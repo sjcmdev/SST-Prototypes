@@ -16,11 +16,10 @@ Projekt **nie jest greenfield** — to aktywna, rozbudowana baza kodu (~70–75%
 
 | Repo | Branch | Uwagi |
 |------|--------|-------|
-| `sjcmdev/Defect-Studio` | `task/04-core` | core |
-| `SirJamesClarkMaxwell/Defect-Studio-mgr` | `task/06-renderer` | renderer |
+| `SirJamesClarkMaxwell/Defect-Studio-mgr` | `task/06-renderer` | Core | 
 
 Oba dzielą wspólny core, który uległ dryftowi — wymagana konsolidacja w trzy repozytoria: **SST**, **SST-experiments**, **SST-prototypes**.
-
+ 
 ### Gotowe komponenty (produkcyjne)
 
 - Logging, EventBus, JobSystem (BS::thread_pool, priority queue, cancel/retry/progress)
@@ -39,21 +38,22 @@ Oba dzielą wspólny core, który uległ dryftowi — wymagana konsolidacja w tr
 |---------|-------------|
 | Język / build | C++23 (target C++26), MSVC (debug), Clang (Linux), Premake5 |
 | UI | Dear ImGui (docking), ImPlot, OpenGL 4.3+, GLFW |
-| Python | embedded CPython via nanobind, `uv`, JAX + XLA (GPU Monte Carlo) |
-| Numerics | levmar (LM), LambertW (Halley + NR), LTSpice, SCAPS-1D wrapper |
+| Python | embedded CPython via nanobind, `uv` |
+| Numerics | levmar (LM), LambertW (Halley + NR), SCAPS-1D wrapper |
 | Data | pliki tekstowe (.dat), YAML,  SQLite, mp-units |
-| Misc | spdlog, Tracy, EnTT, yaml-cpp |
+| Misc | spdlog, Tracy, yaml-cpp |
 | Docs | MkDocs Material (PlantUML, LaTeX math, rectangle-card nav) |
 | VCS | GitHub (3 repo), bez GitHub Actions / Docker |
+| Rendering | ECS (entt), OpenGL, GLAD |
 
 ---
 
 ## Moduły docelowe
 
-1. **JFM** — J-V / IV curve analysis & fitting (P09 = MVP, pełna reimplementacja)
-2. **CV/DLCP** — capacitance-voltage, deep level transient
-3. **Admittance/Impedance Spectroscopy** — z integracją LTSpice
+1. **JFM** — J-V / IV curve analysis & fitting (MVP, pełna reimplementacja)
 4. **SunsVoc**
+2. **CV/DLCP** — capacitance-voltage, deep level transient
+3. **Admittance/Impedance Spectroscopy** — implementacja swojego silnika do rysowania i rozwiązywania obwodów zastępczych. 
 5. **SCAPS wrapper**
 6. **AI/RAG integration** — wewnętrzne narzędzie deweloperskie (nie produkt fizyków)
 7. **Python automation layer**
@@ -64,14 +64,13 @@ Oba dzielą wspólny core, który uległ dryftowi — wymagana konsolidacja w tr
 ---
 
 ## Aktualny priorytet
-1. Stabilizacja Core jako template dla prototypów
-2. eksperyment z podłączeniem GPU C++ ImGui przez Premake5
-3. Określenie zakres JFM/JFM+/JFM++ jako pierwszego prototypu 
+1. (done) Stabilizacja Core jako template dla prototypów 
+2. (done) eksperyment z podłączeniem GPU C++ ImGui przez Premake5
+3. (done) Określenie zakres JFM/JFM+/JFM++ jako pierwszego prototypu 
 4. Projekt architektury JFM/JFM+/JFM++ (po to jest ten projekt)
 5. Ustalenie zakresu i kolejności kolejnych prototypów
 6. Ustalenie MVP całego projektu
 7. Ustalenie architektury w jakiej cały projekt będzie działał -> ADR
-8. 
 
 ---
 
@@ -81,7 +80,6 @@ Oba dzielą wspólny core, który uległ dryftowi — wymagana konsolidacja w tr
 - Komponenty dodawane przyrostowo, napędzane realną potrzebą
 - Git submodules → **Vendor/ directory** (header-only) + **Python bootstrap script**
 - CI = lokalne skrypty batch/shell z pinowanymi wersjami kompilatora
-
 - Istniejący kod JFM = **referencja tylko**, nie do migracji
 - GPU solver 1D = **odłożony** (ryzyko pochłonięcia zasobów)
 
