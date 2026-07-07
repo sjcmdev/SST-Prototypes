@@ -20,8 +20,8 @@ namespace SST
 		[[nodiscard]] static bool IsRuntimeInitialized();
 
 #if DS_PYTHON_CAPI_AVAILABLE
-		[[nodiscard]] static PyThreadState *AcquireRuntimeThreadState();
-		static void ReleaseRuntimeThreadState(PyThreadState *threadState);
+		[[nodiscard]] static PyGILState_STATE AcquireRuntimeGil();
+		static void ReleaseRuntimeGil(PyGILState_STATE state);
 #endif
 
 	private:

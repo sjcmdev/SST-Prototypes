@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <future>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -131,5 +132,27 @@ namespace SST::Prototypes::JFM
 		EXPECT_FALSE(characteristic.voltage.empty());
 		EXPECT_FALSE(characteristic.current.empty());
 		EXPECT_TRUE(characteristic.temperatureK.has_value());
+	}
+
+	TEST(JFMProjectJobsTests, PythonImportBridgeCanImportAgainFromWorkerThread)
+	{
+		if (!JFMPythonImportBridge::IsAvailable())
+			GTEST_SKIP() << "Embedded Python is unavailable in this build.";
+
+		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
+		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
+		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("IV_C002_Z015_6_290,0K.dat");
+
+		JFMPythonImportBridge firstBridge(pythonRoot);
+		ASSERT_TRUE(firstBridge.ImportFiles({dataPath}, {}));
+
+		auto workerResult = std::async(std::launch::async, [pythonRoot, dataPath] {
+			JFMPythonImportBridge bridge(pythonRoot);
+			return bridge.ImportFiles({dataPath}, {});
+		});
+
+		Result<JFMImportBatchResult> result = workerResult.get();
+		ASSERT_TRUE(result) << result.Error().technicalDetails;
+		ASSERT_FALSE(result->characteristics.empty());
 	}
 } // namespace SST::Prototypes::JFM

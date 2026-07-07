@@ -17,8 +17,8 @@ namespace SST
 #if DS_PYTHON_CAPI_AVAILABLE
 		if (PythonInterpreter::IsRuntimeInitialized())
 		{
-			m_ThreadState = PythonInterpreter::AcquireRuntimeThreadState();
-			m_IsActive = m_ThreadState != nullptr;
+			m_State = PythonInterpreter::AcquireRuntimeGil();
+			m_IsActive = true;
 		}
 #endif
 		if (!m_IsActive && m_Lock.owns_lock())
@@ -29,7 +29,7 @@ namespace SST
 	{
 #if DS_PYTHON_CAPI_AVAILABLE
 		if (m_IsActive)
-			PythonInterpreter::ReleaseRuntimeThreadState(m_ThreadState);
+			PythonInterpreter::ReleaseRuntimeGil(m_State);
 #endif
 	}
 

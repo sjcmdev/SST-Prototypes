@@ -50,7 +50,7 @@ namespace SST
 				"python.embed.initialize_failed");
 		}
 
-		m_MainThreadState = PyThreadState_Get();
+		m_MainThreadState = PyEval_SaveThread();
 		g_PythonRuntimeThreadState = m_MainThreadState;
 		if (m_MainThreadState == nullptr)
 		{
@@ -110,20 +110,17 @@ namespace SST
 	}
 
 #if DS_PYTHON_CAPI_AVAILABLE
-	PyThreadState *PythonInterpreter::AcquireRuntimeThreadState()
+	PyGILState_STATE PythonInterpreter::AcquireRuntimeGil()
 	{
 		if (!IsRuntimeInitialized() || !Py_IsInitialized() || g_PythonRuntimeThreadState == nullptr)
-			return nullptr;
+			return PyGILState_UNLOCKED;
 
-		if (!PyGILState_Check())
-			return nullptr;
-
-		return PyThreadState_Get();
+		return PyGILState_Ensure();
 	}
 
-	void PythonInterpreter::ReleaseRuntimeThreadState(PyThreadState *threadState)
+	void PythonInterpreter::ReleaseRuntimeGil(PyGILState_STATE state)
 	{
-		(void)threadState;
+		PyGILState_Release(state);
 	}
 #endif
 } // namespace SST

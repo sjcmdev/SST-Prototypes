@@ -19,7 +19,7 @@ namespace SST
 	private:
 		std::unique_lock<std::mutex> m_Lock;
 #if DS_PYTHON_CAPI_AVAILABLE
-		PyThreadState *m_ThreadState = nullptr;
+		PyGILState_STATE m_State = PyGILState_UNLOCKED;
 #endif
 		bool m_IsActive = false;
 	};
