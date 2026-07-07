@@ -1,0 +1,48 @@
+1. Decyzja o tym w jaki sposób będzie podłączane Core (wzięte z Defect-Studio). Bardzo podoba mi się to co TheCherno zrobił początkowo z Hazel. Jeden Core -> Klient implementuje CreateApplication -> Domena jest per projekt tak konfiguracja wszystkiego. 
+
+2. Jak wygląda prefit dla zadanych modeli prądu (wylistować je i podać formuły numeryczne)
+3. Jak wygląda algorytm automatycznego dobierania modelu?
+4. Test fitowania modeli:
+    * zakres do szybkiego dodaniea: MC na GPU, 
+    * test modeli Uwego Rau skryptem python
+5. import danych i prefit przez osobne skrypty python
+    * hot-reload
+    * hot-upload
+    * osobne skrypty do importu i prefit
+    * jak sprządz ograniczenie zakresu z prefit?
+6. Co jest eksportowane i w jakich plikach do Origina?
+--- 
+1. Najpierw określić API Charakterystyki i biblioteki numerycznej
+2. CPU i GPU jako osobne biblioteki numeryczne? czy jako jedna? 
+3. Określenie MVP dla każdej z wersji JFM
+4. Czy piszemy swoją wersję Levemberg-Marquadt? Czy jest jakaś wersja open-source
+5. Obecny system z zaznaczaniem która charakterystyka jest widoczna jest do usprawnienia. MultipleSelect, ctrl, shift, drag select w drzewce projektu i przyciski jako context menu po mouse-right-click
+    - hide/unhinde
+    - select/unselect 
+    - change model 
+    - add/remove
+    - invert selection
+
+6. Wiele serii dla wykresów Arrheniusa (osobne dopasowania)
+7. Ustawienia do MC są wygodne, ich logikę działania można wziąć z istniejacego kodu 
+8. Dodać gotower presety dla serii dla kolorów
+9. Wykresy w głównym oknie: raw, ranged, fitted, tunned (osobne kontrolki i slidery do koloru, grubości widoczności)
+10. Hide non active jest zdecydowanie in-plus
+11. Auto-scale z automatycznym zoom-out (slider w ustawieniach)
+12. Manualny zakres dopasowania (może skrót klawiaturowy, L/R od left/rigt kiedy użytkownik jest sfocusowany na głównym wykresie? )
+13. Fix-parametrów na pewno musi się pojawić, zarówno w CPU jak i GPU
+14. Należało by znaleźć algorytm, który przy dużych zakresach dla Rs i Rsh automatycznie zafiksuje te parametry jako wiarygodne. 
+15. Należy znaleźć sprytniejszy sposób dobierania granic fitowania paramterów na GPU niżeli +- dwa rzędy wielkości dla tych o dużym rozstrzale
+16. automatyczny fitting przy zmianie zakresu 
+17. wyświetlanie wyników: estimated, fitted, tuned (pytanie jak to pokazać jeśli będziemy mieli wiele modelów opisujących dane?) 
+18. Jak zrobić porównanie modeli? 
+19. Jak obsłużyć sytuację, gdzie zmienia się model wraz ze wzrostem napięcia? 
+20. Opcja Tune Charakterystic jest zdecydowanie porządana. Dodatkowo możne dodać opcję automatycznego przepisywania i fitu po zmianie slidera podczas tune. (jeśli MC bedzie wystarczajaco szybkie to może również liczenie niepewności, choć takowe nie powinny się zmieniać)
+21. Dodanie presetów dla symulacji MC
+22. Fitowanie wykresów z rodziny 1/T, T (dokładniej opisane w jfm-scientific-research-perplexity)
+23. Generator syntetycznych danych porzucamy
+24. Zapis parametrów z fit + niepewności i przeliczonych parametrów na użyteczne wielkości (wraz z niepewnościami) do tsv, zapis surowych danych z MC do tsv (jedno MC per zapis) zapis arrhenius, dopasowań, niepewności
+25. Pełna obsługa jasnych charakterystyk
+26. Do określenia jest jakie wartości reduced chi^2 są okej, jaki przedział
+27. należy określić dynamiczny sposób wyznaczania maksymalnej ilości iteracji simplex aby nie liczyć na darmo, oraz kiedy włączyć Simulated Annealing.
+28. Określić, jak wygląda pipeline dotyczący wyznaczania parametrów i modeli oraz wstecznego dopasowania na podstawie założonych modeli (np. Uwego Rau)

@@ -1,0 +1,70 @@
+﻿schema_version: 1
+log:
+  level: info
+  to_file: true
+  file_path: logs/JFM.log
+trace_events: false
+window:
+  x: 1721
+  y: 31
+  width: 1718
+  height: 1360
+  maximized: false
+  title: JFM
+ui:
+  font_scale:
+    min: 0.7
+    max: 10
+  font_scale_step:
+    min: 0.01
+    max: 1
+    slider_max: 1
+  settings_preview_enabled: true
+  settings_auto_save_on_preview: true
+appearance:
+  clear_color: [0.1, 0.1, 0.12, 1]
+  colors:
+    background: [0.12968445, 0.11779031, 0.10986089, 1]
+    surface: [0.16470589, 0.15098229, 0.13757786, 1]
+    raised_surface: [0.16078432, 0.14527336, 0.13493273, 1]
+    border: [0.32156864, 0.32156864, 0.32156864, 1]
+    collapsible: [0.1882353, 0.1882353, 0.1882353, 1]
+    text: [0.89411765, 0.8762147, 0.8450288, 1]
+    muted_text: [0.663, 0.604, 0.545, 1]
+    accent: [1, 0.49019608, 0, 1]
+  rounding:
+    window: 4
+    frame: 3.2
+    grab: 6
+    popup: 8
+    scrollbar: 8
+    tab: 6
+  spacing:
+    window_padding:
+      x: 7.9
+      y: 7.9
+    frame_padding:
+      x: 3.8
+      y: 5.2
+    item_spacing:
+      x: 7.8
+      y: 4
+  state_rules:
+    neutral_hover_lighten: 0.044
+    neutral_active_lighten: 0.042
+    accent_hover_lighten: 0.052
+    accent_hover_saturation: -0.154
+    accent_active_darken: 0.05
+    accent_active_saturation: -0.155
+    selected_alpha: 0.221
+    selected_hover_alpha: 0.217
+    selected_active_alpha: 0.416
+    disabled_alpha: 0.45
+    disabled_background_mix: 0.55
+jobs:
+  default_worker_threads: 6
+  reserve_urgent_worker: true
+event_queue:
+  initial_capacity: 256
+  growth_step: 256
+
