@@ -1,0 +1,25 @@
+#pragma once
+
+#include "Core/dspch.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
+
+namespace SST
+{
+	class Layer
+	{
+	public:
+		explicit Layer(std::string name = "Layer");
+		virtual ~Layer();
+
+		virtual void OnAttach() {}
+		virtual void OnDetach() {}
+		virtual void OnUpdate(float) {}
+		virtual void OnEvent(Event &) {}
+		virtual void OnImGuiRender() {}
+
+		[[nodiscard]] const std::string &GetName() const;
+
+	private:
+		std::string m_Name;
+	};
+} // namespace SST

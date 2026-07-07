@@ -1,0 +1,29 @@
+#pragma once
+
+#include <utility>
+
+#include "Core/EventSystem/BusEventSystem/Event.hpp"
+#include "Core/Notifications/Notification.hpp"
+
+namespace SST
+{
+	struct NotificationEvent final : public BusEvent
+	{
+		explicit NotificationEvent(Notification newNotification)
+			: notification(std::move(newNotification))
+		{
+		}
+
+		Notification notification;
+	};
+
+	struct NotificationRequestedEvent final : public BusEvent
+	{
+		explicit NotificationRequestedEvent(Notification newNotification)
+			: notification(std::move(newNotification))
+		{
+		}
+
+		Notification notification;
+	};
+} // namespace SST

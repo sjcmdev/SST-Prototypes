@@ -1,0 +1,49 @@
+.venv/
+.local/
+
+tools/
+Tools/
+build/
+buildfiles/
+bin/
+bin-int/
+logs/
+docs/book
+tmp/
+imgui.ini
+*.pdf
+refactor.md
+
+# IDE and editor caches
+.vs/
+.vscode/
+*.VC.db
+*.VC.opendb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+
+# Exported env snapshots
+scripts/requirements/*.txt
+
+# App-local Python runtime artifacts (kept local, rebuilt by tooling)
+install/app/python/*
+!install/app/python/.gitkeep
+!install/app/python/README.md
+
+# OS artifacts
+Thumbs.db
+.DS_Store
+
+graphify-out/**
+**/graphify-out/
+Core-Copy/
+.codex/*
+Hazel/

@@ -1,0 +1,22 @@
+#pragma once
+
+#include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
+
+namespace SST
+{
+	class ApplicationLifecycleState
+	{
+	public:
+		[[nodiscard]] bool TryMarkCreated();
+		[[nodiscard]] bool TryBeginShutdown();
+		void SetRunning(bool running);
+		[[nodiscard]] bool IsCreated() const;
+		[[nodiscard]] bool IsRunning() const;
+
+	private:
+		bool m_Created = false;
+		bool m_Running = false;
+	};
+
+	void HandleLifecycleEvent(Event &event, ApplicationLifecycleState &state);
+} // namespace SST

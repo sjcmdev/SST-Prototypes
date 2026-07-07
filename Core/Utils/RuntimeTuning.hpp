@@ -1,0 +1,38 @@
+#pragma once
+
+#include <cstddef>
+
+namespace SST
+{
+	namespace RuntimeDefaults
+	{
+		inline constexpr const char *LogFilePath = "logs/SST.log";
+		inline constexpr int WindowPosX = -1;
+		inline constexpr int WindowPosY = -1;
+		inline constexpr int WindowWidth = 1280;
+		inline constexpr int WindowHeight = 720;
+		inline constexpr bool WindowMaximized = false;
+		inline constexpr const char *WindowTitle = "SST";
+
+		inline constexpr float UiFontScale = 1.0f;
+		inline constexpr float UiFontScaleStep = 0.10f;
+		inline constexpr const char *UiFontPath = "";
+		inline constexpr const char *UiClearColor = "0.10, 0.10, 0.12, 1.00";
+
+		inline constexpr float UiFontScaleMin = 0.70f;
+		inline constexpr float UiFontScaleMax = 10.00f;
+		inline constexpr float UiFontScaleStepMin = 0.01f;
+		inline constexpr float UiFontScaleStepMax = 1.00f;
+		inline constexpr float UiFontScaleStepSliderMax = 0.50f;
+		inline constexpr bool UiSettingsPreviewEnabled = true;
+		inline constexpr bool UiSettingsAutoSaveOnPreview = false;
+
+		inline constexpr int JobsDefaultWorkerThreads = 5;
+		inline constexpr bool JobsReserveUrgentWorker = true;
+
+		inline constexpr std::size_t EventQueueInitialCapacity = 256;
+		inline constexpr std::size_t EventQueueGrowthStep = 256;
+		inline constexpr std::size_t EventQueueMinCapacity = 32;
+		inline constexpr std::size_t EventQueueMinGrowthStep = 32;
+	}
+} // namespace SST

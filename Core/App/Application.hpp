@@ -1,0 +1,170 @@
+#pragma once
+
+#include <functional>
+#include <optional>
+#include <filesystem>
+
+#include "App/ApplicationLifecycle.hpp"
+#include "App/ApplicationState.hpp"
+#include "App/Managers/ConfigManager.hpp"
+#include "App/Window.hpp"
+#include "Core/Capabilities/CapabilityService.hpp"
+#include "Core/Assets/AssetManager.hpp"
+#include "Core/Diagnostics/StructuredError.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEvent.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/EventSystem/DispatchingEventSystem/EventQueue.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
+#include "Core/LayerStack.hpp"
+#include "Core/Notifications/Notifier.hpp"
+#include "Core/Logging/Logger.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
+
+struct ImVec4;
+struct ImGuiIO;
+
+namespace SST
+{
+	class ApplicationEventController;
+	class CommandRegistry;
+	class ContextManager;
+	class CoreLayer;
+	class EditorLayer;
+	class KeymapResolver;
+	class LogRegistry;
+
+	class Application
+	{
+	public:
+		using LayerSetup = std::function<void(Application &)>;
+
+		// Create a fully initialized application instance (may fail internally; check Run()).
+		static Application Create(int argc, char **argv);
+		static Application Create(int argc, char **argv, LayerSetup layerSetup);
+		// Run the main loop until shutdown is requested; returns exit code.
+		int Run();
+		// Request shutdown; safe to call multiple times.
+		void Shutdown();
+		~Application();
+
+		// Queue a platform event for main-thread processing.
+		static void EmitEvent(EventVariant event);
+		// Present a blocking error dialog on the main thread.
+		void ShowBlockingError(const StructuredError &error);
+
+		// Global accessor for layers and demos
+		// Precondition: Application was created.
+		static Application &Get();
+
+		// Runtime service accessors
+		// Precondition: CoreLayer initialized.
+		EventBus &GetEventBus();
+		[[nodiscard]] Ref<EventBus> GetEventBusRef() const;
+		[[nodiscard]] Notifier &GetNotifier();
+		[[nodiscard]] Ref<Notifier> GetNotifierRef() const;
+		[[nodiscard]] CapabilityService &GetCapabilityService();
+		[[nodiscard]] AssetManager &GetAssetManager();
+		[[nodiscard]] Ref<LogRegistry> GetLogRegistry() const;
+		// Precondition: CoreLayer initialized.
+		JobSystem &GetJobSystem();
+		[[nodiscard]] WeakRef<JobSystem> GetJobSystemHandle() const;
+		// Precondition: CoreLayer initialized.
+		ProgressTracker &GetProgressTracker();
+		[[nodiscard]] WeakRef<ProgressTracker> GetProgressTrackerHandle() const;
+		[[nodiscard]] WeakRef<KeymapResolver> GetKeymapResolverHandle() const;
+		[[nodiscard]] WeakRef<ContextManager> GetContextManagerHandle() const;
+		[[nodiscard]] WeakRef<CommandRegistry> GetCommandRegistryHandle() const;
+		[[nodiscard]] EditorLayer &GetEditorLayer();
+		[[nodiscard]] const EditorLayer &GetEditorLayer() const;
+		[[nodiscard]] WeakRef<ConfigManager> GetConfigManager() const;
+		[[nodiscard]] const ApplicationConfig &GetConfig() const;
+		void PushLayer(Unique<Layer> layer);
+		void PushOverlay(Unique<Layer> overlay);
+
+		// Event processing entry point for concrete event types.
+		template <typename TEvent>
+		void OnEvent(TEvent &event);
+
+	private:
+		Application(int argc, char **argv, LayerSetup layerSetup = {});
+		Application(const Application &) = delete;
+		Application &operator=(const Application &) = delete;
+		Application(Application &&) = delete;
+		Application &operator=(Application &&) = delete;
+		
+		// High-level lifecycle orchestration
+		bool createFromSpecification(const ApplicationSpecification &specification);
+		bool beginCreateFromSpecification();
+		bool bootstrapApplicationConfiguration();
+		bool initializeEventInfrastructure();
+		bool initializeWindowingAndGraphics();
+		bool initializeApplicationLayers();
+		bool initializeCoreRuntimeServices();
+		bool finishCreateFromSpecification();
+		void shutdownInternal();
+		
+		// High-level runtime flow
+		void onUpdate(float deltaTime);
+		void onRender(const ImVec4 &clearColor, float frameRate);
+		template <typename TEvent>
+		void dispatchEventToLayers(TEvent &event);
+		void mainLoop();
+		void runMainLoopFrame(const ImVec4 &clearColor, ImGuiIO &io);
+		void initializeLogger() const;
+		void shutdownLogger() const;
+		void logStartupSpecification() const;
+
+		// Runtime services lifecycle
+		bool initializeEventDispatchingSystem();
+		bool initializeCoreLayerSystems();
+		bool initializeAssetManager();
+
+		// Configuration API
+		bool bootstrapConfiguration();
+		void applySpecificationFromDefaultConfig();
+		bool persistUiSettings();
+
+		// Low-level platform/graphics setup
+		void setupDefaultLayers();
+		bool initializeGlfw();
+		bool createMainWindow();
+		bool initializeGraphics();
+		
+		void shutdownWindow();
+		void shutdownGlfw();
+		void configureInputBackend();
+
+		// Low-level frame and UI helpers
+		void beginFrame();
+		void renderFrame(const ImVec4 &clearColor, float frameRate);
+
+		// Event queue internals
+		// Extension point: external event pump for test harness or offline tools.
+		// Not currently called from production code. Do not remove.
+		// static void ProcessQueuedEvents();
+		void queueEvent(EventVariant event);
+		void processPendingEvents();
+
+	private:
+		EventQueue m_EventQueue;
+		Ref<EventBus> m_EventBus;
+		Unique<ApplicationEventController> m_EventController;
+		LayerStack m_LayerStack;
+		LayerSetup m_ProjectLayerSetup;
+		Ref<LogRegistry> m_LogRegistry;
+		
+		Ref<CapabilityService> m_CapabilityService;
+		Ref<Notifier> m_Notifier;
+		
+		ApplicationConfig m_Config;
+		Ref<AssetManager> m_AssetManager;
+		Ref<ConfigManager> m_ConfigManager;
+
+		ApplicationRuntimeState m_Runtime;
+		ApplicationGraphicsState m_Graphics;
+
+
+		// Singleton ownership
+		static std::optional<std::reference_wrapper<Application>> s_Instance;
+	};
+} // namespace SST

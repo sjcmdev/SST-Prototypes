@@ -1,0 +1,33 @@
+#include "Core/dspch.hpp"
+
+#include "Core/Logging/SpdlogEventSink.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Logging/LogEvents.hpp"
+
+namespace SST
+{
+    SpdlogEventSink::SpdlogEventSink(Ref<EventBus> eventBus)
+        : m_EventBus(std::move(eventBus))
+    {
+    }
+
+    void SpdlogEventSink::sink_it_(const spdlog::details::log_msg &msg)
+    {
+        if (m_EventBus == nullptr)
+            return;
+
+        // use payload (already formatted by spdlog)
+        std::string message(msg.payload.begin(), msg.payload.end());
+        auto lvlView = spdlog::level::to_string_view(msg.level);
+        const std::string level(lvlView.data(), lvlView.size());
+        const std::string loggerName = (msg.logger_name.size() > 0) ? std::string(msg.logger_name.data(), msg.logger_name.size()) : std::string();
+        Time::TimePoint ts = Time::Now();
+
+        LogEvent event(level, loggerName, message, ts);
+        m_EventBus->Publish(event);
+    }
+
+    void SpdlogEventSink::flush_()
+    {
+    }
+} // namespace SST
