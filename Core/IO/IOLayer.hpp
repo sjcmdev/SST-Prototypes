@@ -1,5 +1,8 @@
 #pragma once
 
+#include <utility>
+
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Layer.hpp"
 #include "Core/Utils/Memory.hpp"
@@ -35,6 +38,9 @@ namespace SST
 
 		void OnDetach() override;
 
+		template <typename EventType, typename Handler>
+		void RegisterHandler(Handler &&handler);
+
 	private:
 		void bindEvents();
 		void onConfigPersistRequested(const AppEvents::Config::PersistRequested &event);
@@ -49,4 +55,12 @@ namespace SST
 	private:
 		Ref<EventBus> m_EventBus;
 	};
+
+	template <typename EventType, typename Handler>
+	void IOLayer::RegisterHandler(Handler &&handler)
+	{
+		if (m_EventBus == nullptr)
+			return;
+		AddSubscription(m_EventBus->Subscribe<EventType>(std::forward<Handler>(handler)));
+	}
 } // namespace SST

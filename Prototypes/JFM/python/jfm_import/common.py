@@ -186,9 +186,17 @@ def make_curve(
     voltage = data[:, voltage_column] if data.size else np.array([], dtype=float)
     direction = "unknown"
     if voltage.size >= 2:
-        direction = "forward" if voltage[-1] >= voltage[0] else "reverse"
-        if np.any(np.diff(voltage) == 0):
-            all_warnings.append("nonmonotonic_sweep")
+        delta = np.diff(voltage)
+        if np.all(delta > 0):
+            direction = "increasing"
+        elif np.all(delta < 0):
+            direction = "decreasing"
+        elif np.sign(delta[0]) != np.sign(delta[-1]):
+            direction = "loop"
+            all_warnings.append("non_monotonic_sweep")
+        else:
+            direction = "non_monotonic"
+            all_warnings.append("non_monotonic_sweep")
 
     metadata = {
         "stem": source.stem,

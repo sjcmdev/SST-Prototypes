@@ -1,11 +1,8 @@
 #pragma once
 
 #include "Core/Diagnostics/StructuredError.hpp"
+#include "ScientificRuntime/Python/PythonApi.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
-
-#if DS_PYTHON_CAPI_AVAILABLE
-#include <Python.h>
-#endif
 
 namespace SST
 {
@@ -21,6 +18,11 @@ namespace SST
 		[[nodiscard]] bool IsRunning() const;
 		[[nodiscard]] static bool IsEmbeddingAvailable();
 		[[nodiscard]] static bool IsRuntimeInitialized();
+
+#if DS_PYTHON_CAPI_AVAILABLE
+		[[nodiscard]] static PyThreadState *AcquireRuntimeThreadState();
+		static void ReleaseRuntimeThreadState(PyThreadState *threadState);
+#endif
 
 	private:
 #if DS_PYTHON_CAPI_AVAILABLE

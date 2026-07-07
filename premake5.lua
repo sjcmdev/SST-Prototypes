@@ -37,12 +37,24 @@ local function trim(value)
 end
 
 local function pythonConfig(command)
-    return trim(os.outputof("python -c \"" .. command .. "\"") or "")
+    local executable = _SST_PYTHON_CONFIG_EXE
+    if executable:find("%s") then
+        executable = "\"" .. executable .. "\""
+    end
+    return trim(os.outputof(executable .. " -c \"" .. command .. "\"") or "")
+end
+
+_SST_PYTHON_CONFIG_EXE = "python"
+if os.isfile(".venv/Scripts/python.exe") then
+    _SST_PYTHON_CONFIG_EXE = path.getabsolute(".venv/Scripts/python.exe")
+elseif os.isfile(".venv/bin/python") then
+    _SST_PYTHON_CONFIG_EXE = path.getabsolute(".venv/bin/python")
 end
 
 _SST_PYTHON_INCLUDE_DIR = os.getenv("SST_PYTHON_INCLUDE_DIR") or ""
 _SST_PYTHON_LIB_DIR = os.getenv("SST_PYTHON_LIB_DIR") or ""
 _SST_PYTHON_LIB_NAME = os.getenv("SST_PYTHON_LIB_NAME") or ""
+_SST_PYTHON_DLL_PATH = os.getenv("SST_PYTHON_DLL_PATH") or ""
 
 if _SST_PYTHON_INCLUDE_DIR == "" then
     _SST_PYTHON_INCLUDE_DIR = pythonConfig("import sysconfig; print(sysconfig.get_paths().get('include',''))")
@@ -53,12 +65,18 @@ end
 if _SST_PYTHON_LIB_NAME == "" then
     _SST_PYTHON_LIB_NAME = pythonConfig("import sysconfig; print('python' + (sysconfig.get_config_var('py_version_nodot') or ''))")
 end
+if _SST_PYTHON_DLL_PATH == "" then
+    _SST_PYTHON_DLL_PATH = pythonConfig("import pathlib, sys, sysconfig; print(pathlib.Path(sys.base_prefix) / ('python' + (sysconfig.get_config_var('py_version_nodot') or '') + '.dll'))")
+end
 
 if _SST_PYTHON_INCLUDE_DIR ~= "" and not os.isdir(_SST_PYTHON_INCLUDE_DIR) then
     _SST_PYTHON_INCLUDE_DIR = ""
 end
 if _SST_PYTHON_LIB_DIR ~= "" and not os.isdir(_SST_PYTHON_LIB_DIR) then
     _SST_PYTHON_LIB_DIR = ""
+end
+if _SST_PYTHON_DLL_PATH ~= "" and not os.isfile(_SST_PYTHON_DLL_PATH) then
+    _SST_PYTHON_DLL_PATH = ""
 end
 
 _SST_PYTHON_EMBED_AVAILABLE = _SST_PYTHON_INCLUDE_DIR ~= "" and _SST_PYTHON_LIB_DIR ~= "" and _SST_PYTHON_LIB_NAME ~= ""
@@ -212,6 +230,14 @@ project "Core"
         "Core/Presentation/Panels/**.cpp",
         "Core/ProgressTrackingSystem/**.hpp",
         "Core/ProgressTrackingSystem/**.cpp",
+        "Core/ScientificRuntime/Python/PythonApi.hpp",
+        "Core/ScientificRuntime/Python/PythonBridgeBuildConfig.hpp",
+        "Core/ScientificRuntime/Python/PythonErrors.hpp",
+        "Core/ScientificRuntime/Python/PythonErrors.cpp",
+        "Core/ScientificRuntime/Python/PythonGilScope.hpp",
+        "Core/ScientificRuntime/Python/PythonGilScope.cpp",
+        "Core/ScientificRuntime/Python/PythonInterpreter.hpp",
+        "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
         "Core/Threading/**.hpp",
         "Core/Threading/**.cpp",
         "Core/Types/**.hpp",
@@ -240,7 +266,12 @@ project "Core"
         "Vendor/yaml-cpp/include"
     }
 
-    defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
+    if _SST_PYTHON_EMBED_AVAILABLE == true then
+        includedirs { _SST_PYTHON_INCLUDE_DIR }
+        defines { "DS_PYTHON_CAPI_AVAILABLE=1", "Py_NO_LINK_LIB" }
+    else
+        defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
+    end
 
     defines {
         "GLFW_INCLUDE_NONE",

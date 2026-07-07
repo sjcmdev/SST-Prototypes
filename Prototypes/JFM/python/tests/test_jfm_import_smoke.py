@@ -21,6 +21,12 @@ def test_dat_parser_returns_unified_shape() -> None:
     assert result["curves"]
     assert isinstance(result["curves"][0]["data"], np.ndarray)
     assert result["temperature_K"] == 290.0
+    assert result["curves"][0]["sweep"]["direction"] in {
+        "increasing",
+        "decreasing",
+        "non_monotonic",
+        "loop",
+    }
 
 
 def test_scaps_parser_returns_curves() -> None:

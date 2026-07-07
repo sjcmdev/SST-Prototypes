@@ -51,6 +51,32 @@ namespace SST
 		m_Layers[m_LayerInsertIndex - 1]->OnAttach();
 	}
 
+	void LayerStack::InsertLayerBefore(LayerId before, Unique<Layer> layer)
+	{
+		DS_ASSERT(layer != nullptr, "LayerStack::InsertLayerBefore requires a valid layer");
+		const std::string_view targetName = toLayerName(before);
+		if (targetName.empty())
+		{
+			PushLayer(std::move(layer));
+			return;
+		}
+
+		auto layerEnd = m_Layers.begin() + static_cast<std::ptrdiff_t>(m_LayerInsertIndex);
+		auto it = std::find_if(m_Layers.begin(), layerEnd, [targetName](const Ref<Layer> &candidate) {
+			return candidate != nullptr && candidate->GetName() == targetName;
+		});
+		if (it == layerEnd)
+		{
+			PushLayer(std::move(layer));
+			return;
+		}
+
+		const auto index = static_cast<std::size_t>(std::distance(m_Layers.begin(), it));
+		m_Layers.insert(it, Ref<Layer>(std::move(layer)));
+		++m_LayerInsertIndex;
+		m_Layers[index]->OnAttach();
+	}
+
 	void LayerStack::PushOverlay(Unique<Layer> overlay)
 	{
 		DS_ASSERT(overlay != nullptr, "LayerStack::PushOverlay requires a valid overlay");

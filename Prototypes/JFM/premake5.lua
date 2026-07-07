@@ -46,7 +46,13 @@
         includedirs { _SST_PYTHON_INCLUDE_DIR }
         libdirs { _SST_PYTHON_LIB_DIR }
         links { "nanobind", _SST_PYTHON_LIB_NAME }
-        defines { "DS_PYTHON_CAPI_AVAILABLE=1", "NB_STATIC" }
+        defines { "DS_PYTHON_CAPI_AVAILABLE=1", "NB_STATIC", "Py_NO_LINK_LIB" }
+        linkoptions { "/NODEFAULTLIB:python313_d.lib", "/NODEFAULTLIB:python313t_d.lib" }
+        if _SST_PYTHON_DLL_PATH ~= "" then
+            postbuildcommands {
+                '{COPYFILE} "' .. _SST_PYTHON_DLL_PATH .. '" "%{cfg.targetdir}"'
+            }
+        end
     else
         defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
     end
@@ -102,10 +108,12 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/Domain/JFMTypes.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Storage/JFMWorkspaceStore.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Storage/JFMWorkspaceStore.cpp",
-        _SST_ROOT .. "/Prototypes/JFM/src/Storage/JFMProjectYamlSerializer.hpp",
-        _SST_ROOT .. "/Prototypes/JFM/src/Storage/JFMProjectYamlSerializer.cpp",
-        _SST_ROOT .. "/Prototypes/JFM/src/Storage/JFMProjectJobs.hpp",
-        _SST_ROOT .. "/Prototypes/JFM/src/Storage/JFMProjectJobs.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportPaths.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportPaths.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonImportBridge.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonImportBridge.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportJob.hpp",
@@ -139,7 +147,13 @@ project "JFMTests"
         includedirs { _SST_PYTHON_INCLUDE_DIR }
         libdirs { _SST_PYTHON_LIB_DIR }
         links { "nanobind", _SST_PYTHON_LIB_NAME }
-        defines { "DS_PYTHON_CAPI_AVAILABLE=1", "NB_STATIC" }
+        defines { "DS_PYTHON_CAPI_AVAILABLE=1", "NB_STATIC", "Py_NO_LINK_LIB" }
+        linkoptions { "/NODEFAULTLIB:python313_d.lib", "/NODEFAULTLIB:python313t_d.lib" }
+        if _SST_PYTHON_DLL_PATH ~= "" then
+            postbuildcommands {
+                '{COPYFILE} "' .. _SST_PYTHON_DLL_PATH .. '" "%{cfg.targetdir}"'
+            }
+        end
     else
         defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
     end

@@ -12,6 +12,7 @@
 #include "App/Controllers/ApplicationEventController.hpp"
 #include "App/ApplicationInternals.hpp"
 #include "Core/CoreLayer.hpp"
+#include "IO/IOLayer.hpp"
 #include "Core/Logging/LogRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
@@ -36,9 +37,9 @@ namespace SST
 	}
 
 
-	Application Application::Create(int argc, char **argv, LayerSetup layerSetup)
+	Application Application::Create(int argc, char **argv, ApplicationSetup setup)
 	{
-		return Application(argc, argv, std::move(layerSetup));
+		return Application(argc, argv, std::move(setup));
 	}
 
 
@@ -150,6 +151,14 @@ namespace SST
 			imguiLayer->SetBlockingError(error);
 	}
 
+	IOLayer &Application::GetIOLayer()
+	{
+		auto ioLayer = m_LayerStack.FindLayerAs<IOLayer>(LayerId::IO).lock();
+		DS_ASSERT(ioLayer != nullptr, "IOLayer not initialized");
+		return *ioLayer;
+	}
+
+
 	EditorLayer &Application::GetEditorLayer()
 	{
 		auto editorLayer = m_LayerStack.FindLayerAs<EditorLayer>(LayerId::Editor).lock();
@@ -236,6 +245,12 @@ namespace SST
 	}
 
 
+	void Application::InsertLayerBefore(LayerId before, Unique<Layer> layer)
+	{
+		m_LayerStack.InsertLayerBefore(before, std::move(layer));
+	}
+
+
 	void Application::PushOverlay(Unique<Layer> overlay)
 	{
 		m_LayerStack.PushOverlay(std::move(overlay));
@@ -251,8 +266,8 @@ namespace SST
 
 	// ===== Instance lifecycle =====
 
-	Application::Application(int argc, char **argv, LayerSetup layerSetup)
-		: m_ProjectLayerSetup(std::move(layerSetup))
+	Application::Application(int argc, char **argv, ApplicationSetup setup)
+		: m_ProjectSetup(std::move(setup))
 	{
 		ApplicationDetail::InstallCrashFallbackHandlers();
 		Threading::SetMainThread();

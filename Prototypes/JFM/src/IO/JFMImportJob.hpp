@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <string>
 #include <vector>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -17,6 +19,9 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
 		void Execute(JobContext &context) override;
+
+	private:
+		void reportProgress(JobContext &context, std::size_t completed, std::size_t total, const std::string &message) const;
 
 	private:
 		Ref<EventBus> m_EventBus;

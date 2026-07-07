@@ -1,11 +1,63 @@
 #include "Core/dspch.hpp"
 
 #include <cstdlib>
+#include <fstream>
 
 #include "Core/Platform/PlatformPythonRuntime.hpp"
 
 namespace SST::Platform
 {
+	static std::string trim(std::string value)
+	{
+		const std::size_t first = value.find_first_not_of(" \t\r\n");
+		if (first == std::string::npos)
+			return {};
+		const std::size_t last = value.find_last_not_of(" \t\r\n");
+		return value.substr(first, last - first + 1);
+	}
+
+	static Path readVenvHome(const Path &venvRoot)
+	{
+		const Path configPath = venvRoot / "pyvenv.cfg";
+		if (!FileSystem::Exists(configPath.Native()))
+			return {};
+
+		std::ifstream file(configPath.Native());
+		std::string line;
+		while (std::getline(file, line))
+		{
+			const std::size_t separator = line.find('=');
+			if (separator == std::string::npos)
+				continue;
+
+			if (trim(line.substr(0, separator)) == "home")
+				return Path(trim(line.substr(separator + 1)));
+		}
+
+		return {};
+	}
+
+	static Path findNearbyVenvHome(Path root)
+	{
+		for (int depth = 0; depth < 8 && !root.Empty(); ++depth)
+		{
+			const Path dotVenvHome = readVenvHome(root / ".venv");
+			if (!dotVenvHome.Empty())
+				return dotVenvHome;
+
+			const Path venvHome = readVenvHome(root / "venv");
+			if (!venvHome.Empty())
+				return venvHome;
+
+			const Path parent = root.parent_path();
+			if (parent == root)
+				break;
+			root = parent;
+		}
+
+		return {};
+	}
+
 	static Path getAppPythonPlatformExecutable()
 	{
 #if defined(DS_PLATFORM_WINDOWS)
@@ -70,6 +122,10 @@ namespace SST::Platform
 
 	Path ResolveEmbeddedPythonHome()
 	{
+		const Path venvHome = findNearbyVenvHome(Path::FromResolved(FileSystem::CurrentPath()));
+		if (!venvHome.Empty() && FileSystem::Exists(venvHome.Native()))
+			return venvHome;
+
 		const Path platformRoot = GetAppPythonPlatformRoot();
 		if (!platformRoot.Empty() && FileSystem::Exists(platformRoot.Native()))
 			return platformRoot;

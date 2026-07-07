@@ -377,6 +377,12 @@ namespace SST
 				return false;
 		}
 		{
+			ZoneScopedN("Application.CreateFromSpecification.ProjectLayerSetup");
+			ApplicationDetail::StartupStepTimer timer("CreateFromSpecification.projectLayerSetup");
+			if (!timer.Finish(initializeProjectLayerSetup()))
+				return false;
+		}
+		{
 			ZoneScopedN("Application.CreateFromSpecification.Finish");
 			ApplicationDetail::StartupStepTimer finishTimer("CreateFromSpecification.finish");
 			const bool finished = finishTimer.Finish(finishCreateFromSpecification());
@@ -583,28 +589,15 @@ namespace SST
 	bool Application::initializeApplicationLayers()
 	{
 		ZoneScopedN("Application.initializeApplicationLayers");
-		ApplicationDetail::SetCrashStage("setup layers");
-		DS_LOG_INFO("CreateFromSpecification: setup default layers");
+		ApplicationDetail::SetCrashStage("setup core layer");
+		DS_LOG_INFO("CreateFromSpecification: setup core layer");
 		{
-			ZoneScopedN("Application.setupDefaultLayers");
-			ApplicationDetail::StartupStepTimer timer("CreateFromSpecification.setupDefaultLayers");
-			setupDefaultLayers();
+			ZoneScopedN("Application.PushCoreLayer");
+			ApplicationDetail::StartupStepTimer timer("LayerStack.push.CoreLayer");
+			m_LayerStack.PushLayer(CreateUnique<CoreLayer>());
 			timer.Finish(true);
 		}
-		{
-			ZoneScopedN("Application.VerifyImGuiLayer");
-			ApplicationDetail::StartupStepTimer timer("CreateFromSpecification.verifyImGuiLayer");
-			if (auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
-			    imGuiLayer == nullptr || !imGuiLayer->IsInitialized())
-			{
-				timer.Finish(false);
-				DS_LOG_ERROR("CreateFromSpecification: ImGuiLayer initialization failed");
-				shutdownInternal();
-				return false;
-			}
-			timer.Finish(true);
-		}
-		DS_LOG_INFO("CreateFromSpecification: default layers ready");
+		DS_LOG_INFO("CreateFromSpecification: core layer ready");
 		return true;
 	}
 
@@ -649,6 +642,54 @@ namespace SST
 			}
 		}
 		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
+		return true;
+	}
+
+
+	bool Application::initializeProjectLayerSetup()
+	{
+		ZoneScopedN("Application.initializeProjectLayerSetup");
+		ApplicationDetail::SetCrashStage("setup application layers");
+		setupDefaultLayers();
+
+		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
+		auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
+		auto editorLayer = m_LayerStack.FindLayerAs<EditorLayer>(LayerId::Editor).lock();
+		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
+		DS_ASSERT(imGuiLayer != nullptr, "ImGuiLayer was not created");
+		DS_ASSERT(editorLayer != nullptr, "EditorLayer was not created");
+
+		editorLayer->BindRuntimeServices(
+			m_EventBus,
+			coreLayer->GetJobSystemHandle(),
+			coreLayer->GetProgressTrackerHandle(),
+			m_LogRegistry,
+			coreLayer->GetKeymapResolverHandle(),
+			coreLayer->GetContextManagerHandle(),
+			coreLayer->GetCommandRegistryHandle());
+		editorLayer->ApplyConfig(m_Config);
+		imGuiLayer->BindUiState(editorLayer->GetUiStateHandle());
+
+		const Path keybindingsPath = ConfigManager::GetKeybindingsPath(m_Config.directory);
+		{
+			ZoneScopedN("Application.LoadStartupKeybindings");
+			ApplicationDetail::StartupStepTimer timer("Application.LoadStartupKeybindings");
+			m_EventBus->Queue(AppEvents::Keymap::BindingsLoadRequested{keybindingsPath});
+			m_EventBus->ProcessQueue();
+			timer.Finish(true);
+		}
+
+		if (m_ProjectSetup)
+			m_ProjectSetup(*this);
+
+		if (!imGuiLayer->IsInitialized())
+		{
+			DS_LOG_ERROR("CreateFromSpecification: ImGuiLayer initialization failed");
+			shutdownInternal();
+			return false;
+		}
+
+		DS_LOG_INFO("CreateFromSpecification: application layers ready");
 		return true;
 	}
 
@@ -714,23 +755,11 @@ namespace SST
 	void Application::setupDefaultLayers()
 	{
 		ZoneScopedN("Application.setupDefaultLayers.detail");
-		DS_LOG_INFO("LayerStack setup: begin");
-		{
-			ZoneScopedN("Application.setupDefaultLayers.PushCoreLayer");
-			ApplicationDetail::StartupStepTimer timer("LayerStack.push.CoreLayer");
-			m_LayerStack.PushLayer(CreateUnique<CoreLayer>());
-			timer.Finish(true);
-		}
+		DS_LOG_INFO("LayerStack default setup: begin");
 		{
 			ZoneScopedN("Application.setupDefaultLayers.PushIOLayer");
 			ApplicationDetail::StartupStepTimer timer("LayerStack.push.IOLayer");
 			m_LayerStack.PushLayer(CreateUnique<IOLayer>(m_EventBus));
-			timer.Finish(true);
-		}
-		{
-			ZoneScopedN("Application.setupDefaultLayers.PushEditorLayer");
-			ApplicationDetail::StartupStepTimer timer("LayerStack.push.EditorLayer");
-			m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
 			timer.Finish(true);
 		}
 		ImGuiLayerRuntime imGuiRuntime;
@@ -751,19 +780,18 @@ namespace SST
 			timer.Finish(true);
 		}
 		{
-			ZoneScopedN("Application.setupDefaultLayers.ProjectLayers");
-			ApplicationDetail::StartupStepTimer timer("LayerStack.push.ProjectLayers");
-			if (m_ProjectLayerSetup)
-				m_ProjectLayerSetup(*this);
-			timer.Finish(true);
-		}
-		{
 			ZoneScopedN("Application.setupDefaultLayers.PushImGuiLayer");
 			ApplicationDetail::StartupStepTimer timer("LayerStack.push.ImGuiLayer");
 			m_LayerStack.PushLayer(CreateUnique<ImGuiLayer>(std::move(imGuiRuntime)));
 			timer.Finish(true);
 		}
-		DS_LOG_INFO("LayerStack setup: complete");
+		{
+			ZoneScopedN("Application.setupDefaultLayers.PushEditorLayer");
+			ApplicationDetail::StartupStepTimer timer("LayerStack.push.EditorLayer");
+			m_LayerStack.PushLayer(CreateUnique<EditorLayer>());
+			timer.Finish(true);
+		}
+		DS_LOG_INFO("LayerStack default setup: complete");
 	}
 
 
@@ -810,8 +838,6 @@ namespace SST
 	{
 		ZoneScopedN("Application.initializeCoreLayerSystems.detail");
 		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
-		auto imGuiLayer = m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock();
-		auto editorLayer = m_LayerStack.FindLayer<EditorLayer>();
 		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
 		DS_ASSERT(m_EventBus != nullptr, "EventBus was not created");
 		DS_LOG_INFO("Init: Core runtime services via CoreLayer");
@@ -835,36 +861,6 @@ namespace SST
 			GetEventBus();
 			GetJobSystem();
 			GetProgressTracker();
-			timer.Finish(true);
-		}
-		if (imGuiLayer != nullptr)
-		{
-			{
-				ZoneScopedN("Application.ImGuiLayer.BindUiState");
-				ApplicationDetail::StartupStepTimer timer("ImGuiLayer.BindUiState");
-				if (editorLayer != nullptr)
-				{
-					editorLayer->BindRuntimeServices(
-						m_EventBus,
-						coreLayer->GetJobSystemHandle(),
-						coreLayer->GetProgressTrackerHandle(),
-						m_LogRegistry,
-						coreLayer->GetKeymapResolverHandle(),
-						coreLayer->GetContextManagerHandle(),
-						coreLayer->GetCommandRegistryHandle());
-					editorLayer->ApplyConfig(m_Config);
-					imGuiLayer->BindUiState(editorLayer->GetUiStateHandle());
-				}
-				timer.Finish(true);
-			}
-		}
-
-		const Path keybindingsPath = ConfigManager::GetKeybindingsPath(m_Config.directory);
-		{
-			ZoneScopedN("Application.LoadStartupKeybindings");
-			ApplicationDetail::StartupStepTimer timer("Application.LoadStartupKeybindings");
-			m_EventBus->Queue(AppEvents::Keymap::BindingsLoadRequested{keybindingsPath});
-			m_EventBus->ProcessQueue();
 			timer.Finish(true);
 		}
 		DS_LOG_INFO("Init: Core runtime services ready");

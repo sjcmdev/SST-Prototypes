@@ -8,6 +8,8 @@
 
 namespace SST::Prototypes::JFM
 {
+	namespace
+	{
 
 	const std::vector<double> &selectYValues(const JFMCharacteristic &characteristic)
 	{
@@ -15,7 +17,7 @@ namespace SST::Prototypes::JFM
 			return characteristic.currentDensity;
 		return characteristic.current;
 	}
-	
+	}
 
 	JFMExportRawTsvJob::JFMExportRawTsvJob(Ref<EventBus> eventBus, Path path, JFMCharacteristic characteristic)
 		: m_EventBus(std::move(eventBus)), m_Path(std::move(path)), m_Characteristic(std::move(characteristic))

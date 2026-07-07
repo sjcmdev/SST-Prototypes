@@ -1,9 +1,8 @@
 #include "Core/dspch.hpp"
 
-#include "Storage/JFMProjectYamlSerializer.hpp"
+#include "IO/JFMProjectYamlSerializer.hpp"
 
-#include <yaml-cpp/yaml.h> // TODO: tu nie powinno być tego includu. To jest odpowiedzialnośc warstwy IO
-//! Error: YAML nie powinien być w Storage. To jest odpowiedzialność warstwy IO serializacja i deserializacja
+#include <yaml-cpp/yaml.h>
 
 namespace SST::Prototypes::JFM
 {

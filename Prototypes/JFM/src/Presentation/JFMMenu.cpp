@@ -5,6 +5,9 @@
 #include <imgui.h>
 
 #include "Core/Commands/CommandRegistry.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Logging/Logger.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 
 namespace SST::Prototypes::JFM
 {
@@ -13,7 +16,23 @@ namespace SST::Prototypes::JFM
 	{
 		auto registry = services.commandRegistry.lock();
 		if (registry == nullptr)
-			return; //TODO: przydało by się tutaj zgłosić jakiś wyjątek, poinformować o problemie
+		{
+			DS_LOG_ERROR("JFM menu command runtime unavailable for '{}'", commandId);
+			if (services.eventBus != nullptr)
+			{
+				Notification notification{
+					NotificationSeverity::Error,
+					NotificationCategory::UI,
+					"Command unavailable",
+					"JFM command runtime is not available.",
+					"JFMMenu",
+					Time::Now(),
+					8000,
+					false};
+				services.eventBus->Queue(NotificationRequestedEvent{notification});
+			}
+			return;
+		}
 
 		CommandContext context(ContextID{"jfm.menu"});
 		context.SetSource(source);

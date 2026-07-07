@@ -23,6 +23,14 @@ namespace SST::Prototypes::JFM
 		return "jfm.import";
 	}
 
+	void JFMImportJob::reportProgress(JobContext &context, std::size_t completed, std::size_t total, const std::string &message) const
+	{
+		context.SetProgress(static_cast<float>(completed), static_cast<float>(total));
+		context.SetMessage(message);
+		if (m_EventBus != nullptr)
+			m_EventBus->Queue(ImportProgress{static_cast<float>(completed), static_cast<float>(total), message});
+	}
+
 	void JFMImportJob::Execute(JobContext &context)
 	{
 		context.SetStage("Python import");
@@ -33,11 +41,8 @@ namespace SST::Prototypes::JFM
 		auto result = bridge.ImportFiles(
 			m_Paths,
 			[&context, this](std::size_t completed, std::size_t total, const std::string &message) {
-				context.SetProgress(static_cast<float>(completed), static_cast<float>(total));
-				context.SetMessage(message);
-				if (m_EventBus != nullptr)
-					m_EventBus->Queue(ImportProgress{static_cast<float>(completed), static_cast<float>(total), message});
-			}); //! Error: za duża lambda, to zdecydowanie powinna być osobna funkcja
+				reportProgress(context, completed, total, message);
+			});
 
 		if (!result)
 		{

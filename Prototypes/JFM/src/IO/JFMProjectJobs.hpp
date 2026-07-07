@@ -8,7 +8,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	class SaveProjectJob final : public IJob //! Error: Dlaczego to się tutaj znajduje? Tu powinny znajdować się tylko rzeczy przechowujące dane a nie obsługujące. Takie rzeczy znajdują się albo w Domain albo IO
+	class SaveProjectJob final : public IJob
 	{
 	public:
 		SaveProjectJob(Ref<EventBus> eventBus, Path path, JFMProject snapshot);

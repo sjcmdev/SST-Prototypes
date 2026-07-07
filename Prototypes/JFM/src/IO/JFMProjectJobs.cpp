@@ -1,11 +1,11 @@
 #include "Core/dspch.hpp"
 
-#include "Storage/JFMProjectJobs.hpp"
+#include "IO/JFMProjectJobs.hpp"
 
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Events/JFMEvents.hpp"
-#include "Storage/JFMProjectYamlSerializer.hpp"
+#include "IO/JFMProjectYamlSerializer.hpp"
 
 namespace SST::Prototypes::JFM
 {

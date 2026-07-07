@@ -4,11 +4,11 @@
 
 namespace SST
 {
-	Application CreateApplication(int argc, char **argv);
+	void SetupApplication(Application &application);
 }
 
 int main(int argc, char **argv)
 {
-	auto app = SST::CreateApplication(argc, argv);
+	auto app = SST::Application::Create(argc, argv, SST::SetupApplication);
 	return app.Run();
 }

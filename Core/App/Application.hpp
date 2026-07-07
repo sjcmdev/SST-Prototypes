@@ -30,17 +30,18 @@ namespace SST
 	class ContextManager;
 	class CoreLayer;
 	class EditorLayer;
+	class IOLayer;
 	class KeymapResolver;
 	class LogRegistry;
 
 	class Application
 	{
 	public:
-		using LayerSetup = std::function<void(Application &)>;
+		using ApplicationSetup = std::function<void(Application &)>;
 
 		// Create a fully initialized application instance (may fail internally; check Run()).
 		static Application Create(int argc, char **argv);
-		static Application Create(int argc, char **argv, LayerSetup layerSetup);
+		static Application Create(int argc, char **argv, ApplicationSetup setup);
 		// Run the main loop until shutdown is requested; returns exit code.
 		int Run();
 		// Request shutdown; safe to call multiple times.
@@ -74,11 +75,13 @@ namespace SST
 		[[nodiscard]] WeakRef<KeymapResolver> GetKeymapResolverHandle() const;
 		[[nodiscard]] WeakRef<ContextManager> GetContextManagerHandle() const;
 		[[nodiscard]] WeakRef<CommandRegistry> GetCommandRegistryHandle() const;
+		[[nodiscard]] IOLayer &GetIOLayer();
 		[[nodiscard]] EditorLayer &GetEditorLayer();
 		[[nodiscard]] const EditorLayer &GetEditorLayer() const;
 		[[nodiscard]] WeakRef<ConfigManager> GetConfigManager() const;
 		[[nodiscard]] const ApplicationConfig &GetConfig() const;
 		void PushLayer(Unique<Layer> layer);
+		void InsertLayerBefore(LayerId before, Unique<Layer> layer);
 		void PushOverlay(Unique<Layer> overlay);
 
 		// Event processing entry point for concrete event types.
@@ -86,7 +89,7 @@ namespace SST
 		void OnEvent(TEvent &event);
 
 	private:
-		Application(int argc, char **argv, LayerSetup layerSetup = {});
+		Application(int argc, char **argv, ApplicationSetup setup = {});
 		Application(const Application &) = delete;
 		Application &operator=(const Application &) = delete;
 		Application(Application &&) = delete;
@@ -100,6 +103,7 @@ namespace SST
 		bool initializeWindowingAndGraphics();
 		bool initializeApplicationLayers();
 		bool initializeCoreRuntimeServices();
+		bool initializeProjectLayerSetup();
 		bool finishCreateFromSpecification();
 		void shutdownInternal();
 		
@@ -150,7 +154,7 @@ namespace SST
 		Ref<EventBus> m_EventBus;
 		Unique<ApplicationEventController> m_EventController;
 		LayerStack m_LayerStack;
-		LayerSetup m_ProjectLayerSetup;
+		ApplicationSetup m_ProjectSetup;
 		Ref<LogRegistry> m_LogRegistry;
 		
 		Ref<CapabilityService> m_CapabilityService;

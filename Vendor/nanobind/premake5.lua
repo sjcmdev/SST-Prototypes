@@ -40,7 +40,8 @@ project "nanobind"
         }
 
         defines {
-            "NB_STATIC"
+            "NB_STATIC",
+            "Py_NO_LINK_LIB"
         }
 
         filter { "action:vs2022" }

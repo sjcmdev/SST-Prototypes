@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Storage/JFMProjectYamlSerializer.hpp"
+#include "IO/JFMProjectYamlSerializer.hpp"
 
 namespace SST::Prototypes::JFM
 {

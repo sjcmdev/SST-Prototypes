@@ -36,6 +36,7 @@ namespace SST
 		~LayerStack();
 
 		void PushLayer(Unique<Layer> layer);
+		void InsertLayerBefore(LayerId before, Unique<Layer> layer);
 		void PushOverlay(Unique<Layer> overlay);
 		void PopLayer(Layer &layer);
 		void PopOverlay(Layer &overlay);

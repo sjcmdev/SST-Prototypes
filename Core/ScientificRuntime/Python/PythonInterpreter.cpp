@@ -11,6 +11,8 @@ namespace SST
 	std::atomic_bool g_PythonRuntimeInitialized{false};
 
 #if DS_PYTHON_CAPI_AVAILABLE
+	PyThreadState *g_PythonRuntimeThreadState = nullptr;
+
 	static void configureEmbeddedPythonHome()
 	{
 		const Path pythonHome = Platform::ResolveEmbeddedPythonHome();
@@ -48,14 +50,15 @@ namespace SST
 				"python.embed.initialize_failed");
 		}
 
-		m_MainThreadState = PyEval_SaveThread();
+		m_MainThreadState = PyThreadState_Get();
+		g_PythonRuntimeThreadState = m_MainThreadState;
 		if (m_MainThreadState == nullptr)
 		{
 			return MakePythonUnavailableError(
 				"Python interpreter lock setup failed.",
-				"PyEval_SaveThread() returned null thread state.",
+				"PyThreadState_Get() returned null thread state.",
 				"Ensure the interpreter is initialized on the main thread before background usage.",
-				"python.embed.save_thread_failed");
+				"python.embed.thread_state_failed");
 		}
 
 		m_IsRunning = true;
@@ -77,18 +80,9 @@ namespace SST
 			return;
 
 #if DS_PYTHON_CAPI_AVAILABLE
-		if (m_MainThreadState != nullptr)
-		{
-			PyEval_RestoreThread(m_MainThreadState);
-			m_MainThreadState = nullptr;
-		}
-
-		if (Py_IsInitialized())
-		{
-			const int finalizeCode = Py_FinalizeEx();
-			if (finalizeCode < 0)
-				DS_LOG_WARN("PythonInterpreter finalize reported an error code: {}", finalizeCode);
-		}
+		// ponytail: numpy/scipy extension modules are not reliably restartable after Py_FinalizeEx().
+		g_PythonRuntimeThreadState = nullptr;
+		m_MainThreadState = nullptr;
 #endif
 
 		m_IsRunning = false;
@@ -114,4 +108,22 @@ namespace SST
 	{
 		return g_PythonRuntimeInitialized.load(std::memory_order_relaxed);
 	}
+
+#if DS_PYTHON_CAPI_AVAILABLE
+	PyThreadState *PythonInterpreter::AcquireRuntimeThreadState()
+	{
+		if (!IsRuntimeInitialized() || !Py_IsInitialized() || g_PythonRuntimeThreadState == nullptr)
+			return nullptr;
+
+		if (!PyGILState_Check())
+			return nullptr;
+
+		return PyThreadState_Get();
+	}
+
+	void PythonInterpreter::ReleaseRuntimeThreadState(PyThreadState *threadState)
+	{
+		(void)threadState;
+	}
+#endif
 } // namespace SST

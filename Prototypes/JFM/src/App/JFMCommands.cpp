@@ -49,6 +49,13 @@ namespace SST::Prototypes::JFM
 			Handler m_Handler;
 		};
 
+		Unique<ICommand> CreateLambdaCommand(const std::string &description, LambdaCommand::Handler handler, CommandContext &)
+		{
+			return CreateUnique<LambdaCommand>(description, std::move(handler));
+		}
+
+		void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, const Path &path);
+
 		StructuredError makeCommandError(std::string message, std::string details)
 		{
 			return StructuredError{
@@ -231,6 +238,124 @@ namespace SST::Prototypes::JFM
 			return paths;
 		}
 
+		Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, CommandContext &)
+		{
+			workspace->ResetProject("Untitled JFM Project");
+			return Result<void>{};
+		}
+
+		Result<void> handleOpenProject(Ref<EventBus> eventBus, CommandContext &context)
+		{
+			try
+			{
+				std::optional<Path> path;
+				if (Path *contextPath = context.TryGet<Path>("path"))
+					path = *contextPath;
+				else
+					path = chooseProjectOpenPath();
+				if (path)
+					eventBus->Queue(ProjectLoadRequested{*path});
+				return Result<void>{};
+			}
+			catch (const std::exception &error)
+			{
+				return Result<void>{makeCommandError("Open project failed.", error.what())};
+			}
+		}
+
+		Result<void> handleSaveProject(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+		{
+			try
+			{
+				std::optional<Path> path = workspace->GetProjectPath();
+				if (!path)
+					path = chooseProjectSavePath();
+				if (path)
+					queueSave(*eventBus, workspace, *path);
+				return Result<void>{};
+			}
+			catch (const std::exception &error)
+			{
+				return Result<void>{makeCommandError("Save project failed.", error.what())};
+			}
+		}
+
+		Result<void> handleSaveProjectAs(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+		{
+			try
+			{
+				std::optional<Path> path = chooseProjectSavePath();
+				if (path)
+					queueSave(*eventBus, workspace, *path);
+				return Result<void>{};
+			}
+			catch (const std::exception &error)
+			{
+				return Result<void>{makeCommandError("Save project as failed.", error.what())};
+			}
+		}
+
+		Result<void> handleImportFiles(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &context)
+		{
+			try
+			{
+				std::vector<Path> paths;
+				if (std::vector<Path> *contextPaths = context.TryGet<std::vector<Path>>("paths"))
+					paths = *contextPaths;
+				else
+					paths = chooseImportFiles();
+				if (!paths.empty())
+					eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
+				return Result<void>{};
+			}
+			catch (const std::exception &error)
+			{
+				return Result<void>{makeCommandError("Import files failed.", error.what())};
+			}
+		}
+
+		Result<void> handleImportDirectory(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+		{
+			try
+			{
+				const std::optional<Path> directory = chooseImportDirectory();
+				if (!directory)
+					return Result<void>{};
+				std::vector<Path> paths = dataFilesInDirectory(*directory);
+				if (!paths.empty())
+					eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
+				else
+					workspace->SetStatusMessage("No .dat or .iv files found in selected directory.");
+				return Result<void>{};
+			}
+			catch (const std::exception &error)
+			{
+				return Result<void>{makeCommandError("Import directory failed.", error.what())};
+			}
+		}
+
+		Result<void> handleExportRawTsv(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+		{
+			try
+			{
+				auto selected = workspace->GetSelectedCharacteristic();
+				if (!selected)
+				{
+					workspace->SetStatusMessage("Raw TSV export failed: no characteristic selected.");
+					return Result<void>{};
+				}
+				const std::string defaultName = selected->name.empty() ? "raw.tsv" : selected->name + ".tsv";
+				std::optional<Path> path = chooseRawTsvSavePath(defaultName);
+				if (path)
+					eventBus->Queue(ExportRawTsvRequested{*path, *selected});
+				return Result<void>{};
+			}
+			catch (const std::exception &error)
+			{
+				return Result<void>{makeCommandError("Raw TSV export failed.", error.what())};
+			}
+		}
+
 		void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, const Path &path)
 		{
 			eventBus.Queue(ProjectSaveRequested{path, workspace->GetProjectSnapshot()});
@@ -241,9 +366,7 @@ namespace SST::Prototypes::JFM
 			std::string description = meta.description;
 			auto result = registry->Register(
 				std::move(meta),
-				[description = std::move(description), handler = std::move(handler)](CommandContext &) mutable {
-					return CreateUnique<LambdaCommand>(description, handler);
-				});
+				std::bind(CreateLambdaCommand, description, std::move(handler), std::placeholders::_1));
 			if (!result)
 				DS_LOG_WARN("JFM command registration failed: {}", result.Error().technicalDetails);
 		}
@@ -262,139 +385,42 @@ namespace SST::Prototypes::JFM
 		auto resolver = application.GetKeymapResolverHandle().lock();
 		Ref<EventBus> eventBus = application.GetEventBusRef();
 		if (registry == nullptr || resolver == nullptr || eventBus == nullptr || workspace == nullptr)
-			return;
+			throw std::runtime_error("JFM startup failed: command registry, keymap resolver, event bus, or workspace is unavailable.");
 
 		registerCommand(
 			registry,
 			CommandMeta{NewProjectCommand, "New Project", "JFM", "Create a new JFM project.", {}, CommandFlags::None},
-			[workspace](CommandContext &) {
-				workspace->ResetProject("Untitled JFM Project");
-				return Result<void>{};
-			});
+			std::bind(handleNewProject, workspace, std::placeholders::_1));
 
 		registerCommand(
 			registry,
 			CommandMeta{OpenProjectCommand, "Open Project...", "JFM", "Open a JFM project file.", {}, CommandFlags::AsyncCapable},
-			[eventBus](CommandContext &context) {
-				try
-				{
-					std::optional<Path> path;
-					if (Path *contextPath = context.TryGet<Path>("path"))
-						path = *contextPath;
-					else
-						path = chooseProjectOpenPath();
-					if (path)
-						eventBus->Queue(ProjectLoadRequested{*path});
-					return Result<void>{};
-				}
-				catch (const std::exception &error)
-				{
-					return Result<void>{makeCommandError("Open project failed.", error.what())};
-				}
-			});
+			std::bind(handleOpenProject, eventBus, std::placeholders::_1));
 
 		registerCommand(
 			registry,
 			CommandMeta{SaveProjectCommand, "Save Project", "JFM", "Save the current JFM project.", {}, CommandFlags::AsyncCapable},
-			[eventBus, workspace](CommandContext &) {
-				try
-				{
-					std::optional<Path> path = workspace->GetProjectPath();
-					if (!path)
-						path = chooseProjectSavePath();
-					if (path)
-						queueSave(*eventBus, workspace, *path);
-					return Result<void>{};
-				}
-				catch (const std::exception &error)
-				{
-					return Result<void>{makeCommandError("Save project failed.", error.what())};
-				}
-			});
+			std::bind(handleSaveProject, eventBus, workspace, std::placeholders::_1));
 
 		registerCommand(
 			registry,
 			CommandMeta{SaveProjectAsCommand, "Save Project As...", "JFM", "Save the current JFM project to a new file.", {}, CommandFlags::AsyncCapable},
-			[eventBus, workspace](CommandContext &) {
-				try
-				{
-					std::optional<Path> path = chooseProjectSavePath();
-					if (path)
-						queueSave(*eventBus, workspace, *path);
-					return Result<void>{};
-				}
-				catch (const std::exception &error)
-				{
-					return Result<void>{makeCommandError("Save project as failed.", error.what())};
-				}
-			});
+			std::bind(handleSaveProjectAs, eventBus, workspace, std::placeholders::_1));
 
 		registerCommand(
 			registry,
 			CommandMeta{ImportFilesCommand, "Import Files", "JFM", "Import JFM data files through Python.", {}, CommandFlags::AsyncCapable},
-			[eventBus, workspace](CommandContext &context) {
-				try
-				{
-					std::vector<Path> paths;
-					if (std::vector<Path> *contextPaths = context.TryGet<std::vector<Path>>("paths"))
-						paths = *contextPaths;
-					else
-						paths = chooseImportFiles();
-					if (!paths.empty())
-						eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
-					return Result<void>{};
-				}
-				catch (const std::exception &error)
-				{
-					return Result<void>{makeCommandError("Import files failed.", error.what())};
-				}
-			});
+			std::bind(handleImportFiles, eventBus, workspace, std::placeholders::_1));
 
 		registerCommand(
 			registry,
 			CommandMeta{ImportDirectoryCommand, "Import Directory", "JFM", "Import a directory of JFM data files through Python.", {}, CommandFlags::AsyncCapable},
-			[eventBus, workspace](CommandContext &) {
-				try
-				{
-					const std::optional<Path> directory = chooseImportDirectory();
-					if (!directory)
-						return Result<void>{};
-					std::vector<Path> paths = dataFilesInDirectory(*directory);
-					if (!paths.empty())
-						eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
-					else
-						workspace->SetStatusMessage("No .dat or .iv files found in selected directory.");
-					return Result<void>{};
-				}
-				catch (const std::exception &error)
-				{
-					return Result<void>{makeCommandError("Import directory failed.", error.what())};
-				}
-			});
+			std::bind(handleImportDirectory, eventBus, workspace, std::placeholders::_1));
 
 		registerCommand(
 			registry,
 			CommandMeta{ExportRawTsvCommand, "Export Raw TSV", "JFM", "Export selected raw data as TSV.", {}, CommandFlags::AsyncCapable},
-			[eventBus, workspace](CommandContext &) {
-				try
-				{
-					auto selected = workspace->GetSelectedCharacteristic();
-					if (!selected)
-					{
-						workspace->SetStatusMessage("Raw TSV export failed: no characteristic selected.");
-						return Result<void>{};
-					}
-					const std::string defaultName = selected->name.empty() ? "raw.tsv" : selected->name + ".tsv";
-					std::optional<Path> path = chooseRawTsvSavePath(defaultName);
-					if (path)
-						eventBus->Queue(ExportRawTsvRequested{*path, *selected});
-					return Result<void>{};
-				}
-				catch (const std::exception &error)
-				{
-					return Result<void>{makeCommandError("Raw TSV export failed.", error.what())};
-				}
-			});
+			std::bind(handleExportRawTsv, eventBus, workspace, std::placeholders::_1));
 
 		registerBinding(resolver, {"jfm.new_project", KeyChord{KeyCode::N, KeyModifiers::Ctrl}, NewProjectCommand, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.open_project", KeyChord{KeyCode::O, KeyModifiers::Ctrl}, OpenProjectCommand, {}, KeymapLayer::Project, true});
