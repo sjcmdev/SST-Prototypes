@@ -1,7 +1,10 @@
 #pragma once
 
 #include <array>
+#include <functional>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Layer.hpp"
@@ -44,6 +47,8 @@ namespace SST
 		WeakRef<EditorUiState> uiState;
 	};
 
+	using EditorMenuRenderer = std::function<void(EditorServices &)>;
+
 	class EditorLayer final : public Layer, public EventReceiver
 	{
 	public:
@@ -64,6 +69,7 @@ namespace SST
 		PanelId RegisterPanel(Args &&...args);
 		[[nodiscard]] WeakRef<IPanel> FindPanel(PanelId panelId);
 		[[nodiscard]] WeakRef<const IPanel> FindPanel(PanelId panelId) const;
+		void RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer);
 
 		void OnDetach() override;
 		void OnEvent(Event &event) override;
@@ -74,13 +80,21 @@ namespace SST
 		void initializeUiState();
 		void bindEvents();
 		void handleFontShortcuts(Event &event);
+		void renderMenuBar();
 		void renderCommandPalettePopup();
 		void executeCommandFromPalette(const CommandID &id);
 		void onConfigApplied(const AppEvents::Config::Applied &event);
 		void onOpenCommandPaletteRequested(const CoreEvents::OpenCommandPaletteRequested &event);
 
 	private:
+		struct MenuRendererEntry
+		{
+			std::string id;
+			EditorMenuRenderer renderer;
+		};
+
 		PanelRegistry m_Panels;
+		std::vector<MenuRendererEntry> m_MenuRenderers;
 		Ref<EditorUiState> m_UiState;
 		Ref<ApplicationConfig> m_CurrentConfig;
 		Ref<EventBus> m_EventBus;

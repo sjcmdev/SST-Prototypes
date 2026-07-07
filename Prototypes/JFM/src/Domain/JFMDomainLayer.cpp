@@ -1,4 +1,4 @@
-﻿#include "Core/dspch.hpp"
+#include "Core/dspch.hpp"
 
 #include "Domain/JFMDomainLayer.hpp"
 
@@ -6,16 +6,14 @@
 
 namespace SST::Prototypes::JFM
 {
-	JFMDomainLayer::JFMDomainLayer(Ref<PrototypeResultStore> store)
+	JFMDomainLayer::JFMDomainLayer(Ref<JFMWorkspaceStore> store)
 		: Layer("JFMDomain"), m_Store(std::move(store))
 	{
 	}
 
 	void JFMDomainLayer::OnAttach()
 	{
-		PrototypeResult result = PrototypeBackend::Evaluate({});
-		m_Store->Save(result);
-		DS_LOG_INFO("JFM backend smoke result: conductivity={}", result.conductivity);
+		const JFMProject snapshot = m_Store != nullptr ? m_Store->GetProjectSnapshot() : JFMProject{};
+		DS_LOG_INFO("JFM domain layer attached: project={}", snapshot.name);
 	}
 } // namespace SST::Prototypes::JFM
-

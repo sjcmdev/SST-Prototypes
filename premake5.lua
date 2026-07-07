@@ -32,13 +32,72 @@ end
 _SST_ROOT = path.getabsolute(".")
 _DS_ROOT = _SST_ROOT
 
-_SST_PYTHON_EMBED_AVAILABLE = false
+local function trim(value)
+    return (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function pythonConfig(command)
+    return trim(os.outputof("python -c \"" .. command .. "\"") or "")
+end
+
+_SST_PYTHON_INCLUDE_DIR = os.getenv("SST_PYTHON_INCLUDE_DIR") or ""
+_SST_PYTHON_LIB_DIR = os.getenv("SST_PYTHON_LIB_DIR") or ""
+_SST_PYTHON_LIB_NAME = os.getenv("SST_PYTHON_LIB_NAME") or ""
+
+if _SST_PYTHON_INCLUDE_DIR == "" then
+    _SST_PYTHON_INCLUDE_DIR = pythonConfig("import sysconfig; print(sysconfig.get_paths().get('include',''))")
+end
+if _SST_PYTHON_LIB_DIR == "" then
+    _SST_PYTHON_LIB_DIR = pythonConfig("import sysconfig; print(sysconfig.get_config_var('LIBDIR') or '')")
+end
+if _SST_PYTHON_LIB_NAME == "" then
+    _SST_PYTHON_LIB_NAME = pythonConfig("import sysconfig; print('python' + (sysconfig.get_config_var('py_version_nodot') or ''))")
+end
+
+if _SST_PYTHON_INCLUDE_DIR ~= "" and not os.isdir(_SST_PYTHON_INCLUDE_DIR) then
+    _SST_PYTHON_INCLUDE_DIR = ""
+end
+if _SST_PYTHON_LIB_DIR ~= "" and not os.isdir(_SST_PYTHON_LIB_DIR) then
+    _SST_PYTHON_LIB_DIR = ""
+end
+
+_SST_PYTHON_EMBED_AVAILABLE = _SST_PYTHON_INCLUDE_DIR ~= "" and _SST_PYTHON_LIB_DIR ~= "" and _SST_PYTHON_LIB_NAME ~= ""
+_DS_PYTHON_INCLUDE_DIR = _SST_PYTHON_INCLUDE_DIR
+_DS_PYTHON_LIB_DIR = _SST_PYTHON_LIB_DIR
+_DS_PYTHON_LIB_NAME = _SST_PYTHON_LIB_NAME
 _DS_PYTHON_EMBED_AVAILABLE = _SST_PYTHON_EMBED_AVAILABLE
 
 group "Dependencies"
 include "Vendor/GLFW"
 include "Vendor/GLAD"
 include "Vendor/ImGui"
+
+project "ImPlot"
+    location (_SST_ROOT .. "/build/generated/%{_ACTION}/%{prj.name}")
+    kind "StaticLib"
+    language "C++"
+    cppdialect "C++latest"
+    staticruntime "off"
+
+    targetdir (_SST_ROOT .. "/build/bin/" .. outputdir .. "/%{prj.name}")
+    objdir (_SST_ROOT .. "/build/bin-int/" .. outputdir .. "/%{prj.name}")
+
+    files {
+        "Vendor/implot/implot.h",
+        "Vendor/implot/implot_internal.h",
+        "Vendor/implot/implot.cpp",
+        "Vendor/implot/implot_items.cpp"
+    }
+
+    includedirs {
+        "Vendor/ImGui",
+        "Vendor/implot"
+    }
+
+    filter { "system:windows", "action:vs2022" }
+        buildoptions { "/utf-8" }
+    filter {}
+
 include "Vendor/thread-pool"
 include "Vendor/json"
 include "Vendor/yaml-cpp"
@@ -65,6 +124,7 @@ end
 
 applyDependencyRuntimeFilters("GLAD")
 applyDependencyRuntimeFilters("ImGui")
+applyDependencyRuntimeFilters("ImPlot")
 applyDependencyRuntimeFilters("yaml-cpp")
 applyDependencyRuntimeFilters("Tracy")
 applyDependencyRuntimeFilters("GoogleTest")
@@ -170,6 +230,7 @@ project "Core"
         "Vendor/GLAD/generated/include",
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
+        "Vendor/implot",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
         "Vendor/ImGuiNotify/win32Example/fonts",
@@ -191,6 +252,7 @@ project "Core"
         "GLFW",
         "GLAD",
         "ImGui",
+        "ImPlot",
         "nfd",
         "yaml-cpp"
     }

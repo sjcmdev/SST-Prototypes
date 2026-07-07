@@ -122,9 +122,28 @@ namespace SST
 		return m_Panels.Get(panelId);
 	}
 
+	void EditorLayer::RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer)
+	{
+		if (!renderer)
+			return;
+
+		auto existing = std::find_if(
+			m_MenuRenderers.begin(),
+			m_MenuRenderers.end(),
+			[&id](const MenuRendererEntry &entry) { return entry.id == id; });
+		if (existing != m_MenuRenderers.end())
+		{
+			existing->renderer = std::move(renderer);
+			return;
+		}
+
+		m_MenuRenderers.push_back(MenuRendererEntry{std::move(id), std::move(renderer)});
+	}
+
 	void EditorLayer::OnDetach()
 	{
 		m_Panels.Clear();
+		m_MenuRenderers.clear();
 		m_PanelsInitialized = false;
 		ClearSubscriptions();
 		m_EventBus.reset();
@@ -154,6 +173,7 @@ namespace SST
 	void EditorLayer::OnImGuiRender()
 	{
 		initializePanelsIfNeeded();
+		renderMenuBar();
 		renderCommandPalettePopup();
 
 		for (auto &entry : m_Panels.Entries())
@@ -261,6 +281,24 @@ namespace SST
 			handleKey(keyPressed->GetKeyCode());
 		else if (const auto *keyRepeated = dynamic_cast<const KeyRepeatedEvent *>(&event))
 			handleKey(keyRepeated->GetKeyCode());
+	}
+
+	void EditorLayer::renderMenuBar()
+	{
+		if (m_MenuRenderers.empty())
+			return;
+
+		if (!ImGui::BeginMainMenuBar())
+			return;
+
+		EditorServices services = GetServices();
+		for (MenuRendererEntry &entry : m_MenuRenderers)
+		{
+			if (entry.renderer)
+				entry.renderer(services);
+		}
+
+		ImGui::EndMainMenuBar();
 	}
 
 	void EditorLayer::renderCommandPalettePopup()

@@ -1,22 +1,19 @@
-﻿#pragma once
-
-#include <memory>
+#pragma once
 
 #include "Core/Layer.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Storage/PrototypeResultStore.hpp"
+#include "Storage/JFMWorkspaceStore.hpp"
 
 namespace SST::Prototypes::JFM
 {
 	class JFMDomainLayer final : public Layer
 	{
 	public:
-		explicit JFMDomainLayer(Ref<PrototypeResultStore> store);
+		explicit JFMDomainLayer(Ref<JFMWorkspaceStore> store);
 
 		void OnAttach() override;
 
 	private:
-		Ref<PrototypeResultStore> m_Store;
+		Ref<JFMWorkspaceStore> m_Store;
 	};
 } // namespace SST::Prototypes::JFM
-

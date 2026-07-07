@@ -1,0 +1,28 @@
+#pragma once
+
+#include "Core/Utils/Memory.hpp"
+#include "Presentation/Panels/IPanel.hpp"
+#include "Storage/JFMWorkspaceStore.hpp"
+
+namespace SST::Prototypes::JFM
+{
+	class RawPlotPanel final : public IPanel
+	{
+	public:
+		explicit RawPlotPanel(Ref<JFMWorkspaceStore> store, std::string title = "Raw Plot", bool visibleByDefault = true);
+
+		[[nodiscard]] Ref<IPanel> Clone() const override;
+		void Render() override;
+
+	private:
+		enum class PlotScale
+		{
+			Linear,
+			SemiLog,
+			SignedLog
+		};
+
+		Ref<JFMWorkspaceStore> m_Store;
+		PlotScale m_Scale = PlotScale::Linear;
+	};
+} // namespace SST::Prototypes::JFM
