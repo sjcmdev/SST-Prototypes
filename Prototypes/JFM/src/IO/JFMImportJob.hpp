@@ -18,6 +18,7 @@ namespace SST::Prototypes::JFM
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
+		[[nodiscard]] bool UsesPythonRuntime() const override;
 		void Execute(JobContext &context) override;
 
 	private:

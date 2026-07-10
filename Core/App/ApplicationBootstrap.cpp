@@ -684,6 +684,10 @@ namespace SST
 		if (m_ProjectSetup)
 			m_ProjectSetup(*this);
 
+		auto scientificRuntimeLayer = m_LayerStack.FindLayerAs<ScientificRuntimeLayer>(LayerId::ScientificRuntime).lock();
+		if (scientificRuntimeLayer != nullptr)
+			scientificRuntimeLayer->InitializeRuntime();
+
 		if (!imGuiLayer->IsInitialized())
 		{
 			DS_LOG_ERROR("CreateFromSpecification: ImGuiLayer initialization failed");

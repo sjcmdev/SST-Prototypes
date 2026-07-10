@@ -23,6 +23,11 @@ namespace SST::Prototypes::JFM
 		return "jfm.import";
 	}
 
+	bool JFMImportJob::UsesPythonRuntime() const
+	{
+		return true;
+	}
+
 	void JFMImportJob::reportProgress(JobContext &context, std::size_t completed, std::size_t total, const std::string &message) const
 	{
 		context.SetProgress(static_cast<float>(completed), static_cast<float>(total));

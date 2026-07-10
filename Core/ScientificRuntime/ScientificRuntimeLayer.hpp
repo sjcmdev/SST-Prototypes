@@ -21,6 +21,7 @@ namespace SST
 		void OnUpdate(float deltaTime) override;
 
 		void BindJobSystem(WeakRef<JobSystem> jobSystem);
+		void InitializeRuntime();
 		void RegisterCapability(CapabilityService &capabilityService, CapabilityEntry capability) const;
 		[[nodiscard]] CapabilityEntry BuildPythonBridgeCapability() const;
 		[[nodiscard]] bool IsPythonBridgeAvailable() const noexcept;

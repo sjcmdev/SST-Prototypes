@@ -9,6 +9,7 @@
 #include "IO/IOLayer.hpp"
 #include "IO/JFMIORegistration.hpp"
 #include "IO/JFMImportPaths.hpp"
+#include "IO/JFMPythonBindings.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/JFMMenu.hpp"
 #include "Presentation/Panels/ImportStatusPanel.hpp"
@@ -44,6 +45,8 @@ namespace SST
 		Ref<EventBus> eventBus = runtime.eventBus.lock();
 		Ref<Notifier> notifier = runtime.notifier.lock();
 		DS_ASSERT(eventBus != nullptr, "JFM setup requires EventBus");
+
+		RegisterJFMPythonBindings();
 
 		auto workspace = CreateRef<JFMWorkspaceStore>();
 		RegisterJFMIOHandlers(

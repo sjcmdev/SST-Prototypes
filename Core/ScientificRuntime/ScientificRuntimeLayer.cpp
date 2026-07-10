@@ -8,7 +8,6 @@
 #include "Core/Logging/Logger.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 #include "ScientificRuntime/Python/PythonGilScope.hpp"
-#include "ScientificRuntime/Python/PythonScriptJob.hpp"
 #include "ScientificRuntime/Python/ScientificPythonRuntime.hpp"
 
 namespace SST
@@ -21,6 +20,15 @@ namespace SST
 
 	void ScientificRuntimeLayer::OnAttach()
 	{
+		registerJobSystemHooks();
+		DS_LOG_INFO("ScientificRuntimeLayer attached");
+	}
+
+	void ScientificRuntimeLayer::InitializeRuntime()
+	{
+		if (m_PythonRuntime != nullptr)
+			return;
+
 		m_PythonRuntime = CreateUnique<ScientificPythonRuntime>();
 		Result<void> initializeResult = m_PythonRuntime->Initialize();
 		m_PythonBridgeAvailable = initializeResult.HasValue();
@@ -37,9 +45,6 @@ namespace SST
 		{
 			DS_LOG_INFO("ScientificRuntimeLayer: Python bridge initialized");
 		}
-
-		registerJobSystemHooks();
-		DS_LOG_INFO("ScientificRuntimeLayer attached");
 	}
 
 	void ScientificRuntimeLayer::OnDetach()
@@ -74,8 +79,7 @@ namespace SST
 			return;
 
 		jobSystem->RegisterPreExecuteHook([](const IJob &job) -> Unique<IJobExecutionGuard> {
-			const auto *pythonJob = dynamic_cast<const PythonScriptJob *>(&job);
-			if (pythonJob != nullptr && pythonJob->UsesPythonRuntime())
+			if (job.UsesPythonRuntime())
 				return CreateUnique<PythonGilAcquireScope>();
 			return {};
 		});

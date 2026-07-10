@@ -20,7 +20,7 @@ namespace SST
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
-		[[nodiscard]] bool UsesPythonRuntime() const;
+		[[nodiscard]] bool UsesPythonRuntime() const override;
 		void Execute(JobContext &context) override;
 
 	private:

@@ -6,8 +6,14 @@
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 
 #if DS_PYTHON_CAPI_AVAILABLE
-#include "ScientificRuntime/Python/PythonGilScope.hpp"
 #include "ScientificRuntime/Python/PythonInterpreter.hpp"
+
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/string.h>
+
+#include <mutex>
+#include <optional>
 #endif
 
 namespace SST::Prototypes::JFM
@@ -25,114 +31,7 @@ namespace SST::Prototypes::JFM
 	}
 
 #if DS_PYTHON_CAPI_AVAILABLE
-	class PyObjectRef
-	{
-	public:
-		PyObjectRef() = default;
-		explicit PyObjectRef(PyObject *object)
-			: m_Object(object)
-		{
-		}
-
-		PyObjectRef(const PyObjectRef &) = delete;
-		PyObjectRef &operator=(const PyObjectRef &) = delete;
-
-		PyObjectRef(PyObjectRef &&other) noexcept
-			: m_Object(other.m_Object)
-		{
-			other.m_Object = nullptr;
-		}
-
-		PyObjectRef &operator=(PyObjectRef &&other) noexcept
-		{
-			if (this == &other)
-				return *this;
-			Py_XDECREF(m_Object);
-			m_Object = other.m_Object;
-			other.m_Object = nullptr;
-			return *this;
-		}
-
-		~PyObjectRef()
-		{
-			Py_XDECREF(m_Object);
-		}
-
-		[[nodiscard]] PyObject *get() const
-		{
-			return m_Object;
-		}
-
-		[[nodiscard]] explicit operator bool() const
-		{
-			return m_Object != nullptr;
-		}
-
-	private:
-		PyObject *m_Object = nullptr;
-	};
-
-	Result<void> ensurePythonRuntimeStarted()
-	{
-		if (PythonInterpreter::IsRuntimeInitialized())
-			return {};
-
-		static PythonInterpreter interpreter;
-		static bool started = false;
-		if (started)
-			return {};
-
-		Result<void> result = interpreter.Start();
-		if (!result)
-			return result.Error();
-
-		started = true;
-		return {};
-	}
-
-	std::string describePythonError()
-	{
-		if (!PyErr_Occurred())
-			return "Unknown Python error.";
-
-		PyObject *type = nullptr;
-		PyObject *value = nullptr;
-		PyObject *traceback = nullptr;
-		PyErr_Fetch(&type, &value, &traceback);
-		PyErr_NormalizeException(&type, &value, &traceback);
-		PyObjectRef typeRef(type);
-		PyObjectRef valueRef(value);
-		PyObjectRef tracebackRef(traceback);
-
-		std::string message;
-		if (typeRef)
-		{
-			PyObjectRef typeName(PyObject_GetAttrString(typeRef.get(), "__name__"));
-			if (typeName)
-			{
-				PyObjectRef utf8(PyUnicode_AsUTF8String(typeName.get()));
-				if (utf8)
-					message += PyBytes_AsString(utf8.get());
-			}
-		}
-
-		if (valueRef)
-		{
-			PyObjectRef valueText(PyObject_Str(valueRef.get()));
-			if (valueText)
-			{
-				PyObjectRef utf8(PyUnicode_AsUTF8String(valueText.get()));
-				if (utf8)
-				{
-					if (!message.empty())
-						message += ": ";
-					message += PyBytes_AsString(utf8.get());
-				}
-			}
-		}
-
-		return message.empty() ? "Unknown Python error." : message;
-	}
+	namespace nb = nanobind;
 
 	std::string parserNameForPath(const Path &path)
 	{
@@ -142,22 +41,79 @@ namespace SST::Prototypes::JFM
 		return "dat";
 	}
 
-	std::string pythonStringLiteral(const std::string &value)
+	StructuredError makeImportFileError(
+		const Path &path,
+		const Path &pythonRoot,
+		const std::string &parser,
+		const std::string &error)
 	{
-		std::string result = "'";
-		for (const char character : value)
+		return makePythonBridgeError(
+			"Python import failed.",
+			"File: " + path.String()
+				+ "\nPython root: " + pythonRoot.String()
+				+ "\nParser: " + parser
+				+ "\nError: " + error);
+	}
+
+	std::string pyString(nb::handle value)
+	{
+		if (!value.is_valid() || value.is_none())
+			return {};
+
+		const nb::str text(value);
+		const char *raw = text.c_str();
+		return raw == nullptr ? std::string{} : std::string(raw);
+	}
+
+	std::optional<double> pyOptionalDouble(nb::handle value)
+	{
+		if (!value.is_valid() || value.is_none())
+			return std::nullopt;
+
+		try
 		{
-			if (character == '\\')
-				result += "\\\\";
-			else if (character == '\'')
-				result += "\\'";
-			else if (character == '\n')
-				result += "\\n";
-			else
-				result += character;
+			return nb::cast<double>(value);
 		}
-		result += "'";
-		return result;
+		catch (const std::exception &)
+		{
+			return std::nullopt;
+		}
+	}
+
+	std::size_t pySize(nb::handle value)
+	{
+		if (!value.is_valid() || value.is_none())
+			return 0;
+
+		try
+		{
+			return nb::cast<std::size_t>(value);
+		}
+		catch (const std::exception &)
+		{
+			return 0;
+		}
+	}
+
+	nb::object dictItem(const nb::dict &dict, const char *key)
+	{
+		if (!dict.contains(key))
+			return nb::none();
+		return nb::borrow<nb::object>(dict[key].ptr());
+	}
+
+	std::optional<nb::dict> asDict(nb::handle value)
+	{
+		if (!value.is_valid() || value.is_none() || !nb::isinstance<nb::dict>(value))
+			return std::nullopt;
+		return nb::borrow<nb::dict>(value);
+	}
+
+	std::optional<nb::list> asList(nb::handle value)
+	{
+		if (!value.is_valid() || value.is_none() || !nb::isinstance<nb::list>(value))
+			return std::nullopt;
+		return nb::borrow<nb::list>(value);
 	}
 
 	bool appendStringToSysPath(const std::string &path)
@@ -165,12 +121,16 @@ namespace SST::Prototypes::JFM
 		if (path.empty())
 			return true;
 
-		const std::string script =
-			"import sys\n"
-			"_sst_path = " + pythonStringLiteral(path) + "\n"
-			"if _sst_path not in sys.path:\n"
-			"    sys.path.insert(0, _sst_path)\n";
-		return PyRun_SimpleString(script.c_str()) == 0;
+		nb::module_ sys = nb::module_::import_("sys");
+		nb::list sysPath = nb::cast<nb::list>(sys.attr("path"));
+		for (nb::handle item : sysPath)
+		{
+			if (pyString(item) == path)
+				return true;
+		}
+
+		sysPath.insert(0, nb::str(path.c_str()));
+		return true;
 	}
 
 	void appendVenvSitePackages(const Path &venvRoot)
@@ -219,73 +179,16 @@ namespace SST::Prototypes::JFM
 		return appendStringToSysPath(pythonRoot.String());
 	}
 
-	PyObject *dictGet(PyObject *dict, const char *key)
-	{
-		if (dict == nullptr || !PyDict_Check(dict))
-			return nullptr;
-		return PyDict_GetItemString(dict, key);
-	}
-
-	std::string pyString(PyObject *value)
-	{
-		if (value == nullptr || value == Py_None)
-			return {};
-
-		PyObjectRef text(PyObject_Str(value));
-		if (!text)
-			return {};
-
-		PyObjectRef utf8(PyUnicode_AsUTF8String(text.get()));
-		if (!utf8)
-			return {};
-
-		const char *raw = PyBytes_AsString(utf8.get());
-		return raw == nullptr ? std::string{} : std::string(raw);
-	}
-
-	std::optional<double> pyOptionalDouble(PyObject *value)
-	{
-		if (value == nullptr || value == Py_None)
-			return std::nullopt;
-
-		const double number = PyFloat_AsDouble(value);
-		if (PyErr_Occurred())
-			return std::nullopt;
-		return number;
-	}
-
-	std::vector<double> extractColumn(PyObject *rows, std::size_t columnIndex)
+	std::vector<double> extractColumn(nb::ndarray<const double, nb::ndim<2>, nb::device::cpu> data, std::size_t columnIndex)
 	{
 		std::vector<double> values;
-		if (rows == nullptr || !PySequence_Check(rows))
+		if (!data.is_valid() || data.ndim() != 2 || columnIndex >= data.shape(1))
 			return values;
 
-		const Py_ssize_t rowCount = PySequence_Size(rows);
-		if (rowCount <= 0)
-			return values;
-		values.reserve(static_cast<std::size_t>(rowCount));
-
-		for (Py_ssize_t rowIndex = 0; rowIndex < rowCount; ++rowIndex)
-		{
-			PyObjectRef row(PySequence_GetItem(rows, rowIndex));
-			if (!row || !PySequence_Check(row.get()))
-				continue;
-
-			const Py_ssize_t columnCount = PySequence_Size(row.get());
-			if (columnIndex >= static_cast<std::size_t>(columnCount))
-				continue;
-
-			PyObjectRef value(PySequence_GetItem(row.get(), static_cast<Py_ssize_t>(columnIndex)));
-			if (!value)
-				continue;
-
-			const double number = PyFloat_AsDouble(value.get());
-			if (!PyErr_Occurred())
-				values.push_back(number);
-			else
-				PyErr_Clear();
-		}
-
+		auto view = data.view();
+		values.reserve(data.shape(0));
+		for (std::size_t row = 0; row < data.shape(0); ++row)
+			values.push_back(view(row, columnIndex));
 		return values;
 	}
 
@@ -299,96 +202,91 @@ namespace SST::Prototypes::JFM
 		return fallback;
 	}
 
-	JFMCharacteristic toCharacteristic(const Path &path, const std::string &parser, PyObject *curve)
+	void readMetadata(JFMCharacteristic &characteristic, const nb::dict &metadata)
 	{
-		JFMCharacteristic characteristic;
-		characteristic.name = pyString(dictGet(curve, "name"));
-		characteristic.measurement = pyString(dictGet(curve, "measurement"));
-		characteristic.sourcePath = path.String();
-		characteristic.parser = parser;
+		for (auto [key, value] : metadata)
+			characteristic.metadata[pyString(key)] = pyString(value);
 
-		PyObject *metadata = dictGet(curve, "metadata");
-		if (metadata != nullptr && PyDict_Check(metadata))
+		characteristic.temperatureK = pyOptionalDouble(dictItem(metadata, "temperature_K"));
+		characteristic.temperatureSource = pyString(dictItem(metadata, "temperature_source"));
+	}
+
+	void readColumns(JFMCharacteristic &characteristic, const nb::list &columns)
+	{
+		for (nb::handle columnValue : columns)
 		{
-			PyObject *key = nullptr;
-			PyObject *value = nullptr;
-			Py_ssize_t position = 0;
-			while (PyDict_Next(metadata, &position, &key, &value))
-				characteristic.metadata[pyString(key)] = pyString(value);
+			const std::optional<nb::dict> column = asDict(columnValue);
+			if (!column)
+				continue;
+
+			characteristic.columns.push_back(JFMColumn{
+				pyString(dictItem(*column, "name")),
+				pyString(dictItem(*column, "unit")),
+				pyString(dictItem(*column, "role"))});
 		}
-		characteristic.temperatureK = pyOptionalDouble(dictGet(metadata, "temperature_K"));
-		characteristic.temperatureSource = pyString(dictGet(metadata, "temperature_source"));
+	}
 
-		PyObject *columns = dictGet(curve, "columns");
-		if (columns != nullptr && PySequence_Check(columns))
-		{
-			const Py_ssize_t count = PySequence_Size(columns);
-			for (Py_ssize_t index = 0; index < count; ++index)
-			{
-				PyObjectRef column(PySequence_GetItem(columns, index));
-				if (!column)
-					continue;
+	void readSweep(JFMCharacteristic &characteristic, const nb::dict &sweep)
+	{
+		characteristic.sweep.direction = pyString(dictItem(sweep, "direction"));
+		characteristic.sweep.vStart = pyOptionalDouble(dictItem(sweep, "v_start"));
+		characteristic.sweep.vStop = pyOptionalDouble(dictItem(sweep, "v_stop"));
+		characteristic.sweep.pointCount = pySize(dictItem(sweep, "n_points"));
+	}
 
-				characteristic.columns.push_back(JFMColumn{
-					pyString(dictGet(column.get(), "name")),
-					pyString(dictGet(column.get(), "unit")),
-					pyString(dictGet(column.get(), "role"))});
-			}
-		}
+	void readWarnings(JFMCharacteristic &characteristic, const nb::list &warnings)
+	{
+		for (nb::handle warning : warnings)
+			characteristic.qc.warnings.push_back(pyString(warning));
 
-		PyObject *sweep = dictGet(curve, "sweep");
-		characteristic.sweep.direction = pyString(dictGet(sweep, "direction"));
-		characteristic.sweep.vStart = pyOptionalDouble(dictGet(sweep, "v_start"));
-		characteristic.sweep.vStop = pyOptionalDouble(dictGet(sweep, "v_stop"));
-		PyObject *pointCount = dictGet(sweep, "n_points");
-		if (pointCount != nullptr)
-			characteristic.sweep.pointCount = static_cast<std::size_t>(PyLong_AsUnsignedLongLong(pointCount));
-
-		PyObject *warnings = dictGet(curve, "warnings");
-		if (warnings != nullptr && PySequence_Check(warnings))
-		{
-			const Py_ssize_t count = PySequence_Size(warnings);
-			for (Py_ssize_t index = 0; index < count; ++index)
-			{
-				PyObjectRef warning(PySequence_GetItem(warnings, index));
-				if (warning)
-					characteristic.qc.warnings.push_back(pyString(warning.get()));
-			}
-		}
 		characteristic.qc.hasMissingTemperature = !characteristic.temperatureK.has_value();
 		characteristic.qc.nonMonotonicSweep =
 			std::find(characteristic.qc.warnings.begin(), characteristic.qc.warnings.end(), "non_monotonic_sweep")
 				!= characteristic.qc.warnings.end()
 			|| std::find(characteristic.qc.warnings.begin(), characteristic.qc.warnings.end(), "nonmonotonic_sweep")
 				!= characteristic.qc.warnings.end();
+	}
 
-		PyObjectRef rows(PyObject_CallMethod(dictGet(curve, "data"), "tolist", nullptr));
+	JFMCharacteristic toCharacteristic(const Path &path, const std::string &parser, const nb::dict &curve)
+	{
+		JFMCharacteristic characteristic;
+		characteristic.name = pyString(dictItem(curve, "name"));
+		characteristic.measurement = pyString(dictItem(curve, "measurement"));
+		characteristic.sourcePath = path.String();
+		characteristic.parser = parser;
+
+		if (const std::optional<nb::dict> metadata = asDict(dictItem(curve, "metadata")))
+			readMetadata(characteristic, *metadata);
+		if (const std::optional<nb::list> columns = asList(dictItem(curve, "columns")))
+			readColumns(characteristic, *columns);
+		if (const std::optional<nb::dict> sweep = asDict(dictItem(curve, "sweep")))
+			readSweep(characteristic, *sweep);
+		if (const std::optional<nb::list> warnings = asList(dictItem(curve, "warnings")))
+			readWarnings(characteristic, *warnings);
+
+		nb::ndarray<const double, nb::ndim<2>, nb::device::cpu> data =
+			nb::cast<nb::ndarray<const double, nb::ndim<2>, nb::device::cpu>>(dictItem(curve, "data"));
 		const std::size_t voltageColumn = findColumnByRole(characteristic.columns, "voltage", 0);
 		const std::size_t currentColumn = findColumnByRole(characteristic.columns, "current", 1);
 		const std::size_t currentDensityColumn = findColumnByRole(characteristic.columns, "current_density", currentColumn);
-		characteristic.voltage = extractColumn(rows.get(), voltageColumn);
-		characteristic.current = extractColumn(rows.get(), currentColumn);
-		characteristic.currentDensity = extractColumn(rows.get(), currentDensityColumn);
+		characteristic.voltage = extractColumn(data, voltageColumn);
+		characteristic.current = extractColumn(data, currentColumn);
+		characteristic.currentDensity = extractColumn(data, currentDensityColumn);
 		return characteristic;
 	}
 
-	PyObjectRef importParserForPath(const Path &path)
+	nb::callable importParserForPath(const Path &path)
 	{
-		const char *moduleName = parserNameForPath(path) == "scaps_iv"
-			? "jfm_import.scaps_iv_parser"
-			: "jfm_import.dat_parser";
-		const char *functionName = parserNameForPath(path) == "scaps_iv"
-			? "parse_scaps_iv"
-			: "parse_dat";
-
-		PyObjectRef module(PyImport_ImportModule(moduleName));
-		if (!module)
-			return {};
-
-		return PyObjectRef(PyObject_GetAttrString(module.get(), functionName));
+		const bool scaps = parserNameForPath(path) == "scaps_iv";
+		const char *moduleName = scaps ? "jfm_import.scaps_iv_parser" : "jfm_import.dat_parser";
+		const char *functionName = scaps ? "parse_scaps_iv" : "parse_dat";
+		return nb::cast<nb::callable>(nb::module_::import_(moduleName).attr(functionName));
 	}
 
-	Result<JFMImportBatchResult> importWithPython(const Path &pythonRoot, const std::vector<Path> &paths, const JFMPythonImportBridge::ProgressCallback &progressCallback)
+	Result<JFMImportBatchResult> importWithPython(
+		const Path &pythonRoot,
+		const std::vector<Path> &paths,
+		const JFMPythonImportBridge::ProgressCallback &progressCallback)
 	{
 		if (!configurePythonPaths(pythonRoot))
 			return makePythonBridgeError("Python import failed.", "Could not append pythonRoot to sys.path: " + pythonRoot.String());
@@ -402,61 +300,39 @@ namespace SST::Prototypes::JFM
 			if (progressCallback)
 				progressCallback(index, total, "Importing " + path.filename().String());
 
-			PyObjectRef parserFunction = importParserForPath(path);
-			if (!parserFunction || !PyCallable_Check(parserFunction.get()))
+			nb::dict result;
+			try
 			{
-				const std::string error = describePythonError();
-				return makePythonBridgeError(
-					"Python import failed.",
-					"File: " + path.String()
-						+ "\nPython root: " + pythonRoot.String()
-						+ "\nParser: " + parser
-						+ "\nError: " + error);
+				nb::object parserResult = importParserForPath(path)(nb::str(path.String().c_str()));
+				if (!nb::isinstance<nb::dict>(parserResult))
+					return makeImportFileError(path, pythonRoot, parser, "Parser returned a non-dict result.");
+				result = nb::borrow<nb::dict>(parserResult);
+			}
+			catch (const nb::python_error &error)
+			{
+				return makeImportFileError(path, pythonRoot, parser, error.what());
+			}
+			catch (const std::exception &error)
+			{
+				return makeImportFileError(path, pythonRoot, parser, error.what());
 			}
 
-			PyObjectRef pathArgument(PyUnicode_FromString(path.String().c_str()));
-			PyObjectRef result(PyObject_CallFunctionObjArgs(parserFunction.get(), pathArgument.get(), nullptr));
-			if (!result || !PyDict_Check(result.get()))
+			const std::string parserName = pyString(dictItem(result, "parser"));
+			if (const std::optional<nb::list> warnings = asList(dictItem(result, "warnings")))
 			{
-				const std::string error = describePythonError();
-				return makePythonBridgeError(
-					"Python import failed.",
-					"File: " + path.String()
-						+ "\nPython root: " + pythonRoot.String()
-						+ "\nParser: " + parser
-						+ "\nError: " + error);
+				for (nb::handle warning : *warnings)
+					batch.warnings.push_back(pyString(warning));
 			}
 
-			const std::string parserName = pyString(dictGet(result.get(), "parser"));
-			PyObject *warnings = dictGet(result.get(), "warnings");
-			if (warnings != nullptr && PySequence_Check(warnings))
-			{
-				const Py_ssize_t count = PySequence_Size(warnings);
-				for (Py_ssize_t warningIndex = 0; warningIndex < count; ++warningIndex)
-				{
-					PyObjectRef warning(PySequence_GetItem(warnings, warningIndex));
-					if (warning)
-						batch.warnings.push_back(pyString(warning.get()));
-				}
-			}
+			const std::optional<nb::list> curves = asList(dictItem(result, "curves"));
+			if (!curves)
+				return makeImportFileError(path, pythonRoot, parser, "Parser returned no curves list.");
 
-			PyObject *curves = dictGet(result.get(), "curves");
-			if (curves == nullptr || !PySequence_Check(curves))
+			for (nb::handle curveValue : *curves)
 			{
-				return makePythonBridgeError(
-					"Python import failed.",
-					"File: " + path.String()
-						+ "\nPython root: " + pythonRoot.String()
-						+ "\nParser: " + parser
-						+ "\nError: Parser returned no curves sequence.");
-			}
-
-			const Py_ssize_t curveCount = PySequence_Size(curves);
-			for (Py_ssize_t curveIndex = 0; curveIndex < curveCount; ++curveIndex)
-			{
-				PyObjectRef curve(PySequence_GetItem(curves, curveIndex));
-				if (curve && PyDict_Check(curve.get()))
-					batch.characteristics.push_back(toCharacteristic(path, parserName, curve.get()));
+				const std::optional<nb::dict> curve = asDict(curveValue);
+				if (curve)
+					batch.characteristics.push_back(toCharacteristic(path, parserName, *curve));
 			}
 		}
 
@@ -493,15 +369,28 @@ namespace SST::Prototypes::JFM
 				"Python root was not found: " + m_PythonRoot.String());
 		}
 
-		Result<void> runtime = ensurePythonRuntimeStarted();
-		if (!runtime)
-			return runtime.Error();
+		if (!PythonInterpreter::IsRuntimeInitialized())
+			return makePythonBridgeError(
+				"Python import failed.",
+				"Core ScientificRuntimeLayer has not initialized the embedded Python runtime.");
 
-		PythonGilAcquireScope gil;
-		if (!gil.IsActive())
-			return makePythonBridgeError("Python import failed.", "Python GIL could not be acquired.");
+		if (!PyGILState_Check())
+			return makePythonBridgeError(
+				"Python import failed.",
+				"Python GIL is not held by the current job. Check JFMImportJob::UsesPythonRuntime() and ScientificRuntimeLayer job hooks.");
 
-		return importWithPython(m_PythonRoot, paths, progressCallback);
+		try
+		{
+			return importWithPython(m_PythonRoot, paths, progressCallback);
+		}
+		catch (const nb::python_error &error)
+		{
+			return makePythonBridgeError("Python import failed.", error.what());
+		}
+		catch (const std::exception &error)
+		{
+			return makePythonBridgeError("Python import failed.", error.what());
+		}
 #else
 		(void)paths;
 		(void)progressCallback;
