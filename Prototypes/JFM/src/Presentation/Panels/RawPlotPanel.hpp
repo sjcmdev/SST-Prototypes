@@ -6,6 +6,12 @@
 
 namespace SST::Prototypes::JFM
 {
+	enum class PlotScale
+	{
+		Linear,
+		SemiLog,
+		SignedLog
+	};
 	class RawPlotPanel final : public IPanel
 	{
 	public:
@@ -15,12 +21,6 @@ namespace SST::Prototypes::JFM
 		void Render() override;
 
 	private:
-		enum class PlotScale
-		{
-			Linear,
-			SemiLog,
-			SignedLog
-		};
 
 		Ref<JFMWorkspaceStore> m_Store;
 		PlotScale m_Scale = PlotScale::Linear;

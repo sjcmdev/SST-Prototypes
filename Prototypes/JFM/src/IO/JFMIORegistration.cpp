@@ -14,15 +14,14 @@
 
 namespace SST::Prototypes::JFM
 {
-	namespace
+
+	struct JFMIOState
 	{
-		struct JFMIOState
-		{
-			Ref<JFMWorkspaceStore> store;
-			std::string targetSeriesId;
-			bool importRunning = false;
-		};
-	}
+		Ref<JFMWorkspaceStore> store;
+		std::string targetSeriesId;
+		bool importRunning = false;
+	};
+	
 
 	void RegisterJFMIOHandlers(IOLayer &ioLayer, Ref<JFMWorkspaceStore> store)
 	{

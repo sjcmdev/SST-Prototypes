@@ -367,7 +367,7 @@ namespace SST
 		{
 			ZoneScopedN("Application.CreateFromSpecification.ApplicationLayers");
 			ApplicationDetail::StartupStepTimer timer("CreateFromSpecification.applicationLayers");
-			if (!timer.Finish(initializeApplicationLayers()))
+			if (!timer.Finish(initializeCoreLayer()))
 				return false;
 		}
 		{
@@ -586,9 +586,9 @@ namespace SST
 	}
 
 
-	bool Application::initializeApplicationLayers()
+	bool Application::initializeCoreLayer()
 	{
-		ZoneScopedN("Application.initializeApplicationLayers");
+		ZoneScopedN("Application.initializeCoreLayer");
 		ApplicationDetail::SetCrashStage("setup core layer");
 		DS_LOG_INFO("CreateFromSpecification: setup core layer");
 		{

@@ -16,30 +16,31 @@
 #include "Storage/JFMWorkspaceStore.hpp"
 
 namespace SST
-{
-	namespace
-	{
-		void RegisterJFMEditor(Application &application, Ref<Prototypes::JFM::JFMWorkspaceStore> workspace)
-		{
-			EditorLayer &editorLayer = application.GetEditorLayer();
+{	
+	using namespace Prototypes::JFM;
 
-			Prototypes::JFM::JFMPanelIds panelIds;
-			panelIds.projectTree = editorLayer.RegisterPanel<Prototypes::JFM::ProjectTreePanel>(workspace);
-			panelIds.overview = editorLayer.RegisterPanel<Prototypes::JFM::JFMOverviewPanel>(workspace);
-			panelIds.importStatus = editorLayer.RegisterPanel<Prototypes::JFM::ImportStatusPanel>(workspace);
-			panelIds.rawPlot = editorLayer.RegisterPanel<Prototypes::JFM::RawPlotPanel>(workspace);
-			editorLayer.RegisterMenuRenderer(
-				"jfm.menu",
-				std::bind(&Prototypes::JFM::RenderJFMMenu, std::ref(editorLayer), panelIds, std::placeholders::_1));
-		}
+	void RegisterJFMEditor(Application &application, Ref<JFMWorkspaceStore> workspace)
+	{
+		
+		EditorLayer &editorLayer = application.GetEditorLayer();
+
+		JFMPanelIds panelIds;
+		panelIds.projectTree = editorLayer.RegisterPanel<ProjectTreePanel>(workspace);
+		panelIds.overview = editorLayer.RegisterPanel<JFMOverviewPanel>(workspace);
+		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
+		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace);
+		editorLayer.RegisterMenuRenderer(
+			"jfm.menu",
+			std::bind(&RenderJFMMenu, std::ref(editorLayer), panelIds, std::placeholders::_1));
 	}
+	
 
 	void SetupApplication(Application &application)
 	{
-		auto workspace = CreateRef<Prototypes::JFM::JFMWorkspaceStore>();
-		Prototypes::JFM::RegisterJFMIOHandlers(application.GetIOLayer(), workspace);
-		application.InsertLayerBefore(LayerId::ImGui, CreateUnique<Prototypes::JFM::JFMDomainLayer>(workspace));
+		auto workspace = CreateRef<JFMWorkspaceStore>();
+		RegisterJFMIOHandlers(application.GetIOLayer(), workspace);
+		application.InsertLayerBefore(LayerId::ImGui, CreateUnique<JFMDomainLayer>(workspace));
 		RegisterJFMEditor(application, workspace);
-		Prototypes::JFM::RegisterJFMCommands(application, workspace);
+		RegisterJFMCommands(application, workspace);
 	}
 } // namespace SST

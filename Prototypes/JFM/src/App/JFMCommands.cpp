@@ -14,370 +14,369 @@
 
 namespace SST::Prototypes::JFM
 {
-	namespace
+
+	const CommandID NewProjectCommand{"jfm.project.new"};
+	const CommandID OpenProjectCommand{"jfm.project.open"};
+	const CommandID SaveProjectCommand{"jfm.project.save"};
+	const CommandID SaveProjectAsCommand{"jfm.project.save_as"};
+	const CommandID ImportFilesCommand{"jfm.import.files"};
+	const CommandID ImportDirectoryCommand{"jfm.import.directory"};
+	const CommandID ExportRawTsvCommand{"jfm.export.raw_tsv"};
+
+	class LambdaCommand final : public ICommand
 	{
-		const CommandID NewProjectCommand{"jfm.project.new"};
-		const CommandID OpenProjectCommand{"jfm.project.open"};
-		const CommandID SaveProjectCommand{"jfm.project.save"};
-		const CommandID SaveProjectAsCommand{"jfm.project.save_as"};
-		const CommandID ImportFilesCommand{"jfm.import.files"};
-		const CommandID ImportDirectoryCommand{"jfm.import.directory"};
-		const CommandID ExportRawTsvCommand{"jfm.export.raw_tsv"};
+	public:
+		using Handler = std::function<Result<void>(CommandContext &)>;
 
-		class LambdaCommand final : public ICommand
+		LambdaCommand(std::string description, Handler handler)
+			: m_Description(std::move(description)), m_Handler(std::move(handler))
 		{
-		public:
-			using Handler = std::function<Result<void>(CommandContext &)>;
-
-			LambdaCommand(std::string description, Handler handler)
-				: m_Description(std::move(description)), m_Handler(std::move(handler))
-			{
-			}
-
-			Result<void> Execute(CommandContext &context) override
-			{
-				return m_Handler(context);
-			}
-
-			std::string Description() const override
-			{
-				return m_Description;
-			}
-
-		private:
-			std::string m_Description;
-			Handler m_Handler;
-		};
-
-		Unique<ICommand> CreateLambdaCommand(const std::string &description, LambdaCommand::Handler handler, CommandContext &)
-		{
-			return CreateUnique<LambdaCommand>(description, std::move(handler));
 		}
 
-		void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, const Path &path);
-
-		StructuredError makeCommandError(std::string message, std::string details)
+		Result<void> Execute(CommandContext &context) override
 		{
-			return StructuredError{
-				ErrorCategory::Runtime,
-				Severity::Error,
-				std::move(message),
-				std::move(details),
-				"Retry the command or check the selected path.",
-				"JFMCommands",
-				"jfm.command"};
+			return m_Handler(context);
 		}
 
-		std::string lastNfdError()
+		std::string Description() const override
 		{
-			const char *error = NFD_GetError();
-			return error != nullptr ? std::string(error) : "Native file dialog failed.";
+			return m_Description;
 		}
 
-		Path ensureProjectExtension(Path path)
-		{
-			std::string text = path.String();
-			if (text.size() >= 9 && text.substr(text.size() - 9) == ".jfm.yaml")
-				return path;
-			return Path::FromResolved(path.Native().string() + ".jfm.yaml");
-		}
+	private:
+		std::string m_Description;
+		Handler m_Handler;
+	};
 
-		Path ensureExtension(Path path, const char *extension)
-		{
-			const std::string text = path.String();
-			const std::string suffix = extension;
-			if (text.size() >= suffix.size() && text.substr(text.size() - suffix.size()) == suffix)
-				return path;
-			return Path::FromResolved(path.Native().string() + suffix);
-		}
+	Unique<ICommand> CreateLambdaCommand(const std::string &description, LambdaCommand::Handler handler, CommandContext &)
+	{
+		return CreateUnique<LambdaCommand>(description, std::move(handler));
+	}
 
-		std::optional<Path> chooseProjectOpenPath()
-		{
-			NFD_Init();
-			nfdu8filteritem_t filters[] = {{"JFM Project", "jfm.yaml,yaml"}};
-			nfdu8char_t *rawPath = nullptr;
-			const nfdresult_t result = NFD_OpenDialogU8(&rawPath, filters, 1, nullptr);
-			if (result == NFD_CANCEL)
-			{
-				NFD_Quit();
-				return std::nullopt;
-			}
-			if (result == NFD_ERROR)
-			{
-				const std::string error = lastNfdError();
-				NFD_Quit();
-				throw std::runtime_error(error);
-			}
+	void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, const Path &path);
 
-			std::string pathText(rawPath);
-			NFD_FreePathU8(rawPath);
+	StructuredError makeCommandError(std::string message, std::string details)
+	{
+		return StructuredError{
+			ErrorCategory::Runtime,
+			Severity::Error,
+			std::move(message),
+			std::move(details),
+			"Retry the command or check the selected path.",
+			"JFMCommands",
+			"jfm.command"};
+	}
+
+	std::string lastNfdError()
+	{
+		const char *error = NFD_GetError();
+		return error != nullptr ? std::string(error) : "Native file dialog failed.";
+	}
+
+	Path ensureProjectExtension(Path path)
+	{
+		std::string text = path.String();
+		if (text.size() >= 9 && text.substr(text.size() - 9) == ".jfm.yaml")
+			return path;
+		return Path::FromResolved(path.Native().string() + ".jfm.yaml");
+	}
+
+	Path ensureExtension(Path path, const char *extension)
+	{
+		const std::string text = path.String();
+		const std::string suffix = extension;
+		if (text.size() >= suffix.size() && text.substr(text.size() - suffix.size()) == suffix)
+			return path;
+		return Path::FromResolved(path.Native().string() + suffix);
+	}
+
+	std::optional<Path> chooseProjectOpenPath()
+	{
+		NFD_Init();
+		nfdu8filteritem_t filters[] = {{"JFM Project", "jfm.yaml,yaml"}};
+		nfdu8char_t *rawPath = nullptr;
+		const nfdresult_t result = NFD_OpenDialogU8(&rawPath, filters, 1, nullptr);
+		if (result == NFD_CANCEL)
+		{
 			NFD_Quit();
-			return Path::FromResolved(pathText);
+			return std::nullopt;
 		}
-
-		std::optional<Path> chooseProjectSavePath()
+		if (result == NFD_ERROR)
 		{
-			NFD_Init();
-			nfdu8filteritem_t filters[] = {{"JFM Project", "jfm.yaml,yaml"}};
-			nfdu8char_t *rawPath = nullptr;
-			const nfdresult_t result = NFD_SaveDialogU8(&rawPath, filters, 1, nullptr, "project.jfm.yaml");
-			if (result == NFD_CANCEL)
-			{
-				NFD_Quit();
-				return std::nullopt;
-			}
-			if (result == NFD_ERROR)
-			{
-				const std::string error = lastNfdError();
-				NFD_Quit();
-				throw std::runtime_error(error);
-			}
-
-			std::string pathText(rawPath);
-			NFD_FreePathU8(rawPath);
+			const std::string error = lastNfdError();
 			NFD_Quit();
-			return ensureProjectExtension(Path::FromResolved(pathText));
+			throw std::runtime_error(error);
 		}
 
-		std::optional<Path> chooseRawTsvSavePath(const std::string &defaultName)
-		{
-			NFD_Init();
-			nfdu8filteritem_t filters[] = {{"TSV", "tsv"}};
-			nfdu8char_t *rawPath = nullptr;
-			const nfdresult_t result = NFD_SaveDialogU8(&rawPath, filters, 1, nullptr, defaultName.c_str());
-			if (result == NFD_CANCEL)
-			{
-				NFD_Quit();
-				return std::nullopt;
-			}
-			if (result == NFD_ERROR)
-			{
-				const std::string error = lastNfdError();
-				NFD_Quit();
-				throw std::runtime_error(error);
-			}
+		std::string pathText(rawPath);
+		NFD_FreePathU8(rawPath);
+		NFD_Quit();
+		return Path::FromResolved(pathText);
+	}
 
-			std::string pathText(rawPath);
-			NFD_FreePathU8(rawPath);
+	std::optional<Path> chooseProjectSavePath()
+	{
+		NFD_Init();
+		nfdu8filteritem_t filters[] = {{"JFM Project", "jfm.yaml,yaml"}};
+		nfdu8char_t *rawPath = nullptr;
+		const nfdresult_t result = NFD_SaveDialogU8(&rawPath, filters, 1, nullptr, "project.jfm.yaml");
+		if (result == NFD_CANCEL)
+		{
 			NFD_Quit();
-			return ensureExtension(Path::FromResolved(pathText), ".tsv");
+			return std::nullopt;
+		}
+		if (result == NFD_ERROR)
+		{
+			const std::string error = lastNfdError();
+			NFD_Quit();
+			throw std::runtime_error(error);
 		}
 
-		std::vector<Path> chooseImportFiles()
-		{
-			NFD_Init();
-			nfdu8filteritem_t filters[] = {{"JFM Data", "dat,iv,txt,csv"}};
-			const nfdpathset_t *pathSet = nullptr;
-			const nfdresult_t result = NFD_OpenDialogMultipleU8(&pathSet, filters, 1, nullptr);
-			if (result == NFD_CANCEL)
-			{
-				NFD_Quit();
-				return {};
-			}
-			if (result == NFD_ERROR)
-			{
-				const std::string error = lastNfdError();
-				NFD_Quit();
-				throw std::runtime_error(error);
-			}
+		std::string pathText(rawPath);
+		NFD_FreePathU8(rawPath);
+		NFD_Quit();
+		return ensureProjectExtension(Path::FromResolved(pathText));
+	}
 
-			nfdpathsetsize_t count = 0;
-			std::vector<Path> paths;
-			if (NFD_PathSet_GetCount(pathSet, &count) == NFD_OKAY)
+	std::optional<Path> chooseRawTsvSavePath(const std::string &defaultName)
+	{
+		NFD_Init();
+		nfdu8filteritem_t filters[] = {{"TSV", "tsv"}};
+		nfdu8char_t *rawPath = nullptr;
+		const nfdresult_t result = NFD_SaveDialogU8(&rawPath, filters, 1, nullptr, defaultName.c_str());
+		if (result == NFD_CANCEL)
+		{
+			NFD_Quit();
+			return std::nullopt;
+		}
+		if (result == NFD_ERROR)
+		{
+			const std::string error = lastNfdError();
+			NFD_Quit();
+			throw std::runtime_error(error);
+		}
+
+		std::string pathText(rawPath);
+		NFD_FreePathU8(rawPath);
+		NFD_Quit();
+		return ensureExtension(Path::FromResolved(pathText), ".tsv");
+	}
+
+	std::vector<Path> chooseImportFiles()
+	{
+		NFD_Init();
+		nfdu8filteritem_t filters[] = {{"JFM Data", "dat,iv,txt,csv"}};
+		const nfdpathset_t *pathSet = nullptr;
+		const nfdresult_t result = NFD_OpenDialogMultipleU8(&pathSet, filters, 1, nullptr);
+		if (result == NFD_CANCEL)
+		{
+			NFD_Quit();
+			return {};
+		}
+		if (result == NFD_ERROR)
+		{
+			const std::string error = lastNfdError();
+			NFD_Quit();
+			throw std::runtime_error(error);
+		}
+
+		nfdpathsetsize_t count = 0;
+		std::vector<Path> paths;
+		if (NFD_PathSet_GetCount(pathSet, &count) == NFD_OKAY)
+		{
+			for (nfdpathsetsize_t index = 0; index < count; ++index)
 			{
-				for (nfdpathsetsize_t index = 0; index < count; ++index)
+				nfdu8char_t *rawPath = nullptr;
+				if (NFD_PathSet_GetPathU8(pathSet, index, &rawPath) == NFD_OKAY && rawPath != nullptr)
 				{
-					nfdu8char_t *rawPath = nullptr;
-					if (NFD_PathSet_GetPathU8(pathSet, index, &rawPath) == NFD_OKAY && rawPath != nullptr)
-					{
-						paths.push_back(Path::FromResolved(std::string(rawPath)));
-						NFD_PathSet_FreePathU8(rawPath);
-					}
+					paths.push_back(Path::FromResolved(std::string(rawPath)));
+					NFD_PathSet_FreePathU8(rawPath);
 				}
 			}
+		}
 
-			NFD_PathSet_Free(pathSet);
+		NFD_PathSet_Free(pathSet);
+		NFD_Quit();
+		return paths;
+	}
+
+	std::optional<Path> chooseImportDirectory()
+	{
+		NFD_Init();
+		nfdu8char_t *rawPath = nullptr;
+		const nfdresult_t result = NFD_PickFolderU8(&rawPath, nullptr);
+		if (result == NFD_CANCEL)
+		{
 			NFD_Quit();
-			return paths;
+			return std::nullopt;
 		}
-
-		std::optional<Path> chooseImportDirectory()
+		if (result == NFD_ERROR)
 		{
-			NFD_Init();
-			nfdu8char_t *rawPath = nullptr;
-			const nfdresult_t result = NFD_PickFolderU8(&rawPath, nullptr);
-			if (result == NFD_CANCEL)
-			{
-				NFD_Quit();
-				return std::nullopt;
-			}
-			if (result == NFD_ERROR)
-			{
-				const std::string error = lastNfdError();
-				NFD_Quit();
-				throw std::runtime_error(error);
-			}
-
-			std::string pathText(rawPath);
-			NFD_FreePathU8(rawPath);
+			const std::string error = lastNfdError();
 			NFD_Quit();
-			return Path::FromResolved(pathText);
+			throw std::runtime_error(error);
 		}
 
-		std::vector<Path> dataFilesInDirectory(const Path &directory)
-		{
-			std::vector<Path> paths;
-			for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native()))
-			{
-				if (!entry.is_regular_file())
-					continue;
-				const std::string extension = entry.path().extension().string();
-				if (extension == ".dat" || extension == ".DAT" || extension == ".iv" || extension == ".IV")
-					paths.push_back(Path::FromResolved(entry.path()));
-			}
-			return paths;
-		}
+		std::string pathText(rawPath);
+		NFD_FreePathU8(rawPath);
+		NFD_Quit();
+		return Path::FromResolved(pathText);
+	}
 
-		Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	std::vector<Path> dataFilesInDirectory(const Path &directory)
+	{
+		std::vector<Path> paths;
+		for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native()))
 		{
-			workspace->ResetProject("Untitled JFM Project");
+			if (!entry.is_regular_file())
+				continue;
+			const std::string extension = entry.path().extension().string();
+			if (extension == ".dat" || extension == ".DAT" || extension == ".iv" || extension == ".IV")
+				paths.push_back(Path::FromResolved(entry.path()));
+		}
+		return paths;
+	}
+
+	Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	{
+		workspace->ResetProject("Untitled JFM Project");
+		return Result<void>{};
+	}
+
+	Result<void> handleOpenProject(Ref<EventBus> eventBus, CommandContext &context)
+	{
+		try
+		{
+			std::optional<Path> path;
+			if (Path *contextPath = context.TryGet<Path>("path"))
+				path = *contextPath;
+			else
+				path = chooseProjectOpenPath();
+			if (path)
+				eventBus->Queue(ProjectLoadRequested{*path});
 			return Result<void>{};
 		}
-
-		Result<void> handleOpenProject(Ref<EventBus> eventBus, CommandContext &context)
+		catch (const std::exception &error)
 		{
-			try
+			return Result<void>{makeCommandError("Open project failed.", error.what())};
+		}
+	}
+
+	Result<void> handleSaveProject(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	{
+		try
+		{
+			std::optional<Path> path = workspace->GetProjectPath();
+			if (!path)
+				path = chooseProjectSavePath();
+			if (path)
+				queueSave(*eventBus, workspace, *path);
+			return Result<void>{};
+		}
+		catch (const std::exception &error)
+		{
+			return Result<void>{makeCommandError("Save project failed.", error.what())};
+		}
+	}
+
+	Result<void> handleSaveProjectAs(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	{
+		try
+		{
+			std::optional<Path> path = chooseProjectSavePath();
+			if (path)
+				queueSave(*eventBus, workspace, *path);
+			return Result<void>{};
+		}
+		catch (const std::exception &error)
+		{
+			return Result<void>{makeCommandError("Save project as failed.", error.what())};
+		}
+	}
+
+	Result<void> handleImportFiles(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &context)
+	{
+		try
+		{
+			std::vector<Path> paths;
+			if (std::vector<Path> *contextPaths = context.TryGet<std::vector<Path>>("paths"))
+				paths = *contextPaths;
+			else
+				paths = chooseImportFiles();
+			if (!paths.empty())
+				eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
+			return Result<void>{};
+		}
+		catch (const std::exception &error)
+		{
+			return Result<void>{makeCommandError("Import files failed.", error.what())};
+		}
+	}
+
+	Result<void> handleImportDirectory(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	{
+		try
+		{
+			const std::optional<Path> directory = chooseImportDirectory();
+			if (!directory)
+				return Result<void>{};
+			std::vector<Path> paths = dataFilesInDirectory(*directory);
+			if (!paths.empty())
+				eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
+			else
+				workspace->SetStatusMessage("No .dat or .iv files found in selected directory.");
+			return Result<void>{};
+		}
+		catch (const std::exception &error)
+		{
+			return Result<void>{makeCommandError("Import directory failed.", error.what())};
+		}
+	}
+
+	Result<void> handleExportRawTsv(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	{
+		try
+		{
+			auto selected = workspace->GetSelectedCharacteristic();
+			if (!selected)
 			{
-				std::optional<Path> path;
-				if (Path *contextPath = context.TryGet<Path>("path"))
-					path = *contextPath;
-				else
-					path = chooseProjectOpenPath();
-				if (path)
-					eventBus->Queue(ProjectLoadRequested{*path});
+				workspace->SetStatusMessage("Raw TSV export failed: no characteristic selected.");
 				return Result<void>{};
 			}
-			catch (const std::exception &error)
-			{
-				return Result<void>{makeCommandError("Open project failed.", error.what())};
-			}
+			const std::string defaultName = selected->name.empty() ? "raw.tsv" : selected->name + ".tsv";
+			std::optional<Path> path = chooseRawTsvSavePath(defaultName);
+			if (path)
+				eventBus->Queue(ExportRawTsvRequested{*path, *selected});
+			return Result<void>{};
 		}
-
-		Result<void> handleSaveProject(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+		catch (const std::exception &error)
 		{
-			try
-			{
-				std::optional<Path> path = workspace->GetProjectPath();
-				if (!path)
-					path = chooseProjectSavePath();
-				if (path)
-					queueSave(*eventBus, workspace, *path);
-				return Result<void>{};
-			}
-			catch (const std::exception &error)
-			{
-				return Result<void>{makeCommandError("Save project failed.", error.what())};
-			}
+			return Result<void>{makeCommandError("Raw TSV export failed.", error.what())};
 		}
+	}
 
-		Result<void> handleSaveProjectAs(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
-		{
-			try
-			{
-				std::optional<Path> path = chooseProjectSavePath();
-				if (path)
-					queueSave(*eventBus, workspace, *path);
-				return Result<void>{};
-			}
-			catch (const std::exception &error)
-			{
-				return Result<void>{makeCommandError("Save project as failed.", error.what())};
-			}
-		}
+	void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, const Path &path)
+	{
+		eventBus.Queue(ProjectSaveRequested{path, workspace->GetProjectSnapshot()});
+	}
 
-		Result<void> handleImportFiles(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &context)
-		{
-			try
-			{
-				std::vector<Path> paths;
-				if (std::vector<Path> *contextPaths = context.TryGet<std::vector<Path>>("paths"))
-					paths = *contextPaths;
-				else
-					paths = chooseImportFiles();
-				if (!paths.empty())
-					eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
-				return Result<void>{};
-			}
-			catch (const std::exception &error)
-			{
-				return Result<void>{makeCommandError("Import files failed.", error.what())};
-			}
-		}
+	void registerCommand(Ref<CommandRegistry> registry, CommandMeta meta, LambdaCommand::Handler handler)
+	{
+		std::string description = meta.description;
+		auto result = registry->Register(
+			std::move(meta),
+			std::bind(CreateLambdaCommand, description, std::move(handler), std::placeholders::_1));
+		if (!result)
+			DS_LOG_WARN("JFM command registration failed: {}", result.Error().technicalDetails);
+	}
 
-		Result<void> handleImportDirectory(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
-		{
-			try
-			{
-				const std::optional<Path> directory = chooseImportDirectory();
-				if (!directory)
-					return Result<void>{};
-				std::vector<Path> paths = dataFilesInDirectory(*directory);
-				if (!paths.empty())
-					eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
-				else
-					workspace->SetStatusMessage("No .dat or .iv files found in selected directory.");
-				return Result<void>{};
-			}
-			catch (const std::exception &error)
-			{
-				return Result<void>{makeCommandError("Import directory failed.", error.what())};
-			}
-		}
-
-		Result<void> handleExportRawTsv(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
-		{
-			try
-			{
-				auto selected = workspace->GetSelectedCharacteristic();
-				if (!selected)
-				{
-					workspace->SetStatusMessage("Raw TSV export failed: no characteristic selected.");
-					return Result<void>{};
-				}
-				const std::string defaultName = selected->name.empty() ? "raw.tsv" : selected->name + ".tsv";
-				std::optional<Path> path = chooseRawTsvSavePath(defaultName);
-				if (path)
-					eventBus->Queue(ExportRawTsvRequested{*path, *selected});
-				return Result<void>{};
-			}
-			catch (const std::exception &error)
-			{
-				return Result<void>{makeCommandError("Raw TSV export failed.", error.what())};
-			}
-		}
-
-		void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, const Path &path)
-		{
-			eventBus.Queue(ProjectSaveRequested{path, workspace->GetProjectSnapshot()});
-		}
-
-		void registerCommand(Ref<CommandRegistry> registry, CommandMeta meta, LambdaCommand::Handler handler)
-		{
-			std::string description = meta.description;
-			auto result = registry->Register(
-				std::move(meta),
-				std::bind(CreateLambdaCommand, description, std::move(handler), std::placeholders::_1));
-			if (!result)
-				DS_LOG_WARN("JFM command registration failed: {}", result.Error().technicalDetails);
-		}
-
-		void registerBinding(Ref<KeymapResolver> resolver, KeyBinding binding)
-		{
-			auto result = resolver->RegisterBinding(std::move(binding));
-			if (!result)
-				DS_LOG_WARN("JFM keybinding registration conflict: {}", result.Error().technicalDetails);
-		}
-	} // namespace
+	void registerBinding(Ref<KeymapResolver> resolver, KeyBinding binding)
+	{
+		auto result = resolver->RegisterBinding(std::move(binding));
+		if (!result)
+			DS_LOG_WARN("JFM keybinding registration conflict: {}", result.Error().technicalDetails);
+	}
+	
 
 	void RegisterJFMCommands(Application &application, Ref<JFMWorkspaceStore> workspace)
 	{

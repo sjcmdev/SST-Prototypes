@@ -1,0 +1,3127 @@
+schema_version: 1
+project:
+  id: jfm-project
+  name: Untitled JFM Project
+  metadata:
+    prototype: JFM
+series:
+  - id: series-1
+    name: Series 1
+    characteristics:
+      - id: characteristic-56
+        name: scaps-batch-file_001
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 1
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-57
+        name: scaps-batch-file_002
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 2
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-58
+        name: scaps-batch-file_003
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 3
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-59
+        name: scaps-batch-file_004
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 4
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-60
+        name: scaps-batch-file_005
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 5
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-61
+        name: scaps-batch-file_006
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 6
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-62
+        name: scaps-batch-file_007
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 7
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-63
+        name: scaps-batch-file_008
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 8
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-64
+        name: scaps-batch-file_009
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 9
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-65
+        name: scaps-batch-file_010
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 10
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-66
+        name: scaps-batch-file_011
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 11
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-67
+        name: scaps-batch-file_012
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 12
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-68
+        name: scaps-batch-file_013
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 13
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-69
+        name: scaps-batch-file_014
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 14
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-70
+        name: scaps-batch-file_015
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 15
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-71
+        name: scaps-batch-file_016
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 16
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-72
+        name: scaps-batch-file_017
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 17
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-73
+        name: scaps-batch-file_018
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 18
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-74
+        name: scaps-batch-file_019
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 19
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-75
+        name: scaps-batch-file_020
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 20
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-76
+        name: scaps-batch-file_021
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 21
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-77
+        name: scaps-batch-file_022
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 22
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-78
+        name: scaps-batch-file_023
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 23
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-79
+        name: scaps-batch-file_024
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 24
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-80
+        name: scaps-batch-file_025
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 25
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-81
+        name: scaps-batch-file_026
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 26
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-82
+        name: scaps-batch-file_027
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 27
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-83
+        name: scaps-batch-file_028
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 28
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-84
+        name: scaps-batch-file_029
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 29
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-85
+        name: scaps-batch-file_030
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 30
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-86
+        name: scaps-batch-file_031
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 31
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-87
+        name: scaps-batch-file_032
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 32
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-88
+        name: scaps-batch-file_033
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 33
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-89
+        name: scaps-batch-file_034
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 34
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-90
+        name: scaps-batch-file_035
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 35
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-91
+        name: scaps-batch-file_036
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 36
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-92
+        name: scaps-batch-file_037
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 37
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-93
+        name: scaps-batch-file_038
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 38
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-94
+        name: scaps-batch-file_039
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 39
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-95
+        name: scaps-batch-file_040
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 40
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-96
+        name: scaps-batch-file_041
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 41
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-97
+        name: scaps-batch-file_042
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 42
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-98
+        name: scaps-batch-file_043
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 43
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-99
+        name: scaps-batch-file_044
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 44
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-100
+        name: scaps-batch-file_045
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 45
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-101
+        name: scaps-batch-file_046
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 46
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-102
+        name: scaps-batch-file_047
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 47
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-103
+        name: scaps-batch-file_048
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 48
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-104
+        name: scaps-batch-file_049
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 49
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-105
+        name: scaps-batch-file_050
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 50
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+      - id: characteristic-106
+        name: scaps-batch-file_051
+        measurement: IV
+        source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+        parser: scaps_iv
+        temperature_K: ~
+        temperature_source: missing
+        metadata:
+          batch_index: 51
+          stem: scaps-batch-file
+          source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\scaps-batch-file.iv
+          parser: scaps_iv
+          temperature_K: ""
+          temperature_source: missing
+        columns:
+          - name: col_0
+            unit: ""
+            role: voltage
+          - name: col_1
+            unit: ""
+            role: value
+          - name: col_2
+            unit: ""
+            role: value
+          - name: col_3
+            unit: ""
+            role: value
+          - name: col_4
+            unit: ""
+            role: value
+          - name: col_5
+            unit: ""
+            role: value
+          - name: col_6
+            unit: ""
+            role: value
+          - name: col_7
+            unit: ""
+            role: value
+          - name: col_8
+            unit: ""
+            role: value
+          - name: col_9
+            unit: ""
+            role: value
+          - name: col_10
+            unit: ""
+            role: value
+        sweep:
+          direction: increasing
+          v_start: 0
+          v_stop: 0.8
+          n_points: 100
+        qc:
+          non_monotonic_sweep: false
+          missing_temperature: true
+          warnings:
+            - multiple_curves
+            - temperature_missing
+        raw_data: external_only
+        raw_point_count: 100
+fit_runs:
+  []
+monte_carlo_runs:
+  []
+derived_analyses:
+  []

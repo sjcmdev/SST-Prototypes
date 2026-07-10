@@ -101,7 +101,7 @@ namespace SST
 		bool bootstrapApplicationConfiguration();
 		bool initializeEventInfrastructure();
 		bool initializeWindowingAndGraphics();
-		bool initializeApplicationLayers();
+		bool initializeCoreLayer();
 		bool initializeCoreRuntimeServices();
 		bool initializeProjectLayerSetup();
 		bool finishCreateFromSpecification();

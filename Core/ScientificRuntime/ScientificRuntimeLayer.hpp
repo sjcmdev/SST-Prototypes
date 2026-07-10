@@ -29,9 +29,7 @@ namespace SST
 		void RegisterCapability(CapabilityService &capabilityService, CapabilityEntry capability) const;
 		[[nodiscard]] CapabilityEntry BuildPythonBridgeCapability() const;
 		[[nodiscard]] bool IsPythonBridgeAvailable() const noexcept;
-		[[nodiscard]] Result<CrystalStructure> LoadCrystalStructure(const Path &filePath) const;
-		[[nodiscard]] Result<std::vector<CrystalStructure>> LoadCrystalStructures(const std::vector<Path> &filePaths) const;
-
+		
 	private:
 		void registerJobSystemHooks();
 

@@ -36,7 +36,7 @@ namespace SST::Prototypes::JFM
 		std::string id;
 		std::string name;
 		std::string measurement = "IV";
-		std::string sourcePath;
+		std::string sourcePath; 
 		std::string parser;
 		std::optional<double> temperatureK;
 		std::string temperatureSource = "missing";

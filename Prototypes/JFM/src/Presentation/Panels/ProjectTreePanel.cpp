@@ -6,52 +6,51 @@
 
 namespace SST::Prototypes::JFM
 {
-	namespace
+
+	void renderCharacteristicNode(
+		const JFMSeries &series,
+		const JFMCharacteristic &characteristic,
+		const std::string &selectedCharacteristic,
+		const Ref<JFMWorkspaceStore> &store)
 	{
-		void renderCharacteristicNode(
-			const JFMSeries &series,
-			const JFMCharacteristic &characteristic,
-			const std::string &selectedCharacteristic,
-			const Ref<JFMWorkspaceStore> &store)
+		const bool selected = characteristic.id == selectedCharacteristic;
+		const std::string label = characteristic.name + "##" + characteristic.id;
+		if (ImGui::Selectable(label.c_str(), selected) && store != nullptr)
 		{
-			const bool selected = characteristic.id == selectedCharacteristic;
-			const std::string label = characteristic.name + "##" + characteristic.id;
-			if (ImGui::Selectable(label.c_str(), selected) && store != nullptr)
-			{
-				store->SelectSeries(series.id);
-				store->SelectCharacteristic(characteristic.id);
-			}
-		}
-
-		void renderSeriesNode(
-			const JFMSeries &series,
-			const std::string &selectedCharacteristic,
-			const Ref<JFMWorkspaceStore> &store)
-		{
-			const std::string seriesLabel = series.name + "##" + series.id;
-			if (!ImGui::TreeNodeEx(seriesLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-				return;
-
-			for (const JFMCharacteristic &characteristic : series.characteristics)
-				renderCharacteristicNode(series, characteristic, selectedCharacteristic, store);
-			if (series.characteristics.empty())
-				ImGui::TextDisabled("No characteristics");
-			ImGui::TreePop();
-		}
-
-		void renderProjectNode(
-			const JFMProject &project,
-			const std::string &selectedCharacteristic,
-			const Ref<JFMWorkspaceStore> &store)
-		{
-			if (!ImGui::TreeNodeEx((project.name + "##project").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
-				return;
-
-			for (const JFMSeries &series : project.series)
-				renderSeriesNode(series, selectedCharacteristic, store);
-			ImGui::TreePop();
+			store->SelectSeries(series.id);
+			store->SelectCharacteristic(characteristic.id);
 		}
 	}
+
+	void renderSeriesNode(
+		const JFMSeries &series,
+		const std::string &selectedCharacteristic,
+		const Ref<JFMWorkspaceStore> &store)
+	{
+		const std::string seriesLabel = series.name + "##" + series.id;
+		if (!ImGui::TreeNodeEx(seriesLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+			return;
+
+		for (const JFMCharacteristic &characteristic : series.characteristics)
+			renderCharacteristicNode(series, characteristic, selectedCharacteristic, store);
+		if (series.characteristics.empty())
+			ImGui::TextDisabled("No characteristics");
+		ImGui::TreePop();
+	}
+
+	void renderProjectNode(
+		const JFMProject &project,
+		const std::string &selectedCharacteristic,
+		const Ref<JFMWorkspaceStore> &store)
+	{
+		if (!ImGui::TreeNodeEx((project.name + "##project").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+			return;
+
+		for (const JFMSeries &series : project.series)
+			renderSeriesNode(series, selectedCharacteristic, store);
+		ImGui::TreePop();
+	}
+	
 
 	ProjectTreePanel::ProjectTreePanel(Ref<JFMWorkspaceStore> store, std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault), m_Store(std::move(store))

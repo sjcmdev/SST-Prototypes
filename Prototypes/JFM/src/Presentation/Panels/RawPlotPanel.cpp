@@ -9,8 +9,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	namespace
-	{
+
 
 	const std::vector<double> &selectYValues(const JFMCharacteristic &characteristic)
 	{
@@ -47,7 +46,7 @@ namespace SST::Prototypes::JFM
 		}
 		return transformed;
 	}
-	}
+	
 
 	RawPlotPanel::RawPlotPanel(Ref<JFMWorkspaceStore> store, std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault), m_Store(std::move(store))
