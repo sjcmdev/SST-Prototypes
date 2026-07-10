@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -36,3 +37,40 @@ def test_scaps_parser_returns_curves() -> None:
     assert result["parser"] == "scaps_iv"
     assert result["curves"]
     assert isinstance(result["curves"][0]["data"], np.ndarray)
+
+
+def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
+    class JFMColumn:
+        pass
+
+    class JFMSweepInfo:
+        pass
+
+    class JFMQualityControl:
+        pass
+
+    class JFMCharacteristic:
+        pass
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sst_jfm",
+        SimpleNamespace(
+            JFMColumn=JFMColumn,
+            JFMSweepInfo=JFMSweepInfo,
+            JFMQualityControl=JFMQualityControl,
+            JFMCharacteristic=JFMCharacteristic,
+        ),
+    )
+
+    from jfm_import.cpp_adapter import import_file
+
+    result = import_file(REPO / "Prototypes/JFM/example-data/IV_C002_Z015_6_290,0K.dat")
+    characteristic = result["characteristics"][0]
+
+    assert result["parser"] == "dat"
+    assert characteristic.source_path.endswith("IV_C002_Z015_6_290,0K.dat")
+    assert characteristic.columns[0].role == "voltage"
+    assert characteristic.temperature_K == 290.0
+    assert characteristic.voltage
+    assert len(characteristic.current) == len(characteristic.voltage)

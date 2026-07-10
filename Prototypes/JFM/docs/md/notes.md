@@ -65,10 +65,10 @@ Data: 2026-07-10
 
 [x] 1. Wprowadzić lekki `RuntimeServices`/`ApplicationRuntimeServices` jako agregat uchwytów: `EventBus`, `JobSystem`, `ProgressTracker`, `CommandRegistry`, `KeymapResolver`, `Notifier`, config paths.
 [x] 2. Ograniczyć użycie `Application::Get()` w JFM do zera. Globalny accessor zostawić tylko dla Core/bootstrap/legacy.
-3. Uporządkować Python runtime: jeden oficjalny Core service dla embedded Python/GIL/sys.path/job hooks.
-4. Utrzymać `ScientificPythonRuntime` jako mały wrapper nad `PythonInterpreter`.
-5. Zmienić `RegisterJFMIOHandlers` na jawny kontekst, np. `JFMIORegistrationContext { store, eventBus, notifier, pythonRoot }`.
-6. Rozdzielić `JFMIORegistration` na funkcje: import requested/progress/completed/failed, export, save, load.
+[x] 3. Uporządkować Python runtime: jeden oficjalny Core service dla embedded Python/GIL/sys.path/job hooks.
+[x] 4. Utrzymać `ScientificPythonRuntime` jako mały wrapper nad `PythonInterpreter`.
+[x] 5. Zmienić `RegisterJFMIOHandlers` na jawny kontekst, np. `JFMIORegistrationContext { store, eventBus, notifier, pythonRoot }`.
+[x] 6. Rozdzielić `JFMIORegistration` na funkcje: import requested/progress/completed/failed, export, save, load.
 
 ### Plan naprawy - model danych
 

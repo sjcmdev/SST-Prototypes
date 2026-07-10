@@ -9,7 +9,6 @@
 #include "ScientificRuntime/Python/PythonInterpreter.hpp"
 
 #include <nanobind/nanobind.h>
-#include <nanobind/ndarray.h>
 #include <nanobind/stl/string.h>
 
 #include <mutex>
@@ -65,48 +64,11 @@ namespace SST::Prototypes::JFM
 		return raw == nullptr ? std::string{} : std::string(raw);
 	}
 
-	std::optional<double> pyOptionalDouble(nb::handle value)
-	{
-		if (!value.is_valid() || value.is_none())
-			return std::nullopt;
-
-		try
-		{
-			return nb::cast<double>(value);
-		}
-		catch (const std::exception &)
-		{
-			return std::nullopt;
-		}
-	}
-
-	std::size_t pySize(nb::handle value)
-	{
-		if (!value.is_valid() || value.is_none())
-			return 0;
-
-		try
-		{
-			return nb::cast<std::size_t>(value);
-		}
-		catch (const std::exception &)
-		{
-			return 0;
-		}
-	}
-
 	nb::object dictItem(const nb::dict &dict, const char *key)
 	{
 		if (!dict.contains(key))
 			return nb::none();
 		return nb::borrow<nb::object>(dict[key].ptr());
-	}
-
-	std::optional<nb::dict> asDict(nb::handle value)
-	{
-		if (!value.is_valid() || value.is_none() || !nb::isinstance<nb::dict>(value))
-			return std::nullopt;
-		return nb::borrow<nb::dict>(value);
 	}
 
 	std::optional<nb::list> asList(nb::handle value)
@@ -179,108 +141,9 @@ namespace SST::Prototypes::JFM
 		return appendStringToSysPath(pythonRoot.String());
 	}
 
-	std::vector<double> extractColumn(nb::ndarray<const double, nb::ndim<2>, nb::device::cpu> data, std::size_t columnIndex)
+	nb::callable importAdapter()
 	{
-		std::vector<double> values;
-		if (!data.is_valid() || data.ndim() != 2 || columnIndex >= data.shape(1))
-			return values;
-
-		auto view = data.view();
-		values.reserve(data.shape(0));
-		for (std::size_t row = 0; row < data.shape(0); ++row)
-			values.push_back(view(row, columnIndex));
-		return values;
-	}
-
-	std::size_t findColumnByRole(const std::vector<JFMColumn> &columns, const std::string &role, std::size_t fallback)
-	{
-		for (std::size_t index = 0; index < columns.size(); ++index)
-		{
-			if (columns[index].role == role)
-				return index;
-		}
-		return fallback;
-	}
-
-	void readMetadata(JFMCharacteristic &characteristic, const nb::dict &metadata)
-	{
-		for (auto [key, value] : metadata)
-			characteristic.metadata[pyString(key)] = pyString(value);
-
-		characteristic.temperatureK = pyOptionalDouble(dictItem(metadata, "temperature_K"));
-		characteristic.temperatureSource = pyString(dictItem(metadata, "temperature_source"));
-	}
-
-	void readColumns(JFMCharacteristic &characteristic, const nb::list &columns)
-	{
-		for (nb::handle columnValue : columns)
-		{
-			const std::optional<nb::dict> column = asDict(columnValue);
-			if (!column)
-				continue;
-
-			characteristic.columns.push_back(JFMColumn{
-				pyString(dictItem(*column, "name")),
-				pyString(dictItem(*column, "unit")),
-				pyString(dictItem(*column, "role"))});
-		}
-	}
-
-	void readSweep(JFMCharacteristic &characteristic, const nb::dict &sweep)
-	{
-		characteristic.sweep.direction = pyString(dictItem(sweep, "direction"));
-		characteristic.sweep.vStart = pyOptionalDouble(dictItem(sweep, "v_start"));
-		characteristic.sweep.vStop = pyOptionalDouble(dictItem(sweep, "v_stop"));
-		characteristic.sweep.pointCount = pySize(dictItem(sweep, "n_points"));
-	}
-
-	void readWarnings(JFMCharacteristic &characteristic, const nb::list &warnings)
-	{
-		for (nb::handle warning : warnings)
-			characteristic.qc.warnings.push_back(pyString(warning));
-
-		characteristic.qc.hasMissingTemperature = !characteristic.temperatureK.has_value();
-		characteristic.qc.nonMonotonicSweep =
-			std::find(characteristic.qc.warnings.begin(), characteristic.qc.warnings.end(), "non_monotonic_sweep")
-				!= characteristic.qc.warnings.end()
-			|| std::find(characteristic.qc.warnings.begin(), characteristic.qc.warnings.end(), "nonmonotonic_sweep")
-				!= characteristic.qc.warnings.end();
-	}
-
-	JFMCharacteristic toCharacteristic(const Path &path, const std::string &parser, const nb::dict &curve)
-	{
-		JFMCharacteristic characteristic;
-		characteristic.name = pyString(dictItem(curve, "name"));
-		characteristic.measurement = pyString(dictItem(curve, "measurement"));
-		characteristic.sourcePath = path.String();
-		characteristic.parser = parser;
-
-		if (const std::optional<nb::dict> metadata = asDict(dictItem(curve, "metadata")))
-			readMetadata(characteristic, *metadata);
-		if (const std::optional<nb::list> columns = asList(dictItem(curve, "columns")))
-			readColumns(characteristic, *columns);
-		if (const std::optional<nb::dict> sweep = asDict(dictItem(curve, "sweep")))
-			readSweep(characteristic, *sweep);
-		if (const std::optional<nb::list> warnings = asList(dictItem(curve, "warnings")))
-			readWarnings(characteristic, *warnings);
-
-		nb::ndarray<const double, nb::ndim<2>, nb::device::cpu> data =
-			nb::cast<nb::ndarray<const double, nb::ndim<2>, nb::device::cpu>>(dictItem(curve, "data"));
-		const std::size_t voltageColumn = findColumnByRole(characteristic.columns, "voltage", 0);
-		const std::size_t currentColumn = findColumnByRole(characteristic.columns, "current", 1);
-		const std::size_t currentDensityColumn = findColumnByRole(characteristic.columns, "current_density", currentColumn);
-		characteristic.voltage = extractColumn(data, voltageColumn);
-		characteristic.current = extractColumn(data, currentColumn);
-		characteristic.currentDensity = extractColumn(data, currentDensityColumn);
-		return characteristic;
-	}
-
-	nb::callable importParserForPath(const Path &path)
-	{
-		const bool scaps = parserNameForPath(path) == "scaps_iv";
-		const char *moduleName = scaps ? "jfm_import.scaps_iv_parser" : "jfm_import.dat_parser";
-		const char *functionName = scaps ? "parse_scaps_iv" : "parse_dat";
-		return nb::cast<nb::callable>(nb::module_::import_(moduleName).attr(functionName));
+		return nb::cast<nb::callable>(nb::module_::import_("jfm_import.cpp_adapter").attr("import_file"));
 	}
 
 	Result<JFMImportBatchResult> importWithPython(
@@ -303,10 +166,10 @@ namespace SST::Prototypes::JFM
 			nb::dict result;
 			try
 			{
-				nb::object parserResult = importParserForPath(path)(nb::str(path.String().c_str()));
-				if (!nb::isinstance<nb::dict>(parserResult))
-					return makeImportFileError(path, pythonRoot, parser, "Parser returned a non-dict result.");
-				result = nb::borrow<nb::dict>(parserResult);
+				nb::object adapterResult = importAdapter()(nb::str(path.String().c_str()));
+				if (!nb::isinstance<nb::dict>(adapterResult))
+					return makeImportFileError(path, pythonRoot, parser, "Python adapter returned a non-dict result.");
+				result = nb::borrow<nb::dict>(adapterResult);
 			}
 			catch (const nb::python_error &error)
 			{
@@ -317,22 +180,32 @@ namespace SST::Prototypes::JFM
 				return makeImportFileError(path, pythonRoot, parser, error.what());
 			}
 
-			const std::string parserName = pyString(dictItem(result, "parser"));
+			const std::string adapterParser = pyString(dictItem(result, "parser"));
+			const std::string parserName = adapterParser.empty() ? parser : adapterParser;
 			if (const std::optional<nb::list> warnings = asList(dictItem(result, "warnings")))
 			{
 				for (nb::handle warning : *warnings)
 					batch.warnings.push_back(pyString(warning));
 			}
 
-			const std::optional<nb::list> curves = asList(dictItem(result, "curves"));
-			if (!curves)
-				return makeImportFileError(path, pythonRoot, parser, "Parser returned no curves list.");
+			const std::optional<nb::list> characteristics = asList(dictItem(result, "characteristics"));
+			if (!characteristics)
+				return makeImportFileError(path, pythonRoot, parser, "Python adapter returned no characteristics list.");
 
-			for (nb::handle curveValue : *curves)
+			for (nb::handle characteristic : *characteristics)
 			{
-				const std::optional<nb::dict> curve = asDict(curveValue);
-				if (curve)
-					batch.characteristics.push_back(toCharacteristic(path, parserName, *curve));
+				try
+				{
+					batch.characteristics.push_back(nb::cast<JFMCharacteristic>(characteristic));
+				}
+				catch (const nb::python_error &error)
+				{
+					return makeImportFileError(path, pythonRoot, parserName, error.what());
+				}
+				catch (const std::exception &error)
+				{
+					return makeImportFileError(path, pythonRoot, parserName, error.what());
+				}
 			}
 		}
 
