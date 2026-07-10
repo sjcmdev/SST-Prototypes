@@ -1,13 +1,8 @@
 #pragma once
 
-#include <vector>
-
 #include "Core/Capabilities/Capability.hpp"
-#include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Layer.hpp"
-#include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Domain/Crystal/CrystalStructure.hpp"
 
 namespace SST
 {
@@ -29,7 +24,7 @@ namespace SST
 		void RegisterCapability(CapabilityService &capabilityService, CapabilityEntry capability) const;
 		[[nodiscard]] CapabilityEntry BuildPythonBridgeCapability() const;
 		[[nodiscard]] bool IsPythonBridgeAvailable() const noexcept;
-		
+
 	private:
 		void registerJobSystemHooks();
 

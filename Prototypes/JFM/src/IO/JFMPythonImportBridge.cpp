@@ -74,6 +74,9 @@ namespace SST::Prototypes::JFM
 
 	Result<void> ensurePythonRuntimeStarted()
 	{
+		if (PythonInterpreter::IsRuntimeInitialized())
+			return {};
+
 		static PythonInterpreter interpreter;
 		static bool started = false;
 		if (started)

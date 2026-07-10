@@ -101,37 +101,4 @@ namespace SST
 	{
 		return m_PythonBridgeAvailable;
 	}
-
-	Result<CrystalStructure> ScientificRuntimeLayer::LoadCrystalStructure(const Path &filePath) const
-	{
-		if (!m_PythonBridgeAvailable || m_PythonRuntime == nullptr)
-		{
-			return StructuredError{
-				ErrorCategory::Python,
-				Severity::Error,
-				"Python bridge is unavailable.",
-				"ScientificRuntimeLayer::LoadCrystalStructure called without an initialized Python runtime.",
-				"Ensure the bundled Python environment initializes successfully before loading structures.",
-				"ScientificRuntime",
-				"python.bridge.unavailable"};
-		}
-		return m_PythonRuntime->LoadCrystalStructure(filePath);
-	}
-
-	Result<std::vector<CrystalStructure>> ScientificRuntimeLayer::LoadCrystalStructures(
-		const std::vector<Path> &filePaths) const
-	{
-		if (!m_PythonBridgeAvailable || m_PythonRuntime == nullptr)
-		{
-			return StructuredError{
-				ErrorCategory::Python,
-				Severity::Error,
-				"Python bridge is unavailable.",
-				"ScientificRuntimeLayer::LoadCrystalStructures called without an initialized Python runtime.",
-				"Ensure the bundled Python environment initializes successfully before loading structures.",
-				"ScientificRuntime",
-				"python.bridge.unavailable"};
-		}
-		return m_PythonRuntime->LoadCrystalStructures(filePaths);
-	}
 } // namespace SST

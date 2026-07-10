@@ -39,6 +39,7 @@
 #include "Core/Utils/RuntimeTuning.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/ImGuiLayer.hpp"
+#include "ScientificRuntime/ScientificRuntimeLayer.hpp"
 
 namespace SST
 {
@@ -760,6 +761,16 @@ namespace SST
 			ZoneScopedN("Application.setupDefaultLayers.PushIOLayer");
 			ApplicationDetail::StartupStepTimer timer("LayerStack.push.IOLayer");
 			m_LayerStack.PushLayer(CreateUnique<IOLayer>(m_EventBus));
+			timer.Finish(true);
+		}
+		{
+			ZoneScopedN("Application.setupDefaultLayers.PushScientificRuntimeLayer");
+			ApplicationDetail::StartupStepTimer timer("LayerStack.push.ScientificRuntimeLayer");
+			auto scientificRuntimeLayer = CreateUnique<ScientificRuntimeLayer>();
+			auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
+			if (coreLayer != nullptr)
+				scientificRuntimeLayer->BindJobSystem(coreLayer->GetJobSystemHandle());
+			m_LayerStack.PushLayer(std::move(scientificRuntimeLayer));
 			timer.Finish(true);
 		}
 		ImGuiLayerRuntime imGuiRuntime;

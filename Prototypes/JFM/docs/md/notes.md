@@ -59,7 +59,7 @@ Data: 2026-07-10
 - `Storage/JFMWorkspaceStore` jest mylące nazewniczo. To jest in-memory workspace/state, a nie storage/persistence.
 - `ensureSelectionLocked` z podwójną pętlą jest do przeżycia teraz, ale po wprowadzeniu registry/id powinno przejść na `FindCharacteristic(id)`.
 - UI nie powinno wiedzieć, że dane są w `vector`. Projekt powinien wystawiać API operacji na seriach i charakterystykach.
-- `ScientificRuntime` jest niespójny: aktywnie budowany jest mały Python runtime, a stary `ScientificPythonRuntime` referencjonuje usunięte ASE/Pymatgen. To trzeba uporządkować przed dalszym importem.
+- `ScientificRuntime` powinien być jedną warstwą runtime dla Pythona. Linki do ASE/Pymatgen zostały usunięte z tej ścieżki; nie przywracamy domenowych mostów Crystal do Core.
 - Problem z otwieraniem projektu jest źródłowy: YAML zapisuje `raw_data: external_only`, ale load nie materializuje danych z `source_path`, więc drzewo wraca bez raw arrays.
 
 ### Plan naprawy - architektura
@@ -67,7 +67,7 @@ Data: 2026-07-10
 1. Wprowadzić lekki `RuntimeServices`/`ApplicationRuntimeServices` jako agregat uchwytów: `EventBus`, `JobSystem`, `ProgressTracker`, `CommandRegistry`, `KeymapResolver`, `Notifier`, config paths.
 2. Ograniczyć użycie `Application::Get()` w JFM do zera. Globalny accessor zostawić tylko dla Core/bootstrap/legacy.
 3. Uporządkować Python runtime: jeden oficjalny Core service dla embedded Python/GIL/sys.path/job hooks.
-4. Usunąć albo przepisać martwy `ScientificPythonRuntime`, który nadal zależy od ASE/Pymatgen.
+4. Utrzymać `ScientificPythonRuntime` jako mały wrapper nad `PythonInterpreter`.
 5. Zmienić `RegisterJFMIOHandlers` na jawny kontekst, np. `JFMIORegistrationContext { store, eventBus, notifier, pythonRoot }`.
 6. Zachować `IOLayer::RegisterHandler<T>()` jako bezpośredni mechanizm rejestracji handlerów; eventy zostają tylko do żądań i wyników pracy.
 7. Rozdzielić `JFMIORegistration` na funkcje: import requested/progress/completed/failed, export, save, load.
