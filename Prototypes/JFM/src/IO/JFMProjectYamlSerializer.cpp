@@ -64,6 +64,33 @@ namespace SST::Prototypes::JFM
 		return child.as<double>();
 	}
 
+	CharacteristicId legacyIdFromText(const std::string &text)
+	{
+		try
+		{
+			const auto value = static_cast<CharacteristicId>(std::stoull(text));
+			return value == InvalidCharacteristicId ? 1 : value;
+		}
+		catch (const std::exception &)
+		{
+			CharacteristicId hash = 1469598103934665603ull;
+			for (const unsigned char character : text)
+			{
+				hash ^= character;
+				hash *= 1099511628211ull;
+			}
+			return hash == InvalidCharacteristicId ? 1 : hash;
+		}
+	}
+
+	CharacteristicId readCharacteristicId(const YAML::Node &node, const char *key, CharacteristicId fallback = InvalidCharacteristicId)
+	{
+		const YAML::Node child = node[key];
+		if (!child || child.IsNull())
+			return fallback;
+		return legacyIdFromText(child.as<std::string>());
+	}
+
 	void emitCharacteristicInfo(YAML::Emitter &out, const JFMCharacteristicInfo &characteristic)
 	{
 		out << YAML::BeginMap;
@@ -105,7 +132,7 @@ namespace SST::Prototypes::JFM
 	JFMCharacteristicInfo readCharacteristicInfo(const YAML::Node &characteristicNode)
 	{
 		JFMCharacteristicInfo characteristic;
-		characteristic.id = readOr<std::string>(characteristicNode, "id", {});
+		characteristic.id = readCharacteristicId(characteristicNode, "id");
 		characteristic.name = readOr<std::string>(characteristicNode, "name", "Characteristic");
 		characteristic.measurement = readOr<std::string>(characteristicNode, "measurement", "IV");
 		characteristic.sourcePath = Path::FromResolved(readOr<std::string>(characteristicNode, "source_path", {}));
@@ -225,7 +252,7 @@ namespace SST::Prototypes::JFM
 				for (const YAML::Node &characteristicNode : seriesNode["characteristics"])
 				{
 					if (characteristicNode.IsScalar())
-						series.characteristicIds.push_back(characteristicNode.as<std::string>());
+						series.characteristicIds.push_back(legacyIdFromText(characteristicNode.as<std::string>()));
 					else
 					{
 						JFMCharacteristicInfo characteristic = readCharacteristicInfo(characteristicNode);

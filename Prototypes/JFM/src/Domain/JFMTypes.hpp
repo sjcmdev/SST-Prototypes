@@ -2,6 +2,7 @@
 
 #include "Core/Utils/Path.hpp"
 
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -10,7 +11,8 @@
 namespace SST::Prototypes::JFM
 {
 	inline constexpr int JFMProjectSchemaVersion = 1;
-	using CharacteristicId = std::string;
+	using CharacteristicId = std::uint64_t;
+	inline constexpr CharacteristicId InvalidCharacteristicId = 0;
 
 	struct JFMColumn
 	{

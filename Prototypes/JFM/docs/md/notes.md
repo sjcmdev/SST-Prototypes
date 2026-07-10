@@ -1,17 +1,17 @@
-1. Dlaczego `sourcePath` w JFMCharacteristic jest raw-string? Czy nie powinno być Path z Core::Utils?
-2. Dlaczego voltage, current, currentDensity jest std::vector i jest to zapisane bezpośrednio w JFMCharacteristic? Wydaje mi się, że odrazu powinniśmy wprowadź koncent 
+[x] 1. Dlaczego `sourcePath` w JFMCharacteristic jest raw-string? Czy nie powinno być Path z Core::Utils?
+[x] 2. Dlaczego voltage, current, currentDensity jest std::vector i jest to zapisane bezpośrednio w JFMCharacteristic? Wydaje mi się, że odrazu powinniśmy wprowadź koncent 
 Characteristics. Tam powinny się znajdować tego typu rzeczy i trzymać to w jakimś rodzaju `CharacteristicsRegistry` czy czymś podobnym. Wtedy identyfikujemy to jedynie po UUID. Nie mamy wtedy problemu z wektorem wektrów wektorów
-3. Myślałem aby wprowadzić klasę `CharacteristicInfo` gdzie też by się znajdowały informacje o typie sweepu, vStart, vEnd, ilości punktów itd. 
-4. Dlaczego jakiekolwiek `id` jest std::string? 
-5. funkcje w `JFMIORegistration` zdecydowanie powinny być osobnymi funkcjami.
+[x] 3. Myślałem aby wprowadzić klasę `CharacteristicInfo` gdzie też by się znajdowały informacje o typie sweepu, vStart, vEnd, ilości punktów itd. 
+[x] 4. Dlaczego jakiekolwiek `id` jest std::string? 
+[x] 5. funkcje w `JFMIORegistration` zdecydowanie powinny być osobnymi funkcjami.
 [x] 6. Bardzo mi się nie podoba częstość i fakt potrzeby używania `Application::Get()...` w `JFMIORegistration`
 6. Przy jako reakcja na event o niepowodzeniu podczas importu/eksportu dobrze by było zrobić Notification
 7. Można pogrupować Joby związane z IO w JFM 
-8. Dlaczego Domain i Storage jest rozdzielone? Czy my podjeliśmy taką świadomą decyzję? 
-9. Czy w `ensureSelectionLocked` nie lepiej by zrobić flatten listy charakterystyk przy takim ułozeniu? W przyszłym ułożeniu (punkty powyżej) może nie będzie potrzeba podwójnej pętli for
-10. Projekt powinien dostarczać swoje własne API do operacji na charakterystykach i później na analizach aby nie polegać na tym, że to jest vector czy array itd. 
-11. Projekt powinien dostarczyć możliwość poproszenia o charakterystykę na podstawie UUID albo jej nazwy aby nie musieć w wielu miejscach pisać tych samych funkcji szukających konkretnego elementu
-12. Bardzo bardzo mi się nie podoba, że nie korzystamy z całego systemu `ScientificRuntime`. Obecny import charakterystyk po przez pythona jest całkowicie do przepisania z wykorzystaniem już istniejącego systemu `ScientificRuntime`
+[x] 8. Dlaczego Domain i Storage jest rozdzielone? Czy my podjeliśmy taką świadomą decyzję? 
+[x] 9. Czy w `ensureSelectionLocked` nie lepiej by zrobić flatten listy charakterystyk przy takim ułozeniu? W przyszłym ułożeniu (punkty powyżej) może nie będzie potrzeba podwójnej pętli for
+[x] 10. Projekt powinien dostarczać swoje własne API do operacji na charakterystykach i później na analizach aby nie polegać na tym, że to jest vector czy array itd. 
+[x] 11. Projekt powinien dostarczyć możliwość poproszenia o charakterystykę na podstawie UUID albo jej nazwy aby nie musieć w wielu miejscach pisać tych samych funkcji szukających konkretnego elementu
+[x] 12. Bardzo bardzo mi się nie podoba, że nie korzystamy z całego systemu `ScientificRuntime`. Obecny import charakterystyk po przez pythona jest całkowicie do przepisania z wykorzystaniem już istniejącego systemu `ScientificRuntime`
 
 Opcje UI do dodania:
 1. wyświetlanie zarejestrowanych skryptów pythonowych do importu (jako element projektu) (context menu (add script/remove script/reload script))
@@ -72,12 +72,12 @@ Data: 2026-07-10
 
 ### Plan naprawy - model danych
 
-1. Wydzielić `JFMCharacteristicInfo` oraz `JFMCharacteristicData`.
-2. Zostawić workspace jako jedynego właściciela projektu i registry charakterystyk.
-3. Zmienić serie tak, aby przechowywały `CharacteristicId`, nie pełne obiekty z raw arrays.
-4. Dodać API workspace: `AddSeries`, `AddCharacteristics`, `FindCharacteristic`, `FindCharacteristicByName`, `GetSelectedCharacteristic`, `DeleteCharacteristic`, `MoveCharacteristic`.
-5. Przenieść/zmienić nazwę `Storage/JFMWorkspaceStore` na `Workspace` albo `State`.
-6. Zmienić `sourcePath` w runtime na `Path`; serializer mapuje `Path <-> string`.
+[x] 1. Wydzielić `JFMCharacteristicInfo` oraz `JFMCharacteristicData`.
+[x] 2. Zostawić workspace jako jedynego właściciela projektu i registry charakterystyk.
+[x] 3. Zmienić serie tak, aby przechowywały `CharacteristicId`, nie pełne obiekty z raw arrays.
+[x] 4. Dodać API workspace: `AddSeries`, `AddCharacteristics`, `FindCharacteristic`, `FindCharacteristicByName`, `GetSelectedCharacteristic`, `DeleteCharacteristic`, [x] `MoveCharacteristic`.
+[x] 5. Przenieść/zmienić nazwę `Storage/JFMWorkspaceStore` na `Workspace` albo `State`.
+[x] 6. Zmienić `sourcePath` w runtime na `Path`; serializer mapuje `Path <-> string`.
 
 ### Plan naprawy - save/load i import
 

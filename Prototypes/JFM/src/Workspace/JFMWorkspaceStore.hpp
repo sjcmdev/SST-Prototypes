@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -43,15 +44,19 @@ namespace SST::Prototypes::JFM
 		void AddImportedCharacteristics(std::vector<JFMCharacteristic> characteristics);
 
 	private:
+		template <typename T>
+		using OptionalRef = std::optional<std::reference_wrapper<T>>;
+
 		[[nodiscard]] static JFMProject MakeDefaultProject(std::string name);
 		[[nodiscard]] std::string nextId(const char *prefix) const;
-		[[nodiscard]] JFMSeries *findSeriesLocked(const std::string &seriesId);
-		[[nodiscard]] const JFMSeries *findSeriesLocked(const std::string &seriesId) const;
-		[[nodiscard]] JFMCharacteristicInfo *findInfoLocked(const CharacteristicId &id);
-		[[nodiscard]] const JFMCharacteristicInfo *findInfoLocked(const CharacteristicId &id) const;
+		[[nodiscard]] OptionalRef<JFMSeries> findSeriesLocked(const std::string &seriesId);
+		[[nodiscard]] OptionalRef<const JFMSeries> findSeriesLocked(const std::string &seriesId) const;
+		[[nodiscard]] OptionalRef<JFMCharacteristicInfo> findInfoLocked(const CharacteristicId &id);
+		[[nodiscard]] OptionalRef<const JFMCharacteristicInfo> findInfoLocked(const CharacteristicId &id) const;
 		[[nodiscard]] std::optional<JFMCharacteristic> makeCharacteristicLocked(const JFMCharacteristicInfo &info) const;
 		void ensureSelectionLocked();
 		void removeCharacteristicReferencesLocked(const CharacteristicId &id);
+		void updateNextCharacteristicIdLocked();
 
 	private:
 		mutable std::mutex m_Mutex;
@@ -64,5 +69,6 @@ namespace SST::Prototypes::JFM
 		std::vector<std::string> m_LastImportWarnings;
 		bool m_ImportRunning = false;
 		mutable std::size_t m_NextId = 1;
+		CharacteristicId m_NextCharacteristicId = 1;
 	};
 } // namespace SST::Prototypes::JFM

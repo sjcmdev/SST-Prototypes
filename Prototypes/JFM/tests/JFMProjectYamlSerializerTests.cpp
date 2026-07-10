@@ -12,7 +12,7 @@ namespace SST::Prototypes::JFM
 		project.metadata["owner"] = "test";
 
 		JFMCharacteristicInfo characteristic;
-		characteristic.id = "ch-1";
+		characteristic.id = 1;
 		characteristic.name = "Curve";
 		characteristic.sourcePath = Path::FromResolved("data/example.dat");
 		characteristic.parser = "dat";
@@ -23,7 +23,7 @@ namespace SST::Prototypes::JFM
 		characteristic.sweep.pointCount = 3;
 
 		project.characteristics.push_back(characteristic);
-		project.series.push_back(JFMSeries{"series-1", "Series", {"ch-1"}});
+		project.series.push_back(JFMSeries{"series-1", "Series", {1}});
 
 		auto text = JFMProjectYamlSerializer::Serialize(project);
 		ASSERT_TRUE(text) << text.Error().technicalDetails;
@@ -35,7 +35,7 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(loaded->name, "JFM test");
 		ASSERT_EQ(loaded->series.size(), 1);
 		ASSERT_EQ(loaded->series.front().characteristicIds.size(), 1);
-		EXPECT_EQ(loaded->series.front().characteristicIds.front(), "ch-1");
+		EXPECT_EQ(loaded->series.front().characteristicIds.front(), 1);
 		ASSERT_EQ(loaded->characteristics.size(), 1);
 		ASSERT_TRUE(loaded->characteristics.front().temperatureK.has_value());
 		EXPECT_DOUBLE_EQ(*loaded->characteristics.front().temperatureK, 300.0);

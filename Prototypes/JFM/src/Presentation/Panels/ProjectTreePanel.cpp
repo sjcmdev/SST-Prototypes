@@ -10,13 +10,13 @@ namespace SST::Prototypes::JFM
 	void renderCharacteristicNode(
 		const JFMSeries &series,
 		const CharacteristicId &characteristicId,
-		const std::string &selectedCharacteristic,
+		const CharacteristicId selectedCharacteristic,
 		const Ref<JFMWorkspaceStore> &store)
 	{
 		const auto characteristic = store != nullptr ? store->FindCharacteristic(characteristicId) : std::optional<JFMCharacteristic>{};
-		const std::string &name = characteristic ? characteristic->info.name : characteristicId;
+		const std::string name = characteristic ? characteristic->info.name : std::to_string(characteristicId);
 		const bool selected = characteristicId == selectedCharacteristic;
-		const std::string label = name + "##" + characteristicId;
+		const std::string label = name + "##" + std::to_string(characteristicId);
 		if (ImGui::Selectable(label.c_str(), selected) && store != nullptr)
 		{
 			store->SelectSeries(series.id);
@@ -26,7 +26,7 @@ namespace SST::Prototypes::JFM
 
 	void renderSeriesNode(
 		const JFMSeries &series,
-		const std::string &selectedCharacteristic,
+		const CharacteristicId selectedCharacteristic,
 		const Ref<JFMWorkspaceStore> &store)
 	{
 		const std::string seriesLabel = series.name + "##" + series.id;
@@ -42,7 +42,7 @@ namespace SST::Prototypes::JFM
 
 	void renderProjectNode(
 		const JFMProject &project,
-		const std::string &selectedCharacteristic,
+		const CharacteristicId selectedCharacteristic,
 		const Ref<JFMWorkspaceStore> &store)
 	{
 		if (!ImGui::TreeNodeEx((project.name + "##project").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
@@ -78,7 +78,7 @@ namespace SST::Prototypes::JFM
 		}
 
 		const JFMProject project = m_Store != nullptr ? m_Store->GetProjectSnapshot() : JFMProject{};
-		const std::string selectedCharacteristic = m_Store != nullptr ? m_Store->GetSelectedCharacteristicId() : std::string{};
+		const CharacteristicId selectedCharacteristic = m_Store != nullptr ? m_Store->GetSelectedCharacteristicId() : InvalidCharacteristicId;
 		renderProjectNode(project, selectedCharacteristic, m_Store);
 
 		ImGui::End();

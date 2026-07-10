@@ -28,7 +28,7 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(selected.has_value());
 		EXPECT_EQ(selected->info.name, "T300");
 		EXPECT_EQ(selected->data.voltage.size(), 2);
-		EXPECT_FALSE(selected->info.id.empty());
+		EXPECT_NE(selected->info.id, InvalidCharacteristicId);
 		EXPECT_EQ(store.GetProjectSnapshot().series.front().characteristicIds.front(), selected->info.id);
 	}
 } // namespace SST::Prototypes::JFM
