@@ -7,6 +7,7 @@
 #include <nfd.h>
 
 #include "Core/Commands/CommandRegistry.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Utils/KeyCodes.hpp"
@@ -378,11 +379,12 @@ namespace SST::Prototypes::JFM
 	}
 	
 
-	void RegisterJFMCommands(Application &application, Ref<JFMWorkspaceStore> workspace)
+	void RegisterJFMCommands(JFMCommandRegistrationContext context)
 	{
-		auto registry = application.GetCommandRegistryHandle().lock();
-		auto resolver = application.GetKeymapResolverHandle().lock();
-		Ref<EventBus> eventBus = application.GetEventBusRef();
+		auto registry = context.commandRegistry.lock();
+		auto resolver = context.keymapResolver.lock();
+		Ref<EventBus> eventBus = std::move(context.eventBus);
+		Ref<JFMWorkspaceStore> workspace = std::move(context.workspace);
 		if (registry == nullptr || resolver == nullptr || eventBus == nullptr || workspace == nullptr)
 			throw std::runtime_error("JFM startup failed: command registry, keymap resolver, event bus, or workspace is unavailable.");
 

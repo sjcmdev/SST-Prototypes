@@ -5,6 +5,7 @@
 #include <filesystem>
 
 #include "App/ApplicationLifecycle.hpp"
+#include "App/ApplicationRuntimeServices.hpp"
 #include "App/ApplicationState.hpp"
 #include "App/Managers/ConfigManager.hpp"
 #include "App/Window.hpp"
@@ -80,6 +81,7 @@ namespace SST
 		[[nodiscard]] const EditorLayer &GetEditorLayer() const;
 		[[nodiscard]] WeakRef<ConfigManager> GetConfigManager() const;
 		[[nodiscard]] const ApplicationConfig &GetConfig() const;
+		[[nodiscard]] const ApplicationRuntimeServices &GetRuntimeServices() const;
 		void PushLayer(Unique<Layer> layer);
 		void InsertLayerBefore(LayerId before, Unique<Layer> layer);
 		void PushOverlay(Unique<Layer> overlay);
@@ -122,6 +124,7 @@ namespace SST
 		bool initializeEventDispatchingSystem();
 		bool initializeCoreLayerSystems();
 		bool initializeAssetManager();
+		void refreshRuntimeServices();
 
 		// Configuration API
 		bool bootstrapConfiguration();
@@ -166,6 +169,7 @@ namespace SST
 
 		ApplicationRuntimeState m_Runtime;
 		ApplicationGraphicsState m_Graphics;
+		ApplicationRuntimeServices m_RuntimeServices;
 
 
 		// Singleton ownership

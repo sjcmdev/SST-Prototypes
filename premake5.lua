@@ -182,6 +182,7 @@ project "Core"
         "Core/App/ApplicationInternals.hpp",
         "Core/App/ApplicationLifecycle.hpp",
         "Core/App/ApplicationLifecycle.cpp",
+        "Core/App/ApplicationRuntimeServices.hpp",
         "Core/App/ApplicationState.hpp",
         "Core/App/ApplicationWindow.cpp",
         "Core/App/RendererConfig.hpp",

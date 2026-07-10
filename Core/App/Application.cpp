@@ -239,6 +239,14 @@ namespace SST
 	}
 
 
+	const ApplicationRuntimeServices &Application::GetRuntimeServices() const
+	{
+		DS_ASSERT(!m_RuntimeServices.eventBus.expired(), "ApplicationRuntimeServices not initialized");
+		DS_ASSERT(m_RuntimeServices.config != nullptr, "ApplicationRuntimeServices config not initialized");
+		return m_RuntimeServices;
+	}
+
+
 	void Application::PushLayer(Unique<Layer> layer)
 	{
 		m_LayerStack.PushLayer(std::move(layer));

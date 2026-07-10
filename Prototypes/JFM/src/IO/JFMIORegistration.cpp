@@ -2,14 +2,13 @@
 
 #include "IO/JFMIORegistration.hpp"
 
-#include "App/Application.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Utils/Assert.hpp"
 #include "Events/JFMEvents.hpp"
 #include "IO/IOLayer.hpp"
 #include "IO/JFMExportRawTsvJob.hpp"
 #include "IO/JFMImportJob.hpp"
-#include "IO/JFMImportPaths.hpp"
 #include "IO/JFMProjectJobs.hpp"
 
 namespace SST::Prototypes::JFM
@@ -17,16 +16,24 @@ namespace SST::Prototypes::JFM
 
 	struct JFMIOState
 	{
+		Ref<EventBus> eventBus;
 		Ref<JFMWorkspaceStore> store;
+		Ref<Notifier> notifier;
+		Path pythonRoot;
 		std::string targetSeriesId;
 		bool importRunning = false;
 	};
 	
 
-	void RegisterJFMIOHandlers(IOLayer &ioLayer, Ref<JFMWorkspaceStore> store)
+	void RegisterJFMIOHandlers(IOLayer &ioLayer, JFMIORegistrationContext context)
 	{
+		DS_ASSERT(context.eventBus != nullptr, "JFM IO registration requires EventBus");
+
 		auto state = CreateRef<JFMIOState>();
-		state->store = std::move(store);
+		state->eventBus = std::move(context.eventBus);
+		state->store = std::move(context.store);
+		state->notifier = std::move(context.notifier);
+		state->pythonRoot = std::move(context.pythonRoot);
 
 		ioLayer.RegisterHandler<ImportRequested>([state](const ImportRequested &event) {
 			if (event.paths.empty())
@@ -34,7 +41,7 @@ namespace SST::Prototypes::JFM
 
 			if (state->importRunning)
 			{
-				Application::Get().GetEventBus().Queue(ImportFailed{"Another JFM import is already running."});
+				state->eventBus->Queue(ImportFailed{"Another JFM import is already running."});
 				return;
 			}
 
@@ -46,9 +53,8 @@ namespace SST::Prototypes::JFM
 			}
 			state->targetSeriesId = event.targetSeriesId;
 
-			const Path pythonRoot = ResolveJFMPythonRoot(Application::Get().GetConfig());
-			auto job = CreateRef<JFMImportJob>(Application::Get().GetEventBusRef(), event.paths, pythonRoot);
-			Application::Get().GetEventBus().Queue(JobSubmitRequested{job, JobPriority::Normal, "JFMIO"});
+			auto job = CreateRef<JFMImportJob>(state->eventBus, event.paths, state->pythonRoot);
+			state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, "JFMIO"});
 		});
 
 		ioLayer.RegisterHandler<ImportProgress>([state](const ImportProgress &event) {
@@ -83,8 +89,8 @@ namespace SST::Prototypes::JFM
 			if (state->store != nullptr)
 				state->store->SetStatusMessage("Raw TSV export queued: " + event.path.String());
 
-			auto job = CreateRef<JFMExportRawTsvJob>(Application::Get().GetEventBusRef(), event.path, event.characteristic);
-			Application::Get().GetEventBus().Queue(JobSubmitRequested{job, JobPriority::Normal, "JFMIO"});
+			auto job = CreateRef<JFMExportRawTsvJob>(state->eventBus, event.path, event.characteristic);
+			state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, "JFMIO"});
 		});
 
 		ioLayer.RegisterHandler<ExportRawTsvCompleted>([state](const ExportRawTsvCompleted &event) {
@@ -102,8 +108,8 @@ namespace SST::Prototypes::JFM
 			if (state->store != nullptr)
 				state->store->SetStatusMessage("Saving project: " + event.path.String());
 
-			auto job = CreateRef<SaveProjectJob>(Application::Get().GetEventBusRef(), event.path, event.snapshot);
-			Application::Get().GetEventBus().Queue(JobSubmitRequested{job, JobPriority::High, "JFMIO"});
+			auto job = CreateRef<SaveProjectJob>(state->eventBus, event.path, event.snapshot);
+			state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, "JFMIO"});
 		});
 
 		ioLayer.RegisterHandler<ProjectSaveCompleted>([state](const ProjectSaveCompleted &event) {
@@ -124,8 +130,8 @@ namespace SST::Prototypes::JFM
 			if (state->store != nullptr)
 				state->store->SetStatusMessage("Loading project: " + event.path.String());
 
-			auto job = CreateRef<LoadProjectJob>(Application::Get().GetEventBusRef(), event.path);
-			Application::Get().GetEventBus().Queue(JobSubmitRequested{job, JobPriority::High, "JFMIO"});
+			auto job = CreateRef<LoadProjectJob>(state->eventBus, event.path);
+			state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, "JFMIO"});
 		});
 
 		ioLayer.RegisterHandler<ProjectLoadCompleted>([state](const ProjectLoadCompleted &event) {

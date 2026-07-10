@@ -642,6 +642,7 @@ namespace SST
 				return false;
 			}
 		}
+		refreshRuntimeServices();
 		DS_LOG_INFO("CreateFromSpecification: core runtime services ready");
 		return true;
 	}
@@ -733,6 +734,7 @@ namespace SST
 		m_CapabilityService.reset();
 		m_AssetManager.reset();
 		m_Notifier.reset();
+		m_RuntimeServices = {};
 
 		if (m_EventBus)
 		{
@@ -803,6 +805,24 @@ namespace SST
 			timer.Finish(true);
 		}
 		DS_LOG_INFO("LayerStack default setup: complete");
+	}
+
+
+	void Application::refreshRuntimeServices()
+	{
+		auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock();
+		DS_ASSERT(coreLayer != nullptr, "CoreLayer was not created");
+
+		m_RuntimeServices.eventBus = CreateWeakRef(m_EventBus);
+		m_RuntimeServices.jobSystem = coreLayer->GetJobSystemHandle();
+		m_RuntimeServices.progressTracker = coreLayer->GetProgressTrackerHandle();
+		m_RuntimeServices.commandRegistry = coreLayer->GetCommandRegistryHandle();
+		m_RuntimeServices.keymapResolver = coreLayer->GetKeymapResolverHandle();
+		m_RuntimeServices.contextManager = coreLayer->GetContextManagerHandle();
+		m_RuntimeServices.notifier = CreateWeakRef(m_Notifier);
+		m_RuntimeServices.config = &m_Config;
+		m_RuntimeServices.configDirectory = m_Config.directory;
+		m_RuntimeServices.paths = m_Config.paths;
 	}
 
 

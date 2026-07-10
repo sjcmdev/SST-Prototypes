@@ -4,15 +4,14 @@ Characteristics. Tam powinny się znajdować tego typu rzeczy i trzymać to w ja
 3. Myślałem aby wprowadzić klasę `CharacteristicInfo` gdzie też by się znajdowały informacje o typie sweepu, vStart, vEnd, ilości punktów itd. 
 4. Dlaczego jakiekolwiek `id` jest std::string? 
 5. funkcje w `JFMIORegistration` zdecydowanie powinny być osobnymi funkcjami.
-6. Bardzo mi się nie podoba częstość i fakt potrzeby używania `Application::Get()...` w `JFMIORegistration`
-7. Bardzo mi się podoba to jak są rejestrowane `Handler` w IOLayer. Czym innym jest rejestracja Eventu i jego obsłużenie, że chcemy zaimportować charakterystykę a czym innym rejestracja mechanizmów importu i eksportu. To są dwie różne rzeczy, których nie wolno mieszać
-8. Przy jako reakcja na event o niepowodzeniu podczas importu/eksportu dobrze by było zrobić Notification
-9. Można pogrupować Joby związane z IO w JFM 
-10. Dlaczego Domain i Storage jest rozdzielone? Czy my podjeliśmy taką świadomą decyzję? 
-11. Czy w `ensureSelectionLocked` nie lepiej by zrobić flatten listy charakterystyk przy takim ułozeniu? W przyszłym ułożeniu (punkty powyżej) może nie będzie potrzeba podwójnej pętli for
-12. Projekt powinien dostarczać swoje własne API do operacji na charakterystykach i później na analizach aby nie polegać na tym, że to jest vector czy array itd. 
-13. Projekt powinien dostarczyć możliwość poproszenia o charakterystykę na podstawie UUID albo jej nazwy aby nie musieć w wielu miejscach pisać tych samych funkcji szukających konkretnego elementu
-14. Bardzo bardzo mi się nie podoba, że nie korzystamy z całego systemu `ScientificRuntime`. Obecny import charakterystyk po przez pythona jest całkowicie do przepisania z wykorzystaniem już istniejącego systemu `ScientificRuntime`
+[x] 6. Bardzo mi się nie podoba częstość i fakt potrzeby używania `Application::Get()...` w `JFMIORegistration`
+6. Przy jako reakcja na event o niepowodzeniu podczas importu/eksportu dobrze by było zrobić Notification
+7. Można pogrupować Joby związane z IO w JFM 
+8. Dlaczego Domain i Storage jest rozdzielone? Czy my podjeliśmy taką świadomą decyzję? 
+9. Czy w `ensureSelectionLocked` nie lepiej by zrobić flatten listy charakterystyk przy takim ułozeniu? W przyszłym ułożeniu (punkty powyżej) może nie będzie potrzeba podwójnej pętli for
+10. Projekt powinien dostarczać swoje własne API do operacji na charakterystykach i później na analizach aby nie polegać na tym, że to jest vector czy array itd. 
+11. Projekt powinien dostarczyć możliwość poproszenia o charakterystykę na podstawie UUID albo jej nazwy aby nie musieć w wielu miejscach pisać tych samych funkcji szukających konkretnego elementu
+12. Bardzo bardzo mi się nie podoba, że nie korzystamy z całego systemu `ScientificRuntime`. Obecny import charakterystyk po przez pythona jest całkowicie do przepisania z wykorzystaniem już istniejącego systemu `ScientificRuntime`
 
 Opcje UI do dodania:
 1. wyświetlanie zarejestrowanych skryptów pythonowych do importu (jako element projektu) (context menu (add script/remove script/reload script))
@@ -64,13 +63,12 @@ Data: 2026-07-10
 
 ### Plan naprawy - architektura
 
-1. Wprowadzić lekki `RuntimeServices`/`ApplicationRuntimeServices` jako agregat uchwytów: `EventBus`, `JobSystem`, `ProgressTracker`, `CommandRegistry`, `KeymapResolver`, `Notifier`, config paths.
-2. Ograniczyć użycie `Application::Get()` w JFM do zera. Globalny accessor zostawić tylko dla Core/bootstrap/legacy.
+[x] 1. Wprowadzić lekki `RuntimeServices`/`ApplicationRuntimeServices` jako agregat uchwytów: `EventBus`, `JobSystem`, `ProgressTracker`, `CommandRegistry`, `KeymapResolver`, `Notifier`, config paths.
+[x] 2. Ograniczyć użycie `Application::Get()` w JFM do zera. Globalny accessor zostawić tylko dla Core/bootstrap/legacy.
 3. Uporządkować Python runtime: jeden oficjalny Core service dla embedded Python/GIL/sys.path/job hooks.
 4. Utrzymać `ScientificPythonRuntime` jako mały wrapper nad `PythonInterpreter`.
 5. Zmienić `RegisterJFMIOHandlers` na jawny kontekst, np. `JFMIORegistrationContext { store, eventBus, notifier, pythonRoot }`.
-6. Zachować `IOLayer::RegisterHandler<T>()` jako bezpośredni mechanizm rejestracji handlerów; eventy zostają tylko do żądań i wyników pracy.
-7. Rozdzielić `JFMIORegistration` na funkcje: import requested/progress/completed/failed, export, save, load.
+6. Rozdzielić `JFMIORegistration` na funkcje: import requested/progress/completed/failed, export, save, load.
 
 ### Plan naprawy - model danych
 

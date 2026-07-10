@@ -3,10 +3,12 @@
 #include "App/Application.hpp"
 #include "App/JFMCommands.hpp"
 #include "Core/EntryPoint.hpp"
+#include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Domain/JFMDomainLayer.hpp"
 #include "IO/IOLayer.hpp"
 #include "IO/JFMIORegistration.hpp"
+#include "IO/JFMImportPaths.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/JFMMenu.hpp"
 #include "Presentation/Panels/ImportStatusPanel.hpp"
@@ -37,10 +39,26 @@ namespace SST
 
 	void SetupApplication(Application &application)
 	{
+		const ApplicationRuntimeServices &runtime = application.GetRuntimeServices();
+		DS_ASSERT(runtime.config != nullptr, "JFM setup requires application config");
+		Ref<EventBus> eventBus = runtime.eventBus.lock();
+		Ref<Notifier> notifier = runtime.notifier.lock();
+		DS_ASSERT(eventBus != nullptr, "JFM setup requires EventBus");
+
 		auto workspace = CreateRef<JFMWorkspaceStore>();
-		RegisterJFMIOHandlers(application.GetIOLayer(), workspace);
+		RegisterJFMIOHandlers(
+			application.GetIOLayer(),
+			JFMIORegistrationContext{
+				eventBus,
+				workspace,
+				notifier,
+				ResolveJFMPythonRoot(*runtime.config)});
 		application.InsertLayerBefore(LayerId::ImGui, CreateUnique<JFMDomainLayer>(workspace));
 		RegisterJFMEditor(application, workspace);
-		RegisterJFMCommands(application, workspace);
+		RegisterJFMCommands(JFMCommandRegistrationContext{
+			eventBus,
+			runtime.commandRegistry,
+			runtime.keymapResolver,
+			workspace});
 	}
 } // namespace SST
