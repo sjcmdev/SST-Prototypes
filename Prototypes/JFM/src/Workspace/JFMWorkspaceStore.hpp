@@ -3,6 +3,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Core/Utils/Path.hpp"
@@ -21,8 +22,15 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] bool IsImportRunning() const;
 		[[nodiscard]] std::optional<JFMCharacteristic> GetSelectedCharacteristic() const;
 		[[nodiscard]] std::string GetSelectedSeriesId() const;
-		[[nodiscard]] std::string GetSelectedCharacteristicId() const;
+		[[nodiscard]] CharacteristicId GetSelectedCharacteristicId() const;
 		[[nodiscard]] std::vector<std::string> GetLastImportWarnings() const;
+		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristic(const CharacteristicId &id) const;
+		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristicByName(const std::string &name) const;
+
+		JFMSeries AddSeries(std::string name);
+		std::vector<CharacteristicId> AddCharacteristics(std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId = {});
+		bool DeleteCharacteristic(const CharacteristicId &id);
+		bool MoveCharacteristic(const CharacteristicId &id, const std::string &targetSeriesId);
 
 		void ResetProject(std::string name = "Untitled JFM Project");
 		void ReplaceProject(JFMProject project, std::optional<Path> path);
@@ -31,20 +39,27 @@ namespace SST::Prototypes::JFM
 		void SetImportRunning(bool running);
 		void SetLastImportWarnings(std::vector<std::string> warnings);
 		void SelectSeries(std::string seriesId);
-		void SelectCharacteristic(std::string characteristicId);
+		void SelectCharacteristic(CharacteristicId characteristicId);
 		void AddImportedCharacteristics(std::vector<JFMCharacteristic> characteristics);
 
 	private:
 		[[nodiscard]] static JFMProject MakeDefaultProject(std::string name);
 		[[nodiscard]] std::string nextId(const char *prefix) const;
+		[[nodiscard]] JFMSeries *findSeriesLocked(const std::string &seriesId);
+		[[nodiscard]] const JFMSeries *findSeriesLocked(const std::string &seriesId) const;
+		[[nodiscard]] JFMCharacteristicInfo *findInfoLocked(const CharacteristicId &id);
+		[[nodiscard]] const JFMCharacteristicInfo *findInfoLocked(const CharacteristicId &id) const;
+		[[nodiscard]] std::optional<JFMCharacteristic> makeCharacteristicLocked(const JFMCharacteristicInfo &info) const;
 		void ensureSelectionLocked();
+		void removeCharacteristicReferencesLocked(const CharacteristicId &id);
 
 	private:
 		mutable std::mutex m_Mutex;
 		JFMProject m_Project;
+		std::unordered_map<CharacteristicId, JFMCharacteristicData> m_CharacteristicData;
 		std::optional<Path> m_ProjectPath;
 		std::string m_SelectedSeriesId;
-		std::string m_SelectedCharacteristicId;
+		CharacteristicId m_SelectedCharacteristicId;
 		std::string m_StatusMessage = "Ready.";
 		std::vector<std::string> m_LastImportWarnings;
 		bool m_ImportRunning = false;

@@ -25,18 +25,19 @@ def _to_cpp_characteristic(source: Path, parser_name: str, curve: dict[str, Any]
     import sst_jfm
 
     characteristic = sst_jfm.JFMCharacteristic()
-    characteristic.name = str(curve.get("name") or source.stem)
-    characteristic.measurement = str(curve.get("measurement") or "IV")
-    characteristic.source_path = str(source)
-    characteristic.parser = parser_name
+    info = sst_jfm.JFMCharacteristicInfo()
+    info.name = str(curve.get("name") or source.stem)
+    info.measurement = str(curve.get("measurement") or "IV")
+    info.source_path = str(source)
+    info.parser = parser_name
 
     metadata = curve.get("metadata") or {}
-    characteristic.metadata = {str(key): "" if value is None else str(value) for key, value in metadata.items()}
-    characteristic.temperature_K = metadata.get("temperature_K")
-    characteristic.temperature_source = str(metadata.get("temperature_source") or "missing")
+    info.metadata = {str(key): "" if value is None else str(value) for key, value in metadata.items()}
+    info.temperature_K = metadata.get("temperature_K")
+    info.temperature_source = str(metadata.get("temperature_source") or "missing")
 
     columns = [_to_cpp_column(sst_jfm, column) for column in curve.get("columns", [])]
-    characteristic.columns = columns
+    info.columns = columns
 
     sweep = curve.get("sweep") or {}
     cpp_sweep = sst_jfm.JFMSweepInfo()
@@ -44,22 +45,25 @@ def _to_cpp_characteristic(source: Path, parser_name: str, curve: dict[str, Any]
     cpp_sweep.v_start = sweep.get("v_start")
     cpp_sweep.v_stop = sweep.get("v_stop")
     cpp_sweep.n_points = int(sweep.get("n_points") or 0)
-    characteristic.sweep = cpp_sweep
+    info.sweep = cpp_sweep
 
     warnings = [str(warning) for warning in curve.get("warnings", [])]
     qc = sst_jfm.JFMQualityControl()
     qc.warnings = warnings
-    qc.has_missing_temperature = characteristic.temperature_K is None
+    qc.has_missing_temperature = info.temperature_K is None
     qc.non_monotonic_sweep = "non_monotonic_sweep" in warnings or "nonmonotonic_sweep" in warnings
-    characteristic.qc = qc
+    info.qc = qc
 
     data = np.asarray(curve.get("data"), dtype=float)
     if data.ndim == 1:
         data = data.reshape((-1, 1))
-    characteristic.voltage = _column(data, columns, "voltage", 0)
+    cpp_data = sst_jfm.JFMCharacteristicData()
+    cpp_data.voltage = _column(data, columns, "voltage", 0)
     current_index = _column_index(columns, "current", 1)
-    characteristic.current = _column(data, columns, "current", current_index)
-    characteristic.current_density = _column(data, columns, "current_density", current_index)
+    cpp_data.current = _column(data, columns, "current", current_index)
+    cpp_data.current_density = _column(data, columns, "current_density", current_index)
+    characteristic.info = info
+    characteristic.data = cpp_data
     return characteristic
 
 

@@ -16,7 +16,7 @@
 #include "Presentation/Panels/JFMOverviewPanel.hpp"
 #include "Presentation/Panels/ProjectTreePanel.hpp"
 #include "Presentation/Panels/RawPlotPanel.hpp"
-#include "Storage/JFMWorkspaceStore.hpp"
+#include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST
 {	

@@ -60,6 +60,8 @@ def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
             JFMSweepInfo=JFMSweepInfo,
             JFMQualityControl=JFMQualityControl,
             JFMCharacteristic=JFMCharacteristic,
+            JFMCharacteristicInfo=SimpleNamespace,
+            JFMCharacteristicData=SimpleNamespace,
         ),
     )
 
@@ -69,8 +71,8 @@ def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
     characteristic = result["characteristics"][0]
 
     assert result["parser"] == "dat"
-    assert characteristic.source_path.endswith("IV_C002_Z015_6_290,0K.dat")
-    assert characteristic.columns[0].role == "voltage"
-    assert characteristic.temperature_K == 290.0
-    assert characteristic.voltage
-    assert len(characteristic.current) == len(characteristic.voltage)
+    assert characteristic.info.source_path.endswith("IV_C002_Z015_6_290,0K.dat")
+    assert characteristic.info.columns[0].role == "voltage"
+    assert characteristic.info.temperature_K == 290.0
+    assert characteristic.data.voltage
+    assert len(characteristic.data.current) == len(characteristic.data.voltage)

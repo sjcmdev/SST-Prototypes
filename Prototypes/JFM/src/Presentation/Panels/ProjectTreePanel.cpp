@@ -9,16 +9,18 @@ namespace SST::Prototypes::JFM
 
 	void renderCharacteristicNode(
 		const JFMSeries &series,
-		const JFMCharacteristic &characteristic,
+		const CharacteristicId &characteristicId,
 		const std::string &selectedCharacteristic,
 		const Ref<JFMWorkspaceStore> &store)
 	{
-		const bool selected = characteristic.id == selectedCharacteristic;
-		const std::string label = characteristic.name + "##" + characteristic.id;
+		const auto characteristic = store != nullptr ? store->FindCharacteristic(characteristicId) : std::optional<JFMCharacteristic>{};
+		const std::string &name = characteristic ? characteristic->info.name : characteristicId;
+		const bool selected = characteristicId == selectedCharacteristic;
+		const std::string label = name + "##" + characteristicId;
 		if (ImGui::Selectable(label.c_str(), selected) && store != nullptr)
 		{
 			store->SelectSeries(series.id);
-			store->SelectCharacteristic(characteristic.id);
+			store->SelectCharacteristic(characteristicId);
 		}
 	}
 
@@ -31,9 +33,9 @@ namespace SST::Prototypes::JFM
 		if (!ImGui::TreeNodeEx(seriesLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 			return;
 
-		for (const JFMCharacteristic &characteristic : series.characteristics)
-			renderCharacteristicNode(series, characteristic, selectedCharacteristic, store);
-		if (series.characteristics.empty())
+		for (const CharacteristicId &characteristicId : series.characteristicIds)
+			renderCharacteristicNode(series, characteristicId, selectedCharacteristic, store);
+		if (series.characteristicIds.empty())
 			ImGui::TextDisabled("No characteristics");
 		ImGui::TreePop();
 	}

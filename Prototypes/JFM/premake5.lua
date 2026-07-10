@@ -106,8 +106,8 @@ project "JFMTests"
 
     files {
         _SST_ROOT .. "/Prototypes/JFM/src/Domain/JFMTypes.hpp",
-        _SST_ROOT .. "/Prototypes/JFM/src/Storage/JFMWorkspaceStore.hpp",
-        _SST_ROOT .. "/Prototypes/JFM/src/Storage/JFMWorkspaceStore.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/Workspace/JFMWorkspaceStore.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/Workspace/JFMWorkspaceStore.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.hpp",
@@ -116,6 +116,8 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportPaths.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonImportBridge.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonImportBridge.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonBindings.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonBindings.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportJob.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportJob.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Events/JFMEvents.hpp",

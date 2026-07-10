@@ -1,0 +1,333 @@
+#include "Core/dspch.hpp"
+
+#include "Workspace/JFMWorkspaceStore.hpp"
+
+#include <algorithm>
+
+namespace SST::Prototypes::JFM
+{
+	JFMWorkspaceStore::JFMWorkspaceStore()
+		: m_Project(MakeDefaultProject("Untitled JFM Project"))
+	{
+		ensureSelectionLocked();
+	}
+
+	JFMProject JFMWorkspaceStore::GetProjectSnapshot() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_Project;
+	}
+
+	std::optional<Path> JFMWorkspaceStore::GetProjectPath() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_ProjectPath;
+	}
+
+	std::string JFMWorkspaceStore::GetStatusMessage() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_StatusMessage;
+	}
+
+	bool JFMWorkspaceStore::IsImportRunning() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_ImportRunning;
+	}
+
+	std::optional<JFMCharacteristic> JFMWorkspaceStore::GetSelectedCharacteristic() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		const JFMCharacteristicInfo *info = findInfoLocked(m_SelectedCharacteristicId);
+		return info != nullptr ? makeCharacteristicLocked(*info) : std::nullopt;
+	}
+
+	std::string JFMWorkspaceStore::GetSelectedSeriesId() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_SelectedSeriesId;
+	}
+
+	CharacteristicId JFMWorkspaceStore::GetSelectedCharacteristicId() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_SelectedCharacteristicId;
+	}
+
+	std::vector<std::string> JFMWorkspaceStore::GetLastImportWarnings() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_LastImportWarnings;
+	}
+
+	std::optional<JFMCharacteristic> JFMWorkspaceStore::FindCharacteristic(const CharacteristicId &id) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		const JFMCharacteristicInfo *info = findInfoLocked(id);
+		return info != nullptr ? makeCharacteristicLocked(*info) : std::nullopt;
+	}
+
+	std::optional<JFMCharacteristic> JFMWorkspaceStore::FindCharacteristicByName(const std::string &name) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		const auto it = std::find_if(
+			m_Project.characteristics.begin(),
+			m_Project.characteristics.end(),
+			[&name](const JFMCharacteristicInfo &info) { return info.name == name; });
+		return it != m_Project.characteristics.end() ? makeCharacteristicLocked(*it) : std::nullopt;
+	}
+
+	JFMSeries JFMWorkspaceStore::AddSeries(std::string name)
+	{
+		std::scoped_lock lock(m_Mutex);
+		JFMSeries series{nextId("series"), std::move(name), {}};
+		if (series.name.empty())
+			series.name = "Series " + std::to_string(m_Project.series.size() + 1);
+		m_Project.series.push_back(series);
+		m_SelectedSeriesId = series.id;
+		ensureSelectionLocked();
+		return series;
+	}
+
+	std::vector<CharacteristicId> JFMWorkspaceStore::AddCharacteristics(std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		ensureSelectionLocked();
+		if (m_Project.series.empty())
+			m_Project.series.push_back(JFMSeries{nextId("series"), "Imported", {}});
+		if (targetSeriesId.empty())
+			targetSeriesId = m_SelectedSeriesId.empty() ? m_Project.series.front().id : m_SelectedSeriesId;
+
+		JFMSeries *target = findSeriesLocked(targetSeriesId);
+		if (target == nullptr)
+			target = &m_Project.series.front();
+
+		std::vector<CharacteristicId> addedIds;
+		addedIds.reserve(characteristics.size());
+		for (JFMCharacteristic &characteristic : characteristics)
+		{
+			if (characteristic.info.id.empty())
+				characteristic.info.id = nextId("characteristic");
+			if (characteristic.info.name.empty())
+			{
+				characteristic.info.name = characteristic.info.sourcePath.Empty()
+					? characteristic.info.id
+					: characteristic.info.sourcePath.filename().String();
+			}
+
+			removeCharacteristicReferencesLocked(characteristic.info.id);
+			if (JFMCharacteristicInfo *existing = findInfoLocked(characteristic.info.id))
+				*existing = characteristic.info;
+			else
+				m_Project.characteristics.push_back(characteristic.info);
+
+			m_CharacteristicData[characteristic.info.id] = std::move(characteristic.data);
+			target->characteristicIds.push_back(characteristic.info.id);
+			m_SelectedCharacteristicId = characteristic.info.id;
+			addedIds.push_back(characteristic.info.id);
+		}
+
+		m_SelectedSeriesId = target->id;
+		m_StatusMessage = "Imported " + std::to_string(characteristics.size()) + " characteristic(s).";
+		m_ImportRunning = false;
+		ensureSelectionLocked();
+		return addedIds;
+	}
+
+	bool JFMWorkspaceStore::DeleteCharacteristic(const CharacteristicId &id)
+	{
+		std::scoped_lock lock(m_Mutex);
+		const auto oldSize = m_Project.characteristics.size();
+		m_Project.characteristics.erase(
+			std::remove_if(
+				m_Project.characteristics.begin(),
+				m_Project.characteristics.end(),
+				[&id](const JFMCharacteristicInfo &info) { return info.id == id; }),
+			m_Project.characteristics.end());
+		m_CharacteristicData.erase(id);
+		removeCharacteristicReferencesLocked(id);
+		if (m_SelectedCharacteristicId == id)
+			m_SelectedCharacteristicId.clear();
+		ensureSelectionLocked();
+		return m_Project.characteristics.size() != oldSize;
+	}
+
+	bool JFMWorkspaceStore::MoveCharacteristic(const CharacteristicId &id, const std::string &targetSeriesId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		if (findInfoLocked(id) == nullptr)
+			return false;
+
+		JFMSeries *target = findSeriesLocked(targetSeriesId);
+		if (target == nullptr)
+			return false;
+
+		removeCharacteristicReferencesLocked(id);
+		target->characteristicIds.push_back(id);
+		m_SelectedSeriesId = target->id;
+		m_SelectedCharacteristicId = id;
+		ensureSelectionLocked();
+		return true;
+	}
+
+	void JFMWorkspaceStore::ResetProject(std::string name)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_Project = MakeDefaultProject(std::move(name));
+		m_CharacteristicData.clear();
+		m_ProjectPath.reset();
+		m_LastImportWarnings.clear();
+		m_ImportRunning = false;
+		m_StatusMessage = "New JFM project created.";
+		ensureSelectionLocked();
+	}
+
+	void JFMWorkspaceStore::ReplaceProject(JFMProject project, std::optional<Path> path)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_Project = std::move(project);
+		m_CharacteristicData.clear();
+		m_ProjectPath = std::move(path);
+		m_StatusMessage = "Project loaded.";
+		ensureSelectionLocked();
+	}
+
+	void JFMWorkspaceStore::SetProjectPath(Path path)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_ProjectPath = std::move(path);
+	}
+
+	void JFMWorkspaceStore::SetStatusMessage(std::string message)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_StatusMessage = std::move(message);
+	}
+
+	void JFMWorkspaceStore::SetImportRunning(bool running)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_ImportRunning = running;
+	}
+
+	void JFMWorkspaceStore::SetLastImportWarnings(std::vector<std::string> warnings)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_LastImportWarnings = std::move(warnings);
+	}
+
+	void JFMWorkspaceStore::SelectSeries(std::string seriesId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_SelectedSeriesId = std::move(seriesId);
+		ensureSelectionLocked();
+	}
+
+	void JFMWorkspaceStore::SelectCharacteristic(CharacteristicId characteristicId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_SelectedCharacteristicId = std::move(characteristicId);
+		ensureSelectionLocked();
+	}
+
+	void JFMWorkspaceStore::AddImportedCharacteristics(std::vector<JFMCharacteristic> characteristics)
+	{
+		(void)AddCharacteristics(std::move(characteristics), GetSelectedSeriesId());
+	}
+
+	JFMProject JFMWorkspaceStore::MakeDefaultProject(std::string name)
+	{
+		JFMProject project;
+		project.id = "jfm-project";
+		project.name = std::move(name);
+		project.metadata["prototype"] = "JFM";
+		project.series.push_back(JFMSeries{"series-default", "Series 1", {}});
+		return project;
+	}
+
+	std::string JFMWorkspaceStore::nextId(const char *prefix) const
+	{
+		return std::string(prefix) + "-" + std::to_string(m_NextId++);
+	}
+
+	JFMSeries *JFMWorkspaceStore::findSeriesLocked(const std::string &seriesId)
+	{
+		const auto it = std::find_if(
+			m_Project.series.begin(),
+			m_Project.series.end(),
+			[&seriesId](const JFMSeries &series) { return series.id == seriesId; });
+		return it != m_Project.series.end() ? &*it : nullptr;
+	}
+
+	const JFMSeries *JFMWorkspaceStore::findSeriesLocked(const std::string &seriesId) const
+	{
+		const auto it = std::find_if(
+			m_Project.series.begin(),
+			m_Project.series.end(),
+			[&seriesId](const JFMSeries &series) { return series.id == seriesId; });
+		return it != m_Project.series.end() ? &*it : nullptr;
+	}
+
+	JFMCharacteristicInfo *JFMWorkspaceStore::findInfoLocked(const CharacteristicId &id)
+	{
+		const auto it = std::find_if(
+			m_Project.characteristics.begin(),
+			m_Project.characteristics.end(),
+			[&id](const JFMCharacteristicInfo &info) { return info.id == id; });
+		return it != m_Project.characteristics.end() ? &*it : nullptr;
+	}
+
+	const JFMCharacteristicInfo *JFMWorkspaceStore::findInfoLocked(const CharacteristicId &id) const
+	{
+		const auto it = std::find_if(
+			m_Project.characteristics.begin(),
+			m_Project.characteristics.end(),
+			[&id](const JFMCharacteristicInfo &info) { return info.id == id; });
+		return it != m_Project.characteristics.end() ? &*it : nullptr;
+	}
+
+	std::optional<JFMCharacteristic> JFMWorkspaceStore::makeCharacteristicLocked(const JFMCharacteristicInfo &info) const
+	{
+		JFMCharacteristic characteristic;
+		characteristic.info = info;
+		if (const auto dataIt = m_CharacteristicData.find(info.id); dataIt != m_CharacteristicData.end())
+			characteristic.data = dataIt->second;
+		return characteristic;
+	}
+
+	void JFMWorkspaceStore::ensureSelectionLocked()
+	{
+		if (m_Project.series.empty())
+			m_Project.series.push_back(JFMSeries{nextId("series"), "Series 1", {}});
+
+		if (findSeriesLocked(m_SelectedSeriesId) == nullptr)
+			m_SelectedSeriesId = m_Project.series.front().id;
+
+		if (findInfoLocked(m_SelectedCharacteristicId) != nullptr)
+			return;
+
+		m_SelectedCharacteristicId.clear();
+		for (const JFMSeries &series : m_Project.series)
+		{
+			for (const CharacteristicId &id : series.characteristicIds)
+			{
+				if (findInfoLocked(id) != nullptr)
+				{
+					m_SelectedCharacteristicId = id;
+					return;
+				}
+			}
+		}
+	}
+
+	void JFMWorkspaceStore::removeCharacteristicReferencesLocked(const CharacteristicId &id)
+	{
+		for (JFMSeries &series : m_Project.series)
+		{
+			series.characteristicIds.erase(
+				std::remove(series.characteristicIds.begin(), series.characteristicIds.end(), id),
+				series.characteristicIds.end());
+		}
+	}
+} // namespace SST::Prototypes::JFM

@@ -344,7 +344,7 @@ namespace SST::Prototypes::JFM
 				workspace->SetStatusMessage("Raw TSV export failed: no characteristic selected.");
 				return Result<void>{};
 			}
-			const std::string defaultName = selected->name.empty() ? "raw.tsv" : selected->name + ".tsv";
+			const std::string defaultName = selected->info.name.empty() ? "raw.tsv" : selected->info.name + ".tsv";
 			std::optional<Path> path = chooseRawTsvSavePath(defaultName);
 			if (path)
 				eventBus->Queue(ExportRawTsvRequested{*path, *selected});

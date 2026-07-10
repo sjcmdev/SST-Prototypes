@@ -10,7 +10,10 @@
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMImportPaths.hpp"
 #include "IO/JFMProjectJobs.hpp"
+#include "IO/JFMPythonBindings.hpp"
 #include "IO/JFMPythonImportBridge.hpp"
+#include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
+#include "ScientificRuntime/Python/PythonInterpreter.hpp"
 
 namespace SST::Prototypes::JFM
 {
@@ -25,6 +28,23 @@ namespace SST::Prototypes::JFM
 				[](JobLogLevel, const std::string &) {},
 				[] { return false; });
 		}
+
+#if DS_PYTHON_CAPI_AVAILABLE
+		Result<void> EnsurePythonRuntimeForBridgeTests()
+		{
+			static PythonInterpreter interpreter;
+			static bool started = false;
+			if (started)
+				return {};
+
+			RegisterJFMPythonBindings();
+			auto result = interpreter.Start();
+			if (!result)
+				return result;
+			started = true;
+			return {};
+		}
+#endif
 	}
 
 	TEST(JFMProjectJobsTests, SaveAndLoadPublishCompletionEvents)
@@ -122,16 +142,24 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(FileSystem::Exists(pythonRoot.Native())) << pythonRoot.String();
 		ASSERT_TRUE(FileSystem::Exists(dataPath.Native())) << dataPath.String();
 
+#if DS_PYTHON_CAPI_AVAILABLE
+		auto runtime = EnsurePythonRuntimeForBridgeTests();
+		ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+		const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+		ASSERT_TRUE(PyGILState_Check());
+
 		JFMPythonImportBridge bridge(pythonRoot);
 		Result<JFMImportBatchResult> result = bridge.ImportFiles({dataPath}, {});
+		PythonInterpreter::ReleaseRuntimeGil(gil);
 
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
 		ASSERT_FALSE(result->characteristics.empty());
 		const JFMCharacteristic &characteristic = result->characteristics.front();
-		EXPECT_EQ(characteristic.parser, "dat");
-		EXPECT_FALSE(characteristic.voltage.empty());
-		EXPECT_FALSE(characteristic.current.empty());
-		EXPECT_TRUE(characteristic.temperatureK.has_value());
+		EXPECT_EQ(characteristic.info.parser, "dat");
+		EXPECT_FALSE(characteristic.data.voltage.empty());
+		EXPECT_FALSE(characteristic.data.current.empty());
+		EXPECT_TRUE(characteristic.info.temperatureK.has_value());
+#endif
 	}
 
 	TEST(JFMProjectJobsTests, PythonImportBridgeCanImportAgainFromWorkerThread)
@@ -143,16 +171,29 @@ namespace SST::Prototypes::JFM
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
 		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("IV_C002_Z015_6_290,0K.dat");
 
+#if DS_PYTHON_CAPI_AVAILABLE
+		auto runtime = EnsurePythonRuntimeForBridgeTests();
+		ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+
 		JFMPythonImportBridge firstBridge(pythonRoot);
-		ASSERT_TRUE(firstBridge.ImportFiles({dataPath}, {}));
+		{
+			const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+			ASSERT_TRUE(PyGILState_Check());
+			ASSERT_TRUE(firstBridge.ImportFiles({dataPath}, {}));
+			PythonInterpreter::ReleaseRuntimeGil(gil);
+		}
 
 		auto workerResult = std::async(std::launch::async, [pythonRoot, dataPath] {
+			const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
 			JFMPythonImportBridge bridge(pythonRoot);
-			return bridge.ImportFiles({dataPath}, {});
+			Result<JFMImportBatchResult> result = bridge.ImportFiles({dataPath}, {});
+			PythonInterpreter::ReleaseRuntimeGil(gil);
+			return result;
 		});
 
 		Result<JFMImportBatchResult> result = workerResult.get();
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
 		ASSERT_FALSE(result->characteristics.empty());
+#endif
 	}
 } // namespace SST::Prototypes::JFM

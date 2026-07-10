@@ -9,10 +9,7 @@ namespace SST::Prototypes::JFM
 
 	std::size_t countCharacteristics(const JFMProject &project)
 	{
-		std::size_t count = 0;
-		for (const JFMSeries &series : project.series)
-			count += series.characteristics.size();
-		return count;
+		return project.characteristics.size();
 	}
 	
 
@@ -53,11 +50,11 @@ namespace SST::Prototypes::JFM
 		ImGui::Spacing();
 		if (selected)
 		{
-			ImGui::Text("Selected: %s", selected->name.c_str());
-			ImGui::Text("Points: %zu", selected->voltage.size());
+			ImGui::Text("Selected: %s", selected->info.name.c_str());
+			ImGui::Text("Points: %zu", selected->data.voltage.size());
 			ImGui::Text("Temperature: %s",
-			            selected->temperatureK ? std::to_string(*selected->temperatureK).c_str() : "<missing>");
-			ImGui::Text("Source: %s", selected->sourcePath.c_str());
+			            selected->info.temperatureK ? std::to_string(*selected->info.temperatureK).c_str() : "<missing>");
+			ImGui::Text("Source: %s", selected->info.sourcePath.String().c_str());
 		}
 		else
 		{

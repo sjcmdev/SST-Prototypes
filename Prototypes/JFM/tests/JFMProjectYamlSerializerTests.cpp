@@ -11,20 +11,19 @@ namespace SST::Prototypes::JFM
 		project.name = "JFM test";
 		project.metadata["owner"] = "test";
 
-		JFMCharacteristic characteristic;
+		JFMCharacteristicInfo characteristic;
 		characteristic.id = "ch-1";
 		characteristic.name = "Curve";
-		characteristic.sourcePath = "data/example.dat";
+		characteristic.sourcePath = Path::FromResolved("data/example.dat");
 		characteristic.parser = "dat";
 		characteristic.temperatureK = 300.0;
 		characteristic.temperatureSource = "filename";
 		characteristic.columns.push_back({"Voltage", "V", "voltage"});
 		characteristic.columns.push_back({"Current", "A", "current"});
-		characteristic.voltage = {0.0, 1.0, 2.0};
-		characteristic.current = {1.0, 2.0, 3.0};
-		characteristic.sweep.pointCount = characteristic.voltage.size();
+		characteristic.sweep.pointCount = 3;
 
-		project.series.push_back(JFMSeries{"series-1", "Series", {characteristic}});
+		project.characteristics.push_back(characteristic);
+		project.series.push_back(JFMSeries{"series-1", "Series", {"ch-1"}});
 
 		auto text = JFMProjectYamlSerializer::Serialize(project);
 		ASSERT_TRUE(text) << text.Error().technicalDetails;
@@ -35,9 +34,11 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(loaded) << loaded.Error().technicalDetails;
 		EXPECT_EQ(loaded->name, "JFM test");
 		ASSERT_EQ(loaded->series.size(), 1);
-		ASSERT_EQ(loaded->series.front().characteristics.size(), 1);
-		ASSERT_TRUE(loaded->series.front().characteristics.front().temperatureK.has_value());
-		EXPECT_DOUBLE_EQ(*loaded->series.front().characteristics.front().temperatureK, 300.0);
-		EXPECT_TRUE(loaded->series.front().characteristics.front().voltage.empty());
+		ASSERT_EQ(loaded->series.front().characteristicIds.size(), 1);
+		EXPECT_EQ(loaded->series.front().characteristicIds.front(), "ch-1");
+		ASSERT_EQ(loaded->characteristics.size(), 1);
+		ASSERT_TRUE(loaded->characteristics.front().temperatureK.has_value());
+		EXPECT_DOUBLE_EQ(*loaded->characteristics.front().temperatureK, 300.0);
+		EXPECT_EQ(loaded->characteristics.front().sourcePath.String(), Path::FromResolved("data/example.dat").String());
 	}
 } // namespace SST::Prototypes::JFM

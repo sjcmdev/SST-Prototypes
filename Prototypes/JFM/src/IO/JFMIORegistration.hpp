@@ -4,7 +4,7 @@
 #include "Core/Notifications/Notifier.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Storage/JFMWorkspaceStore.hpp"
+#include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST
 {

@@ -13,9 +13,9 @@ namespace SST::Prototypes::JFM
 
 	const std::vector<double> &selectYValues(const JFMCharacteristic &characteristic)
 	{
-		if (!characteristic.currentDensity.empty())
-			return characteristic.currentDensity;
-		return characteristic.current;
+		if (!characteristic.data.currentDensity.empty())
+			return characteristic.data.currentDensity;
+		return characteristic.data.current;
 	}
 
 	std::vector<double> absolutePositive(const std::vector<double> &values, const std::vector<double> &x, std::vector<double> &filteredX)
@@ -80,7 +80,7 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		const std::vector<double> &x = selected->voltage;
+		const std::vector<double> &x = selected->data.voltage;
 		const std::vector<double> &rawY = selectYValues(*selected);
 		const std::size_t count = std::min(x.size(), rawY.size());
 		if (count == 0)
@@ -99,7 +99,7 @@ namespace SST::Prototypes::JFM
 		ImGui::RadioButton("Signed-log", &scale, static_cast<int>(PlotScale::SignedLog));
 		m_Scale = static_cast<PlotScale>(scale);
 
-		ImGui::TextUnformatted(selected->name.c_str());
+		ImGui::TextUnformatted(selected->info.name.c_str());
 		if (ImPlot::BeginPlot("##jfm_raw_plot", ImVec2(-1.0f, -1.0f)))
 		{
 			ImPlot::SetupAxes("Voltage", m_Scale == PlotScale::SignedLog ? "signed log current" : "Current");

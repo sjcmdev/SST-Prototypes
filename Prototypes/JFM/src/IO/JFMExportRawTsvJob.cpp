@@ -13,9 +13,9 @@ namespace SST::Prototypes::JFM
 
 	const std::vector<double> &selectYValues(const JFMCharacteristic &characteristic)
 	{
-		if (!characteristic.currentDensity.empty())
-			return characteristic.currentDensity;
-		return characteristic.current;
+		if (!characteristic.data.currentDensity.empty())
+			return characteristic.data.currentDensity;
+		return characteristic.data.current;
 	}
 	}
 
@@ -39,7 +39,7 @@ namespace SST::Prototypes::JFM
 		context.SetStage("Build TSV");
 		context.SetProgress(0.0f, 2.0f);
 		const std::vector<double> &y = selectYValues(m_Characteristic);
-		const std::size_t count = std::min(m_Characteristic.voltage.size(), y.size());
+		const std::size_t count = std::min(m_Characteristic.data.voltage.size(), y.size());
 		if (count == 0)
 		{
 			if (m_EventBus != nullptr)
@@ -48,9 +48,9 @@ namespace SST::Prototypes::JFM
 		}
 
 		std::ostringstream output;
-		output << "voltage\t" << (m_Characteristic.currentDensity.empty() ? "current" : "current_density") << '\n';
+		output << "voltage\t" << (m_Characteristic.data.currentDensity.empty() ? "current" : "current_density") << '\n';
 		for (std::size_t index = 0; index < count; ++index)
-			output << m_Characteristic.voltage[index] << '\t' << y[index] << '\n';
+			output << m_Characteristic.data.voltage[index] << '\t' << y[index] << '\n';
 
 		context.ThrowIfCancellationRequested();
 		context.SetStage("Write");

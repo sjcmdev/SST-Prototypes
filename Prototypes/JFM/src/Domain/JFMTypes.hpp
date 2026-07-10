@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core/Utils/Path.hpp"
+
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -8,6 +10,7 @@
 namespace SST::Prototypes::JFM
 {
 	inline constexpr int JFMProjectSchemaVersion = 1;
+	using CharacteristicId = std::string;
 
 	struct JFMColumn
 	{
@@ -31,12 +34,12 @@ namespace SST::Prototypes::JFM
 		std::vector<std::string> warnings;
 	};
 
-	struct JFMCharacteristic
+	struct JFMCharacteristicInfo
 	{
-		std::string id;
+		CharacteristicId id;
 		std::string name;
 		std::string measurement = "IV";
-		std::string sourcePath; 
+		Path sourcePath;
 		std::string parser;
 		std::optional<double> temperatureK;
 		std::string temperatureSource = "missing";
@@ -44,16 +47,26 @@ namespace SST::Prototypes::JFM
 		JFMSweepInfo sweep;
 		JFMQualityControl qc;
 		std::unordered_map<std::string, std::string> metadata;
+	};
+
+	struct JFMCharacteristicData
+	{
 		std::vector<double> voltage;
 		std::vector<double> current;
 		std::vector<double> currentDensity;
+	};
+
+	struct JFMCharacteristic
+	{
+		JFMCharacteristicInfo info;
+		JFMCharacteristicData data;
 	};
 
 	struct JFMSeries
 	{
 		std::string id;
 		std::string name;
-		std::vector<JFMCharacteristic> characteristics;
+		std::vector<CharacteristicId> characteristicIds;
 	};
 
 	struct JFMFitRun
@@ -84,6 +97,7 @@ namespace SST::Prototypes::JFM
 		std::string name = "Untitled JFM Project";
 		std::unordered_map<std::string, std::string> metadata;
 		std::vector<JFMSeries> series;
+		std::vector<JFMCharacteristicInfo> characteristics;
 		std::vector<JFMFitRun> fitRuns;
 		std::vector<JFMMonteCarloRun> monteCarloRuns;
 		std::vector<JFMDerivedAnalysis> derivedAnalyses;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Core/Utils/Memory.hpp"
-#include "Storage/JFMWorkspaceStore.hpp"
+#include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST
 {

@@ -23,7 +23,6 @@ namespace nb = nanobind;
 NB_MODULE(sst_jfm, module)
 {
 	using namespace SST::Prototypes::JFM;
-
 	module.attr("schema_version") = JFMProjectSchemaVersion;
 
 	nb::class_<JFMColumn>(module, "JFMColumn")
@@ -45,28 +44,39 @@ NB_MODULE(sst_jfm, module)
 		.def_rw("has_missing_temperature", &JFMQualityControl::hasMissingTemperature)
 		.def_rw("warnings", &JFMQualityControl::warnings);
 
+	nb::class_<JFMCharacteristicInfo>(module, "JFMCharacteristicInfo")
+		.def(nb::init<>())
+		.def_rw("id", &JFMCharacteristicInfo::id)
+		.def_rw("name", &JFMCharacteristicInfo::name)
+		.def_rw("measurement", &JFMCharacteristicInfo::measurement)
+		.def_prop_rw(
+			"source_path",
+			[](const JFMCharacteristicInfo &info) { return info.sourcePath.String(); },
+			[](JFMCharacteristicInfo &info, const std::string &path) { info.sourcePath = SST::Path::FromResolved(path); })
+		.def_rw("parser", &JFMCharacteristicInfo::parser)
+		.def_rw("temperature_K", &JFMCharacteristicInfo::temperatureK)
+		.def_rw("temperature_source", &JFMCharacteristicInfo::temperatureSource)
+		.def_rw("columns", &JFMCharacteristicInfo::columns)
+		.def_rw("sweep", &JFMCharacteristicInfo::sweep)
+		.def_rw("qc", &JFMCharacteristicInfo::qc)
+		.def_rw("metadata", &JFMCharacteristicInfo::metadata);
+
+	nb::class_<JFMCharacteristicData>(module, "JFMCharacteristicData")
+		.def(nb::init<>())
+		.def_rw("voltage", &JFMCharacteristicData::voltage)
+		.def_rw("current", &JFMCharacteristicData::current)
+		.def_rw("current_density", &JFMCharacteristicData::currentDensity);
+
 	nb::class_<JFMCharacteristic>(module, "JFMCharacteristic")
 		.def(nb::init<>())
-		.def_rw("id", &JFMCharacteristic::id)
-		.def_rw("name", &JFMCharacteristic::name)
-		.def_rw("measurement", &JFMCharacteristic::measurement)
-		.def_rw("source_path", &JFMCharacteristic::sourcePath)
-		.def_rw("parser", &JFMCharacteristic::parser)
-		.def_rw("temperature_K", &JFMCharacteristic::temperatureK)
-		.def_rw("temperature_source", &JFMCharacteristic::temperatureSource)
-		.def_rw("columns", &JFMCharacteristic::columns)
-		.def_rw("sweep", &JFMCharacteristic::sweep)
-		.def_rw("qc", &JFMCharacteristic::qc)
-		.def_rw("metadata", &JFMCharacteristic::metadata)
-		.def_rw("voltage", &JFMCharacteristic::voltage)
-		.def_rw("current", &JFMCharacteristic::current)
-		.def_rw("current_density", &JFMCharacteristic::currentDensity);
+		.def_rw("info", &JFMCharacteristic::info)
+		.def_rw("data", &JFMCharacteristic::data);
 
 	nb::class_<JFMSeries>(module, "JFMSeries")
 		.def(nb::init<>())
 		.def_rw("id", &JFMSeries::id)
 		.def_rw("name", &JFMSeries::name)
-		.def_rw("characteristics", &JFMSeries::characteristics);
+		.def_rw("characteristic_ids", &JFMSeries::characteristicIds);
 }
 #endif
 

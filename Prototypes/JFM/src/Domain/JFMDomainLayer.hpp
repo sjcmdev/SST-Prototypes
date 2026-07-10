@@ -2,7 +2,7 @@
 
 #include "Core/Layer.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Storage/JFMWorkspaceStore.hpp"
+#include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST::Prototypes::JFM
 {

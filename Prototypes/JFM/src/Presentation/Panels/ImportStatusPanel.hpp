@@ -2,7 +2,7 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "Presentation/Panels/IPanel.hpp"
-#include "Storage/JFMWorkspaceStore.hpp"
+#include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST::Prototypes::JFM
 {

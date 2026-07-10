@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "Storage/JFMWorkspaceStore.hpp"
+#include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST::Prototypes::JFM
 {
@@ -18,16 +18,17 @@ namespace SST::Prototypes::JFM
 	{
 		JFMWorkspaceStore store;
 		JFMCharacteristic characteristic;
-		characteristic.name = "T300";
-		characteristic.voltage = {0.0, 1.0};
-		characteristic.current = {1.0e-6, 2.0e-6};
+		characteristic.info.name = "T300";
+		characteristic.data.voltage = {0.0, 1.0};
+		characteristic.data.current = {1.0e-6, 2.0e-6};
 
 		store.AddImportedCharacteristics({characteristic});
 		const auto selected = store.GetSelectedCharacteristic();
 
 		ASSERT_TRUE(selected.has_value());
-		EXPECT_EQ(selected->name, "T300");
-		EXPECT_EQ(selected->voltage.size(), 2);
-		EXPECT_FALSE(selected->id.empty());
+		EXPECT_EQ(selected->info.name, "T300");
+		EXPECT_EQ(selected->data.voltage.size(), 2);
+		EXPECT_FALSE(selected->info.id.empty());
+		EXPECT_EQ(store.GetProjectSnapshot().series.front().characteristicIds.front(), selected->info.id);
 	}
 } // namespace SST::Prototypes::JFM
