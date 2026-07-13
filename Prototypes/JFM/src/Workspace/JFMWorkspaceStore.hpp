@@ -28,7 +28,10 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristic(const CharacteristicId &id) const;
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristicByName(const std::string &name) const;
 
+		JFMGroup AddGroup(std::string name, std::string parentId = {});
+		std::string FindOrCreateGroupPath(const std::vector<std::string> &names);
 		JFMSeries AddSeries(std::string name);
+		JFMSeries AddSeries(std::string name, std::string groupId);
 		std::vector<CharacteristicId> AddCharacteristics(std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId = {});
 		bool DeleteCharacteristic(const CharacteristicId &id);
 		bool MoveCharacteristic(const CharacteristicId &id, const std::string &targetSeriesId);
@@ -42,6 +45,7 @@ namespace SST::Prototypes::JFM
 		void SelectSeries(std::string seriesId);
 		void SelectCharacteristic(CharacteristicId characteristicId);
 		void AddImportedCharacteristics(std::vector<JFMCharacteristic> characteristics);
+		std::size_t UpdateCharacteristicData(std::vector<JFMCharacteristic> characteristics);
 
 	private:
 		template <typename T>
@@ -49,6 +53,9 @@ namespace SST::Prototypes::JFM
 
 		[[nodiscard]] static JFMProject MakeDefaultProject(std::string name);
 		[[nodiscard]] std::string nextId(const char *prefix) const;
+		[[nodiscard]] OptionalRef<JFMGroup> findGroupLocked(const std::string &groupId);
+		[[nodiscard]] OptionalRef<const JFMGroup> findGroupLocked(const std::string &groupId) const;
+		[[nodiscard]] OptionalRef<JFMGroup> findGroupByNameAndParentLocked(const std::string &name, const std::string &parentId);
 		[[nodiscard]] OptionalRef<JFMSeries> findSeriesLocked(const std::string &seriesId);
 		[[nodiscard]] OptionalRef<const JFMSeries> findSeriesLocked(const std::string &seriesId) const;
 		[[nodiscard]] OptionalRef<JFMCharacteristicInfo> findInfoLocked(const CharacteristicId &id);

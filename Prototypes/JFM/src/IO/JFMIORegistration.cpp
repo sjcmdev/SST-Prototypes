@@ -4,6 +4,7 @@
 
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Events/JFMEvents.hpp"
 #include "IO/IOLayer.hpp"
@@ -11,10 +12,16 @@
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMProjectJobs.hpp"
 
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <functional>
+#include <map>
+#include <system_error>
 
 namespace SST::Prototypes::JFM
 {
+	constexpr const char *JFMIOJobSource = "jfm.io";
 
 	struct JFMIOState
 	{
@@ -22,9 +29,139 @@ namespace SST::Prototypes::JFM
 		Ref<JFMWorkspaceStore> store;
 		Ref<Notifier> notifier;
 		Path pythonRoot;
-		std::string targetSeriesId;
+		std::vector<std::string> importWarnings;
 		bool importRunning = false;
 	};
+
+	bool IsDirectory(const Path &path)
+	{
+		std::error_code error;
+		return std::filesystem::is_directory(path.Native(), error);
+	}
+
+	bool IsRegularFile(const Path &path)
+	{
+		std::error_code error;
+		return std::filesystem::is_regular_file(path.Native(), error);
+	}
+
+	bool IsJFMDataFile(const Path &path)
+	{
+		std::string extension = path.extension().String();
+		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character) {
+			return static_cast<char>(std::tolower(character));
+		});
+		return extension == ".dat" || extension == ".iv" || extension == ".txt" || extension == ".csv";
+	}
+
+	void NotifyFailure(
+		const Ref<JFMIOState> &state,
+		NotificationCategory category,
+		std::string title,
+		std::string message)
+	{
+		if (state->eventBus == nullptr)
+			return;
+
+		Notification notification;
+		notification.severity = NotificationSeverity::Error;
+		notification.category = category;
+		notification.title = std::move(title);
+		notification.message = std::move(message);
+		notification.source = "JFM IO";
+		notification.timeoutMs = 12000;
+		state->eventBus->Queue(NotificationRequestedEvent{std::move(notification)});
+	}
+
+	std::string FolderName(const Path &path)
+	{
+		std::string name = path.filename().String();
+		return name.empty() ? path.String() : name;
+	}
+
+	std::vector<std::string> GroupPathForFolder(const Path &root, const Path &folder)
+	{
+		std::vector<std::string> names{FolderName(root)};
+		std::error_code error;
+		const std::filesystem::path relative = std::filesystem::relative(folder.Native(), root.Native(), error);
+		if (error || relative.empty() || relative == ".")
+			return names;
+
+		for (const std::filesystem::path &part : relative)
+			names.push_back(part.string());
+		return names;
+	}
+
+	std::vector<Path> DirectDataFilesInDirectory(const Path &directory)
+	{
+		std::vector<Path> paths;
+		std::error_code error;
+		for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native(), error))
+		{
+			if (error)
+				break;
+			const Path path = Path::FromResolved(entry.path());
+			std::error_code fileError;
+			if (entry.is_regular_file(fileError) && IsJFMDataFile(path))
+				paths.push_back(path);
+		}
+		return paths;
+	}
+
+	std::map<std::string, std::vector<Path>> DataFilesByFolder(const Path &directory, bool recursive)
+	{
+		std::map<std::string, std::vector<Path>> filesByFolder;
+		if (!recursive)
+		{
+			std::vector<Path> paths = DirectDataFilesInDirectory(directory);
+			if (!paths.empty())
+				filesByFolder[directory.String()] = std::move(paths);
+			return filesByFolder;
+		}
+
+		std::error_code error;
+		const auto options = std::filesystem::directory_options::skip_permission_denied;
+		for (const std::filesystem::directory_entry &entry : std::filesystem::recursive_directory_iterator(directory.Native(), options, error))
+		{
+			if (error)
+				break;
+			const Path path = Path::FromResolved(entry.path());
+			std::error_code fileError;
+			if (entry.is_regular_file(fileError) && IsJFMDataFile(path))
+				filesByFolder[path.parent_path().String()].push_back(path);
+		}
+		return filesByFolder;
+	}
+
+	void AddDirectoryImportGroups(const Path &directory, bool recursive, std::vector<JFMImportGroup> &groups)
+	{
+		for (auto &[folder, paths] : DataFilesByFolder(directory, recursive))
+		{
+			const Path folderPath = Path::FromResolved(folder);
+			groups.push_back(JFMImportGroup{
+				std::move(paths),
+				{},
+				GroupPathForFolder(directory, folderPath),
+				"Imported Data"});
+		}
+	}
+
+	std::vector<JFMImportGroup> BuildImportGroups(const ImportRequested &event)
+	{
+		std::vector<JFMImportGroup> groups;
+		std::vector<Path> filePaths;
+		for (const Path &path : event.paths)
+		{
+			if (IsDirectory(path))
+				AddDirectoryImportGroups(path, event.recursive, groups);
+			else if (IsRegularFile(path) || !FileSystem::Exists(path.Native()))
+				filePaths.push_back(path);
+		}
+
+		if (!filePaths.empty())
+			groups.push_back(JFMImportGroup{std::move(filePaths), event.targetSeriesId});
+		return groups;
+	}
 
 	void HandleImportRequested(const Ref<JFMIOState> &state, const ImportRequested &event)
 	{
@@ -38,15 +175,26 @@ namespace SST::Prototypes::JFM
 		}
 
 		state->importRunning = true;
+		state->importWarnings.clear();
 		if (state->store != nullptr)
 		{
 			state->store->SetImportRunning(true);
 			state->store->SetStatusMessage("Import queued.");
 		}
-		state->targetSeriesId = event.targetSeriesId;
+		std::vector<JFMImportGroup> groups = BuildImportGroups(event);
+		if (groups.empty())
+		{
+			state->importRunning = false;
+			if (state->store != nullptr)
+			{
+				state->store->SetImportRunning(false);
+				state->store->SetStatusMessage("No JFM data files found for import.");
+			}
+			return;
+		}
 
-		auto job = CreateRef<JFMImportJob>(state->eventBus, event.paths, state->pythonRoot);
-		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, "JFMIO"});
+		auto job = CreateRef<JFMImportJob>(state->eventBus, std::move(groups), state->pythonRoot);
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
 	void HandleImportProgress(const Ref<JFMIOState> &state, const ImportProgress &event)
@@ -57,15 +205,29 @@ namespace SST::Prototypes::JFM
 
 	void HandleImportCompleted(const Ref<JFMIOState> &state, const ImportCompleted &event)
 	{
-		state->importRunning = false;
 		if (state->store != nullptr)
 		{
-			if (!state->targetSeriesId.empty())
-				state->store->SelectSeries(state->targetSeriesId);
-			state->store->SetLastImportWarnings(event.warnings);
-			state->store->AddImportedCharacteristics(event.characteristics);
+			state->importWarnings.insert(state->importWarnings.end(), event.warnings.begin(), event.warnings.end());
+			state->store->SetLastImportWarnings(state->importWarnings);
+			std::string targetSeriesId = event.targetSeriesId;
+			if (!event.characteristics.empty() && targetSeriesId.empty() && !event.groupPath.empty())
+			{
+				const std::string groupId = state->store->FindOrCreateGroupPath(event.groupPath);
+				const JFMSeries series = state->store->AddSeries(event.seriesName.empty() ? "Imported Data" : event.seriesName, groupId);
+				targetSeriesId = series.id;
+			}
+			if (!targetSeriesId.empty())
+				state->store->SelectSeries(targetSeriesId);
+			if (!event.characteristics.empty())
+				state->store->AddCharacteristics(event.characteristics, targetSeriesId);
+			if (event.finalBatch)
+				state->store->SetImportRunning(false);
 		}
-		state->targetSeriesId.clear();
+		if (event.finalBatch)
+		{
+			state->importRunning = false;
+			state->importWarnings.clear();
+		}
 	}
 
 	void HandleImportFailed(const Ref<JFMIOState> &state, const ImportFailed &event)
@@ -75,8 +237,10 @@ namespace SST::Prototypes::JFM
 		{
 			state->store->SetImportRunning(false);
 			state->store->SetStatusMessage("Import failed: " + event.error);
+			state->store->SetLastImportWarnings({event.error});
 		}
-		state->targetSeriesId.clear();
+		state->importWarnings.clear();
+		NotifyFailure(state, NotificationCategory::Import, "JFM import failed", event.error);
 		DS_LOG_WARN("JFM import failed: {}", event.error);
 	}
 
@@ -94,7 +258,7 @@ namespace SST::Prototypes::JFM
 			state->store->SetStatusMessage("Raw TSV export queued: " + event.path.String());
 
 		auto job = CreateRef<JFMExportRawTsvJob>(state->eventBus, event.path, event.characteristic);
-		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, "JFMIO"});
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
 	void HandleExportRawTsvCompleted(const Ref<JFMIOState> &state, const ExportRawTsvCompleted &event)
@@ -107,6 +271,7 @@ namespace SST::Prototypes::JFM
 	{
 		if (state->store != nullptr)
 			state->store->SetStatusMessage("Raw TSV export failed: " + event.error);
+		NotifyFailure(state, NotificationCategory::Export, "JFM export failed", event.error);
 		DS_LOG_WARN("JFM raw TSV export failed [{}]: {}", event.path.String(), event.error);
 	}
 
@@ -123,7 +288,7 @@ namespace SST::Prototypes::JFM
 			state->store->SetStatusMessage("Saving project: " + event.path.String());
 
 		auto job = CreateRef<SaveProjectJob>(state->eventBus, event.path, event.snapshot);
-		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, "JFMIO"});
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
 	}
 
 	void HandleProjectSaveCompleted(const Ref<JFMIOState> &state, const ProjectSaveCompleted &event)
@@ -139,6 +304,7 @@ namespace SST::Prototypes::JFM
 	{
 		if (state->store != nullptr)
 			state->store->SetStatusMessage("Project save failed: " + event.error);
+		NotifyFailure(state, NotificationCategory::Project, "JFM save failed", event.error);
 		DS_LOG_WARN("JFM project save failed [{}]: {}", event.path.String(), event.error);
 	}
 
@@ -155,20 +321,40 @@ namespace SST::Prototypes::JFM
 			state->store->SetStatusMessage("Loading project: " + event.path.String());
 
 		auto job = CreateRef<LoadProjectJob>(state->eventBus, event.path);
-		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, "JFMIO"});
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
 	}
 
 	void HandleProjectLoadCompleted(const Ref<JFMIOState> &state, const ProjectLoadCompleted &event)
 	{
 		if (state->store != nullptr)
+		{
 			state->store->ReplaceProject(event.project, event.path);
+			state->store->SetStatusMessage("Project loaded; raw data materialization queued.");
+		}
+
+		auto job = CreateRef<MaterializeProjectDataJob>(state->eventBus, event.project, state->pythonRoot);
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
 	void HandleProjectLoadFailed(const Ref<JFMIOState> &state, const ProjectLoadFailed &event)
 	{
 		if (state->store != nullptr)
 			state->store->SetStatusMessage("Project load failed: " + event.error);
+		NotifyFailure(state, NotificationCategory::Project, "JFM load failed", event.error);
 		DS_LOG_WARN("JFM project load failed [{}]: {}", event.path.String(), event.error);
+	}
+
+	void HandleProjectDataMaterializationCompleted(const Ref<JFMIOState> &state, const ProjectDataMaterializationCompleted &event)
+	{
+		if (state->store == nullptr)
+			return;
+
+		const std::size_t updated = state->store->UpdateCharacteristicData(event.characteristics);
+		state->store->SetLastImportWarnings(event.warnings);
+		if (event.warnings.empty())
+			state->store->SetStatusMessage("Project raw data materialized: " + std::to_string(updated) + " characteristic(s).");
+		else
+			state->store->SetStatusMessage("Project raw data materialized with warnings: " + std::to_string(updated) + " characteristic(s).");
 	}
 
 	void RegisterProjectLoadHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
@@ -176,6 +362,7 @@ namespace SST::Prototypes::JFM
 		ioLayer.RegisterHandler<ProjectLoadRequested>(std::bind_front(&HandleProjectLoadRequested, state));
 		ioLayer.RegisterHandler<ProjectLoadCompleted>(std::bind_front(&HandleProjectLoadCompleted, state));
 		ioLayer.RegisterHandler<ProjectLoadFailed>(std::bind_front(&HandleProjectLoadFailed, state));
+		ioLayer.RegisterHandler<ProjectDataMaterializationCompleted>(std::bind_front(&HandleProjectDataMaterializationCompleted, state));
 	}
 
 	void RegisterJFMIOHandlers(IOLayer &ioLayer, JFMIORegistrationContext context)

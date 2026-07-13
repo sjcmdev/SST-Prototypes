@@ -2,8 +2,6 @@
 
 #include "App/JFMCommands.hpp"
 
-#include <filesystem>
-
 #include <nfd.h>
 
 #include "Core/Commands/CommandRegistry.hpp"
@@ -22,6 +20,8 @@ namespace SST::Prototypes::JFM
 	const CommandID SaveProjectAsCommand{"jfm.project.save_as"};
 	const CommandID ImportFilesCommand{"jfm.import.files"};
 	const CommandID ImportDirectoryCommand{"jfm.import.directory"};
+	const CommandID ImportDirectoriesCommand{"jfm.import.directories"};
+	const CommandID ImportDirectoriesRecursiveCommand{"jfm.import.directories_recursive"};
 	const CommandID ExportRawTsvCommand{"jfm.export.raw_tsv"};
 
 	class LambdaCommand final : public ICommand
@@ -163,6 +163,25 @@ namespace SST::Prototypes::JFM
 		return ensureExtension(Path::FromResolved(pathText), ".tsv");
 	}
 
+	std::vector<Path> collectPathSet(const nfdpathset_t *pathSet)
+	{
+		nfdpathsetsize_t count = 0;
+		std::vector<Path> paths;
+		if (NFD_PathSet_GetCount(pathSet, &count) == NFD_OKAY)
+		{
+			for (nfdpathsetsize_t index = 0; index < count; ++index)
+			{
+				nfdu8char_t *rawPath = nullptr;
+				if (NFD_PathSet_GetPathU8(pathSet, index, &rawPath) == NFD_OKAY && rawPath != nullptr)
+				{
+					paths.push_back(Path::FromResolved(std::string(rawPath)));
+					NFD_PathSet_FreePathU8(rawPath);
+				}
+			}
+		}
+		return paths;
+	}
+
 	std::vector<Path> chooseImportFiles()
 	{
 		NFD_Init();
@@ -181,35 +200,43 @@ namespace SST::Prototypes::JFM
 			throw std::runtime_error(error);
 		}
 
-		nfdpathsetsize_t count = 0;
-		std::vector<Path> paths;
-		if (NFD_PathSet_GetCount(pathSet, &count) == NFD_OKAY)
-		{
-			for (nfdpathsetsize_t index = 0; index < count; ++index)
-			{
-				nfdu8char_t *rawPath = nullptr;
-				if (NFD_PathSet_GetPathU8(pathSet, index, &rawPath) == NFD_OKAY && rawPath != nullptr)
-				{
-					paths.push_back(Path::FromResolved(std::string(rawPath)));
-					NFD_PathSet_FreePathU8(rawPath);
-				}
-			}
-		}
-
+		std::vector<Path> paths = collectPathSet(pathSet);
 		NFD_PathSet_Free(pathSet);
 		NFD_Quit();
 		return paths;
 	}
 
-	std::optional<Path> chooseImportDirectory()
+	std::vector<Path> chooseImportDirectories(bool multiple)
 	{
 		NFD_Init();
+		if (multiple)
+		{
+			const nfdpathset_t *pathSet = nullptr;
+			const nfdresult_t result = NFD_PickFolderMultipleU8(&pathSet, nullptr);
+			if (result == NFD_CANCEL)
+			{
+				NFD_Quit();
+				return {};
+			}
+			if (result == NFD_ERROR)
+			{
+				const std::string error = lastNfdError();
+				NFD_Quit();
+				throw std::runtime_error(error);
+			}
+
+			std::vector<Path> paths = collectPathSet(pathSet);
+			NFD_PathSet_Free(pathSet);
+			NFD_Quit();
+			return paths;
+		}
+
 		nfdu8char_t *rawPath = nullptr;
 		const nfdresult_t result = NFD_PickFolderU8(&rawPath, nullptr);
 		if (result == NFD_CANCEL)
 		{
 			NFD_Quit();
-			return std::nullopt;
+			return {};
 		}
 		if (result == NFD_ERROR)
 		{
@@ -221,21 +248,7 @@ namespace SST::Prototypes::JFM
 		std::string pathText(rawPath);
 		NFD_FreePathU8(rawPath);
 		NFD_Quit();
-		return Path::FromResolved(pathText);
-	}
-
-	std::vector<Path> dataFilesInDirectory(const Path &directory)
-	{
-		std::vector<Path> paths;
-		for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native()))
-		{
-			if (!entry.is_regular_file())
-				continue;
-			const std::string extension = entry.path().extension().string();
-			if (extension == ".dat" || extension == ".DAT" || extension == ".iv" || extension == ".IV")
-				paths.push_back(Path::FromResolved(entry.path()));
-		}
-		return paths;
+		return {Path::FromResolved(pathText)};
 	}
 
 	Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, CommandContext &)
@@ -314,23 +327,23 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
-	Result<void> handleImportDirectory(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	Result<void> handleImportDirectories(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, bool multiple, bool recursive, CommandContext &context)
 	{
 		try
 		{
-			const std::optional<Path> directory = chooseImportDirectory();
-			if (!directory)
-				return Result<void>{};
-			std::vector<Path> paths = dataFilesInDirectory(*directory);
-			if (!paths.empty())
-				eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId()});
+			std::vector<Path> paths;
+			if (std::vector<Path> *contextPaths = context.TryGet<std::vector<Path>>("paths"))
+				paths = *contextPaths;
 			else
-				workspace->SetStatusMessage("No .dat or .iv files found in selected directory.");
+				paths = chooseImportDirectories(multiple);
+			if (paths.empty())
+				return Result<void>{};
+			eventBus->Queue(ImportRequested{paths, workspace->GetSelectedSeriesId(), recursive});
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
 		{
-			return Result<void>{makeCommandError("Import directory failed.", error.what())};
+			return Result<void>{makeCommandError("Import directories failed.", error.what())};
 		}
 	}
 
@@ -415,8 +428,18 @@ namespace SST::Prototypes::JFM
 
 		registerCommand(
 			registry,
-			CommandMeta{ImportDirectoryCommand, "Import Directory", "JFM", "Import a directory of JFM data files through Python.", {}, CommandFlags::AsyncCapable},
-			std::bind(handleImportDirectory, eventBus, workspace, std::placeholders::_1));
+			CommandMeta{ImportDirectoryCommand, "Import Folder", "JFM", "Import one folder of JFM data files through Python.", {}, CommandFlags::AsyncCapable},
+			std::bind(handleImportDirectories, eventBus, workspace, false, false, std::placeholders::_1));
+
+		registerCommand(
+			registry,
+			CommandMeta{ImportDirectoriesCommand, "Import Folders", "JFM", "Import multiple folders of JFM data files through Python.", {}, CommandFlags::AsyncCapable},
+			std::bind(handleImportDirectories, eventBus, workspace, true, false, std::placeholders::_1));
+
+		registerCommand(
+			registry,
+			CommandMeta{ImportDirectoriesRecursiveCommand, "Import Folders Recursively", "JFM", "Import nested folders of JFM data files through Python.", {}, CommandFlags::AsyncCapable},
+			std::bind(handleImportDirectories, eventBus, workspace, true, true, std::placeholders::_1));
 
 		registerCommand(
 			registry,
@@ -429,6 +452,9 @@ namespace SST::Prototypes::JFM
 		registerBinding(resolver, {"jfm.save_project_as", KeyChord{KeyCode::S, KeyModifiers::Ctrl | KeyModifiers::Shift}, SaveProjectAsCommand, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.redo_alt", KeyChord{KeyCode::Z, KeyModifiers::Ctrl | KeyModifiers::Shift}, CommandID{"edit.redo"}, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.import_files", KeyChord{KeyCode::I, KeyModifiers::Ctrl | KeyModifiers::Shift}, ImportFilesCommand, {}, KeymapLayer::Project, true});
+		registerBinding(resolver, {"jfm.import_directory", KeyChord{KeyCode::D, KeyModifiers::Ctrl | KeyModifiers::Shift}, ImportDirectoryCommand, {}, KeymapLayer::Project, true});
+		registerBinding(resolver, {"jfm.import_directories", KeyChord{KeyCode::D, KeyModifiers::Ctrl | KeyModifiers::Alt | KeyModifiers::Shift}, ImportDirectoriesCommand, {}, KeymapLayer::Project, true});
+		registerBinding(resolver, {"jfm.import_directories_recursive", KeyChord{KeyCode::R, KeyModifiers::Ctrl | KeyModifiers::Alt | KeyModifiers::Shift}, ImportDirectoriesRecursiveCommand, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.export_raw_tsv", KeyChord{KeyCode::E, KeyModifiers::Ctrl | KeyModifiers::Shift}, ExportRawTsvCommand, {}, KeymapLayer::Project, true});
 	}
 } // namespace SST::Prototypes::JFM

@@ -94,6 +94,11 @@ Data: 2026-07-10
 4.  Dodajmy skrót klawiaturowy dla importu pojedynczego folderu
 5.  Dodajmy skrót klawiaturowy dla importu wielu folderów
 6.  Dodajmy skrót klawiaturowy dla importu folderu/folderów rekursywnie 
+---
+1. Należało by zrobić jakiś wrapper na NFD
+2. jak jest import rekursywny i folderów to jest dodatkowy poziom chierarchi za dużo w postaci (imported) należy to usunąć
+3. W JFMProjectJobs w funkcji `Execute` znajduje się duży blok if-else: zredukuj dwa wcięcia po przez zamianę warunków 
+4. W JFMProjectJobs w funkcji `Execute` znajduje się wektor charakterystyk i wyjątków: oszacuj/policz odpowiedni rozmiar tych wektorów i zarezerwuj ich odpowiedni rozmiar. Tam gdzie się da to używaj `emplace_back` zamiast `push_back`
 ### Plan UI po fundamentach
 
 1. Context menu: projekt `import series/add series`, seria `delete/add characteristics`, charakterystyka `delete`.

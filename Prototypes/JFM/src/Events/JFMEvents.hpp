@@ -83,13 +83,14 @@ namespace SST::Prototypes::JFM
 	struct ImportRequested final : public BusEvent
 	{
 		ImportRequested() = default;
-		ImportRequested(std::vector<Path> requestedPaths, std::string requestedTargetSeriesId)
-			: paths(std::move(requestedPaths)), targetSeriesId(std::move(requestedTargetSeriesId))
+		ImportRequested(std::vector<Path> requestedPaths, std::string requestedTargetSeriesId, bool requestedRecursive = false)
+			: paths(std::move(requestedPaths)), targetSeriesId(std::move(requestedTargetSeriesId)), recursive(requestedRecursive)
 		{
 		}
 
 		std::vector<Path> paths;
 		std::string targetSeriesId;
+		bool recursive = false;
 	};
 
 	struct ImportProgress final : public BusEvent
@@ -108,13 +109,28 @@ namespace SST::Prototypes::JFM
 	struct ImportCompleted final : public BusEvent
 	{
 		ImportCompleted() = default;
-		ImportCompleted(std::vector<JFMCharacteristic> importedCharacteristics, std::vector<std::string> importWarnings)
-			: characteristics(std::move(importedCharacteristics)), warnings(std::move(importWarnings))
+		ImportCompleted(
+			std::vector<JFMCharacteristic> importedCharacteristics,
+			std::vector<std::string> importWarnings,
+			std::string completedTargetSeriesId = {},
+			std::vector<std::string> completedGroupPath = {},
+			std::string completedSeriesName = {},
+			bool completedFinalBatch = true)
+			: characteristics(std::move(importedCharacteristics)),
+				warnings(std::move(importWarnings)),
+				targetSeriesId(std::move(completedTargetSeriesId)),
+				groupPath(std::move(completedGroupPath)),
+				seriesName(std::move(completedSeriesName)),
+				finalBatch(completedFinalBatch)
 		{
 		}
 
 		std::vector<JFMCharacteristic> characteristics;
 		std::vector<std::string> warnings;
+		std::string targetSeriesId;
+		std::vector<std::string> groupPath;
+		std::string seriesName;
+		bool finalBatch = true;
 	};
 
 	struct ImportFailed final : public BusEvent
@@ -161,5 +177,19 @@ namespace SST::Prototypes::JFM
 
 		Path path;
 		std::string error;
+	};
+
+	struct ProjectDataMaterializationCompleted final : public BusEvent
+	{
+		ProjectDataMaterializationCompleted() = default;
+		ProjectDataMaterializationCompleted(
+			std::vector<JFMCharacteristic> materializedCharacteristics,
+			std::vector<std::string> materializationWarnings)
+			: characteristics(std::move(materializedCharacteristics)), warnings(std::move(materializationWarnings))
+		{
+		}
+
+		std::vector<JFMCharacteristic> characteristics;
+		std::vector<std::string> warnings;
 	};
 } // namespace SST::Prototypes::JFM

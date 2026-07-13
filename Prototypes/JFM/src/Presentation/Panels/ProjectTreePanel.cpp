@@ -15,13 +15,18 @@ namespace SST::Prototypes::JFM
 	{
 		const auto characteristic = store != nullptr ? store->FindCharacteristic(characteristicId) : std::optional<JFMCharacteristic>{};
 		const std::string name = characteristic ? characteristic->info.name : std::to_string(characteristicId);
+		const bool hasWarning = characteristic
+			&& (!characteristic->info.qc.warnings.empty()
+				|| (!characteristic->info.sourcePath.Empty() && characteristic->data.voltage.empty()));
 		const bool selected = characteristicId == selectedCharacteristic;
-		const std::string label = name + "##" + std::to_string(characteristicId);
+		const std::string label = name + (hasWarning ? " [!]" : "") + "##" + std::to_string(characteristicId);
 		if (ImGui::Selectable(label.c_str(), selected) && store != nullptr)
 		{
 			store->SelectSeries(series.id);
 			store->SelectCharacteristic(characteristicId);
 		}
+		if (hasWarning && ImGui::IsItemHovered())
+			ImGui::SetTooltip("Raw arrays unavailable; see Import Status.");
 	}
 
 	void renderSeriesNode(
@@ -40,6 +45,29 @@ namespace SST::Prototypes::JFM
 		ImGui::TreePop();
 	}
 
+	void renderGroupNode(
+		const JFMProject &project,
+		const JFMGroup &group,
+		const CharacteristicId selectedCharacteristic,
+		const Ref<JFMWorkspaceStore> &store)
+	{
+		const std::string groupLabel = group.name + "##" + group.id;
+		if (!ImGui::TreeNodeEx(groupLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+			return;
+
+		for (const JFMGroup &child : project.groups)
+		{
+			if (child.parentId == group.id)
+				renderGroupNode(project, child, selectedCharacteristic, store);
+		}
+		for (const JFMSeries &series : project.series)
+		{
+			if (series.groupId == group.id)
+				renderSeriesNode(series, selectedCharacteristic, store);
+		}
+		ImGui::TreePop();
+	}
+
 	void renderProjectNode(
 		const JFMProject &project,
 		const CharacteristicId selectedCharacteristic,
@@ -48,8 +76,16 @@ namespace SST::Prototypes::JFM
 		if (!ImGui::TreeNodeEx((project.name + "##project").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 			return;
 
+		for (const JFMGroup &group : project.groups)
+		{
+			if (group.parentId.empty())
+				renderGroupNode(project, group, selectedCharacteristic, store);
+		}
 		for (const JFMSeries &series : project.series)
-			renderSeriesNode(series, selectedCharacteristic, store);
+		{
+			if (series.groupId.empty())
+				renderSeriesNode(series, selectedCharacteristic, store);
+		}
 		ImGui::TreePop();
 	}
 	

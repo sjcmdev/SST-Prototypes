@@ -183,12 +183,24 @@ namespace SST::Prototypes::JFM
 				emitCharacteristicInfo(out, characteristic);
 			out << YAML::EndSeq;
 
+			out << YAML::Key << "groups" << YAML::Value << YAML::BeginSeq;
+			for (const JFMGroup &group : project.groups)
+			{
+				out << YAML::BeginMap;
+				out << YAML::Key << "id" << YAML::Value << group.id;
+				out << YAML::Key << "name" << YAML::Value << group.name;
+				out << YAML::Key << "parent_id" << YAML::Value << group.parentId;
+				out << YAML::EndMap;
+			}
+			out << YAML::EndSeq;
+
 			out << YAML::Key << "series" << YAML::Value << YAML::BeginSeq;
 			for (const JFMSeries &series : project.series)
 			{
 				out << YAML::BeginMap;
 				out << YAML::Key << "id" << YAML::Value << series.id;
 				out << YAML::Key << "name" << YAML::Value << series.name;
+				out << YAML::Key << "group_id" << YAML::Value << series.groupId;
 				out << YAML::Key << "characteristics" << YAML::Value << YAML::BeginSeq;
 				for (const CharacteristicId &characteristicId : series.characteristicIds)
 					out << characteristicId;
@@ -244,11 +256,20 @@ namespace SST::Prototypes::JFM
 			for (const YAML::Node &characteristicNode : root["characteristics"])
 				project.characteristics.push_back(readCharacteristicInfo(characteristicNode));
 
+			for (const YAML::Node &groupNode : root["groups"])
+			{
+				project.groups.push_back(JFMGroup{
+					readOr<std::string>(groupNode, "id", {}),
+					readOr<std::string>(groupNode, "name", "Group"),
+					readOr<std::string>(groupNode, "parent_id", {})});
+			}
+
 			for (const YAML::Node &seriesNode : root["series"])
 			{
 				JFMSeries series;
 				series.id = readOr<std::string>(seriesNode, "id", {});
 				series.name = readOr<std::string>(seriesNode, "name", "Series");
+				series.groupId = readOr<std::string>(seriesNode, "group_id", {});
 				for (const YAML::Node &characteristicNode : seriesNode["characteristics"])
 				{
 					if (characteristicNode.IsScalar())
@@ -273,7 +294,7 @@ namespace SST::Prototypes::JFM
 				project.derivedAnalyses.push_back(JFMDerivedAnalysis{readOr<std::string>(analysisNode, "id", {}), readOr<std::string>(analysisNode, "name", {}), readOr<std::string>(analysisNode, "status", "not_started")});
 
 			if (project.series.empty())
-				project.series.push_back(JFMSeries{"series-1", "Series 1", {}});
+				project.series.push_back(JFMSeries{"series-1", "Series 1", {}, {}});
 			return project;
 		}
 		catch (const std::exception &error)

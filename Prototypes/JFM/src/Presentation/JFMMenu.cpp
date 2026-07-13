@@ -86,7 +86,9 @@ namespace SST::Prototypes::JFM
 		if (ImGui::BeginMenu("Data"))
 		{
 			commandMenuItem(services, "Import Files...", "Ctrl+Shift+I", "jfm.import.files");
-			commandMenuItem(services, "Import Directory...", nullptr, "jfm.import.directory");
+			commandMenuItem(services, "Import Folder...", "Ctrl+Shift+D", "jfm.import.directory");
+			commandMenuItem(services, "Import Folders...", "Ctrl+Alt+Shift+D", "jfm.import.directories");
+			commandMenuItem(services, "Import Folders Recursively...", "Ctrl+Alt+Shift+R", "jfm.import.directories_recursive");
 			commandMenuItem(services, "Export Raw TSV", "Ctrl+Shift+E", "jfm.export.raw_tsv");
 			ImGui::EndMenu();
 		}

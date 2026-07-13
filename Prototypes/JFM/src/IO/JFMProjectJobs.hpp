@@ -36,4 +36,20 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> m_EventBus;
 		Path m_Path;
 	};
+
+	class MaterializeProjectDataJob final : public IJob
+	{
+	public:
+		MaterializeProjectDataJob(Ref<EventBus> eventBus, JFMProject project, Path pythonRoot);
+
+		[[nodiscard]] std::string GetName() const override;
+		[[nodiscard]] std::string GetType() const override;
+		[[nodiscard]] bool UsesPythonRuntime() const override;
+		void Execute(JobContext &context) override;
+
+	private:
+		Ref<EventBus> m_EventBus;
+		JFMProject m_Project;
+		Path m_PythonRoot;
+	};
 } // namespace SST::Prototypes::JFM

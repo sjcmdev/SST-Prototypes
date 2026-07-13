@@ -38,7 +38,7 @@ namespace SST::Prototypes::JFM
 
 	struct JFMCharacteristicInfo
 	{
-		CharacteristicId id;
+		CharacteristicId id = InvalidCharacteristicId;
 		std::string name;
 		std::string measurement = "IV";
 		Path sourcePath;
@@ -64,10 +64,18 @@ namespace SST::Prototypes::JFM
 		JFMCharacteristicData data;
 	};
 
+	struct JFMGroup
+	{
+		std::string id;
+		std::string name;
+		std::string parentId;
+	};
+
 	struct JFMSeries
 	{
 		std::string id;
 		std::string name;
+		std::string groupId;
 		std::vector<CharacteristicId> characteristicIds;
 	};
 
@@ -98,6 +106,7 @@ namespace SST::Prototypes::JFM
 		std::string id;
 		std::string name = "Untitled JFM Project";
 		std::unordered_map<std::string, std::string> metadata;
+		std::vector<JFMGroup> groups;
 		std::vector<JFMSeries> series;
 		std::vector<JFMCharacteristicInfo> characteristics;
 		std::vector<JFMFitRun> fitRuns;

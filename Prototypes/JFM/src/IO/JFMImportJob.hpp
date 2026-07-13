@@ -11,10 +11,19 @@
 
 namespace SST::Prototypes::JFM
 {
+	struct JFMImportGroup
+	{
+		std::vector<Path> paths;
+		std::string targetSeriesId;
+		std::vector<std::string> groupPath;
+		std::string seriesName;
+	};
+
 	class JFMImportJob final : public IJob
 	{
 	public:
 		JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot);
+		JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -26,7 +35,7 @@ namespace SST::Prototypes::JFM
 
 	private:
 		Ref<EventBus> m_EventBus;
-		std::vector<Path> m_Paths;
+		std::vector<JFMImportGroup> m_Groups;
 		Path m_PythonRoot;
 	};
 } // namespace SST::Prototypes::JFM

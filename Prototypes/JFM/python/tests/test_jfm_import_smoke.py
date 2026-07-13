@@ -15,13 +15,13 @@ from jfm_import.scaps_iv_parser import parse_scaps_iv
 
 
 def test_dat_parser_returns_unified_shape() -> None:
-    result = parse_dat(REPO / "Prototypes/JFM/example-data/IV_C002_Z015_6_290,0K.dat")
+    result = parse_dat(REPO / "Prototypes/JFM/example-data/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat")
 
     assert result["ok"] is True
     assert result["parser"] == "dat"
     assert result["curves"]
     assert isinstance(result["curves"][0]["data"], np.ndarray)
-    assert result["temperature_K"] == 290.0
+    assert result["temperature_K"] == 300.0
     assert result["curves"][0]["sweep"]["direction"] in {
         "increasing",
         "decreasing",
@@ -67,12 +67,12 @@ def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
 
     from jfm_import.cpp_adapter import import_file
 
-    result = import_file(REPO / "Prototypes/JFM/example-data/IV_C002_Z015_6_290,0K.dat")
+    result = import_file(REPO / "Prototypes/JFM/example-data/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat")
     characteristic = result["characteristics"][0]
 
     assert result["parser"] == "dat"
-    assert characteristic.info.source_path.endswith("IV_C002_Z015_6_290,0K.dat")
+    assert characteristic.info.source_path.endswith("IV_C002_Z015_6_300,0K.dat")
     assert characteristic.info.columns[0].role == "voltage"
-    assert characteristic.info.temperature_K == 290.0
+    assert characteristic.info.temperature_K == 300.0
     assert characteristic.data.voltage
     assert len(characteristic.data.current) == len(characteristic.data.voltage)

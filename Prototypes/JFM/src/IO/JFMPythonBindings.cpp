@@ -72,10 +72,17 @@ NB_MODULE(sst_jfm, module)
 		.def_rw("info", &JFMCharacteristic::info)
 		.def_rw("data", &JFMCharacteristic::data);
 
+	nb::class_<JFMGroup>(module, "JFMGroup")
+		.def(nb::init<>())
+		.def_rw("id", &JFMGroup::id)
+		.def_rw("name", &JFMGroup::name)
+		.def_rw("parent_id", &JFMGroup::parentId);
+
 	nb::class_<JFMSeries>(module, "JFMSeries")
 		.def(nb::init<>())
 		.def_rw("id", &JFMSeries::id)
 		.def_rw("name", &JFMSeries::name)
+		.def_rw("group_id", &JFMSeries::groupId)
 		.def_rw("characteristic_ids", &JFMSeries::characteristicIds);
 }
 #endif

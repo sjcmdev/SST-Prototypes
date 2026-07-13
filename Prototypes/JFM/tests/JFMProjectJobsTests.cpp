@@ -56,7 +56,7 @@ namespace SST::Prototypes::JFM
 		JFMProject project;
 		project.id = "project";
 		project.name = "Job Project";
-		project.series.push_back(JFMSeries{"series-1", "Series", {}});
+		project.series.push_back(JFMSeries{"series-1", "Series", {}, {}});
 
 		bool saveCompleted = false;
 		bool loadCompleted = false;
@@ -115,6 +115,40 @@ namespace SST::Prototypes::JFM
 		(void)completedSub;
 	}
 
+	TEST(JFMProjectJobsTests, MaterializeProjectDataWarnsForMissingSource)
+	{
+		auto bus = CreateRef<EventBus>();
+		bool completed = false;
+		std::vector<JFMCharacteristic> characteristics;
+		std::vector<std::string> warnings;
+		auto completedSub = bus->Subscribe<ProjectDataMaterializationCompleted>([&](const ProjectDataMaterializationCompleted &event) {
+			completed = true;
+			characteristics = event.characteristics;
+			warnings = event.warnings;
+		});
+
+		JFMProject project;
+		project.id = "project";
+		project.name = "Missing Source Project";
+		project.characteristics.push_back(JFMCharacteristicInfo{
+			42,
+			"Missing Source",
+			"IV",
+			Path::FromResolved(FileSystem::TempDirectoryPath() / "sst-jfm-missing-source.dat")});
+		project.series.push_back(JFMSeries{"series-1", "Series", {}, {42}});
+
+		JobContext context = MakeTestJobContext();
+		MaterializeProjectDataJob job(bus, project, Path::FromResolved("missing-python-root"));
+		job.Execute(context);
+		bus->ProcessQueue();
+
+		ASSERT_TRUE(completed);
+		EXPECT_TRUE(characteristics.empty());
+		ASSERT_FALSE(warnings.empty());
+		EXPECT_NE(warnings.front().find("Source file missing"), std::string::npos);
+		(void)completedSub;
+	}
+
 	TEST(JFMProjectJobsTests, PythonRootResolverCoversBundleAndRepoLayouts)
 	{
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
@@ -138,7 +172,7 @@ namespace SST::Prototypes::JFM
 
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
-		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("IV_C002_Z015_6_290,0K.dat");
+		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
 		ASSERT_TRUE(FileSystem::Exists(pythonRoot.Native())) << pythonRoot.String();
 		ASSERT_TRUE(FileSystem::Exists(dataPath.Native())) << dataPath.String();
 
@@ -169,7 +203,7 @@ namespace SST::Prototypes::JFM
 
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
-		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("IV_C002_Z015_6_290,0K.dat");
+		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
 
 #if DS_PYTHON_CAPI_AVAILABLE
 		auto runtime = EnsurePythonRuntimeForBridgeTests();
