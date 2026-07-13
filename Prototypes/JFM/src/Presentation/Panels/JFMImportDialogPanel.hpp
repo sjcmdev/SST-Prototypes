@@ -43,9 +43,11 @@ namespace SST::Prototypes::JFM
 	private:
 		void loadRequest(JFMImportDialogRequest request);
 		void refreshPreviewFiles();
+		void applyPreviewFolderFilter();
 		void renderPreviewWindow();
 		[[nodiscard]] JFMImportOptions buildOptions() const;
 		[[nodiscard]] std::string previewName() const;
+		[[nodiscard]] std::string previewShortName() const;
 		[[nodiscard]] std::string previewFileText() const;
 		[[nodiscard]] Path selectedPreviewPath() const;
 		[[nodiscard]] std::vector<Path> selectedPreviewPaths() const;
@@ -63,9 +65,13 @@ namespace SST::Prototypes::JFM
 		int m_TemperatureExtraction = 0;
 		int m_PreviewFileIndex = 0;
 		int m_PreviewScale = 0;
+		int m_PreviewFolderIndex = 0;
+		std::vector<Path> m_AllPreviewFiles;
 		std::vector<Path> m_PreviewFiles;
+		std::vector<std::string> m_PreviewFolders;
 		std::vector<int> m_SelectedPreviewFileIndices;
 		std::array<char, 160> m_NamePattern = {};
+		std::array<char, 160> m_ShortNamePattern = {};
 		std::array<char, 32> m_Delimiter = {};
 		std::array<char, 320> m_CustomScriptPath = {};
 	};

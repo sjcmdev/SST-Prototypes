@@ -44,7 +44,7 @@ namespace SST::Prototypes::JFM
 		};
 
 		[[nodiscard]] PlotArea CreatePlotArea();
-		void PlotIds(std::vector<CharacteristicId> ids);
+		void PlotIds(std::vector<CharacteristicId> ids, std::string title = {});
 		void PlotSeries(const std::string &seriesId);
 		void PlotSelectedGroup();
 

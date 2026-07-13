@@ -141,4 +141,23 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(project.series.back().name, "Renamed Series");
 		EXPECT_EQ(store.FindCharacteristic(id)->info.name, "Renamed Curve");
 	}
+
+	TEST(JFMWorkspaceStoreTests, StoresShortNamesForTreeItems)
+	{
+		JFMWorkspaceStore store;
+		const JFMGroup group = store.AddGroup("Long Group");
+		const JFMSeries series = store.AddSeries("Long Series", group.id);
+		JFMCharacteristic characteristic;
+		characteristic.info.name = "Long Characteristic";
+		const CharacteristicId id = store.AddCharacteristics({characteristic}, series.id).front();
+
+		EXPECT_TRUE(store.SetGroupShortName(group.id, "G1"));
+		EXPECT_TRUE(store.SetSeriesShortName(series.id, "S1"));
+		EXPECT_TRUE(store.SetCharacteristicShortName(id, "C1"));
+
+		const JFMProject project = store.GetProjectSnapshot();
+		EXPECT_EQ(project.groups.back().metadata.at("short_name"), "G1");
+		EXPECT_EQ(project.series.back().metadata.at("short_name"), "S1");
+		EXPECT_EQ(store.FindCharacteristic(id)->info.metadata.at("short_name"), "C1");
+	}
 } // namespace SST::Prototypes::JFM

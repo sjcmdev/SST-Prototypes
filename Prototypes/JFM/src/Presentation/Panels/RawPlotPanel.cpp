@@ -102,6 +102,27 @@ namespace SST::Prototypes::JFM
 			minY = std::min(minY, y);
 			maxY = std::max(maxY, y);
 		}
+
+		struct ColorPreset
+		{
+			const char *name;
+			std::array<float, 4> start;
+			std::array<float, 4> end;
+		};
+
+		constexpr ColorPreset ColorPresets[] = {
+			{"Cyan/Pink", {0.15f, 0.75f, 1.00f, 1.00f}, {1.00f, 0.12f, 0.55f, 1.00f}},
+			{"Blue/Orange", {0.22f, 0.45f, 1.00f, 1.00f}, {1.00f, 0.55f, 0.05f, 1.00f}},
+			{"Green/Yellow", {0.10f, 0.85f, 0.35f, 1.00f}, {1.00f, 0.90f, 0.15f, 1.00f}},
+			{"Violet/Red", {0.58f, 0.20f, 0.95f, 1.00f}, {1.00f, 0.18f, 0.18f, 1.00f}},
+		};
+
+		std::string displayName(const std::string &name, const std::unordered_map<std::string, std::string> &metadata)
+		{
+			if (const auto it = metadata.find("short_name"); it != metadata.end() && !it->second.empty())
+				return it->second;
+			return name;
+		}
 	}
 
 	RawPlotPanel::RawPlotPanel(Ref<JFMWorkspaceStore> store, Ref<JFMPlotRequestState> plotRequests, std::string title, bool visibleByDefault)
@@ -123,11 +144,13 @@ namespace SST::Prototypes::JFM
 		return area;
 	}
 
-	void RawPlotPanel::PlotIds(std::vector<CharacteristicId> ids)
+	void RawPlotPanel::PlotIds(std::vector<CharacteristicId> ids, std::string title)
 	{
 		if (ids.empty())
 			return;
 		PlotArea area = CreatePlotArea();
+		if (!title.empty())
+			area.title = std::move(title);
 		appendUnique(area.characteristicIds, ids);
 		m_PlotAreas.push_back(std::move(area));
 	}
@@ -137,9 +160,19 @@ namespace SST::Prototypes::JFM
 		if (m_Store == nullptr || seriesId.empty())
 			return;
 		std::vector<CharacteristicId> ids;
+		std::string title;
+		const JFMProject project = m_Store->GetProjectSnapshot();
+		for (const JFMSeries &series : project.series)
+		{
+			if (series.id == seriesId)
+			{
+				title = displayName(series.name, series.metadata);
+				break;
+			}
+		}
 		for (const JFMCharacteristic &characteristic : m_Store->GetSeriesCharacteristics(seriesId))
 			ids.push_back(characteristic.info.id);
-		PlotIds(std::move(ids));
+		PlotIds(std::move(ids), std::move(title));
 	}
 
 	void RawPlotPanel::PlotSelectedGroup()
@@ -154,10 +187,19 @@ namespace SST::Prototypes::JFM
 		if (seriesIt == project.series.end() || seriesIt->groupId.empty())
 			return;
 
+		std::string title;
+		for (const JFMGroup &group : project.groups)
+		{
+			if (group.id == seriesIt->groupId)
+			{
+				title = displayName(group.name, group.metadata);
+				break;
+			}
+		}
 		std::vector<CharacteristicId> ids;
 		for (const JFMCharacteristic &characteristic : m_Store->GetGroupCharacteristics(seriesIt->groupId))
 			ids.push_back(characteristic.info.id);
-		PlotIds(std::move(ids));
+		PlotIds(std::move(ids), std::move(title));
 	}
 
 	void RawPlotPanel::Render()
@@ -183,8 +225,8 @@ namespace SST::Prototypes::JFM
 		}
 		if (m_PlotRequests != nullptr)
 		{
-			for (std::vector<CharacteristicId> ids : m_PlotRequests->ConsumeRequests())
-				PlotIds(std::move(ids));
+			for (JFMPlotRequest request : m_PlotRequests->ConsumeRequests())
+				PlotIds(std::move(request.ids), std::move(request.title));
 		}
 
 		if (ImGui::Button("+ Empty Plot"))
@@ -288,6 +330,19 @@ namespace SST::Prototypes::JFM
 			ImGui::ColorEdit4("Start", area.gradientStart.data(), ImGuiColorEditFlags_NoInputs);
 			ImGui::SameLine();
 			ImGui::ColorEdit4("End", area.gradientEnd.data(), ImGuiColorEditFlags_NoInputs);
+			ImGui::SameLine();
+			if (ImGui::BeginCombo("Preset", "Color preset"))
+			{
+				for (const ColorPreset &preset : ColorPresets)
+				{
+					if (ImGui::Selectable(preset.name))
+					{
+						area.gradientStart = preset.start;
+						area.gradientEnd = preset.end;
+					}
+				}
+				ImGui::EndCombo();
+			}
 			ImGui::SameLine();
 			if (ImGui::Button("Apply Colors"))
 			{

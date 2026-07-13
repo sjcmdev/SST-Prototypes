@@ -108,6 +108,7 @@ def _parse_options(options: dict[str, Any]) -> dict[str, Any]:
         "encoding",
         "strict",
         "name_pattern",
+        "short_name_pattern",
         "temperature_extraction",
         "user_overrides",
     }

@@ -45,6 +45,9 @@ namespace SST::Prototypes::JFM
 		bool RenameGroup(const std::string &groupId, std::string name);
 		bool RenameSeries(const std::string &seriesId, std::string name);
 		bool RenameCharacteristic(const CharacteristicId &id, std::string name);
+		bool SetGroupShortName(const std::string &groupId, std::string shortName);
+		bool SetSeriesShortName(const std::string &seriesId, std::string shortName);
+		bool SetCharacteristicShortName(const CharacteristicId &id, std::string shortName);
 		JFMScriptInfo AddScript(Path path);
 		void EnsureDefaultScripts(Path scriptsDirectory);
 		bool RemoveScript(const std::string &scriptId);

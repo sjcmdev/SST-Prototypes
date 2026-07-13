@@ -68,6 +68,7 @@ namespace SST::Prototypes::JFM
 	{
 		std::string parser = "auto";
 		std::string namePattern = "{stem}";
+		std::string shortNamePattern;
 		std::string delimiter;
 		std::string decimalSeparator = "auto";
 		std::string temperatureExtraction = "auto";
@@ -79,6 +80,7 @@ namespace SST::Prototypes::JFM
 		std::string id;
 		std::string name;
 		std::string parentId;
+		std::unordered_map<std::string, std::string> metadata;
 	};
 
 	struct JFMSeries
@@ -87,6 +89,7 @@ namespace SST::Prototypes::JFM
 		std::string name;
 		std::string groupId;
 		std::vector<CharacteristicId> characteristicIds;
+		std::unordered_map<std::string, std::string> metadata;
 	};
 
 	struct JFMFitRun

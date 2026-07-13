@@ -14,6 +14,7 @@
 #include <imgui.h>
 #include <implot.h>
 #include <sstream>
+#include <set>
 #include <system_error>
 
 namespace SST::Prototypes::JFM
@@ -35,6 +36,15 @@ namespace SST::Prototypes::JFM
 				position += to.size();
 			}
 			return text;
+		}
+
+		std::string BuildNameFromPattern(const std::string &pattern, const Path &path)
+		{
+			if (path.Empty())
+				return pattern;
+			std::string text = ReplaceAll(pattern, "{stem}", path.Native().stem().string());
+			text = ReplaceAll(text, "{source_path}", path.String());
+			return text.empty() ? path.Native().stem().string() : text;
 		}
 
 		bool IsDataFile(const Path &path)
@@ -183,6 +193,7 @@ namespace SST::Prototypes::JFM
 
 		ImGui::Combo("Parser", &m_Parser, ParserOptions, IM_ARRAYSIZE(ParserOptions));
 		ImGui::InputText("Name pattern", m_NamePattern.data(), m_NamePattern.size());
+		ImGui::InputText("Short name", m_ShortNamePattern.data(), m_ShortNamePattern.size());
 		ImGui::InputText("Delimiter", m_Delimiter.data(), m_Delimiter.size());
 		ImGui::Combo("Decimal", &m_DecimalSeparator, DecimalOptions, IM_ARRAYSIZE(DecimalOptions));
 		ImGui::Combo("Temperature", &m_TemperatureExtraction, TemperatureOptions, IM_ARRAYSIZE(TemperatureOptions));
@@ -210,6 +221,9 @@ namespace SST::Prototypes::JFM
 
 		const std::string name = previewName();
 		ImGui::Text("Preview name: %s", name.c_str());
+		const std::string shortName = previewShortName();
+		if (!shortName.empty())
+			ImGui::Text("Preview short: %s", shortName.c_str());
 		ImGui::Checkbox("Preview window", &m_PreviewOpen);
 
 		if (ImGui::Button("Import"))
@@ -242,9 +256,11 @@ namespace SST::Prototypes::JFM
 		m_DecimalSeparator = 0;
 		m_TemperatureExtraction = 0;
 		m_Delimiter.fill('\0');
+		m_ShortNamePattern.fill('\0');
 		m_CustomScriptPath.fill('\0');
 		m_PreviewFileIndex = 0;
 		m_PreviewScale = 0;
+		m_PreviewFolderIndex = 0;
 		m_SelectedPreviewFileIndices.clear();
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
 		refreshPreviewFiles();
@@ -252,17 +268,38 @@ namespace SST::Prototypes::JFM
 
 	void JFMImportDialogPanel::refreshPreviewFiles()
 	{
-		m_PreviewFiles.clear();
+		m_AllPreviewFiles.clear();
+		std::set<std::string> folders;
 		for (const Path &path : m_Request.paths)
 		{
 			if (IsDirectory(path))
-				AddFilesFromDirectory(path, m_Request.recursive, m_PreviewFiles);
+				AddFilesFromDirectory(path, m_Request.recursive, m_AllPreviewFiles);
 			else if ((IsRegularFile(path) || !FileSystem::Exists(path.Native())) && IsDataFile(path))
-				m_PreviewFiles.push_back(path);
+				m_AllPreviewFiles.push_back(path);
 		}
-		std::sort(m_PreviewFiles.begin(), m_PreviewFiles.end(), [](const Path &left, const Path &right) {
+		std::sort(m_AllPreviewFiles.begin(), m_AllPreviewFiles.end(), [](const Path &left, const Path &right) {
 			return left.String() < right.String();
 		});
+		for (const Path &path : m_AllPreviewFiles)
+			folders.insert(path.parent_path().String());
+
+		m_PreviewFolders.clear();
+		m_PreviewFolders.push_back("All folders");
+		m_PreviewFolders.insert(m_PreviewFolders.end(), folders.begin(), folders.end());
+		applyPreviewFolderFilter();
+	}
+
+	void JFMImportDialogPanel::applyPreviewFolderFilter()
+	{
+		const std::string folder = m_PreviewFolderIndex > 0 && m_PreviewFolderIndex < static_cast<int>(m_PreviewFolders.size())
+			? m_PreviewFolders[static_cast<std::size_t>(m_PreviewFolderIndex)]
+			: std::string{};
+		m_PreviewFiles.clear();
+		for (const Path &path : m_AllPreviewFiles)
+		{
+			if (folder.empty() || path.parent_path().String() == folder)
+				m_PreviewFiles.push_back(path);
+		}
 		if (m_PreviewFileIndex >= static_cast<int>(m_PreviewFiles.size()))
 			m_PreviewFileIndex = 0;
 		m_SelectedPreviewFileIndices.erase(
@@ -294,6 +331,24 @@ namespace SST::Prototypes::JFM
 		}
 
 		ImGui::BeginChild("##jfm_preview_files", ImVec2(360.0f, 0.0f), true);
+		if (m_PreviewFolders.size() > 1)
+		{
+			ImGui::SetNextItemWidth(-1.0f);
+			if (ImGui::BeginCombo("##preview_folder", m_PreviewFolders[static_cast<std::size_t>(m_PreviewFolderIndex)].c_str()))
+			{
+				for (std::size_t index = 0; index < m_PreviewFolders.size(); ++index)
+				{
+					const bool selected = static_cast<int>(index) == m_PreviewFolderIndex;
+					if (ImGui::Selectable(m_PreviewFolders[index].c_str(), selected))
+					{
+						m_PreviewFolderIndex = static_cast<int>(index);
+						m_SelectedPreviewFileIndices.clear();
+						applyPreviewFolderFilter();
+					}
+				}
+				ImGui::EndCombo();
+			}
+		}
 		if (ImGui::Button("All"))
 		{
 			m_SelectedPreviewFileIndices.clear();
@@ -375,6 +430,7 @@ namespace SST::Prototypes::JFM
 		JFMImportOptions options;
 		options.parser = ParserOptions[static_cast<std::size_t>(m_Parser)];
 		options.namePattern = m_NamePattern.data();
+		options.shortNamePattern = m_ShortNamePattern.data();
 		options.delimiter = m_Delimiter.data();
 		options.decimalSeparator = DecimalOptions[static_cast<std::size_t>(m_DecimalSeparator)];
 		options.temperatureExtraction = TemperatureOptions[static_cast<std::size_t>(m_TemperatureExtraction)];
@@ -388,10 +444,15 @@ namespace SST::Prototypes::JFM
 		if (m_Request.paths.empty())
 			return pattern;
 
-		const Path path = selectedPreviewPath();
-		std::string text = ReplaceAll(pattern, "{stem}", path.Native().stem().string());
-		text = ReplaceAll(text, "{source_path}", path.String());
-		return text.empty() ? path.Native().stem().string() : text;
+		return BuildNameFromPattern(pattern, selectedPreviewPath());
+	}
+
+	std::string JFMImportDialogPanel::previewShortName() const
+	{
+		const std::string pattern = m_ShortNamePattern.data();
+		if (pattern.empty())
+			return {};
+		return BuildNameFromPattern(pattern, selectedPreviewPath());
 	}
 
 	std::string JFMImportDialogPanel::previewFileText() const

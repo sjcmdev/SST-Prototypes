@@ -19,6 +19,7 @@ class ParseOptions:
     encoding: str = "utf-8"
     strict: bool = False
     name_pattern: str = "{stem}"
+    short_name_pattern: str = ""
     temperature_extraction: str = "auto"
     user_overrides: dict[str, str] = field(default_factory=dict)
 
@@ -208,6 +209,9 @@ def make_curve(
     }
     if extra_metadata:
         metadata.update(extra_metadata)
+    short_name = build_curve_name(metadata, options.short_name_pattern, options.user_overrides)
+    if options.short_name_pattern and short_name:
+        metadata["short_name"] = short_name
 
     return {
         "name": build_curve_name(metadata, options.name_pattern, options.user_overrides),

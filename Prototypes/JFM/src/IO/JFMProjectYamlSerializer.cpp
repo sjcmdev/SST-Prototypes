@@ -190,6 +190,8 @@ namespace SST::Prototypes::JFM
 				out << YAML::Key << "id" << YAML::Value << group.id;
 				out << YAML::Key << "name" << YAML::Value << group.name;
 				out << YAML::Key << "parent_id" << YAML::Value << group.parentId;
+				out << YAML::Key << "metadata" << YAML::Value;
+				emitStringMap(out, group.metadata);
 				out << YAML::EndMap;
 			}
 			out << YAML::EndSeq;
@@ -201,6 +203,8 @@ namespace SST::Prototypes::JFM
 				out << YAML::Key << "id" << YAML::Value << series.id;
 				out << YAML::Key << "name" << YAML::Value << series.name;
 				out << YAML::Key << "group_id" << YAML::Value << series.groupId;
+				out << YAML::Key << "metadata" << YAML::Value;
+				emitStringMap(out, series.metadata);
 				out << YAML::Key << "characteristics" << YAML::Value << YAML::BeginSeq;
 				for (const CharacteristicId &characteristicId : series.characteristicIds)
 					out << characteristicId;
@@ -271,10 +275,12 @@ namespace SST::Prototypes::JFM
 
 			for (const YAML::Node &groupNode : root["groups"])
 			{
-				project.groups.push_back(JFMGroup{
+				JFMGroup group{
 					readOr<std::string>(groupNode, "id", {}),
 					readOr<std::string>(groupNode, "name", "Group"),
-					readOr<std::string>(groupNode, "parent_id", {})});
+					readOr<std::string>(groupNode, "parent_id", {})};
+				group.metadata = readStringMap(groupNode["metadata"]);
+				project.groups.push_back(std::move(group));
 			}
 
 			for (const YAML::Node &seriesNode : root["series"])
@@ -283,6 +289,7 @@ namespace SST::Prototypes::JFM
 				series.id = readOr<std::string>(seriesNode, "id", {});
 				series.name = readOr<std::string>(seriesNode, "name", "Series");
 				series.groupId = readOr<std::string>(seriesNode, "group_id", {});
+				series.metadata = readStringMap(seriesNode["metadata"]);
 				for (const YAML::Node &characteristicNode : seriesNode["characteristics"])
 				{
 					if (characteristicNode.IsScalar())
