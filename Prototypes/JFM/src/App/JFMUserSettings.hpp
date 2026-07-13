@@ -22,6 +22,7 @@ namespace SST::Prototypes::JFM
 		Path defaultProjectsDirectory;
 		Path defaultScriptsDirectory;
 		std::vector<JFMColorPreset> colorPresets;
+		std::string defaultColorPresetName;
 		bool defaultPlotSemiLog = true;
 		bool defaultPlotAutoFit = true;
 		bool defaultPlotShowLegend = false;
@@ -50,6 +51,7 @@ namespace SST::Prototypes::JFM
 		void SetPlotDefaults(bool semiLog, bool autoFit, bool showLegend, float fitPadding);
 		void SetAutoPlotAfterImport(bool enabled);
 		void SetColorPresets(std::vector<JFMColorPreset> presets);
+		void SetDefaultColorPreset(std::string presetName);
 		void AddRecentProject(Path path);
 
 	private:

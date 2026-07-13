@@ -64,12 +64,22 @@ namespace SST::Prototypes::JFM
 		JFMCharacteristicData data;
 	};
 
+	struct JFMNameVariableRule
+	{
+		std::string name;
+		std::string source = "stem";
+		int tokenIndex = -1;
+		int substringStart = 0;
+		int substringLength = -1;
+	};
+
 	struct JFMImportOptions
 	{
 		std::string parser = "auto";
 		std::string namePattern = "{stem}";
 		std::string shortNamePattern;
 		std::string variableDelimiter = "_";
+		std::vector<JFMNameVariableRule> customVariables;
 		std::string delimiter;
 		std::string decimalSeparator = "auto";
 		std::string temperatureExtraction = "auto";

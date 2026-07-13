@@ -15,6 +15,7 @@ namespace SST::Prototypes::JFM
 
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 		void Render() override;
+		void RenderContent();
 
 	private:
 		void renderPathRow(const char *label, const Path &path, void (JFMUserSettingsStore::*setter)(Path));

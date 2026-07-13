@@ -110,6 +110,7 @@ def _parse_options(options: dict[str, Any]) -> dict[str, Any]:
         "name_pattern",
         "short_name_pattern",
         "variable_delimiter",
+        "custom_variables",
         "temperature_extraction",
         "user_overrides",
     }

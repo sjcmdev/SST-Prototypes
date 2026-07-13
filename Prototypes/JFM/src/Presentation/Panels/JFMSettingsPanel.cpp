@@ -35,19 +35,24 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		if (m_Settings != nullptr)
-		{
-			const JFMUserSettings settings = m_Settings->GetSnapshot();
-			ImGui::SeparatorText("JFM Paths");
-			renderPathRow("Import directory", settings.defaultImportDirectory, &JFMUserSettingsStore::SetDefaultImportDirectory);
-			renderPathRow("Projects directory", settings.defaultProjectsDirectory, &JFMUserSettingsStore::SetDefaultProjectsDirectory);
-			renderPathRow("Scripts directory", settings.defaultScriptsDirectory, &JFMUserSettingsStore::SetDefaultScriptsDirectory);
-			renderPlotDefaults(settings);
-			renderColorPresets(settings);
-		}
+		RenderContent();
 
 		ImGui::End();
 		SetVisible(visible);
+	}
+
+	void JFMSettingsPanel::RenderContent()
+	{
+		if (m_Settings == nullptr)
+			return;
+
+		const JFMUserSettings settings = m_Settings->GetSnapshot();
+		ImGui::SeparatorText("JFM Paths");
+		renderPathRow("Import directory", settings.defaultImportDirectory, &JFMUserSettingsStore::SetDefaultImportDirectory);
+		renderPathRow("Projects directory", settings.defaultProjectsDirectory, &JFMUserSettingsStore::SetDefaultProjectsDirectory);
+		renderPathRow("Scripts directory", settings.defaultScriptsDirectory, &JFMUserSettingsStore::SetDefaultScriptsDirectory);
+		renderPlotDefaults(settings);
+		renderColorPresets(settings);
 	}
 
 	void JFMSettingsPanel::renderPathRow(const char *label, const Path &path, void (JFMUserSettingsStore::*setter)(Path))
@@ -86,6 +91,20 @@ namespace SST::Prototypes::JFM
 	{
 		ImGui::SeparatorText("JFM Color Presets");
 		std::vector<JFMColorPreset> presets = settings.colorPresets;
+		const char *defaultName = settings.defaultColorPresetName.empty() ? "<none>" : settings.defaultColorPresetName.c_str();
+		if (ImGui::BeginCombo("Default preset", defaultName))
+		{
+			for (const JFMColorPreset &preset : presets)
+			{
+				ImGui::ColorButton(("##default_start_" + preset.name).c_str(), ImVec4(preset.start[0], preset.start[1], preset.start[2], preset.start[3]));
+				ImGui::SameLine();
+				ImGui::ColorButton(("##default_end_" + preset.name).c_str(), ImVec4(preset.end[0], preset.end[1], preset.end[2], preset.end[3]));
+				ImGui::SameLine();
+				if (ImGui::Selectable(preset.name.c_str(), preset.name == settings.defaultColorPresetName))
+					m_Settings->SetDefaultColorPreset(preset.name);
+			}
+			ImGui::EndCombo();
+		}
 		for (std::size_t index = 0; index < presets.size();)
 		{
 			ImGui::PushID(static_cast<int>(index));

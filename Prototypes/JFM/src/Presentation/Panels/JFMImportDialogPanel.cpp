@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 #include <filesystem>
 #include <iterator>
@@ -29,6 +30,16 @@ namespace SST::Prototypes::JFM
 		const char *ParserOptions[] = {"auto", "dat", "scaps_iv", "custom"};
 		const char *DecimalOptions[] = {"auto", ".", ","};
 		const char *TemperatureOptions[] = {"auto", "filename", "header", "off"};
+		const char *VariableSources[] = {"stem", "folder", "parent_folder"};
+
+		struct NameVariablePreview
+		{
+			std::string name;
+			std::string value;
+			std::string source;
+		};
+
+		std::string DetectTemperatureToken(const Path &path);
 
 		std::string ReplaceAll(std::string text, const std::string &from, const std::string &to)
 		{
@@ -41,20 +52,91 @@ namespace SST::Prototypes::JFM
 			return text;
 		}
 
-		void AddTokenVariables(std::unordered_map<std::string, std::string> &variables, const std::string &key, const std::string &text, const std::string &delimiter)
+		std::vector<std::string> SplitTokens(const std::string &text, const std::string &delimiter)
 		{
 			if (delimiter.empty())
-				return;
+				return {text};
+			std::vector<std::string> tokens;
 			std::size_t start = 0;
-			std::size_t index = 0;
 			while (start <= text.size())
 			{
 				const std::size_t end = text.find(delimiter, start);
-				variables[key + "_" + std::to_string(index++)] = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+				tokens.push_back(text.substr(start, end == std::string::npos ? std::string::npos : end - start));
 				if (end == std::string::npos)
 					break;
 				start = end + delimiter.size();
 			}
+			return tokens;
+		}
+
+		std::string ApplySubstring(std::string text, int start, int length)
+		{
+			const std::size_t safeStart = static_cast<std::size_t>(std::clamp(start, 0, static_cast<int>(text.size())));
+			if (length < 0)
+				return text.substr(safeStart);
+			return text.substr(safeStart, static_cast<std::size_t>(length));
+		}
+
+		void AddVariable(
+			std::vector<NameVariablePreview> &previews,
+			std::unordered_map<std::string, std::string> &variables,
+			std::string name,
+			std::string value,
+			std::string source)
+		{
+			variables[name] = value;
+			previews.push_back(NameVariablePreview{std::move(name), std::move(value), std::move(source)});
+		}
+
+		std::vector<NameVariablePreview> BuildNameVariables(
+			const Path &path,
+			const std::string &delimiter,
+			const std::vector<JFMNameVariableRule> &rules)
+		{
+			std::vector<NameVariablePreview> previews;
+			std::unordered_map<std::string, std::string> variables;
+			if (path.Empty())
+				return previews;
+
+			const std::string stem = path.Native().stem().string();
+			const std::string folder = path.parent_path().filename().String();
+			const std::string parentFolder = path.parent_path().parent_path().filename().String();
+			AddVariable(previews, variables, "stem", stem, "file name without extension");
+			AddVariable(previews, variables, "folder", folder, "parent folder name");
+			AddVariable(previews, variables, "parent_folder", parentFolder, "parent of parent folder");
+			AddVariable(previews, variables, "source_path", path.String(), "full source path");
+			const std::string temperature = DetectTemperatureToken(path);
+			AddVariable(previews, variables, "T", temperature, "temperature parsed from file name");
+			AddVariable(previews, variables, "temperature_K", temperature, "temperature parsed from file name");
+
+			for (const auto &[key, text] : std::vector<std::pair<std::string, std::string>>{{"stem", stem}, {"folder", folder}})
+			{
+				const std::vector<std::string> tokens = SplitTokens(text, delimiter);
+				for (std::size_t index = 0; index < tokens.size(); ++index)
+					AddVariable(previews, variables, key + "_" + std::to_string(index), tokens[index], key + " split by '" + delimiter + "'");
+			}
+
+			for (const JFMNameVariableRule &rule : rules)
+			{
+				if (rule.name.empty())
+					continue;
+				std::string value;
+				if (const auto it = variables.find(rule.source); it != variables.end())
+					value = it->second;
+				std::string source = rule.source;
+				if (rule.tokenIndex >= 0)
+				{
+					const std::vector<std::string> tokens = SplitTokens(value, delimiter);
+					value = rule.tokenIndex < static_cast<int>(tokens.size()) ? tokens[static_cast<std::size_t>(rule.tokenIndex)] : std::string{};
+					source += " token " + std::to_string(rule.tokenIndex);
+				}
+				value = ApplySubstring(std::move(value), rule.substringStart, rule.substringLength);
+				if (rule.substringStart > 0 || rule.substringLength >= 0)
+					source += " substring " + std::to_string(rule.substringStart) + ":" + (rule.substringLength < 0 ? std::string{"end"} : std::to_string(rule.substringLength));
+				AddVariable(previews, variables, rule.name, std::move(value), std::move(source));
+			}
+
+			return previews;
 		}
 
 		std::string DetectTemperatureToken(const Path &path)
@@ -70,29 +152,18 @@ namespace SST::Prototypes::JFM
 			return value;
 		}
 
-		std::string BuildNameFromPattern(const std::string &pattern, const Path &path, const std::string &delimiter)
+		std::string BuildNameFromPattern(
+			const std::string &pattern,
+			const Path &path,
+			const std::string &delimiter,
+			const std::vector<JFMNameVariableRule> &customVariables)
 		{
 			if (path.Empty())
 				return pattern;
 
-			const std::string stem = path.Native().stem().string();
-			const std::string folder = path.parent_path().filename().String();
-			const std::string parentFolder = path.parent_path().parent_path().filename().String();
-			std::unordered_map<std::string, std::string> variables{
-				{"stem", stem},
-				{"folder", folder},
-				{"parent_folder", parentFolder},
-				{"source_path", path.String()},
-			};
-			const std::string temperature = DetectTemperatureToken(path);
-			variables["T"] = temperature;
-			variables["temperature_K"] = temperature;
-			AddTokenVariables(variables, "stem", stem, delimiter);
-			AddTokenVariables(variables, "folder", folder, delimiter);
-
 			std::string text = pattern;
-			for (const auto &[key, value] : variables)
-				text = ReplaceAll(text, "{" + key + "}", value);
+			for (const NameVariablePreview &variable : BuildNameVariables(path, delimiter, customVariables))
+				text = ReplaceAll(text, "{" + variable.name + "}", variable.value);
 			return text.empty() ? path.Native().stem().string() : text;
 		}
 
@@ -232,34 +303,46 @@ namespace SST::Prototypes::JFM
 			ImGui::TextWrapped("%s", m_Request.paths.front().String().c_str());
 		ImGui::Text("Previewable files: %d", static_cast<int>(m_PreviewFiles.size()));
 
-		ImGui::Combo("Parser", &m_Parser, ParserOptions, IM_ARRAYSIZE(ParserOptions));
-		ImGui::InputText("Name pattern", m_NamePattern.data(), m_NamePattern.size());
-		ImGui::InputText("Short name", m_ShortNamePattern.data(), m_ShortNamePattern.size());
-		ImGui::InputText("Variable delimiter", m_VariableDelimiter.data(), m_VariableDelimiter.size());
-		ImGui::TextDisabled("Variables: {stem}, {folder}, {parent_folder}, {T}, {stem_0}, {folder_0}");
-		ImGui::InputText("Delimiter", m_Delimiter.data(), m_Delimiter.size());
-		ImGui::Combo("Decimal", &m_DecimalSeparator, DecimalOptions, IM_ARRAYSIZE(DecimalOptions));
-		ImGui::Combo("Temperature", &m_TemperatureExtraction, TemperatureOptions, IM_ARRAYSIZE(TemperatureOptions));
-
-		if (m_Parser == 3)
+		if (ImGui::BeginTable("##jfm_import_options_layout", 2, ImGuiTableFlags_SizingStretchProp))
 		{
-			ImGui::InputText("Script", m_CustomScriptPath.data(), m_CustomScriptPath.size());
-			ImGui::SameLine();
-			if (ImGui::Button("..."))
+			ImGui::TableSetupColumn("Options", ImGuiTableColumnFlags_WidthStretch, 0.46f);
+			ImGui::TableSetupColumn("Variables", ImGuiTableColumnFlags_WidthStretch, 0.54f);
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Combo("Parser", &m_Parser, ParserOptions, IM_ARRAYSIZE(ParserOptions));
+			ImGui::InputText("Name pattern", m_NamePattern.data(), m_NamePattern.size());
+			ImGui::InputText("Short name", m_ShortNamePattern.data(), m_ShortNamePattern.size());
+			ImGui::InputText("Variable delimiter", m_VariableDelimiter.data(), m_VariableDelimiter.size());
+			ImGui::TextDisabled("Variables: {stem}, {folder}, {parent_folder}, {T}, {stem_0}, {folder_0}");
+			renderCustomVariables();
+			ImGui::InputText("Delimiter", m_Delimiter.data(), m_Delimiter.size());
+			ImGui::Combo("Decimal", &m_DecimalSeparator, DecimalOptions, IM_ARRAYSIZE(DecimalOptions));
+			ImGui::Combo("Temperature", &m_TemperatureExtraction, TemperatureOptions, IM_ARRAYSIZE(TemperatureOptions));
+
+			if (m_Parser == 3)
 			{
-				if (auto script = OpenFileDialog(PythonScriptFilter))
-					std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script->String().c_str());
-			}
-			if (m_Store != nullptr)
-			{
-				const JFMProject project = m_Store->GetProjectSnapshot();
-				for (const JFMScriptInfo &script : project.scripts)
+				ImGui::InputText("Script", m_CustomScriptPath.data(), m_CustomScriptPath.size());
+				ImGui::SameLine();
+				if (ImGui::Button("..."))
 				{
-					ImGui::SameLine();
-					if (ImGui::SmallButton(script.name.c_str()))
-						std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script.path.String().c_str());
+					if (auto script = OpenFileDialog(PythonScriptFilter))
+						std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script->String().c_str());
+				}
+				if (m_Store != nullptr)
+				{
+					const JFMProject project = m_Store->GetProjectSnapshot();
+					for (const JFMScriptInfo &script : project.scripts)
+					{
+						ImGui::SameLine();
+						if (ImGui::SmallButton(script.name.c_str()))
+							std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script.path.String().c_str());
+					}
 				}
 			}
+
+			ImGui::TableSetColumnIndex(1);
+			renderVariablePreviewTable();
+			ImGui::EndTable();
 		}
 
 		const std::string name = previewName();
@@ -361,6 +444,91 @@ namespace SST::Prototypes::JFM
 			m_SelectedPreviewFileIndices.end());
 		if (m_SelectedPreviewFileIndices.empty() && !m_PreviewFiles.empty())
 			m_SelectedPreviewFileIndices.push_back(0);
+	}
+
+	void JFMImportDialogPanel::renderCustomVariables()
+	{
+		if (!ImGui::TreeNodeEx("Custom short-name variables", ImGuiTreeNodeFlags_DefaultOpen))
+			return;
+
+		ImGui::TextDisabled("Use custom variables in patterns as {variable_name}.");
+		if (ImGui::BeginTable("##jfm_custom_variables", 6, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV))
+		{
+			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.28f);
+			ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthStretch, 0.22f);
+			ImGui::TableSetupColumn("Token", ImGuiTableColumnFlags_WidthFixed, 78.0f);
+			ImGui::TableSetupColumn("Start", ImGuiTableColumnFlags_WidthFixed, 78.0f);
+			ImGui::TableSetupColumn("Length", ImGuiTableColumnFlags_WidthFixed, 78.0f);
+			ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 42.0f);
+			ImGui::TableHeadersRow();
+			for (std::size_t index = 0; index < m_CustomVariables.size();)
+			{
+				VariableRuleDraft &rule = m_CustomVariables[index];
+				ImGui::PushID(static_cast<int>(index));
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::SetNextItemWidth(-1.0f);
+				ImGui::InputText("##name", rule.name.data(), rule.name.size());
+				ImGui::TableSetColumnIndex(1);
+				ImGui::SetNextItemWidth(-1.0f);
+				ImGui::Combo("##source", &rule.source, VariableSources, IM_ARRAYSIZE(VariableSources));
+				ImGui::TableSetColumnIndex(2);
+				ImGui::SetNextItemWidth(-1.0f);
+				ImGui::InputInt("##token", &rule.tokenIndex, 1, 1);
+				ImGui::TableSetColumnIndex(3);
+				ImGui::SetNextItemWidth(-1.0f);
+				ImGui::InputInt("##start", &rule.substringStart, 1, 1);
+				ImGui::TableSetColumnIndex(4);
+				ImGui::SetNextItemWidth(-1.0f);
+				ImGui::InputInt("##length", &rule.substringLength, 1, 1);
+				ImGui::TableSetColumnIndex(5);
+				if (ImGui::SmallButton("-"))
+				{
+					m_CustomVariables.erase(m_CustomVariables.begin() + static_cast<std::ptrdiff_t>(index));
+					ImGui::PopID();
+					continue;
+				}
+				rule.tokenIndex = std::max(-1, rule.tokenIndex);
+				rule.substringStart = std::max(0, rule.substringStart);
+				rule.substringLength = std::max(-1, rule.substringLength);
+				ImGui::PopID();
+				++index;
+			}
+			ImGui::EndTable();
+		}
+		if (ImGui::Button("+ Variable"))
+		{
+			VariableRuleDraft rule;
+			std::snprintf(rule.name.data(), rule.name.size(), "var%d", static_cast<int>(m_CustomVariables.size() + 1));
+			m_CustomVariables.push_back(rule);
+		}
+		ImGui::TreePop();
+	}
+
+	void JFMImportDialogPanel::renderVariablePreviewTable() const
+	{
+		const Path path = selectedPreviewPath();
+		const std::string sampleName = path.Empty() ? std::string{"<none>"} : path.filename().String();
+		ImGui::TextDisabled("Sample: %s", sampleName.c_str());
+		const std::vector<NameVariablePreview> variables = BuildNameVariables(path, m_VariableDelimiter.data(), buildVariableRules());
+		if (!ImGui::BeginTable("##jfm_variable_preview", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
+			return;
+
+		ImGui::TableSetupColumn("Variable", ImGuiTableColumnFlags_WidthStretch, 0.22f);
+		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.38f);
+		ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthStretch, 0.40f);
+		ImGui::TableHeadersRow();
+		for (const NameVariablePreview &variable : variables)
+		{
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::Text("{%s}", variable.name.c_str());
+			ImGui::TableSetColumnIndex(1);
+			ImGui::TextWrapped("%s", variable.value.c_str());
+			ImGui::TableSetColumnIndex(2);
+			ImGui::TextWrapped("%s", variable.source.c_str());
+		}
+		ImGui::EndTable();
 	}
 
 	void JFMImportDialogPanel::renderPreviewWindow()
@@ -484,11 +652,31 @@ namespace SST::Prototypes::JFM
 		options.namePattern = m_NamePattern.data();
 		options.shortNamePattern = m_ShortNamePattern.data();
 		options.variableDelimiter = m_VariableDelimiter.data();
+		options.customVariables = buildVariableRules();
 		options.delimiter = m_Delimiter.data();
 		options.decimalSeparator = DecimalOptions[static_cast<std::size_t>(m_DecimalSeparator)];
 		options.temperatureExtraction = TemperatureOptions[static_cast<std::size_t>(m_TemperatureExtraction)];
 		options.customScriptPath = m_CustomScriptPath.data();
 		return options;
+	}
+
+	std::vector<JFMNameVariableRule> JFMImportDialogPanel::buildVariableRules() const
+	{
+		std::vector<JFMNameVariableRule> rules;
+		rules.reserve(m_CustomVariables.size());
+		for (const VariableRuleDraft &draft : m_CustomVariables)
+		{
+			if (draft.name[0] == '\0')
+				continue;
+			JFMNameVariableRule rule;
+			rule.name = draft.name.data();
+			rule.source = VariableSources[static_cast<std::size_t>(std::clamp(draft.source, 0, static_cast<int>(IM_ARRAYSIZE(VariableSources)) - 1))];
+			rule.tokenIndex = std::max(-1, draft.tokenIndex);
+			rule.substringStart = std::max(0, draft.substringStart);
+			rule.substringLength = std::max(-1, draft.substringLength);
+			rules.push_back(std::move(rule));
+		}
+		return rules;
 	}
 
 	std::string JFMImportDialogPanel::previewName() const
@@ -497,7 +685,7 @@ namespace SST::Prototypes::JFM
 		if (m_Request.paths.empty())
 			return pattern;
 
-		return BuildNameFromPattern(pattern, selectedPreviewPath(), m_VariableDelimiter.data());
+		return BuildNameFromPattern(pattern, selectedPreviewPath(), m_VariableDelimiter.data(), buildVariableRules());
 	}
 
 	std::string JFMImportDialogPanel::previewShortName() const
@@ -505,7 +693,7 @@ namespace SST::Prototypes::JFM
 		const std::string pattern = m_ShortNamePattern.data();
 		if (pattern.empty())
 			return {};
-		return BuildNameFromPattern(pattern, selectedPreviewPath(), m_VariableDelimiter.data());
+		return BuildNameFromPattern(pattern, selectedPreviewPath(), m_VariableDelimiter.data(), buildVariableRules());
 	}
 
 	std::string JFMImportDialogPanel::previewFileText() const

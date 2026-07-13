@@ -140,10 +140,29 @@ namespace SST
 		m_MenuRenderers.push_back(MenuRendererEntry{std::move(id), std::move(renderer)});
 	}
 
+	void EditorLayer::RegisterSettingsTab(SettingsTabExtension extension)
+	{
+		if (!extension.renderer || extension.id.empty() || extension.title.empty())
+			return;
+
+		auto existing = std::find_if(
+			m_SettingsTabs.begin(),
+			m_SettingsTabs.end(),
+			[&extension](const SettingsTabExtension &entry) { return entry.id == extension.id; });
+		if (existing != m_SettingsTabs.end())
+		{
+			*existing = std::move(extension);
+			return;
+		}
+
+		m_SettingsTabs.push_back(std::move(extension));
+	}
+
 	void EditorLayer::OnDetach()
 	{
 		m_Panels.Clear();
 		m_MenuRenderers.clear();
+		m_SettingsTabs.clear();
 		m_PanelsInitialized = false;
 		ClearSubscriptions();
 		m_EventBus.reset();
@@ -205,6 +224,7 @@ namespace SST
 			m_KeymapResolver,
 			m_CommandRegistry,
 			config,
+			m_SettingsTabs,
 			"Settings",
 			true);
 

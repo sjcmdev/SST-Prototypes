@@ -153,6 +153,18 @@ namespace SST::Prototypes::JFM
 		dict["name_pattern"] = nb::str(options.namePattern.c_str());
 		dict["short_name_pattern"] = nb::str(options.shortNamePattern.c_str());
 		dict["variable_delimiter"] = nb::str(options.variableDelimiter.c_str());
+		nb::list customVariables;
+		for (const JFMNameVariableRule &rule : options.customVariables)
+		{
+			nb::dict item;
+			item["name"] = nb::str(rule.name.c_str());
+			item["source"] = nb::str(rule.source.c_str());
+			item["token_index"] = nb::int_(rule.tokenIndex);
+			item["substring_start"] = nb::int_(rule.substringStart);
+			item["substring_length"] = nb::int_(rule.substringLength);
+			customVariables.append(item);
+		}
+		dict["custom_variables"] = customVariables;
 		dict["decimal_separator"] = nb::str(options.decimalSeparator.c_str());
 		dict["temperature_extraction"] = nb::str(options.temperatureExtraction.c_str());
 		dict["custom_script_path"] = nb::str(options.customScriptPath.c_str());

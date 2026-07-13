@@ -21,6 +21,7 @@ class ParseOptions:
     name_pattern: str = "{stem}"
     short_name_pattern: str = ""
     variable_delimiter: str = "_"
+    custom_variables: list[dict[str, Any]] = field(default_factory=list)
     temperature_extraction: str = "auto"
     user_overrides: dict[str, str] = field(default_factory=dict)
 
@@ -82,6 +83,26 @@ def add_token_variables(metadata: dict[str, Any], key: str, text: str, delimiter
         return
     for index, part in enumerate(text.split(delimiter)):
         metadata[f"{key}_{index}"] = part
+
+
+def add_custom_variables(metadata: dict[str, Any], options: ParseOptions) -> None:
+    delimiter = options.variable_delimiter
+    for rule in options.custom_variables:
+        name = str(rule.get("name") or "")
+        source = str(rule.get("source") or "stem")
+        if not name:
+            continue
+
+        value = "" if metadata.get(source) is None else str(metadata.get(source, ""))
+        token_index = int(rule.get("token_index", -1))
+        if token_index >= 0 and delimiter:
+            tokens = value.split(delimiter)
+            value = tokens[token_index] if token_index < len(tokens) else ""
+
+        start = max(0, int(rule.get("substring_start", 0)))
+        length = int(rule.get("substring_length", -1))
+        value = value[start:] if length < 0 else value[start : start + max(0, length)]
+        metadata[name] = value
 
 
 def split_numeric_rows(
@@ -220,6 +241,7 @@ def make_curve(
     }
     add_token_variables(metadata, "stem", source.stem, options.variable_delimiter)
     add_token_variables(metadata, "folder", source.parent.name, options.variable_delimiter)
+    add_custom_variables(metadata, options)
     if extra_metadata:
         metadata.update(extra_metadata)
     short_name = build_curve_name(metadata, options.short_name_pattern, options.user_overrides)

@@ -18,6 +18,7 @@ namespace SST::Prototypes::JFM
 		store.SetDefaultImportDirectory(prototype / Path("example-data") / Path("nested"));
 		store.SetDefaultProjectsDirectory(prototype / Path("JFM-projects"));
 		store.SetDefaultScriptsDirectory(prototype / Path("python") / Path("custom_scripts"));
+		store.SetDefaultColorPreset("Green/Yellow");
 		store.AddRecentProject(prototype / Path("JFM-projects") / Path("one.jfm.yaml"));
 
 		JFMUserSettingsStore loaded(config, prototype);
@@ -28,6 +29,7 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(settings.defaultScriptsDirectory, prototype / Path("python") / Path("custom_scripts"));
 		EXPECT_FALSE(settings.colorPresets.empty());
 		EXPECT_TRUE(settings.defaultPlotSemiLog);
+		EXPECT_EQ(settings.defaultColorPresetName, "Green/Yellow");
 		ASSERT_EQ(settings.recentProjects.size(), 1);
 		EXPECT_EQ(settings.recentProjects.front(), prototype / Path("JFM-projects") / Path("one.jfm.yaml"));
 

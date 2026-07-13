@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
@@ -20,6 +21,13 @@ namespace SST
     class KeymapResolver;
     class CommandRegistry;
 
+    struct SettingsTabExtension
+    {
+        std::string id;
+        std::string title;
+        std::function<void()> renderer;
+    };
+
     namespace EditorUiEvents
     {
         struct LayoutListLoaded;
@@ -35,6 +43,7 @@ namespace SST
                           WeakRef<KeymapResolver> keymapResolver = {},
                           WeakRef<CommandRegistry> commandRegistry = {},
                           ApplicationConfig initialConfig = {},
+                          std::vector<SettingsTabExtension> tabExtensions = {},
                           std::string title = "SettingsPanel",
                           bool visibleByDefault = true);
         SettingsPanel(const SettingsPanel &other);
@@ -128,6 +137,8 @@ namespace SST
         std::vector<ApplicationConfig> m_RedoHistory;
         std::optional<ApplicationConfig> m_PendingUndoSnapshot;
         std::string m_StatusMessage;
+        std::vector<SettingsTabExtension> m_TabExtensions;
+        int m_SelectedExtensionTab = -1;
         Ref<EventBus> m_EventBus;
         WeakRef<JobSystem> m_JobSystem;
         WeakRef<EditorUiState> m_UiState;

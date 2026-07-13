@@ -89,10 +89,12 @@ namespace SST
 	                   WeakRef<KeymapResolver> keymapResolver,
 	                   WeakRef<CommandRegistry> commandRegistry,
 	                   ApplicationConfig initialConfig,
+	                   std::vector<SettingsTabExtension> tabExtensions,
 	                   std::string title,
 	                   bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_DraftConfig(std::move(initialConfig)),
+		  m_TabExtensions(std::move(tabExtensions)),
 		  m_EventBus(std::move(eventBus)),
 		  m_JobSystem(std::move(jobSystem)),
 		  m_UiState(std::move(uiState)),
@@ -125,6 +127,8 @@ namespace SST
 		  m_RedoHistory(other.m_RedoHistory),
 		  m_PendingUndoSnapshot(other.m_PendingUndoSnapshot),
 		  m_StatusMessage(other.m_StatusMessage),
+		  m_TabExtensions(other.m_TabExtensions),
+		  m_SelectedExtensionTab(other.m_SelectedExtensionTab),
 		  m_EventBus(other.m_EventBus),
 		  m_JobSystem(other.m_JobSystem),
 		  m_UiState(other.m_UiState),
@@ -182,7 +186,12 @@ namespace SST
 		ImGui::BeginChild("SettingsContent", ImVec2(0.0f, 0.0f), true);
 		renderActionBar();
 
-		switch (m_SelectedTab)
+		if (m_SelectedExtensionTab >= 0 && m_SelectedExtensionTab < static_cast<int>(m_TabExtensions.size()))
+		{
+			if (m_TabExtensions[static_cast<std::size_t>(m_SelectedExtensionTab)].renderer)
+				m_TabExtensions[static_cast<std::size_t>(m_SelectedExtensionTab)].renderer();
+		}
+		else switch (m_SelectedTab)
 		{
 		case SettingsPanel::Tab::System:
 			renderSystemTab();
@@ -712,9 +721,23 @@ namespace SST
 		for (int i = 0; i < tabCount; ++i)
 		{
 			const auto tab = static_cast<SettingsPanel::Tab>(i);
-			const bool selected = (m_SelectedTab == tab);
+			const bool selected = m_SelectedExtensionTab < 0 && (m_SelectedTab == tab);
 			if (ImGui::Selectable(tabs[i], selected))
+			{
 				m_SelectedTab = tab;
+				m_SelectedExtensionTab = -1;
+			}
+		}
+
+		if (!m_TabExtensions.empty())
+		{
+			ImGui::Separator();
+			for (std::size_t index = 0; index < m_TabExtensions.size(); ++index)
+			{
+				const bool selected = m_SelectedExtensionTab == static_cast<int>(index);
+				if (ImGui::Selectable(m_TabExtensions[index].title.c_str(), selected))
+					m_SelectedExtensionTab = static_cast<int>(index);
+			}
 		}
 	}
 

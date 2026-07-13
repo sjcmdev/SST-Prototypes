@@ -13,7 +13,6 @@ namespace SST::Prototypes::JFM
 		PanelId importStatus = 0;
 		PanelId rawPlot = 0;
 		PanelId details = 0;
-		PanelId settings = 0;
 	};
 
 	void RenderJFMMenu(

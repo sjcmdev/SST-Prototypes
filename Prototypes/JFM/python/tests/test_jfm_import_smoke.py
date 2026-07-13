@@ -108,10 +108,26 @@ def test_cpp_adapter_applies_parse_options(monkeypatch) -> None:
 
     result = import_file(
         REPO / "Prototypes/JFM/example-data/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat",
-        {"parser": "dat", "name_pattern": "curve_{stem}", "decimal_separator": "auto"},
+        {
+            "parser": "dat",
+            "name_pattern": "curve_{stem}",
+            "short_name_pattern": "{sample}_{T}",
+            "variable_delimiter": "_",
+            "custom_variables": [
+                {
+                    "name": "sample",
+                    "source": "stem",
+                    "token_index": 1,
+                    "substring_start": 0,
+                    "substring_length": -1,
+                }
+            ],
+            "decimal_separator": "auto",
+        },
     )
 
     assert result["characteristics"][0].info.name.startswith("curve_IV_C002")
+    assert result["characteristics"][0].info.metadata["short_name"] == "C002_300.0"
 
 
 def test_cpp_adapter_custom_script(monkeypatch, tmp_path: Path) -> None:

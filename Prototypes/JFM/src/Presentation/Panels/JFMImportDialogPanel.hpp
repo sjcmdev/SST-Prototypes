@@ -42,11 +42,23 @@ namespace SST::Prototypes::JFM
 		void Render() override;
 
 	private:
+		struct VariableRuleDraft
+		{
+			std::array<char, 32> name = {};
+			int source = 0;
+			int tokenIndex = -1;
+			int substringStart = 0;
+			int substringLength = -1;
+		};
+
 		void loadRequest(JFMImportDialogRequest request);
 		void refreshPreviewFiles();
 		void applyPreviewFolderFilter();
+		void renderCustomVariables();
+		void renderVariablePreviewTable() const;
 		void renderPreviewWindow();
 		[[nodiscard]] JFMImportOptions buildOptions() const;
+		[[nodiscard]] std::vector<JFMNameVariableRule> buildVariableRules() const;
 		[[nodiscard]] std::string previewName() const;
 		[[nodiscard]] std::string previewShortName() const;
 		[[nodiscard]] std::string previewFileText() const;
@@ -76,6 +88,7 @@ namespace SST::Prototypes::JFM
 		std::vector<std::string> m_PreviewFolders;
 		std::vector<std::string> m_PreviewFolderLabels;
 		std::vector<int> m_SelectedPreviewFileIndices;
+		std::vector<VariableRuleDraft> m_CustomVariables;
 		std::array<char, 160> m_NamePattern = {};
 		std::array<char, 160> m_ShortNamePattern = {};
 		std::array<char, 32> m_VariableDelimiter = {};

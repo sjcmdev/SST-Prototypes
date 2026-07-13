@@ -44,6 +44,18 @@ namespace SST::Prototypes::JFM
 		{
 			out << YAML::Flow << YAML::BeginSeq << color[0] << color[1] << color[2] << color[3] << YAML::EndSeq;
 		}
+
+		bool HasPreset(const std::vector<JFMColorPreset> &presets, const std::string &name)
+		{
+			return std::any_of(presets.begin(), presets.end(), [&name](const JFMColorPreset &preset) {
+				return preset.name == name;
+			});
+		}
+
+		std::string FirstPresetName(const std::vector<JFMColorPreset> &presets)
+		{
+			return presets.empty() ? std::string{} : presets.front().name;
+		}
 	}
 
 	JFMUserSettingsStore::JFMUserSettingsStore(Path configDirectory, Path prototypeRoot)
@@ -107,6 +119,7 @@ namespace SST::Prototypes::JFM
 			m_Settings.defaultPlotShowLegend = root["default_plot_show_legend"] ? root["default_plot_show_legend"].as<bool>() : m_Settings.defaultPlotShowLegend;
 			m_Settings.defaultPlotFitPadding = root["default_plot_fit_padding"] ? root["default_plot_fit_padding"].as<float>() : m_Settings.defaultPlotFitPadding;
 			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
+			m_Settings.defaultColorPresetName = root["default_color_preset"] ? root["default_color_preset"].as<std::string>() : m_Settings.defaultColorPresetName;
 			if (const YAML::Node presets = root["color_presets"])
 			{
 				m_Settings.colorPresets.clear();
@@ -119,6 +132,8 @@ namespace SST::Prototypes::JFM
 					m_Settings.colorPresets.push_back(std::move(preset));
 				}
 			}
+			if (!HasPreset(m_Settings.colorPresets, m_Settings.defaultColorPresetName))
+				m_Settings.defaultColorPresetName = FirstPresetName(m_Settings.colorPresets);
 			m_Settings.recentProjects.clear();
 			if (const YAML::Node recent = root["recent_projects"])
 			{
@@ -145,6 +160,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "default_plot_show_legend" << YAML::Value << snapshot.defaultPlotShowLegend;
 		out << YAML::Key << "default_plot_fit_padding" << YAML::Value << snapshot.defaultPlotFitPadding;
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
+		out << YAML::Key << "default_color_preset" << YAML::Value << snapshot.defaultColorPresetName;
 		out << YAML::Key << "color_presets" << YAML::Value << YAML::BeginSeq;
 		for (const JFMColorPreset &preset : snapshot.colorPresets)
 		{
@@ -223,6 +239,19 @@ namespace SST::Prototypes::JFM
 		{
 			std::scoped_lock lock(m_Mutex);
 			m_Settings.colorPresets = std::move(presets);
+			if (!HasPreset(m_Settings.colorPresets, m_Settings.defaultColorPresetName))
+				m_Settings.defaultColorPresetName = FirstPresetName(m_Settings.colorPresets);
+		}
+		Save();
+	}
+
+	void JFMUserSettingsStore::SetDefaultColorPreset(std::string presetName)
+	{
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.defaultColorPresetName = HasPreset(m_Settings.colorPresets, presetName)
+				? std::move(presetName)
+				: FirstPresetName(m_Settings.colorPresets);
 		}
 		Save();
 	}
@@ -273,6 +302,7 @@ namespace SST::Prototypes::JFM
 			JFMColorPreset{"Green/Yellow", {0.10f, 0.85f, 0.35f, 1.00f}, {1.00f, 0.90f, 0.15f, 1.00f}},
 			JFMColorPreset{"Violet/Red", {0.58f, 0.20f, 0.95f, 1.00f}, {1.00f, 0.18f, 0.18f, 1.00f}},
 		};
+		settings.defaultColorPresetName = settings.colorPresets.front().name;
 		return settings;
 	}
 } // namespace SST::Prototypes::JFM

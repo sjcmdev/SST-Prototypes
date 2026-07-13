@@ -111,6 +111,16 @@ namespace SST::Prototypes::JFM
 				return it->second;
 			return name;
 		}
+
+		const JFMColorPreset *findPreset(const JFMUserSettings &settings, const std::string &name)
+		{
+			auto it = std::find_if(settings.colorPresets.begin(), settings.colorPresets.end(), [&name](const JFMColorPreset &preset) {
+				return preset.name == name;
+			});
+			if (it != settings.colorPresets.end())
+				return &*it;
+			return settings.colorPresets.empty() ? nullptr : &settings.colorPresets.front();
+		}
 	}
 
 	RawPlotPanel::RawPlotPanel(
@@ -152,10 +162,10 @@ namespace SST::Prototypes::JFM
 			area.autoFit = settings.defaultPlotAutoFit;
 			area.showLegend = settings.defaultPlotShowLegend;
 			area.fitPadding = settings.defaultPlotFitPadding;
-			if (!settings.colorPresets.empty())
+			if (const JFMColorPreset *preset = findPreset(settings, settings.defaultColorPresetName))
 			{
-				area.gradientStart = settings.colorPresets.front().start;
-				area.gradientEnd = settings.colorPresets.front().end;
+				area.gradientStart = preset->start;
+				area.gradientEnd = preset->end;
 			}
 		}
 		return area;

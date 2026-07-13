@@ -11,6 +11,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Presentation/EditorUiState.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
+#include "Presentation/Panels/SettingsPanel.hpp"
 
 namespace SST
 {
@@ -70,6 +71,7 @@ namespace SST
 		[[nodiscard]] WeakRef<IPanel> FindPanel(PanelId panelId);
 		[[nodiscard]] WeakRef<const IPanel> FindPanel(PanelId panelId) const;
 		void RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer);
+		void RegisterSettingsTab(SettingsTabExtension extension);
 
 		void OnDetach() override;
 		void OnEvent(Event &event) override;
@@ -95,6 +97,7 @@ namespace SST
 
 		PanelRegistry m_Panels;
 		std::vector<MenuRendererEntry> m_MenuRenderers;
+		std::vector<SettingsTabExtension> m_SettingsTabs;
 		Ref<EditorUiState> m_UiState;
 		Ref<ApplicationConfig> m_CurrentConfig;
 		Ref<EventBus> m_EventBus;

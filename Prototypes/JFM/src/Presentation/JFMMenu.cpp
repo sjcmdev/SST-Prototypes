@@ -147,7 +147,6 @@ namespace SST::Prototypes::JFM
 			panelMenuItem(editorLayer, panelIds.importStatus, "Import Status");
 			panelMenuItem(editorLayer, panelIds.rawPlot, "Raw Plot");
 			panelMenuItem(editorLayer, panelIds.details, "Characteristic Details");
-			panelMenuItem(editorLayer, panelIds.settings, "JFM Settings");
 			ImGui::EndMenu();
 		}
 	}
