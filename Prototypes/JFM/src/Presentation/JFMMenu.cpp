@@ -22,6 +22,7 @@ namespace SST::Prototypes::JFM
 
 	void execute(EditorServices &services, const char *commandId, const char *source, CommandContext context)
 	{
+		(void)source;
 		auto registry = services.commandRegistry.lock();
 		if (registry == nullptr)
 		{

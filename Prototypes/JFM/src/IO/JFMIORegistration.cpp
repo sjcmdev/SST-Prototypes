@@ -138,16 +138,16 @@ namespace SST::Prototypes::JFM
 		return filesByFolder;
 	}
 
-	void AddDirectoryImportGroups(const Path &directory, bool recursive, std::vector<JFMImportGroup> &groups)
+	void AddDirectoryImportGroups(const Path &directory, bool recursive, const std::string &targetSeriesId, std::vector<JFMImportGroup> &groups)
 	{
 		for (auto &[folder, paths] : DataFilesByFolder(directory, recursive))
 		{
 			const Path folderPath = Path::FromResolved(folder);
 			groups.push_back(JFMImportGroup{
 				std::move(paths),
-				{},
-				ParentGroupPathForFolder(directory, folderPath),
-				FolderName(folderPath)});
+				targetSeriesId,
+				targetSeriesId.empty() ? ParentGroupPathForFolder(directory, folderPath) : std::vector<std::string>{},
+				targetSeriesId.empty() ? FolderName(folderPath) : std::string{}});
 		}
 	}
 
@@ -158,7 +158,7 @@ namespace SST::Prototypes::JFM
 		for (const Path &path : event.paths)
 		{
 			if (IsDirectory(path))
-				AddDirectoryImportGroups(path, event.recursive, groups);
+				AddDirectoryImportGroups(path, event.recursive, event.targetSeriesId, groups);
 			else if (IsRegularFile(path) || !FileSystem::Exists(path.Native()))
 				filePaths.push_back(path);
 		}

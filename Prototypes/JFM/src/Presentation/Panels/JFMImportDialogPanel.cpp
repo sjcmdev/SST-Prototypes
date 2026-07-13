@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <imgui.h>
@@ -84,6 +85,46 @@ namespace SST::Prototypes::JFM
 				if (entry.is_regular_file(fileError) && IsDataFile(path))
 					files.push_back(path);
 			}
+		}
+
+		bool ContainsIndex(const std::vector<int> &indices, int index)
+		{
+			return std::find(indices.begin(), indices.end(), index) != indices.end();
+		}
+
+		ImVec4 PreviewColor(std::size_t index)
+		{
+			return ImColor::HSV(static_cast<float>(std::fmod(index * 0.173, 1.0)), 0.74f, 0.95f).Value;
+		}
+
+		void ApplyPreviewScale(int scale, std::vector<double> &x, std::vector<double> &y)
+		{
+			if (scale == 0)
+				return;
+
+			std::vector<double> nextX;
+			std::vector<double> nextY;
+			nextX.reserve(std::min(x.size(), y.size()));
+			nextY.reserve(std::min(x.size(), y.size()));
+			for (std::size_t index = 0; index < x.size() && index < y.size(); ++index)
+			{
+				if (scale == 1)
+				{
+					const double value = std::abs(y[index]);
+					if (value <= 0.0)
+						continue;
+					nextX.push_back(x[index]);
+					nextY.push_back(value);
+				}
+				else
+				{
+					const double sign = y[index] < 0.0 ? -1.0 : 1.0;
+					nextX.push_back(x[index]);
+					nextY.push_back(sign * std::log10(1.0 + std::abs(y[index])));
+				}
+			}
+			x = std::move(nextX);
+			y = std::move(nextY);
 		}
 	}
 
@@ -203,6 +244,8 @@ namespace SST::Prototypes::JFM
 		m_Delimiter.fill('\0');
 		m_CustomScriptPath.fill('\0');
 		m_PreviewFileIndex = 0;
+		m_PreviewScale = 0;
+		m_SelectedPreviewFileIndices.clear();
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
 		refreshPreviewFiles();
 	}
@@ -222,6 +265,14 @@ namespace SST::Prototypes::JFM
 		});
 		if (m_PreviewFileIndex >= static_cast<int>(m_PreviewFiles.size()))
 			m_PreviewFileIndex = 0;
+		m_SelectedPreviewFileIndices.erase(
+			std::remove_if(
+				m_SelectedPreviewFileIndices.begin(),
+				m_SelectedPreviewFileIndices.end(),
+				[this](int index) { return index < 0 || index >= static_cast<int>(m_PreviewFiles.size()); }),
+			m_SelectedPreviewFileIndices.end());
+		if (m_SelectedPreviewFileIndices.empty() && !m_PreviewFiles.empty())
+			m_SelectedPreviewFileIndices.push_back(0);
 	}
 
 	void JFMImportDialogPanel::renderPreviewWindow()
@@ -242,26 +293,67 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		ImGui::SetNextItemWidth(360.0f);
-		if (ImGui::BeginCombo("File", m_PreviewFiles[static_cast<std::size_t>(m_PreviewFileIndex)].filename().String().c_str()))
+		ImGui::BeginChild("##jfm_preview_files", ImVec2(360.0f, 0.0f), true);
+		if (ImGui::Button("All"))
 		{
+			m_SelectedPreviewFileIndices.clear();
+			m_SelectedPreviewFileIndices.reserve(m_PreviewFiles.size());
 			for (std::size_t index = 0; index < m_PreviewFiles.size(); ++index)
-			{
-				const bool selected = static_cast<int>(index) == m_PreviewFileIndex;
-				if (ImGui::Selectable(m_PreviewFiles[index].String().c_str(), selected))
-					m_PreviewFileIndex = static_cast<int>(index);
-				if (selected)
-					ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
+				m_SelectedPreviewFileIndices.push_back(static_cast<int>(index));
 		}
-
-		std::vector<double> x;
-		std::vector<double> y;
-		if (buildPreviewCurve(x, y) && ImPlot::BeginPlot("Mini Plot", ImVec2(460.0f, 220.0f)))
+		ImGui::SameLine();
+		if (ImGui::Button("Clear"))
+			m_SelectedPreviewFileIndices.clear();
+		ImGui::Separator();
+		for (std::size_t index = 0; index < m_PreviewFiles.size(); ++index)
 		{
-			ImPlot::SetupAxes("x", "y");
-			ImPlot::PlotLine("preview", x.data(), y.data(), static_cast<int>(std::min(x.size(), y.size())));
+			const int itemIndex = static_cast<int>(index);
+			const bool selected = ContainsIndex(m_SelectedPreviewFileIndices, itemIndex);
+			const std::string label = m_PreviewFiles[index].filename().String() + "##preview_file_" + std::to_string(index);
+			if (ImGui::Selectable(label.c_str(), selected))
+			{
+				const bool append = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift;
+				if (!append)
+					m_SelectedPreviewFileIndices.clear();
+				if (selected && append)
+					m_SelectedPreviewFileIndices.erase(std::remove(m_SelectedPreviewFileIndices.begin(), m_SelectedPreviewFileIndices.end(), itemIndex), m_SelectedPreviewFileIndices.end());
+				else if (!ContainsIndex(m_SelectedPreviewFileIndices, itemIndex))
+					m_SelectedPreviewFileIndices.push_back(itemIndex);
+				m_PreviewFileIndex = itemIndex;
+			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("%s", m_PreviewFiles[index].String().c_str());
+		}
+		ImGui::EndChild();
+		ImGui::SameLine();
+
+		ImGui::BeginChild("##jfm_preview_plot_and_text", ImVec2(0.0f, 0.0f), false);
+		ImGui::RadioButton("Linear", &m_PreviewScale, 0);
+		ImGui::SameLine();
+		ImGui::RadioButton("Semi-log", &m_PreviewScale, 1);
+		ImGui::SameLine();
+		ImGui::RadioButton("Signed-log", &m_PreviewScale, 2);
+		const std::vector<Path> previewPaths = selectedPreviewPaths();
+		const float plotHeight = std::max(360.0f, ImGui::GetContentRegionAvail().y * 0.58f);
+		if (!previewPaths.empty() && ImPlot::BeginPlot("Preview Plot", ImVec2(-1.0f, plotHeight)))
+		{
+			ImPlot::SetupAxes("x", m_PreviewScale == 2 ? "signed log y" : "y");
+			ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
+			if (m_PreviewScale == 1)
+				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+			for (std::size_t index = 0; index < previewPaths.size(); ++index)
+			{
+				std::vector<double> x;
+				std::vector<double> y;
+				if (!buildPreviewCurve(previewPaths[index], x, y))
+					continue;
+				ApplyPreviewScale(m_PreviewScale, x, y);
+				if (x.empty() || y.empty())
+					continue;
+				const ImPlotSpec spec(ImPlotProp_LineColor, PreviewColor(index));
+				const std::string label = previewPaths[index].filename().String() + "##preview_plot_" + std::to_string(index);
+				ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(std::min(x.size(), y.size())), spec);
+			}
 			ImPlot::EndPlot();
 		}
 		else
@@ -271,8 +363,9 @@ namespace SST::Prototypes::JFM
 
 		const std::string preview = previewFileText();
 		ImGui::SeparatorText("Text");
-		ImGui::BeginChild("##jfm_import_text_preview", ImVec2(640.0f, 220.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
+		ImGui::BeginChild("##jfm_import_text_preview", ImVec2(0.0f, 220.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
 		ImGui::TextUnformatted(preview.empty() ? "No preview" : preview.c_str());
+		ImGui::EndChild();
 		ImGui::EndChild();
 		ImGui::End();
 	}
@@ -327,11 +420,25 @@ namespace SST::Prototypes::JFM
 		return m_Request.paths.empty() ? Path{} : m_Request.paths.front();
 	}
 
-	bool JFMImportDialogPanel::buildPreviewCurve(std::vector<double> &x, std::vector<double> &y) const
+	std::vector<Path> JFMImportDialogPanel::selectedPreviewPaths() const
+	{
+		std::vector<Path> paths;
+		paths.reserve(m_SelectedPreviewFileIndices.size());
+		for (int index : m_SelectedPreviewFileIndices)
+		{
+			if (index >= 0 && index < static_cast<int>(m_PreviewFiles.size()))
+				paths.push_back(m_PreviewFiles[static_cast<std::size_t>(index)]);
+		}
+		if (paths.empty() && !m_PreviewFiles.empty())
+			paths.push_back(selectedPreviewPath());
+		return paths;
+	}
+
+	bool JFMImportDialogPanel::buildPreviewCurve(const Path &path, std::vector<double> &x, std::vector<double> &y) const
 	{
 		std::string text;
 		std::string error;
-		if (!TextFileIO::Load(selectedPreviewPath(), text, error))
+		if (!TextFileIO::Load(path, text, error))
 			return false;
 
 		std::istringstream lines(text);

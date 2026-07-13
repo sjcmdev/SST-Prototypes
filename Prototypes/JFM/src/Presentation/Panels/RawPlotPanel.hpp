@@ -4,6 +4,9 @@
 #include "Presentation/Panels/IPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
+#include <array>
+#include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 namespace SST::Prototypes::JFM
@@ -25,11 +28,19 @@ namespace SST::Prototypes::JFM
 	private:
 		struct PlotArea
 		{
+			std::uint64_t id = 0;
 			std::vector<CharacteristicId> characteristicIds;
 			PlotScale scale = PlotScale::Linear;
 		};
 
+		[[nodiscard]] PlotArea CreatePlotArea();
+		void PlotIds(std::vector<CharacteristicId> ids);
+		void PlotSeries(const std::string &seriesId);
+		void PlotSelectedGroup();
+
 		Ref<JFMWorkspaceStore> m_Store;
 		std::vector<PlotArea> m_PlotAreas;
+		std::uint64_t m_NextPlotAreaId = 1;
+		std::unordered_map<CharacteristicId, std::array<float, 4>> m_ColorOverrides;
 	};
 } // namespace SST::Prototypes::JFM

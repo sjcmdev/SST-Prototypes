@@ -245,6 +245,7 @@ namespace SST::Prototypes::JFM
 		};
 
 		const auto renderSeriesNode = [&](const JFMSeries &series, const auto &renderSeriesNodeRef) -> void {
+			(void)renderSeriesNodeRef;
 			const std::string seriesLabel = series.name + "##" + series.id;
 			const bool open = ImGui::TreeNodeEx(seriesLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 			if (ImGui::BeginDragDropTarget())

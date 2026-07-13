@@ -50,21 +50,83 @@ namespace SST::Prototypes::JFM
 
 		ImVec4 colorFor(const JFMCharacteristicInfo &info)
 		{
-			const double seed = info.temperatureK.value_or(static_cast<double>(info.id % 997));
-			const float hue = static_cast<float>(std::fmod(seed * 0.013, 1.0));
-			return ImColor::HSV(hue, 0.72f, 0.92f).Value;
+			const float hue = static_cast<float>(std::fmod(static_cast<double>((info.id * 37) % 997) / 997.0, 1.0));
+			return ImColor::HSV(hue, 0.78f, 0.96f).Value;
+		}
+
+		std::array<float, 4> toArray(const ImVec4 &color)
+		{
+			return {color.x, color.y, color.z, color.w};
+		}
+
+		ImVec4 toVec4(const std::array<float, 4> &color)
+		{
+			return {color[0], color[1], color[2], color[3]};
+		}
+
+		void appendUnique(std::vector<CharacteristicId> &target, const std::vector<CharacteristicId> &ids)
+		{
+			for (CharacteristicId id : ids)
+			{
+				if (id != InvalidCharacteristicId && std::find(target.begin(), target.end(), id) == target.end())
+					target.push_back(id);
+			}
 		}
 	}
 
 	RawPlotPanel::RawPlotPanel(Ref<JFMWorkspaceStore> store, std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault), m_Store(std::move(store))
 	{
-		m_PlotAreas.push_back({});
+		m_PlotAreas.push_back(CreatePlotArea());
 	}
 
 	Ref<IPanel> RawPlotPanel::Clone() const
 	{
 		return CreateRef<RawPlotPanel>(*this);
+	}
+
+	RawPlotPanel::PlotArea RawPlotPanel::CreatePlotArea()
+	{
+		PlotArea area;
+		area.id = m_NextPlotAreaId++;
+		return area;
+	}
+
+	void RawPlotPanel::PlotIds(std::vector<CharacteristicId> ids)
+	{
+		if (ids.empty())
+			return;
+		PlotArea area = CreatePlotArea();
+		appendUnique(area.characteristicIds, ids);
+		m_PlotAreas.push_back(std::move(area));
+	}
+
+	void RawPlotPanel::PlotSeries(const std::string &seriesId)
+	{
+		if (m_Store == nullptr || seriesId.empty())
+			return;
+		std::vector<CharacteristicId> ids;
+		for (const JFMCharacteristic &characteristic : m_Store->GetSeriesCharacteristics(seriesId))
+			ids.push_back(characteristic.info.id);
+		PlotIds(std::move(ids));
+	}
+
+	void RawPlotPanel::PlotSelectedGroup()
+	{
+		if (m_Store == nullptr)
+			return;
+		const std::string selectedSeriesId = m_Store->GetSelectedSeriesId();
+		const JFMProject project = m_Store->GetProjectSnapshot();
+		const auto seriesIt = std::find_if(project.series.begin(), project.series.end(), [&selectedSeriesId](const JFMSeries &series) {
+			return series.id == selectedSeriesId;
+		});
+		if (seriesIt == project.series.end() || seriesIt->groupId.empty())
+			return;
+
+		std::vector<CharacteristicId> ids;
+		for (const JFMCharacteristic &characteristic : m_Store->GetGroupCharacteristics(seriesIt->groupId))
+			ids.push_back(characteristic.info.id);
+		PlotIds(std::move(ids));
 	}
 
 	void RawPlotPanel::Render()
@@ -73,7 +135,8 @@ namespace SST::Prototypes::JFM
 			return;
 
 		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible))
+		const std::string managerTitle = GetTitle() + " Manager###jfm_raw_plot_manager";
+		if (!ImGui::Begin(managerTitle.c_str(), &visible))
 		{
 			ImGui::End();
 			SetVisible(visible);
@@ -88,15 +151,17 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		if (ImGui::Button("+ Plot Window"))
-			m_PlotAreas.push_back({});
+		if (ImGui::Button("+ Empty Plot"))
+			m_PlotAreas.push_back(CreatePlotArea());
 		ImGui::SameLine();
-		if (ImGui::Button("Use Selection"))
-		{
-			if (m_PlotAreas.empty())
-				m_PlotAreas.push_back({});
-			m_PlotAreas.front().characteristicIds = m_Store->GetSelectedCharacteristicIds();
-		}
+		if (ImGui::Button("Plot Selection"))
+			PlotIds(m_Store->GetSelectedCharacteristicIds());
+		ImGui::SameLine();
+		if (ImGui::Button("Plot Series"))
+			PlotSeries(m_Store->GetSelectedSeriesId());
+		ImGui::SameLine();
+		if (ImGui::Button("Plot Group"))
+			PlotSelectedGroup();
 		ImGui::TextDisabled("Plot windows: %d", static_cast<int>(m_PlotAreas.size()));
 		ImGui::End();
 		SetVisible(visible);
@@ -104,13 +169,13 @@ namespace SST::Prototypes::JFM
 			return;
 
 		if (m_PlotAreas.empty())
-			m_PlotAreas.push_back({});
+			m_PlotAreas.push_back(CreatePlotArea());
 
 		for (std::size_t areaIndex = 0; areaIndex < m_PlotAreas.size();)
 		{
 			PlotArea &area = m_PlotAreas[areaIndex];
 			bool plotVisible = true;
-			const std::string windowTitle = "Raw Plot " + std::to_string(areaIndex + 1) + "###jfm_raw_plot_window_" + std::to_string(areaIndex);
+			const std::string windowTitle = "Raw Plot " + std::to_string(area.id) + "###jfm_raw_plot_window_" + std::to_string(area.id);
 			if (!ImGui::Begin(windowTitle.c_str(), &plotVisible))
 			{
 				ImGui::End();
@@ -121,9 +186,9 @@ namespace SST::Prototypes::JFM
 				continue;
 			}
 
-			ImGui::PushID(static_cast<int>(areaIndex));
+			ImGui::PushID(static_cast<int>(area.id));
 			if (ImGui::Button("Use Selection"))
-				area.characteristicIds = m_Store->GetSelectedCharacteristicIds();
+				appendUnique(area.characteristicIds, m_Store->GetSelectedCharacteristicIds());
 			ImGui::SameLine();
 			if (ImGui::Button("Clear"))
 				area.characteristicIds.clear();
@@ -144,6 +209,8 @@ namespace SST::Prototypes::JFM
 			ImGui::RadioButton("Signed-log", &scale, static_cast<int>(PlotScale::SignedLog));
 			area.scale = static_cast<PlotScale>(scale);
 
+			ImGui::BeginChild("##curves", ImVec2(360.0f, 0.0f), true);
+			ImGui::TextDisabled("Curves");
 			for (std::size_t idIndex = 0; idIndex < area.characteristicIds.size();)
 			{
 				const CharacteristicId id = area.characteristicIds[idIndex];
@@ -156,18 +223,25 @@ namespace SST::Prototypes::JFM
 					continue;
 				}
 				ImGui::SameLine();
-				ImGui::TextUnformatted(characteristic ? characteristic->info.name.c_str() : std::to_string(id).c_str());
+				std::array<float, 4> &color = m_ColorOverrides.try_emplace(id, toArray(colorFor(characteristic ? characteristic->info : JFMCharacteristicInfo{id}))).first->second;
+				ImGui::ColorEdit4("##color", color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+				ImGui::SameLine();
+				ImGui::Selectable(characteristic ? characteristic->info.name.c_str() : std::to_string(id).c_str(), false);
 				ImGui::PopID();
 				++idIndex;
 			}
 
 			if (area.characteristicIds.empty())
 				ImGui::TextDisabled("Drop characteristics here or use selection.");
+			ImGui::EndChild();
+			ImGui::SameLine();
 
-			const std::string plotId = "##jfm_raw_plot_" + std::to_string(areaIndex);
-			if (ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, 260.0f)))
+			const std::string plotId = "##jfm_raw_plot_" + std::to_string(area.id);
+			const float plotHeight = std::max(360.0f, ImGui::GetContentRegionAvail().y);
+			if (ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, plotHeight)))
 			{
 				ImPlot::SetupAxes("Voltage", area.scale == PlotScale::SignedLog ? "signed log current" : "Current");
+				ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
 				if (area.scale == PlotScale::SemiLog)
 					ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
 
@@ -182,7 +256,8 @@ namespace SST::Prototypes::JFM
 					if (count == 0)
 						continue;
 
-					const ImPlotSpec spec(ImPlotProp_LineColor, colorFor(characteristic->info));
+					std::array<float, 4> &color = m_ColorOverrides.try_emplace(id, toArray(colorFor(characteristic->info))).first->second;
+					const ImPlotSpec spec(ImPlotProp_LineColor, toVec4(color));
 					if (area.scale == PlotScale::Linear)
 					{
 						ImPlot::PlotLine(characteristic->info.name.c_str(), x.data(), rawY.data(), static_cast<int>(count), spec);
