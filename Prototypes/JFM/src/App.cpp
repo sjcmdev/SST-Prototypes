@@ -13,6 +13,7 @@
 #include "IO/JFMPythonBindings.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/JFMMenu.hpp"
+#include "Presentation/JFMPlotRequestState.hpp"
 #include "Presentation/Panels/CharacteristicDetailsPanel.hpp"
 #include "Presentation/Panels/ImportStatusPanel.hpp"
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
@@ -30,16 +31,17 @@ namespace SST
 		Application &application,
 		Ref<JFMWorkspaceStore> workspace,
 		Ref<JFMUserSettingsStore> settings,
-		Ref<JFMImportDialogState> importDialog)
+		Ref<JFMImportDialogState> importDialog,
+		Ref<JFMPlotRequestState> plotRequests)
 	{
 		
 		EditorLayer &editorLayer = application.GetEditorLayer();
 
 		JFMPanelIds panelIds;
-		panelIds.projectTree = editorLayer.RegisterPanel<ProjectTreePanel>(workspace, settings, importDialog, application.GetEventBusRef());
+		panelIds.projectTree = editorLayer.RegisterPanel<ProjectTreePanel>(workspace, settings, importDialog, plotRequests, application.GetEventBusRef());
 		panelIds.overview = editorLayer.RegisterPanel<JFMOverviewPanel>(workspace);
 		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
-		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace);
+		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace, plotRequests);
 		panelIds.details = editorLayer.RegisterPanel<CharacteristicDetailsPanel>(workspace);
 		panelIds.settings = editorLayer.RegisterPanel<JFMSettingsPanel>(settings);
 		editorLayer.RegisterPanel<JFMImportDialogPanel>(application.GetEventBusRef(), workspace, importDialog);
@@ -64,6 +66,7 @@ namespace SST
 		settings->Load();
 		workspace->EnsureDefaultScripts(settings->GetDefaultScriptsDirectory());
 		auto importDialog = CreateRef<JFMImportDialogState>();
+		auto plotRequests = CreateRef<JFMPlotRequestState>();
 		RegisterJFMIOHandlers(
 			application.GetIOLayer(),
 			JFMIORegistrationContext{
@@ -73,7 +76,7 @@ namespace SST
 				settings,
 				ResolveJFMPythonRoot(*runtime.config)});
 		application.InsertLayerBefore(LayerId::ImGui, CreateUnique<JFMDomainLayer>(workspace));
-		RegisterJFMEditor(application, workspace, settings, importDialog);
+		RegisterJFMEditor(application, workspace, settings, importDialog, plotRequests);
 		RegisterJFMCommands(JFMCommandRegistrationContext{
 			eventBus,
 			runtime.commandRegistry,

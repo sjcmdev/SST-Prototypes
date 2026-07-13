@@ -41,6 +41,10 @@ namespace SST::Prototypes::JFM
 		bool DeleteSeries(const std::string &seriesId);
 		bool DeleteGroup(const std::string &groupId);
 		bool MoveCharacteristic(const CharacteristicId &id, const std::string &targetSeriesId);
+		bool RenameProject(std::string name);
+		bool RenameGroup(const std::string &groupId, std::string name);
+		bool RenameSeries(const std::string &seriesId, std::string name);
+		bool RenameCharacteristic(const CharacteristicId &id, std::string name);
 		JFMScriptInfo AddScript(Path path);
 		void EnsureDefaultScripts(Path scriptsDirectory);
 		bool RemoveScript(const std::string &scriptId);

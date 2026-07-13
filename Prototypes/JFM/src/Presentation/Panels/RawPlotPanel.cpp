@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 #include <imgui.h>
 #include <implot.h>
@@ -36,18 +37,6 @@ namespace SST::Prototypes::JFM
 			return filteredY;
 		}
 
-		std::vector<double> signedLog(const std::vector<double> &values)
-		{
-			std::vector<double> transformed;
-			transformed.reserve(values.size());
-			for (double value : values)
-			{
-				const double sign = value < 0.0 ? -1.0 : 1.0;
-				transformed.push_back(sign * std::log10(1.0 + std::abs(value)));
-			}
-			return transformed;
-		}
-
 		ImVec4 colorFor(const JFMCharacteristicInfo &info)
 		{
 			const float hue = static_cast<float>(std::fmod(static_cast<double>((info.id * 37) % 997) / 997.0, 1.0));
@@ -72,10 +61,51 @@ namespace SST::Prototypes::JFM
 					target.push_back(id);
 			}
 		}
+
+		bool containsId(const std::vector<CharacteristicId> &ids, CharacteristicId id)
+		{
+			return std::find(ids.begin(), ids.end(), id) != ids.end();
+		}
+
+		void setHidden(std::vector<CharacteristicId> &ids, CharacteristicId id, bool hidden)
+		{
+			ids.erase(std::remove(ids.begin(), ids.end(), id), ids.end());
+			if (hidden)
+				ids.push_back(id);
+		}
+
+		std::string shortName(const JFMCharacteristicInfo &info)
+		{
+			if (const auto it = info.metadata.find("short_name"); it != info.metadata.end() && !it->second.empty())
+				return it->second;
+			const std::size_t separator = info.name.find('_');
+			if (separator != std::string::npos && separator > 0 && separator <= 16)
+				return info.name.substr(0, separator);
+			if (info.name.size() > 32)
+				return info.name.substr(0, 29) + "...";
+			return info.name.empty() ? std::to_string(info.id) : info.name;
+		}
+
+		void includeBounds(double x, double y, bool &hasBounds, double &minX, double &maxX, double &minY, double &maxY)
+		{
+			if (!std::isfinite(x) || !std::isfinite(y))
+				return;
+			if (!hasBounds)
+			{
+				minX = maxX = x;
+				minY = maxY = y;
+				hasBounds = true;
+				return;
+			}
+			minX = std::min(minX, x);
+			maxX = std::max(maxX, x);
+			minY = std::min(minY, y);
+			maxY = std::max(maxY, y);
+		}
 	}
 
-	RawPlotPanel::RawPlotPanel(Ref<JFMWorkspaceStore> store, std::string title, bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault), m_Store(std::move(store))
+	RawPlotPanel::RawPlotPanel(Ref<JFMWorkspaceStore> store, Ref<JFMPlotRequestState> plotRequests, std::string title, bool visibleByDefault)
+		: IPanel(std::move(title), visibleByDefault), m_Store(std::move(store)), m_PlotRequests(std::move(plotRequests))
 	{
 		m_PlotAreas.push_back(CreatePlotArea());
 	}
@@ -89,6 +119,7 @@ namespace SST::Prototypes::JFM
 	{
 		PlotArea area;
 		area.id = m_NextPlotAreaId++;
+		area.title = "Raw Plot " + std::to_string(area.id);
 		return area;
 	}
 
@@ -150,6 +181,11 @@ namespace SST::Prototypes::JFM
 			SetVisible(visible);
 			return;
 		}
+		if (m_PlotRequests != nullptr)
+		{
+			for (std::vector<CharacteristicId> ids : m_PlotRequests->ConsumeRequests())
+				PlotIds(std::move(ids));
+		}
 
 		if (ImGui::Button("+ Empty Plot"))
 			m_PlotAreas.push_back(CreatePlotArea());
@@ -174,8 +210,21 @@ namespace SST::Prototypes::JFM
 		for (std::size_t areaIndex = 0; areaIndex < m_PlotAreas.size();)
 		{
 			PlotArea &area = m_PlotAreas[areaIndex];
+			area.characteristicIds.erase(
+				std::remove_if(
+					area.characteristicIds.begin(),
+					area.characteristicIds.end(),
+					[this](CharacteristicId id) { return !m_Store->FindCharacteristic(id).has_value(); }),
+				area.characteristicIds.end());
+			area.hiddenCharacteristicIds.erase(
+				std::remove_if(
+					area.hiddenCharacteristicIds.begin(),
+					area.hiddenCharacteristicIds.end(),
+					[&area](CharacteristicId id) { return !containsId(area.characteristicIds, id); }),
+				area.hiddenCharacteristicIds.end());
+
 			bool plotVisible = true;
-			const std::string windowTitle = "Raw Plot " + std::to_string(area.id) + "###jfm_raw_plot_window_" + std::to_string(area.id);
+			const std::string windowTitle = area.title + "###jfm_raw_plot_window_" + std::to_string(area.id);
 			if (!ImGui::Begin(windowTitle.c_str(), &plotVisible))
 			{
 				ImGui::End();
@@ -187,6 +236,28 @@ namespace SST::Prototypes::JFM
 			}
 
 			ImGui::PushID(static_cast<int>(area.id));
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F2))
+			{
+				area.renaming = true;
+				std::snprintf(area.renameBuffer.data(), area.renameBuffer.size(), "%s", area.title.c_str());
+			}
+			if (area.renaming)
+			{
+				ImGui::SetNextItemWidth(260.0f);
+				if (ImGui::InputText("##plot_rename", area.renameBuffer.data(), area.renameBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue))
+				{
+					if (area.renameBuffer[0] != '\0')
+						area.title = area.renameBuffer.data();
+					area.renaming = false;
+				}
+				ImGui::SameLine();
+				if (ImGui::Button("OK"))
+				{
+					if (area.renameBuffer[0] != '\0')
+						area.title = area.renameBuffer.data();
+					area.renaming = false;
+				}
+			}
 			if (ImGui::Button("Use Selection"))
 				appendUnique(area.characteristicIds, m_Store->GetSelectedCharacteristicIds());
 			ImGui::SameLine();
@@ -206,8 +277,30 @@ namespace SST::Prototypes::JFM
 			ImGui::SameLine();
 			ImGui::RadioButton("Semi-log", &scale, static_cast<int>(PlotScale::SemiLog));
 			ImGui::SameLine();
-			ImGui::RadioButton("Signed-log", &scale, static_cast<int>(PlotScale::SignedLog));
+			ImGui::Checkbox("Auto fit", &area.autoFit);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Scroll out", &area.fitPadding, 0.0f, 0.5f, "%.2f");
+			ImGui::SameLine();
+			ImGui::Checkbox("Legend", &area.showLegend);
 			area.scale = static_cast<PlotScale>(scale);
+			ImGui::SameLine();
+			ImGui::ColorEdit4("Start", area.gradientStart.data(), ImGuiColorEditFlags_NoInputs);
+			ImGui::SameLine();
+			ImGui::ColorEdit4("End", area.gradientEnd.data(), ImGuiColorEditFlags_NoInputs);
+			ImGui::SameLine();
+			if (ImGui::Button("Apply Colors"))
+			{
+				const std::size_t count = std::max<std::size_t>(area.characteristicIds.size(), 1);
+				for (std::size_t index = 0; index < area.characteristicIds.size(); ++index)
+				{
+					const float t = count == 1 ? 0.0f : static_cast<float>(index) / static_cast<float>(count - 1);
+					std::array<float, 4> color{};
+					for (std::size_t component = 0; component < color.size(); ++component)
+						color[component] = area.gradientStart[component] + (area.gradientEnd[component] - area.gradientStart[component]) * t;
+					m_ColorOverrides[area.characteristicIds[index]] = color;
+				}
+			}
 
 			ImGui::BeginChild("##curves", ImVec2(360.0f, 0.0f), true);
 			ImGui::TextDisabled("Curves");
@@ -226,7 +319,14 @@ namespace SST::Prototypes::JFM
 				std::array<float, 4> &color = m_ColorOverrides.try_emplace(id, toArray(colorFor(characteristic ? characteristic->info : JFMCharacteristicInfo{id}))).first->second;
 				ImGui::ColorEdit4("##color", color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 				ImGui::SameLine();
-				ImGui::Selectable(characteristic ? characteristic->info.name.c_str() : std::to_string(id).c_str(), false);
+				bool shown = !containsId(area.hiddenCharacteristicIds, id);
+				if (ImGui::Checkbox("##visible", &shown))
+					setHidden(area.hiddenCharacteristicIds, id, !shown);
+				ImGui::SameLine();
+				const std::string label = characteristic ? shortName(characteristic->info) : std::to_string(id);
+				ImGui::Selectable(label.c_str(), false);
+				if (characteristic && ImGui::IsItemHovered())
+					ImGui::SetTooltip("%s", characteristic->info.name.c_str());
 				ImGui::PopID();
 				++idIndex;
 			}
@@ -238,15 +338,64 @@ namespace SST::Prototypes::JFM
 
 			const std::string plotId = "##jfm_raw_plot_" + std::to_string(area.id);
 			const float plotHeight = std::max(360.0f, ImGui::GetContentRegionAvail().y);
-			if (ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, plotHeight)))
+			const ImPlotFlags plotFlags = area.showLegend ? ImPlotFlags_None : ImPlotFlags_NoLegend;
+			if (ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, plotHeight), plotFlags))
 			{
-				ImPlot::SetupAxes("Voltage", area.scale == PlotScale::SignedLog ? "signed log current" : "Current");
-				ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
+				ImPlot::SetupAxes("Voltage", "Current");
+				if (area.showLegend)
+					ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
 				if (area.scale == PlotScale::SemiLog)
 					ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
 
+				bool hasBounds = false;
+				double minX = 0.0;
+				double maxX = 0.0;
+				double minY = 0.0;
+				double maxY = 0.0;
 				for (CharacteristicId id : area.characteristicIds)
 				{
+					if (containsId(area.hiddenCharacteristicIds, id))
+						continue;
+					auto characteristic = m_Store->FindCharacteristic(id);
+					if (!characteristic)
+						continue;
+					const std::vector<double> &x = characteristic->data.voltage;
+					const std::vector<double> &rawY = selectYValues(*characteristic);
+					for (std::size_t index = 0; index < x.size() && index < rawY.size(); ++index)
+					{
+						const double y = area.scale == PlotScale::SemiLog ? std::abs(rawY[index]) : rawY[index];
+						if (area.scale == PlotScale::SemiLog && y <= 0.0)
+							continue;
+						includeBounds(x[index], y, hasBounds, minX, maxX, minY, maxY);
+					}
+				}
+				if (area.autoFit && hasBounds)
+				{
+					double dx = maxX - minX;
+					double dy = maxY - minY;
+					if (dx <= 0.0)
+						dx = std::max(1.0, std::abs(maxX) * 0.1);
+					if (dy <= 0.0)
+						dy = std::max(1.0, std::abs(maxY) * 0.1);
+					minX -= dx * area.fitPadding;
+					maxX += dx * area.fitPadding;
+					if (area.scale == PlotScale::SemiLog)
+					{
+						minY = std::max(1.0e-30, minY / (1.0 + area.fitPadding * 4.0));
+						maxY *= 1.0 + area.fitPadding * 4.0;
+					}
+					else
+					{
+						minY -= dy * area.fitPadding;
+						maxY += dy * area.fitPadding;
+					}
+					ImPlot::SetupAxesLimits(minX, maxX, minY, maxY, ImPlotCond_Always);
+				}
+
+				for (CharacteristicId id : area.characteristicIds)
+				{
+					if (containsId(area.hiddenCharacteristicIds, id))
+						continue;
 					auto characteristic = m_Store->FindCharacteristic(id);
 					if (!characteristic)
 						continue;
@@ -258,21 +407,17 @@ namespace SST::Prototypes::JFM
 
 					std::array<float, 4> &color = m_ColorOverrides.try_emplace(id, toArray(colorFor(characteristic->info))).first->second;
 					const ImPlotSpec spec(ImPlotProp_LineColor, toVec4(color));
+					const std::string curveLabel = shortName(characteristic->info) + "###curve_" + std::to_string(id);
 					if (area.scale == PlotScale::Linear)
 					{
-						ImPlot::PlotLine(characteristic->info.name.c_str(), x.data(), rawY.data(), static_cast<int>(count), spec);
+						ImPlot::PlotLine(curveLabel.c_str(), x.data(), rawY.data(), static_cast<int>(count), spec);
 					}
-					else if (area.scale == PlotScale::SemiLog)
+					else
 					{
 						std::vector<double> filteredX;
 						std::vector<double> filteredY = absolutePositive(rawY, x, filteredX);
 						if (!filteredX.empty())
-							ImPlot::PlotLine(characteristic->info.name.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), spec);
-					}
-					else
-					{
-						std::vector<double> transformed = signedLog(rawY);
-						ImPlot::PlotLine(characteristic->info.name.c_str(), x.data(), transformed.data(), static_cast<int>(std::min(x.size(), transformed.size())), spec);
+							ImPlot::PlotLine(curveLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), spec);
 					}
 				}
 				ImPlot::EndPlot();

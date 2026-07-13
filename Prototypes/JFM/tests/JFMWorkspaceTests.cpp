@@ -120,4 +120,25 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(project.scripts.front().name, "dat_parser.py");
 		EXPECT_EQ(project.scripts.back().name, "scaps_iv_parser.py");
 	}
+
+	TEST(JFMWorkspaceStoreTests, RenamesProjectTreeItems)
+	{
+		JFMWorkspaceStore store;
+		const JFMGroup group = store.AddGroup("Group");
+		const JFMSeries series = store.AddSeries("Series", group.id);
+		JFMCharacteristic characteristic;
+		characteristic.info.name = "Curve";
+		const CharacteristicId id = store.AddCharacteristics({characteristic}, series.id).front();
+
+		EXPECT_TRUE(store.RenameProject("Renamed Project"));
+		EXPECT_TRUE(store.RenameGroup(group.id, "Renamed Group"));
+		EXPECT_TRUE(store.RenameSeries(series.id, "Renamed Series"));
+		EXPECT_TRUE(store.RenameCharacteristic(id, "Renamed Curve"));
+
+		const JFMProject project = store.GetProjectSnapshot();
+		EXPECT_EQ(project.name, "Renamed Project");
+		EXPECT_EQ(project.groups.back().name, "Renamed Group");
+		EXPECT_EQ(project.series.back().name, "Renamed Series");
+		EXPECT_EQ(store.FindCharacteristic(id)->info.name, "Renamed Curve");
+	}
 } // namespace SST::Prototypes::JFM

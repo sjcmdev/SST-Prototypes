@@ -353,6 +353,51 @@ namespace SST::Prototypes::JFM
 		return true;
 	}
 
+	bool JFMWorkspaceStore::RenameProject(std::string name)
+	{
+		if (name.empty())
+			return false;
+		std::scoped_lock lock(m_Mutex);
+		m_Project.name = std::move(name);
+		return true;
+	}
+
+	bool JFMWorkspaceStore::RenameGroup(const std::string &groupId, std::string name)
+	{
+		if (name.empty())
+			return false;
+		std::scoped_lock lock(m_Mutex);
+		auto group = findGroupLocked(groupId);
+		if (!group)
+			return false;
+		group->get().name = std::move(name);
+		return true;
+	}
+
+	bool JFMWorkspaceStore::RenameSeries(const std::string &seriesId, std::string name)
+	{
+		if (name.empty())
+			return false;
+		std::scoped_lock lock(m_Mutex);
+		auto series = findSeriesLocked(seriesId);
+		if (!series)
+			return false;
+		series->get().name = std::move(name);
+		return true;
+	}
+
+	bool JFMWorkspaceStore::RenameCharacteristic(const CharacteristicId &id, std::string name)
+	{
+		if (name.empty())
+			return false;
+		std::scoped_lock lock(m_Mutex);
+		auto info = findInfoLocked(id);
+		if (!info)
+			return false;
+		info->get().name = std::move(name);
+		return true;
+	}
+
 	JFMScriptInfo JFMWorkspaceStore::AddScript(Path path)
 	{
 		std::scoped_lock lock(m_Mutex);
