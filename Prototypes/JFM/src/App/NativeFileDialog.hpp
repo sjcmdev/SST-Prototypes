@@ -13,8 +13,8 @@ namespace SST::Prototypes::JFM
 		const char *spec = "";
 	};
 
-	std::optional<Path> OpenFileDialog(const NativeFileDialogFilter &filter);
-	std::optional<Path> SaveFileDialog(const NativeFileDialogFilter &filter, const char *defaultName);
-	std::vector<Path> OpenFilesDialog(const NativeFileDialogFilter &filter);
-	std::vector<Path> PickFoldersDialog(bool multiple);
+	std::optional<Path> OpenFileDialog(const NativeFileDialogFilter &filter, const Path &defaultPath = {});
+	std::optional<Path> SaveFileDialog(const NativeFileDialogFilter &filter, const char *defaultName, const Path &defaultPath = {});
+	std::vector<Path> OpenFilesDialog(const NativeFileDialogFilter &filter, const Path &defaultPath = {});
+	std::vector<Path> PickFoldersDialog(bool multiple, const Path &defaultPath = {});
 } // namespace SST::Prototypes::JFM

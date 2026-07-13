@@ -22,11 +22,15 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::string GetStatusMessage() const;
 		[[nodiscard]] bool IsImportRunning() const;
 		[[nodiscard]] std::optional<JFMCharacteristic> GetSelectedCharacteristic() const;
+		[[nodiscard]] std::vector<JFMCharacteristic> GetSelectedCharacteristics() const;
 		[[nodiscard]] std::string GetSelectedSeriesId() const;
 		[[nodiscard]] CharacteristicId GetSelectedCharacteristicId() const;
+		[[nodiscard]] std::vector<CharacteristicId> GetSelectedCharacteristicIds() const;
 		[[nodiscard]] std::vector<std::string> GetLastImportWarnings() const;
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristic(const CharacteristicId &id) const;
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristicByName(const std::string &name) const;
+		[[nodiscard]] std::vector<JFMCharacteristic> GetSeriesCharacteristics(const std::string &seriesId) const;
+		[[nodiscard]] std::vector<JFMCharacteristic> GetGroupCharacteristics(const std::string &groupId) const;
 
 		JFMGroup AddGroup(std::string name, std::string parentId = {});
 		std::string FindOrCreateGroupPath(const std::vector<std::string> &names);
@@ -34,7 +38,12 @@ namespace SST::Prototypes::JFM
 		JFMSeries AddSeries(std::string name, std::string groupId);
 		std::vector<CharacteristicId> AddCharacteristics(std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId = {});
 		bool DeleteCharacteristic(const CharacteristicId &id);
+		bool DeleteSeries(const std::string &seriesId);
+		bool DeleteGroup(const std::string &groupId);
 		bool MoveCharacteristic(const CharacteristicId &id, const std::string &targetSeriesId);
+		JFMScriptInfo AddScript(Path path);
+		bool RemoveScript(const std::string &scriptId);
+		bool ReloadScript(const std::string &scriptId);
 
 		void ResetProject(std::string name = "Untitled JFM Project");
 		void ReplaceProject(JFMProject project, std::optional<Path> path);
@@ -44,6 +53,7 @@ namespace SST::Prototypes::JFM
 		void SetLastImportWarnings(std::vector<std::string> warnings);
 		void SelectSeries(std::string seriesId);
 		void SelectCharacteristic(CharacteristicId characteristicId);
+		void SetSelectedCharacteristics(std::vector<CharacteristicId> characteristicIds, CharacteristicId primary, std::string seriesId = {});
 		void AddImportedCharacteristics(std::vector<JFMCharacteristic> characteristics);
 		std::size_t UpdateCharacteristicData(std::vector<JFMCharacteristic> characteristics);
 
@@ -61,6 +71,8 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] OptionalRef<JFMCharacteristicInfo> findInfoLocked(const CharacteristicId &id);
 		[[nodiscard]] OptionalRef<const JFMCharacteristicInfo> findInfoLocked(const CharacteristicId &id) const;
 		[[nodiscard]] std::optional<JFMCharacteristic> makeCharacteristicLocked(const JFMCharacteristicInfo &info) const;
+		[[nodiscard]] std::vector<JFMCharacteristic> seriesCharacteristicsLocked(const JFMSeries &series) const;
+		void collectGroupIdsLocked(const std::string &groupId, std::vector<std::string> &groupIds) const;
 		void ensureSelectionLocked();
 		void removeCharacteristicReferencesLocked(const CharacteristicId &id);
 		void updateNextCharacteristicIdLocked();
@@ -72,6 +84,7 @@ namespace SST::Prototypes::JFM
 		std::optional<Path> m_ProjectPath;
 		std::string m_SelectedSeriesId;
 		CharacteristicId m_SelectedCharacteristicId;
+		std::vector<CharacteristicId> m_SelectedCharacteristicIds;
 		std::string m_StatusMessage = "Ready.";
 		std::vector<std::string> m_LastImportWarnings;
 		bool m_ImportRunning = false;

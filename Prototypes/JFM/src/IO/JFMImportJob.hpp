@@ -8,6 +8,7 @@
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
+#include "Domain/JFMTypes.hpp"
 
 namespace SST::Prototypes::JFM
 {
@@ -22,8 +23,8 @@ namespace SST::Prototypes::JFM
 	class JFMImportJob final : public IJob
 	{
 	public:
-		JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot);
-		JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot);
+		JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot, JFMImportOptions options = {});
+		JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot, JFMImportOptions options = {});
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -37,5 +38,6 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> m_EventBus;
 		std::vector<JFMImportGroup> m_Groups;
 		Path m_PythonRoot;
+		JFMImportOptions m_Options;
 	};
 } // namespace SST::Prototypes::JFM

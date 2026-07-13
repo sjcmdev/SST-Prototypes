@@ -43,6 +43,20 @@ namespace SST::Prototypes::JFM
 		return info ? makeCharacteristicLocked(info->get()) : std::nullopt;
 	}
 
+	std::vector<JFMCharacteristic> JFMWorkspaceStore::GetSelectedCharacteristics() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		std::vector<JFMCharacteristic> characteristics;
+		characteristics.reserve(m_SelectedCharacteristicIds.size());
+		for (const CharacteristicId id : m_SelectedCharacteristicIds)
+		{
+			auto info = findInfoLocked(id);
+			if (info)
+				characteristics.push_back(*makeCharacteristicLocked(info->get()));
+		}
+		return characteristics;
+	}
+
 	std::string JFMWorkspaceStore::GetSelectedSeriesId() const
 	{
 		std::scoped_lock lock(m_Mutex);
@@ -53,6 +67,12 @@ namespace SST::Prototypes::JFM
 	{
 		std::scoped_lock lock(m_Mutex);
 		return m_SelectedCharacteristicId;
+	}
+
+	std::vector<CharacteristicId> JFMWorkspaceStore::GetSelectedCharacteristicIds() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_SelectedCharacteristicIds;
 	}
 
 	std::vector<std::string> JFMWorkspaceStore::GetLastImportWarnings() const
@@ -76,6 +96,30 @@ namespace SST::Prototypes::JFM
 			m_Project.characteristics.end(),
 			[&name](const JFMCharacteristicInfo &info) { return info.name == name; });
 		return it != m_Project.characteristics.end() ? makeCharacteristicLocked(*it) : std::nullopt;
+	}
+
+	std::vector<JFMCharacteristic> JFMWorkspaceStore::GetSeriesCharacteristics(const std::string &seriesId) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto series = findSeriesLocked(seriesId);
+		return series ? seriesCharacteristicsLocked(series->get()) : std::vector<JFMCharacteristic>{};
+	}
+
+	std::vector<JFMCharacteristic> JFMWorkspaceStore::GetGroupCharacteristics(const std::string &groupId) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		std::vector<std::string> groupIds;
+		collectGroupIdsLocked(groupId, groupIds);
+
+		std::vector<JFMCharacteristic> characteristics;
+		for (const JFMSeries &series : m_Project.series)
+		{
+			if (std::find(groupIds.begin(), groupIds.end(), series.groupId) == groupIds.end())
+				continue;
+			std::vector<JFMCharacteristic> seriesCharacteristics = seriesCharacteristicsLocked(series);
+			characteristics.insert(characteristics.end(), seriesCharacteristics.begin(), seriesCharacteristics.end());
+		}
+		return characteristics;
 	}
 
 	JFMGroup JFMWorkspaceStore::AddGroup(std::string name, std::string parentId)
@@ -173,6 +217,7 @@ namespace SST::Prototypes::JFM
 		}
 
 		m_SelectedSeriesId = target.id;
+		m_SelectedCharacteristicIds = addedIds;
 		m_StatusMessage = "Imported " + std::to_string(characteristics.size()) + " characteristic(s).";
 		ensureSelectionLocked();
 		return addedIds;
@@ -190,10 +235,104 @@ namespace SST::Prototypes::JFM
 			m_Project.characteristics.end());
 		m_CharacteristicData.erase(id);
 		removeCharacteristicReferencesLocked(id);
+		m_SelectedCharacteristicIds.erase(
+			std::remove(m_SelectedCharacteristicIds.begin(), m_SelectedCharacteristicIds.end(), id),
+			m_SelectedCharacteristicIds.end());
 		if (m_SelectedCharacteristicId == id)
 			m_SelectedCharacteristicId = InvalidCharacteristicId;
 		ensureSelectionLocked();
 		return m_Project.characteristics.size() != oldSize;
+	}
+
+	bool JFMWorkspaceStore::DeleteSeries(const std::string &seriesId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto series = findSeriesLocked(seriesId);
+		if (!series)
+			return false;
+
+		std::vector<CharacteristicId> ids = series->get().characteristicIds;
+		for (const CharacteristicId id : ids)
+		{
+			m_Project.characteristics.erase(
+				std::remove_if(
+					m_Project.characteristics.begin(),
+					m_Project.characteristics.end(),
+					[id](const JFMCharacteristicInfo &info) { return info.id == id; }),
+				m_Project.characteristics.end());
+			m_CharacteristicData.erase(id);
+			m_SelectedCharacteristicIds.erase(
+				std::remove(m_SelectedCharacteristicIds.begin(), m_SelectedCharacteristicIds.end(), id),
+				m_SelectedCharacteristicIds.end());
+		}
+
+		m_Project.series.erase(
+			std::remove_if(
+				m_Project.series.begin(),
+				m_Project.series.end(),
+				[&seriesId](const JFMSeries &candidate) { return candidate.id == seriesId; }),
+			m_Project.series.end());
+		if (m_SelectedSeriesId == seriesId)
+			m_SelectedSeriesId.clear();
+		if (std::find(ids.begin(), ids.end(), m_SelectedCharacteristicId) != ids.end())
+			m_SelectedCharacteristicId = InvalidCharacteristicId;
+		m_StatusMessage = "Series deleted.";
+		ensureSelectionLocked();
+		return true;
+	}
+
+	bool JFMWorkspaceStore::DeleteGroup(const std::string &groupId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		if (!findGroupLocked(groupId))
+			return false;
+
+		std::vector<std::string> groupIds;
+		collectGroupIdsLocked(groupId, groupIds);
+		std::vector<std::string> seriesIds;
+		for (const JFMSeries &series : m_Project.series)
+		{
+			if (std::find(groupIds.begin(), groupIds.end(), series.groupId) != groupIds.end())
+				seriesIds.push_back(series.id);
+		}
+		for (const std::string &seriesId : seriesIds)
+		{
+			auto series = findSeriesLocked(seriesId);
+			if (!series)
+				continue;
+			for (const CharacteristicId id : series->get().characteristicIds)
+			{
+				m_Project.characteristics.erase(
+					std::remove_if(
+						m_Project.characteristics.begin(),
+						m_Project.characteristics.end(),
+						[id](const JFMCharacteristicInfo &info) { return info.id == id; }),
+					m_Project.characteristics.end());
+				m_CharacteristicData.erase(id);
+			}
+		}
+		m_Project.series.erase(
+			std::remove_if(
+				m_Project.series.begin(),
+				m_Project.series.end(),
+				[&groupIds](const JFMSeries &series) {
+					return std::find(groupIds.begin(), groupIds.end(), series.groupId) != groupIds.end();
+				}),
+			m_Project.series.end());
+		m_Project.groups.erase(
+			std::remove_if(
+				m_Project.groups.begin(),
+				m_Project.groups.end(),
+				[&groupIds](const JFMGroup &group) {
+					return std::find(groupIds.begin(), groupIds.end(), group.id) != groupIds.end();
+				}),
+			m_Project.groups.end());
+		m_SelectedSeriesId.clear();
+		m_SelectedCharacteristicId = InvalidCharacteristicId;
+		m_SelectedCharacteristicIds.clear();
+		m_StatusMessage = "Group deleted.";
+		ensureSelectionLocked();
+		return true;
 	}
 
 	bool JFMWorkspaceStore::MoveCharacteristic(const CharacteristicId &id, const std::string &targetSeriesId)
@@ -214,6 +353,50 @@ namespace SST::Prototypes::JFM
 		return true;
 	}
 
+	JFMScriptInfo JFMWorkspaceStore::AddScript(Path path)
+	{
+		std::scoped_lock lock(m_Mutex);
+		JFMScriptInfo script;
+		script.id = nextId("script");
+		script.path = std::move(path);
+		script.name = script.path.filename().String();
+		if (script.name.empty())
+			script.name = script.id;
+		m_Project.scripts.push_back(script);
+		m_StatusMessage = "Script registered: " + script.name;
+		return script;
+	}
+
+	bool JFMWorkspaceStore::RemoveScript(const std::string &scriptId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		const auto oldSize = m_Project.scripts.size();
+		m_Project.scripts.erase(
+			std::remove_if(
+				m_Project.scripts.begin(),
+				m_Project.scripts.end(),
+				[&scriptId](const JFMScriptInfo &script) { return script.id == scriptId; }),
+			m_Project.scripts.end());
+		if (oldSize == m_Project.scripts.size())
+			return false;
+		m_StatusMessage = "Script removed.";
+		return true;
+	}
+
+	bool JFMWorkspaceStore::ReloadScript(const std::string &scriptId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		const auto it = std::find_if(
+			m_Project.scripts.begin(),
+			m_Project.scripts.end(),
+			[&scriptId](const JFMScriptInfo &script) { return script.id == scriptId; });
+		if (it == m_Project.scripts.end())
+			return false;
+		++it->reloadCount;
+		m_StatusMessage = "Script reloaded: " + it->name;
+		return true;
+	}
+
 	void JFMWorkspaceStore::ResetProject(std::string name)
 	{
 		std::scoped_lock lock(m_Mutex);
@@ -223,6 +406,7 @@ namespace SST::Prototypes::JFM
 		m_ProjectPath.reset();
 		m_LastImportWarnings.clear();
 		m_ImportRunning = false;
+		m_SelectedCharacteristicIds.clear();
 		m_StatusMessage = "New JFM project created.";
 		ensureSelectionLocked();
 	}
@@ -234,6 +418,7 @@ namespace SST::Prototypes::JFM
 		m_CharacteristicData.clear();
 		updateNextCharacteristicIdLocked();
 		m_ProjectPath = std::move(path);
+		m_SelectedCharacteristicIds.clear();
 		m_StatusMessage = "Project loaded.";
 		ensureSelectionLocked();
 	}
@@ -273,6 +458,27 @@ namespace SST::Prototypes::JFM
 	{
 		std::scoped_lock lock(m_Mutex);
 		m_SelectedCharacteristicId = std::move(characteristicId);
+		m_SelectedCharacteristicIds = m_SelectedCharacteristicId == InvalidCharacteristicId
+			? std::vector<CharacteristicId>{}
+			: std::vector<CharacteristicId>{m_SelectedCharacteristicId};
+		ensureSelectionLocked();
+	}
+
+	void JFMWorkspaceStore::SetSelectedCharacteristics(std::vector<CharacteristicId> characteristicIds, CharacteristicId primary, std::string seriesId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		characteristicIds.erase(
+			std::remove_if(
+				characteristicIds.begin(),
+				characteristicIds.end(),
+				[this](CharacteristicId id) { return !findInfoLocked(id).has_value(); }),
+			characteristicIds.end());
+		std::sort(characteristicIds.begin(), characteristicIds.end());
+		characteristicIds.erase(std::unique(characteristicIds.begin(), characteristicIds.end()), characteristicIds.end());
+		m_SelectedCharacteristicIds = std::move(characteristicIds);
+		m_SelectedCharacteristicId = findInfoLocked(primary) ? primary : (m_SelectedCharacteristicIds.empty() ? InvalidCharacteristicId : m_SelectedCharacteristicIds.back());
+		if (!seriesId.empty() && findSeriesLocked(seriesId))
+			m_SelectedSeriesId = std::move(seriesId);
 		ensureSelectionLocked();
 	}
 
@@ -315,7 +521,8 @@ namespace SST::Prototypes::JFM
 			id = std::string(prefix) + "-" + std::to_string(m_NextId++);
 		} while (
 			std::any_of(m_Project.groups.begin(), m_Project.groups.end(), [&id](const JFMGroup &group) { return group.id == id; })
-			|| std::any_of(m_Project.series.begin(), m_Project.series.end(), [&id](const JFMSeries &series) { return series.id == id; }));
+			|| std::any_of(m_Project.series.begin(), m_Project.series.end(), [&id](const JFMSeries &series) { return series.id == id; })
+			|| std::any_of(m_Project.scripts.begin(), m_Project.scripts.end(), [&id](const JFMScriptInfo &script) { return script.id == id; }));
 		return id;
 	}
 
@@ -405,6 +612,31 @@ namespace SST::Prototypes::JFM
 		return characteristic;
 	}
 
+	std::vector<JFMCharacteristic> JFMWorkspaceStore::seriesCharacteristicsLocked(const JFMSeries &series) const
+	{
+		std::vector<JFMCharacteristic> characteristics;
+		characteristics.reserve(series.characteristicIds.size());
+		for (const CharacteristicId id : series.characteristicIds)
+		{
+			auto info = findInfoLocked(id);
+			if (info)
+				characteristics.push_back(*makeCharacteristicLocked(info->get()));
+		}
+		return characteristics;
+	}
+
+	void JFMWorkspaceStore::collectGroupIdsLocked(const std::string &groupId, std::vector<std::string> &groupIds) const
+	{
+		if (!findGroupLocked(groupId))
+			return;
+		groupIds.push_back(groupId);
+		for (const JFMGroup &group : m_Project.groups)
+		{
+			if (group.parentId == groupId)
+				collectGroupIdsLocked(group.id, groupIds);
+		}
+	}
+
 	void JFMWorkspaceStore::ensureSelectionLocked()
 	{
 		if (m_Project.series.empty())
@@ -414,9 +646,14 @@ namespace SST::Prototypes::JFM
 			m_SelectedSeriesId = m_Project.series.front().id;
 
 		if (findInfoLocked(m_SelectedCharacteristicId))
+		{
+			if (m_SelectedCharacteristicIds.empty())
+				m_SelectedCharacteristicIds.push_back(m_SelectedCharacteristicId);
 			return;
+		}
 
 		m_SelectedCharacteristicId = InvalidCharacteristicId;
+		m_SelectedCharacteristicIds.clear();
 		for (const JFMSeries &series : m_Project.series)
 		{
 			for (const CharacteristicId &id : series.characteristicIds)
@@ -424,6 +661,7 @@ namespace SST::Prototypes::JFM
 				if (findInfoLocked(id))
 				{
 					m_SelectedCharacteristicId = id;
+					m_SelectedCharacteristicIds.push_back(id);
 					return;
 				}
 			}

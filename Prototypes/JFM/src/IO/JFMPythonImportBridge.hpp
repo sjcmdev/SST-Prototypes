@@ -24,6 +24,10 @@ namespace SST::Prototypes::JFM
 		explicit JFMPythonImportBridge(Path pythonRoot);
 
 		[[nodiscard]] static bool IsAvailable();
+		[[nodiscard]] Result<JFMImportBatchResult> ImportFiles(
+			const std::vector<Path> &paths,
+			const JFMImportOptions &options,
+			const ProgressCallback &progressCallback);
 		[[nodiscard]] Result<JFMImportBatchResult> ImportFiles(const std::vector<Path> &paths, const ProgressCallback &progressCallback);
 
 	private:

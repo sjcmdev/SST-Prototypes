@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+import importlib.util
 
 import numpy as np
 
@@ -11,9 +12,12 @@ from .scaps_iv_parser import parse_scaps_iv
 
 def import_file(path: str | Path, options: dict[str, Any] | None = None) -> dict[str, Any]:
     source = Path(path)
-    parser_name = _parser_name_for(source)
-    parser = parse_scaps_iv if parser_name == "scaps_iv" else parse_dat
-    result = parser(source, options)
+    options = dict(options or {})
+    parser_name = str(options.get("parser") or "auto")
+    if parser_name == "auto":
+        parser_name = _parser_name_for(source)
+    parser = _load_custom_parser(options) if parser_name == "custom" else (parse_scaps_iv if parser_name == "scaps_iv" else parse_dat)
+    result = parser(source, _parse_options(options))
     return {
         "parser": result.get("parser", parser_name),
         "warnings": list(result.get("warnings", [])),
@@ -91,3 +95,35 @@ def _column_index(columns: list[Any], role: str, fallback: int) -> int:
 
 def _parser_name_for(path: Path) -> str:
     return "scaps_iv" if path.suffix.lower() == ".iv" else "dat"
+
+
+def _parse_options(options: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "delimiter",
+        "decimal_separator",
+        "skip_rows",
+        "has_header",
+        "column_roles",
+        "column_units",
+        "encoding",
+        "strict",
+        "name_pattern",
+        "temperature_extraction",
+        "user_overrides",
+    }
+    return {key: value for key, value in options.items() if key in allowed}
+
+
+def _load_custom_parser(options: dict[str, Any]) -> Any:
+    script_path = Path(str(options.get("custom_script_path") or ""))
+    if not script_path.is_file():
+        raise ValueError(f"Custom parser script not found: {script_path}")
+    spec = importlib.util.spec_from_file_location("jfm_custom_parser", script_path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f"Could not load custom parser script: {script_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    parser = getattr(module, "parse", None)
+    if not callable(parser):
+        raise ValueError("Custom parser script must export parse(path, options).")
+    return parser

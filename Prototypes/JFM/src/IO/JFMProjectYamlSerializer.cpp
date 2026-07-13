@@ -223,6 +223,19 @@ namespace SST::Prototypes::JFM
 			for (const JFMDerivedAnalysis &analysis : project.derivedAnalyses)
 				out << YAML::BeginMap << YAML::Key << "id" << YAML::Value << analysis.id << YAML::Key << "name" << YAML::Value << analysis.name << YAML::Key << "status" << YAML::Value << analysis.status << YAML::EndMap;
 			out << YAML::EndSeq;
+
+			out << YAML::Key << "scripts" << YAML::Value << YAML::BeginSeq;
+			for (const JFMScriptInfo &script : project.scripts)
+			{
+				out << YAML::BeginMap;
+				out << YAML::Key << "id" << YAML::Value << script.id;
+				out << YAML::Key << "name" << YAML::Value << script.name;
+				out << YAML::Key << "path" << YAML::Value << script.path.String();
+				out << YAML::Key << "enabled" << YAML::Value << script.enabled;
+				out << YAML::Key << "reload_count" << YAML::Value << script.reloadCount;
+				out << YAML::EndMap;
+			}
+			out << YAML::EndSeq;
 			out << YAML::EndMap;
 
 			if (!out.good())
@@ -292,6 +305,16 @@ namespace SST::Prototypes::JFM
 
 			for (const YAML::Node &analysisNode : root["derived_analyses"])
 				project.derivedAnalyses.push_back(JFMDerivedAnalysis{readOr<std::string>(analysisNode, "id", {}), readOr<std::string>(analysisNode, "name", {}), readOr<std::string>(analysisNode, "status", "not_started")});
+
+			for (const YAML::Node &scriptNode : root["scripts"])
+			{
+				project.scripts.push_back(JFMScriptInfo{
+					readOr<std::string>(scriptNode, "id", {}),
+					readOr<std::string>(scriptNode, "name", {}),
+					Path::FromResolved(readOr<std::string>(scriptNode, "path", {})),
+					readOr<bool>(scriptNode, "enabled", true),
+					readOr<std::size_t>(scriptNode, "reload_count", 0)});
+			}
 
 			if (project.series.empty())
 				project.series.push_back(JFMSeries{"series-1", "Series 1", {}, {}});

@@ -4,6 +4,8 @@
 #include "Presentation/Panels/IPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
+#include <vector>
+
 namespace SST::Prototypes::JFM
 {
 	enum class PlotScale
@@ -21,8 +23,13 @@ namespace SST::Prototypes::JFM
 		void Render() override;
 
 	private:
+		struct PlotArea
+		{
+			std::vector<CharacteristicId> characteristicIds;
+			PlotScale scale = PlotScale::Linear;
+		};
 
 		Ref<JFMWorkspaceStore> m_Store;
-		PlotScale m_Scale = PlotScale::Linear;
+		std::vector<PlotArea> m_PlotAreas;
 	};
 } // namespace SST::Prototypes::JFM

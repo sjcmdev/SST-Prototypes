@@ -28,6 +28,7 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> eventBus;
 		Ref<JFMWorkspaceStore> store;
 		Ref<Notifier> notifier;
+		Ref<JFMUserSettingsStore> settings;
 		Path pythonRoot;
 		std::vector<std::string> importWarnings;
 		bool importRunning = false;
@@ -197,7 +198,7 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		auto job = CreateRef<JFMImportJob>(state->eventBus, std::move(groups), state->pythonRoot);
+		auto job = CreateRef<JFMImportJob>(state->eventBus, std::move(groups), state->pythonRoot, event.options);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
@@ -279,11 +280,40 @@ namespace SST::Prototypes::JFM
 		DS_LOG_WARN("JFM raw TSV export failed [{}]: {}", event.path.String(), event.error);
 	}
 
+	void HandleExportRawTsvBatchRequested(const Ref<JFMIOState> &state, const ExportRawTsvBatchRequested &event)
+	{
+		if (state->store != nullptr)
+			state->store->SetStatusMessage("Raw TSV batch export queued: " + event.outputDirectory.String());
+
+		auto job = CreateRef<JFMExportRawTsvBatchJob>(state->eventBus, event.outputDirectory, event.items);
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
+	}
+
+	void HandleExportRawTsvBatchCompleted(const Ref<JFMIOState> &state, const ExportRawTsvBatchCompleted &event)
+	{
+		if (state->store != nullptr)
+		{
+			state->store->SetLastImportWarnings(event.warnings);
+			state->store->SetStatusMessage("Raw TSV batch exported: " + std::to_string(event.count) + " file(s).");
+		}
+	}
+
+	void HandleExportRawTsvBatchFailed(const Ref<JFMIOState> &state, const ExportRawTsvBatchFailed &event)
+	{
+		if (state->store != nullptr)
+			state->store->SetStatusMessage("Raw TSV batch export failed: " + event.error);
+		NotifyFailure(state, NotificationCategory::Export, "JFM export failed", event.error);
+		DS_LOG_WARN("JFM raw TSV batch export failed [{}]: {}", event.outputDirectory.String(), event.error);
+	}
+
 	void RegisterExportHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
 	{
 		ioLayer.RegisterHandler<ExportRawTsvRequested>(std::bind_front(&HandleExportRawTsvRequested, state));
 		ioLayer.RegisterHandler<ExportRawTsvCompleted>(std::bind_front(&HandleExportRawTsvCompleted, state));
 		ioLayer.RegisterHandler<ExportRawTsvFailed>(std::bind_front(&HandleExportRawTsvFailed, state));
+		ioLayer.RegisterHandler<ExportRawTsvBatchRequested>(std::bind_front(&HandleExportRawTsvBatchRequested, state));
+		ioLayer.RegisterHandler<ExportRawTsvBatchCompleted>(std::bind_front(&HandleExportRawTsvBatchCompleted, state));
+		ioLayer.RegisterHandler<ExportRawTsvBatchFailed>(std::bind_front(&HandleExportRawTsvBatchFailed, state));
 	}
 
 	void HandleProjectSaveRequested(const Ref<JFMIOState> &state, const ProjectSaveRequested &event)
@@ -302,6 +332,8 @@ namespace SST::Prototypes::JFM
 
 		state->store->SetProjectPath(event.path);
 		state->store->SetStatusMessage("Project saved: " + event.path.String());
+		if (state->settings != nullptr)
+			state->settings->AddRecentProject(event.path);
 	}
 
 	void HandleProjectSaveFailed(const Ref<JFMIOState> &state, const ProjectSaveFailed &event)
@@ -335,6 +367,8 @@ namespace SST::Prototypes::JFM
 			state->store->ReplaceProject(event.project, event.path);
 			state->store->SetStatusMessage("Project loaded; raw data materialization queued.");
 		}
+		if (state->settings != nullptr)
+			state->settings->AddRecentProject(event.path);
 
 		auto job = CreateRef<MaterializeProjectDataJob>(state->eventBus, event.project, state->pythonRoot);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
@@ -377,6 +411,7 @@ namespace SST::Prototypes::JFM
 		state->eventBus = std::move(context.eventBus);
 		state->store = std::move(context.store);
 		state->notifier = std::move(context.notifier);
+		state->settings = std::move(context.settings);
 		state->pythonRoot = std::move(context.pythonRoot);
 
 		RegisterImportHandlers(ioLayer, state);

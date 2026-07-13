@@ -69,4 +69,41 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(project.groups.back().parentId, project.groups.front().id);
 		EXPECT_EQ(series.groupId, groupId);
 	}
+
+	TEST(JFMWorkspaceStoreTests, MultiSelectAndDeleteSeriesRemovesCharacteristics)
+	{
+		JFMWorkspaceStore store;
+		const JFMSeries series = store.AddSeries("To delete");
+
+		JFMCharacteristic first;
+		first.info.name = "A";
+		JFMCharacteristic second;
+		second.info.name = "B";
+		const std::vector<CharacteristicId> ids = store.AddCharacteristics({first, second}, series.id);
+
+		ASSERT_EQ(ids.size(), 2);
+		store.SetSelectedCharacteristics(ids, ids.front(), series.id);
+		EXPECT_EQ(store.GetSelectedCharacteristicIds().size(), 2);
+
+		EXPECT_TRUE(store.DeleteSeries(series.id));
+		EXPECT_FALSE(store.FindCharacteristic(ids.front()).has_value());
+		EXPECT_FALSE(store.FindCharacteristic(ids.back()).has_value());
+	}
+
+	TEST(JFMWorkspaceStoreTests, RegistersReloadsAndRemovesScripts)
+	{
+		JFMWorkspaceStore store;
+		const JFMScriptInfo script = store.AddScript(Path::FromResolved("custom_parser.py"));
+
+		JFMProject project = store.GetProjectSnapshot();
+		ASSERT_EQ(project.scripts.size(), 1);
+		EXPECT_EQ(project.scripts.front().name, "custom_parser.py");
+
+		EXPECT_TRUE(store.ReloadScript(script.id));
+		project = store.GetProjectSnapshot();
+		EXPECT_EQ(project.scripts.front().reloadCount, 1);
+
+		EXPECT_TRUE(store.RemoveScript(script.id));
+		EXPECT_TRUE(store.GetProjectSnapshot().scripts.empty());
+	}
 } // namespace SST::Prototypes::JFM

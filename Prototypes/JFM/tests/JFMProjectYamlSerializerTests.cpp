@@ -25,6 +25,7 @@ namespace SST::Prototypes::JFM
 		project.characteristics.push_back(characteristic);
 		project.groups.push_back(JFMGroup{"group-1", "Folder", {}});
 		project.series.push_back(JFMSeries{"series-1", "Series", "group-1", {1}});
+		project.scripts.push_back(JFMScriptInfo{"script-1", "custom.py", Path::FromResolved("scripts/custom.py"), true, 2});
 
 		auto text = JFMProjectYamlSerializer::Serialize(project);
 		ASSERT_TRUE(text) << text.Error().technicalDetails;
@@ -40,6 +41,9 @@ namespace SST::Prototypes::JFM
 		ASSERT_EQ(loaded->series.front().characteristicIds.size(), 1);
 		EXPECT_EQ(loaded->series.front().characteristicIds.front(), 1);
 		ASSERT_EQ(loaded->characteristics.size(), 1);
+		ASSERT_EQ(loaded->scripts.size(), 1);
+		EXPECT_EQ(loaded->scripts.front().path.String(), Path::FromResolved("scripts/custom.py").String());
+		EXPECT_EQ(loaded->scripts.front().reloadCount, 2);
 		ASSERT_TRUE(loaded->characteristics.front().temperatureK.has_value());
 		EXPECT_DOUBLE_EQ(*loaded->characteristics.front().temperatureK, 300.0);
 		EXPECT_EQ(loaded->characteristics.front().sourcePath.String(), Path::FromResolved("data/example.dat").String());

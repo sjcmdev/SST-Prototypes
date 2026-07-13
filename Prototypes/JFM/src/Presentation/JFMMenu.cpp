@@ -11,8 +11,16 @@
 
 namespace SST::Prototypes::JFM
 {
+	void execute(EditorServices &services, const char *commandId, const char *source, CommandContext context);
 
 	void execute(EditorServices &services, const char *commandId, const char *source)
+	{
+		CommandContext context(ContextID{"jfm.menu"});
+		context.SetSource(source);
+		execute(services, commandId, source, std::move(context));
+	}
+
+	void execute(EditorServices &services, const char *commandId, const char *source, CommandContext context)
 	{
 		auto registry = services.commandRegistry.lock();
 		if (registry == nullptr)
@@ -34,8 +42,6 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		CommandContext context(ContextID{"jfm.menu"});
-		context.SetSource(source);
 		(void)registry->Execute(CommandID{commandId}, std::move(context));
 	}
 
@@ -59,15 +65,57 @@ namespace SST::Prototypes::JFM
 	}
 	
 
-	void RenderJFMMenu(EditorLayer &editorLayer, const JFMPanelIds &panelIds, EditorServices &services)
+	void recentProjectMenuItem(EditorServices &services, const Path &path)
+	{
+		CommandContext context(ContextID{"jfm.menu.recent_projects"});
+		context.SetSource("Last Projects");
+		context.Set("path", path);
+		if (ImGui::MenuItem(path.filename().String().c_str()))
+			execute(services, "jfm.project.open", "Last Projects", std::move(context));
+	}
+
+	void RenderJFMMenu(
+		EditorLayer &editorLayer,
+		const JFMPanelIds &panelIds,
+		Ref<JFMWorkspaceStore> workspace,
+		Ref<JFMUserSettingsStore> settings,
+		EditorServices &services)
 	{
 		if (ImGui::BeginMenu("File"))
 		{
 			commandMenuItem(services, "New Project", "Ctrl+N", "jfm.project.new");
+			commandMenuItem(services, "Open New Project Window", nullptr, "jfm.project.open_new_window");
 			commandMenuItem(services, "Open Project...", "Ctrl+O", "jfm.project.open");
+			if (ImGui::BeginMenu("Last Projects"))
+			{
+				const std::vector<Path> recent = settings != nullptr ? settings->GetRecentProjects() : std::vector<Path>{};
+				for (const Path &path : recent)
+					recentProjectMenuItem(services, path);
+				if (recent.empty())
+					ImGui::MenuItem("No recent projects", nullptr, false, false);
+				ImGui::EndMenu();
+			}
 			ImGui::Separator();
 			commandMenuItem(services, "Save Project", "Ctrl+S", "jfm.project.save");
 			commandMenuItem(services, "Save Project As...", "Ctrl+Shift+S", "jfm.project.save_as");
+			ImGui::Separator();
+			if (ImGui::BeginMenu("Import"))
+			{
+				commandMenuItem(services, "Files...", "Ctrl+Shift+I", "jfm.import.files");
+				commandMenuItem(services, "Folder...", "Ctrl+Shift+D", "jfm.import.directory");
+				commandMenuItem(services, "Folders...", "Ctrl+Alt+Shift+D", "jfm.import.directories");
+				commandMenuItem(services, "Folders Recursively...", "Ctrl+Alt+Shift+R", "jfm.import.directories_recursive");
+				ImGui::EndMenu();
+			}
+			if (ImGui::BeginMenu("Export"))
+			{
+				commandMenuItem(services, "Selected Raw TSV", "Ctrl+Shift+E", "jfm.export.raw_tsv");
+				commandMenuItem(services, "Selected Series Raw TSV", nullptr, "jfm.export.series_raw_tsv");
+				ImGui::BeginDisabled(workspace == nullptr || workspace->GetProjectSnapshot().groups.empty());
+				commandMenuItem(services, "Selected Group Raw TSV", nullptr, "jfm.export.group_raw_tsv", false);
+				ImGui::EndDisabled();
+				ImGui::EndMenu();
+			}
 			ImGui::Separator();
 			commandMenuItem(services, "Quit", "Ctrl+Shift+W", "app.quit");
 			ImGui::EndMenu();
@@ -80,16 +128,6 @@ namespace SST::Prototypes::JFM
 			commandMenuItem(services, "Redo", "Ctrl+Shift+Z", "edit.redo");
 			ImGui::Separator();
 			commandMenuItem(services, "Command Palette", "Ctrl+Shift+P", "app.command_palette");
-			ImGui::EndMenu();
-		}
-
-		if (ImGui::BeginMenu("Data"))
-		{
-			commandMenuItem(services, "Import Files...", "Ctrl+Shift+I", "jfm.import.files");
-			commandMenuItem(services, "Import Folder...", "Ctrl+Shift+D", "jfm.import.directory");
-			commandMenuItem(services, "Import Folders...", "Ctrl+Alt+Shift+D", "jfm.import.directories");
-			commandMenuItem(services, "Import Folders Recursively...", "Ctrl+Alt+Shift+R", "jfm.import.directories_recursive");
-			commandMenuItem(services, "Export Raw TSV", "Ctrl+Shift+E", "jfm.export.raw_tsv");
 			ImGui::EndMenu();
 		}
 
@@ -107,6 +145,8 @@ namespace SST::Prototypes::JFM
 			panelMenuItem(editorLayer, panelIds.overview, "JFM Overview");
 			panelMenuItem(editorLayer, panelIds.importStatus, "Import Status");
 			panelMenuItem(editorLayer, panelIds.rawPlot, "Raw Plot");
+			panelMenuItem(editorLayer, panelIds.details, "Characteristic Details");
+			panelMenuItem(editorLayer, panelIds.settings, "JFM Settings");
 			ImGui::EndMenu();
 		}
 	}

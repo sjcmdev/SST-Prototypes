@@ -106,6 +106,8 @@ project "JFMTests"
 
     files {
         _SST_ROOT .. "/Prototypes/JFM/src/Domain/JFMTypes.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/App/JFMUserSettings.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/App/JFMUserSettings.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Workspace/JFMWorkspaceStore.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Workspace/JFMWorkspaceStore.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.hpp",
@@ -120,6 +122,8 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonBindings.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportJob.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportJob.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMExportRawTsvJob.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMExportRawTsvJob.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Events/JFMEvents.hpp",
         _SST_ROOT .. "/Prototypes/JFM/tests/**.hpp",
         _SST_ROOT .. "/Prototypes/JFM/tests/**.cpp"

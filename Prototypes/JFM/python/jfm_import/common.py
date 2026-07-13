@@ -11,7 +11,7 @@ import numpy as np
 @dataclass(slots=True)
 class ParseOptions:
     delimiter: str | None = None
-    decimal_separator: str = "."
+    decimal_separator: str = "auto"
     skip_rows: int = 0
     has_header: bool | None = None
     column_roles: list[str] | None = None
@@ -19,6 +19,7 @@ class ParseOptions:
     encoding: str = "utf-8"
     strict: bool = False
     name_pattern: str = "{stem}"
+    temperature_extraction: str = "auto"
     user_overrides: dict[str, str] = field(default_factory=dict)
 
 

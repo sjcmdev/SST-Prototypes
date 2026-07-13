@@ -52,6 +52,14 @@ namespace SST::Prototypes::JFM
 		return Path::FromResolved(pathText);
 	}
 
+	const nfdu8char_t *DefaultPathOrNull(const Path &path, std::string &storage)
+	{
+		if (path.Empty())
+			return nullptr;
+		storage = path.String();
+		return storage.c_str();
+	}
+
 	std::vector<Path> CollectPathSet(const nfdpathset_t *pathSet)
 	{
 		nfdpathsetsize_t count = 0;
@@ -73,36 +81,39 @@ namespace SST::Prototypes::JFM
 	}
 	
 
-	std::optional<Path> OpenFileDialog(const NativeFileDialogFilter &filter)
+	std::optional<Path> OpenFileDialog(const NativeFileDialogFilter &filter, const Path &defaultPath)
 	{
 		NativeFileDialogSession session;
 		nfdu8filteritem_t nfdFilter = ToNfdFilter(filter);
 		nfdu8char_t *rawPath = nullptr;
-		const nfdresult_t result = NFD_OpenDialogU8(&rawPath, &nfdFilter, 1, nullptr);
+		std::string defaultPathText;
+		const nfdresult_t result = NFD_OpenDialogU8(&rawPath, &nfdFilter, 1, DefaultPathOrNull(defaultPath, defaultPathText));
 		if (result == NFD_CANCEL)
 			return std::nullopt;
 		ThrowIfDialogFailed(result);
 		return TakePath(rawPath);
 	}
 
-	std::optional<Path> SaveFileDialog(const NativeFileDialogFilter &filter, const char *defaultName)
+	std::optional<Path> SaveFileDialog(const NativeFileDialogFilter &filter, const char *defaultName, const Path &defaultPath)
 	{
 		NativeFileDialogSession session;
 		nfdu8filteritem_t nfdFilter = ToNfdFilter(filter);
 		nfdu8char_t *rawPath = nullptr;
-		const nfdresult_t result = NFD_SaveDialogU8(&rawPath, &nfdFilter, 1, nullptr, defaultName);
+		std::string defaultPathText;
+		const nfdresult_t result = NFD_SaveDialogU8(&rawPath, &nfdFilter, 1, DefaultPathOrNull(defaultPath, defaultPathText), defaultName);
 		if (result == NFD_CANCEL)
 			return std::nullopt;
 		ThrowIfDialogFailed(result);
 		return TakePath(rawPath);
 	}
 
-	std::vector<Path> OpenFilesDialog(const NativeFileDialogFilter &filter)
+	std::vector<Path> OpenFilesDialog(const NativeFileDialogFilter &filter, const Path &defaultPath)
 	{
 		NativeFileDialogSession session;
 		nfdu8filteritem_t nfdFilter = ToNfdFilter(filter);
 		const nfdpathset_t *pathSet = nullptr;
-		const nfdresult_t result = NFD_OpenDialogMultipleU8(&pathSet, &nfdFilter, 1, nullptr);
+		std::string defaultPathText;
+		const nfdresult_t result = NFD_OpenDialogMultipleU8(&pathSet, &nfdFilter, 1, DefaultPathOrNull(defaultPath, defaultPathText));
 		if (result == NFD_CANCEL)
 			return {};
 		ThrowIfDialogFailed(result);
@@ -112,13 +123,15 @@ namespace SST::Prototypes::JFM
 		return paths;
 	}
 
-	std::vector<Path> PickFoldersDialog(bool multiple)
+	std::vector<Path> PickFoldersDialog(bool multiple, const Path &defaultPath)
 	{
 		NativeFileDialogSession session;
+		std::string defaultPathText;
+		const nfdu8char_t *defaultPathTextOrNull = DefaultPathOrNull(defaultPath, defaultPathText);
 		if (multiple)
 		{
 			const nfdpathset_t *pathSet = nullptr;
-			const nfdresult_t result = NFD_PickFolderMultipleU8(&pathSet, nullptr);
+			const nfdresult_t result = NFD_PickFolderMultipleU8(&pathSet, defaultPathTextOrNull);
 			if (result == NFD_CANCEL)
 				return {};
 			ThrowIfDialogFailed(result);
@@ -129,7 +142,7 @@ namespace SST::Prototypes::JFM
 		}
 
 		nfdu8char_t *rawPath = nullptr;
-		const nfdresult_t result = NFD_PickFolderU8(&rawPath, nullptr);
+		const nfdresult_t result = NFD_PickFolderU8(&rawPath, defaultPathTextOrNull);
 		if (result == NFD_CANCEL)
 			return {};
 		ThrowIfDialogFailed(result);

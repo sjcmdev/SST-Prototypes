@@ -7,6 +7,7 @@
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Events/JFMEvents.hpp"
+#include "IO/JFMExportRawTsvJob.hpp"
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMImportPaths.hpp"
 #include "IO/JFMProjectJobs.hpp"
@@ -146,6 +147,45 @@ namespace SST::Prototypes::JFM
 		EXPECT_TRUE(characteristics.empty());
 		ASSERT_FALSE(warnings.empty());
 		EXPECT_NE(warnings.front().find("Source file missing"), std::string::npos);
+		(void)completedSub;
+	}
+
+	TEST(JFMProjectJobsTests, BatchExportSkipsMissingRawArraysAndPublishesWarning)
+	{
+		auto bus = CreateRef<EventBus>();
+		bool completed = false;
+		std::vector<std::string> warnings;
+		auto completedSub = bus->Subscribe<ExportRawTsvBatchCompleted>([&](const ExportRawTsvBatchCompleted &event) {
+			completed = true;
+			warnings = event.warnings;
+		});
+
+		JFMCharacteristic valid;
+		valid.info.name = "valid";
+		valid.data.voltage = {0.0, 1.0};
+		valid.data.current = {1.0, 2.0};
+
+		JFMCharacteristic missing;
+		missing.info.name = "missing";
+
+		const Path output = Path::FromResolved(FileSystem::TempDirectoryPath() / "sst-jfm-batch-export");
+		(void)FileSystem::RemoveAll(output.Native());
+
+		JobContext context = MakeTestJobContext();
+		JFMExportRawTsvBatchJob job(
+			bus,
+			output,
+			{
+				JFMExportItem{Path("series") / Path("valid.tsv"), valid},
+				JFMExportItem{Path("series") / Path("missing.tsv"), missing},
+			});
+		job.Execute(context);
+		bus->ProcessQueue();
+
+		ASSERT_TRUE(completed);
+		ASSERT_FALSE(warnings.empty());
+		EXPECT_TRUE(FileSystem::Exists((output / Path("series") / Path("valid.tsv")).Native()));
+		(void)FileSystem::RemoveAll(output.Native());
 		(void)completedSub;
 	}
 

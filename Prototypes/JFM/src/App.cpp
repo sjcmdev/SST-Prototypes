@@ -2,6 +2,7 @@
 
 #include "App/Application.hpp"
 #include "App/JFMCommands.hpp"
+#include "App/JFMUserSettings.hpp"
 #include "Core/EntryPoint.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Memory.hpp"
@@ -12,8 +13,11 @@
 #include "IO/JFMPythonBindings.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/JFMMenu.hpp"
+#include "Presentation/Panels/CharacteristicDetailsPanel.hpp"
 #include "Presentation/Panels/ImportStatusPanel.hpp"
+#include "Presentation/Panels/JFMImportDialogPanel.hpp"
 #include "Presentation/Panels/JFMOverviewPanel.hpp"
+#include "Presentation/Panels/JFMSettingsPanel.hpp"
 #include "Presentation/Panels/ProjectTreePanel.hpp"
 #include "Presentation/Panels/RawPlotPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
@@ -22,19 +26,26 @@ namespace SST
 {	
 	using namespace Prototypes::JFM;
 
-	void RegisterJFMEditor(Application &application, Ref<JFMWorkspaceStore> workspace)
+	void RegisterJFMEditor(
+		Application &application,
+		Ref<JFMWorkspaceStore> workspace,
+		Ref<JFMUserSettingsStore> settings,
+		Ref<JFMImportDialogState> importDialog)
 	{
 		
 		EditorLayer &editorLayer = application.GetEditorLayer();
 
 		JFMPanelIds panelIds;
-		panelIds.projectTree = editorLayer.RegisterPanel<ProjectTreePanel>(workspace);
+		panelIds.projectTree = editorLayer.RegisterPanel<ProjectTreePanel>(workspace, settings, importDialog, application.GetEventBusRef());
 		panelIds.overview = editorLayer.RegisterPanel<JFMOverviewPanel>(workspace);
 		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
 		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace);
+		panelIds.details = editorLayer.RegisterPanel<CharacteristicDetailsPanel>(workspace);
+		panelIds.settings = editorLayer.RegisterPanel<JFMSettingsPanel>(settings);
+		editorLayer.RegisterPanel<JFMImportDialogPanel>(application.GetEventBusRef(), workspace, importDialog);
 		editorLayer.RegisterMenuRenderer(
 			"jfm.menu",
-			std::bind(&RenderJFMMenu, std::ref(editorLayer), panelIds, std::placeholders::_1));
+			std::bind(&RenderJFMMenu, std::ref(editorLayer), panelIds, workspace, settings, std::placeholders::_1));
 	}
 	
 
@@ -49,19 +60,25 @@ namespace SST
 		RegisterJFMPythonBindings();
 
 		auto workspace = CreateRef<JFMWorkspaceStore>();
+		auto settings = CreateRef<JFMUserSettingsStore>(runtime.configDirectory);
+		settings->Load();
+		auto importDialog = CreateRef<JFMImportDialogState>();
 		RegisterJFMIOHandlers(
 			application.GetIOLayer(),
 			JFMIORegistrationContext{
 				eventBus,
 				workspace,
 				notifier,
+				settings,
 				ResolveJFMPythonRoot(*runtime.config)});
 		application.InsertLayerBefore(LayerId::ImGui, CreateUnique<JFMDomainLayer>(workspace));
-		RegisterJFMEditor(application, workspace);
+		RegisterJFMEditor(application, workspace, settings, importDialog);
 		RegisterJFMCommands(JFMCommandRegistrationContext{
 			eventBus,
 			runtime.commandRegistry,
 			runtime.keymapResolver,
-			workspace});
+			workspace,
+			settings,
+			importDialog});
 	}
 } // namespace SST

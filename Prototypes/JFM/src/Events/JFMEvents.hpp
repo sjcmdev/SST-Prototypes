@@ -83,14 +83,22 @@ namespace SST::Prototypes::JFM
 	struct ImportRequested final : public BusEvent
 	{
 		ImportRequested() = default;
-		ImportRequested(std::vector<Path> requestedPaths, std::string requestedTargetSeriesId, bool requestedRecursive = false)
-			: paths(std::move(requestedPaths)), targetSeriesId(std::move(requestedTargetSeriesId)), recursive(requestedRecursive)
+		ImportRequested(
+			std::vector<Path> requestedPaths,
+			std::string requestedTargetSeriesId,
+			bool requestedRecursive = false,
+			JFMImportOptions requestedOptions = {})
+			: paths(std::move(requestedPaths)),
+			  targetSeriesId(std::move(requestedTargetSeriesId)),
+			  recursive(requestedRecursive),
+			  options(std::move(requestedOptions))
 		{
 		}
 
 		std::vector<Path> paths;
 		std::string targetSeriesId;
 		bool recursive = false;
+		JFMImportOptions options;
 	};
 
 	struct ImportProgress final : public BusEvent
@@ -176,6 +184,49 @@ namespace SST::Prototypes::JFM
 		}
 
 		Path path;
+		std::string error;
+	};
+
+	struct JFMExportItem
+	{
+		Path relativePath;
+		JFMCharacteristic characteristic;
+	};
+
+	struct ExportRawTsvBatchRequested final : public BusEvent
+	{
+		ExportRawTsvBatchRequested() = default;
+		ExportRawTsvBatchRequested(Path requestedDirectory, std::vector<JFMExportItem> requestedItems)
+			: outputDirectory(std::move(requestedDirectory)), items(std::move(requestedItems))
+		{
+		}
+
+		Path outputDirectory;
+		std::vector<JFMExportItem> items;
+	};
+
+	struct ExportRawTsvBatchCompleted final : public BusEvent
+	{
+		ExportRawTsvBatchCompleted() = default;
+		ExportRawTsvBatchCompleted(Path requestedDirectory, std::size_t exportedCount, std::vector<std::string> exportWarnings)
+			: outputDirectory(std::move(requestedDirectory)), count(exportedCount), warnings(std::move(exportWarnings))
+		{
+		}
+
+		Path outputDirectory;
+		std::size_t count = 0;
+		std::vector<std::string> warnings;
+	};
+
+	struct ExportRawTsvBatchFailed final : public BusEvent
+	{
+		ExportRawTsvBatchFailed() = default;
+		ExportRawTsvBatchFailed(Path requestedDirectory, std::string failure)
+			: outputDirectory(std::move(requestedDirectory)), error(std::move(failure))
+		{
+		}
+
+		Path outputDirectory;
 		std::string error;
 	};
 

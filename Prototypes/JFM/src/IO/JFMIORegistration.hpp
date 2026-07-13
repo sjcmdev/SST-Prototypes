@@ -4,6 +4,7 @@
 #include "Core/Notifications/Notifier.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Memory.hpp"
+#include "App/JFMUserSettings.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST
@@ -18,6 +19,7 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> eventBus;
 		Ref<JFMWorkspaceStore> store;
 		Ref<Notifier> notifier;
+		Ref<JFMUserSettingsStore> settings;
 		Path pythonRoot;
 	};
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Core/Utils/Memory.hpp"
+#include "App/JFMUserSettings.hpp"
+#include "Presentation/Panels/JFMImportDialogPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST
@@ -18,6 +20,8 @@ namespace SST::Prototypes::JFM
 		WeakRef<CommandRegistry> commandRegistry;
 		WeakRef<KeymapResolver> keymapResolver;
 		Ref<JFMWorkspaceStore> workspace;
+		Ref<JFMUserSettingsStore> settings;
+		Ref<JFMImportDialogState> importDialog;
 	};
 
 	void RegisterJFMCommands(JFMCommandRegistrationContext context);

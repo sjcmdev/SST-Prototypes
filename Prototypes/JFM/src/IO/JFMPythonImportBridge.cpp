@@ -146,9 +146,25 @@ namespace SST::Prototypes::JFM
 		return nb::cast<nb::callable>(nb::module_::import_("jfm_import.cpp_adapter").attr("import_file"));
 	}
 
+	nb::dict makeImportOptionsDict(const JFMImportOptions &options)
+	{
+		nb::dict dict;
+		dict["parser"] = nb::str(options.parser.c_str());
+		dict["name_pattern"] = nb::str(options.namePattern.c_str());
+		dict["decimal_separator"] = nb::str(options.decimalSeparator.c_str());
+		dict["temperature_extraction"] = nb::str(options.temperatureExtraction.c_str());
+		dict["custom_script_path"] = nb::str(options.customScriptPath.c_str());
+		if (options.delimiter.empty())
+			dict["delimiter"] = nb::none();
+		else
+			dict["delimiter"] = nb::str(options.delimiter.c_str());
+		return dict;
+	}
+
 	Result<JFMImportBatchResult> importWithPython(
 		const Path &pythonRoot,
 		const std::vector<Path> &paths,
+		const JFMImportOptions &options,
 		const JFMPythonImportBridge::ProgressCallback &progressCallback)
 	{
 		if (!configurePythonPaths(pythonRoot))
@@ -156,6 +172,7 @@ namespace SST::Prototypes::JFM
 
 		JFMImportBatchResult batch;
 		const std::size_t total = paths.size();
+		nb::dict importOptions = makeImportOptionsDict(options);
 		for (std::size_t index = 0; index < paths.size(); ++index)
 		{
 			const Path &path = paths[index];
@@ -166,7 +183,7 @@ namespace SST::Prototypes::JFM
 			nb::dict result;
 			try
 			{
-				nb::object adapterResult = importAdapter()(nb::str(path.String().c_str()));
+				nb::object adapterResult = importAdapter()(nb::str(path.String().c_str()), importOptions);
 				if (!nb::isinstance<nb::dict>(adapterResult))
 					return makeImportFileError(path, pythonRoot, parser, "Python adapter returned a non-dict result.");
 				result = nb::borrow<nb::dict>(adapterResult);
@@ -229,7 +246,10 @@ namespace SST::Prototypes::JFM
 #endif
 	}
 
-	Result<JFMImportBatchResult> JFMPythonImportBridge::ImportFiles(const std::vector<Path> &paths, const ProgressCallback &progressCallback)
+	Result<JFMImportBatchResult> JFMPythonImportBridge::ImportFiles(
+		const std::vector<Path> &paths,
+		const JFMImportOptions &options,
+		const ProgressCallback &progressCallback)
 	{
 #if DS_PYTHON_CAPI_AVAILABLE
 		static std::mutex pythonMutex;
@@ -254,7 +274,7 @@ namespace SST::Prototypes::JFM
 
 		try
 		{
-			return importWithPython(m_PythonRoot, paths, progressCallback);
+			return importWithPython(m_PythonRoot, paths, options, progressCallback);
 		}
 		catch (const nb::python_error &error)
 		{
@@ -266,10 +286,16 @@ namespace SST::Prototypes::JFM
 		}
 #else
 		(void)paths;
+		(void)options;
 		(void)progressCallback;
 		return makePythonBridgeError(
 			"Python import is unavailable in this build.",
 			"DS_PYTHON_CAPI_AVAILABLE is 0, so JFM cannot call embedded Python.");
 #endif
+	}
+
+	Result<JFMImportBatchResult> JFMPythonImportBridge::ImportFiles(const std::vector<Path> &paths, const ProgressCallback &progressCallback)
+	{
+		return ImportFiles(paths, JFMImportOptions{}, progressCallback);
 	}
 } // namespace SST::Prototypes::JFM

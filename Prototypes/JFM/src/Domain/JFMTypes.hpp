@@ -64,6 +64,16 @@ namespace SST::Prototypes::JFM
 		JFMCharacteristicData data;
 	};
 
+	struct JFMImportOptions
+	{
+		std::string parser = "auto";
+		std::string namePattern = "{stem}";
+		std::string delimiter;
+		std::string decimalSeparator = "auto";
+		std::string temperatureExtraction = "auto";
+		std::string customScriptPath;
+	};
+
 	struct JFMGroup
 	{
 		std::string id;
@@ -100,6 +110,15 @@ namespace SST::Prototypes::JFM
 		std::string status = "not_started";
 	};
 
+	struct JFMScriptInfo
+	{
+		std::string id;
+		std::string name;
+		Path path;
+		bool enabled = true;
+		std::size_t reloadCount = 0;
+	};
+
 	struct JFMProject
 	{
 		int schemaVersion = JFMProjectSchemaVersion;
@@ -112,5 +131,6 @@ namespace SST::Prototypes::JFM
 		std::vector<JFMFitRun> fitRuns;
 		std::vector<JFMMonteCarloRun> monteCarloRuns;
 		std::vector<JFMDerivedAnalysis> derivedAnalyses;
+		std::vector<JFMScriptInfo> scripts;
 	};
 } // namespace SST::Prototypes::JFM

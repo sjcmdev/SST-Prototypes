@@ -18,13 +18,13 @@ namespace SST::Prototypes::JFM
 	}
 
 
-	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot)
-		: JFMImportJob(std::move(eventBus), std::vector<JFMImportGroup>{{std::move(paths), {}}}, std::move(pythonRoot))
+	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot, JFMImportOptions options)
+		: JFMImportJob(std::move(eventBus), std::vector<JFMImportGroup>{{std::move(paths), {}}}, std::move(pythonRoot), std::move(options))
 	{
 	}
 
-	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot)
-		: m_EventBus(std::move(eventBus)), m_Groups(std::move(groups)), m_PythonRoot(std::move(pythonRoot))
+	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot, JFMImportOptions options)
+		: m_EventBus(std::move(eventBus)), m_Groups(std::move(groups)), m_PythonRoot(std::move(pythonRoot)), m_Options(std::move(options))
 	{
 	}
 
@@ -74,6 +74,7 @@ namespace SST::Prototypes::JFM
 			{
 				auto result = bridge.ImportFiles(
 					{path},
+					m_Options,
 					[&context, this, completedOffset, total](std::size_t completed, std::size_t, const std::string &message) {
 						reportProgress(context, completedOffset + completed, total, message);
 					});

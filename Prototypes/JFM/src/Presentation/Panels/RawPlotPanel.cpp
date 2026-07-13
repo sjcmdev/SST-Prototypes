@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/RawPlotPanel.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 #include <imgui.h>
@@ -9,48 +10,56 @@
 
 namespace SST::Prototypes::JFM
 {
-
-
-	const std::vector<double> &selectYValues(const JFMCharacteristic &characteristic)
+	namespace
 	{
-		if (!characteristic.data.currentDensity.empty())
-			return characteristic.data.currentDensity;
-		return characteristic.data.current;
-	}
-
-	std::vector<double> absolutePositive(const std::vector<double> &values, const std::vector<double> &x, std::vector<double> &filteredX)
-	{
-		std::vector<double> filteredY;
-		const std::size_t count = std::min(values.size(), x.size());
-		filteredX.reserve(count);
-		filteredY.reserve(count);
-		for (std::size_t index = 0; index < count; ++index)
+		const std::vector<double> &selectYValues(const JFMCharacteristic &characteristic)
 		{
-			const double value = std::abs(values[index]);
-			if (value <= 0.0)
-				continue;
-			filteredX.push_back(x[index]);
-			filteredY.push_back(value);
+			if (!characteristic.data.currentDensity.empty())
+				return characteristic.data.currentDensity;
+			return characteristic.data.current;
 		}
-		return filteredY;
-	}
 
-	std::vector<double> signedLog(const std::vector<double> &values)
-	{
-		std::vector<double> transformed;
-		transformed.reserve(values.size());
-		for (double value : values)
+		std::vector<double> absolutePositive(const std::vector<double> &values, const std::vector<double> &x, std::vector<double> &filteredX)
 		{
-			const double sign = value < 0.0 ? -1.0 : 1.0;
-			transformed.push_back(sign * std::log10(1.0 + std::abs(value)));
+			std::vector<double> filteredY;
+			const std::size_t count = std::min(values.size(), x.size());
+			filteredX.reserve(count);
+			filteredY.reserve(count);
+			for (std::size_t index = 0; index < count; ++index)
+			{
+				const double value = std::abs(values[index]);
+				if (value <= 0.0)
+					continue;
+				filteredX.push_back(x[index]);
+				filteredY.push_back(value);
+			}
+			return filteredY;
 		}
-		return transformed;
+
+		std::vector<double> signedLog(const std::vector<double> &values)
+		{
+			std::vector<double> transformed;
+			transformed.reserve(values.size());
+			for (double value : values)
+			{
+				const double sign = value < 0.0 ? -1.0 : 1.0;
+				transformed.push_back(sign * std::log10(1.0 + std::abs(value)));
+			}
+			return transformed;
+		}
+
+		ImVec4 colorFor(const JFMCharacteristicInfo &info)
+		{
+			const double seed = info.temperatureK.value_or(static_cast<double>(info.id % 997));
+			const float hue = static_cast<float>(std::fmod(seed * 0.013, 1.0));
+			return ImColor::HSV(hue, 0.72f, 0.92f).Value;
+		}
 	}
-	
 
 	RawPlotPanel::RawPlotPanel(Ref<JFMWorkspaceStore> store, std::string title, bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault), m_Store(std::move(store))
 	{
+		m_PlotAreas.push_back({});
 	}
 
 	Ref<IPanel> RawPlotPanel::Clone() const
@@ -71,58 +80,98 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		auto selected = m_Store != nullptr ? m_Store->GetSelectedCharacteristic() : std::optional<JFMCharacteristic>{};
-		if (!selected)
+		if (m_Store == nullptr)
 		{
-			ImGui::TextDisabled("No data");
+			ImGui::TextDisabled("Workspace unavailable");
 			ImGui::End();
 			SetVisible(visible);
 			return;
 		}
 
-		const std::vector<double> &x = selected->data.voltage;
-		const std::vector<double> &rawY = selectYValues(*selected);
-		const std::size_t count = std::min(x.size(), rawY.size());
-		if (count == 0)
+		if (ImGui::Button("+ Plot Area"))
+			m_PlotAreas.push_back({});
+		ImGui::SameLine();
+		if (ImGui::Button("Use Selection"))
 		{
-			ImGui::TextDisabled("No raw arrays loaded");
-			ImGui::End();
-			SetVisible(visible);
-			return;
+			if (m_PlotAreas.empty())
+				m_PlotAreas.push_back({});
+			m_PlotAreas.front().characteristicIds = m_Store->GetSelectedCharacteristicIds();
 		}
 
-		int scale = static_cast<int>(m_Scale);
-		ImGui::RadioButton("Linear", &scale, static_cast<int>(PlotScale::Linear));
-		ImGui::SameLine();
-		ImGui::RadioButton("Semi-log", &scale, static_cast<int>(PlotScale::SemiLog));
-		ImGui::SameLine();
-		ImGui::RadioButton("Signed-log", &scale, static_cast<int>(PlotScale::SignedLog));
-		m_Scale = static_cast<PlotScale>(scale);
+		if (m_PlotAreas.empty())
+			m_PlotAreas.push_back({});
 
-		ImGui::TextUnformatted(selected->info.name.c_str());
-		if (ImPlot::BeginPlot("##jfm_raw_plot", ImVec2(-1.0f, -1.0f)))
+		for (std::size_t areaIndex = 0; areaIndex < m_PlotAreas.size(); ++areaIndex)
 		{
-			ImPlot::SetupAxes("Voltage", m_Scale == PlotScale::SignedLog ? "signed log current" : "Current");
-			if (m_Scale == PlotScale::SemiLog)
-				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+			PlotArea &area = m_PlotAreas[areaIndex];
+			if (area.characteristicIds.empty())
+				area.characteristicIds = m_Store->GetSelectedCharacteristicIds();
 
-			if (m_Scale == PlotScale::Linear)
+			ImGui::PushID(static_cast<int>(areaIndex));
+			int scale = static_cast<int>(area.scale);
+			ImGui::RadioButton("Linear", &scale, static_cast<int>(PlotScale::Linear));
+			ImGui::SameLine();
+			ImGui::RadioButton("Semi-log", &scale, static_cast<int>(PlotScale::SemiLog));
+			ImGui::SameLine();
+			ImGui::RadioButton("Signed-log", &scale, static_cast<int>(PlotScale::SignedLog));
+			//ImGui::SameLine();
+			if (m_PlotAreas.size() > 1 && ImGui::Button("x"))
 			{
-				ImPlot::PlotLine("raw", x.data(), rawY.data(), static_cast<int>(count));
+				m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
+				ImGui::PopID();
+				break;
 			}
-			else if (m_Scale == PlotScale::SemiLog)
+			area.scale = static_cast<PlotScale>(scale);
+
+			const std::string plotId = "##jfm_raw_plot_" + std::to_string(areaIndex);
+			if (ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, 260.0f)))
 			{
-				std::vector<double> filteredX;
-				std::vector<double> filteredY = absolutePositive(rawY, x, filteredX);
-				if (!filteredX.empty())
-					ImPlot::PlotLine("|raw|", filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()));
+				ImPlot::SetupAxes("Voltage", area.scale == PlotScale::SignedLog ? "signed log current" : "Current");
+				if (area.scale == PlotScale::SemiLog)
+					ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+
+				for (CharacteristicId id : area.characteristicIds)
+				{
+					auto characteristic = m_Store->FindCharacteristic(id);
+					if (!characteristic)
+						continue;
+					const std::vector<double> &x = characteristic->data.voltage;
+					const std::vector<double> &rawY = selectYValues(*characteristic);
+					const std::size_t count = std::min(x.size(), rawY.size());
+					if (count == 0)
+						continue;
+
+					const ImPlotSpec spec(ImPlotProp_LineColor, colorFor(characteristic->info));
+					if (area.scale == PlotScale::Linear)
+					{
+						ImPlot::PlotLine(characteristic->info.name.c_str(), x.data(), rawY.data(), static_cast<int>(count), spec);
+					}
+					else if (area.scale == PlotScale::SemiLog)
+					{
+						std::vector<double> filteredX;
+						std::vector<double> filteredY = absolutePositive(rawY, x, filteredX);
+						if (!filteredX.empty())
+							ImPlot::PlotLine(characteristic->info.name.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), spec);
+					}
+					else
+					{
+						std::vector<double> transformed = signedLog(rawY);
+						ImPlot::PlotLine(characteristic->info.name.c_str(), x.data(), transformed.data(), static_cast<int>(std::min(x.size(), transformed.size())), spec);
+					}
+				}
+				ImPlot::EndPlot();
 			}
-			else
+			if (ImGui::BeginDragDropTarget())
 			{
-				std::vector<double> transformed = signedLog(rawY);
-				ImPlot::PlotLine("signed log", x.data(), transformed.data(), static_cast<int>(std::min(x.size(), transformed.size())));
+				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("JFM_CHARACTERISTIC_ID"))
+				{
+					const CharacteristicId id = *static_cast<const CharacteristicId *>(payload->Data);
+					if (std::find(area.characteristicIds.begin(), area.characteristicIds.end(), id) == area.characteristicIds.end())
+						area.characteristicIds.push_back(id);
+				}
+				ImGui::EndDragDropTarget();
 			}
-			ImPlot::EndPlot();
+			ImGui::PopID();
 		}
 
 		ImGui::End();
