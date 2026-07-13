@@ -356,6 +356,13 @@ namespace SST::Prototypes::JFM
 	JFMScriptInfo JFMWorkspaceStore::AddScript(Path path)
 	{
 		std::scoped_lock lock(m_Mutex);
+		const auto existing = std::find_if(
+			m_Project.scripts.begin(),
+			m_Project.scripts.end(),
+			[&path](const JFMScriptInfo &script) { return script.path == path; });
+		if (existing != m_Project.scripts.end())
+			return *existing;
+
 		JFMScriptInfo script;
 		script.id = nextId("script");
 		script.path = std::move(path);
@@ -365,6 +372,35 @@ namespace SST::Prototypes::JFM
 		m_Project.scripts.push_back(script);
 		m_StatusMessage = "Script registered: " + script.name;
 		return script;
+	}
+
+	void JFMWorkspaceStore::EnsureDefaultScripts(Path scriptsDirectory)
+	{
+		if (scriptsDirectory.Empty())
+			return;
+
+		std::scoped_lock lock(m_Mutex);
+		const Path paths[] = {
+			scriptsDirectory / Path("dat_parser.py"),
+			scriptsDirectory / Path("scaps_iv_parser.py"),
+		};
+
+		for (const Path &path : paths)
+		{
+			const auto existing = std::find_if(
+				m_Project.scripts.begin(),
+				m_Project.scripts.end(),
+				[&path](const JFMScriptInfo &script) { return script.path == path; });
+			if (existing != m_Project.scripts.end())
+				continue;
+
+			JFMScriptInfo script;
+			script.id = nextId("script");
+			script.path = path;
+			script.name = path.filename().String();
+			if (!script.name.empty())
+				m_Project.scripts.push_back(std::move(script));
+		}
 	}
 
 	bool JFMWorkspaceStore::RemoveScript(const std::string &scriptId)

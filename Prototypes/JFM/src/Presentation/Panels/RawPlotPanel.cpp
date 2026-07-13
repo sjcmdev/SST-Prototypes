@@ -88,7 +88,7 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		if (ImGui::Button("+ Plot Area"))
+		if (ImGui::Button("+ Plot Window"))
 			m_PlotAreas.push_back({});
 		ImGui::SameLine();
 		if (ImGui::Button("Use Selection"))
@@ -97,31 +97,72 @@ namespace SST::Prototypes::JFM
 				m_PlotAreas.push_back({});
 			m_PlotAreas.front().characteristicIds = m_Store->GetSelectedCharacteristicIds();
 		}
+		ImGui::TextDisabled("Plot windows: %d", static_cast<int>(m_PlotAreas.size()));
+		ImGui::End();
+		SetVisible(visible);
+		if (!visible)
+			return;
 
 		if (m_PlotAreas.empty())
 			m_PlotAreas.push_back({});
 
-		for (std::size_t areaIndex = 0; areaIndex < m_PlotAreas.size(); ++areaIndex)
+		for (std::size_t areaIndex = 0; areaIndex < m_PlotAreas.size();)
 		{
 			PlotArea &area = m_PlotAreas[areaIndex];
-			if (area.characteristicIds.empty())
-				area.characteristicIds = m_Store->GetSelectedCharacteristicIds();
+			bool plotVisible = true;
+			const std::string windowTitle = "Raw Plot " + std::to_string(areaIndex + 1) + "###jfm_raw_plot_window_" + std::to_string(areaIndex);
+			if (!ImGui::Begin(windowTitle.c_str(), &plotVisible))
+			{
+				ImGui::End();
+				if (!plotVisible)
+					m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
+				else
+					++areaIndex;
+				continue;
+			}
 
 			ImGui::PushID(static_cast<int>(areaIndex));
+			if (ImGui::Button("Use Selection"))
+				area.characteristicIds = m_Store->GetSelectedCharacteristicIds();
+			ImGui::SameLine();
+			if (ImGui::Button("Clear"))
+				area.characteristicIds.clear();
+			ImGui::SameLine();
+			if (m_PlotAreas.size() > 1 && ImGui::Button("Close Plot"))
+			{
+				ImGui::PopID();
+				ImGui::End();
+				m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
+				continue;
+			}
+
 			int scale = static_cast<int>(area.scale);
 			ImGui::RadioButton("Linear", &scale, static_cast<int>(PlotScale::Linear));
 			ImGui::SameLine();
 			ImGui::RadioButton("Semi-log", &scale, static_cast<int>(PlotScale::SemiLog));
 			ImGui::SameLine();
 			ImGui::RadioButton("Signed-log", &scale, static_cast<int>(PlotScale::SignedLog));
-			//ImGui::SameLine();
-			if (m_PlotAreas.size() > 1 && ImGui::Button("x"))
-			{
-				m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
-				ImGui::PopID();
-				break;
-			}
 			area.scale = static_cast<PlotScale>(scale);
+
+			for (std::size_t idIndex = 0; idIndex < area.characteristicIds.size();)
+			{
+				const CharacteristicId id = area.characteristicIds[idIndex];
+				const auto characteristic = m_Store->FindCharacteristic(id);
+				ImGui::PushID(static_cast<int>(id));
+				if (ImGui::SmallButton("x"))
+				{
+					area.characteristicIds.erase(area.characteristicIds.begin() + static_cast<std::ptrdiff_t>(idIndex));
+					ImGui::PopID();
+					continue;
+				}
+				ImGui::SameLine();
+				ImGui::TextUnformatted(characteristic ? characteristic->info.name.c_str() : std::to_string(id).c_str());
+				ImGui::PopID();
+				++idIndex;
+			}
+
+			if (area.characteristicIds.empty())
+				ImGui::TextDisabled("Drop characteristics here or use selection.");
 
 			const std::string plotId = "##jfm_raw_plot_" + std::to_string(areaIndex);
 			if (ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, 260.0f)))
@@ -166,15 +207,24 @@ namespace SST::Prototypes::JFM
 				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("JFM_CHARACTERISTIC_ID"))
 				{
 					const CharacteristicId id = *static_cast<const CharacteristicId *>(payload->Data);
-					if (std::find(area.characteristicIds.begin(), area.characteristicIds.end(), id) == area.characteristicIds.end())
-						area.characteristicIds.push_back(id);
+					std::vector<CharacteristicId> idsToAdd = m_Store->GetSelectedCharacteristicIds();
+					if (std::find(idsToAdd.begin(), idsToAdd.end(), id) == idsToAdd.end())
+						idsToAdd = {id};
+					for (CharacteristicId selectedId : idsToAdd)
+					{
+						if (std::find(area.characteristicIds.begin(), area.characteristicIds.end(), selectedId) == area.characteristicIds.end())
+							area.characteristicIds.push_back(selectedId);
+					}
 				}
 				ImGui::EndDragDropTarget();
 			}
 			ImGui::PopID();
-		}
+			ImGui::End();
 
-		ImGui::End();
-		SetVisible(visible);
+			if (!plotVisible)
+				m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
+			else
+				++areaIndex;
+		}
 	}
 } // namespace SST::Prototypes::JFM

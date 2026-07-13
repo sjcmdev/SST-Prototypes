@@ -365,6 +365,8 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 		{
 			state->store->ReplaceProject(event.project, event.path);
+			if (state->settings != nullptr)
+				state->store->EnsureDefaultScripts(state->settings->GetDefaultScriptsDirectory());
 			state->store->SetStatusMessage("Project loaded; raw data materialization queued.");
 		}
 		if (state->settings != nullptr)

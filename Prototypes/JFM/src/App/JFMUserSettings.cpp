@@ -57,6 +57,12 @@ namespace SST::Prototypes::JFM
 		return m_Settings.defaultProjectsDirectory;
 	}
 
+	Path JFMUserSettingsStore::GetDefaultScriptsDirectory() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_Settings.defaultScriptsDirectory;
+	}
+
 	std::vector<Path> JFMUserSettingsStore::GetRecentProjects() const
 	{
 		std::scoped_lock lock(m_Mutex);
@@ -76,6 +82,7 @@ namespace SST::Prototypes::JFM
 			std::scoped_lock lock(m_Mutex);
 			m_Settings.defaultImportDirectory = ReadPath(root, "default_import_directory", m_Settings.defaultImportDirectory);
 			m_Settings.defaultProjectsDirectory = ReadPath(root, "default_projects_directory", m_Settings.defaultProjectsDirectory);
+			m_Settings.defaultScriptsDirectory = ReadPath(root, "default_scripts_directory", m_Settings.defaultScriptsDirectory);
 			m_Settings.recentProjects.clear();
 			if (const YAML::Node recent = root["recent_projects"])
 			{
@@ -96,6 +103,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::BeginMap;
 		EmitPath(out, "default_import_directory", snapshot.defaultImportDirectory);
 		EmitPath(out, "default_projects_directory", snapshot.defaultProjectsDirectory);
+		EmitPath(out, "default_scripts_directory", snapshot.defaultScriptsDirectory);
 		out << YAML::Key << "recent_projects" << YAML::Value << YAML::BeginSeq;
 		for (const Path &path : snapshot.recentProjects)
 			out << path.String();
@@ -123,6 +131,15 @@ namespace SST::Prototypes::JFM
 		{
 			std::scoped_lock lock(m_Mutex);
 			m_Settings.defaultProjectsDirectory = std::move(path);
+		}
+		Save();
+	}
+
+	void JFMUserSettingsStore::SetDefaultScriptsDirectory(Path path)
+	{
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.defaultScriptsDirectory = std::move(path);
 		}
 		Save();
 	}
@@ -166,6 +183,7 @@ namespace SST::Prototypes::JFM
 		JFMUserSettings settings;
 		settings.defaultImportDirectory = prototypeRoot / Path("example-data");
 		settings.defaultProjectsDirectory = prototypeRoot / Path("JFM-projects");
+		settings.defaultScriptsDirectory = prototypeRoot / Path("python") / Path("jfm_import");
 		return settings;
 	}
 } // namespace SST::Prototypes::JFM

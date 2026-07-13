@@ -236,9 +236,11 @@ namespace SST::Prototypes::JFM
 			eventBus.Queue(ExportRawTsvBatchRequested{directory, std::move(items)});
 	}
 
-	Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, Ref<JFMUserSettingsStore> settings, CommandContext &)
 	{
 		workspace->ResetProject("Untitled JFM Project");
+		if (settings != nullptr)
+			workspace->EnsureDefaultScripts(settings->GetDefaultScriptsDirectory());
 		return Result<void>{};
 	}
 
@@ -487,9 +489,9 @@ namespace SST::Prototypes::JFM
 		return Result<void>{};
 	}
 
-	Result<void> handleAddScript(Ref<JFMWorkspaceStore> workspace, CommandContext &)
+	Result<void> handleAddScript(Ref<JFMWorkspaceStore> workspace, Ref<JFMUserSettingsStore> settings, CommandContext &)
 	{
-		if (auto path = OpenFileDialog(PythonScriptFilter))
+		if (auto path = OpenFileDialog(PythonScriptFilter, settings != nullptr ? settings->GetDefaultScriptsDirectory() : Path{}))
 			(void)workspace->AddScript(*path);
 		return Result<void>{};
 	}
@@ -545,7 +547,7 @@ namespace SST::Prototypes::JFM
 		registerCommand(
 			registry,
 			CommandMeta{NewProjectCommand, "New Project", "JFM", "Create a new JFM project.", {}, CommandFlags::None},
-			std::bind(handleNewProject, workspace, std::placeholders::_1));
+			std::bind(handleNewProject, workspace, settings, std::placeholders::_1));
 
 		registerCommand(
 			registry,
@@ -620,7 +622,7 @@ namespace SST::Prototypes::JFM
 		registerCommand(
 			registry,
 			CommandMeta{AddScriptCommand, "Add Import Script", "JFM", "Register a custom Python import script.", {}, CommandFlags::None},
-			std::bind(handleAddScript, workspace, std::placeholders::_1));
+			std::bind(handleAddScript, workspace, settings, std::placeholders::_1));
 
 		registerCommand(
 			registry,

@@ -6,9 +6,14 @@
 #include "Core/IO/TextFileIO.hpp"
 #include "Events/JFMEvents.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <filesystem>
 #include <imgui.h>
+#include <implot.h>
 #include <sstream>
+#include <system_error>
 
 namespace SST::Prototypes::JFM
 {
@@ -29,6 +34,56 @@ namespace SST::Prototypes::JFM
 				position += to.size();
 			}
 			return text;
+		}
+
+		bool IsDataFile(const Path &path)
+		{
+			std::string extension = path.extension().String();
+			std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character) {
+				return static_cast<char>(std::tolower(character));
+			});
+			return extension == ".dat" || extension == ".iv" || extension == ".txt" || extension == ".csv";
+		}
+
+		bool IsDirectory(const Path &path)
+		{
+			std::error_code error;
+			return std::filesystem::is_directory(path.Native(), error);
+		}
+
+		bool IsRegularFile(const Path &path)
+		{
+			std::error_code error;
+			return std::filesystem::is_regular_file(path.Native(), error);
+		}
+
+		void AddFilesFromDirectory(const Path &directory, bool recursive, std::vector<Path> &files)
+		{
+			std::error_code error;
+			if (!recursive)
+			{
+				for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native(), error))
+				{
+					if (error)
+						break;
+					const Path path = Path::FromResolved(entry.path());
+					std::error_code fileError;
+					if (entry.is_regular_file(fileError) && IsDataFile(path))
+						files.push_back(path);
+				}
+				return;
+			}
+
+			const auto options = std::filesystem::directory_options::skip_permission_denied;
+			for (const std::filesystem::directory_entry &entry : std::filesystem::recursive_directory_iterator(directory.Native(), options, error))
+			{
+				if (error)
+					break;
+				const Path path = Path::FromResolved(entry.path());
+				std::error_code fileError;
+				if (entry.is_regular_file(fileError) && IsDataFile(path))
+					files.push_back(path);
+			}
 		}
 	}
 
@@ -65,7 +120,7 @@ namespace SST::Prototypes::JFM
 			{
 				loadRequest(std::move(*request));
 				m_Open = true;
-				ImGui::OpenPopup("Import Data");
+				m_PreviewOpen = true;
 			}
 		}
 
@@ -73,12 +128,17 @@ namespace SST::Prototypes::JFM
 			return;
 
 		bool open = true;
-		if (!ImGui::BeginPopupModal("Import Data", &open, ImGuiWindowFlags_AlwaysAutoResize))
+		if (!ImGui::Begin("Import Data", &open, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::End();
+			renderPreviewWindow();
 			return;
+		}
 
 		ImGui::Text("Files: %d", static_cast<int>(m_Request.paths.size()));
 		if (!m_Request.paths.empty())
 			ImGui::TextWrapped("%s", m_Request.paths.front().String().c_str());
+		ImGui::Text("Previewable files: %d", static_cast<int>(m_PreviewFiles.size()));
 
 		ImGui::Combo("Parser", &m_Parser, ParserOptions, IM_ARRAYSIZE(ParserOptions));
 		ImGui::InputText("Name pattern", m_NamePattern.data(), m_NamePattern.size());
@@ -109,29 +169,29 @@ namespace SST::Prototypes::JFM
 
 		const std::string name = previewName();
 		ImGui::Text("Preview name: %s", name.c_str());
-		if (ImGui::CollapsingHeader("File preview"))
-		{
-			const std::string preview = previewFileText();
-			ImGui::TextUnformatted(preview.empty() ? "No preview" : preview.c_str());
-		}
+		ImGui::Checkbox("Preview window", &m_PreviewOpen);
 
 		if (ImGui::Button("Import"))
 		{
 			if (m_EventBus != nullptr)
 				m_EventBus->Queue(ImportRequested{m_Request.paths, m_Request.targetSeriesId, m_Request.recursive, buildOptions()});
 			m_Open = false;
-			ImGui::CloseCurrentPopup();
+			m_PreviewOpen = false;
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel"))
 		{
 			m_Open = false;
-			ImGui::CloseCurrentPopup();
+			m_PreviewOpen = false;
 		}
 
 		if (!open)
+		{
 			m_Open = false;
-		ImGui::EndPopup();
+			m_PreviewOpen = false;
+		}
+		ImGui::End();
+		renderPreviewWindow();
 	}
 
 	void JFMImportDialogPanel::loadRequest(JFMImportDialogRequest request)
@@ -142,7 +202,79 @@ namespace SST::Prototypes::JFM
 		m_TemperatureExtraction = 0;
 		m_Delimiter.fill('\0');
 		m_CustomScriptPath.fill('\0');
+		m_PreviewFileIndex = 0;
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
+		refreshPreviewFiles();
+	}
+
+	void JFMImportDialogPanel::refreshPreviewFiles()
+	{
+		m_PreviewFiles.clear();
+		for (const Path &path : m_Request.paths)
+		{
+			if (IsDirectory(path))
+				AddFilesFromDirectory(path, m_Request.recursive, m_PreviewFiles);
+			else if ((IsRegularFile(path) || !FileSystem::Exists(path.Native())) && IsDataFile(path))
+				m_PreviewFiles.push_back(path);
+		}
+		std::sort(m_PreviewFiles.begin(), m_PreviewFiles.end(), [](const Path &left, const Path &right) {
+			return left.String() < right.String();
+		});
+		if (m_PreviewFileIndex >= static_cast<int>(m_PreviewFiles.size()))
+			m_PreviewFileIndex = 0;
+	}
+
+	void JFMImportDialogPanel::renderPreviewWindow()
+	{
+		if (!m_PreviewOpen)
+			return;
+
+		if (!ImGui::Begin("Import Preview", &m_PreviewOpen, ImGuiWindowFlags_AlwaysAutoResize))
+		{
+			ImGui::End();
+			return;
+		}
+
+		if (m_PreviewFiles.empty())
+		{
+			ImGui::TextDisabled("No previewable data files.");
+			ImGui::End();
+			return;
+		}
+
+		ImGui::SetNextItemWidth(360.0f);
+		if (ImGui::BeginCombo("File", m_PreviewFiles[static_cast<std::size_t>(m_PreviewFileIndex)].filename().String().c_str()))
+		{
+			for (std::size_t index = 0; index < m_PreviewFiles.size(); ++index)
+			{
+				const bool selected = static_cast<int>(index) == m_PreviewFileIndex;
+				if (ImGui::Selectable(m_PreviewFiles[index].String().c_str(), selected))
+					m_PreviewFileIndex = static_cast<int>(index);
+				if (selected)
+					ImGui::SetItemDefaultFocus();
+			}
+			ImGui::EndCombo();
+		}
+
+		std::vector<double> x;
+		std::vector<double> y;
+		if (buildPreviewCurve(x, y) && ImPlot::BeginPlot("Mini Plot", ImVec2(460.0f, 220.0f)))
+		{
+			ImPlot::SetupAxes("x", "y");
+			ImPlot::PlotLine("preview", x.data(), y.data(), static_cast<int>(std::min(x.size(), y.size())));
+			ImPlot::EndPlot();
+		}
+		else
+		{
+			ImGui::TextDisabled("Mini plot unavailable for this file.");
+		}
+
+		const std::string preview = previewFileText();
+		ImGui::SeparatorText("Text");
+		ImGui::BeginChild("##jfm_import_text_preview", ImVec2(640.0f, 220.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
+		ImGui::TextUnformatted(preview.empty() ? "No preview" : preview.c_str());
+		ImGui::EndChild();
+		ImGui::End();
 	}
 
 	JFMImportOptions JFMImportDialogPanel::buildOptions() const
@@ -163,7 +295,7 @@ namespace SST::Prototypes::JFM
 		if (m_Request.paths.empty())
 			return pattern;
 
-		const Path &path = m_Request.paths.front();
+		const Path path = selectedPreviewPath();
 		std::string text = ReplaceAll(pattern, "{stem}", path.Native().stem().string());
 		text = ReplaceAll(text, "{source_path}", path.String());
 		return text.empty() ? path.Native().stem().string() : text;
@@ -171,12 +303,13 @@ namespace SST::Prototypes::JFM
 
 	std::string JFMImportDialogPanel::previewFileText() const
 	{
-		if (m_Request.paths.empty())
+		const Path path = selectedPreviewPath();
+		if (path.Empty())
 			return {};
 
 		std::string text;
 		std::string error;
-		if (!TextFileIO::Load(m_Request.paths.front(), text, error))
+		if (!TextFileIO::Load(path, text, error))
 			return error;
 
 		std::istringstream stream(text);
@@ -185,5 +318,48 @@ namespace SST::Prototypes::JFM
 		for (int index = 0; index < 12 && std::getline(stream, line); ++index)
 			preview << line << '\n';
 		return preview.str();
+	}
+
+	Path JFMImportDialogPanel::selectedPreviewPath() const
+	{
+		if (!m_PreviewFiles.empty())
+			return m_PreviewFiles[static_cast<std::size_t>(std::clamp(m_PreviewFileIndex, 0, static_cast<int>(m_PreviewFiles.size()) - 1))];
+		return m_Request.paths.empty() ? Path{} : m_Request.paths.front();
+	}
+
+	bool JFMImportDialogPanel::buildPreviewCurve(std::vector<double> &x, std::vector<double> &y) const
+	{
+		std::string text;
+		std::string error;
+		if (!TextFileIO::Load(selectedPreviewPath(), text, error))
+			return false;
+
+		std::istringstream lines(text);
+		std::string line;
+		const bool commaDecimal = std::string(DecimalOptions[static_cast<std::size_t>(m_DecimalSeparator)]) == ",";
+		const std::string delimiter = m_Delimiter.data();
+		while (x.size() < 512 && std::getline(lines, line))
+		{
+			if (commaDecimal)
+				std::replace(line.begin(), line.end(), ',', '.');
+			if (!delimiter.empty())
+			{
+				for (char &character : line)
+				{
+					if (delimiter.find(character) != std::string::npos)
+						character = ' ';
+				}
+			}
+
+			std::istringstream values(line);
+			double first = 0.0;
+			double second = 0.0;
+			if (values >> first >> second)
+			{
+				x.push_back(first);
+				y.push_back(second);
+			}
+		}
+		return x.size() > 1 && x.size() == y.size();
 	}
 } // namespace SST::Prototypes::JFM

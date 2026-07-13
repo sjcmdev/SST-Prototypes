@@ -106,4 +106,18 @@ namespace SST::Prototypes::JFM
 		EXPECT_TRUE(store.RemoveScript(script.id));
 		EXPECT_TRUE(store.GetProjectSnapshot().scripts.empty());
 	}
+
+	TEST(JFMWorkspaceStoreTests, RegistersDefaultImportScriptsOnce)
+	{
+		JFMWorkspaceStore store;
+		const Path scripts = Path::FromResolved("python/jfm_import");
+
+		store.EnsureDefaultScripts(scripts);
+		store.EnsureDefaultScripts(scripts);
+
+		const JFMProject project = store.GetProjectSnapshot();
+		ASSERT_EQ(project.scripts.size(), 2);
+		EXPECT_EQ(project.scripts.front().name, "dat_parser.py");
+		EXPECT_EQ(project.scripts.back().name, "scaps_iv_parser.py");
+	}
 } // namespace SST::Prototypes::JFM

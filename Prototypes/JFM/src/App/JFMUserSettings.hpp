@@ -11,6 +11,7 @@ namespace SST::Prototypes::JFM
 	{
 		Path defaultImportDirectory;
 		Path defaultProjectsDirectory;
+		Path defaultScriptsDirectory;
 		std::vector<Path> recentProjects;
 	};
 
@@ -23,12 +24,14 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] Path GetSettingsPath() const;
 		[[nodiscard]] Path GetDefaultImportDirectory() const;
 		[[nodiscard]] Path GetDefaultProjectsDirectory() const;
+		[[nodiscard]] Path GetDefaultScriptsDirectory() const;
 		[[nodiscard]] std::vector<Path> GetRecentProjects() const;
 
 		void Load();
 		void Save() const;
 		void SetDefaultImportDirectory(Path path);
 		void SetDefaultProjectsDirectory(Path path);
+		void SetDefaultScriptsDirectory(Path path);
 		void AddRecentProject(Path path);
 
 	private:

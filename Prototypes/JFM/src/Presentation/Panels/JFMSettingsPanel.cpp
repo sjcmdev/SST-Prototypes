@@ -36,6 +36,7 @@ namespace SST::Prototypes::JFM
 			const JFMUserSettings settings = m_Settings->GetSnapshot();
 			renderPathRow("Import directory", settings.defaultImportDirectory, &JFMUserSettingsStore::SetDefaultImportDirectory);
 			renderPathRow("Projects directory", settings.defaultProjectsDirectory, &JFMUserSettingsStore::SetDefaultProjectsDirectory);
+			renderPathRow("Scripts directory", settings.defaultScriptsDirectory, &JFMUserSettingsStore::SetDefaultScriptsDirectory);
 		}
 
 		ImGui::End();

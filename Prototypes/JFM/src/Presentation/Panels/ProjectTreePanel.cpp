@@ -159,7 +159,7 @@ namespace SST::Prototypes::JFM
 
 		const JFMProject project = m_Store->GetProjectSnapshot();
 		const CharacteristicId primarySelection = m_Store->GetSelectedCharacteristicId();
-		const std::vector<CharacteristicId> selectedIds = m_Store->GetSelectedCharacteristicIds();
+		std::vector<CharacteristicId> selectedIds = m_Store->GetSelectedCharacteristicIds();
 
 		const auto openImportDialog = [&](std::string targetSeriesId = {}) {
 			std::vector<Path> paths = chooseImportFiles(m_Settings);
@@ -169,14 +169,14 @@ namespace SST::Prototypes::JFM
 				m_ImportDialog->Open(JFMImportDialogRequest{std::move(paths), std::move(targetSeriesId), false});
 		};
 
-		const auto renderCharacteristicNode = [&](const JFMSeries &series, CharacteristicId characteristicId) {
+		const auto renderCharacteristicNode = [&](const JFMSeries &series, CharacteristicId characteristicId, const std::vector<CharacteristicId> &visibleIds) {
 			const auto characteristic = m_Store != nullptr ? m_Store->FindCharacteristic(characteristicId) : std::optional<JFMCharacteristic>{};
 			const std::string name = characteristic ? characteristic->info.name : std::to_string(characteristicId);
 			const bool hasWarning = characteristic
 				&& (!characteristic->info.qc.warnings.empty()
 					|| (!characteristic->info.sourcePath.Empty() && characteristic->data.voltage.empty()));
 			const bool selected = containsId(selectedIds, characteristicId);
-			const std::string label = name + (hasWarning ? " [!]" : "") + "##" + std::to_string(characteristicId);
+			const std::string label = std::string(selected ? "[x] " : "[ ] ") + name + (hasWarning ? " [!]" : "") + "##" + std::to_string(characteristicId);
 
 			if (ImGui::Selectable(label.c_str(), selected) && m_Store != nullptr)
 			{
@@ -186,7 +186,7 @@ namespace SST::Prototypes::JFM
 				{
 					nextSelection.clear();
 					bool collecting = false;
-					for (CharacteristicId id : series.characteristicIds)
+					for (CharacteristicId id : visibleIds)
 					{
 						if (id == primarySelection || id == characteristicId)
 						{
@@ -213,11 +213,15 @@ namespace SST::Prototypes::JFM
 				}
 				m_Store->SelectSeries(series.id);
 				m_Store->SetSelectedCharacteristics(std::move(nextSelection), characteristicId, series.id);
+				selectedIds = m_Store->GetSelectedCharacteristicIds();
 			}
 			if (ImGui::BeginDragDropSource())
 			{
 				ImGui::SetDragDropPayload("JFM_CHARACTERISTIC_ID", &characteristicId, sizeof(CharacteristicId));
-				ImGui::TextUnformatted(name.c_str());
+				if (selected && selectedIds.size() > 1)
+					ImGui::Text("%d characteristics", static_cast<int>(selectedIds.size()));
+				else
+					ImGui::TextUnformatted(name.c_str());
 				ImGui::EndDragDropSource();
 			}
 			if (hasWarning && ImGui::IsItemHovered())
@@ -243,6 +247,19 @@ namespace SST::Prototypes::JFM
 		const auto renderSeriesNode = [&](const JFMSeries &series, const auto &renderSeriesNodeRef) -> void {
 			const std::string seriesLabel = series.name + "##" + series.id;
 			const bool open = ImGui::TreeNodeEx(seriesLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+			if (ImGui::BeginDragDropTarget())
+			{
+				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("JFM_CHARACTERISTIC_ID"))
+				{
+					const CharacteristicId id = *static_cast<const CharacteristicId *>(payload->Data);
+					std::vector<CharacteristicId> idsToMove = containsId(selectedIds, id) ? selectedIds : std::vector<CharacteristicId>{id};
+					for (CharacteristicId movedId : idsToMove)
+						(void)m_Store->MoveCharacteristic(movedId, series.id);
+					m_Store->SetSelectedCharacteristics(idsToMove, id, series.id);
+					selectedIds = m_Store->GetSelectedCharacteristicIds();
+				}
+				ImGui::EndDragDropTarget();
+			}
 			if (ImGui::BeginPopupContextItem())
 			{
 				if (ImGui::MenuItem("Select Series"))
@@ -264,8 +281,9 @@ namespace SST::Prototypes::JFM
 			if (!open)
 				return;
 
-			for (CharacteristicId characteristicId : sortedCharacteristicIds(series, m_Store, m_SortMode))
-				renderCharacteristicNode(series, characteristicId);
+			const std::vector<CharacteristicId> visibleIds = sortedCharacteristicIds(series, m_Store, m_SortMode);
+			for (CharacteristicId characteristicId : visibleIds)
+				renderCharacteristicNode(series, characteristicId, visibleIds);
 			if (series.characteristicIds.empty())
 				ImGui::TextDisabled("No characteristics");
 			ImGui::TreePop();
@@ -348,7 +366,7 @@ namespace SST::Prototypes::JFM
 				{
 					if (ImGui::MenuItem("Add Script"))
 					{
-						if (auto path = OpenFileDialog(PythonScriptFilter))
+						if (auto path = OpenFileDialog(PythonScriptFilter, m_Settings != nullptr ? m_Settings->GetDefaultScriptsDirectory() : Path{}))
 							(void)m_Store->AddScript(*path);
 					}
 					ImGui::EndPopup();

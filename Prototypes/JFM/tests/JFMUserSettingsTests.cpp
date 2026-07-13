@@ -15,6 +15,7 @@ namespace SST::Prototypes::JFM
 		JFMUserSettingsStore store(config, prototype);
 		store.SetDefaultImportDirectory(prototype / Path("example-data") / Path("nested"));
 		store.SetDefaultProjectsDirectory(prototype / Path("JFM-projects"));
+		store.SetDefaultScriptsDirectory(prototype / Path("python") / Path("custom_scripts"));
 		store.AddRecentProject(prototype / Path("JFM-projects") / Path("one.jfm.yaml"));
 
 		JFMUserSettingsStore loaded(config, prototype);
@@ -22,6 +23,7 @@ namespace SST::Prototypes::JFM
 		const JFMUserSettings settings = loaded.GetSnapshot();
 
 		EXPECT_EQ(settings.defaultImportDirectory, prototype / Path("example-data") / Path("nested"));
+		EXPECT_EQ(settings.defaultScriptsDirectory, prototype / Path("python") / Path("custom_scripts"));
 		ASSERT_EQ(settings.recentProjects.size(), 1);
 		EXPECT_EQ(settings.recentProjects.front(), prototype / Path("JFM-projects") / Path("one.jfm.yaml"));
 

@@ -62,6 +62,7 @@ namespace SST
 		auto workspace = CreateRef<JFMWorkspaceStore>();
 		auto settings = CreateRef<JFMUserSettingsStore>(runtime.configDirectory);
 		settings->Load();
+		workspace->EnsureDefaultScripts(settings->GetDefaultScriptsDirectory());
 		auto importDialog = CreateRef<JFMImportDialogState>();
 		RegisterJFMIOHandlers(
 			application.GetIOLayer(),
