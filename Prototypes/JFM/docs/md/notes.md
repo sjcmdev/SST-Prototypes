@@ -88,6 +88,12 @@ Data: 2026-07-10
 5. Import/export/save/load failure publikuje `NotificationRequestedEvent` oraz aktualizuje status workspace.
 6. Grupować joby JFM IO przez spójny `source/type`, bez nowej hierarchii klas jeśli nie jest potrzebna.
 
+1. import całych zagnieżdżonych folderów, należy odtworzyć strukturę folderów. 
+2. Przy importcie folderów należy sprawdzić czy są tam jakieś pliki które można zaimportować a jeśli się nie uda to pominąć
+3. Podczas nieudanego importu danych należy iść dalej i importować to co się da z kolejnych folderów
+4.  Dodajmy skrót klawiaturowy dla importu pojedynczego folderu
+5.  Dodajmy skrót klawiaturowy dla importu wielu folderów
+6.  Dodajmy skrót klawiaturowy dla importu folderu/folderów rekursywnie 
 ### Plan UI po fundamentach
 
 1. Context menu: projekt `import series/add series`, seria `delete/add characteristics`, charakterystyka `delete`.
