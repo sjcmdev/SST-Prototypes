@@ -52,6 +52,8 @@ namespace SST::Prototypes::JFM
 		void QueuePlot(std::vector<CharacteristicId> ids, std::string title);
 		void OpenImportDialog(std::string targetSeriesId = {});
 		void OpenImportFolderDialog(std::string targetSeriesId, bool recursive);
+		void QueuePlotsForProjectGroups(const JFMProject &project);
+		void QueuePlotsForChildGroups(const JFMProject &project, const std::string &parentGroupId);
 		void RenderProjectNode(const JFMProject &project, TreeRenderState &state);
 		void RenderGroupNode(const JFMProject &project, const JFMGroup &group, TreeRenderState &state);
 		void RenderSeriesNode(const JFMProject &project, const JFMSeries &series, TreeRenderState &state);
@@ -81,6 +83,7 @@ namespace SST::Prototypes::JFM
 		std::array<char, 160> m_RenameBuffer = {};
 		RenameTarget m_ShortNameTarget = RenameTarget::None;
 		std::string m_ShortNameTargetId;
+		std::vector<CharacteristicId> m_ShortNameTargetIds;
 		bool m_OpenShortNamePopup = false;
 		std::array<char, 160> m_ShortNameBuffer = {};
 		RenameTarget m_ClipboardTarget = RenameTarget::None;

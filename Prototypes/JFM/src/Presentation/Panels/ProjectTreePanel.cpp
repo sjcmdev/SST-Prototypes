@@ -11,6 +11,7 @@
 #include <functional>
 #include <optional>
 #include <set>
+#include <sstream>
 
 #include <imgui.h>
 
@@ -59,6 +60,44 @@ namespace SST::Prototypes::JFM
 		{
 			const std::string shortName = shortNameFrom(metadata);
 			return shortName.empty() ? name : shortName;
+		}
+
+		std::string replaceAll(std::string text, const std::string &from, const std::string &to)
+		{
+			std::size_t position = 0;
+			while ((position = text.find(from, position)) != std::string::npos)
+			{
+				text.replace(position, from.size(), to);
+				position += to.size();
+			}
+			return text;
+		}
+
+		std::string formatTemperature(std::optional<double> temperature)
+		{
+			if (!temperature)
+				return {};
+			std::ostringstream stream;
+			stream << *temperature;
+			return stream.str();
+		}
+
+		std::string expandShortNamePattern(std::string pattern, const JFMCharacteristicInfo &info)
+		{
+			const std::string stem = info.sourcePath.Empty() ? info.name : info.sourcePath.Native().stem().string();
+			const std::string folder = info.sourcePath.Empty() ? std::string{} : info.sourcePath.parent_path().filename().String();
+			const std::string parentFolder = info.sourcePath.Empty() ? std::string{} : info.sourcePath.parent_path().parent_path().filename().String();
+			const std::string temperature = formatTemperature(info.temperatureK);
+			pattern = replaceAll(std::move(pattern), "{name}", info.name);
+			pattern = replaceAll(std::move(pattern), "{id}", std::to_string(info.id));
+			pattern = replaceAll(std::move(pattern), "{stem}", stem);
+			pattern = replaceAll(std::move(pattern), "{folder}", folder);
+			pattern = replaceAll(std::move(pattern), "{parent_folder}", parentFolder);
+			pattern = replaceAll(std::move(pattern), "{T}", temperature);
+			pattern = replaceAll(std::move(pattern), "{temperature_K}", temperature);
+			for (const auto &[key, value] : info.metadata)
+				pattern = replaceAll(std::move(pattern), "{" + key + "}", value);
+			return pattern;
 		}
 
 		std::optional<std::reference_wrapper<const JFMGroup>> findGroup(const JFMProject &project, const std::string &groupId)
@@ -269,9 +308,12 @@ namespace SST::Prototypes::JFM
 		}
 		else if (target == RenameTarget::Characteristic)
 		{
-			const auto characteristic = m_Store->FindCharacteristic(static_cast<CharacteristicId>(std::stoull(id)));
+			const CharacteristicId characteristicId = static_cast<CharacteristicId>(std::stoull(id));
+			const auto characteristic = m_Store->FindCharacteristic(characteristicId);
 			if (characteristic)
 				shortName = shortNameFrom(characteristic->info.metadata);
+			const std::vector<CharacteristicId> selectedIds = m_Store->GetSelectedCharacteristicIds();
+			m_ShortNameTargetIds = containsId(selectedIds, characteristicId) ? selectedIds : std::vector<CharacteristicId>{characteristicId};
 		}
 		else
 		{
@@ -280,6 +322,8 @@ namespace SST::Prototypes::JFM
 
 		m_ShortNameTarget = target;
 		m_ShortNameTargetId = std::move(id);
+		if (m_ShortNameTarget != RenameTarget::Characteristic)
+			m_ShortNameTargetIds.clear();
 		std::snprintf(m_ShortNameBuffer.data(), m_ShortNameBuffer.size(), "%s", shortName.empty() ? fallbackName.c_str() : shortName.c_str());
 		m_OpenShortNamePopup = true;
 	}
@@ -288,6 +332,24 @@ namespace SST::Prototypes::JFM
 	{
 		if (m_PlotRequests != nullptr)
 			m_PlotRequests->QueuePlot(std::move(ids), std::move(title));
+	}
+
+	void ProjectTreePanel::QueuePlotsForProjectGroups(const JFMProject &project)
+	{
+		for (const JFMGroup &group : project.groups)
+		{
+			if (group.parentId.empty())
+				QueuePlot(idsForGroup(m_Store, group.id), displayName(group.name, group.metadata));
+		}
+	}
+
+	void ProjectTreePanel::QueuePlotsForChildGroups(const JFMProject &project, const std::string &parentGroupId)
+	{
+		for (const JFMGroup &group : project.groups)
+		{
+			if (group.parentId == parentGroupId)
+				QueuePlot(idsForGroup(m_Store, group.id), displayName(group.name, group.metadata));
+		}
 	}
 
 	void ProjectTreePanel::OpenImportDialog(std::string targetSeriesId)
@@ -326,6 +388,8 @@ namespace SST::Prototypes::JFM
 				OpenImportFolderDialog({}, false);
 			if (ImGui::MenuItem("Import Folder Recursively as Series"))
 				OpenImportFolderDialog({}, true);
+			if (ImGui::MenuItem("Plot Project Groups"))
+				QueuePlotsForProjectGroups(project);
 			if (ImGui::MenuItem("Paste", nullptr, false, m_ClipboardTarget != RenameTarget::None))
 				OpenPastePrompt(false);
 			if (ImGui::MenuItem("Rename"))
@@ -362,6 +426,8 @@ namespace SST::Prototypes::JFM
 				(void)m_Store->AddSeries("Series", group.id);
 			if (ImGui::MenuItem("Plot Group"))
 				QueuePlot(idsForGroup(m_Store, group.id), shownName);
+			if (ImGui::MenuItem("Plot Child Groups"))
+				QueuePlotsForChildGroups(project, group.id);
 			if (ImGui::MenuItem("Export Raw TSV"))
 				ExportGroup(project, group);
 			if (ImGui::MenuItem("Rename"))
@@ -375,7 +441,7 @@ namespace SST::Prototypes::JFM
 			if (ImGui::MenuItem("Duplicate"))
 			{
 				CopyFocused(project, state.selectedIds);
-				OpenPastePrompt(true);
+				PasteClipboard(project, false);
 			}
 			if (ImGui::MenuItem("Delete Group"))
 				(void)m_Store->DeleteGroup(group.id);
@@ -450,7 +516,7 @@ namespace SST::Prototypes::JFM
 			if (ImGui::MenuItem("Duplicate"))
 			{
 				CopyFocused(project, state.selectedIds);
-				OpenPastePrompt(true);
+				PasteClipboard(project, false);
 			}
 			if (ImGui::MenuItem("Delete Series"))
 				(void)m_Store->DeleteSeries(series.id);
@@ -564,7 +630,7 @@ namespace SST::Prototypes::JFM
 			if (ImGui::MenuItem("Duplicate"))
 			{
 				CopyFocused(m_Store->GetProjectSnapshot(), state.selectedIds);
-				OpenPastePrompt(true);
+				PasteClipboard(m_Store->GetProjectSnapshot(), false);
 			}
 			ImGui::EndPopup();
 		}
@@ -647,6 +713,16 @@ namespace SST::Prototypes::JFM
 			return;
 
 		ImGui::InputText("Short name", m_ShortNameBuffer.data(), m_ShortNameBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+		ImGui::SameLine();
+		ImGui::BeginGroup();
+		ImGui::TextDisabled("Variables");
+		ImGui::TextDisabled("{name}");
+		ImGui::TextDisabled("{stem}");
+		ImGui::TextDisabled("{folder}");
+		ImGui::TextDisabled("{T}");
+		ImGui::EndGroup();
+		if (m_ShortNameTarget == RenameTarget::Characteristic && m_ShortNameTargetIds.size() > 1)
+			ImGui::TextDisabled("Applies to %d selected characteristics.", static_cast<int>(m_ShortNameTargetIds.size()));
 		const auto commit = [&]() {
 			const std::string shortName = m_ShortNameBuffer.data();
 			if (m_ShortNameTarget == RenameTarget::Group)
@@ -654,8 +730,17 @@ namespace SST::Prototypes::JFM
 			else if (m_ShortNameTarget == RenameTarget::Series)
 				(void)m_Store->SetSeriesShortName(m_ShortNameTargetId, shortName);
 			else if (m_ShortNameTarget == RenameTarget::Characteristic)
-				(void)m_Store->SetCharacteristicShortName(static_cast<CharacteristicId>(std::stoull(m_ShortNameTargetId)), shortName);
+			{
+				if (m_ShortNameTargetIds.empty())
+					m_ShortNameTargetIds.push_back(static_cast<CharacteristicId>(std::stoull(m_ShortNameTargetId)));
+				for (CharacteristicId id : m_ShortNameTargetIds)
+				{
+					const auto characteristic = m_Store->FindCharacteristic(id);
+					(void)m_Store->SetCharacteristicShortName(id, characteristic ? expandShortNamePattern(shortName, characteristic->info) : shortName);
+				}
+			}
 			m_ShortNameTarget = RenameTarget::None;
+			m_ShortNameTargetIds.clear();
 			ImGui::CloseCurrentPopup();
 		};
 		if (ImGui::Button("OK") || ImGui::IsKeyPressed(ImGuiKey_Enter) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter))
@@ -670,6 +755,7 @@ namespace SST::Prototypes::JFM
 		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
 		{
 			m_ShortNameTarget = RenameTarget::None;
+			m_ShortNameTargetIds.clear();
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::EndPopup();
@@ -689,7 +775,7 @@ namespace SST::Prototypes::JFM
 		if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_D))
 		{
 			CopyFocused(project, state.selectedIds);
-			OpenPastePrompt(true);
+			PasteClipboard(project, false);
 		}
 		if (ImGui::IsKeyPressed(ImGuiKey_Delete) && !state.selectedIds.empty())
 		{
@@ -774,16 +860,16 @@ namespace SST::Prototypes::JFM
 		if (!ImGui::BeginPopupModal("Paste Options##jfm_tree", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 			return;
 
-		ImGui::TextUnformatted(m_PasteDuplicateFocused ? "Duplicate into separate group?" : "Paste into separate group?");
-		if (ImGui::Button("Yes"))
+		ImGui::TextUnformatted(m_PasteDuplicateFocused ? "Duplicate items" : "Paste items");
+		if (ImGui::Button("Current location"))
 		{
-			PasteClipboard(project, true);
+			PasteClipboard(project, false);
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("No"))
+		if (ImGui::Button("Separate group"))
 		{
-			PasteClipboard(project, false);
+			PasteClipboard(project, true);
 			ImGui::CloseCurrentPopup();
 		}
 		ImGui::SameLine();
@@ -835,7 +921,7 @@ namespace SST::Prototypes::JFM
 		};
 
 		if (extractToGroup)
-			targetGroupId = m_Store->AddGroup("Extracted", targetGroupId).id;
+			targetGroupId = m_Store->AddGroup("Pasted", targetGroupId).id;
 
 		if (m_ClipboardTarget == RenameTarget::Characteristic)
 		{

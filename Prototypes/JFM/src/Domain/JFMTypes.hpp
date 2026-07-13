@@ -69,6 +69,7 @@ namespace SST::Prototypes::JFM
 		std::string parser = "auto";
 		std::string namePattern = "{stem}";
 		std::string shortNamePattern;
+		std::string variableDelimiter = "_";
 		std::string delimiter;
 		std::string decimalSeparator = "auto";
 		std::string temperatureExtraction = "auto";

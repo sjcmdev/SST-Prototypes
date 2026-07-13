@@ -32,6 +32,7 @@ namespace SST::Prototypes::JFM
 		Path pythonRoot;
 		std::vector<std::string> importWarnings;
 		bool importRunning = false;
+		bool plotAfterImport = false;
 	};
 
 	bool IsDirectory(const Path &path)
@@ -180,6 +181,7 @@ namespace SST::Prototypes::JFM
 		}
 
 		state->importRunning = true;
+		state->plotAfterImport = event.plotAfterImport;
 		state->importWarnings.clear();
 		if (state->store != nullptr)
 		{
@@ -190,6 +192,7 @@ namespace SST::Prototypes::JFM
 		if (groups.empty())
 		{
 			state->importRunning = false;
+			state->plotAfterImport = false;
 			if (state->store != nullptr)
 			{
 				state->store->SetImportRunning(false);
@@ -224,13 +227,18 @@ namespace SST::Prototypes::JFM
 			if (!targetSeriesId.empty())
 				state->store->SelectSeries(targetSeriesId);
 			if (!event.characteristics.empty())
-				state->store->AddCharacteristics(event.characteristics, targetSeriesId);
+			{
+				std::vector<CharacteristicId> addedIds = state->store->AddCharacteristics(event.characteristics, targetSeriesId);
+				if (state->plotAfterImport && !addedIds.empty() && state->eventBus != nullptr)
+					state->eventBus->Queue(PlotCharacteristicsRequested{std::move(addedIds), event.seriesName.empty() ? "Imported Data" : event.seriesName});
+			}
 			if (event.finalBatch)
 				state->store->SetImportRunning(false);
 		}
 		if (event.finalBatch)
 		{
 			state->importRunning = false;
+			state->plotAfterImport = false;
 			state->importWarnings.clear();
 		}
 	}
@@ -238,6 +246,7 @@ namespace SST::Prototypes::JFM
 	void HandleImportFailed(const Ref<JFMIOState> &state, const ImportFailed &event)
 	{
 		state->importRunning = false;
+		state->plotAfterImport = false;
 		if (state->store != nullptr)
 		{
 			state->store->SetImportRunning(false);

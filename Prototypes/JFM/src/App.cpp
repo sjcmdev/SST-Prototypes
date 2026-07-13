@@ -41,10 +41,10 @@ namespace SST
 		panelIds.projectTree = editorLayer.RegisterPanel<ProjectTreePanel>(workspace, settings, importDialog, plotRequests, application.GetEventBusRef());
 		panelIds.overview = editorLayer.RegisterPanel<JFMOverviewPanel>(workspace);
 		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
-		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace, plotRequests);
+		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace, plotRequests, settings, application.GetEventBusRef());
 		panelIds.details = editorLayer.RegisterPanel<CharacteristicDetailsPanel>(workspace);
 		panelIds.settings = editorLayer.RegisterPanel<JFMSettingsPanel>(settings);
-		editorLayer.RegisterPanel<JFMImportDialogPanel>(application.GetEventBusRef(), workspace, importDialog);
+		editorLayer.RegisterPanel<JFMImportDialogPanel>(application.GetEventBusRef(), workspace, importDialog, settings);
 		editorLayer.RegisterMenuRenderer(
 			"jfm.menu",
 			std::bind(&RenderJFMMenu, std::ref(editorLayer), panelIds, workspace, settings, std::placeholders::_1));

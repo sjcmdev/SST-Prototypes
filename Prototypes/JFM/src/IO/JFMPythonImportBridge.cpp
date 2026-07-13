@@ -152,6 +152,7 @@ namespace SST::Prototypes::JFM
 		dict["parser"] = nb::str(options.parser.c_str());
 		dict["name_pattern"] = nb::str(options.namePattern.c_str());
 		dict["short_name_pattern"] = nb::str(options.shortNamePattern.c_str());
+		dict["variable_delimiter"] = nb::str(options.variableDelimiter.c_str());
 		dict["decimal_separator"] = nb::str(options.decimalSeparator.c_str());
 		dict["temperature_extraction"] = nb::str(options.temperatureExtraction.c_str());
 		dict["custom_script_path"] = nb::str(options.customScriptPath.c_str());

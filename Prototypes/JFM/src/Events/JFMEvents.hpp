@@ -87,11 +87,13 @@ namespace SST::Prototypes::JFM
 			std::vector<Path> requestedPaths,
 			std::string requestedTargetSeriesId,
 			bool requestedRecursive = false,
-			JFMImportOptions requestedOptions = {})
+			JFMImportOptions requestedOptions = {},
+			bool requestedPlotAfterImport = false)
 			: paths(std::move(requestedPaths)),
 			  targetSeriesId(std::move(requestedTargetSeriesId)),
 			  recursive(requestedRecursive),
-			  options(std::move(requestedOptions))
+			  options(std::move(requestedOptions)),
+			  plotAfterImport(requestedPlotAfterImport)
 		{
 		}
 
@@ -99,6 +101,19 @@ namespace SST::Prototypes::JFM
 		std::string targetSeriesId;
 		bool recursive = false;
 		JFMImportOptions options;
+		bool plotAfterImport = false;
+	};
+
+	struct PlotCharacteristicsRequested final : public BusEvent
+	{
+		PlotCharacteristicsRequested() = default;
+		PlotCharacteristicsRequested(std::vector<CharacteristicId> requestedIds, std::string requestedTitle)
+			: ids(std::move(requestedIds)), title(std::move(requestedTitle))
+		{
+		}
+
+		std::vector<CharacteristicId> ids;
+		std::string title;
 	};
 
 	struct ImportProgress final : public BusEvent

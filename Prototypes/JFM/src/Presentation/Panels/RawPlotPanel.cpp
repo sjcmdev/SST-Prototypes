@@ -2,6 +2,8 @@
 
 #include "Presentation/Panels/RawPlotPanel.hpp"
 
+#include "Events/JFMEvents.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -103,20 +105,6 @@ namespace SST::Prototypes::JFM
 			maxY = std::max(maxY, y);
 		}
 
-		struct ColorPreset
-		{
-			const char *name;
-			std::array<float, 4> start;
-			std::array<float, 4> end;
-		};
-
-		constexpr ColorPreset ColorPresets[] = {
-			{"Cyan/Pink", {0.15f, 0.75f, 1.00f, 1.00f}, {1.00f, 0.12f, 0.55f, 1.00f}},
-			{"Blue/Orange", {0.22f, 0.45f, 1.00f, 1.00f}, {1.00f, 0.55f, 0.05f, 1.00f}},
-			{"Green/Yellow", {0.10f, 0.85f, 0.35f, 1.00f}, {1.00f, 0.90f, 0.15f, 1.00f}},
-			{"Violet/Red", {0.58f, 0.20f, 0.95f, 1.00f}, {1.00f, 0.18f, 0.18f, 1.00f}},
-		};
-
 		std::string displayName(const std::string &name, const std::unordered_map<std::string, std::string> &metadata)
 		{
 			if (const auto it = metadata.find("short_name"); it != metadata.end() && !it->second.empty())
@@ -125,15 +113,31 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
-	RawPlotPanel::RawPlotPanel(Ref<JFMWorkspaceStore> store, Ref<JFMPlotRequestState> plotRequests, std::string title, bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault), m_Store(std::move(store)), m_PlotRequests(std::move(plotRequests))
+	RawPlotPanel::RawPlotPanel(
+		Ref<JFMWorkspaceStore> store,
+		Ref<JFMPlotRequestState> plotRequests,
+		Ref<JFMUserSettingsStore> settings,
+		Ref<SST::EventBus> eventBus,
+		std::string title,
+		bool visibleByDefault)
+		: IPanel(std::move(title), visibleByDefault),
+		  m_Store(std::move(store)),
+		  m_PlotRequests(std::move(plotRequests)),
+		  m_Settings(std::move(settings)),
+		  m_EventBus(std::move(eventBus))
 	{
+		if (m_EventBus != nullptr)
+		{
+			AddSubscription(m_EventBus->Subscribe<PlotCharacteristicsRequested>([this](const PlotCharacteristicsRequested &event) {
+				PlotIds(event.ids, event.title);
+			}));
+		}
 		m_PlotAreas.push_back(CreatePlotArea());
 	}
 
 	Ref<IPanel> RawPlotPanel::Clone() const
 	{
-		return CreateRef<RawPlotPanel>(*this);
+		return CreateRef<RawPlotPanel>(m_Store, m_PlotRequests, m_Settings, m_EventBus, GetTitle(), IsVisible());
 	}
 
 	RawPlotPanel::PlotArea RawPlotPanel::CreatePlotArea()
@@ -141,6 +145,19 @@ namespace SST::Prototypes::JFM
 		PlotArea area;
 		area.id = m_NextPlotAreaId++;
 		area.title = "Raw Plot " + std::to_string(area.id);
+		if (m_Settings != nullptr)
+		{
+			const JFMUserSettings settings = m_Settings->GetSnapshot();
+			area.scale = settings.defaultPlotSemiLog ? PlotScale::SemiLog : PlotScale::Linear;
+			area.autoFit = settings.defaultPlotAutoFit;
+			area.showLegend = settings.defaultPlotShowLegend;
+			area.fitPadding = settings.defaultPlotFitPadding;
+			if (!settings.colorPresets.empty())
+			{
+				area.gradientStart = settings.colorPresets.front().start;
+				area.gradientEnd = settings.colorPresets.front().end;
+			}
+		}
 		return area;
 	}
 
@@ -173,6 +190,19 @@ namespace SST::Prototypes::JFM
 		for (const JFMCharacteristic &characteristic : m_Store->GetSeriesCharacteristics(seriesId))
 			ids.push_back(characteristic.info.id);
 		PlotIds(std::move(ids), std::move(title));
+	}
+
+	void RawPlotPanel::ApplyColorRange(PlotArea &area)
+	{
+		const std::size_t count = std::max<std::size_t>(area.characteristicIds.size(), 1);
+		for (std::size_t index = 0; index < area.characteristicIds.size(); ++index)
+		{
+			const float t = count == 1 ? 0.0f : static_cast<float>(index) / static_cast<float>(count - 1);
+			std::array<float, 4> color{};
+			for (std::size_t component = 0; component < color.size(); ++component)
+				color[component] = area.gradientStart[component] + (area.gradientEnd[component] - area.gradientStart[component]) * t;
+			m_ColorOverrides[area.characteristicIds[index]] = color;
+		}
 	}
 
 	void RawPlotPanel::PlotSelectedGroup()
@@ -333,29 +363,28 @@ namespace SST::Prototypes::JFM
 			ImGui::SameLine();
 			if (ImGui::BeginCombo("Preset", "Color preset"))
 			{
-				for (const ColorPreset &preset : ColorPresets)
+				const JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
+				for (std::size_t presetIndex = 0; presetIndex < settings.colorPresets.size(); ++presetIndex)
 				{
-					if (ImGui::Selectable(preset.name))
+					const JFMColorPreset &preset = settings.colorPresets[presetIndex];
+					ImGui::PushID(static_cast<int>(presetIndex));
+					ImGui::ColorButton("##start", toVec4(preset.start), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f, 18.0f));
+					ImGui::SameLine();
+					ImGui::ColorButton("##end", toVec4(preset.end), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f, 18.0f));
+					ImGui::SameLine();
+					if (ImGui::Selectable(preset.name.c_str()))
 					{
 						area.gradientStart = preset.start;
 						area.gradientEnd = preset.end;
+						ApplyColorRange(area);
 					}
+					ImGui::PopID();
 				}
 				ImGui::EndCombo();
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Apply Colors"))
-			{
-				const std::size_t count = std::max<std::size_t>(area.characteristicIds.size(), 1);
-				for (std::size_t index = 0; index < area.characteristicIds.size(); ++index)
-				{
-					const float t = count == 1 ? 0.0f : static_cast<float>(index) / static_cast<float>(count - 1);
-					std::array<float, 4> color{};
-					for (std::size_t component = 0; component < color.size(); ++component)
-						color[component] = area.gradientStart[component] + (area.gradientEnd[component] - area.gradientStart[component]) * t;
-					m_ColorOverrides[area.characteristicIds[index]] = color;
-				}
-			}
+			if (ImGui::Button("Apply Range"))
+				ApplyColorRange(area);
 
 			ImGui::BeginChild("##curves", ImVec2(360.0f, 0.0f), true);
 			ImGui::TextDisabled("Curves");

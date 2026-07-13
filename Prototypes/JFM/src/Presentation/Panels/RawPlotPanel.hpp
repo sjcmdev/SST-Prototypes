@@ -1,5 +1,8 @@
 #pragma once
 
+#include "App/JFMUserSettings.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Presentation/JFMPlotRequestState.hpp"
 #include "Presentation/Panels/IPanel.hpp"
@@ -18,10 +21,16 @@ namespace SST::Prototypes::JFM
 		Linear,
 		SemiLog
 	};
-	class RawPlotPanel final : public IPanel
+	class RawPlotPanel final : public IPanel, public EventReceiver
 	{
 	public:
-		explicit RawPlotPanel(Ref<JFMWorkspaceStore> store, Ref<JFMPlotRequestState> plotRequests, std::string title = "Raw Plot", bool visibleByDefault = true);
+		explicit RawPlotPanel(
+			Ref<JFMWorkspaceStore> store,
+			Ref<JFMPlotRequestState> plotRequests,
+			Ref<JFMUserSettingsStore> settings,
+			Ref<SST::EventBus> eventBus,
+			std::string title = "Raw Plot",
+			bool visibleByDefault = true);
 
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 		void Render() override;
@@ -47,9 +56,12 @@ namespace SST::Prototypes::JFM
 		void PlotIds(std::vector<CharacteristicId> ids, std::string title = {});
 		void PlotSeries(const std::string &seriesId);
 		void PlotSelectedGroup();
+		void ApplyColorRange(PlotArea &area);
 
 		Ref<JFMWorkspaceStore> m_Store;
 		Ref<JFMPlotRequestState> m_PlotRequests;
+		Ref<JFMUserSettingsStore> m_Settings;
+		Ref<SST::EventBus> m_EventBus;
 		std::vector<PlotArea> m_PlotAreas;
 		std::uint64_t m_NextPlotAreaId = 1;
 		std::unordered_map<CharacteristicId, std::array<float, 4>> m_ColorOverrides;

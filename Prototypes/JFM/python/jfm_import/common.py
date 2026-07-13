@@ -20,6 +20,7 @@ class ParseOptions:
     strict: bool = False
     name_pattern: str = "{stem}"
     short_name_pattern: str = ""
+    variable_delimiter: str = "_"
     temperature_extraction: str = "auto"
     user_overrides: dict[str, str] = field(default_factory=dict)
 
@@ -74,6 +75,13 @@ def build_curve_name(
         return pattern.format(**values)
     except KeyError:
         return values.get("stem") or values.get("source_path") or "curve"
+
+
+def add_token_variables(metadata: dict[str, Any], key: str, text: str, delimiter: str) -> None:
+    if not delimiter:
+        return
+    for index, part in enumerate(text.split(delimiter)):
+        metadata[f"{key}_{index}"] = part
 
 
 def split_numeric_rows(
@@ -202,11 +210,16 @@ def make_curve(
 
     metadata = {
         "stem": source.stem,
+        "folder": source.parent.name,
+        "parent_folder": source.parent.parent.name if source.parent.parent != source.parent else "",
         "source_path": str(source),
         "parser": parser,
         "temperature_K": temperature,
+        "T": temperature,
         "temperature_source": temperature_source,
     }
+    add_token_variables(metadata, "stem", source.stem, options.variable_delimiter)
+    add_token_variables(metadata, "folder", source.parent.name, options.variable_delimiter)
     if extra_metadata:
         metadata.update(extra_metadata)
     short_name = build_curve_name(metadata, options.short_name_pattern, options.user_overrides)

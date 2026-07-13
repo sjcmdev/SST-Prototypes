@@ -11,11 +11,14 @@
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
+#include <iterator>
 #include <imgui.h>
 #include <implot.h>
+#include <regex>
 #include <sstream>
 #include <set>
 #include <system_error>
+#include <unordered_map>
 
 namespace SST::Prototypes::JFM
 {
@@ -38,12 +41,58 @@ namespace SST::Prototypes::JFM
 			return text;
 		}
 
-		std::string BuildNameFromPattern(const std::string &pattern, const Path &path)
+		void AddTokenVariables(std::unordered_map<std::string, std::string> &variables, const std::string &key, const std::string &text, const std::string &delimiter)
+		{
+			if (delimiter.empty())
+				return;
+			std::size_t start = 0;
+			std::size_t index = 0;
+			while (start <= text.size())
+			{
+				const std::size_t end = text.find(delimiter, start);
+				variables[key + "_" + std::to_string(index++)] = text.substr(start, end == std::string::npos ? std::string::npos : end - start);
+				if (end == std::string::npos)
+					break;
+				start = end + delimiter.size();
+			}
+		}
+
+		std::string DetectTemperatureToken(const Path &path)
+		{
+			const std::string name = path.filename().String();
+			const std::regex kelvinPattern(R"((\d+(?:[.,]\d+)?)\s*K\b)", std::regex::icase);
+			const std::regex tPattern(R"(T(?:emp(?:erature)?)?[_:= -]?(\d+(?:[.,]\d+)?))", std::regex::icase);
+			std::smatch match;
+			if ((!std::regex_search(name, match, kelvinPattern) && !std::regex_search(name, match, tPattern)) || match.size() < 2)
+				return {};
+			std::string value = match[1].str();
+			std::replace(value.begin(), value.end(), ',', '.');
+			return value;
+		}
+
+		std::string BuildNameFromPattern(const std::string &pattern, const Path &path, const std::string &delimiter)
 		{
 			if (path.Empty())
 				return pattern;
-			std::string text = ReplaceAll(pattern, "{stem}", path.Native().stem().string());
-			text = ReplaceAll(text, "{source_path}", path.String());
+
+			const std::string stem = path.Native().stem().string();
+			const std::string folder = path.parent_path().filename().String();
+			const std::string parentFolder = path.parent_path().parent_path().filename().String();
+			std::unordered_map<std::string, std::string> variables{
+				{"stem", stem},
+				{"folder", folder},
+				{"parent_folder", parentFolder},
+				{"source_path", path.String()},
+			};
+			const std::string temperature = DetectTemperatureToken(path);
+			variables["T"] = temperature;
+			variables["temperature_K"] = temperature;
+			AddTokenVariables(variables, "stem", stem, delimiter);
+			AddTokenVariables(variables, "folder", folder, delimiter);
+
+			std::string text = pattern;
+			for (const auto &[key, value] : variables)
+				text = ReplaceAll(text, "{" + key + "}", value);
 			return text.empty() ? path.Native().stem().string() : text;
 		}
 
@@ -118,20 +167,11 @@ namespace SST::Prototypes::JFM
 			nextY.reserve(std::min(x.size(), y.size()));
 			for (std::size_t index = 0; index < x.size() && index < y.size(); ++index)
 			{
-				if (scale == 1)
-				{
-					const double value = std::abs(y[index]);
-					if (value <= 0.0)
-						continue;
-					nextX.push_back(x[index]);
-					nextY.push_back(value);
-				}
-				else
-				{
-					const double sign = y[index] < 0.0 ? -1.0 : 1.0;
-					nextX.push_back(x[index]);
-					nextY.push_back(sign * std::log10(1.0 + std::abs(y[index])));
-				}
+				const double value = std::abs(y[index]);
+				if (value <= 0.0)
+					continue;
+				nextX.push_back(x[index]);
+				nextY.push_back(value);
 			}
 			x = std::move(nextX);
 			y = std::move(nextY);
@@ -152,10 +192,11 @@ namespace SST::Prototypes::JFM
 		return request;
 	}
 
-	JFMImportDialogPanel::JFMImportDialogPanel(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> store, Ref<JFMImportDialogState> state)
-		: IPanel("Import Dialog", false), m_EventBus(std::move(eventBus)), m_Store(std::move(store)), m_State(std::move(state))
+	JFMImportDialogPanel::JFMImportDialogPanel(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> store, Ref<JFMImportDialogState> state, Ref<JFMUserSettingsStore> settings)
+		: IPanel("Import Dialog", false), m_EventBus(std::move(eventBus)), m_Store(std::move(store)), m_State(std::move(state)), m_Settings(std::move(settings))
 	{
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
+		std::snprintf(m_VariableDelimiter.data(), m_VariableDelimiter.size(), "%s", "_");
 	}
 
 	Ref<IPanel> JFMImportDialogPanel::Clone() const
@@ -194,6 +235,8 @@ namespace SST::Prototypes::JFM
 		ImGui::Combo("Parser", &m_Parser, ParserOptions, IM_ARRAYSIZE(ParserOptions));
 		ImGui::InputText("Name pattern", m_NamePattern.data(), m_NamePattern.size());
 		ImGui::InputText("Short name", m_ShortNamePattern.data(), m_ShortNamePattern.size());
+		ImGui::InputText("Variable delimiter", m_VariableDelimiter.data(), m_VariableDelimiter.size());
+		ImGui::TextDisabled("Variables: {stem}, {folder}, {parent_folder}, {T}, {stem_0}, {folder_0}");
 		ImGui::InputText("Delimiter", m_Delimiter.data(), m_Delimiter.size());
 		ImGui::Combo("Decimal", &m_DecimalSeparator, DecimalOptions, IM_ARRAYSIZE(DecimalOptions));
 		ImGui::Combo("Temperature", &m_TemperatureExtraction, TemperatureOptions, IM_ARRAYSIZE(TemperatureOptions));
@@ -225,11 +268,12 @@ namespace SST::Prototypes::JFM
 		if (!shortName.empty())
 			ImGui::Text("Preview short: %s", shortName.c_str());
 		ImGui::Checkbox("Preview window", &m_PreviewOpen);
+		ImGui::Checkbox("Plot after import", &m_PlotAfterImport);
 
 		if (ImGui::Button("Import"))
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ImportRequested{m_Request.paths, m_Request.targetSeriesId, m_Request.recursive, buildOptions()});
+				m_EventBus->Queue(ImportRequested{m_Request.paths, m_Request.targetSeriesId, m_Request.recursive, buildOptions(), m_PlotAfterImport});
 			m_Open = false;
 			m_PreviewOpen = false;
 		}
@@ -257,12 +301,15 @@ namespace SST::Prototypes::JFM
 		m_TemperatureExtraction = 0;
 		m_Delimiter.fill('\0');
 		m_ShortNamePattern.fill('\0');
+		m_VariableDelimiter.fill('\0');
 		m_CustomScriptPath.fill('\0');
 		m_PreviewFileIndex = 0;
 		m_PreviewScale = 0;
 		m_PreviewFolderIndex = 0;
+		m_PlotAfterImport = m_Settings != nullptr && m_Settings->GetSnapshot().autoPlotAfterImport;
 		m_SelectedPreviewFileIndices.clear();
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
+		std::snprintf(m_VariableDelimiter.data(), m_VariableDelimiter.size(), "%s", "_");
 		refreshPreviewFiles();
 	}
 
@@ -284,8 +331,12 @@ namespace SST::Prototypes::JFM
 			folders.insert(path.parent_path().String());
 
 		m_PreviewFolders.clear();
+		m_PreviewFolderLabels.clear();
 		m_PreviewFolders.push_back("All folders");
+		m_PreviewFolderLabels.push_back("All folders");
 		m_PreviewFolders.insert(m_PreviewFolders.end(), folders.begin(), folders.end());
+		for (auto it = std::next(m_PreviewFolders.begin()); it != m_PreviewFolders.end(); ++it)
+			m_PreviewFolderLabels.push_back(relativeLabel(Path::FromResolved(*it)));
 		applyPreviewFolderFilter();
 	}
 
@@ -331,34 +382,6 @@ namespace SST::Prototypes::JFM
 		}
 
 		ImGui::BeginChild("##jfm_preview_files", ImVec2(360.0f, 0.0f), true);
-		if (m_PreviewFolders.size() > 1)
-		{
-			ImGui::SetNextItemWidth(-1.0f);
-			if (ImGui::BeginCombo("##preview_folder", m_PreviewFolders[static_cast<std::size_t>(m_PreviewFolderIndex)].c_str()))
-			{
-				for (std::size_t index = 0; index < m_PreviewFolders.size(); ++index)
-				{
-					const bool selected = static_cast<int>(index) == m_PreviewFolderIndex;
-					if (ImGui::Selectable(m_PreviewFolders[index].c_str(), selected))
-					{
-						m_PreviewFolderIndex = static_cast<int>(index);
-						m_SelectedPreviewFileIndices.clear();
-						applyPreviewFolderFilter();
-					}
-				}
-				ImGui::EndCombo();
-			}
-		}
-		if (ImGui::Button("All"))
-		{
-			m_SelectedPreviewFileIndices.clear();
-			m_SelectedPreviewFileIndices.reserve(m_PreviewFiles.size());
-			for (std::size_t index = 0; index < m_PreviewFiles.size(); ++index)
-				m_SelectedPreviewFileIndices.push_back(static_cast<int>(index));
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Clear"))
-			m_SelectedPreviewFileIndices.clear();
 		ImGui::Separator();
 		for (std::size_t index = 0; index < m_PreviewFiles.size(); ++index)
 		{
@@ -383,16 +406,45 @@ namespace SST::Prototypes::JFM
 		ImGui::SameLine();
 
 		ImGui::BeginChild("##jfm_preview_plot_and_text", ImVec2(0.0f, 0.0f), false);
+		if (m_PreviewFolders.size() > 1)
+		{
+			ImGui::SetNextItemWidth(320.0f);
+			if (ImGui::BeginCombo("Folder", m_PreviewFolderLabels[static_cast<std::size_t>(m_PreviewFolderIndex)].c_str()))
+			{
+				for (std::size_t index = 0; index < m_PreviewFolderLabels.size(); ++index)
+				{
+					const bool selected = static_cast<int>(index) == m_PreviewFolderIndex;
+					if (ImGui::Selectable(m_PreviewFolderLabels[index].c_str(), selected))
+					{
+						m_PreviewFolderIndex = static_cast<int>(index);
+						m_SelectedPreviewFileIndices.clear();
+						applyPreviewFolderFilter();
+					}
+					if (ImGui::IsItemHovered() && index < m_PreviewFolders.size())
+						ImGui::SetTooltip("%s", m_PreviewFolders[index].c_str());
+				}
+				ImGui::EndCombo();
+			}
+		}
 		ImGui::RadioButton("Linear", &m_PreviewScale, 0);
 		ImGui::SameLine();
 		ImGui::RadioButton("Semi-log", &m_PreviewScale, 1);
 		ImGui::SameLine();
-		ImGui::RadioButton("Signed-log", &m_PreviewScale, 2);
+		if (ImGui::Button("All"))
+		{
+			m_SelectedPreviewFileIndices.clear();
+			m_SelectedPreviewFileIndices.reserve(m_PreviewFiles.size());
+			for (std::size_t index = 0; index < m_PreviewFiles.size(); ++index)
+				m_SelectedPreviewFileIndices.push_back(static_cast<int>(index));
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Clear"))
+			m_SelectedPreviewFileIndices.clear();
 		const std::vector<Path> previewPaths = selectedPreviewPaths();
 		const float plotHeight = std::max(360.0f, ImGui::GetContentRegionAvail().y * 0.58f);
 		if (!previewPaths.empty() && ImPlot::BeginPlot("Preview Plot", ImVec2(-1.0f, plotHeight)))
 		{
-			ImPlot::SetupAxes("x", m_PreviewScale == 2 ? "signed log y" : "y");
+			ImPlot::SetupAxes("x", "y");
 			ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
 			if (m_PreviewScale == 1)
 				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
@@ -431,6 +483,7 @@ namespace SST::Prototypes::JFM
 		options.parser = ParserOptions[static_cast<std::size_t>(m_Parser)];
 		options.namePattern = m_NamePattern.data();
 		options.shortNamePattern = m_ShortNamePattern.data();
+		options.variableDelimiter = m_VariableDelimiter.data();
 		options.delimiter = m_Delimiter.data();
 		options.decimalSeparator = DecimalOptions[static_cast<std::size_t>(m_DecimalSeparator)];
 		options.temperatureExtraction = TemperatureOptions[static_cast<std::size_t>(m_TemperatureExtraction)];
@@ -444,7 +497,7 @@ namespace SST::Prototypes::JFM
 		if (m_Request.paths.empty())
 			return pattern;
 
-		return BuildNameFromPattern(pattern, selectedPreviewPath());
+		return BuildNameFromPattern(pattern, selectedPreviewPath(), m_VariableDelimiter.data());
 	}
 
 	std::string JFMImportDialogPanel::previewShortName() const
@@ -452,7 +505,7 @@ namespace SST::Prototypes::JFM
 		const std::string pattern = m_ShortNamePattern.data();
 		if (pattern.empty())
 			return {};
-		return BuildNameFromPattern(pattern, selectedPreviewPath());
+		return BuildNameFromPattern(pattern, selectedPreviewPath(), m_VariableDelimiter.data());
 	}
 
 	std::string JFMImportDialogPanel::previewFileText() const
@@ -529,5 +582,28 @@ namespace SST::Prototypes::JFM
 			}
 		}
 		return x.size() > 1 && x.size() == y.size();
+	}
+
+	Path JFMImportDialogPanel::importRoot() const
+	{
+		if (m_Request.paths.empty())
+			return {};
+		const Path first = m_Request.paths.front();
+		if (IsDirectory(first))
+			return first;
+		return first.parent_path();
+	}
+
+	std::string JFMImportDialogPanel::relativeLabel(const Path &path) const
+	{
+		const Path root = importRoot();
+		if (root.Empty())
+			return path.String();
+
+		std::error_code error;
+		const std::filesystem::path relative = std::filesystem::relative(path.Native(), root.Native(), error);
+		if (error || relative.empty() || relative == ".")
+			return path.filename().String().empty() ? path.String() : path.filename().String();
+		return relative.string();
 	}
 } // namespace SST::Prototypes::JFM

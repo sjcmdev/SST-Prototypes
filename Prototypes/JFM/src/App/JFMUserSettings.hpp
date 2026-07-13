@@ -1,17 +1,32 @@
 #pragma once
 
+#include <array>
 #include <mutex>
+#include <string>
 #include <vector>
 
 #include "Core/Utils/Path.hpp"
 
 namespace SST::Prototypes::JFM
 {
+	struct JFMColorPreset
+	{
+		std::string name;
+		std::array<float, 4> start = {0.15f, 0.75f, 1.00f, 1.00f};
+		std::array<float, 4> end = {1.00f, 0.12f, 0.55f, 1.00f};
+	};
+
 	struct JFMUserSettings
 	{
 		Path defaultImportDirectory;
 		Path defaultProjectsDirectory;
 		Path defaultScriptsDirectory;
+		std::vector<JFMColorPreset> colorPresets;
+		bool defaultPlotSemiLog = true;
+		bool defaultPlotAutoFit = true;
+		bool defaultPlotShowLegend = false;
+		float defaultPlotFitPadding = 0.08f;
+		bool autoPlotAfterImport = false;
 		std::vector<Path> recentProjects;
 	};
 
@@ -32,6 +47,9 @@ namespace SST::Prototypes::JFM
 		void SetDefaultImportDirectory(Path path);
 		void SetDefaultProjectsDirectory(Path path);
 		void SetDefaultScriptsDirectory(Path path);
+		void SetPlotDefaults(bool semiLog, bool autoFit, bool showLegend, float fitPadding);
+		void SetAutoPlotAfterImport(bool enabled);
+		void SetColorPresets(std::vector<JFMColorPreset> presets);
 		void AddRecentProject(Path path);
 
 	private:
