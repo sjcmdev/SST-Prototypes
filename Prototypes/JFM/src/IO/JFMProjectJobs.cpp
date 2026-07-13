@@ -140,14 +140,23 @@ namespace SST::Prototypes::JFM
 
 	void MaterializeProjectDataJob::Execute(JobContext &context)
 	{
+		const std::size_t total = m_Project.characteristics.size();
 		context.SetStage("Materialize raw data");
-		context.SetProgress(0.0f, static_cast<float>(m_Project.characteristics.size()));
+		context.SetProgress(0.0f, static_cast<float>(total));
 
 		JFMPythonImportBridge bridge(m_PythonRoot);
 		std::unordered_map<std::string, JFMImportBatchResult> parsedBySource;
 		std::vector<JFMCharacteristic> materialized;
 		std::vector<std::string> warnings;
 		std::size_t completed = 0;
+		parsedBySource.reserve(total);
+		materialized.reserve(total);
+		warnings.reserve(total);
+
+		const auto advanceProgress = [&context, &completed, total]() {
+			++completed;
+			context.SetProgress(static_cast<float>(completed), static_cast<float>(total));
+		};
 
 		for (const JFMCharacteristicInfo &info : m_Project.characteristics)
 		{
@@ -156,50 +165,52 @@ namespace SST::Prototypes::JFM
 
 			if (info.sourcePath.Empty())
 			{
-				warnings.push_back("No source_path for " + info.name + "; raw arrays were not materialized.");
+				warnings.emplace_back("No source_path for " + info.name + "; raw arrays were not materialized.");
+				advanceProgress();
+				continue;
 			}
-			else
+
+			const std::string sourceKey = info.sourcePath.String();
+			auto parsed = parsedBySource.find(sourceKey);
+			if (parsed == parsedBySource.end())
 			{
-				const std::string sourceKey = info.sourcePath.String();
-				auto parsed = parsedBySource.find(sourceKey);
-				if (parsed == parsedBySource.end())
+				JFMImportBatchResult batch;
+				if (!FileSystem::Exists(info.sourcePath.Native()))
 				{
-					JFMImportBatchResult batch;
-					if (!FileSystem::Exists(info.sourcePath.Native()))
-					{
-						warnings.push_back("Source file missing for " + info.name + ": " + sourceKey);
-					}
-					else
-					{
-						auto result = bridge.ImportFiles({info.sourcePath}, {});
-						if (result)
-						{
-							batch = std::move(result).Value();
-							warnings.insert(warnings.end(), batch.warnings.begin(), batch.warnings.end());
-						}
-						else
-						{
-							warnings.push_back("Raw data materialization failed for " + sourceKey + ": " + result.Error().technicalDetails);
-						}
-					}
-					parsed = parsedBySource.emplace(sourceKey, std::move(batch)).first;
+					warnings.emplace_back("Source file missing for " + info.name + ": " + sourceKey);
+					parsedBySource.emplace(sourceKey, std::move(batch));
+					advanceProgress();
+					continue;
 				}
 
-				if (const JFMCharacteristic *match = FindMaterializedMatch(parsed->second.characteristics, info))
+				auto result = bridge.ImportFiles({info.sourcePath}, {});
+				if (!result)
 				{
-					JFMCharacteristic characteristic;
-					characteristic.info = info;
-					characteristic.data = match->data;
-					materialized.push_back(std::move(characteristic));
+					warnings.emplace_back("Raw data materialization failed for " + sourceKey + ": " + result.Error().technicalDetails);
+					parsedBySource.emplace(sourceKey, std::move(batch));
+					advanceProgress();
+					continue;
 				}
-				else if (FileSystem::Exists(info.sourcePath.Native()))
-				{
-					warnings.push_back("No matching raw data found for " + info.name + " in " + sourceKey);
-				}
+
+				batch = std::move(result).Value();
+				warnings.insert(warnings.end(), batch.warnings.begin(), batch.warnings.end());
+				parsed = parsedBySource.emplace(sourceKey, std::move(batch)).first;
 			}
 
-			++completed;
-			context.SetProgress(static_cast<float>(completed), static_cast<float>(m_Project.characteristics.size()));
+			const JFMCharacteristic *match = FindMaterializedMatch(parsed->second.characteristics, info);
+			if (match == nullptr)
+			{
+				if (FileSystem::Exists(info.sourcePath.Native()))
+					warnings.emplace_back("No matching raw data found for " + info.name + " in " + sourceKey);
+				advanceProgress();
+				continue;
+			}
+
+			JFMCharacteristic characteristic;
+			characteristic.info = info;
+			characteristic.data = match->data;
+			materialized.emplace_back(std::move(characteristic));
+			advanceProgress();
 		}
 
 		if (m_EventBus != nullptr)

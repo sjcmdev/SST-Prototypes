@@ -2,8 +2,7 @@
 
 #include "App/JFMCommands.hpp"
 
-#include <nfd.h>
-
+#include "App/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Input/KeymapResolver.hpp"
@@ -23,6 +22,10 @@ namespace SST::Prototypes::JFM
 	const CommandID ImportDirectoriesCommand{"jfm.import.directories"};
 	const CommandID ImportDirectoriesRecursiveCommand{"jfm.import.directories_recursive"};
 	const CommandID ExportRawTsvCommand{"jfm.export.raw_tsv"};
+
+	constexpr NativeFileDialogFilter JFMProjectFilter{"JFM Project", "jfm.yaml,yaml"};
+	constexpr NativeFileDialogFilter JFMDataFilter{"JFM Data", "dat,iv,txt,csv"};
+	constexpr NativeFileDialogFilter TsvFilter{"TSV", "tsv"};
 
 	class LambdaCommand final : public ICommand
 	{
@@ -68,12 +71,6 @@ namespace SST::Prototypes::JFM
 			"jfm.command"};
 	}
 
-	std::string lastNfdError()
-	{
-		const char *error = NFD_GetError();
-		return error != nullptr ? std::string(error) : "Native file dialog failed.";
-	}
-
 	Path ensureProjectExtension(Path path)
 	{
 		std::string text = path.String();
@@ -93,162 +90,33 @@ namespace SST::Prototypes::JFM
 
 	std::optional<Path> chooseProjectOpenPath()
 	{
-		NFD_Init();
-		nfdu8filteritem_t filters[] = {{"JFM Project", "jfm.yaml,yaml"}};
-		nfdu8char_t *rawPath = nullptr;
-		const nfdresult_t result = NFD_OpenDialogU8(&rawPath, filters, 1, nullptr);
-		if (result == NFD_CANCEL)
-		{
-			NFD_Quit();
-			return std::nullopt;
-		}
-		if (result == NFD_ERROR)
-		{
-			const std::string error = lastNfdError();
-			NFD_Quit();
-			throw std::runtime_error(error);
-		}
-
-		std::string pathText(rawPath);
-		NFD_FreePathU8(rawPath);
-		NFD_Quit();
-		return Path::FromResolved(pathText);
+		return OpenFileDialog(JFMProjectFilter);
 	}
 
 	std::optional<Path> chooseProjectSavePath()
 	{
-		NFD_Init();
-		nfdu8filteritem_t filters[] = {{"JFM Project", "jfm.yaml,yaml"}};
-		nfdu8char_t *rawPath = nullptr;
-		const nfdresult_t result = NFD_SaveDialogU8(&rawPath, filters, 1, nullptr, "project.jfm.yaml");
-		if (result == NFD_CANCEL)
-		{
-			NFD_Quit();
+		std::optional<Path> path = SaveFileDialog(JFMProjectFilter, "project.jfm.yaml");
+		if (!path)
 			return std::nullopt;
-		}
-		if (result == NFD_ERROR)
-		{
-			const std::string error = lastNfdError();
-			NFD_Quit();
-			throw std::runtime_error(error);
-		}
-
-		std::string pathText(rawPath);
-		NFD_FreePathU8(rawPath);
-		NFD_Quit();
-		return ensureProjectExtension(Path::FromResolved(pathText));
+		return ensureProjectExtension(*path);
 	}
 
 	std::optional<Path> chooseRawTsvSavePath(const std::string &defaultName)
 	{
-		NFD_Init();
-		nfdu8filteritem_t filters[] = {{"TSV", "tsv"}};
-		nfdu8char_t *rawPath = nullptr;
-		const nfdresult_t result = NFD_SaveDialogU8(&rawPath, filters, 1, nullptr, defaultName.c_str());
-		if (result == NFD_CANCEL)
-		{
-			NFD_Quit();
+		std::optional<Path> path = SaveFileDialog(TsvFilter, defaultName.c_str());
+		if (!path)
 			return std::nullopt;
-		}
-		if (result == NFD_ERROR)
-		{
-			const std::string error = lastNfdError();
-			NFD_Quit();
-			throw std::runtime_error(error);
-		}
-
-		std::string pathText(rawPath);
-		NFD_FreePathU8(rawPath);
-		NFD_Quit();
-		return ensureExtension(Path::FromResolved(pathText), ".tsv");
-	}
-
-	std::vector<Path> collectPathSet(const nfdpathset_t *pathSet)
-	{
-		nfdpathsetsize_t count = 0;
-		std::vector<Path> paths;
-		if (NFD_PathSet_GetCount(pathSet, &count) == NFD_OKAY)
-		{
-			for (nfdpathsetsize_t index = 0; index < count; ++index)
-			{
-				nfdu8char_t *rawPath = nullptr;
-				if (NFD_PathSet_GetPathU8(pathSet, index, &rawPath) == NFD_OKAY && rawPath != nullptr)
-				{
-					paths.push_back(Path::FromResolved(std::string(rawPath)));
-					NFD_PathSet_FreePathU8(rawPath);
-				}
-			}
-		}
-		return paths;
+		return ensureExtension(*path, ".tsv");
 	}
 
 	std::vector<Path> chooseImportFiles()
 	{
-		NFD_Init();
-		nfdu8filteritem_t filters[] = {{"JFM Data", "dat,iv,txt,csv"}};
-		const nfdpathset_t *pathSet = nullptr;
-		const nfdresult_t result = NFD_OpenDialogMultipleU8(&pathSet, filters, 1, nullptr);
-		if (result == NFD_CANCEL)
-		{
-			NFD_Quit();
-			return {};
-		}
-		if (result == NFD_ERROR)
-		{
-			const std::string error = lastNfdError();
-			NFD_Quit();
-			throw std::runtime_error(error);
-		}
-
-		std::vector<Path> paths = collectPathSet(pathSet);
-		NFD_PathSet_Free(pathSet);
-		NFD_Quit();
-		return paths;
+		return OpenFilesDialog(JFMDataFilter);
 	}
 
 	std::vector<Path> chooseImportDirectories(bool multiple)
 	{
-		NFD_Init();
-		if (multiple)
-		{
-			const nfdpathset_t *pathSet = nullptr;
-			const nfdresult_t result = NFD_PickFolderMultipleU8(&pathSet, nullptr);
-			if (result == NFD_CANCEL)
-			{
-				NFD_Quit();
-				return {};
-			}
-			if (result == NFD_ERROR)
-			{
-				const std::string error = lastNfdError();
-				NFD_Quit();
-				throw std::runtime_error(error);
-			}
-
-			std::vector<Path> paths = collectPathSet(pathSet);
-			NFD_PathSet_Free(pathSet);
-			NFD_Quit();
-			return paths;
-		}
-
-		nfdu8char_t *rawPath = nullptr;
-		const nfdresult_t result = NFD_PickFolderU8(&rawPath, nullptr);
-		if (result == NFD_CANCEL)
-		{
-			NFD_Quit();
-			return {};
-		}
-		if (result == NFD_ERROR)
-		{
-			const std::string error = lastNfdError();
-			NFD_Quit();
-			throw std::runtime_error(error);
-		}
-
-		std::string pathText(rawPath);
-		NFD_FreePathU8(rawPath);
-		NFD_Quit();
-		return {Path::FromResolved(pathText)};
+		return PickFoldersDialog(multiple);
 	}
 
 	Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, CommandContext &)

@@ -79,15 +79,19 @@ namespace SST::Prototypes::JFM
 		return name.empty() ? path.String() : name;
 	}
 
-	std::vector<std::string> GroupPathForFolder(const Path &root, const Path &folder)
+	std::vector<std::string> ParentGroupPathForFolder(const Path &root, const Path &folder)
 	{
-		std::vector<std::string> names{FolderName(root)};
 		std::error_code error;
 		const std::filesystem::path relative = std::filesystem::relative(folder.Native(), root.Native(), error);
 		if (error || relative.empty() || relative == ".")
-			return names;
+			return {};
 
-		for (const std::filesystem::path &part : relative)
+		const std::filesystem::path parent = relative.parent_path();
+		if (parent.empty())
+			return {FolderName(root)};
+
+		std::vector<std::string> names{FolderName(root)};
+		for (const std::filesystem::path &part : parent)
 			names.push_back(part.string());
 		return names;
 	}
@@ -141,8 +145,8 @@ namespace SST::Prototypes::JFM
 			groups.push_back(JFMImportGroup{
 				std::move(paths),
 				{},
-				GroupPathForFolder(directory, folderPath),
-				"Imported Data"});
+				ParentGroupPathForFolder(directory, folderPath),
+				FolderName(folderPath)});
 		}
 	}
 
@@ -210,9 +214,9 @@ namespace SST::Prototypes::JFM
 			state->importWarnings.insert(state->importWarnings.end(), event.warnings.begin(), event.warnings.end());
 			state->store->SetLastImportWarnings(state->importWarnings);
 			std::string targetSeriesId = event.targetSeriesId;
-			if (!event.characteristics.empty() && targetSeriesId.empty() && !event.groupPath.empty())
+			if (!event.characteristics.empty() && targetSeriesId.empty())
 			{
-				const std::string groupId = state->store->FindOrCreateGroupPath(event.groupPath);
+				const std::string groupId = event.groupPath.empty() ? std::string{} : state->store->FindOrCreateGroupPath(event.groupPath);
 				const JFMSeries series = state->store->AddSeries(event.seriesName.empty() ? "Imported Data" : event.seriesName, groupId);
 				targetSeriesId = series.id;
 			}
