@@ -103,9 +103,9 @@ namespace SST::Prototypes::JFM
 			if (ImGui::BeginMenu("Import"))
 			{
 				commandMenuItem(services, "Files...", "Ctrl+Shift+I", "jfm.import.files");
-				commandMenuItem(services, "Folder...", "Ctrl+Shift+D", "jfm.import.directory");
-				commandMenuItem(services, "Folders...", "Ctrl+Alt+Shift+D", "jfm.import.directories");
-				commandMenuItem(services, "Folders Recursively...", "Ctrl+Alt+Shift+R", "jfm.import.directories_recursive");
+				commandMenuItem(services, "Folder as Series...", "Ctrl+Shift+D", "jfm.import.directory");
+				commandMenuItem(services, "Folders as Series...", "Ctrl+Alt+Shift+D", "jfm.import.directories");
+				commandMenuItem(services, "Folder Trees...", "Ctrl+Alt+Shift+R", "jfm.import.directories_recursive");
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Export"))

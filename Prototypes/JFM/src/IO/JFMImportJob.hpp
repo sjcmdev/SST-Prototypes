@@ -23,8 +23,8 @@ namespace SST::Prototypes::JFM
 	class JFMImportJob final : public IJob
 	{
 	public:
-		JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot, JFMImportOptions options = {});
-		JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot, JFMImportOptions options = {});
+		JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot, JFMImportOptions options = {}, ProjectHandle project = InvalidProjectHandle, JFMOperationId operation = InvalidJFMOperationId);
+		JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot, JFMImportOptions options = {}, ProjectHandle project = InvalidProjectHandle, JFMOperationId operation = InvalidJFMOperationId);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -39,5 +39,7 @@ namespace SST::Prototypes::JFM
 		std::vector<JFMImportGroup> m_Groups;
 		Path m_PythonRoot;
 		JFMImportOptions m_Options;
+		ProjectHandle m_Project = InvalidProjectHandle;
+		JFMOperationId m_Operation = InvalidJFMOperationId;
 	};
 } // namespace SST::Prototypes::JFM

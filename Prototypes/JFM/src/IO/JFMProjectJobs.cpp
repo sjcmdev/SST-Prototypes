@@ -31,8 +31,19 @@ namespace SST::Prototypes::JFM
 	}
 
 
-	SaveProjectJob::SaveProjectJob(Ref<EventBus> eventBus, Path path, JFMProject snapshot)
-		: m_EventBus(std::move(eventBus)), m_Path(std::move(path)), m_Snapshot(std::move(snapshot))
+	SaveProjectJob::SaveProjectJob(
+		Ref<EventBus> eventBus,
+		Path path,
+		JFMProject snapshot,
+		ProjectHandle project,
+		JFMOperationId operation,
+		std::uint64_t revision)
+		: m_EventBus(std::move(eventBus)),
+		  m_Path(std::move(path)),
+		  m_Snapshot(std::move(snapshot)),
+		  m_Project(project),
+		  m_Operation(operation),
+		  m_Revision(revision)
 	{
 	}
 
@@ -54,7 +65,7 @@ namespace SST::Prototypes::JFM
 		if (!serialized)
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ProjectSaveFailed{m_Path, serialized.Error().technicalDetails});
+				m_EventBus->Queue(ProjectSaveFailed{m_Path, serialized.Error().technicalDetails, m_Project, m_Operation});
 			return;
 		}
 
@@ -65,17 +76,17 @@ namespace SST::Prototypes::JFM
 		if (!TextFileIO::Save(m_Path, serialized.Value(), error))
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ProjectSaveFailed{m_Path, error});
+				m_EventBus->Queue(ProjectSaveFailed{m_Path, error, m_Project, m_Operation});
 			return;
 		}
 
 		context.SetProgress(2.0f, 2.0f);
 		if (m_EventBus != nullptr)
-			m_EventBus->Queue(ProjectSaveCompleted{m_Path});
+			m_EventBus->Queue(ProjectSaveCompleted{m_Path, m_Project, m_Operation, m_Revision});
 	}
 
-	LoadProjectJob::LoadProjectJob(Ref<EventBus> eventBus, Path path)
-		: m_EventBus(std::move(eventBus)), m_Path(std::move(path))
+	LoadProjectJob::LoadProjectJob(Ref<EventBus> eventBus, Path path, JFMOperationId operation)
+		: m_EventBus(std::move(eventBus)), m_Path(std::move(path)), m_Operation(operation)
 	{
 	}
 
@@ -98,7 +109,7 @@ namespace SST::Prototypes::JFM
 		if (!TextFileIO::Load(m_Path, text, error))
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ProjectLoadFailed{m_Path, error});
+				m_EventBus->Queue(ProjectLoadFailed{m_Path, error, m_Operation});
 			return;
 		}
 
@@ -109,17 +120,26 @@ namespace SST::Prototypes::JFM
 		if (!project)
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ProjectLoadFailed{m_Path, project.Error().technicalDetails});
+				m_EventBus->Queue(ProjectLoadFailed{m_Path, project.Error().technicalDetails, m_Operation});
 			return;
 		}
 
 		context.SetProgress(2.0f, 2.0f);
 		if (m_EventBus != nullptr)
-			m_EventBus->Queue(ProjectLoadCompleted{m_Path, project.Value()});
+			m_EventBus->Queue(ProjectLoadCompleted{m_Path, project.Value(), m_Operation});
 	}
 
-	MaterializeProjectDataJob::MaterializeProjectDataJob(Ref<EventBus> eventBus, JFMProject project, Path pythonRoot)
-		: m_EventBus(std::move(eventBus)), m_Project(std::move(project)), m_PythonRoot(std::move(pythonRoot))
+	MaterializeProjectDataJob::MaterializeProjectDataJob(
+		Ref<EventBus> eventBus,
+		JFMProject project,
+		Path pythonRoot,
+		ProjectHandle projectHandle,
+		JFMOperationId operation)
+		: m_EventBus(std::move(eventBus)),
+		  m_Project(std::move(project)),
+		  m_PythonRoot(std::move(pythonRoot)),
+		  m_ProjectHandle(projectHandle),
+		  m_Operation(operation)
 	{
 	}
 
@@ -183,7 +203,7 @@ namespace SST::Prototypes::JFM
 					continue;
 				}
 
-				auto result = bridge.ImportFiles({info.sourcePath}, {});
+				auto result = bridge.ImportFiles({info.sourcePath}, info.importOptions, {});
 				if (!result)
 				{
 					warnings.emplace_back("Raw data materialization failed for " + sourceKey + ": " + result.Error().technicalDetails);
@@ -214,6 +234,10 @@ namespace SST::Prototypes::JFM
 		}
 
 		if (m_EventBus != nullptr)
-			m_EventBus->Queue(ProjectDataMaterializationCompleted{std::move(materialized), std::move(warnings)});
+			m_EventBus->Queue(ProjectDataMaterializationCompleted{
+				std::move(materialized),
+				std::move(warnings),
+				m_ProjectHandle,
+				m_Operation});
 	}
 } // namespace SST::Prototypes::JFM

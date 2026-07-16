@@ -7,20 +7,58 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Domain/JFMTypes.hpp"
 
 namespace SST::Prototypes::JFM
 {
+	struct JFMProjectDocumentInfo
+	{
+		ProjectHandle handle = InvalidProjectHandle;
+		std::string name;
+		std::optional<Path> path;
+		std::string status;
+		bool active = false;
+		bool dirty = false;
+		bool importRunning = false;
+	};
+
+	struct JFMProjectStateSnapshot
+	{
+		JFMProject project;
+		std::unordered_map<CharacteristicId, Ref<const JFMCharacteristicData>> characteristicData;
+		std::string selectedSeriesId;
+		CharacteristicId selectedCharacteristicId = InvalidCharacteristicId;
+		std::vector<CharacteristicId> selectedCharacteristicIds;
+		std::uint64_t revision = 0;
+	};
+
 	class JFMWorkspaceStore
 	{
 	public:
 		JFMWorkspaceStore();
 
+		[[nodiscard]] std::vector<JFMProjectDocumentInfo> GetProjects() const;
+		[[nodiscard]] ProjectHandle GetActiveProjectHandle() const;
+		[[nodiscard]] bool SetActiveProject(ProjectHandle handle);
+		[[nodiscard]] ProjectHandle CreateProject(std::string name = "Untitled JFM Project");
+		[[nodiscard]] ProjectHandle AttachProject(JFMProject project, std::optional<Path> path, bool activate = true);
+		[[nodiscard]] std::optional<ProjectHandle> FindProjectByPath(const Path &path) const;
+
 		[[nodiscard]] JFMProject GetProjectSnapshot() const;
+		[[nodiscard]] JFMProject GetProjectSnapshot(ProjectHandle handle) const;
 		[[nodiscard]] std::optional<Path> GetProjectPath() const;
+		[[nodiscard]] std::optional<Path> GetProjectPath(ProjectHandle handle) const;
 		[[nodiscard]] std::string GetStatusMessage() const;
+		[[nodiscard]] std::string GetStatusMessage(ProjectHandle handle) const;
 		[[nodiscard]] bool IsImportRunning() const;
+		[[nodiscard]] bool IsImportRunning(ProjectHandle handle) const;
+		[[nodiscard]] bool IsDirty(ProjectHandle handle) const;
+		[[nodiscard]] std::uint64_t GetProjectRevision(ProjectHandle handle) const;
+		[[nodiscard]] std::optional<JFMProjectStateSnapshot> CaptureProjectState(ProjectHandle handle) const;
+		bool RestoreProjectState(ProjectHandle handle, JFMProjectStateSnapshot snapshot, bool activate = true);
+
 		[[nodiscard]] std::optional<JFMCharacteristic> GetSelectedCharacteristic() const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetSelectedCharacteristics() const;
 		[[nodiscard]] std::string GetSelectedSeriesId() const;
@@ -28,75 +66,131 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::vector<CharacteristicId> GetSelectedCharacteristicIds() const;
 		[[nodiscard]] std::vector<std::string> GetLastImportWarnings() const;
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristic(const CharacteristicId &id) const;
+		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristic(JFMCharacteristicRef ref) const;
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristicByName(const std::string &name) const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetSeriesCharacteristics(const std::string &seriesId) const;
+		[[nodiscard]] std::vector<JFMCharacteristic> GetSeriesCharacteristics(ProjectHandle handle, const std::string &seriesId) const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetGroupCharacteristics(const std::string &groupId) const;
+		[[nodiscard]] std::vector<JFMCharacteristic> GetGroupCharacteristics(ProjectHandle handle, const std::string &groupId) const;
 
 		JFMGroup AddGroup(std::string name, std::string parentId = {});
+		JFMGroup AddGroup(ProjectHandle handle, std::string name, std::string parentId = {});
 		std::string FindOrCreateGroupPath(const std::vector<std::string> &names);
+		std::string FindOrCreateGroupPath(ProjectHandle handle, const std::vector<std::string> &names, std::string parentId = {});
 		JFMSeries AddSeries(std::string name);
 		JFMSeries AddSeries(std::string name, std::string groupId);
+		JFMSeries AddSeries(ProjectHandle handle, std::string name, std::string groupId = {});
 		std::vector<CharacteristicId> AddCharacteristics(std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId = {});
+		std::vector<CharacteristicId> AddCharacteristics(ProjectHandle handle, std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId = {});
 		bool DeleteCharacteristic(const CharacteristicId &id);
+		bool DeleteCharacteristic(ProjectHandle handle, const CharacteristicId &id);
 		bool DeleteSeries(const std::string &seriesId);
+		bool DeleteSeries(ProjectHandle handle, const std::string &seriesId);
 		bool DeleteGroup(const std::string &groupId);
+		bool DeleteGroup(ProjectHandle handle, const std::string &groupId);
 		bool MoveCharacteristic(const CharacteristicId &id, const std::string &targetSeriesId);
+		bool MoveCharacteristic(ProjectHandle handle, const CharacteristicId &id, const std::string &targetSeriesId);
 		bool RenameProject(std::string name);
+		bool RenameProject(ProjectHandle handle, std::string name);
 		bool RenameGroup(const std::string &groupId, std::string name);
+		bool RenameGroup(ProjectHandle handle, const std::string &groupId, std::string name);
 		bool RenameSeries(const std::string &seriesId, std::string name);
+		bool RenameSeries(ProjectHandle handle, const std::string &seriesId, std::string name);
 		bool RenameCharacteristic(const CharacteristicId &id, std::string name);
+		bool RenameCharacteristic(ProjectHandle handle, const CharacteristicId &id, std::string name);
 		bool SetGroupShortName(const std::string &groupId, std::string shortName);
+		bool SetGroupShortName(ProjectHandle handle, const std::string &groupId, std::string shortName);
 		bool SetSeriesShortName(const std::string &seriesId, std::string shortName);
+		bool SetSeriesShortName(ProjectHandle handle, const std::string &seriesId, std::string shortName);
 		bool SetCharacteristicShortName(const CharacteristicId &id, std::string shortName);
+		bool SetCharacteristicShortName(ProjectHandle handle, const CharacteristicId &id, std::string shortName);
+
+		JFMGroupingDefinition AddGrouping(ProjectHandle handle, JFMGroupingDefinition grouping);
+		bool UpdateGrouping(ProjectHandle handle, JFMGroupingDefinition grouping);
+		bool RenameGrouping(ProjectHandle handle, const std::string &groupingId, std::string name);
+		bool DeleteGrouping(ProjectHandle handle, const std::string &groupingId);
+		[[nodiscard]] std::vector<JFMGroupingBucket> ResolveGrouping(ProjectHandle handle, const std::string &groupingId) const;
+		[[nodiscard]] std::vector<JFMGroupingBucket> ResolveGrouping(ProjectHandle handle, const JFMGroupingDefinition &grouping) const;
+		[[nodiscard]] std::vector<std::string> GetAvailableGroupingKeys(ProjectHandle handle) const;
+
 		JFMScriptInfo AddScript(Path path);
+		JFMScriptInfo AddScript(ProjectHandle handle, Path path);
 		void EnsureDefaultScripts(Path scriptsDirectory);
 		bool RemoveScript(const std::string &scriptId);
+		bool RemoveScript(ProjectHandle handle, const std::string &scriptId);
 		bool ReloadScript(const std::string &scriptId);
+		bool ReloadScript(ProjectHandle handle, const std::string &scriptId);
 
 		void ResetProject(std::string name = "Untitled JFM Project");
 		void ReplaceProject(JFMProject project, std::optional<Path> path);
 		void SetProjectPath(Path path);
+		void SetProjectPath(ProjectHandle handle, Path path);
+		void MarkProjectSaved(ProjectHandle handle, Path path, std::uint64_t revision = 0);
 		void SetStatusMessage(std::string message);
+		void SetStatusMessage(ProjectHandle handle, std::string message);
 		void SetImportRunning(bool running);
+		void SetImportRunning(ProjectHandle handle, bool running);
 		void SetLastImportWarnings(std::vector<std::string> warnings);
+		void SetLastImportWarnings(ProjectHandle handle, std::vector<std::string> warnings);
 		void SelectSeries(std::string seriesId);
 		void SelectCharacteristic(CharacteristicId characteristicId);
 		void SetSelectedCharacteristics(std::vector<CharacteristicId> characteristicIds, CharacteristicId primary, std::string seriesId = {});
 		void AddImportedCharacteristics(std::vector<JFMCharacteristic> characteristics);
 		std::size_t UpdateCharacteristicData(std::vector<JFMCharacteristic> characteristics);
+		std::size_t UpdateCharacteristicData(ProjectHandle handle, std::vector<JFMCharacteristic> characteristics);
 
 	private:
 		template <typename T>
 		using OptionalRef = std::optional<std::reference_wrapper<T>>;
 
+		struct ProjectDocument
+		{
+			ProjectHandle handle = InvalidProjectHandle;
+			JFMProject project;
+			std::unordered_map<CharacteristicId, Ref<const JFMCharacteristicData>> characteristicData;
+			std::optional<Path> path;
+			std::string selectedSeriesId;
+			CharacteristicId selectedCharacteristicId = InvalidCharacteristicId;
+			std::vector<CharacteristicId> selectedCharacteristicIds;
+			std::string status = "Ready.";
+			std::vector<std::string> lastImportWarnings;
+			bool importRunning = false;
+			std::size_t nextId = 1;
+			CharacteristicId nextCharacteristicId = 1;
+			std::uint64_t revision = 1;
+			std::uint64_t savedRevision = 1;
+		};
+
 		[[nodiscard]] static JFMProject MakeDefaultProject(std::string name);
-		[[nodiscard]] std::string nextId(const char *prefix) const;
-		[[nodiscard]] OptionalRef<JFMGroup> findGroupLocked(const std::string &groupId);
-		[[nodiscard]] OptionalRef<const JFMGroup> findGroupLocked(const std::string &groupId) const;
-		[[nodiscard]] OptionalRef<JFMGroup> findGroupByNameAndParentLocked(const std::string &name, const std::string &parentId);
-		[[nodiscard]] OptionalRef<JFMSeries> findSeriesLocked(const std::string &seriesId);
-		[[nodiscard]] OptionalRef<const JFMSeries> findSeriesLocked(const std::string &seriesId) const;
-		[[nodiscard]] OptionalRef<JFMCharacteristicInfo> findInfoLocked(const CharacteristicId &id);
-		[[nodiscard]] OptionalRef<const JFMCharacteristicInfo> findInfoLocked(const CharacteristicId &id) const;
-		[[nodiscard]] std::optional<JFMCharacteristic> makeCharacteristicLocked(const JFMCharacteristicInfo &info) const;
-		[[nodiscard]] std::vector<JFMCharacteristic> seriesCharacteristicsLocked(const JFMSeries &series) const;
-		void collectGroupIdsLocked(const std::string &groupId, std::vector<std::string> &groupIds) const;
-		void ensureSelectionLocked();
-		void removeCharacteristicReferencesLocked(const CharacteristicId &id);
-		void updateNextCharacteristicIdLocked();
+		[[nodiscard]] OptionalRef<ProjectDocument> findDocumentLocked(ProjectHandle handle);
+		[[nodiscard]] OptionalRef<const ProjectDocument> findDocumentLocked(ProjectHandle handle) const;
+		[[nodiscard]] ProjectDocument &activeDocumentLocked();
+		[[nodiscard]] const ProjectDocument &activeDocumentLocked() const;
+		[[nodiscard]] std::string nextId(ProjectDocument &document, const char *prefix) const;
+		[[nodiscard]] static OptionalRef<JFMGroup> findGroupLocked(ProjectDocument &document, const std::string &groupId);
+		[[nodiscard]] static OptionalRef<const JFMGroup> findGroupLocked(const ProjectDocument &document, const std::string &groupId);
+		[[nodiscard]] static OptionalRef<JFMGroup> findGroupByNameAndParentLocked(ProjectDocument &document, const std::string &name, const std::string &parentId);
+		[[nodiscard]] static OptionalRef<JFMSeries> findSeriesLocked(ProjectDocument &document, const std::string &seriesId);
+		[[nodiscard]] static OptionalRef<const JFMSeries> findSeriesLocked(const ProjectDocument &document, const std::string &seriesId);
+		[[nodiscard]] static OptionalRef<JFMCharacteristicInfo> findInfoLocked(ProjectDocument &document, const CharacteristicId &id);
+		[[nodiscard]] static OptionalRef<const JFMCharacteristicInfo> findInfoLocked(const ProjectDocument &document, const CharacteristicId &id);
+		[[nodiscard]] static std::optional<JFMCharacteristic> makeCharacteristicLocked(const ProjectDocument &document, const JFMCharacteristicInfo &info);
+		[[nodiscard]] static std::vector<JFMCharacteristic> seriesCharacteristicsLocked(const ProjectDocument &document, const JFMSeries &series);
+		static void collectGroupIdsLocked(const ProjectDocument &document, const std::string &groupId, std::vector<std::string> &groupIds);
+		static void ensureSelectionLocked(ProjectDocument &document);
+		static void removeCharacteristicReferencesLocked(ProjectDocument &document, const CharacteristicId &id);
+		static void updateNextCharacteristicIdLocked(ProjectDocument &document);
+		void bumpRevisionLocked(ProjectDocument &document);
+		[[nodiscard]] static std::optional<std::string> groupingValue(const JFMCharacteristicInfo &info, const std::string &key);
+		[[nodiscard]] static std::vector<JFMGroupingBucket> resolveGroupingLocked(
+			const ProjectDocument &document,
+			const JFMGroupingDefinition &grouping);
 
 	private:
 		mutable std::mutex m_Mutex;
-		JFMProject m_Project;
-		std::unordered_map<CharacteristicId, JFMCharacteristicData> m_CharacteristicData;
-		std::optional<Path> m_ProjectPath;
-		std::string m_SelectedSeriesId;
-		CharacteristicId m_SelectedCharacteristicId;
-		std::vector<CharacteristicId> m_SelectedCharacteristicIds;
-		std::string m_StatusMessage = "Ready.";
-		std::vector<std::string> m_LastImportWarnings;
-		bool m_ImportRunning = false;
-		mutable std::size_t m_NextId = 1;
-		CharacteristicId m_NextCharacteristicId = 1;
+		std::vector<ProjectDocument> m_Projects;
+		ProjectHandle m_ActiveProject = InvalidProjectHandle;
+		ProjectHandle m_NextProjectHandle = 1;
+		std::uint64_t m_NextRevision = 2;
 	};
 } // namespace SST::Prototypes::JFM

@@ -38,7 +38,13 @@ namespace SST
 		EditorLayer &editorLayer = application.GetEditorLayer();
 
 		JFMPanelIds panelIds;
-		panelIds.projectTree = editorLayer.RegisterPanel<ProjectTreePanel>(workspace, settings, importDialog, plotRequests, application.GetEventBusRef());
+		panelIds.projectTree = editorLayer.RegisterPanel<ProjectTreePanel>(
+			workspace,
+			settings,
+			importDialog,
+			plotRequests,
+			application.GetEventBusRef(),
+			application.GetRuntimeServices().commandRegistry);
 		panelIds.overview = editorLayer.RegisterPanel<JFMOverviewPanel>(workspace);
 		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
 		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace, plotRequests, settings, application.GetEventBusRef());
@@ -80,6 +86,7 @@ namespace SST
 				workspace,
 				notifier,
 				settings,
+				runtime.commandRegistry,
 				ResolveJFMPythonRoot(*runtime.config)});
 		application.InsertLayerBefore(LayerId::ImGui, CreateUnique<JFMDomainLayer>(workspace));
 		RegisterJFMEditor(application, workspace, settings, importDialog, plotRequests);

@@ -11,7 +11,13 @@ namespace SST::Prototypes::JFM
 	class SaveProjectJob final : public IJob
 	{
 	public:
-		SaveProjectJob(Ref<EventBus> eventBus, Path path, JFMProject snapshot);
+		SaveProjectJob(
+			Ref<EventBus> eventBus,
+			Path path,
+			JFMProject snapshot,
+			ProjectHandle project = InvalidProjectHandle,
+			JFMOperationId operation = InvalidJFMOperationId,
+			std::uint64_t revision = 0);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -21,12 +27,15 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> m_EventBus;
 		Path m_Path;
 		JFMProject m_Snapshot;
+		ProjectHandle m_Project = InvalidProjectHandle;
+		JFMOperationId m_Operation = InvalidJFMOperationId;
+		std::uint64_t m_Revision = 0;
 	};
 
 	class LoadProjectJob final : public IJob
 	{
 	public:
-		LoadProjectJob(Ref<EventBus> eventBus, Path path);
+		LoadProjectJob(Ref<EventBus> eventBus, Path path, JFMOperationId operation = InvalidJFMOperationId);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -35,12 +44,18 @@ namespace SST::Prototypes::JFM
 	private:
 		Ref<EventBus> m_EventBus;
 		Path m_Path;
+		JFMOperationId m_Operation = InvalidJFMOperationId;
 	};
 
 	class MaterializeProjectDataJob final : public IJob
 	{
 	public:
-		MaterializeProjectDataJob(Ref<EventBus> eventBus, JFMProject project, Path pythonRoot);
+		MaterializeProjectDataJob(
+			Ref<EventBus> eventBus,
+			JFMProject project,
+			Path pythonRoot,
+			ProjectHandle projectHandle = InvalidProjectHandle,
+			JFMOperationId operation = InvalidJFMOperationId);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -51,5 +66,7 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> m_EventBus;
 		JFMProject m_Project;
 		Path m_PythonRoot;
+		ProjectHandle m_ProjectHandle = InvalidProjectHandle;
+		JFMOperationId m_Operation = InvalidJFMOperationId;
 	};
 } // namespace SST::Prototypes::JFM

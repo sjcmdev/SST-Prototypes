@@ -108,6 +108,7 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/Domain/JFMTypes.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/App/JFMUserSettings.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/App/JFMUserSettings.cpp",
+		_SST_ROOT .. "/Prototypes/JFM/src/App/JFMProjectEditCommand.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Workspace/JFMWorkspaceStore.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Workspace/JFMWorkspaceStore.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.hpp",

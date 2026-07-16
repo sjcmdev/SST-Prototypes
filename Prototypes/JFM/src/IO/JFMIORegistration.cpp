@@ -2,6 +2,8 @@
 
 #include "IO/JFMIORegistration.hpp"
 
+#include "App/JFMCommands.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Notifications/NotificationEvents.hpp"
@@ -29,8 +31,14 @@ namespace SST::Prototypes::JFM
 		Ref<JFMWorkspaceStore> store;
 		Ref<Notifier> notifier;
 		Ref<JFMUserSettingsStore> settings;
+		WeakRef<CommandRegistry> commandRegistry;
 		Path pythonRoot;
 		std::vector<std::string> importWarnings;
+		std::vector<ImportCompleted> importBatches;
+		ProjectHandle importProject = InvalidProjectHandle;
+		JFMOperationId importOperation = InvalidJFMOperationId;
+		JFMOperationId nextOperation = 1;
+		std::string importTargetGroupId;
 		bool importRunning = false;
 		bool plotAfterImport = false;
 	};
@@ -156,16 +164,21 @@ namespace SST::Prototypes::JFM
 	{
 		std::vector<JFMImportGroup> groups;
 		std::vector<Path> filePaths;
+		const std::string targetSeriesId = event.placement == JFMImportPlacement::ExistingSeries ? event.targetSeriesId : std::string{};
+		const bool recursive = event.recursive || event.placement == JFMImportPlacement::PreserveFolderTree;
 		for (const Path &path : event.paths)
 		{
 			if (IsDirectory(path))
-				AddDirectoryImportGroups(path, event.recursive, event.targetSeriesId, groups);
+				AddDirectoryImportGroups(path, recursive, targetSeriesId, groups);
 			else if (IsRegularFile(path) || !FileSystem::Exists(path.Native()))
 				filePaths.push_back(path);
 		}
 
 		if (!filePaths.empty())
-			groups.push_back(JFMImportGroup{std::move(filePaths), event.targetSeriesId});
+		{
+			const std::string seriesName = FolderName(filePaths.front().parent_path());
+			groups.push_back(JFMImportGroup{std::move(filePaths), targetSeriesId, {}, seriesName.empty() ? "Series" : seriesName});
+		}
 		return groups;
 	}
 
@@ -176,17 +189,23 @@ namespace SST::Prototypes::JFM
 
 		if (state->importRunning)
 		{
-			state->eventBus->Queue(ImportFailed{"Another JFM import is already running."});
+			state->eventBus->Queue(ImportFailed{"Another JFM import is already running.", event.project, event.operation});
 			return;
 		}
 
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		state->importRunning = true;
+		state->importProject = project;
+		state->importOperation = operation;
+		state->importTargetGroupId = event.targetGroupId;
 		state->plotAfterImport = event.plotAfterImport;
 		state->importWarnings.clear();
+		state->importBatches.clear();
 		if (state->store != nullptr)
 		{
-			state->store->SetImportRunning(true);
-			state->store->SetStatusMessage("Import queued.");
+			state->store->SetImportRunning(project, true);
+			state->store->SetStatusMessage(project, "Import queued.");
 		}
 		std::vector<JFMImportGroup> groups = BuildImportGroups(event);
 		if (groups.empty())
@@ -195,65 +214,116 @@ namespace SST::Prototypes::JFM
 			state->plotAfterImport = false;
 			if (state->store != nullptr)
 			{
-				state->store->SetImportRunning(false);
-				state->store->SetStatusMessage("No JFM data files found for import.");
+				state->store->SetImportRunning(project, false);
+				state->store->SetStatusMessage(project, "No JFM data files found for import.");
 			}
 			return;
 		}
 
-		auto job = CreateRef<JFMImportJob>(state->eventBus, std::move(groups), state->pythonRoot, event.options);
+		auto job = CreateRef<JFMImportJob>(state->eventBus, std::move(groups), state->pythonRoot, event.options, project, operation);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
 	void HandleImportProgress(const Ref<JFMIOState> &state, const ImportProgress &event)
 	{
 		if (state->store != nullptr)
-			state->store->SetStatusMessage("Import: " + event.message);
+			state->store->SetStatusMessage(event.project, "Import: " + event.message);
 	}
 
 	void HandleImportCompleted(const Ref<JFMIOState> &state, const ImportCompleted &event)
 	{
+		if (event.operation != state->importOperation || event.project != state->importProject)
+			return;
+
+		state->importWarnings.insert(state->importWarnings.end(), event.warnings.begin(), event.warnings.end());
+		state->importBatches.push_back(event);
+		if (!event.finalBatch)
+			return;
+
+		const ProjectHandle project = state->importProject;
 		if (state->store != nullptr)
 		{
-			state->importWarnings.insert(state->importWarnings.end(), event.warnings.begin(), event.warnings.end());
-			state->store->SetLastImportWarnings(state->importWarnings);
-			std::string targetSeriesId = event.targetSeriesId;
-			if (!event.characteristics.empty() && targetSeriesId.empty())
-			{
-				const std::string groupId = event.groupPath.empty() ? std::string{} : state->store->FindOrCreateGroupPath(event.groupPath);
-				const JFMSeries series = state->store->AddSeries(event.seriesName.empty() ? "Imported Data" : event.seriesName, groupId);
-				targetSeriesId = series.id;
-			}
-			if (!targetSeriesId.empty())
-				state->store->SelectSeries(targetSeriesId);
-			if (!event.characteristics.empty())
-			{
-				std::vector<CharacteristicId> addedIds = state->store->AddCharacteristics(event.characteristics, targetSeriesId);
-				if (state->plotAfterImport && !addedIds.empty() && state->eventBus != nullptr)
-					state->eventBus->Queue(PlotCharacteristicsRequested{std::move(addedIds), event.seriesName.empty() ? "Imported Data" : event.seriesName});
-			}
-			if (event.finalBatch)
-				state->store->SetImportRunning(false);
+			state->store->SetLastImportWarnings(project, state->importWarnings);
+			state->store->SetImportRunning(project, false);
 		}
-		if (event.finalBatch)
+
+		const bool hasCharacteristics = std::any_of(state->importBatches.begin(), state->importBatches.end(), [](const ImportCompleted &batch) {
+			return !batch.characteristics.empty();
+		});
+		if (hasCharacteristics)
 		{
-			state->importRunning = false;
-			state->plotAfterImport = false;
-			state->importWarnings.clear();
+			auto registry = state->commandRegistry.lock();
+			if (registry != nullptr)
+			{
+				std::vector<ImportCompleted> batches = std::move(state->importBatches);
+				const std::string targetGroupId = state->importTargetGroupId;
+				const bool plotAfterImport = state->plotAfterImport;
+				Ref<EventBus> eventBus = state->eventBus;
+				JFMProjectEditRequest request;
+				request.project = project;
+				request.description = "Import JFM data";
+				request.apply = [batches = std::move(batches), targetGroupId, plotAfterImport, eventBus](JFMWorkspaceStore &workspace, ProjectHandle targetProject) mutable -> Result<void> {
+					for (ImportCompleted &batch : batches)
+					{
+						if (batch.characteristics.empty())
+							continue;
+						std::string seriesId = batch.targetSeriesId;
+						if (seriesId.empty())
+						{
+							const std::string groupId = batch.groupPath.empty()
+								? targetGroupId
+								: workspace.FindOrCreateGroupPath(targetProject, batch.groupPath, targetGroupId);
+							seriesId = workspace.AddSeries(targetProject, batch.seriesName.empty() ? "Series" : batch.seriesName, groupId).id;
+						}
+						std::vector<CharacteristicId> added = workspace.AddCharacteristics(targetProject, std::move(batch.characteristics), seriesId);
+						if (plotAfterImport && eventBus != nullptr && !added.empty())
+							eventBus->Queue(PlotCharacteristicsRequested{std::move(added), batch.seriesName.empty() ? "Series" : batch.seriesName, targetProject});
+					}
+					workspace.SetStatusMessage(targetProject, "Import complete.");
+					return {};
+				};
+				CommandContext context(ContextID{"jfm.import.complete"});
+				context.SetSource("JFM import completion");
+				context.Set("edit", std::move(request));
+				auto result = registry->Execute(CommandID{JFMApplyProjectEditCommandId}, std::move(context));
+				if (!result)
+					NotifyFailure(state, NotificationCategory::Import, "JFM import could not be applied", result.Error().technicalDetails);
+			}
+			else
+			{
+				NotifyFailure(state, NotificationCategory::Import, "JFM import could not be applied", "Command runtime is unavailable.");
+			}
 		}
+
+		state->importRunning = false;
+		state->plotAfterImport = false;
+		state->importWarnings.clear();
+		state->importBatches.clear();
+		state->importProject = InvalidProjectHandle;
+		state->importOperation = InvalidJFMOperationId;
+		state->importTargetGroupId.clear();
 	}
 
 	void HandleImportFailed(const Ref<JFMIOState> &state, const ImportFailed &event)
 	{
+		if (state->importRunning
+			&& event.operation != InvalidJFMOperationId
+			&& (event.operation != state->importOperation || event.project != state->importProject))
+			return;
 		state->importRunning = false;
 		state->plotAfterImport = false;
-		if (state->store != nullptr)
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->importProject : event.project;
+		if (state->store != nullptr && project != InvalidProjectHandle)
 		{
-			state->store->SetImportRunning(false);
-			state->store->SetStatusMessage("Import failed: " + event.error);
-			state->store->SetLastImportWarnings({event.error});
+			state->store->SetImportRunning(project, false);
+			state->store->SetStatusMessage(project, "Import failed: " + event.error);
+			state->store->SetLastImportWarnings(project, {event.error});
 		}
 		state->importWarnings.clear();
+		state->importBatches.clear();
+		state->importProject = InvalidProjectHandle;
+		state->importOperation = InvalidJFMOperationId;
+		state->importTargetGroupId.clear();
 		NotifyFailure(state, NotificationCategory::Import, "JFM import failed", event.error);
 		DS_LOG_WARN("JFM import failed: {}", event.error);
 	}
@@ -327,10 +397,12 @@ namespace SST::Prototypes::JFM
 
 	void HandleProjectSaveRequested(const Ref<JFMIOState> &state, const ProjectSaveRequested &event)
 	{
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage("Saving project: " + event.path.String());
+			state->store->SetStatusMessage(project, "Saving project: " + event.path.String());
 
-		auto job = CreateRef<SaveProjectJob>(state->eventBus, event.path, event.snapshot);
+		auto job = CreateRef<SaveProjectJob>(state->eventBus, event.path, event.snapshot, project, operation, event.revision);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
 	}
 
@@ -339,8 +411,8 @@ namespace SST::Prototypes::JFM
 		if (state->store == nullptr)
 			return;
 
-		state->store->SetProjectPath(event.path);
-		state->store->SetStatusMessage("Project saved: " + event.path.String());
+		state->store->MarkProjectSaved(event.project, event.path, event.revision);
+		state->store->SetStatusMessage(event.project, "Project saved: " + event.path.String());
 		if (state->settings != nullptr)
 			state->settings->AddRecentProject(event.path);
 	}
@@ -348,7 +420,7 @@ namespace SST::Prototypes::JFM
 	void HandleProjectSaveFailed(const Ref<JFMIOState> &state, const ProjectSaveFailed &event)
 	{
 		if (state->store != nullptr)
-			state->store->SetStatusMessage("Project save failed: " + event.error);
+			state->store->SetStatusMessage(event.project, "Project save failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Project, "JFM save failed", event.error);
 		DS_LOG_WARN("JFM project save failed [{}]: {}", event.path.String(), event.error);
 	}
@@ -363,25 +435,35 @@ namespace SST::Prototypes::JFM
 	void HandleProjectLoadRequested(const Ref<JFMIOState> &state, const ProjectLoadRequested &event)
 	{
 		if (state->store != nullptr)
+		{
+			if (const auto existing = state->store->FindProjectByPath(event.path))
+			{
+				(void)state->store->SetActiveProject(*existing);
+				state->store->SetStatusMessage(*existing, "Project already open.");
+				return;
+			}
 			state->store->SetStatusMessage("Loading project: " + event.path.String());
+		}
 
-		auto job = CreateRef<LoadProjectJob>(state->eventBus, event.path);
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
+		auto job = CreateRef<LoadProjectJob>(state->eventBus, event.path, operation);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
 	}
 
 	void HandleProjectLoadCompleted(const Ref<JFMIOState> &state, const ProjectLoadCompleted &event)
 	{
+		ProjectHandle project = InvalidProjectHandle;
 		if (state->store != nullptr)
 		{
-			state->store->ReplaceProject(event.project, event.path);
+			project = state->store->AttachProject(event.project, event.path);
 			if (state->settings != nullptr)
 				state->store->EnsureDefaultScripts(state->settings->GetDefaultScriptsDirectory());
-			state->store->SetStatusMessage("Project loaded; raw data materialization queued.");
+			state->store->SetStatusMessage(project, "Project loaded; raw data materialization queued.");
 		}
 		if (state->settings != nullptr)
 			state->settings->AddRecentProject(event.path);
 
-		auto job = CreateRef<MaterializeProjectDataJob>(state->eventBus, event.project, state->pythonRoot);
+		auto job = CreateRef<MaterializeProjectDataJob>(state->eventBus, event.project, state->pythonRoot, project, event.operation);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
@@ -398,12 +480,12 @@ namespace SST::Prototypes::JFM
 		if (state->store == nullptr)
 			return;
 
-		const std::size_t updated = state->store->UpdateCharacteristicData(event.characteristics);
-		state->store->SetLastImportWarnings(event.warnings);
+		const std::size_t updated = state->store->UpdateCharacteristicData(event.project, event.characteristics);
+		state->store->SetLastImportWarnings(event.project, event.warnings);
 		if (event.warnings.empty())
-			state->store->SetStatusMessage("Project raw data materialized: " + std::to_string(updated) + " characteristic(s).");
+			state->store->SetStatusMessage(event.project, "Project raw data materialized: " + std::to_string(updated) + " characteristic(s).");
 		else
-			state->store->SetStatusMessage("Project raw data materialized with warnings: " + std::to_string(updated) + " characteristic(s).");
+			state->store->SetStatusMessage(event.project, "Project raw data materialized with warnings: " + std::to_string(updated) + " characteristic(s).");
 	}
 
 	void RegisterProjectLoadHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
@@ -423,6 +505,7 @@ namespace SST::Prototypes::JFM
 		state->store = std::move(context.store);
 		state->notifier = std::move(context.notifier);
 		state->settings = std::move(context.settings);
+		state->commandRegistry = std::move(context.commandRegistry);
 		state->pythonRoot = std::move(context.pythonRoot);
 
 		RegisterImportHandlers(ioLayer, state);

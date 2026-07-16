@@ -37,17 +37,11 @@ namespace SST::Prototypes::JFM
 	const CommandID ExportRawTsvCommand{"jfm.export.raw_tsv"};
 	const CommandID ExportSeriesRawTsvCommand{"jfm.export.series_raw_tsv"};
 	const CommandID ExportGroupRawTsvCommand{"jfm.export.group_raw_tsv"};
-	const CommandID AddSeriesCommand{"jfm.project_tree.add_series"};
-	const CommandID DeleteSeriesCommand{"jfm.project_tree.delete_series"};
-	const CommandID DeleteCharacteristicCommand{"jfm.project_tree.delete_characteristic"};
-	const CommandID AddScriptCommand{"jfm.scripts.add"};
-	const CommandID RemoveScriptCommand{"jfm.scripts.remove"};
-	const CommandID ReloadScriptCommand{"jfm.scripts.reload"};
 
 	constexpr NativeFileDialogFilter JFMProjectFilter{"JFM Project", "jfm.yaml,yaml"};
 	constexpr NativeFileDialogFilter JFMDataFilter{"JFM Data", "dat,iv,txt,csv"};
 	constexpr NativeFileDialogFilter TsvFilter{"TSV", "tsv"};
-	constexpr NativeFileDialogFilter PythonScriptFilter{"Python", "py"};
+	StructuredError makeCommandError(std::string message, std::string details);
 
 	class LambdaCommand final : public ICommand
 	{
@@ -79,7 +73,15 @@ namespace SST::Prototypes::JFM
 		return CreateUnique<LambdaCommand>(description, std::move(handler));
 	}
 
-	void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, const Path &path);
+	Unique<ICommand> CreateProjectEditCommand(const Ref<JFMWorkspaceStore> &workspace, CommandContext &context)
+	{
+		JFMProjectEditRequest request;
+		if (JFMProjectEditRequest *value = context.TryGet<JFMProjectEditRequest>("edit"))
+			request = std::move(*value);
+		return CreateJFMProjectEditCommand(workspace, std::move(request));
+	}
+
+	void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, ProjectHandle project, const Path &path);
 
 	StructuredError makeCommandError(std::string message, std::string details)
 	{
@@ -238,7 +240,7 @@ namespace SST::Prototypes::JFM
 
 	Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, Ref<JFMUserSettingsStore> settings, CommandContext &)
 	{
-		workspace->ResetProject("Untitled JFM Project");
+		(void)workspace->CreateProject("Untitled JFM Project");
 		if (settings != nullptr)
 			workspace->EnsureDefaultScripts(settings->GetDefaultScriptsDirectory());
 		return Result<void>{};
@@ -267,11 +269,12 @@ namespace SST::Prototypes::JFM
 	{
 		try
 		{
-			std::optional<Path> path = workspace->GetProjectPath();
+			const ProjectHandle project = workspace->GetActiveProjectHandle();
+			std::optional<Path> path = workspace->GetProjectPath(project);
 			if (!path)
 				path = chooseProjectSavePath(settings);
 			if (path)
-				queueSave(*eventBus, workspace, *path);
+				queueSave(*eventBus, workspace, project, *path);
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
@@ -284,9 +287,10 @@ namespace SST::Prototypes::JFM
 	{
 		try
 		{
+			const ProjectHandle project = workspace->GetActiveProjectHandle();
 			std::optional<Path> path = chooseProjectSavePath(settings);
 			if (path)
-				queueSave(*eventBus, workspace, *path);
+				queueSave(*eventBus, workspace, project, *path);
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
@@ -328,11 +332,14 @@ namespace SST::Prototypes::JFM
 			else
 				paths = chooseImportFiles(settings);
 			rememberImportDirectory(settings, paths);
-			std::string targetSeriesId = workspace->GetSelectedSeriesId();
+			const ProjectHandle project = context.TryGet<ProjectHandle>("project") ? *context.TryGet<ProjectHandle>("project") : workspace->GetActiveProjectHandle();
+			std::string targetSeriesId;
 			if (std::string *contextSeriesId = context.TryGet<std::string>("target_series_id"))
 				targetSeriesId = *contextSeriesId;
+			const std::string targetGroupId = context.TryGet<std::string>("target_group_id") ? *context.TryGet<std::string>("target_group_id") : std::string{};
+			const JFMImportPlacement placement = targetSeriesId.empty() ? JFMImportPlacement::NewSeries : JFMImportPlacement::ExistingSeries;
 			if (!paths.empty() && dialog != nullptr)
-				dialog->Open(JFMImportDialogRequest{paths, targetSeriesId, false});
+				dialog->Open(JFMImportDialogRequest{paths, targetSeriesId, false, project, targetGroupId, placement});
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
@@ -353,11 +360,16 @@ namespace SST::Prototypes::JFM
 			if (paths.empty())
 				return Result<void>{};
 			rememberImportDirectory(settings, paths);
-			std::string targetSeriesId = workspace->GetSelectedSeriesId();
+			const ProjectHandle project = context.TryGet<ProjectHandle>("project") ? *context.TryGet<ProjectHandle>("project") : workspace->GetActiveProjectHandle();
+			std::string targetSeriesId;
 			if (std::string *contextSeriesId = context.TryGet<std::string>("target_series_id"))
 				targetSeriesId = *contextSeriesId;
+			const std::string targetGroupId = context.TryGet<std::string>("target_group_id") ? *context.TryGet<std::string>("target_group_id") : std::string{};
+			const JFMImportPlacement placement = targetSeriesId.empty()
+				? (recursive ? JFMImportPlacement::PreserveFolderTree : JFMImportPlacement::NewSeries)
+				: JFMImportPlacement::ExistingSeries;
 			if (dialog != nullptr)
-				dialog->Open(JFMImportDialogRequest{paths, targetSeriesId, recursive});
+				dialog->Open(JFMImportDialogRequest{paths, targetSeriesId, recursive, project, targetGroupId, placement});
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
@@ -458,61 +470,14 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
-	Result<void> handleAddSeries(Ref<JFMWorkspaceStore> workspace, CommandContext &context)
+	void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, ProjectHandle project, const Path &path)
 	{
-		std::string groupId;
-		if (std::string *contextGroupId = context.TryGet<std::string>("group_id"))
-			groupId = *contextGroupId;
-		workspace->AddSeries("Series", groupId);
-		return Result<void>{};
-	}
-
-	Result<void> handleDeleteSeries(Ref<JFMWorkspaceStore> workspace, CommandContext &context)
-	{
-		std::string seriesId = workspace->GetSelectedSeriesId();
-		if (std::string *contextSeriesId = context.TryGet<std::string>("series_id"))
-			seriesId = *contextSeriesId;
-		(void)workspace->DeleteSeries(seriesId);
-		return Result<void>{};
-	}
-
-	Result<void> handleDeleteCharacteristic(Ref<JFMWorkspaceStore> workspace, CommandContext &context)
-	{
-		if (CharacteristicId *contextId = context.TryGet<CharacteristicId>("characteristic_id"))
-		{
-			(void)workspace->DeleteCharacteristic(*contextId);
-			return Result<void>{};
-		}
-
-		for (const CharacteristicId id : workspace->GetSelectedCharacteristicIds())
-			(void)workspace->DeleteCharacteristic(id);
-		return Result<void>{};
-	}
-
-	Result<void> handleAddScript(Ref<JFMWorkspaceStore> workspace, Ref<JFMUserSettingsStore> settings, CommandContext &)
-	{
-		if (auto path = OpenFileDialog(PythonScriptFilter, settings != nullptr ? settings->GetDefaultScriptsDirectory() : Path{}))
-			(void)workspace->AddScript(*path);
-		return Result<void>{};
-	}
-
-	Result<void> handleRemoveScript(Ref<JFMWorkspaceStore> workspace, CommandContext &context)
-	{
-		if (std::string *scriptId = context.TryGet<std::string>("script_id"))
-			(void)workspace->RemoveScript(*scriptId);
-		return Result<void>{};
-	}
-
-	Result<void> handleReloadScript(Ref<JFMWorkspaceStore> workspace, CommandContext &context)
-	{
-		if (std::string *scriptId = context.TryGet<std::string>("script_id"))
-			(void)workspace->ReloadScript(*scriptId);
-		return Result<void>{};
-	}
-
-	void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, const Path &path)
-	{
-		eventBus.Queue(ProjectSaveRequested{path, workspace->GetProjectSnapshot()});
+		eventBus.Queue(ProjectSaveRequested{
+			path,
+			workspace->GetProjectSnapshot(project),
+			project,
+			InvalidJFMOperationId,
+			workspace->GetProjectRevision(project)});
 	}
 
 	void registerCommand(Ref<CommandRegistry> registry, CommandMeta meta, LambdaCommand::Handler handler)
@@ -543,6 +508,18 @@ namespace SST::Prototypes::JFM
 		Ref<JFMImportDialogState> importDialog = std::move(context.importDialog);
 		if (registry == nullptr || resolver == nullptr || eventBus == nullptr || workspace == nullptr || settings == nullptr || importDialog == nullptr)
 			throw std::runtime_error("JFM startup failed: command registry, keymap resolver, event bus, workspace, settings, or import dialog is unavailable.");
+
+		auto editRegistration = registry->Register(
+			CommandMeta{
+				CommandID{JFMApplyProjectEditCommandId},
+				"Apply JFM Project Edit",
+				"JFM",
+				"Apply an undoable mutation to one JFM project.",
+				{},
+				CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
+			std::bind(CreateProjectEditCommand, workspace, std::placeholders::_1));
+		if (!editRegistration)
+			throw std::runtime_error("JFM startup failed: project edit command could not be registered.");
 
 		registerCommand(
 			registry,
@@ -603,36 +580,6 @@ namespace SST::Prototypes::JFM
 			registry,
 			CommandMeta{ExportGroupRawTsvCommand, "Export Group Raw TSV", "JFM", "Export a group to TSV files.", {}, CommandFlags::AsyncCapable},
 			std::bind(handleExportGroupRawTsv, eventBus, workspace, settings, std::placeholders::_1));
-
-		registerCommand(
-			registry,
-			CommandMeta{AddSeriesCommand, "Add Series", "JFM", "Add a new series.", {}, CommandFlags::None},
-			std::bind(handleAddSeries, workspace, std::placeholders::_1));
-
-		registerCommand(
-			registry,
-			CommandMeta{DeleteSeriesCommand, "Delete Series", "JFM", "Delete a series and its characteristics.", {}, CommandFlags::None},
-			std::bind(handleDeleteSeries, workspace, std::placeholders::_1));
-
-		registerCommand(
-			registry,
-			CommandMeta{DeleteCharacteristicCommand, "Delete Characteristic", "JFM", "Delete selected characteristic(s).", {}, CommandFlags::None},
-			std::bind(handleDeleteCharacteristic, workspace, std::placeholders::_1));
-
-		registerCommand(
-			registry,
-			CommandMeta{AddScriptCommand, "Add Import Script", "JFM", "Register a custom Python import script.", {}, CommandFlags::None},
-			std::bind(handleAddScript, workspace, settings, std::placeholders::_1));
-
-		registerCommand(
-			registry,
-			CommandMeta{RemoveScriptCommand, "Remove Import Script", "JFM", "Remove a custom Python import script.", {}, CommandFlags::None},
-			std::bind(handleRemoveScript, workspace, std::placeholders::_1));
-
-		registerCommand(
-			registry,
-			CommandMeta{ReloadScriptCommand, "Reload Import Script", "JFM", "Reload a custom Python import script.", {}, CommandFlags::None},
-			std::bind(handleReloadScript, workspace, std::placeholders::_1));
 
 		registerBinding(resolver, {"jfm.new_project", KeyChord{KeyCode::N, KeyModifiers::Ctrl}, NewProjectCommand, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.open_project", KeyChord{KeyCode::O, KeyModifiers::Ctrl}, OpenProjectCommand, {}, KeymapLayer::Project, true});

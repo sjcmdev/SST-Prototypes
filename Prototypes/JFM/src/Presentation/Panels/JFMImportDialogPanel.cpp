@@ -303,6 +303,59 @@ namespace SST::Prototypes::JFM
 			ImGui::TextWrapped("%s", m_Request.paths.front().String().c_str());
 		ImGui::Text("Previewable files: %d", static_cast<int>(m_PreviewFiles.size()));
 
+		const JFMProject targetProject = m_Store != nullptr ? m_Store->GetProjectSnapshot(m_Request.project) : JFMProject{};
+		ImGui::SeparatorText("Destination");
+		ImGui::Text("Project: %s", targetProject.name.c_str());
+		int placement = static_cast<int>(m_Request.placement);
+		const char *placementLabels[] = {"New series", "Existing series", "Preserve folder tree"};
+		if (ImGui::Combo("Placement", &placement, placementLabels, IM_ARRAYSIZE(placementLabels)))
+		{
+			m_Request.placement = static_cast<JFMImportPlacement>(placement);
+			if (m_Request.placement != JFMImportPlacement::ExistingSeries)
+				m_Request.targetSeriesId.clear();
+		}
+		if (m_Request.placement == JFMImportPlacement::ExistingSeries)
+		{
+			std::string seriesLabel = "Select series";
+			for (const JFMSeries &series : targetProject.series)
+			{
+				if (series.id == m_Request.targetSeriesId)
+					seriesLabel = series.name;
+			}
+			if (ImGui::BeginCombo("Series", seriesLabel.c_str()))
+			{
+				for (const JFMSeries &series : targetProject.series)
+				{
+					if (ImGui::Selectable(series.name.c_str(), series.id == m_Request.targetSeriesId))
+					{
+						m_Request.targetSeriesId = series.id;
+						m_Request.targetGroupId = series.groupId;
+					}
+				}
+				ImGui::EndCombo();
+			}
+		}
+		else
+		{
+			std::string groupLabel = "Project root";
+			for (const JFMGroup &group : targetProject.groups)
+			{
+				if (group.id == m_Request.targetGroupId)
+					groupLabel = group.name;
+			}
+			if (ImGui::BeginCombo("Parent group", groupLabel.c_str()))
+			{
+				if (ImGui::Selectable("Project root", m_Request.targetGroupId.empty()))
+					m_Request.targetGroupId.clear();
+				for (const JFMGroup &group : targetProject.groups)
+				{
+					if (ImGui::Selectable(group.name.c_str(), group.id == m_Request.targetGroupId))
+						m_Request.targetGroupId = group.id;
+				}
+				ImGui::EndCombo();
+			}
+		}
+
 		if (ImGui::BeginTable("##jfm_import_options_layout", 2, ImGuiTableFlags_SizingStretchProp))
 		{
 			ImGui::TableSetupColumn("Options", ImGuiTableColumnFlags_WidthStretch, 0.46f);
@@ -330,7 +383,7 @@ namespace SST::Prototypes::JFM
 				}
 				if (m_Store != nullptr)
 				{
-					const JFMProject project = m_Store->GetProjectSnapshot();
+					const JFMProject project = m_Store->GetProjectSnapshot(m_Request.project);
 					for (const JFMScriptInfo &script : project.scripts)
 					{
 						ImGui::SameLine();
@@ -353,13 +406,25 @@ namespace SST::Prototypes::JFM
 		ImGui::Checkbox("Preview window", &m_PreviewOpen);
 		ImGui::Checkbox("Plot after import", &m_PlotAfterImport);
 
+		const bool validDestination = m_Request.placement != JFMImportPlacement::ExistingSeries || !m_Request.targetSeriesId.empty();
+		ImGui::BeginDisabled(!validDestination);
 		if (ImGui::Button("Import"))
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ImportRequested{m_Request.paths, m_Request.targetSeriesId, m_Request.recursive, buildOptions(), m_PlotAfterImport});
+				m_EventBus->Queue(ImportRequested{
+					m_Request.paths,
+					m_Request.targetSeriesId,
+					m_Request.recursive,
+					buildOptions(),
+					m_PlotAfterImport,
+					m_Request.project,
+					InvalidJFMOperationId,
+					m_Request.targetGroupId,
+					m_Request.placement});
 			m_Open = false;
 			m_PreviewOpen = false;
 		}
+		ImGui::EndDisabled();
 		ImGui::SameLine();
 		if (ImGui::Button("Cancel"))
 		{
@@ -379,6 +444,8 @@ namespace SST::Prototypes::JFM
 	void JFMImportDialogPanel::loadRequest(JFMImportDialogRequest request)
 	{
 		m_Request = std::move(request);
+		if (m_Request.project == InvalidProjectHandle && m_Store != nullptr)
+			m_Request.project = m_Store->GetActiveProjectHandle();
 		m_Parser = 0;
 		m_DecimalSeparator = 0;
 		m_TemperatureExtraction = 0;

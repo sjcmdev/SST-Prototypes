@@ -227,7 +227,11 @@ namespace SST::Prototypes::JFM
 			{
 				try
 				{
-					batch.characteristics.push_back(nb::cast<JFMCharacteristic>(characteristic));
+					JFMCharacteristic imported = nb::cast<JFMCharacteristic>(characteristic);
+					imported.info.importOptions = options;
+					if (imported.info.importOptions.parser == "auto")
+						imported.info.importOptions.parser = parserName;
+					batch.characteristics.emplace_back(std::move(imported));
 				}
 				catch (const nb::python_error &error)
 				{

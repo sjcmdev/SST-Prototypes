@@ -2,6 +2,8 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "App/JFMUserSettings.hpp"
+#include "App/JFMCommands.hpp"
+#include "Core/Commands/CommandContext.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Presentation/JFMPlotRequestState.hpp"
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
@@ -23,6 +25,7 @@ namespace SST::Prototypes::JFM
 			Ref<JFMImportDialogState> importDialog,
 			Ref<JFMPlotRequestState> plotRequests,
 			Ref<EventBus> eventBus,
+			WeakRef<CommandRegistry> commandRegistry,
 			std::string title = "Project Tree",
 			bool visibleByDefault = true);
 
@@ -49,15 +52,21 @@ namespace SST::Prototypes::JFM
 		void FocusItem(RenameTarget target, std::string id, std::string name);
 		void StartRename(RenameTarget target, std::string id, std::string name);
 		void StartShortNameEdit(const JFMProject &project, RenameTarget target, std::string id, const std::string &fallbackName);
+		void ExecuteCommand(const char *commandId, CommandContext context = {});
+		void ExecuteEdit(std::string description, JFMProjectEditRequest::Apply mutation);
 		void QueuePlot(std::vector<CharacteristicId> ids, std::string title);
-		void OpenImportDialog(std::string targetSeriesId = {});
-		void OpenImportFolderDialog(std::string targetSeriesId, bool recursive);
+		void OpenImportDialog(std::string targetSeriesId = {}, std::string targetGroupId = {});
+		void OpenImportFolderDialog(std::string targetSeriesId, std::string targetGroupId, bool recursive);
 		void QueuePlotsForProjectGroups(const JFMProject &project);
 		void QueuePlotsForChildGroups(const JFMProject &project, const std::string &parentGroupId);
-		void RenderProjectNode(const JFMProject &project, TreeRenderState &state);
+		void RenderProjectNode(ProjectHandle projectHandle, const JFMProject &project, TreeRenderState &state);
 		void RenderGroupNode(const JFMProject &project, const JFMGroup &group, TreeRenderState &state);
 		void RenderSeriesNode(const JFMProject &project, const JFMSeries &series, TreeRenderState &state);
 		void RenderCharacteristicNode(const JFMSeries &series, CharacteristicId characteristicId, const std::vector<CharacteristicId> &visibleIds, TreeRenderState &state);
+		void RenderGroupingsNode(const JFMProject &project);
+		void OpenGroupingPopup(const JFMProject &project, const JFMGroupingDefinition *grouping = nullptr);
+		void RenderGroupingPopup(const JFMProject &project);
+		void QueueGroupingPlot(const JFMGroupingDefinition &grouping);
 		void RenderScriptsNode(const JFMProject &project);
 		void RenderRenamePopup();
 		void RenderShortNamePopup();
@@ -73,6 +82,8 @@ namespace SST::Prototypes::JFM
 		Ref<JFMImportDialogState> m_ImportDialog;
 		Ref<JFMPlotRequestState> m_PlotRequests;
 		Ref<EventBus> m_EventBus;
+		WeakRef<CommandRegistry> m_CommandRegistry;
+		ProjectHandle m_CurrentProject = InvalidProjectHandle;
 		int m_SortMode = 0;
 		RenameTarget m_FocusedTarget = RenameTarget::None;
 		std::string m_FocusedTargetId;
@@ -91,5 +102,13 @@ namespace SST::Prototypes::JFM
 		std::vector<CharacteristicId> m_ClipboardCharacteristicIds;
 		bool m_OpenPastePopup = false;
 		bool m_PasteDuplicateFocused = false;
+		bool m_OpenGroupingPopup = false;
+		std::string m_EditingGroupingId;
+		std::array<char, 128> m_GroupingName = {};
+		std::array<char, 128> m_GroupingKey = {};
+		int m_GroupingMode = 1;
+		float m_GroupingStep = 1.0f;
+		bool m_GroupingIncludeMissing = true;
+		std::vector<std::string> m_GroupingSeriesIds;
 	};
 } // namespace SST::Prototypes::JFM

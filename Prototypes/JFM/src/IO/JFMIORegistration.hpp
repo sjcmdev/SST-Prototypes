@@ -9,6 +9,7 @@
 
 namespace SST
 {
+	class CommandRegistry;
 	class IOLayer;
 }
 
@@ -20,6 +21,7 @@ namespace SST::Prototypes::JFM
 		Ref<JFMWorkspaceStore> store;
 		Ref<Notifier> notifier;
 		Ref<JFMUserSettingsStore> settings;
+		WeakRef<CommandRegistry> commandRegistry;
 		Path pythonRoot;
 	};
 

@@ -22,6 +22,8 @@ namespace SST::Prototypes::JFM
 	template <typename TValue>
 	TValue readOr(const YAML::Node &node, const char *key, TValue fallback)
 	{
+		if (!node || !node.IsMap())
+			return fallback;
 		const YAML::Node child = node[key];
 		if (!child)
 			return fallback;
@@ -58,6 +60,8 @@ namespace SST::Prototypes::JFM
 
 	std::optional<double> readOptionalDouble(const YAML::Node &node, const char *key)
 	{
+		if (!node || !node.IsMap())
+			return std::nullopt;
 		const YAML::Node child = node[key];
 		if (!child || child.IsNull())
 			return std::nullopt;
@@ -85,10 +89,77 @@ namespace SST::Prototypes::JFM
 
 	CharacteristicId readCharacteristicId(const YAML::Node &node, const char *key, CharacteristicId fallback = InvalidCharacteristicId)
 	{
+		if (!node || !node.IsMap())
+			return fallback;
 		const YAML::Node child = node[key];
 		if (!child || child.IsNull())
 			return fallback;
 		return legacyIdFromText(child.as<std::string>());
+	}
+
+	void emitImportOptions(YAML::Emitter &out, const JFMImportOptions &options)
+	{
+		out << YAML::BeginMap;
+		out << YAML::Key << "parser" << YAML::Value << options.parser;
+		out << YAML::Key << "name_pattern" << YAML::Value << options.namePattern;
+		out << YAML::Key << "short_name_pattern" << YAML::Value << options.shortNamePattern;
+		out << YAML::Key << "variable_delimiter" << YAML::Value << options.variableDelimiter;
+		out << YAML::Key << "delimiter" << YAML::Value << options.delimiter;
+		out << YAML::Key << "decimal_separator" << YAML::Value << options.decimalSeparator;
+		out << YAML::Key << "temperature_extraction" << YAML::Value << options.temperatureExtraction;
+		out << YAML::Key << "custom_script_path" << YAML::Value << options.customScriptPath;
+		out << YAML::Key << "variables" << YAML::Value << YAML::BeginSeq;
+		for (const JFMNameVariableRule &rule : options.customVariables)
+		{
+			out << YAML::BeginMap;
+			out << YAML::Key << "name" << YAML::Value << rule.name;
+			out << YAML::Key << "source" << YAML::Value << rule.source;
+			out << YAML::Key << "token_index" << YAML::Value << rule.tokenIndex;
+			out << YAML::Key << "substring_start" << YAML::Value << rule.substringStart;
+			out << YAML::Key << "substring_length" << YAML::Value << rule.substringLength;
+			out << YAML::EndMap;
+		}
+		out << YAML::EndSeq << YAML::EndMap;
+	}
+
+	JFMImportOptions readImportOptions(const YAML::Node &node, const std::string &fallbackParser)
+	{
+		JFMImportOptions options;
+		if (!node || !node.IsMap())
+		{
+			options.parser = fallbackParser.empty() ? "auto" : fallbackParser;
+			return options;
+		}
+		options.parser = readOr<std::string>(node, "parser", fallbackParser.empty() ? "auto" : fallbackParser);
+		options.namePattern = readOr<std::string>(node, "name_pattern", "{stem}");
+		options.shortNamePattern = readOr<std::string>(node, "short_name_pattern", {});
+		options.variableDelimiter = readOr<std::string>(node, "variable_delimiter", "_");
+		options.delimiter = readOr<std::string>(node, "delimiter", {});
+		options.decimalSeparator = readOr<std::string>(node, "decimal_separator", "auto");
+		options.temperatureExtraction = readOr<std::string>(node, "temperature_extraction", "auto");
+		options.customScriptPath = readOr<std::string>(node, "custom_script_path", {});
+		for (const YAML::Node &ruleNode : node["variables"])
+		{
+			options.customVariables.push_back(JFMNameVariableRule{
+				readOr<std::string>(ruleNode, "name", {}),
+				readOr<std::string>(ruleNode, "source", "stem"),
+				readOr<int>(ruleNode, "token_index", -1),
+				readOr<int>(ruleNode, "substring_start", 0),
+				readOr<int>(ruleNode, "substring_length", -1)});
+		}
+		return options;
+	}
+
+	const char *groupingModeName(JFMGroupingMode mode)
+	{
+		return mode == JFMGroupingMode::Exact ? "exact" : "numeric_step";
+	}
+
+	JFMGroupingMode readGroupingMode(const YAML::Node &node)
+	{
+		return readOr<std::string>(node, "mode", "numeric_step") == "exact"
+			? JFMGroupingMode::Exact
+			: JFMGroupingMode::NumericStep;
 	}
 
 	void emitCharacteristicInfo(YAML::Emitter &out, const JFMCharacteristicInfo &characteristic)
@@ -99,6 +170,8 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "measurement" << YAML::Value << characteristic.measurement;
 		out << YAML::Key << "source_path" << YAML::Value << characteristic.sourcePath.String();
 		out << YAML::Key << "parser" << YAML::Value << characteristic.parser;
+		out << YAML::Key << "import" << YAML::Value;
+		emitImportOptions(out, characteristic.importOptions);
 		emitOptionalDouble(out, "temperature_K", characteristic.temperatureK);
 		out << YAML::Key << "temperature_source" << YAML::Value << characteristic.temperatureSource;
 		out << YAML::Key << "metadata" << YAML::Value;
@@ -137,6 +210,7 @@ namespace SST::Prototypes::JFM
 		characteristic.measurement = readOr<std::string>(characteristicNode, "measurement", "IV");
 		characteristic.sourcePath = Path::FromResolved(readOr<std::string>(characteristicNode, "source_path", {}));
 		characteristic.parser = readOr<std::string>(characteristicNode, "parser", {});
+		characteristic.importOptions = readImportOptions(characteristicNode["import"], characteristic.parser);
 		characteristic.temperatureK = readOptionalDouble(characteristicNode, "temperature_K");
 		characteristic.temperatureSource = readOr<std::string>(characteristicNode, "temperature_source", "missing");
 		characteristic.metadata = readStringMap(characteristicNode["metadata"]);
@@ -158,7 +232,7 @@ namespace SST::Prototypes::JFM
 		const YAML::Node qcNode = characteristicNode["qc"];
 		characteristic.qc.nonMonotonicSweep = readOr<bool>(qcNode, "non_monotonic_sweep", false);
 		characteristic.qc.hasMissingTemperature = readOr<bool>(qcNode, "missing_temperature", false);
-		if (qcNode["warnings"])
+		if (qcNode && qcNode.IsMap() && qcNode["warnings"])
 			characteristic.qc.warnings = qcNode["warnings"].as<std::vector<std::string>>();
 
 		return characteristic;
@@ -240,6 +314,21 @@ namespace SST::Prototypes::JFM
 				out << YAML::EndMap;
 			}
 			out << YAML::EndSeq;
+
+			out << YAML::Key << "groupings" << YAML::Value << YAML::BeginSeq;
+			for (const JFMGroupingDefinition &grouping : project.groupings)
+			{
+				out << YAML::BeginMap;
+				out << YAML::Key << "id" << YAML::Value << grouping.id;
+				out << YAML::Key << "name" << YAML::Value << grouping.name;
+				out << YAML::Key << "source_series" << YAML::Value << grouping.sourceSeriesIds;
+				out << YAML::Key << "metadata_key" << YAML::Value << grouping.metadataKey;
+				out << YAML::Key << "mode" << YAML::Value << groupingModeName(grouping.mode);
+				out << YAML::Key << "numeric_step" << YAML::Value << grouping.numericStep;
+				out << YAML::Key << "include_missing" << YAML::Value << grouping.includeMissing;
+				out << YAML::EndMap;
+			}
+			out << YAML::EndSeq;
 			out << YAML::EndMap;
 
 			if (!out.good())
@@ -260,10 +349,12 @@ namespace SST::Prototypes::JFM
 			if (!root || !root.IsMap())
 				return makeYamlError("Project load failed.", "Root YAML node is not a map.");
 
+			const int sourceSchemaVersion = readOr<int>(root, "schema_version", 1);
+			if (sourceSchemaVersion < 1 || sourceSchemaVersion > JFMProjectSchemaVersion)
+				return makeYamlError("Unsupported JFM project schema.", "Schema version " + std::to_string(sourceSchemaVersion) + " is not supported.");
+
 			JFMProject project;
-			project.schemaVersion = readOr<int>(root, "schema_version", JFMProjectSchemaVersion);
-			if (project.schemaVersion != JFMProjectSchemaVersion)
-				return makeYamlError("Unsupported JFM project schema.", "Schema version " + std::to_string(project.schemaVersion) + " is not supported.");
+			project.schemaVersion = JFMProjectSchemaVersion;
 
 			const YAML::Node projectNode = root["project"];
 			project.id = readOr<std::string>(projectNode, "id", "jfm-project");
@@ -321,6 +412,20 @@ namespace SST::Prototypes::JFM
 					Path::FromResolved(readOr<std::string>(scriptNode, "path", {})),
 					readOr<bool>(scriptNode, "enabled", true),
 					readOr<std::size_t>(scriptNode, "reload_count", 0)});
+			}
+
+			for (const YAML::Node &groupingNode : root["groupings"])
+			{
+				JFMGroupingDefinition grouping;
+				grouping.id = readOr<std::string>(groupingNode, "id", {});
+				grouping.name = readOr<std::string>(groupingNode, "name", "Grouping");
+				if (groupingNode["source_series"])
+					grouping.sourceSeriesIds = groupingNode["source_series"].as<std::vector<std::string>>();
+				grouping.metadataKey = readOr<std::string>(groupingNode, "metadata_key", "temperature_K");
+				grouping.mode = readGroupingMode(groupingNode);
+				grouping.numericStep = readOr<double>(groupingNode, "numeric_step", 1.0);
+				grouping.includeMissing = readOr<bool>(groupingNode, "include_missing", true);
+				project.groupings.push_back(std::move(grouping));
 			}
 
 			if (project.series.empty())

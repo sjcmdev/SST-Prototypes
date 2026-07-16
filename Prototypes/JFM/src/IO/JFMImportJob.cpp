@@ -18,13 +18,13 @@ namespace SST::Prototypes::JFM
 	}
 
 
-	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot, JFMImportOptions options)
-		: JFMImportJob(std::move(eventBus), std::vector<JFMImportGroup>{{std::move(paths), {}}}, std::move(pythonRoot), std::move(options))
+	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot, JFMImportOptions options, ProjectHandle project, JFMOperationId operation)
+		: JFMImportJob(std::move(eventBus), std::vector<JFMImportGroup>{{std::move(paths), {}}}, std::move(pythonRoot), std::move(options), project, operation)
 	{
 	}
 
-	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot, JFMImportOptions options)
-		: m_EventBus(std::move(eventBus)), m_Groups(std::move(groups)), m_PythonRoot(std::move(pythonRoot)), m_Options(std::move(options))
+	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot, JFMImportOptions options, ProjectHandle project, JFMOperationId operation)
+		: m_EventBus(std::move(eventBus)), m_Groups(std::move(groups)), m_PythonRoot(std::move(pythonRoot)), m_Options(std::move(options)), m_Project(project), m_Operation(operation)
 	{
 	}
 
@@ -48,7 +48,7 @@ namespace SST::Prototypes::JFM
 		context.SetProgress(static_cast<float>(completed), static_cast<float>(total));
 		context.SetMessage(message);
 		if (m_EventBus != nullptr)
-			m_EventBus->Queue(ImportProgress{static_cast<float>(completed), static_cast<float>(total), message});
+			m_EventBus->Queue(ImportProgress{static_cast<float>(completed), static_cast<float>(total), message, m_Project, m_Operation});
 	}
 
 	void JFMImportJob::Execute(JobContext &context)
@@ -57,7 +57,7 @@ namespace SST::Prototypes::JFM
 		context.SetStage("Python import");
 		context.SetProgress(0.0f, static_cast<float>(total));
 		if (m_EventBus != nullptr)
-			m_EventBus->Queue(ImportProgress{0.0f, static_cast<float>(total), "Import starting"});
+			m_EventBus->Queue(ImportProgress{0.0f, static_cast<float>(total), "Import starting", m_Project, m_Operation});
 
 		JFMPythonImportBridge bridge(m_PythonRoot);
 		std::size_t completedOffset = 0;
@@ -101,13 +101,15 @@ namespace SST::Prototypes::JFM
 					group.targetSeriesId,
 					group.groupPath,
 					group.seriesName,
-					groupIndex + 1 == m_Groups.size()});
+					groupIndex + 1 == m_Groups.size(),
+					m_Project,
+					m_Operation});
 		}
 
 		context.SetProgress(static_cast<float>(total), static_cast<float>(total));
 		if (m_EventBus != nullptr && importedCount == 0 && !allWarnings.empty())
-			m_EventBus->Queue(ImportFailed{allWarnings.front()});
+			m_EventBus->Queue(ImportFailed{allWarnings.front(), m_Project, m_Operation});
 		else if (m_EventBus != nullptr && completedOffset == 0)
-			m_EventBus->Queue(ImportCompleted{{}, {}, {}, {}, {}, true});
+			m_EventBus->Queue(ImportCompleted{{}, {}, {}, {}, {}, true, m_Project, m_Operation});
 	}
 } // namespace SST::Prototypes::JFM

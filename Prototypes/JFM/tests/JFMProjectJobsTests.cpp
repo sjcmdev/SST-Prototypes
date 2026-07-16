@@ -61,29 +61,41 @@ namespace SST::Prototypes::JFM
 
 		bool saveCompleted = false;
 		bool loadCompleted = false;
+		ProjectHandle savedProject = InvalidProjectHandle;
+		JFMOperationId saveOperation = InvalidJFMOperationId;
+		std::uint64_t saveRevision = 0;
+		JFMOperationId loadOperation = InvalidJFMOperationId;
 		JFMProject loadedProject;
-		auto saveSub = bus->Subscribe<ProjectSaveCompleted>([&saveCompleted](const ProjectSaveCompleted &) {
+		auto saveSub = bus->Subscribe<ProjectSaveCompleted>([&](const ProjectSaveCompleted &event) {
 			saveCompleted = true;
+			savedProject = event.project;
+			saveOperation = event.operation;
+			saveRevision = event.revision;
 		});
 		auto loadSub = bus->Subscribe<ProjectLoadCompleted>([&](const ProjectLoadCompleted &event) {
 			loadCompleted = true;
 			loadedProject = event.project;
+			loadOperation = event.operation;
 		});
 
 		JobContext context = MakeTestJobContext();
-		SaveProjectJob saveJob(bus, path, project);
+		SaveProjectJob saveJob(bus, path, project, 7, 11, 23);
 		saveJob.Execute(context);
 		bus->ProcessQueue();
 
 		ASSERT_TRUE(saveCompleted);
 		ASSERT_TRUE(FileSystem::Exists(path.Native()));
+		EXPECT_EQ(savedProject, 7);
+		EXPECT_EQ(saveOperation, 11);
+		EXPECT_EQ(saveRevision, 23);
 
-		LoadProjectJob loadJob(bus, path);
+		LoadProjectJob loadJob(bus, path, 12);
 		loadJob.Execute(context);
 		bus->ProcessQueue();
 
 		ASSERT_TRUE(loadCompleted);
 		EXPECT_EQ(loadedProject.name, "Job Project");
+		EXPECT_EQ(loadOperation, 12);
 		(void)saveSub;
 		(void)loadSub;
 		(void)FileSystem::Remove(path.Native());
@@ -94,23 +106,28 @@ namespace SST::Prototypes::JFM
 		auto bus = CreateRef<EventBus>();
 		bool sawProgress = false;
 		bool sawTerminalEvent = false;
-		auto progressSub = bus->Subscribe<ImportProgress>([&sawProgress](const ImportProgress &) {
+		bool routingMatches = true;
+		auto progressSub = bus->Subscribe<ImportProgress>([&](const ImportProgress &event) {
 			sawProgress = true;
+			routingMatches = routingMatches && event.project == 8 && event.operation == 13;
 		});
-		auto failedSub = bus->Subscribe<ImportFailed>([&sawTerminalEvent](const ImportFailed &) {
+		auto failedSub = bus->Subscribe<ImportFailed>([&](const ImportFailed &event) {
 			sawTerminalEvent = true;
+			routingMatches = routingMatches && event.project == 8 && event.operation == 13;
 		});
-		auto completedSub = bus->Subscribe<ImportCompleted>([&sawTerminalEvent](const ImportCompleted &) {
+		auto completedSub = bus->Subscribe<ImportCompleted>([&](const ImportCompleted &event) {
 			sawTerminalEvent = true;
+			routingMatches = routingMatches && event.project == 8 && event.operation == 13;
 		});
 
 		JobContext context = MakeTestJobContext();
-		JFMImportJob job(bus, {Path::FromResolved("missing.dat")}, Path::FromResolved("missing-python-root"));
+		JFMImportJob job(bus, std::vector<Path>{Path::FromResolved("missing.dat")}, Path::FromResolved("missing-python-root"), {}, 8, 13);
 		job.Execute(context);
 		bus->ProcessQueue();
 
 		EXPECT_TRUE(sawProgress);
 		EXPECT_TRUE(sawTerminalEvent);
+		EXPECT_TRUE(routingMatches);
 		(void)progressSub;
 		(void)failedSub;
 		(void)completedSub;
@@ -120,10 +137,14 @@ namespace SST::Prototypes::JFM
 	{
 		auto bus = CreateRef<EventBus>();
 		bool completed = false;
+		ProjectHandle completedProject = InvalidProjectHandle;
+		JFMOperationId completedOperation = InvalidJFMOperationId;
 		std::vector<JFMCharacteristic> characteristics;
 		std::vector<std::string> warnings;
 		auto completedSub = bus->Subscribe<ProjectDataMaterializationCompleted>([&](const ProjectDataMaterializationCompleted &event) {
 			completed = true;
+			completedProject = event.project;
+			completedOperation = event.operation;
 			characteristics = event.characteristics;
 			warnings = event.warnings;
 		});
@@ -139,7 +160,7 @@ namespace SST::Prototypes::JFM
 		project.series.push_back(JFMSeries{"series-1", "Series", {}, {42}});
 
 		JobContext context = MakeTestJobContext();
-		MaterializeProjectDataJob job(bus, project, Path::FromResolved("missing-python-root"));
+		MaterializeProjectDataJob job(bus, project, Path::FromResolved("missing-python-root"), 9, 14);
 		job.Execute(context);
 		bus->ProcessQueue();
 
@@ -147,6 +168,8 @@ namespace SST::Prototypes::JFM
 		EXPECT_TRUE(characteristics.empty());
 		ASSERT_FALSE(warnings.empty());
 		EXPECT_NE(warnings.front().find("Source file missing"), std::string::npos);
+		EXPECT_EQ(completedProject, 9);
+		EXPECT_EQ(completedOperation, 14);
 		(void)completedSub;
 	}
 

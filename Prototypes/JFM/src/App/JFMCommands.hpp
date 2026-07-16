@@ -1,5 +1,9 @@
 #pragma once
 
+#include <functional>
+#include <string>
+
+#include "Core/Commands/Command.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "App/JFMUserSettings.hpp"
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
@@ -14,6 +18,17 @@ namespace SST
 
 namespace SST::Prototypes::JFM
 {
+	inline constexpr const char *JFMApplyProjectEditCommandId = "jfm.project.apply_edit";
+
+	struct JFMProjectEditRequest
+	{
+		using Apply = std::function<Result<void>(JFMWorkspaceStore &, ProjectHandle)>;
+
+		ProjectHandle project = InvalidProjectHandle;
+		std::string description;
+		Apply apply;
+	};
+
 	struct JFMCommandRegistrationContext
 	{
 		Ref<EventBus> eventBus;
@@ -24,5 +39,6 @@ namespace SST::Prototypes::JFM
 		Ref<JFMImportDialogState> importDialog;
 	};
 
+	[[nodiscard]] Unique<ICommand> CreateJFMProjectEditCommand(Ref<JFMWorkspaceStore> workspace, JFMProjectEditRequest request);
 	void RegisterJFMCommands(JFMCommandRegistrationContext context);
 } // namespace SST::Prototypes::JFM

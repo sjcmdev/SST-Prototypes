@@ -3,6 +3,7 @@
 #include "Presentation/Panels/ProjectTreePanel.hpp"
 
 #include "App/NativeFileDialog.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
 #include "Events/JFMEvents.hpp"
 
 #include <algorithm>
@@ -19,7 +20,6 @@ namespace SST::Prototypes::JFM
 {
 	namespace
 	{
-		constexpr NativeFileDialogFilter JFMDataFilter{"JFM Data", "dat,iv,txt,csv"};
 		constexpr NativeFileDialogFilter PythonScriptFilter{"Python", "py"};
 
 		bool containsId(const std::vector<CharacteristicId> &ids, CharacteristicId id)
@@ -148,16 +148,6 @@ namespace SST::Prototypes::JFM
 			}
 		}
 
-		std::vector<Path> chooseImportFiles(const Ref<JFMUserSettingsStore> &settings)
-		{
-			return OpenFilesDialog(JFMDataFilter, settings != nullptr ? settings->GetDefaultImportDirectory() : Path{});
-		}
-
-		std::vector<Path> chooseImportFolders(const Ref<JFMUserSettingsStore> &settings, bool multiple)
-		{
-			return PickFoldersDialog(multiple, settings != nullptr ? settings->GetDefaultImportDirectory() : Path{});
-		}
-
 		std::optional<Path> chooseOutputDirectory(const Ref<JFMUserSettingsStore> &settings)
 		{
 			std::vector<Path> paths = PickFoldersDialog(false, settings != nullptr ? settings->GetDefaultProjectsDirectory() : Path{});
@@ -178,12 +168,13 @@ namespace SST::Prototypes::JFM
 		std::vector<CharacteristicId> sortedCharacteristicIds(
 			const JFMSeries &series,
 			const Ref<JFMWorkspaceStore> &store,
+			ProjectHandle project,
 			int sortMode)
 		{
 			std::vector<CharacteristicId> ids = series.characteristicIds;
 			std::sort(ids.begin(), ids.end(), [&](CharacteristicId left, CharacteristicId right) {
-				const auto leftCharacteristic = store->FindCharacteristic(left);
-				const auto rightCharacteristic = store->FindCharacteristic(right);
+				const auto leftCharacteristic = store->FindCharacteristic({project, left});
+				const auto rightCharacteristic = store->FindCharacteristic({project, right});
 				if (!leftCharacteristic || !rightCharacteristic)
 					return left < right;
 				if (sortMode == 1 && leftCharacteristic->info.temperatureK != rightCharacteristic->info.temperatureK)
@@ -203,12 +194,15 @@ namespace SST::Prototypes::JFM
 			return {};
 		}
 
-		std::vector<CharacteristicId> idsForGroup(const Ref<JFMWorkspaceStore> &store, const std::string &groupId)
+		std::vector<CharacteristicId> idsForGroup(
+			const Ref<JFMWorkspaceStore> &store,
+			ProjectHandle project,
+			const std::string &groupId)
 		{
 			std::vector<CharacteristicId> ids;
 			if (store == nullptr)
 				return ids;
-			for (const JFMCharacteristic &characteristic : store->GetGroupCharacteristics(groupId))
+			for (const JFMCharacteristic &characteristic : store->GetGroupCharacteristics(project, groupId))
 				ids.push_back(characteristic.info.id);
 			return ids;
 		}
@@ -220,6 +214,7 @@ namespace SST::Prototypes::JFM
 		Ref<JFMImportDialogState> importDialog,
 		Ref<JFMPlotRequestState> plotRequests,
 		Ref<EventBus> eventBus,
+		WeakRef<CommandRegistry> commandRegistry,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
@@ -227,13 +222,40 @@ namespace SST::Prototypes::JFM
 		  m_Settings(std::move(settings)),
 		  m_ImportDialog(std::move(importDialog)),
 		  m_PlotRequests(std::move(plotRequests)),
-		  m_EventBus(std::move(eventBus))
+		  m_EventBus(std::move(eventBus)),
+		  m_CommandRegistry(std::move(commandRegistry))
 	{
 	}
 
 	Ref<IPanel> ProjectTreePanel::Clone() const
 	{
 		return CreateRef<ProjectTreePanel>(*this);
+	}
+
+	void ProjectTreePanel::ExecuteCommand(const char *commandId, CommandContext context)
+	{
+		auto registry = m_CommandRegistry.lock();
+		if (registry == nullptr)
+		{
+			if (m_Store != nullptr)
+				m_Store->SetStatusMessage(m_CurrentProject, "Command runtime unavailable.");
+			return;
+		}
+		context.SetContextId(ContextID{"jfm.project_tree"});
+		context.SetSource("Project Tree");
+		(void)registry->Execute(CommandID{commandId}, std::move(context));
+	}
+
+	void ProjectTreePanel::ExecuteEdit(std::string description, JFMProjectEditRequest::Apply mutation)
+	{
+		CommandContext context;
+		context.Set(
+			"edit",
+			JFMProjectEditRequest{
+				m_CurrentProject,
+				std::move(description),
+				std::move(mutation)});
+		ExecuteCommand(JFMApplyProjectEditCommandId, std::move(context));
 	}
 
 	void ProjectTreePanel::Render()
@@ -261,16 +283,42 @@ namespace SST::Prototypes::JFM
 		ImGui::SetNextItemWidth(150.0f);
 		ImGui::Combo("Sort", &m_SortMode, sortModes, IM_ARRAYSIZE(sortModes));
 
-		const JFMProject project = m_Store->GetProjectSnapshot();
+		m_CurrentProject = m_Store->GetActiveProjectHandle();
+		const JFMProject project = m_Store->GetProjectSnapshot(m_CurrentProject);
 		TreeRenderState state;
 		state.primarySelection = m_Store->GetSelectedCharacteristicId();
 		state.selectedIds = m_Store->GetSelectedCharacteristicIds();
 
-		RenderProjectNode(project, state);
+		for (const JFMProjectDocumentInfo &document : m_Store->GetProjects())
+		{
+			if (document.handle == m_CurrentProject)
+			{
+				RenderProjectNode(document.handle, project, state);
+				continue;
+			}
+
+			const std::string label = document.name + (document.dirty ? " *" : "") + "##project_" + std::to_string(document.handle);
+			const bool open = ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_None);
+			if (ImGui::IsItemClicked())
+				(void)m_Store->SetActiveProject(document.handle);
+			if (ImGui::BeginPopupContextItem())
+			{
+				if (ImGui::MenuItem("Set Active"))
+					(void)m_Store->SetActiveProject(document.handle);
+				ImGui::EndPopup();
+			}
+			if (open)
+			{
+				ImGui::TextDisabled("Inactive project");
+				ImGui::TextWrapped("%s", document.status.c_str());
+				ImGui::TreePop();
+			}
+		}
 		HandleKeyboard(project, state);
 		RenderRenamePopup();
 		RenderShortNamePopup();
 		RenderPastePopup(project);
+		RenderGroupingPopup(project);
 
 		ImGui::End();
 		SetVisible(visible);
@@ -309,7 +357,7 @@ namespace SST::Prototypes::JFM
 		else if (target == RenameTarget::Characteristic)
 		{
 			const CharacteristicId characteristicId = static_cast<CharacteristicId>(std::stoull(id));
-			const auto characteristic = m_Store->FindCharacteristic(characteristicId);
+			const auto characteristic = m_Store->FindCharacteristic({m_CurrentProject, characteristicId});
 			if (characteristic)
 				shortName = shortNameFrom(characteristic->info.metadata);
 			const std::vector<CharacteristicId> selectedIds = m_Store->GetSelectedCharacteristicIds();
@@ -331,7 +379,7 @@ namespace SST::Prototypes::JFM
 	void ProjectTreePanel::QueuePlot(std::vector<CharacteristicId> ids, std::string title)
 	{
 		if (m_PlotRequests != nullptr)
-			m_PlotRequests->QueuePlot(std::move(ids), std::move(title));
+			m_PlotRequests->QueuePlot(std::move(ids), std::move(title), m_CurrentProject);
 	}
 
 	void ProjectTreePanel::QueuePlotsForProjectGroups(const JFMProject &project)
@@ -339,7 +387,7 @@ namespace SST::Prototypes::JFM
 		for (const JFMGroup &group : project.groups)
 		{
 			if (group.parentId.empty())
-				QueuePlot(idsForGroup(m_Store, group.id), displayName(group.name, group.metadata));
+				QueuePlot(idsForGroup(m_Store, m_CurrentProject, group.id), displayName(group.name, group.metadata));
 		}
 	}
 
@@ -348,31 +396,32 @@ namespace SST::Prototypes::JFM
 		for (const JFMGroup &group : project.groups)
 		{
 			if (group.parentId == parentGroupId)
-				QueuePlot(idsForGroup(m_Store, group.id), displayName(group.name, group.metadata));
+				QueuePlot(idsForGroup(m_Store, m_CurrentProject, group.id), displayName(group.name, group.metadata));
 		}
 	}
 
-	void ProjectTreePanel::OpenImportDialog(std::string targetSeriesId)
+	void ProjectTreePanel::OpenImportDialog(std::string targetSeriesId, std::string targetGroupId)
 	{
-		std::vector<Path> paths = chooseImportFiles(m_Settings);
-		if (!paths.empty() && m_Settings != nullptr)
-			m_Settings->SetDefaultImportDirectory(paths.front().parent_path());
-		if (!paths.empty() && m_ImportDialog != nullptr)
-			m_ImportDialog->Open(JFMImportDialogRequest{std::move(paths), std::move(targetSeriesId), false});
+		CommandContext context;
+		context.Set("project", m_CurrentProject);
+		context.Set("target_series_id", std::move(targetSeriesId));
+		context.Set("target_group_id", std::move(targetGroupId));
+		ExecuteCommand("jfm.import.files", std::move(context));
 	}
 
-	void ProjectTreePanel::OpenImportFolderDialog(std::string targetSeriesId, bool recursive)
+	void ProjectTreePanel::OpenImportFolderDialog(std::string targetSeriesId, std::string targetGroupId, bool recursive)
 	{
-		std::vector<Path> paths = chooseImportFolders(m_Settings, false);
-		if (!paths.empty() && m_Settings != nullptr)
-			m_Settings->SetDefaultImportDirectory(paths.front());
-		if (!paths.empty() && m_ImportDialog != nullptr)
-			m_ImportDialog->Open(JFMImportDialogRequest{std::move(paths), std::move(targetSeriesId), recursive});
+		CommandContext context;
+		context.Set("project", m_CurrentProject);
+		context.Set("target_series_id", std::move(targetSeriesId));
+		context.Set("target_group_id", std::move(targetGroupId));
+		ExecuteCommand(recursive ? "jfm.import.directories_recursive" : "jfm.import.directory", std::move(context));
 	}
 
-	void ProjectTreePanel::RenderProjectNode(const JFMProject &project, TreeRenderState &state)
+	void ProjectTreePanel::RenderProjectNode(ProjectHandle projectHandle, const JFMProject &project, TreeRenderState &state)
 	{
-		if (!ImGui::TreeNodeEx((project.name + "##project").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+		const std::string projectLabel = project.name + (m_Store->IsDirty(projectHandle) ? " *" : "") + " [active]##project_" + std::to_string(projectHandle);
+		if (!ImGui::TreeNodeEx(projectLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 			return;
 
 		if (ImGui::IsItemClicked() || ImGui::IsItemFocused())
@@ -380,14 +429,24 @@ namespace SST::Prototypes::JFM
 		if (ImGui::BeginPopupContextItem())
 		{
 			FocusItem(RenameTarget::Project, {}, project.name);
+			if (ImGui::MenuItem("Add Group"))
+				ExecuteEdit("Add group", [](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+					(void)workspace.AddGroup(handle, "Group");
+					return Result<void>{};
+				});
 			if (ImGui::MenuItem("Add Series"))
-				(void)m_Store->AddSeries("Series");
+				ExecuteEdit("Add series", [](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+					(void)workspace.AddSeries(handle, "Series");
+					return Result<void>{};
+				});
 			if (ImGui::MenuItem("Import Series"))
 				OpenImportDialog();
 			if (ImGui::MenuItem("Import Folder as Series"))
-				OpenImportFolderDialog({}, false);
-			if (ImGui::MenuItem("Import Folder Recursively as Series"))
-				OpenImportFolderDialog({}, true);
+				OpenImportFolderDialog({}, {}, false);
+			if (ImGui::MenuItem("Import Folder Tree"))
+				OpenImportFolderDialog({}, {}, true);
+			if (ImGui::MenuItem("Create Grouping"))
+				OpenGroupingPopup(project);
 			if (ImGui::MenuItem("Plot Project Groups"))
 				QueuePlotsForProjectGroups(project);
 			if (ImGui::MenuItem("Paste", nullptr, false, m_ClipboardTarget != RenameTarget::None))
@@ -407,6 +466,7 @@ namespace SST::Prototypes::JFM
 			if (series.groupId.empty())
 				RenderSeriesNode(project, series, state);
 		}
+		RenderGroupingsNode(project);
 		RenderScriptsNode(project);
 		ImGui::TreePop();
 	}
@@ -422,10 +482,30 @@ namespace SST::Prototypes::JFM
 		if (ImGui::BeginPopupContextItem())
 		{
 			FocusItem(RenameTarget::Group, group.id, group.name);
+			if (ImGui::MenuItem("Add Group"))
+			{
+				const std::string parentId = group.id;
+				ExecuteEdit("Add group", [parentId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+					(void)workspace.AddGroup(handle, "Group", parentId);
+					return Result<void>{};
+				});
+			}
 			if (ImGui::MenuItem("Add Series"))
-				(void)m_Store->AddSeries("Series", group.id);
+			{
+				const std::string groupId = group.id;
+				ExecuteEdit("Add series", [groupId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+					(void)workspace.AddSeries(handle, "Series", groupId);
+					return Result<void>{};
+				});
+			}
+			if (ImGui::MenuItem("Import Files"))
+				OpenImportDialog({}, group.id);
+			if (ImGui::MenuItem("Import Folder as Series"))
+				OpenImportFolderDialog({}, group.id, false);
+			if (ImGui::MenuItem("Import Folder Tree"))
+				OpenImportFolderDialog({}, group.id, true);
 			if (ImGui::MenuItem("Plot Group"))
-				QueuePlot(idsForGroup(m_Store, group.id), shownName);
+				QueuePlot(idsForGroup(m_Store, m_CurrentProject, group.id), shownName);
 			if (ImGui::MenuItem("Plot Child Groups"))
 				QueuePlotsForChildGroups(project, group.id);
 			if (ImGui::MenuItem("Export Raw TSV"))
@@ -444,7 +524,13 @@ namespace SST::Prototypes::JFM
 				PasteClipboard(project, false);
 			}
 			if (ImGui::MenuItem("Delete Group"))
-				(void)m_Store->DeleteGroup(group.id);
+			{
+				const std::string groupId = group.id;
+				ExecuteEdit("Delete group", [groupId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+					(void)workspace.DeleteGroup(handle, groupId);
+					return Result<void>{};
+				});
+			}
 			ImGui::EndPopup();
 		}
 		if (!open)
@@ -477,8 +563,12 @@ namespace SST::Prototypes::JFM
 			{
 				const CharacteristicId id = *static_cast<const CharacteristicId *>(payload->Data);
 				std::vector<CharacteristicId> idsToMove = containsId(state.selectedIds, id) ? state.selectedIds : std::vector<CharacteristicId>{id};
-				for (CharacteristicId movedId : idsToMove)
-					(void)m_Store->MoveCharacteristic(movedId, series.id);
+				const std::string targetSeriesId = series.id;
+				ExecuteEdit("Move characteristics", [idsToMove, targetSeriesId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+					for (CharacteristicId movedId : idsToMove)
+						(void)workspace.MoveCharacteristic(handle, movedId, targetSeriesId);
+					return Result<void>{};
+				});
 				m_Store->SetSelectedCharacteristics(idsToMove, id, series.id);
 				state.selectedIds = m_Store->GetSelectedCharacteristicIds();
 			}
@@ -495,9 +585,9 @@ namespace SST::Prototypes::JFM
 			if (ImGui::MenuItem("Add Characteristics"))
 				OpenImportDialog(series.id);
 			if (ImGui::MenuItem("Import Folder"))
-				OpenImportFolderDialog(series.id, false);
+				OpenImportFolderDialog(series.id, {}, false);
 			if (ImGui::MenuItem("Import Folder Recursively"))
-				OpenImportFolderDialog(series.id, true);
+				OpenImportFolderDialog(series.id, {}, true);
 			if (ImGui::MenuItem("Plot Series"))
 				QueuePlot(series.characteristicIds, shownName);
 			if (ImGui::MenuItem("Export Raw TSV"))
@@ -519,13 +609,19 @@ namespace SST::Prototypes::JFM
 				PasteClipboard(project, false);
 			}
 			if (ImGui::MenuItem("Delete Series"))
-				(void)m_Store->DeleteSeries(series.id);
+			{
+				const std::string seriesId = series.id;
+				ExecuteEdit("Delete series", [seriesId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+					(void)workspace.DeleteSeries(handle, seriesId);
+					return Result<void>{};
+				});
+			}
 			ImGui::EndPopup();
 		}
 		if (!open)
 			return;
 
-		const std::vector<CharacteristicId> visibleIds = sortedCharacteristicIds(series, m_Store, m_SortMode);
+		const std::vector<CharacteristicId> visibleIds = sortedCharacteristicIds(series, m_Store, m_CurrentProject, m_SortMode);
 		state.visibleCharacteristicIds.insert(state.visibleCharacteristicIds.end(), visibleIds.begin(), visibleIds.end());
 		for (CharacteristicId characteristicId : visibleIds)
 			RenderCharacteristicNode(series, characteristicId, visibleIds, state);
@@ -536,7 +632,7 @@ namespace SST::Prototypes::JFM
 
 	void ProjectTreePanel::RenderCharacteristicNode(const JFMSeries &series, CharacteristicId characteristicId, const std::vector<CharacteristicId> &visibleIds, TreeRenderState &state)
 	{
-		const auto characteristic = m_Store->FindCharacteristic(characteristicId);
+		const auto characteristic = m_Store->FindCharacteristic({m_CurrentProject, characteristicId});
 		const std::string name = characteristic ? characteristic->info.name : std::to_string(characteristicId);
 		const std::string shownName = characteristic ? displayName(characteristic->info.name, characteristic->info.metadata) : name;
 		const bool hasWarning = characteristic
@@ -611,29 +707,207 @@ namespace SST::Prototypes::JFM
 			FocusItem(RenameTarget::Characteristic, std::to_string(characteristicId), name);
 			if (ImGui::MenuItem("Delete"))
 			{
-				if (selected && state.selectedIds.size() > 1)
-				{
-					for (CharacteristicId id : state.selectedIds)
-						(void)m_Store->DeleteCharacteristic(id);
-				}
-				else
-				{
-					(void)m_Store->DeleteCharacteristic(characteristicId);
-				}
+				const std::vector<CharacteristicId> ids = selected && state.selectedIds.size() > 1
+					? state.selectedIds
+					: std::vector<CharacteristicId>{characteristicId};
+				ExecuteEdit("Delete characteristics", [ids](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+					for (CharacteristicId id : ids)
+						(void)workspace.DeleteCharacteristic(handle, id);
+					return Result<void>{};
+				});
 			}
 			if (ImGui::MenuItem("Rename"))
 				StartRename(RenameTarget::Characteristic, std::to_string(characteristicId), name);
 			if (ImGui::MenuItem("Edit Short Name"))
-				StartShortNameEdit(m_Store->GetProjectSnapshot(), RenameTarget::Characteristic, std::to_string(characteristicId), shownName);
+				StartShortNameEdit(m_Store->GetProjectSnapshot(m_CurrentProject), RenameTarget::Characteristic, std::to_string(characteristicId), shownName);
 			if (ImGui::MenuItem("Copy"))
-				CopyFocused(m_Store->GetProjectSnapshot(), state.selectedIds);
+				CopyFocused(m_Store->GetProjectSnapshot(m_CurrentProject), state.selectedIds);
 			if (ImGui::MenuItem("Duplicate"))
 			{
-				CopyFocused(m_Store->GetProjectSnapshot(), state.selectedIds);
-				PasteClipboard(m_Store->GetProjectSnapshot(), false);
+				CopyFocused(m_Store->GetProjectSnapshot(m_CurrentProject), state.selectedIds);
+				PasteClipboard(m_Store->GetProjectSnapshot(m_CurrentProject), false);
 			}
 			ImGui::EndPopup();
 		}
+	}
+
+	void ProjectTreePanel::QueueGroupingPlot(const JFMGroupingDefinition &grouping)
+	{
+		if (m_PlotRequests == nullptr || m_Store == nullptr)
+			return;
+		std::vector<JFMPlotRequest::CurveGroup> groups;
+		for (const JFMGroupingBucket &bucket : m_Store->ResolveGrouping(m_CurrentProject, grouping.id))
+		{
+			groups.emplace_back(JFMPlotRequest::CurveGroup{
+				grouping.id + ":" + bucket.key,
+				bucket.label,
+				bucket.characteristicIds,
+				grouping.id,
+				bucket.key});
+		}
+		m_PlotRequests->QueueGroups(m_CurrentProject, grouping.name, std::move(groups));
+	}
+
+	void ProjectTreePanel::OpenGroupingPopup(const JFMProject &project, const JFMGroupingDefinition *grouping)
+	{
+		m_EditingGroupingId = grouping == nullptr ? std::string{} : grouping->id;
+		const std::string name = grouping == nullptr ? "Grouping" : grouping->name;
+		const std::string key = grouping == nullptr ? "temperature_K" : grouping->metadataKey;
+		std::snprintf(m_GroupingName.data(), m_GroupingName.size(), "%s", name.c_str());
+		std::snprintf(m_GroupingKey.data(), m_GroupingKey.size(), "%s", key.c_str());
+		m_GroupingMode = grouping == nullptr || grouping->mode == JFMGroupingMode::NumericStep ? 1 : 0;
+		m_GroupingStep = grouping == nullptr ? 1.0f : static_cast<float>(grouping->numericStep);
+		m_GroupingIncludeMissing = grouping == nullptr || grouping->includeMissing;
+		m_GroupingSeriesIds.clear();
+		if (grouping == nullptr)
+		{
+			for (const JFMSeries &series : project.series)
+				m_GroupingSeriesIds.emplace_back(series.id);
+		}
+		else
+		{
+			m_GroupingSeriesIds = grouping->sourceSeriesIds;
+		}
+		m_OpenGroupingPopup = true;
+	}
+
+	void ProjectTreePanel::RenderGroupingsNode(const JFMProject &project)
+	{
+		const bool open = ImGui::TreeNodeEx("Groupings##jfm_groupings", ImGuiTreeNodeFlags_DefaultOpen);
+		if (ImGui::BeginPopupContextItem())
+		{
+			if (ImGui::MenuItem("Create Grouping"))
+				OpenGroupingPopup(project);
+			ImGui::EndPopup();
+		}
+		if (!open)
+			return;
+		if (ImGui::SmallButton("+ Grouping"))
+			OpenGroupingPopup(project);
+		for (const JFMGroupingDefinition &grouping : project.groupings)
+		{
+			const std::vector<JFMGroupingBucket> buckets = m_Store->ResolveGrouping(m_CurrentProject, grouping.id);
+			const std::string label = grouping.name + " (" + std::to_string(buckets.size()) + ")##" + grouping.id;
+			ImGui::Selectable(label.c_str(), false);
+			if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+				QueueGroupingPlot(grouping);
+			if (ImGui::BeginPopupContextItem())
+			{
+				if (ImGui::MenuItem("Plot Grouping"))
+					QueueGroupingPlot(grouping);
+				if (ImGui::MenuItem("Edit"))
+					OpenGroupingPopup(project, &grouping);
+				if (ImGui::MenuItem("Delete"))
+				{
+					const std::string groupingId = grouping.id;
+					ExecuteEdit("Delete grouping", [groupingId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+						(void)workspace.DeleteGrouping(handle, groupingId);
+						return Result<void>{};
+					});
+				}
+				ImGui::EndPopup();
+			}
+		}
+		if (project.groupings.empty())
+			ImGui::TextDisabled("No groupings");
+		ImGui::TreePop();
+	}
+
+	void ProjectTreePanel::RenderGroupingPopup(const JFMProject &project)
+	{
+		if (m_OpenGroupingPopup)
+		{
+			ImGui::OpenPopup("Grouping##jfm_tree");
+			m_OpenGroupingPopup = false;
+		}
+		if (!ImGui::BeginPopupModal("Grouping##jfm_tree", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+			return;
+
+		ImGui::InputText("Name", m_GroupingName.data(), m_GroupingName.size());
+		const std::vector<std::string> keys = m_Store->GetAvailableGroupingKeys(m_CurrentProject);
+		if (ImGui::BeginCombo("Metadata", m_GroupingKey.data()))
+		{
+			for (const std::string &key : keys)
+			{
+				if (ImGui::Selectable(key.c_str(), key == m_GroupingKey.data()))
+					std::snprintf(m_GroupingKey.data(), m_GroupingKey.size(), "%s", key.c_str());
+			}
+			ImGui::EndCombo();
+		}
+		ImGui::InputText("Custom key", m_GroupingKey.data(), m_GroupingKey.size());
+		ImGui::RadioButton("Exact", &m_GroupingMode, 0);
+		ImGui::SameLine();
+		ImGui::RadioButton("Numeric step", &m_GroupingMode, 1);
+		if (m_GroupingMode == 1)
+		{
+			ImGui::SetNextItemWidth(180.0f);
+			ImGui::DragFloat("Step / tolerance", &m_GroupingStep, 0.1f, 0.0001f, 1000000.0f, "%.4g");
+		}
+		ImGui::Checkbox("Include missing values", &m_GroupingIncludeMissing);
+
+		ImGui::SeparatorText("Source series");
+		ImGui::BeginChild("##grouping_series", ImVec2(420.0f, 150.0f), true);
+		for (const JFMSeries &series : project.series)
+		{
+			bool selected = std::find(m_GroupingSeriesIds.begin(), m_GroupingSeriesIds.end(), series.id) != m_GroupingSeriesIds.end();
+			if (ImGui::Checkbox((displayName(series.name, series.metadata) + "##" + series.id).c_str(), &selected))
+			{
+				m_GroupingSeriesIds.erase(std::remove(m_GroupingSeriesIds.begin(), m_GroupingSeriesIds.end(), series.id), m_GroupingSeriesIds.end());
+				if (selected)
+					m_GroupingSeriesIds.emplace_back(series.id);
+			}
+		}
+		ImGui::EndChild();
+
+		JFMGroupingDefinition preview;
+		preview.id = m_EditingGroupingId;
+		preview.name = m_GroupingName.data();
+		preview.sourceSeriesIds = m_GroupingSeriesIds;
+		preview.metadataKey = m_GroupingKey.data();
+		preview.mode = m_GroupingMode == 0 ? JFMGroupingMode::Exact : JFMGroupingMode::NumericStep;
+		preview.numericStep = std::max(0.0001, static_cast<double>(m_GroupingStep));
+		preview.includeMissing = m_GroupingIncludeMissing;
+		const std::vector<JFMGroupingBucket> buckets = m_Store->ResolveGrouping(m_CurrentProject, preview);
+		ImGui::SeparatorText("Preview");
+		if (ImGui::BeginTable("##grouping_preview", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+		{
+			ImGui::TableSetupColumn("Bucket");
+			ImGui::TableSetupColumn("Count");
+			ImGui::TableHeadersRow();
+			for (const JFMGroupingBucket &bucket : buckets)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(bucket.label.c_str());
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%d", static_cast<int>(bucket.characteristicIds.size()));
+			}
+			ImGui::EndTable();
+		}
+
+		const bool valid = preview.name.size() > 0 && preview.metadataKey.size() > 0 && !preview.sourceSeriesIds.empty();
+		ImGui::BeginDisabled(!valid);
+		if (ImGui::Button(m_EditingGroupingId.empty() ? "Create" : "Save"))
+		{
+			const bool create = m_EditingGroupingId.empty();
+			ExecuteEdit(create ? "Create grouping" : "Reconfigure grouping", [preview, create](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+				if (create)
+					(void)workspace.AddGrouping(handle, preview);
+				else
+					(void)workspace.UpdateGrouping(handle, preview);
+				return Result<void>{};
+			});
+			m_EditingGroupingId.clear();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
+		{
+			m_EditingGroupingId.clear();
+			ImGui::CloseCurrentPopup();
+		}
+		ImGui::EndPopup();
 	}
 
 	void ProjectTreePanel::RenderScriptsNode(const JFMProject &project)
@@ -645,7 +919,13 @@ namespace SST::Prototypes::JFM
 			if (ImGui::MenuItem("Add Script"))
 			{
 				if (auto path = OpenFileDialog(PythonScriptFilter, m_Settings != nullptr ? m_Settings->GetDefaultScriptsDirectory() : Path{}))
-					(void)m_Store->AddScript(*path);
+				{
+					const Path scriptPath = *path;
+					ExecuteEdit("Add script", [scriptPath](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+						(void)workspace.AddScript(handle, scriptPath);
+						return Result<void>{};
+					});
+				}
 			}
 			ImGui::EndPopup();
 		}
@@ -656,9 +936,21 @@ namespace SST::Prototypes::JFM
 			if (ImGui::BeginPopupContextItem())
 			{
 				if (ImGui::MenuItem("Reload"))
-					(void)m_Store->ReloadScript(script.id);
+				{
+					const std::string scriptId = script.id;
+					ExecuteEdit("Reload script", [scriptId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+						(void)workspace.ReloadScript(handle, scriptId);
+						return Result<void>{};
+					});
+				}
 				if (ImGui::MenuItem("Remove"))
-					(void)m_Store->RemoveScript(script.id);
+				{
+					const std::string scriptId = script.id;
+					ExecuteEdit("Remove script", [scriptId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+						(void)workspace.RemoveScript(handle, scriptId);
+						return Result<void>{};
+					});
+				}
 				ImGui::EndPopup();
 			}
 		}
@@ -680,14 +972,19 @@ namespace SST::Prototypes::JFM
 		ImGui::InputText("Name", m_RenameBuffer.data(), m_RenameBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue);
 		const auto commitRename = [&]() {
 			const std::string name = m_RenameBuffer.data();
-			if (m_RenameTarget == RenameTarget::Project)
-				(void)m_Store->RenameProject(name);
-			else if (m_RenameTarget == RenameTarget::Group)
-				(void)m_Store->RenameGroup(m_RenameTargetId, name);
-			else if (m_RenameTarget == RenameTarget::Series)
-				(void)m_Store->RenameSeries(m_RenameTargetId, name);
-			else if (m_RenameTarget == RenameTarget::Characteristic)
-				(void)m_Store->RenameCharacteristic(static_cast<CharacteristicId>(std::stoull(m_RenameTargetId)), name);
+			const RenameTarget target = m_RenameTarget;
+			const std::string targetId = m_RenameTargetId;
+			ExecuteEdit("Rename item", [target, targetId, name](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+				if (target == RenameTarget::Project)
+					(void)workspace.RenameProject(handle, name);
+				else if (target == RenameTarget::Group)
+					(void)workspace.RenameGroup(handle, targetId, name);
+				else if (target == RenameTarget::Series)
+					(void)workspace.RenameSeries(handle, targetId, name);
+				else if (target == RenameTarget::Characteristic)
+					(void)workspace.RenameCharacteristic(handle, static_cast<CharacteristicId>(std::stoull(targetId)), name);
+				return Result<void>{};
+			});
 			m_RenameTarget = RenameTarget::None;
 			ImGui::CloseCurrentPopup();
 		};
@@ -725,20 +1022,29 @@ namespace SST::Prototypes::JFM
 			ImGui::TextDisabled("Applies to %d selected characteristics.", static_cast<int>(m_ShortNameTargetIds.size()));
 		const auto commit = [&]() {
 			const std::string shortName = m_ShortNameBuffer.data();
-			if (m_ShortNameTarget == RenameTarget::Group)
-				(void)m_Store->SetGroupShortName(m_ShortNameTargetId, shortName);
-			else if (m_ShortNameTarget == RenameTarget::Series)
-				(void)m_Store->SetSeriesShortName(m_ShortNameTargetId, shortName);
-			else if (m_ShortNameTarget == RenameTarget::Characteristic)
-			{
-				if (m_ShortNameTargetIds.empty())
-					m_ShortNameTargetIds.push_back(static_cast<CharacteristicId>(std::stoull(m_ShortNameTargetId)));
-				for (CharacteristicId id : m_ShortNameTargetIds)
+			const RenameTarget target = m_ShortNameTarget;
+			const std::string targetId = m_ShortNameTargetId;
+			std::vector<CharacteristicId> targetIds = m_ShortNameTargetIds;
+			if (target == RenameTarget::Characteristic && targetIds.empty())
+				targetIds.emplace_back(static_cast<CharacteristicId>(std::stoull(targetId)));
+			ExecuteEdit("Edit short name", [target, targetId, targetIds, shortName](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+				if (target == RenameTarget::Group)
+					(void)workspace.SetGroupShortName(handle, targetId, shortName);
+				else if (target == RenameTarget::Series)
+					(void)workspace.SetSeriesShortName(handle, targetId, shortName);
+				else if (target == RenameTarget::Characteristic)
 				{
-					const auto characteristic = m_Store->FindCharacteristic(id);
-					(void)m_Store->SetCharacteristicShortName(id, characteristic ? expandShortNamePattern(shortName, characteristic->info) : shortName);
+					for (CharacteristicId id : targetIds)
+					{
+						const auto characteristic = workspace.FindCharacteristic({handle, id});
+						(void)workspace.SetCharacteristicShortName(
+							handle,
+							id,
+							characteristic ? expandShortNamePattern(shortName, characteristic->info) : shortName);
+					}
 				}
-			}
+				return Result<void>{};
+			});
 			m_ShortNameTarget = RenameTarget::None;
 			m_ShortNameTargetIds.clear();
 			ImGui::CloseCurrentPopup();
@@ -779,8 +1085,12 @@ namespace SST::Prototypes::JFM
 		}
 		if (ImGui::IsKeyPressed(ImGuiKey_Delete) && !state.selectedIds.empty())
 		{
-			for (CharacteristicId id : state.selectedIds)
-				(void)m_Store->DeleteCharacteristic(id);
+			const std::vector<CharacteristicId> ids = state.selectedIds;
+			ExecuteEdit("Delete characteristics", [ids](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+				for (CharacteristicId id : ids)
+					(void)workspace.DeleteCharacteristic(handle, id);
+				return Result<void>{};
+			});
 			state.selectedIds.clear();
 		}
 		if (ImGui::IsKeyPressed(ImGuiKey_F2))
@@ -897,72 +1207,86 @@ namespace SST::Prototypes::JFM
 				targetGroupId = series->get().groupId;
 		}
 
-		const auto cloneCharacteristics = [&](const std::vector<CharacteristicId> &ids, const std::string &seriesId) {
-			std::vector<JFMCharacteristic> clones;
-			clones.reserve(ids.size());
-			for (CharacteristicId id : ids)
-			{
-				auto characteristic = m_Store->FindCharacteristic(id);
-				if (!characteristic)
-					continue;
-				characteristic->info.id = InvalidCharacteristicId;
-				characteristic->info.name = copyName(characteristic->info.name);
-				clones.push_back(std::move(*characteristic));
-			}
-			if (!clones.empty())
-				(void)m_Store->AddCharacteristics(std::move(clones), seriesId);
-		};
+		const RenameTarget clipboardTarget = m_ClipboardTarget;
+		const std::string clipboardTargetId = m_ClipboardTargetId;
+		const std::vector<CharacteristicId> clipboardCharacteristicIds = m_ClipboardCharacteristicIds;
+		ExecuteEdit(
+			clipboardTarget == RenameTarget::Characteristic ? "Duplicate characteristics" : "Duplicate project items",
+			[project,
+			 clipboardTarget,
+			 clipboardTargetId,
+			 clipboardCharacteristicIds,
+			 targetGroupId,
+			 targetSeriesId,
+			 extractToGroup](JFMWorkspaceStore &workspace, ProjectHandle handle) mutable {
+				const auto cloneCharacteristics = [&](const std::vector<CharacteristicId> &ids, const std::string &seriesId) {
+					std::vector<JFMCharacteristic> clones;
+					clones.reserve(ids.size());
+					for (CharacteristicId id : ids)
+					{
+						auto characteristic = workspace.FindCharacteristic({handle, id});
+						if (!characteristic)
+							continue;
+						characteristic->info.id = InvalidCharacteristicId;
+						characteristic->info.name = copyName(characteristic->info.name);
+						clones.emplace_back(std::move(*characteristic));
+					}
+					if (!clones.empty())
+						(void)workspace.AddCharacteristics(handle, std::move(clones), seriesId);
+				};
 
-		const auto cloneSeries = [&](const JFMSeries &source, const std::string &groupId) {
-			const JFMSeries series = m_Store->AddSeries(copyName(source.name), groupId);
-			if (const std::string shortName = shortNameFrom(source.metadata); !shortName.empty())
-				(void)m_Store->SetSeriesShortName(series.id, copyName(shortName));
-			cloneCharacteristics(source.characteristicIds, series.id);
-		};
+				std::function<void(const JFMSeries &, const std::string &)> cloneSeries;
+				cloneSeries = [&](const JFMSeries &source, const std::string &groupId) {
+					const JFMSeries series = workspace.AddSeries(handle, copyName(source.name), groupId);
+					if (const std::string shortName = shortNameFrom(source.metadata); !shortName.empty())
+						(void)workspace.SetSeriesShortName(handle, series.id, copyName(shortName));
+					cloneCharacteristics(source.characteristicIds, series.id);
+				};
 
-		if (extractToGroup)
-			targetGroupId = m_Store->AddGroup("Pasted", targetGroupId).id;
+				if (extractToGroup)
+					targetGroupId = workspace.AddGroup(handle, "Pasted", targetGroupId).id;
 
-		if (m_ClipboardTarget == RenameTarget::Characteristic)
-		{
-			if (extractToGroup || targetSeriesId.empty())
-				targetSeriesId = m_Store->AddSeries("Pasted Characteristics", targetGroupId).id;
-			cloneCharacteristics(m_ClipboardCharacteristicIds, targetSeriesId);
-			return;
-		}
+				if (clipboardTarget == RenameTarget::Characteristic)
+				{
+					if (extractToGroup || targetSeriesId.empty())
+						targetSeriesId = workspace.AddSeries(handle, "Pasted Characteristics", targetGroupId).id;
+					cloneCharacteristics(clipboardCharacteristicIds, targetSeriesId);
+					return Result<void>{};
+				}
 
-		if (m_ClipboardTarget == RenameTarget::Series)
-		{
-			if (const auto source = findSeries(project, m_ClipboardTargetId))
-				cloneSeries(source->get(), extractToGroup ? targetGroupId : (targetGroupId.empty() ? source->get().groupId : targetGroupId));
-			return;
-		}
+				if (clipboardTarget == RenameTarget::Series)
+				{
+					if (const auto source = findSeries(project, clipboardTargetId))
+						cloneSeries(source->get(), extractToGroup ? targetGroupId : (targetGroupId.empty() ? source->get().groupId : targetGroupId));
+					return Result<void>{};
+				}
 
-		if (m_ClipboardTarget != RenameTarget::Group)
-			return;
+				if (clipboardTarget != RenameTarget::Group)
+					return Result<void>{};
+				const auto sourceGroup = findGroup(project, clipboardTargetId);
+				if (!sourceGroup)
+					return Result<void>{};
 
-		const auto sourceGroup = findGroup(project, m_ClipboardTargetId);
-		if (!sourceGroup)
-			return;
-
-		const auto copyGroupRecursive = [&](const auto &self, const std::string &sourceGroupId, const std::string &parentId) -> void {
-			const auto group = findGroup(project, sourceGroupId);
-			if (!group)
-				return;
-			const JFMGroup created = m_Store->AddGroup(copyName(group->get().name), parentId);
-			if (const std::string shortName = shortNameFrom(group->get().metadata); !shortName.empty())
-				(void)m_Store->SetGroupShortName(created.id, copyName(shortName));
-			for (const JFMSeries &series : project.series)
-			{
-				if (series.groupId == sourceGroupId)
-					cloneSeries(series, created.id);
-			}
-			for (const JFMGroup &child : project.groups)
-			{
-				if (child.parentId == sourceGroupId)
-					self(self, child.id, created.id);
-			}
-		};
-		copyGroupRecursive(copyGroupRecursive, sourceGroup->get().id, extractToGroup ? targetGroupId : sourceGroup->get().parentId);
+				const auto copyGroupRecursive = [&](const auto &self, const std::string &sourceGroupId, const std::string &parentId) -> void {
+					const auto group = findGroup(project, sourceGroupId);
+					if (!group)
+						return;
+					const JFMGroup created = workspace.AddGroup(handle, copyName(group->get().name), parentId);
+					if (const std::string shortName = shortNameFrom(group->get().metadata); !shortName.empty())
+						(void)workspace.SetGroupShortName(handle, created.id, copyName(shortName));
+					for (const JFMSeries &series : project.series)
+					{
+						if (series.groupId == sourceGroupId)
+							cloneSeries(series, created.id);
+					}
+					for (const JFMGroup &child : project.groups)
+					{
+						if (child.parentId == sourceGroupId)
+							self(self, child.id, created.id);
+					}
+				};
+				copyGroupRecursive(copyGroupRecursive, sourceGroup->get().id, extractToGroup ? targetGroupId : sourceGroup->get().parentId);
+				return Result<void>{};
+			});
 	}
 } // namespace SST::Prototypes::JFM

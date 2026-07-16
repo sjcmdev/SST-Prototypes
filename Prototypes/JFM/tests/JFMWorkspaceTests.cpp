@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "App/JFMCommands.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST::Prototypes::JFM
@@ -159,5 +160,155 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(project.groups.back().metadata.at("short_name"), "G1");
 		EXPECT_EQ(project.series.back().metadata.at("short_name"), "S1");
 		EXPECT_EQ(store.FindCharacteristic(id)->info.metadata.at("short_name"), "C1");
+	}
+
+	TEST(JFMWorkspaceStoreTests, IsolatesEqualCharacteristicIdsAcrossProjects)
+	{
+		JFMWorkspaceStore store;
+		const ProjectHandle firstProject = store.GetActiveProjectHandle();
+		JFMCharacteristic first;
+		first.info.id = 1;
+		first.info.name = "First";
+		first.data.voltage = {1.0};
+		(void)store.AddCharacteristics(firstProject, {first}, store.GetProjectSnapshot(firstProject).series.front().id);
+
+		JFMProject secondSnapshot;
+		secondSnapshot.id = "second";
+		secondSnapshot.name = "Second project";
+		secondSnapshot.characteristics.push_back(JFMCharacteristicInfo{1, "Second"});
+		secondSnapshot.series.push_back(JFMSeries{"series-2", "Series", {}, {1}});
+		const ProjectHandle secondProject = store.AttachProject(std::move(secondSnapshot), std::nullopt);
+		JFMCharacteristic second;
+		second.info.id = 1;
+		second.data.voltage = {2.0};
+		EXPECT_EQ(store.UpdateCharacteristicData(secondProject, {second}), 1);
+
+		const auto firstResult = store.FindCharacteristic({firstProject, 1});
+		const auto secondResult = store.FindCharacteristic({secondProject, 1});
+		ASSERT_TRUE(firstResult);
+		ASSERT_TRUE(secondResult);
+		EXPECT_EQ(firstResult->info.name, "First");
+		EXPECT_EQ(secondResult->info.name, "Second");
+		EXPECT_DOUBLE_EQ(firstResult->data.voltage.front(), 1.0);
+		EXPECT_DOUBLE_EQ(secondResult->data.voltage.front(), 2.0);
+	}
+
+	TEST(JFMWorkspaceStoreTests, ResolvesDynamicNumericExactAndMissingGroupingBuckets)
+	{
+		JFMWorkspaceStore store;
+		const ProjectHandle project = store.GetActiveProjectHandle();
+		const JFMSeries source = store.AddSeries(project, "Source");
+		const JFMSeries ignored = store.AddSeries(project, "Ignored");
+
+		JFMCharacteristic low;
+		low.info.name = "Low";
+		low.info.temperatureK = 300.2;
+		low.info.parser = "dat";
+		JFMCharacteristic high;
+		high.info.name = "High";
+		high.info.temperatureK = 300.7;
+		high.info.parser = "dat";
+		JFMCharacteristic missing;
+		missing.info.name = "Missing";
+		missing.info.parser = "scaps";
+		(void)store.AddCharacteristics(project, {low, high, missing}, source.id);
+		JFMCharacteristic outside;
+		outside.info.name = "Outside";
+		outside.info.temperatureK = 300.2;
+		(void)store.AddCharacteristics(project, {outside}, ignored.id);
+
+		JFMGroupingDefinition numeric;
+		numeric.name = "Temperature";
+		numeric.sourceSeriesIds = {source.id};
+		numeric.metadataKey = "temperature_K";
+		numeric.mode = JFMGroupingMode::NumericStep;
+		numeric.numericStep = 1.0;
+		numeric.includeMissing = true;
+		const JFMGroupingDefinition storedNumeric = store.AddGrouping(project, numeric);
+		auto buckets = store.ResolveGrouping(project, storedNumeric.id);
+		ASSERT_EQ(buckets.size(), 3);
+		EXPECT_EQ(buckets[0].label, "300 K");
+		EXPECT_EQ(buckets[1].label, "301 K");
+		EXPECT_EQ(buckets[2].key, "missing");
+
+		JFMCharacteristic added;
+		added.info.name = "Added";
+		added.info.temperatureK = 300.1;
+		(void)store.AddCharacteristics(project, {added}, source.id);
+		buckets = store.ResolveGrouping(project, storedNumeric.id);
+		ASSERT_EQ(buckets.front().characteristicIds.size(), 2);
+
+		JFMGroupingDefinition exact;
+		exact.name = "Parser";
+		exact.sourceSeriesIds = {source.id};
+		exact.metadataKey = "parser";
+		exact.mode = JFMGroupingMode::Exact;
+		exact.includeMissing = false;
+		const auto exactBuckets = store.ResolveGrouping(project, exact);
+		ASSERT_EQ(exactBuckets.size(), 2);
+		EXPECT_EQ(exactBuckets.front().label, "dat");
+		EXPECT_EQ(exactBuckets.back().label, "scaps");
+	}
+
+	TEST(JFMWorkspaceStoreTests, ProjectStateSnapshotsRestoreStructureAndSharedRawData)
+	{
+		JFMWorkspaceStore store;
+		const ProjectHandle project = store.GetActiveProjectHandle();
+		const std::string seriesId = store.GetProjectSnapshot(project).series.front().id;
+		JFMCharacteristic characteristic;
+		characteristic.info.name = "Original";
+		characteristic.data.voltage = {0.0, 1.0};
+		const CharacteristicId id = store.AddCharacteristics(project, {characteristic}, seriesId).front();
+		const auto before = store.CaptureProjectState(project);
+		ASSERT_TRUE(before);
+
+		EXPECT_TRUE(store.RenameCharacteristic(project, id, "Changed"));
+		EXPECT_TRUE(store.DeleteCharacteristic(project, id));
+		ASSERT_TRUE(store.RestoreProjectState(project, *before));
+
+		const auto restored = store.FindCharacteristic({project, id});
+		ASSERT_TRUE(restored);
+		EXPECT_EQ(restored->info.name, "Original");
+		EXPECT_EQ(restored->data.voltage, (std::vector<double>{0.0, 1.0}));
+	}
+
+	TEST(JFMWorkspaceStoreTests, SaveCompletionKeepsLaterEditsDirty)
+	{
+		JFMWorkspaceStore store;
+		const ProjectHandle project = store.GetActiveProjectHandle();
+		(void)store.AddSeries(project, "Before Save");
+		const std::uint64_t savedRevision = store.GetProjectRevision(project);
+		(void)store.AddGroup(project, "Edited During Save");
+
+		store.MarkProjectSaved(project, Path::FromResolved("project.jfm.yaml"), savedRevision);
+
+		EXPECT_TRUE(store.IsDirty(project));
+	}
+
+	TEST(JFMWorkspaceStoreTests, ProjectEditCommandRestoresAndActivatesItsProject)
+	{
+		auto store = CreateRef<JFMWorkspaceStore>();
+		const ProjectHandle editedProject = store->GetActiveProjectHandle();
+		const ProjectHandle otherProject = store->CreateProject("Other");
+		JFMProjectEditRequest request;
+		request.project = editedProject;
+		request.description = "Rename project";
+		request.apply = [](JFMWorkspaceStore &workspace, ProjectHandle project) {
+			(void)workspace.RenameProject(project, "Renamed");
+			return Result<void>{};
+		};
+		auto command = CreateJFMProjectEditCommand(store, std::move(request));
+		CommandContext context;
+
+		ASSERT_TRUE(command->Execute(context));
+		EXPECT_EQ(store->GetProjectSnapshot(editedProject).name, "Renamed");
+		EXPECT_EQ(store->GetActiveProjectHandle(), otherProject);
+		ASSERT_TRUE(command->Undo(context));
+		EXPECT_EQ(store->GetProjectSnapshot(editedProject).name, "Untitled JFM Project");
+		EXPECT_EQ(store->GetActiveProjectHandle(), editedProject);
+		ASSERT_TRUE(store->SetActiveProject(otherProject));
+		ASSERT_TRUE(command->Redo(context));
+		EXPECT_EQ(store->GetProjectSnapshot(editedProject).name, "Renamed");
+		EXPECT_EQ(store->GetActiveProjectHandle(), editedProject);
 	}
 } // namespace SST::Prototypes::JFM

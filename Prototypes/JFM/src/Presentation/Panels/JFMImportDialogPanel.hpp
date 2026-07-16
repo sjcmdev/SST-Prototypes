@@ -20,6 +20,9 @@ namespace SST::Prototypes::JFM
 		std::vector<Path> paths;
 		std::string targetSeriesId;
 		bool recursive = false;
+		ProjectHandle project = InvalidProjectHandle;
+		std::string targetGroupId;
+		JFMImportPlacement placement = JFMImportPlacement::NewSeries;
 	};
 
 	class JFMImportDialogState
