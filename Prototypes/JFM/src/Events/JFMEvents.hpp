@@ -116,7 +116,8 @@ namespace SST::Prototypes::JFM
 			ProjectHandle requestedProject = InvalidProjectHandle,
 			JFMOperationId requestedOperation = InvalidJFMOperationId,
 			std::string requestedTargetGroupId = {},
-			JFMImportPlacement requestedPlacement = JFMImportPlacement::NewSeries)
+			JFMImportPlacement requestedPlacement = JFMImportPlacement::NewSeries,
+			bool requestedDeferApply = false)
 			: paths(std::move(requestedPaths)),
 			  targetSeriesId(std::move(requestedTargetSeriesId)),
 			  recursive(requestedRecursive),
@@ -125,7 +126,8 @@ namespace SST::Prototypes::JFM
 			  project(requestedProject),
 			  operation(requestedOperation),
 			  targetGroupId(std::move(requestedTargetGroupId)),
-			  placement(requestedPlacement)
+			  placement(requestedPlacement),
+			  deferApply(requestedDeferApply)
 		{
 		}
 
@@ -138,6 +140,7 @@ namespace SST::Prototypes::JFM
 		JFMOperationId operation = InvalidJFMOperationId;
 		std::string targetGroupId;
 		JFMImportPlacement placement = JFMImportPlacement::NewSeries;
+		bool deferApply = false;
 	};
 
 	struct JFMImportPreviewItem

@@ -58,6 +58,15 @@ def test_very_narrow_manual_range_stays_inside_selected_data() -> None:
     assert np.all(np.isfinite(result["prefit_current"]))
 
 
+def test_automatic_range_cuts_saturated_current_tail() -> None:
+    voltage = np.linspace(0.0, 1.0, 160)
+    rising = 1.0e-10 * np.exp(16.0 * (voltage - 0.25))
+    plateau = rising[np.searchsorted(voltage, 0.64)]
+    current = np.minimum(rising, plateau)
+    result = prefit_characteristic(voltage, current, 300.0, "SD-RsRsh")
+    assert 0.50 < result["fit_range"]["voltage_max"] < 0.78
+
+
 def test_preprocessing_sorts_filters_and_averages_duplicates() -> None:
     voltage, current = _sample()
     dirty_voltage = np.concatenate((voltage[::-1], [np.nan, voltage[20]]))

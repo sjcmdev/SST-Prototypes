@@ -195,6 +195,28 @@ namespace SST::Prototypes::JFM
 		EXPECT_DOUBLE_EQ(secondResult->data.voltage.front(), 2.0);
 	}
 
+	TEST(JFMWorkspaceStoreTests, TransientProjectsStayHiddenAndDoNotActivate)
+	{
+		JFMWorkspaceStore store;
+		const ProjectHandle visibleProject = store.GetActiveProjectHandle();
+		const ProjectHandle transient = store.CreateTransientProject("Import staging");
+
+		EXPECT_EQ(store.GetActiveProjectHandle(), visibleProject);
+		ASSERT_EQ(store.GetProjects().size(), 1);
+		EXPECT_EQ(store.GetProjects().front().handle, visibleProject);
+
+		const JFMSeries series = store.AddSeries(transient, "Staged");
+		JFMCharacteristic characteristic;
+		characteristic.info.name = "Staged curve";
+		const CharacteristicId id = store.AddCharacteristics(transient, {characteristic}, series.id).front();
+		ASSERT_TRUE(store.FindCharacteristicRecord({transient, id}));
+
+		const auto snapshot = store.CaptureProjectState(transient);
+		ASSERT_TRUE(snapshot);
+		ASSERT_TRUE(store.RestoreProjectState(transient, *snapshot));
+		EXPECT_EQ(store.GetActiveProjectHandle(), visibleProject);
+	}
+
 	TEST(JFMWorkspaceStoreTests, ResolvesDynamicNumericExactAndMissingGroupingBuckets)
 	{
 		JFMWorkspaceStore store;

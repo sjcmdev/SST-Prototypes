@@ -75,6 +75,28 @@ namespace SST::Prototypes::JFM
 			x = std::move(nextX);
 			y = std::move(nextY);
 		}
+
+		const std::vector<double> &AnalysisCurrent(const JFMCharacteristicData &data)
+		{
+			return data.currentDensity.empty() ? data.current : data.currentDensity;
+		}
+
+		void IncludePlotBounds(double x, double y, bool &hasBounds, double &minX, double &maxX, double &minY, double &maxY)
+		{
+			if (!std::isfinite(x) || !std::isfinite(y))
+				return;
+			if (!hasBounds)
+			{
+				minX = maxX = x;
+				minY = maxY = y;
+				hasBounds = true;
+				return;
+			}
+			minX = std::min(minX, x);
+			maxX = std::max(maxX, x);
+			minY = std::min(minY, y);
+			maxY = std::max(maxY, y);
+		}
 	} // namespace ImportDialogDetail
 	using namespace ImportDialogDetail;
 
@@ -111,6 +133,12 @@ namespace SST::Prototypes::JFM
 		std::snprintf(m_VariableDelimiter.data(), m_VariableDelimiter.size(), "%s", "_");
 		if (m_EventBus != nullptr)
 		{
+			AddSubscription(m_EventBus->Subscribe<ImportCompleted>([this](const ImportCompleted &event) {
+				handleImportCompleted(event);
+			}));
+			AddSubscription(m_EventBus->Subscribe<ImportFailed>([this](const ImportFailed &event) {
+				handleImportFailed(event);
+			}));
 			AddSubscription(m_EventBus->Subscribe<ImportPreviewCompleted>([this](const ImportPreviewCompleted &event) {
 				handlePreviewCompleted(event);
 			}));
@@ -140,18 +168,9 @@ namespace SST::Prototypes::JFM
 		if (!m_Open)
 			return;
 
-		if (m_ImportSubmitted && m_Store != nullptr &&
-			!m_Store->IsImportRunning(m_Request.project) &&
-			m_Store->GetProjectRevision(m_Request.project) != m_ImportStartRevision &&
-			m_Store->GetStatusMessage(m_Request.project) == "Import complete.")
-		{
-			m_ImportSubmitted = false;
-			m_SelectAnalysisTab = true;
-		}
-
 		bool open = true;
 		ImGui::SetNextWindowSize(ImVec2(1180.0f, 760.0f), ImGuiCond_FirstUseEver);
-		if (!ImGui::Begin("Import Data", &open))
+		if (!ImGui::Begin("Import Data", &open, ImGuiWindowFlags_NoDocking))
 		{
 			finishRangeUndoGroup();
 			ImGui::End();
@@ -279,12 +298,14 @@ namespace SST::Prototypes::JFM
 		else if (!m_PreviewError.empty())
 			ImGui::TextWrapped("Preview failed: %s", m_PreviewError.c_str());
 		ImGui::Checkbox("Preview window", &m_PreviewOpen);
-		ImGui::Checkbox("Plot after import", &m_PlotAfterImport);
+		ImGui::Checkbox("Plot after add", &m_PlotAfterImport);
 
 		const bool validDestination = m_Request.placement != JFMImportPlacement::ExistingSeries || !m_Request.targetSeriesId.empty();
 		ImGui::BeginDisabled(!validDestination || m_ImportSubmitted);
-		if (ImGui::Button(m_ImportSubmitted ? "Importing..." : "Import"))
+		if (ImGui::Button(m_ImportSubmitted ? "Preparing..." : "Prepare data"))
 		{
+			resetStaging();
+			m_ImportOperation = m_NextImportOperation++;
 			if (m_EventBus != nullptr)
 				m_EventBus->Queue(ImportRequested{
 					m_Request.paths,
@@ -293,11 +314,11 @@ namespace SST::Prototypes::JFM
 					buildOptions(),
 					m_PlotAfterImport,
 					m_Request.project,
-					InvalidJFMOperationId,
+					m_ImportOperation,
 					m_Request.targetGroupId,
-					m_Request.placement});
+					m_Request.placement,
+					true});
 			m_ImportSubmitted = true;
-			m_ImportStartRevision = m_Store != nullptr ? m_Store->GetProjectRevision(m_Request.project) : 0;
 			m_PreviewOpen = false;
 		}
 		ImGui::EndDisabled();
@@ -341,8 +362,14 @@ namespace SST::Prototypes::JFM
 			ImGui::TextDisabled("No project selected.");
 			return;
 		}
+		if (m_StagingProject == InvalidProjectHandle)
+		{
+			ImGui::TextDisabled("Prepare data in the Import tab first.");
+			return;
+		}
 
-		const JFMProject project = m_Store->GetProjectSnapshot(m_Request.project);
+		const ProjectHandle analysisProject = m_StagingProject;
+		const JFMProject project = m_Store->GetProjectSnapshot(analysisProject);
 		std::vector<CharacteristicId> visibleIds;
 		for (const JFMSeries &series : project.series)
 			visibleIds.insert(visibleIds.end(), series.characteristicIds.begin(), series.characteristicIds.end());
@@ -352,7 +379,7 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		auto projectState = m_Store->CaptureProjectState(m_Request.project);
+		auto projectState = m_Store->CaptureProjectState(analysisProject);
 		if (!projectState)
 			return;
 		std::vector<CharacteristicId> selectedIds;
@@ -367,27 +394,53 @@ namespace SST::Prototypes::JFM
 		if (selectedIds.empty())
 		{
 			selectedIds = {active};
-			m_Store->SetSelectedCharacteristics(m_Request.project, selectedIds, active);
+			m_Store->SetSelectedCharacteristics(analysisProject, selectedIds, active);
 		}
 
 		std::vector<CharacteristicId> missingPrefits;
 		for (CharacteristicId id : visibleIds)
 		{
-			const std::optional<JFMPrefitState> state = m_Store->GetPrefitState({m_Request.project, id});
-			const bool curveMissing = m_Store->GetPrefitCurve({m_Request.project, id}) == nullptr;
+			const std::optional<JFMPrefitState> state = m_Store->GetPrefitState({analysisProject, id});
+			const bool curveMissing = m_Store->GetPrefitCurve({analysisProject, id}) == nullptr;
 			if (!state || state->status == "not_started" || (state->status == "completed" && curveMissing))
 				missingPrefits.push_back(id);
 		}
-		requestPrefit(m_Request.project, std::move(missingPrefits));
+		requestPrefit(analysisProject, std::move(missingPrefits));
 
 		const float treeWidth = std::clamp(ImGui::GetContentRegionAvail().x * 0.27f, 250.0f, 340.0f);
 		if (ImGui::BeginChild("##jfm_analysis_tree", ImVec2(treeWidth, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_ResizeX))
 			renderAnalysisTree(project);
 		ImGui::EndChild();
+		if (m_AnalysisTreeOpenRequest != 0)
+			m_AnalysisTreeOpenRequest = 0;
 		ImGui::SameLine();
 
 		if (ImGui::BeginChild("##jfm_analysis_workspace", ImVec2(0.0f, 0.0f)))
 		{
+			const bool canAdd = !m_DataAddedToProject && !m_ImportSubmitted && !m_StagedSeries.empty();
+			ImGui::BeginDisabled(!canAdd);
+			if (ImGui::Button("Add Data to Project"))
+			{
+				if (auto registry = m_CommandRegistry.lock())
+				{
+					CommandContext context(ContextID{"jfm.import.stage.apply"});
+					context.SetSource("JFM import staging");
+					context.Set("project", m_Request.project);
+					context.Set("batches", buildApplyBatchesFromStaging());
+					context.Set("target_group_id", m_Request.targetGroupId);
+					context.Set("plot_after_import", m_PlotAfterImport);
+					if (auto result = registry->Execute(CommandID{JFMImportApplyCommandId}, std::move(context)))
+						m_DataAddedToProject = true;
+				}
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			int scale = m_AnalysisScale;
+			ImGui::RadioButton("Linear", &scale, 0);
+			ImGui::SameLine();
+			ImGui::RadioButton("Semi-log", &scale, 1);
+			m_AnalysisScale = scale;
+			ImGui::SameLine();
 			ImGui::Checkbox("Show only active", &m_ShowOnlyActive);
 			ImGui::SameLine();
 			ImGui::TextDisabled("Selected: %d", static_cast<int>(selectedIds.size()));
@@ -396,7 +449,7 @@ namespace SST::Prototypes::JFM
 			bool mixedModels = false;
 			for (std::size_t index = 0; index < selectedIds.size(); ++index)
 			{
-				const auto state = m_Store->GetPrefitState({m_Request.project, selectedIds[index]});
+				const auto state = m_Store->GetPrefitState({analysisProject, selectedIds[index]});
 				const std::string model = state ? state->modelId : "SD-RsRsh";
 				if (index == 0)
 					selectedModel = model;
@@ -413,7 +466,7 @@ namespace SST::Prototypes::JFM
 						if (auto registry = m_CommandRegistry.lock())
 						{
 							CommandContext context;
-							context.Set("project", m_Request.project);
+							context.Set("project", analysisProject);
 							context.Set("characteristic_ids", selectedIds);
 							context.Set("model_id", std::string(model));
 							(void)registry->Execute(CommandID{JFMSetPrefitModelCommandId}, std::move(context));
@@ -423,7 +476,7 @@ namespace SST::Prototypes::JFM
 				ImGui::EndCombo();
 			}
 			ImGui::SameLine();
-			const auto activePrefit = m_Store->GetPrefitState({m_Request.project, active});
+			const auto activePrefit = m_Store->GetPrefitState({analysisProject, active});
 			const bool hasManualRange = activePrefit && activePrefit->manualLowerVoltage && activePrefit->manualUpperVoltage;
 			ImGui::BeginDisabled(!hasManualRange);
 			if (ImGui::Button("Automatic range"))
@@ -432,19 +485,40 @@ namespace SST::Prototypes::JFM
 				if (auto registry = m_CommandRegistry.lock())
 				{
 					CommandContext context;
-					context.Set("project", m_Request.project);
+					context.Set("project", analysisProject);
 					context.Set("characteristic_id", active);
 					(void)registry->Execute(CommandID{JFMResetFitRangeCommandId}, std::move(context));
 				}
 				m_RangeInitialized = false;
 			}
 			ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::Checkbox("Auto fit", &m_AnalysisAutoFit);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(120.0f);
+			ImGui::SliderFloat("Scroll out", &m_AnalysisFitPadding, 0.0f, 0.5f, "%.2f");
+			ImGui::SameLine();
+			ImGui::Checkbox("Legend", &m_AnalysisShowLegend);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Expand all"))
+				m_AnalysisTreeOpenRequest = 1;
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Collapse all"))
+				m_AnalysisTreeOpenRequest = -1;
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Hide all"))
+				m_ShowOnlyActive = true;
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Unhide all"))
+				m_ShowOnlyActive = false;
+			ImGui::SameLine();
+			ImGui::Checkbox("Curves", &m_AnalysisShowCurves);
 
 			const std::vector<CharacteristicId> plotIds = m_ShowOnlyActive
 				? std::vector<CharacteristicId>{active}
 				: visibleIds;
-			renderAnalysisPlot(m_Request.project, plotIds, active);
-			renderPrefitParameters(m_Store->GetPrefitState({m_Request.project, active}));
+			renderAnalysisPlot(analysisProject, plotIds, active);
+			renderPrefitParameters(m_Store->GetPrefitState({analysisProject, active}));
 		}
 		ImGui::EndChild();
 	}
@@ -456,6 +530,8 @@ namespace SST::Prototypes::JFM
 			visibleIds.insert(visibleIds.end(), series.characteristicIds.begin(), series.characteristicIds.end());
 
 		const std::string projectLabel = project.name + "##jfm_analysis_project";
+		if (m_AnalysisTreeOpenRequest != 0)
+			ImGui::SetNextItemOpen(m_AnalysisTreeOpenRequest > 0, ImGuiCond_Always);
 		if (!ImGui::TreeNodeEx(projectLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
 			return;
 		for (const JFMGroup &group : project.groups)
@@ -474,6 +550,8 @@ namespace SST::Prototypes::JFM
 	void JFMImportDialogPanel::renderAnalysisGroup(const JFMProject &project, const JFMGroup &group, const std::vector<CharacteristicId> &visibleIds)
 	{
 		const std::string label = group.name + "##jfm_analysis_group_" + group.id;
+		if (m_AnalysisTreeOpenRequest != 0)
+			ImGui::SetNextItemOpen(m_AnalysisTreeOpenRequest > 0, ImGuiCond_Always);
 		if (!ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
 			return;
 		for (const JFMGroup &child : project.groups)
@@ -491,14 +569,18 @@ namespace SST::Prototypes::JFM
 
 	void JFMImportDialogPanel::renderAnalysisSeries(const JFMSeries &series, const std::vector<CharacteristicId> &visibleIds)
 	{
+		if (series.characteristicIds.empty())
+			return;
 		const std::string label = series.name + "##jfm_analysis_series_" + series.id;
+		if (m_AnalysisTreeOpenRequest != 0)
+			ImGui::SetNextItemOpen(m_AnalysisTreeOpenRequest > 0, ImGuiCond_Always);
 		if (!ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
 			return;
-		const auto snapshot = m_Store->CaptureProjectState(m_Request.project);
+		const auto snapshot = m_Store->CaptureProjectState(m_StagingProject);
 		const std::vector<CharacteristicId> selected = snapshot ? snapshot->selectedCharacteristicIds : std::vector<CharacteristicId>{};
 		for (CharacteristicId id : series.characteristicIds)
 		{
-			const auto record = m_Store->FindCharacteristicRecord({m_Request.project, id});
+			const auto record = m_Store->FindCharacteristicRecord({m_StagingProject, id});
 			if (!record)
 				continue;
 			std::string status;
@@ -518,7 +600,7 @@ namespace SST::Prototypes::JFM
 		if (m_Store == nullptr)
 			return;
 		finishRangeUndoGroup();
-		const auto snapshot = m_Store->CaptureProjectState(m_Request.project);
+		const auto snapshot = m_Store->CaptureProjectState(m_StagingProject);
 		std::vector<CharacteristicId> selected = snapshot ? snapshot->selectedCharacteristicIds : std::vector<CharacteristicId>{};
 		CharacteristicId primary = id;
 		const ImGuiIO &io = ImGui::GetIO();
@@ -551,7 +633,7 @@ namespace SST::Prototypes::JFM
 		{
 			selected = {id};
 		}
-		m_Store->SetSelectedCharacteristics(m_Request.project, std::move(selected), primary, series.id);
+		m_Store->SetSelectedCharacteristics(m_StagingProject, std::move(selected), primary, series.id);
 		m_RangeCharacteristic = primary;
 		m_RangeInitialized = false;
 	}
@@ -621,37 +703,114 @@ namespace SST::Prototypes::JFM
 
 		ImGui::Text("Fit range: %.6g V to %.6g V", m_RangeLower, m_RangeUpper);
 		const ImVec2 plotSize{-1.0f, std::max(300.0f, ImGui::GetContentRegionAvail().y * 0.62f)};
-		if (!ImPlot::BeginPlot("##jfm_data_range_prefit_plot", plotSize))
+		const ImPlotFlags plotFlags = m_AnalysisShowLegend ? ImPlotFlags_None : ImPlotFlags_NoLegend;
+		if (!ImPlot::BeginPlot("##jfm_data_range_prefit_plot", plotSize, plotFlags))
 			return;
-		ImPlot::SetupAxes("Voltage (V)", "Current / current density", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
-		for (std::size_t index = 0; index < ids.size(); ++index)
+		ImPlot::SetupAxes("Voltage (V)", "Current / current density");
+		if (m_AnalysisShowLegend)
+			ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
+		if (m_AnalysisScale == 1)
+			ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+
+		if (m_AnalysisAutoFit)
 		{
-			const auto record = m_Store->FindCharacteristicRecord({project, ids[index]});
-			if (!record || record->data == nullptr)
-				continue;
-			const std::vector<double> &current = record->data->currentDensity.empty()
-				? record->data->current
-				: record->data->currentDensity;
-			const int count = static_cast<int>(std::min(record->data->voltage.size(), current.size()));
-			if (count > 0)
+			const double fitLower = std::min(m_RangeLower, m_RangeUpper);
+			const double fitUpper = std::max(m_RangeLower, m_RangeUpper);
+			bool hasBounds = false;
+			double minX = fitLower;
+			double maxX = fitUpper;
+			double minY = 0.0;
+			double maxY = 0.0;
+			for (CharacteristicId id : ids)
 			{
-				ImPlotSpec rawSpec;
-				rawSpec.LineColor = PreviewColor(index);
-				const std::string label = record->info.name + "##jfm_analysis_raw_" + std::to_string(ids[index]);
-				ImPlot::PlotLine(label.c_str(), record->data->voltage.data(), current.data(), count, rawSpec);
-			}
-			const auto curve = m_Store->GetPrefitCurve({project, ids[index]});
-			if (curve)
-			{
-				const int curveCount = static_cast<int>(std::min(curve->voltage.size(), curve->current.size()));
-				if (curveCount > 0)
+				const auto record = m_Store->FindCharacteristicRecord({project, id});
+				if (!record || record->data == nullptr)
+					continue;
+				const std::vector<double> &x = record->data->voltage;
+				const std::vector<double> &y = AnalysisCurrent(*record->data);
+				for (std::size_t point = 0; point < x.size() && point < y.size(); ++point)
 				{
-					ImPlotSpec prefitSpec;
-					prefitSpec.LineColor = ImVec4(0.20f, 0.85f, 0.36f, 1.0f);
-					prefitSpec.LineWeight = 2.0f;
-					prefitSpec.Flags = ImPlotItemFlags_NoLegend;
-					const std::string label = "##jfm_analysis_prefit_" + std::to_string(ids[index]);
-					ImPlot::PlotLine(label.c_str(), curve->voltage.data(), curve->current.data(), curveCount, prefitSpec);
+					if (x[point] < fitLower || x[point] > fitUpper)
+						continue;
+					const double value = m_AnalysisScale == 1 ? std::abs(y[point]) : y[point];
+					if (m_AnalysisScale == 1 && value <= 0.0)
+						continue;
+					IncludePlotBounds(x[point], value, hasBounds, minX, maxX, minY, maxY);
+				}
+			}
+			if (hasBounds)
+			{
+				minX = fitLower;
+				maxX = fitUpper;
+				double dx = maxX - minX;
+				double dy = maxY - minY;
+				if (dx <= 0.0)
+					dx = std::max(1.0, std::abs(maxX) * 0.1);
+				if (dy <= 0.0)
+					dy = std::max(1.0, std::abs(maxY) * 0.1);
+				minX -= dx * m_AnalysisFitPadding;
+				maxX += dx * m_AnalysisFitPadding;
+				if (m_AnalysisScale == 1)
+				{
+					minY = std::max(1.0e-30, minY / (1.0 + m_AnalysisFitPadding * 4.0));
+					maxY *= 1.0 + m_AnalysisFitPadding * 4.0;
+				}
+				else
+				{
+					minY -= dy * m_AnalysisFitPadding;
+					maxY += dy * m_AnalysisFitPadding;
+				}
+				ImPlot::SetupAxesLimits(minX, maxX, minY, maxY, ImPlotCond_Always);
+			}
+		}
+
+		if (m_AnalysisShowCurves)
+		{
+			for (std::size_t index = 0; index < ids.size(); ++index)
+			{
+				const auto record = m_Store->FindCharacteristicRecord({project, ids[index]});
+				if (!record || record->data == nullptr)
+					continue;
+				const std::vector<double> &current = AnalysisCurrent(*record->data);
+				const int count = static_cast<int>(std::min(record->data->voltage.size(), current.size()));
+				if (count > 0)
+				{
+					ImPlotSpec rawSpec;
+					rawSpec.LineColor = PreviewColor(index);
+					const std::string label = record->info.name + "##jfm_analysis_raw_" + std::to_string(ids[index]);
+					if (m_AnalysisScale == 0)
+						ImPlot::PlotLine(label.c_str(), record->data->voltage.data(), current.data(), count, rawSpec);
+					else
+					{
+						std::vector<double> x(record->data->voltage.begin(), record->data->voltage.begin() + count);
+						std::vector<double> y(current.begin(), current.begin() + count);
+						ApplyPreviewScale(m_AnalysisScale, x, y);
+						if (!x.empty())
+							ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), rawSpec);
+					}
+				}
+				const auto curve = m_Store->GetPrefitCurve({project, ids[index]});
+				if (curve)
+				{
+					const int curveCount = static_cast<int>(std::min(curve->voltage.size(), curve->current.size()));
+					if (curveCount > 0)
+					{
+						ImPlotSpec prefitSpec;
+						prefitSpec.LineColor = ImVec4(0.20f, 0.85f, 0.36f, 1.0f);
+						prefitSpec.LineWeight = 2.0f;
+						prefitSpec.Flags = ImPlotItemFlags_NoLegend;
+						const std::string label = "##jfm_analysis_prefit_" + std::to_string(ids[index]);
+						if (m_AnalysisScale == 0)
+							ImPlot::PlotLine(label.c_str(), curve->voltage.data(), curve->current.data(), curveCount, prefitSpec);
+						else
+						{
+							std::vector<double> x(curve->voltage.begin(), curve->voltage.begin() + curveCount);
+							std::vector<double> y(curve->current.begin(), curve->current.begin() + curveCount);
+							ApplyPreviewScale(m_AnalysisScale, x, y);
+							if (!x.empty())
+								ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), prefitSpec);
+						}
+					}
 				}
 			}
 		}
@@ -761,6 +920,111 @@ namespace SST::Prototypes::JFM
 		m_RangeHeldLastFrame = false;
 	}
 
+	void JFMImportDialogPanel::resetStaging()
+	{
+		finishRangeUndoGroup();
+		m_StagingProject = InvalidProjectHandle;
+		m_StagedImportBatches.clear();
+		m_StagedSeries.clear();
+		m_DataAddedToProject = false;
+		m_SelectAnalysisTab = false;
+		m_RangeCharacteristic = InvalidCharacteristicId;
+		m_RangeInitialized = false;
+	}
+
+	void JFMImportDialogPanel::handleImportCompleted(const ImportCompleted &event)
+	{
+		if (event.operation != m_ImportOperation || event.project != m_Request.project)
+			return;
+		m_StagedImportBatches.push_back(event);
+		if (!event.finalBatch)
+			return;
+
+		m_ImportSubmitted = false;
+		buildStagingProject();
+		m_SelectAnalysisTab = true;
+	}
+
+	void JFMImportDialogPanel::handleImportFailed(const ImportFailed &event)
+	{
+		if (event.operation != m_ImportOperation || event.project != m_Request.project)
+			return;
+		m_ImportSubmitted = false;
+		m_PreviewError = event.error;
+	}
+
+	void JFMImportDialogPanel::buildStagingProject()
+	{
+		if (m_Store == nullptr)
+			return;
+
+		m_StagingProject = m_Store->CreateTransientProject("Import staging");
+		m_StagedSeries.clear();
+		const JFMProject targetProject = m_Store->GetProjectSnapshot(m_Request.project);
+		std::vector<CharacteristicId> allIds;
+
+		for (const ImportCompleted &batch : m_StagedImportBatches)
+		{
+			if (batch.characteristics.empty())
+				continue;
+
+			std::string groupId;
+			if (!batch.groupPath.empty())
+				groupId = m_Store->FindOrCreateGroupPath(m_StagingProject, batch.groupPath);
+
+			std::string seriesName = batch.seriesName;
+			if (seriesName.empty() && !batch.targetSeriesId.empty())
+			{
+				const auto targetSeries = std::find_if(targetProject.series.begin(), targetProject.series.end(), [&batch](const JFMSeries &series) {
+					return series.id == batch.targetSeriesId;
+				});
+				if (targetSeries != targetProject.series.end())
+					seriesName = targetSeries->name;
+			}
+			if (seriesName.empty())
+				seriesName = "Series";
+
+			const JFMSeries series = m_Store->AddSeries(m_StagingProject, seriesName, groupId);
+			std::vector<JFMCharacteristicRecord> records = batch.characteristics;
+			for (JFMCharacteristicRecord &record : records)
+				record.info.id = InvalidCharacteristicId;
+			std::vector<CharacteristicId> ids = m_Store->AddCharacteristicRecords(m_StagingProject, std::move(records), series.id);
+			allIds.insert(allIds.end(), ids.begin(), ids.end());
+			m_StagedSeries.push_back(StagedSeries{batch.targetSeriesId, batch.groupPath, seriesName, std::move(ids)});
+		}
+
+		if (!allIds.empty())
+		{
+			m_Store->SetSelectedCharacteristics(m_StagingProject, allIds, allIds.front());
+			requestPrefit(m_StagingProject, std::move(allIds));
+		}
+	}
+
+	std::vector<ImportCompleted> JFMImportDialogPanel::buildApplyBatchesFromStaging() const
+	{
+		std::vector<ImportCompleted> batches;
+		if (m_Store == nullptr || m_StagingProject == InvalidProjectHandle)
+			return batches;
+
+		batches.reserve(m_StagedSeries.size());
+		for (const StagedSeries &series : m_StagedSeries)
+		{
+			std::vector<JFMCharacteristicRecord> records;
+			records.reserve(series.characteristicIds.size());
+			for (CharacteristicId id : series.characteristicIds)
+			{
+				auto record = m_Store->FindCharacteristicRecord({m_StagingProject, id});
+				if (!record)
+					continue;
+				record->info.id = InvalidCharacteristicId;
+				records.push_back(std::move(*record));
+			}
+			if (!records.empty())
+				batches.emplace_back(std::move(records), std::vector<std::string>{}, series.targetSeriesId, series.groupPath, series.seriesName);
+		}
+		return batches;
+	}
+
 	void JFMImportDialogPanel::loadRequest(JFMImportDialogRequest request)
 	{
 		finishRangeUndoGroup();
@@ -781,6 +1045,17 @@ namespace SST::Prototypes::JFM
 		m_ImportSubmitted = false;
 		m_SelectAnalysisTab = false;
 		m_ShowOnlyActive = false;
+		m_DataAddedToProject = false;
+		m_AnalysisAutoFit = true;
+		m_AnalysisShowLegend = false;
+		m_AnalysisShowCurves = true;
+		m_AnalysisScale = 0;
+		m_AnalysisTreeOpenRequest = 0;
+		m_AnalysisFitPadding = 0.08f;
+		m_ImportOperation = InvalidJFMOperationId;
+		m_StagingProject = InvalidProjectHandle;
+		m_StagedImportBatches.clear();
+		m_StagedSeries.clear();
 		m_RangeCharacteristic = InvalidCharacteristicId;
 		m_RangeInitialized = false;
 		m_RangeHeldLastFrame = false;
@@ -972,7 +1247,7 @@ namespace SST::Prototypes::JFM
 		if (!m_PreviewOpen)
 			return;
 
-		if (!ImGui::Begin("Import Preview", &m_PreviewOpen, ImGuiWindowFlags_AlwaysAutoResize))
+		if (!ImGui::Begin("Import Preview", &m_PreviewOpen, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking))
 		{
 			ImGui::End();
 			return;

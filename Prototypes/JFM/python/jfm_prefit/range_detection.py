@@ -6,6 +6,47 @@ from .constants import thermal_voltage
 from .types import FitRangeResult, PrefitSegmentation, RangeOptions, RangeWindow, Sample
 
 
+def _saturation_upper_bound(voltage: np.ndarray, current: np.ndarray, lo: int, options: RangeOptions) -> int | None:
+    count = voltage.size
+    window = max(2, min(options.upper_window, count - lo - 1))
+    if count - lo < max(window * 3, options.min_remaining_points):
+        return None
+
+    dv = np.diff(voltage[lo:])
+    di = np.diff(current[lo:])
+    valid = np.isfinite(dv) & np.isfinite(di) & (dv != 0.0)
+    if np.count_nonzero(valid) < window * 3:
+        return None
+
+    slopes = np.full_like(di, np.nan, dtype=float)
+    slopes[valid] = np.abs(di[valid] / dv[valid])
+    finite = slopes[np.isfinite(slopes)]
+    if finite.size < window * 3:
+        return None
+
+    slopes = np.nan_to_num(slopes, nan=float(np.nanmedian(finite)), posinf=0.0, neginf=0.0)
+    smooth = np.convolve(slopes, np.ones(window) / window, mode="valid")
+    if smooth.size < window * 2:
+        return None
+
+    peak = float(np.max(smooth))
+    if peak <= 0.0:
+        return None
+    low = smooth <= peak * max(options.upper_rel_tol, 0.02)
+    tail_start = smooth.size
+    for index in range(smooth.size - 1, -1, -1):
+        if not low[index]:
+            break
+        tail_start = index
+
+    if smooth.size - tail_start < window:
+        return None
+    hi = lo + tail_start
+    if hi - lo < options.min_remaining_points:
+        return None
+    return max(lo + 4, min(hi, count))
+
+
 def _automatic_bounds(sample: Sample, options: RangeOptions) -> tuple[int, int, list[str]]:
     voltage = sample.voltage
     current = sample.current
@@ -35,6 +76,10 @@ def _automatic_bounds(sample: Sample, options: RangeOptions) -> tuple[int, int, 
             hi = plateau_start
         elif plateau_start < count:
             warnings.append("rolloff_ignored_too_few_points")
+
+    slope_hi = _saturation_upper_bound(voltage, current, lo, options)
+    if slope_hi is not None and slope_hi < hi:
+        hi = slope_hi
 
     if hi - lo < 4:
         lo, hi = 0, count

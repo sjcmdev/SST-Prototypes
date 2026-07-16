@@ -40,6 +40,7 @@ namespace SST::Prototypes::JFM
 		Ref<JFMPrefitWorkQueue> prefitQueue = CreateRef<JFMPrefitWorkQueue>();
 		bool importRunning = false;
 		bool plotAfterImport = false;
+		bool deferImportApply = false;
 	};
 
 	void NotifyFailure(
@@ -80,6 +81,7 @@ namespace SST::Prototypes::JFM
 		state->importOperation = operation;
 		state->importTargetGroupId = event.targetGroupId;
 		state->plotAfterImport = event.plotAfterImport;
+		state->deferImportApply = event.deferApply;
 		state->importWarnings.clear();
 		state->importBatches.clear();
 		if (state->store != nullptr)
@@ -138,7 +140,7 @@ namespace SST::Prototypes::JFM
 		const bool hasCharacteristics = std::any_of(state->importBatches.begin(), state->importBatches.end(), [](const ImportCompleted &batch) {
 			return !batch.characteristics.empty();
 		});
-		if (hasCharacteristics)
+		if (hasCharacteristics && !state->deferImportApply)
 		{
 			auto registry = state->commandRegistry.lock();
 			if (registry != nullptr)
@@ -158,9 +160,14 @@ namespace SST::Prototypes::JFM
 				NotifyFailure(state, NotificationCategory::Import, "JFM import could not be applied", "Command runtime is unavailable.");
 			}
 		}
+		else if (hasCharacteristics && state->store != nullptr)
+		{
+			state->store->SetStatusMessage(project, "Import ready for data range.");
+		}
 
 		state->importRunning = false;
 		state->plotAfterImport = false;
+		state->deferImportApply = false;
 		state->importWarnings.clear();
 		state->importBatches.clear();
 		state->importProject = InvalidProjectHandle;
@@ -176,6 +183,7 @@ namespace SST::Prototypes::JFM
 			return;
 		state->importRunning = false;
 		state->plotAfterImport = false;
+		state->deferImportApply = false;
 		const ProjectHandle project = event.project == InvalidProjectHandle ? state->importProject : event.project;
 		if (state->store != nullptr && project != InvalidProjectHandle)
 		{

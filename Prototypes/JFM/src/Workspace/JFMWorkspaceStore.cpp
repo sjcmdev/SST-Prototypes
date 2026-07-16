@@ -52,6 +52,8 @@ namespace SST::Prototypes::JFM
 		projects.reserve(m_Projects.size());
 		for (const ProjectDocument &document : m_Projects)
 		{
+			if (document.hidden)
+				continue;
 			projects.push_back({
 				document.handle,
 				document.project.name,
@@ -73,7 +75,8 @@ namespace SST::Prototypes::JFM
 	bool JFMWorkspaceStore::SetActiveProject(ProjectHandle handle)
 	{
 		std::scoped_lock lock(m_Mutex);
-		if (!findDocumentLocked(handle))
+		const auto document = findDocumentLocked(handle);
+		if (!document || document->get().hidden)
 			return false;
 		m_ActiveProject = handle;
 		return true;
@@ -91,6 +94,21 @@ namespace SST::Prototypes::JFM
 		m_Projects.push_back(std::move(document));
 		m_ActiveProject = m_Projects.back().handle;
 		return m_ActiveProject;
+	}
+
+	ProjectHandle JFMWorkspaceStore::CreateTransientProject(std::string name)
+	{
+		std::scoped_lock lock(m_Mutex);
+		ProjectDocument document;
+		document.handle = m_NextProjectHandle++;
+		document.project = MakeDefaultProject(std::move(name));
+		document.hidden = true;
+		document.status = "Import staging.";
+		document.revision = m_NextRevision++;
+		document.savedRevision = document.revision;
+		ensureSelectionLocked(document);
+		m_Projects.push_back(std::move(document));
+		return m_Projects.back().handle;
 	}
 
 	ProjectHandle JFMWorkspaceStore::AttachProject(JFMProject project, std::optional<Path> path, bool activate)
@@ -243,7 +261,7 @@ namespace SST::Prototypes::JFM
 		}
 		updateNextCharacteristicIdLocked(value);
 		ensureSelectionLocked(value);
-		if (activate)
+		if (activate && !value.hidden)
 			m_ActiveProject = handle;
 		return true;
 	}

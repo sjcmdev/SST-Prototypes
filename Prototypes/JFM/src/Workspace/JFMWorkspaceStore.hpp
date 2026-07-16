@@ -43,6 +43,7 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] ProjectHandle GetActiveProjectHandle() const;
 		[[nodiscard]] bool SetActiveProject(ProjectHandle handle);
 		[[nodiscard]] ProjectHandle CreateProject(std::string name = "Untitled JFM Project");
+		[[nodiscard]] ProjectHandle CreateTransientProject(std::string name = "Transient JFM Project");
 		[[nodiscard]] ProjectHandle AttachProject(JFMProject project, std::optional<Path> path, bool activate = true);
 		[[nodiscard]] std::optional<ProjectHandle> FindProjectByPath(const Path &path) const;
 
@@ -181,6 +182,7 @@ namespace SST::Prototypes::JFM
 			std::string status = "Ready.";
 			std::vector<std::string> lastImportWarnings;
 			bool importRunning = false;
+			bool hidden = false;
 			std::size_t nextId = 1;
 			CharacteristicId nextCharacteristicId = 1;
 			std::uint64_t revision = 1;

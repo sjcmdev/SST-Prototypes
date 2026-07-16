@@ -11,6 +11,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "App/JFMUserSettings.hpp"
+#include "Events/JFMEvents.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
@@ -24,6 +25,8 @@ namespace SST::Prototypes::JFM
 {
 	struct ImportPreviewCompleted;
 	struct ImportPreviewFailed;
+	struct ImportCompleted;
+	struct ImportFailed;
 	struct JFMImportPreviewItem;
 	struct JFMImportPreviewPayload;
 
@@ -72,10 +75,23 @@ namespace SST::Prototypes::JFM
 			int substringLength = -1;
 		};
 
+		struct StagedSeries
+		{
+			std::string targetSeriesId;
+			std::vector<std::string> groupPath;
+			std::string seriesName;
+			std::vector<CharacteristicId> characteristicIds;
+		};
+
 		void loadRequest(JFMImportDialogRequest request);
 		void requestPreview();
+		void handleImportCompleted(const ImportCompleted &event);
+		void handleImportFailed(const ImportFailed &event);
 		void handlePreviewCompleted(const ImportPreviewCompleted &event);
 		void handlePreviewFailed(const ImportPreviewFailed &event);
+		void resetStaging();
+		void buildStagingProject();
+		[[nodiscard]] std::vector<ImportCompleted> buildApplyBatchesFromStaging() const;
 		void refreshPreviewFiles();
 		void applyPreviewFolderFilter();
 		void renderCustomVariables();
@@ -113,7 +129,16 @@ namespace SST::Prototypes::JFM
 		bool m_ImportSubmitted = false;
 		bool m_SelectAnalysisTab = false;
 		bool m_ShowOnlyActive = false;
-		std::uint64_t m_ImportStartRevision = 0;
+		bool m_DataAddedToProject = false;
+		bool m_AnalysisAutoFit = true;
+		bool m_AnalysisShowLegend = false;
+		bool m_AnalysisShowCurves = true;
+		int m_AnalysisScale = 0;
+		int m_AnalysisTreeOpenRequest = 0;
+		float m_AnalysisFitPadding = 0.08f;
+		JFMOperationId m_NextImportOperation = 1;
+		JFMOperationId m_ImportOperation = InvalidJFMOperationId;
+		ProjectHandle m_StagingProject = InvalidProjectHandle;
 		CharacteristicId m_RangeCharacteristic = InvalidCharacteristicId;
 		double m_RangeLower = 0.0;
 		double m_RangeUpper = 0.0;
@@ -131,6 +156,8 @@ namespace SST::Prototypes::JFM
 		std::string m_PreviewError;
 		std::string m_LastPreviewOptionsKey;
 		Ref<const JFMImportPreviewPayload> m_PreviewPayload;
+		std::vector<ImportCompleted> m_StagedImportBatches;
+		std::vector<StagedSeries> m_StagedSeries;
 		std::vector<Path> m_AllPreviewFiles;
 		std::vector<Path> m_PreviewFiles;
 		std::vector<std::string> m_PreviewFolders;
