@@ -29,6 +29,13 @@ namespace SST::Prototypes::JFM
 		characteristic.importOptions.decimalSeparator = ".";
 		characteristic.importOptions.temperatureExtraction = "filename";
 		characteristic.importOptions.customVariables.push_back({"sample", "stem", 1, 0, 4});
+		characteristic.prefit = JFMPrefitState{};
+		characteristic.prefit->modelId = "SD-RsRsh-alpha-Rsh2";
+		characteristic.prefit->status = "completed";
+		characteristic.prefit->manualLowerVoltage = 0.1;
+		characteristic.prefit->manualUpperVoltage = 0.7;
+		characteristic.prefit->fitRange = {4, 48, 0.1, 0.7, "manual"};
+		characteristic.prefit->parameters["A"] = JFMParameterEstimate{1.6, 0.05, "semilog_block", {}};
 
 		project.characteristics.push_back(characteristic);
 		JFMGroup group{"group-1", "Folder", {}};
@@ -77,6 +84,10 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(loaded->characteristics.front().importOptions.delimiter, "\t");
 		ASSERT_EQ(loaded->characteristics.front().importOptions.customVariables.size(), 1);
 		EXPECT_EQ(loaded->characteristics.front().importOptions.customVariables.front().name, "sample");
+		ASSERT_TRUE(loaded->characteristics.front().prefit.has_value());
+		EXPECT_EQ(loaded->characteristics.front().prefit->modelId, "SD-RsRsh-alpha-Rsh2");
+		EXPECT_EQ(loaded->characteristics.front().prefit->fitRange.reason, "manual");
+		EXPECT_DOUBLE_EQ(loaded->characteristics.front().prefit->parameters.at("A").value, 1.6);
 	}
 
 	TEST(JFMProjectYamlSerializerTests, MigratesSchemaOneWithDefaultGroupingAndMaterializationOptions)

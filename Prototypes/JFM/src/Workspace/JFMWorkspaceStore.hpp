@@ -78,6 +78,8 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::vector<JFMCharacteristic> GetGroupCharacteristics(const std::string &groupId) const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetGroupCharacteristics(ProjectHandle handle, const std::string &groupId) const;
 		[[nodiscard]] std::vector<CharacteristicId> GetGroupCharacteristicIds(ProjectHandle handle, const std::string &groupId) const;
+		[[nodiscard]] std::optional<JFMPrefitState> GetPrefitState(JFMCharacteristicRef ref) const;
+		[[nodiscard]] Ref<const JFMPrefitCurve> GetPrefitCurve(JFMCharacteristicRef ref) const;
 
 		JFMGroup AddGroup(std::string name, std::string parentId = {});
 		JFMGroup AddGroup(ProjectHandle handle, std::string name, std::string parentId = {});
@@ -111,6 +113,13 @@ namespace SST::Prototypes::JFM
 		bool SetSeriesShortName(ProjectHandle handle, const std::string &seriesId, std::string shortName);
 		bool SetCharacteristicShortName(const CharacteristicId &id, std::string shortName);
 		bool SetCharacteristicShortName(ProjectHandle handle, const CharacteristicId &id, std::string shortName);
+		bool SetPrefitModel(ProjectHandle handle, const std::vector<CharacteristicId> &ids, const std::string &modelId);
+		bool SetManualFitRange(ProjectHandle handle, CharacteristicId id, double lowerVoltage, double upperVoltage);
+		bool ResetFitRange(ProjectHandle handle, CharacteristicId id);
+		[[nodiscard]] std::uint64_t BeginPrefit(JFMCharacteristicRef ref);
+		[[nodiscard]] bool IsPrefitGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const;
+		bool ApplyPrefitResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMPrefitState result, JFMPrefitCurve curve);
+		bool FailPrefit(JFMCharacteristicRef ref, std::uint64_t generation, std::string error);
 
 		JFMGroupingDefinition AddGrouping(ProjectHandle handle, JFMGroupingDefinition grouping);
 		bool UpdateGrouping(ProjectHandle handle, JFMGroupingDefinition grouping);
@@ -143,6 +152,7 @@ namespace SST::Prototypes::JFM
 		void SelectGroup(std::string groupId);
 		void SelectCharacteristic(CharacteristicId characteristicId);
 		void SetSelectedCharacteristics(std::vector<CharacteristicId> characteristicIds, CharacteristicId primary, std::string seriesId = {});
+		void SetSelectedCharacteristics(ProjectHandle handle, std::vector<CharacteristicId> characteristicIds, CharacteristicId primary, std::string seriesId = {});
 		void AddImportedCharacteristics(std::vector<JFMCharacteristic> characteristics);
 		std::size_t UpdateCharacteristicData(std::vector<JFMCharacteristic> characteristics);
 		std::size_t UpdateCharacteristicData(ProjectHandle handle, std::vector<JFMCharacteristic> characteristics);
@@ -161,6 +171,8 @@ namespace SST::Prototypes::JFM
 			ProjectHandle handle = InvalidProjectHandle;
 			JFMProject project;
 			std::unordered_map<CharacteristicId, Ref<const JFMCharacteristicData>> characteristicData;
+			std::unordered_map<CharacteristicId, Ref<const JFMPrefitCurve>> prefitCurves;
+			std::unordered_map<CharacteristicId, std::uint64_t> prefitGenerations;
 			std::optional<Path> path;
 			std::string selectedSeriesId;
 			std::string selectedGroupId;

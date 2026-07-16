@@ -2,6 +2,8 @@
 
 #include "IO/JFMPythonImportBridge.hpp"
 
+#include "IO/JFMPythonRuntime.hpp"
+
 #include "ScientificRuntime/Python/PythonApi.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 
@@ -78,69 +80,6 @@ namespace SST::Prototypes::JFM
 		return nb::borrow<nb::list>(value);
 	}
 
-	bool appendStringToSysPath(const std::string &path)
-	{
-		if (path.empty())
-			return true;
-
-		nb::module_ sys = nb::module_::import_("sys");
-		nb::list sysPath = nb::cast<nb::list>(sys.attr("path"));
-		for (nb::handle item : sysPath)
-		{
-			if (pyString(item) == path)
-				return true;
-		}
-
-		sysPath.insert(0, nb::str(path.c_str()));
-		return true;
-	}
-
-	void appendVenvSitePackages(const Path &venvRoot)
-	{
-		if (venvRoot.Empty() || !FileSystem::Exists((venvRoot / Path("pyvenv.cfg")).Native()))
-			return;
-
-#if defined(DS_PLATFORM_WINDOWS)
-		const Path sitePackages = venvRoot / Path("Lib") / Path("site-packages");
-		if (FileSystem::Exists(sitePackages.Native()))
-			(void)appendStringToSysPath(sitePackages.String());
-#else
-		const Path libRoot = venvRoot / Path("lib");
-		if (!FileSystem::Exists(libRoot.Native()))
-			return;
-
-		std::error_code error;
-		for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(libRoot.Native(), error))
-		{
-			if (error || !entry.is_directory())
-				continue;
-			const Path sitePackages = Path::FromResolved(entry.path()) / Path("site-packages");
-			if (FileSystem::Exists(sitePackages.Native()))
-				(void)appendStringToSysPath(sitePackages.String());
-		}
-#endif
-	}
-
-	void appendNearbyVenvs(Path root)
-	{
-		for (int depth = 0; depth < 8 && !root.Empty(); ++depth)
-		{
-			appendVenvSitePackages(root / Path(".venv"));
-			appendVenvSitePackages(root / Path("venv"));
-			const Path parent = root.parent_path();
-			if (parent == root)
-				break;
-			root = parent;
-		}
-	}
-
-	bool configurePythonPaths(const Path &pythonRoot)
-	{
-		appendNearbyVenvs(Path::FromResolved(FileSystem::CurrentPath()));
-		appendNearbyVenvs(pythonRoot);
-		return appendStringToSysPath(pythonRoot.String());
-	}
-
 	nb::callable importAdapter()
 	{
 		return nb::cast<nb::callable>(nb::module_::import_("jfm_import.cpp_adapter").attr("import_file"));
@@ -181,7 +120,7 @@ namespace SST::Prototypes::JFM
 		const JFMImportOptions &options,
 		const JFMPythonImportBridge::ProgressCallback &progressCallback)
 	{
-		if (!configurePythonPaths(pythonRoot))
+		if (!ConfigureJFMPythonPaths(pythonRoot))
 			return makePythonBridgeError("Python import failed.", "Could not append pythonRoot to sys.path: " + pythonRoot.String());
 
 		JFMImportBatchResult batch;

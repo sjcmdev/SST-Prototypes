@@ -102,11 +102,16 @@ Data: 2026-07-10
 ### Plan UI po fundamentach
 
 1. Context menu: projekt `import series/add series`, seria `delete/add characteristics`, charakterystyka `delete`.
-2. Multi-select charakterystyk: Ctrl/Shift, później drag selection.
-3. Import dialog: parser/script, nazwa charakterystyki, delimiter, decimal separator, temperature extraction.
-4. Script registry w projekcie: add/remove/reload script, widoczne w Project Tree.
-5. Raw plot: multi-plot serii, drag-drop z drzewa na plot area, wiele plot areas.
-6. Później: kolorowanie, sortowanie po temperaturze/metadanych, panel szczegółów charakterystyki.
+2. Rzeczy z importu danych powinny być w File -> Import
+3. Dodajmy funkcję ekstrakcji wielu danych do osobnych plików: całe serie, grupy do wybranego folderu
+4. Przy imporcie niech będzie domyślny folder (example-data), otwieranie/zapis projektów (JFM-projects) (obydwie ścierzki powinny być konfigurowalne w UI (ikonka po której otwiera się okienko z wybraniem folderu)), powinno to być serializowane w ustawieniach
+5. W zakładce File dodajmy zakładkę Last Projects
+6. W zakładce File dodamy (otwórz nowy projek) -> otwarcie nowego okna aplikacji. 
+7. Multi-select charakterystyk: Ctrl/Shift, później drag selection.
+8. Import dialog: parser/script, nazwa charakterystyki, delimiter, decimal separator, temperature extraction. (Tak samo podgląd jak wyglądają pliki też by się przydał i jak by wyglądała obecnie zbudowana nazwa)
+9. Script registry w projekcie: add/remove/reload script, widoczne w Project Tree.
+10. Raw plot: multi-plot serii, drag-drop z drzewa na plot area, wiele plot areas.
+11. Kolorowanie, sortowanie po temperaturze/metadanych, panel szczegółów charakterystyki.
 
 ### Test plan
 

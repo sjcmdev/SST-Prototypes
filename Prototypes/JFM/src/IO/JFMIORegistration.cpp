@@ -14,6 +14,7 @@
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMImportPreviewJob.hpp"
 #include "IO/JFMProjectJobs.hpp"
+#include "IO/JFMPrefitJob.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -36,6 +37,7 @@ namespace SST::Prototypes::JFM
 		JFMOperationId importOperation = InvalidJFMOperationId;
 		JFMOperationId nextOperation = 1;
 		std::string importTargetGroupId;
+		Ref<JFMPrefitWorkQueue> prefitQueue = CreateRef<JFMPrefitWorkQueue>();
 		bool importRunning = false;
 		bool plotAfterImport = false;
 	};
@@ -199,6 +201,52 @@ namespace SST::Prototypes::JFM
 		ioLayer.RegisterHandler<ImportFailed>(std::bind_front(&HandleImportFailed, state));
 	}
 
+	void HandlePrefitRequested(const Ref<JFMIOState> &state, const PrefitRequested &event)
+	{
+		if (state->store == nullptr || event.project == InvalidProjectHandle || event.ids.empty())
+			return;
+		std::vector<CharacteristicId> ids = event.ids;
+		std::sort(ids.begin(), ids.end());
+		ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+		std::vector<JFMPrefitWorkItem> items;
+		items.reserve(ids.size());
+		for (CharacteristicId id : ids)
+		{
+			const JFMCharacteristicRef ref{event.project, id};
+			const std::uint64_t generation = state->store->BeginPrefit(ref);
+			if (generation == 0)
+				continue;
+			auto characteristic = state->store->FindCharacteristicRecord(ref);
+			if (characteristic)
+				items.push_back(JFMPrefitWorkItem{ref, generation, std::move(*characteristic)});
+		}
+		if (items.empty())
+			return;
+		if (state->prefitQueue == nullptr || !state->prefitQueue->Enqueue(std::move(items)))
+			return;
+		auto job = CreateRef<JFMPrefitJob>(state->eventBus, state->store, state->pythonRoot, state->prefitQueue);
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, "jfm.prefit"});
+	}
+
+	void HandlePrefitCompleted(const Ref<JFMIOState> &state, const PrefitCompleted &event)
+	{
+		if (state->store != nullptr)
+			(void)state->store->ApplyPrefitResult(event.ref, event.generation, event.state, event.curve);
+	}
+
+	void HandlePrefitFailed(const Ref<JFMIOState> &state, const PrefitFailed &event)
+	{
+		if (state->store != nullptr && state->store->FailPrefit(event.ref, event.generation, event.error))
+			DS_LOG_WARN("JFM prefit failed [{}:{}]: {}", event.ref.project, event.ref.characteristic, event.error);
+	}
+
+	void RegisterPrefitHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
+	{
+		ioLayer.RegisterHandler<PrefitRequested>(std::bind_front(&HandlePrefitRequested, state));
+		ioLayer.RegisterHandler<PrefitCompleted>(std::bind_front(&HandlePrefitCompleted, state));
+		ioLayer.RegisterHandler<PrefitFailed>(std::bind_front(&HandlePrefitFailed, state));
+	}
+
 	void HandleExportRawTsvRequested(const Ref<JFMIOState> &state, const ExportRawTsvRequested &event)
 	{
 		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
@@ -353,6 +401,12 @@ namespace SST::Prototypes::JFM
 			state->store->SetStatusMessage(event.project, "Project raw data materialized: " + std::to_string(updated) + " characteristic(s).");
 		else
 			state->store->SetStatusMessage(event.project, "Project raw data materialized with warnings: " + std::to_string(updated) + " characteristic(s).");
+		std::vector<CharacteristicId> ids;
+		ids.reserve(event.characteristics.size());
+		for (const JFMCharacteristicRecord &characteristic : event.characteristics)
+			ids.push_back(characteristic.info.id);
+		if (!ids.empty())
+			state->eventBus->Queue(PrefitRequested{event.project, std::move(ids)});
 	}
 
 	void RegisterProjectLoadHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
@@ -377,6 +431,7 @@ namespace SST::Prototypes::JFM
 		state->pythonRoot = std::move(context.pythonRoot);
 
 		RegisterImportHandlers(ioLayer, state);
+		RegisterPrefitHandlers(ioLayer, state);
 		RegisterExportHandlers(ioLayer, state);
 		RegisterProjectSaveHandlers(ioLayer, state);
 		RegisterProjectLoadHandlers(ioLayer, state);

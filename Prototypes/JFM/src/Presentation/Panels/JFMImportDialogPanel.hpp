@@ -14,6 +14,12 @@
 #include "Presentation/Panels/IPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
+namespace SST
+{
+	class CommandRegistry;
+	class UndoStack;
+}
+
 namespace SST::Prototypes::JFM
 {
 	struct ImportPreviewCompleted;
@@ -45,7 +51,13 @@ namespace SST::Prototypes::JFM
 	class JFMImportDialogPanel final : public IPanel, public EventReceiver
 	{
 	public:
-		JFMImportDialogPanel(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> store, Ref<JFMImportDialogState> state, Ref<JFMUserSettingsStore> settings);
+		JFMImportDialogPanel(
+			Ref<EventBus> eventBus,
+			Ref<JFMWorkspaceStore> store,
+			Ref<JFMImportDialogState> state,
+			Ref<JFMUserSettingsStore> settings,
+			WeakRef<CommandRegistry> commandRegistry,
+			WeakRef<UndoStack> undoStack);
 
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 		void Render() override;
@@ -69,6 +81,15 @@ namespace SST::Prototypes::JFM
 		void renderCustomVariables();
 		void renderVariablePreviewTable() const;
 		void renderPreviewWindow();
+		void renderAnalysisTab();
+		void renderAnalysisTree(const JFMProject &project);
+		void renderAnalysisGroup(const JFMProject &project, const JFMGroup &group, const std::vector<CharacteristicId> &visibleIds);
+		void renderAnalysisSeries(const JFMSeries &series, const std::vector<CharacteristicId> &visibleIds);
+		void selectAnalysisCharacteristic(const JFMSeries &series, CharacteristicId id, const std::vector<CharacteristicId> &visibleIds);
+		void renderAnalysisPlot(ProjectHandle project, const std::vector<CharacteristicId> &ids, CharacteristicId active);
+		void renderPrefitParameters(const std::optional<JFMPrefitState> &prefit) const;
+		void requestPrefit(ProjectHandle project, std::vector<CharacteristicId> ids) const;
+		void finishRangeUndoGroup(bool cancel = false);
 		[[nodiscard]] JFMImportOptions buildOptions() const;
 		[[nodiscard]] std::vector<JFMNameVariableRule> buildVariableRules() const;
 		[[nodiscard]] std::string previewName() const;
@@ -83,10 +104,22 @@ namespace SST::Prototypes::JFM
 		Ref<JFMWorkspaceStore> m_Store;
 		Ref<JFMImportDialogState> m_State;
 		Ref<JFMUserSettingsStore> m_Settings;
+		WeakRef<CommandRegistry> m_CommandRegistry;
+		WeakRef<UndoStack> m_UndoStack;
 		JFMImportDialogRequest m_Request;
 		bool m_Open = false;
 		bool m_PreviewOpen = false;
 		bool m_PlotAfterImport = false;
+		bool m_ImportSubmitted = false;
+		bool m_SelectAnalysisTab = false;
+		bool m_ShowOnlyActive = false;
+		std::uint64_t m_ImportStartRevision = 0;
+		CharacteristicId m_RangeCharacteristic = InvalidCharacteristicId;
+		double m_RangeLower = 0.0;
+		double m_RangeUpper = 0.0;
+		bool m_RangeInitialized = false;
+		bool m_RangeUndoGroupOpen = false;
+		bool m_RangeHeldLastFrame = false;
 		int m_Parser = 0;
 		int m_DecimalSeparator = 0;
 		int m_TemperatureExtraction = 0;

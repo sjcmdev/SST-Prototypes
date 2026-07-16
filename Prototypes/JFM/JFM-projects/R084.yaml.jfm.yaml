@@ -1,0 +1,723 @@
+schema_version: 1
+project:
+  id: jfm-project
+  name: Untitled JFM Project
+  metadata:
+    prototype: JFM
+characteristics:
+  - id: 1
+    name: 047_#R084_97C-B_Og002_3_REL_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\047_#R084_97C-B_Og002_3_REL_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 047_#R084_97C-B_Og002_3_REL_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\047_#R084_97C-B_Og002_3_REL_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1.2
+      v_stop: -0.99
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 2
+    name: 051_#R084_97C-B_Og002_3_REL0min_T300K_IVD
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\051_#R084_97C-B_Og002_3_REL0min_T300K_IVD.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 051_#R084_97C-B_Og002_3_REL0min_T300K_IVD
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\051_#R084_97C-B_Og002_3_REL0min_T300K_IVD.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1.2
+      v_stop: -0.99
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 3
+    name: 052_#R084_97C-B_Og002_3_REL1min_T300K_IVD
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\052_#R084_97C-B_Og002_3_REL1min_T300K_IVD.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 052_#R084_97C-B_Og002_3_REL1min_T300K_IVD
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\052_#R084_97C-B_Og002_3_REL1min_T300K_IVD.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1.2
+      v_stop: -0.99
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 4
+    name: 053_#R084_97C-B_Og002_3_REL5min_T300K_IVD
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\053_#R084_97C-B_Og002_3_REL5min_T300K_IVD.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 053_#R084_97C-B_Og002_3_REL5min_T300K_IVD
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\053_#R084_97C-B_Og002_3_REL5min_T300K_IVD.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1.2
+      v_stop: -0.99
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 5
+    name: 054_#R084_97C-B_Og002_3_REL15min_T300K_IVD
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\054_#R084_97C-B_Og002_3_REL15min_T300K_IVD.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 054_#R084_97C-B_Og002_3_REL15min_T300K_IVD
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\054_#R084_97C-B_Og002_3_REL15min_T300K_IVD.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1.2
+      v_stop: -0.99
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 6
+    name: 056_#R084_97C-B_Og002_3_REL15min_T300K_IVD
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\056_#R084_97C-B_Og002_3_REL15min_T300K_IVD.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 056_#R084_97C-B_Og002_3_REL15min_T300K_IVD
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\056_#R084_97C-B_Og002_3_REL15min_T300K_IVD.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1.2
+      v_stop: -0.99
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 7
+    name: 003_R084_97C_Og003_1_REL_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\003_R084_97C_Og003_1_REL_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 003_R084_97C_Og003_1_REL_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\003_R084_97C_Og003_1_REL_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 0.8
+      v_stop: -0.99
+      n_points: 180
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 180
+  - id: 8
+    name: 008_#R084_97C_Og003_1_LSO15min_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\008_#R084_97C_Og003_1_LSO15min_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 008_#R084_97C_Og003_1_LSO15min_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\008_#R084_97C_Og003_1_LSO15min_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 0.8
+      v_stop: -0.09
+      n_points: 90
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 90
+  - id: 9
+    name: 009_#R084_97C_Og003_1_REL1min_LSO15min_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\009_#R084_97C_Og003_1_REL1min_LSO15min_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 009_#R084_97C_Og003_1_REL1min_LSO15min_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\009_#R084_97C_Og003_1_REL1min_LSO15min_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 0.8
+      v_stop: -0.09
+      n_points: 90
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 90
+  - id: 10
+    name: 010_#R084_97C_Og003_1_REL5min_LSO15min_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\010_#R084_97C_Og003_1_REL5min_LSO15min_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 010_#R084_97C_Og003_1_REL5min_LSO15min_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\010_#R084_97C_Og003_1_REL5min_LSO15min_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 0.8
+      v_stop: -0.09
+      n_points: 90
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 90
+  - id: 11
+    name: 011_#R084_97C_Og003_1_REL15min_LSO15min_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\011_#R084_97C_Og003_1_REL15min_LSO15min_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 011_#R084_97C_Og003_1_REL15min_LSO15min_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_CdS\011_#R084_97C_Og003_1_REL15min_LSO15min_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 0.8
+      v_stop: -0.09
+      n_points: 90
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 90
+  - id: 12
+    name: 009_#R084_97C-A_Og001_1_REL_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS\009_#R084_97C-A_Og001_1_REL_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 009_#R084_97C-A_Og001_1_REL_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS\009_#R084_97C-A_Og001_1_REL_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1
+      v_stop: -0.09
+      n_points: 110
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 110
+  - id: 13
+    name: 014_#R084_97C-A_Og001_1_REL_LSO_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS\014_#R084_97C-A_Og001_1_REL_LSO_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 014_#R084_97C-A_Og001_1_REL_LSO_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS\014_#R084_97C-A_Og001_1_REL_LSO_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1
+      v_stop: -0.09
+      n_points: 110
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 110
+  - id: 14
+    name: 015_#R084_97C-A_Og001_1_REL1min_LSO_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS\015_#R084_97C-A_Og001_1_REL1min_LSO_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 015_#R084_97C-A_Og001_1_REL1min_LSO_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS\015_#R084_97C-A_Og001_1_REL1min_LSO_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1
+      v_stop: -0.09
+      n_points: 110
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 110
+  - id: 15
+    name: 019_#R084_97C-A_Og001_3_REL1min_LSO_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\019_#R084_97C-A_Og001_3_REL1min_LSO_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 019_#R084_97C-A_Og001_3_REL1min_LSO_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\019_#R084_97C-A_Og001_3_REL1min_LSO_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1
+      v_stop: -0.09
+      n_points: 110
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 110
+  - id: 16
+    name: 020_#R084_97C-A_Og001_3_REL5min_LSO_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\020_#R084_97C-A_Og001_3_REL5min_LSO_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 020_#R084_97C-A_Og001_3_REL5min_LSO_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\020_#R084_97C-A_Og001_3_REL5min_LSO_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1
+      v_stop: -0.09
+      n_points: 110
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 110
+  - id: 17
+    name: 021_#R084_97C-A_Og001_3_REL15min_LSO_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\021_#R084_97C-A_Og001_3_REL15min_LSO_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 021_#R084_97C-A_Og001_3_REL15min_LSO_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\021_#R084_97C-A_Og001_3_REL15min_LSO_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1
+      v_stop: -0.09
+      n_points: 110
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 110
+  - id: 18
+    name: 022_#R084_97C-A_Og001_3_REL30min_LSO_T300K_IVD_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\022_#R084_97C-A_Og001_3_REL30min_LSO_T300K_IVD_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 022_#R084_97C-A_Og001_3_REL30min_LSO_T300K_IVD_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\022_#R084_97C-A_Og001_3_REL30min_LSO_T300K_IVD_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1
+      v_stop: -0.09
+      n_points: 110
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 110
+  - id: 19
+    name: 023_#R084_97C-A_Og001_3_REL30min_LSO_T300K_IVL_pm
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\023_#R084_97C-A_Og001_3_REL30min_LSO_T300K_IVL_pm.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: 023_#R084_97C-A_Og001_3_REL30min_LSO_T300K_IVL_pm
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\R084\IV_ZnOS1\023_#R084_97C-A_Og001_3_REL30min_LSO_T300K_IVL_pm.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: decreasing
+      v_start: 1
+      v_stop: -0.09
+      n_points: 110
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 110
+groups:
+  - id: group-2
+    name: R084
+    parent_id: ""
+series:
+  - id: series-default
+    name: Series 1
+    group_id: ""
+    characteristics:
+      []
+  - id: series-1
+    name: R084
+    group_id: ""
+    characteristics:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+  - id: series-3
+    name: IV_CdS
+    group_id: group-2
+    characteristics:
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+  - id: series-4
+    name: IV_ZnOS
+    group_id: group-2
+    characteristics:
+      - 12
+      - 13
+      - 14
+  - id: series-5
+    name: IV_ZnOS1
+    group_id: group-2
+    characteristics:
+      - 15
+      - 16
+      - 17
+      - 18
+      - 19
+fit_runs:
+  []
+monte_carlo_runs:
+  []
+derived_analyses:
+  []

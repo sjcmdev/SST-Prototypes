@@ -150,6 +150,70 @@ namespace SST::Prototypes::JFM
 		return options;
 	}
 
+	void emitPrefitState(YAML::Emitter &out, const JFMPrefitState &prefit)
+	{
+		out << YAML::BeginMap;
+		out << YAML::Key << "model" << YAML::Value << prefit.modelId;
+		out << YAML::Key << "status" << YAML::Value << prefit.status;
+		emitOptionalDouble(out, "manual_lower_voltage", prefit.manualLowerVoltage);
+		emitOptionalDouble(out, "manual_upper_voltage", prefit.manualUpperVoltage);
+		out << YAML::Key << "fit_range" << YAML::Value << YAML::BeginMap;
+		out << YAML::Key << "lower_index" << YAML::Value << prefit.fitRange.lowerIndex;
+		out << YAML::Key << "upper_index" << YAML::Value << prefit.fitRange.upperIndex;
+		out << YAML::Key << "lower_voltage" << YAML::Value << prefit.fitRange.lowerVoltage;
+		out << YAML::Key << "upper_voltage" << YAML::Value << prefit.fitRange.upperVoltage;
+		out << YAML::Key << "reason" << YAML::Value << prefit.fitRange.reason;
+		out << YAML::EndMap;
+		out << YAML::Key << "parameters" << YAML::Value << YAML::BeginMap;
+		for (const auto &[name, estimate] : prefit.parameters)
+		{
+			out << YAML::Key << name << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "value" << YAML::Value << estimate.value;
+			emitOptionalDouble(out, "standard_error", estimate.standardError);
+			out << YAML::Key << "source" << YAML::Value << estimate.source;
+			out << YAML::Key << "warnings" << YAML::Value << estimate.warnings;
+			out << YAML::EndMap;
+		}
+		out << YAML::EndMap;
+		out << YAML::Key << "warnings" << YAML::Value << prefit.warnings;
+		out << YAML::EndMap;
+	}
+
+	std::optional<JFMPrefitState> readPrefitState(const YAML::Node &node)
+	{
+		if (!node || !node.IsMap())
+			return std::nullopt;
+		JFMPrefitState prefit;
+		prefit.modelId = readOr<std::string>(node, "model", "SD-RsRsh");
+		prefit.status = readOr<std::string>(node, "status", "not_started");
+		prefit.manualLowerVoltage = readOptionalDouble(node, "manual_lower_voltage");
+		prefit.manualUpperVoltage = readOptionalDouble(node, "manual_upper_voltage");
+		const YAML::Node range = node["fit_range"];
+		prefit.fitRange.lowerIndex = readOr<std::size_t>(range, "lower_index", 0);
+		prefit.fitRange.upperIndex = readOr<std::size_t>(range, "upper_index", 0);
+		prefit.fitRange.lowerVoltage = readOr<double>(range, "lower_voltage", 0.0);
+		prefit.fitRange.upperVoltage = readOr<double>(range, "upper_voltage", 0.0);
+		prefit.fitRange.reason = readOr<std::string>(range, "reason", "automatic");
+		const YAML::Node parameters = node["parameters"];
+		if (parameters && parameters.IsMap())
+		{
+			for (const auto &entry : parameters)
+			{
+				const YAML::Node estimateNode = entry.second;
+				JFMParameterEstimate estimate;
+				estimate.value = readOr<double>(estimateNode, "value", 0.0);
+				estimate.standardError = readOptionalDouble(estimateNode, "standard_error");
+				estimate.source = readOr<std::string>(estimateNode, "source", {});
+				if (estimateNode["warnings"])
+					estimate.warnings = estimateNode["warnings"].as<std::vector<std::string>>();
+				prefit.parameters[entry.first.as<std::string>()] = std::move(estimate);
+			}
+		}
+		if (node["warnings"])
+			prefit.warnings = node["warnings"].as<std::vector<std::string>>();
+		return prefit;
+	}
+
 	const char *groupingModeName(JFMGroupingMode mode)
 	{
 		return mode == JFMGroupingMode::Exact ? "exact" : "numeric_step";
@@ -198,6 +262,11 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "missing_temperature" << YAML::Value << characteristic.qc.hasMissingTemperature;
 		out << YAML::Key << "warnings" << YAML::Value << characteristic.qc.warnings;
 		out << YAML::EndMap;
+		if (characteristic.prefit)
+		{
+			out << YAML::Key << "prefit" << YAML::Value;
+			emitPrefitState(out, *characteristic.prefit);
+		}
 		out << YAML::Key << "raw_data" << YAML::Value << "external_only";
 		out << YAML::Key << "raw_point_count" << YAML::Value << characteristic.sweep.pointCount;
 		out << YAML::EndMap;
@@ -236,6 +305,7 @@ namespace SST::Prototypes::JFM
 		characteristic.qc.hasMissingTemperature = readOr<bool>(qcNode, "missing_temperature", false);
 		if (qcNode && qcNode.IsMap() && qcNode["warnings"])
 			characteristic.qc.warnings = qcNode["warnings"].as<std::vector<std::string>>();
+		characteristic.prefit = readPrefitState(characteristicNode["prefit"]);
 
 		return characteristic;
 	}

@@ -287,6 +287,37 @@ namespace SST::Prototypes::JFM
 		EXPECT_TRUE(store.IsDirty(project));
 	}
 
+	TEST(JFMWorkspaceStoreTests, StoresPrefitConfigurationAndRejectsStaleResults)
+	{
+		JFMWorkspaceStore store;
+		const ProjectHandle project = store.GetActiveProjectHandle();
+		JFMCharacteristic characteristic;
+		characteristic.info.name = "Curve";
+		characteristic.info.temperatureK = 300.0;
+		const CharacteristicId id = store.AddCharacteristics(project, {characteristic}, store.GetSelectedSeriesId()).front();
+
+		EXPECT_TRUE(store.SetManualFitRange(project, id, 0.1, 0.8));
+		const std::uint64_t staleGeneration = store.BeginPrefit({project, id});
+		EXPECT_TRUE(store.SetPrefitModel(project, {id}, "SD-RsRsh-alpha-Rsh2"));
+		JFMPrefitState stale;
+		stale.modelId = "SD-RsRsh";
+		EXPECT_FALSE(store.ApplyPrefitResult({project, id}, staleGeneration, stale, {}));
+
+		const std::uint64_t generation = store.BeginPrefit({project, id});
+		JFMPrefitState result;
+		result.modelId = "SD-RsRsh-alpha-Rsh2";
+		result.fitRange = {2, 20, 0.1, 0.8, "manual"};
+		result.parameters["A"] = JFMParameterEstimate{1.5, std::nullopt, "semilog_block", {}};
+		EXPECT_TRUE(store.ApplyPrefitResult({project, id}, generation, result, {{0.1, 0.8}, {1.0, 2.0}}));
+
+		const auto state = store.GetPrefitState({project, id});
+		ASSERT_TRUE(state);
+		EXPECT_EQ(state->status, "completed");
+		EXPECT_EQ(state->modelId, "SD-RsRsh-alpha-Rsh2");
+		EXPECT_DOUBLE_EQ(*state->manualLowerVoltage, 0.1);
+		ASSERT_TRUE(store.GetPrefitCurve({project, id}));
+	}
+
 	TEST(JFMWorkspaceStoreTests, ProjectEditCommandRunsThroughRegistryUndoAndRedo)
 	{
 		auto store = CreateRef<JFMWorkspaceStore>();

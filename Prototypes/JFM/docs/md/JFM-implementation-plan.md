@@ -1,9 +1,21 @@
 # JFM — Roadmap implementacji
 
-**Status:** plan faz implementacji, na bazie `JFM_functional_specification.md` i `jfm-scientific-research-perplexity.md`.
+**Status:** plan faz implementacji, na bazie `JFM_functional_specification.md` i `jfm-scientific-research-perplexity.md`. Zaktualizowano o realny stan implementacji na branchu `JFM-prototype` (`SST-Prototypes`) oraz o odniesienie do nowego dokumentu projektowego auto-zakresu i prefitu.
 **Zasada:** Core gotowy (~99%) — JFM to czysty moduł domenowy budowany na nim, bez node editora i systemu pluginów.
 **Podejście:** implementacja wzdłuż pipeline'u analizy — każda faza kończy się wynikiem widocznym na wykresie, zanim przechodzimy dalej.
-**Data:** 2026-07-05.
+**Data:** 2026-07-05. **Audyt stanu i aktualizacja:** 2026-07-14.
+**Dokumenty powiązane:** `algorithm-description.md` (warstwa algorytmiczna, powstała równolegle 2026-07-05), `current-user-functionality.md` (audyt legacy JFM na `SemiconductorStudio@workin-sjcm`), `JFM-prefit-autorange-design.md` (specyfikacja API auto-zakresu i prefitu — szczegóły do Fazy 2 i Fazy 3, patrz niżej).
+
+---
+
+## Status realizacji (audyt 2026-07-14)
+
+Audyt objął branch `JFM-prototype` repozytorium `SST-Prototypes` (ostatni commit audytowany: `2c2bf7b`). Poniższe dotyczy pracy **ponad** to, co było jawnie wypunktowane w Fazach 0-1 — realny zakres architektoniczny okazał się szerszy niż plan zakładał explicite, ale mieści się w duchu Fazy 0/1 (fundament + import), więc numeracja faz się nie zmienia.
+
+- **Refaktor warstwy IO/runtime domknięty.** Wszystkie punkty z sesji „Codex — odniesienie techniczne i plan naprawy” (`notes.md`) w sekcjach *architektura* i *model danych* są oznaczone jako zrobione: `Application::Get()` wyzerowany w JFM, `RuntimeServices` jako jawny agregat uchwytów (`EventBus`, `JobSystem`, `ProgressTracker`, `CommandRegistry`, notifier, config), `JFMIORegistration` rozbity na osobne funkcje (import requested/progress/completed/failed, export, save, load), `JFMCharacteristicInfo`/`JFMCharacteristicData` rozdzielone, `Workspace` jako jedyny właściciel projektu i registry charakterystyk z API `AddSeries`/`AddCharacteristics`/`FindCharacteristic`/`FindCharacteristicByName`/`DeleteCharacteristic`/`MoveCharacteristic`, `sourcePath` jako `Path`. To bezpośrednio rozstrzyga pięć otwartych pytań architektonicznych IO, które wcześniej blokowały dalszą pracę (podział odpowiedzialności `IOLayer`/obiekty IO/joby/serializery/workspace store; `Application::Get()` → zero w JFM; itd.).
+- **Warstwa algorytmiczna zaprojektowana koncepcyjnie zanim ruszyła implementacja.** `algorithm-description.md` (2026-07-05) domyka analizę z sekcji „Otwarte pytania algorytmiczne” pytaniem wprost: „zanim da się to przełożyć na konkretne interfejsy” — dokładnie to zadanie zrealizował `JFM-prefit-autorange-design.md` dla warstwy auto-zakresu i prefitu (Faza 2 §a, Faza 3 §prefit).
+- **Legacy JFM (`SemiconductorStudio@workin-sjcm`) przeaudytowany funkcjonalnie i błędowo.** `current-user-functionality.md` inwentaryzuje 24 funkcje do odtworzenia (§7) oraz 10 konkretnych błędów ze wskazaniem linii kodu (§6) — to jest teraz podstawowe źródło prawdy „co dokładnie robił stary JFM”, uzupełniające `jfm-scientific-research-perplexity.md` (co *powinien* robić naukowo poprawny JFM).
+- **Python-side pattern ustalony na przykładzie importu.** Pakiet `python/jfm_import` (dataclassy `slots=True`, granica C++ przez zwykły `dict[str, Any]` ręcznie mapowany na `sst_jfm.*` w `cpp_adapter.py`, dynamiczne ładowanie skryptu użytkownika przez `importlib`, testy `pytest` z `monkeypatch` na module `sst_jfm`) — to jest konwencja, na której `JFM-prefit-autorange-design.md` buduje nowy pakiet `jfm_prefit`.
 
 ---
 
@@ -49,45 +61,57 @@ stop
 
 **Walidacja wizualna:** pusty projekt i drzewo widoczne w UI.
 
-- Klasy domenowe: `Project`, `Series`, `Characteristic`, `FitRun`, `MonteCarloRun`, `DerivedAnalysis` (§3) — na razie jako struktury danych
-- Osadzenie modułu JFM w istniejącym systemie okien/paneli Core
-- Pusty widok drzewa projektu: projekt → seria → charakterystyka (§15.1)
-- Nowy projekt / nowa seria (puste)
+**Status: ✅ zrealizowane, z solidniejszym fundamentem niż pierwotnie planowano.**
+
+- Klasy domenowe: `Project`, `Series`, `Characteristic` istnieją jako realne typy w `src/Domain` (`JFMDomainLayer`, `JFMTypes`) i `src/Workspace` (`JFMWorkspaceStore`), nie tylko jako struktury danych — `FitRun`, `MonteCarloRun`, `DerivedAnalysis` nadal czekają na Fazę 4/8/9
+- Osadzenie modułu JFM w systemie okien/paneli Core — gotowe (`src/Presentation/Panels`)
+- Widok drzewa projektu zaimplementowany i rozszerzony ponad plan: `ProjectTreePanel` + `JFMOverviewPanel`, `CharacteristicDetailsPanel`
+- Nowy projekt / nowa seria — gotowe, wraz z zapisem/odczytem YAML (`JFMProjectYamlSerializer`) i materializacją danych po wczytaniu (job uruchamiany po `ProjectLoadCompleted`)
+- Ponad plan: warstwa `RuntimeServices` (agregat `EventBus`/`JobSystem`/`ProgressTracker`/`CommandRegistry`/notifier/config) eliminująca `Application::Get()` z JFM — to wykracza poza dosłowny zakres Fazy 0, ale było warunkiem koniecznym, by dalsze fazy (zwłaszcza 2-3, praca w tle na dużych zbiorach) nie dziedziczyły długu technicznego z warstwy IO
 
 ## Faza 1 — Import + kontrola jakości + wizualizacja surowych danych
 
 **Walidacja wizualna:** zaimportowana rodzina charakterystyk na wykresie, kolorowana wg `T`.
 
-- Parsery `.dat` / `.txt` / `.csv` / `.tsv` + rozpoznawanie/ręczne mapowanie kolumn `V`/`I`/`J`/`T`/metadane (§4.1–4.2)
-- Odczyt temperatury: nazwa pliku, nagłówek, kolumna, edycja ręczna (§4.3)
-- Import pojedynczy/wielokrotny/katalogu, przypisanie do serii, auto-sort po `T` (§4.4)
-- Rejestracja zewnętrznych skryptów importu (Python, hot-reload, dynamiczna rejestracja) na bazie istniejącego osadzenia Pythona (§4.1)
-- QC: braki kolumn, jednostki (domyślne gdy brak), brak `T`, duplikaty, niemonotoniczność `V`, puste/nienumeryczne punkty, saturacja/compliance, wiele sweepów + rozdzielanie (§4.5)
-- Panel statusu importu w UI, nie konsola (§18.1)
-- Wykres surowych danych: liniowy / semi-log (§14.1–14.2). Signed-log jest świadomie odłożony poza bieżącą iterację.
-- Minimalny eksport `.tsv` danych surowych — wczesna weryfikacja w OriginPro
+**Status: ✅ zrealizowane dla ścieżki głównej; kilka podpunktów §4.5/§4.1 częściowe — patrz uwagi.**
+
+- Parsery: `.dat`/`.txt` gotowe (`jfm_import.dat_parser`), plus parser formatu SCAPS `.iv` (`scaps_iv_parser`) — dodatek ponad literalny zakres §4.1, przydatny bo `example-data/scaps-batch-file.iv` jest częścią danych referencyjnych projektu. Rozpoznawanie/ręczne mapowanie kolumn `V`/`I`/`J` — gotowe przez `column_roles`/`ParseOptions` (§4.1–4.2)
+- Odczyt temperatury: nazwa pliku i nagłówek — gotowe (`common.detect_temperature`); edycja ręczna po imporcie — status nieustalony w tym audycie, do zweryfikowania w UI (§4.3)
+- Import pojedynczy/wielokrotny/katalogu, przypisanie do serii — gotowe, **wraz z rozszerzeniem ponad plan**: import zagnieżdżonych folderów z odtworzeniem struktury jako serii, pomijanie plików nie do zaimportowania bez przerywania całego importu (`notes.md`, sekcja folderów). Auto-sort po `T` — do potwierdzenia w UI (§4.4)
+- Rejestracja zewnętrznych skryptów importu: **częściowe** — dynamiczne ładowanie pojedynczego skryptu użytkownika (`cpp_adapter._load_custom_parser`, `importlib`) działa, ale UI do przeglądania/dodawania/przeładowania wielu zarejestrowanych skryptów jako element projektu (z `notes.md`, „Opcje UI do dodania” pkt 1-2) nie jest jeszcze zbudowane — to zostaje jako otwarty podpunkt Fazy 1 (§4.1)
+- QC: duplikaty, niemonotoniczność `V` (`non_monotonic_sweep` warning), brak `T` — gotowe; braki kolumn/jednostki domyślne, saturacja/compliance, wiele sweepów + rozdzielanie — status nieustalony w tym audycie, prawdopodobnie częściowe (§4.5)
+- `ImportStatusPanel` — gotowe, statusy w UI nie w konsoli (§18.1)
+- `RawPlotPanel` — gotowe dla skali liniowej/log; signed-log nieustalony w tym audycie (§14.1–14.2)
+- Minimalny eksport `.tsv` danych surowych (`JFMExportRawTsvJob`) — gotowe
+
+**Mały dodatek do zakresu (uzgodniony, nie zmienia funkcjonalności):** `short_name_pattern` istnieje dziś jako pole `ParseOptions` przekazywane per-import. Doprecyzowanie: dodać **user-preset** — zapisywalny, nazwany zestaw wzorców (`name_pattern`/`short_name_pattern`/`custom_variables`) wybieralny z listy w oknie importu, żeby nie wpisywać wzorca ręcznie przy każdym imporcie tej samej serii pomiarowej. To rozszerzenie panelu importu (§15.1 UI z `notes.md`, pkt 5), nie zmiana modelu danych charakterystyki.
 
 ## Faza 2 — Preprocessing + zakres dopasowania
 
 **Walidacja wizualna:** raw/processed/ranged rozróżnialne na wykresie, granice zakresu przeciągane myszką.
 
-- Konwersja jednostek, `I`↔`J` (przy znanej powierzchni), korekta znaku jako jawna akcja (§5.1)
-- Duplikaty, oznaczanie punktów wyłączonych z fitu, log operacji widoczny w historii (§5.1)
-- Zakres manualny: panel + uchwyty na wykresie + skróty klawiszowe (§6.2)
-- Zakres automatyczny: zły znak `I`, dominacja `-I_0`/offsetu przy niskim `V`, wejście w `R_s`, rolloff/kink (§6.1, §7.1–7.2 dok. nauk.)
-- Zakres jako atrybut przyszłego `FitRun` (§6.3)
-- Status zewnętrznych skryptów preprocessingu/walidacji: użyty/nieużyty/błąd (§5.2)
+**Status: ⬜ implementacja C++/UI nierozpoczęta — ale zakres automatyczny (§6.1) jest teraz w pełni zaprojektowany na poziomie API, patrz `JFM-prefit-autorange-design.md`.**
+
+- Konwersja jednostek, `I`↔`J`, korekta znaku jako jawna akcja — nierozpoczęte (§5.1)
+- Duplikaty/wyłączanie punktów z fitu/log operacji — nierozpoczęte na tym poziomie (odrębne od QC importu z Fazy 1) (§5.1)
+- Zakres manualny: panel + uchwyty na wykresie — nierozpoczęte (§6.2)
+- **Zakres automatyczny — zaprojektowany, nierozpoczęty w kodzie.** `JFM-prefit-autorange-design.md` doprecyzowuje §6.1 tej specyfikacji i §7.1–7.2 dok. naukowego jako konkretny, gotowy do implementacji algorytm: maskowanie fizyczne → dolna granica (uogólnienie progu `3·V_T(T)` zamiast stałej wartości) → górna granica (detekcja rolloff/compliance z progiem względnym) → wewnętrzna segmentacja shunt/exponential/series na potrzeby prefitu (Faza 3). Uruchamiane po stronie Pythona, jako część automatyzacji poimportowej — zgodnie z decyzją podjętą w tej sesji, że auto-zakres i prefit żyją na poziomie preprocessingu/automatyzacji po imporcie, nie w osobnym kroku UI
+- Zakres jako atrybut przyszłego `FitRun` — koncepcyjnie ustalone (`FitRangeResult` w nowym dokumencie), implementacja czeka na Fazę 4 (§6.3)
+- Status zewnętrznych skryptów preprocessingu/walidacji — nierozpoczęte (§5.2)
 
 ## Faza 3 — Katalog modeli podstawowych + solver CPU/GPU + prefit
 
-**Walidacja wizualna:** krzywa prefit nałożona na dane, dla każdego z 5 modeli.
+**Walidacja wizualna:** krzywa prefit nałożona na dane, dla każdego z modeli katalogu.
 
-- Modele: `SD-0`, `SD-Rsh` (jawne `I(V)`); `SD-Rs`, `SD-RsRsh`, `SD-Iph` (implicit) (§7.1 spec., §1.2 dok. nauk.)
-- Solver implicit: Lambert W + fallback Newton-Raphson/Halley, zabezpieczenia overflow/underflow (§2.2 dok. nauk.)
-- Ta sama logika w wersji CPU i równoległej GPU (batch po `V` / po zestawach parametrów) + test zgodności CPU↔GPU na wspólnych wektorach (§18.3 dok. nauk. jako wzorzec rygoru)
-- Parametry: estimated/initial/fitted/tuned, jednostka, fixed/free, bounds (w tym „brak granicy” i wykrywanie `min ≥ max`), skala log dla `I_0`/`R_s`/`R_sh` — identycznie CPU i GPU (§8)
-- Prefit dla wszystkich 5 modeli: initial guess, bounds, sugerowany zakres, parametry do tymczasowego zafiksowania, ostrzeżenia o identyfikowalności; jawny status „prefit niedostępny” gdy brak (§5.3)
-- Identyfikacja modelu przez składniki fizyczne w UI/eksporcie, mapowanie legacy `4P`/`6P` (§7)
+**Status: ⬜ implementacja nierozpoczęta — ale prefit ma teraz kompletną, gotową do wdrożenia specyfikację API; katalog modeli doprecyzowany z 5 do 10 jawnych wariantów.**
+
+- Modele: `SD-0`, `SD-Rsh` (jawne `I(V)`); `SD-Rs`, `SD-RsRsh` (implicit) (§7.1 spec., §1.2 dok. nauk.) — nierozpoczęte
+- **Doprecyzowanie nazewnictwa katalogu (nie zmiana zakresu funkcjonalnego):** zamiast jednego ogólnego `SD-Iph` z niejasnym zestawem parametrów, katalog Fazy 3 obejmuje jawnie 10 identyfikatorów: `SD-0`, `SD-Rs`, `SD-Rsh`, `SD-RsRsh` (dark) oraz ich odpowiedniki `-I_ph` (light), plus `SD-RsRsh-alpha-Rsh2` i `SD-RsRsh-alpha-Rsh2-I_ph` (odpowiednik legacy `SD-PLsh`/„6P”/„7P”). Pełna tabela model → parametry → bloki prefitu w `JFM-prefit-autorange-design.md` §c. To pokrywa się z pierwotnym zamysłem tej fazy (jedna infrastruktura solvera implicit dla całej rodziny `SD-*`), tylko z jawnym nazewnictwem zamiast skrótu „5 modeli”
+- Solver implicit (Lambert W + Newton/Halley) — nierozpoczęty, poza zakresem nowego dokumentu prefitu (prefit dostarcza tylko wartości startowe, nie sam solver)
+- CPU/GPU parytet — nierozpoczęty
+- Parametry estimated/initial/fitted/tuned, bounds, skala log — nierozpoczęte w C++/UI; odpowiednik `ParameterEstimate` (wartość + błąd standardowy + źródło) istnieje już jako typ wynikowy prefitu w nowym dokumencie
+- **Prefit — w pełni zaprojektowany, gotowy do implementacji.** `JFM-prefit-autorange-design.md` specyfikuje: sekwencję estymacji (`R_sh` → `A`/`I_0` z regionu semi-log → `R_s` metodą Cheunga → `I_ph` z interpolacji przy `V=0`), wspólny prymityw dopasowania liniowego Levenberg–Marquardt reużywany przez wszystkie bloki, mechanizm przeskalowania `A` oparty na tabeli korekcyjnej z `PreFitter.cpp` (`SemiconductorStudio@workin-sjcm`) przeniesiony jako osobny, wymienny komponent kalibracyjny, oraz rejestr modeli, w którym dodanie nowego modelu to nowy wpis deklaratywny, nie nowy kod numeryczny. Zawiera też algorytm automatycznego doboru najmniejszego wystarczającego modelu (test istotności `R_s`/`R_sh` + tani pseudo-`ΔAICc` na rezyduach prefitu) — realizuje ideę z `notes.md`/`current-user-functionality.md` (legacy „spróbuj 4P, eskaluj do 6P przy błędzie”), tylko podjętą świadomie na etapie prefitu zamiast post-hoc po nieudanym ficie
+- Identyfikacja modelu przez składniki fizyczne — konwencja nazewnicza już przyjęta i używana w nowym dokumencie (§7 spec.)
 
 ## Faza 4 — Fit pojedynczej charakterystyki (CPU/GPU) + ocena wyniku
 
@@ -201,7 +225,12 @@ stop
 - `JFM_functional_specification.md`
 - `jfm-scientific-research-perplexity.md`
 - `PROJECT_CONTEXT.md`
+- `algorithm-description.md` — warstwa algorytmiczna (2026-07-05), uzupełniona przez ten audyt o konkretną specyfikację API dla §4-5
+- `current-user-functionality.md` — audyt funkcjonalny i błędowy legacy JFM, `SemiconductorStudio@workin-sjcm`, commit `f69295a` (2026-06-26)
+- `notes.md` — notatki robocze + sesja „Codex — odniesienie techniczne i plan naprawy” (2026-07-10), źródło statusów w tym audycie
+- `JFM-prefit-autorange-design.md` — nowy dokument: specyfikacja auto-zakresu, prefitu i doboru modelu (2026-07-14)
+- `SemiconductorStudio@workin-sjcm:JFMServices/Fitting/PreFitter.hpp/.cpp` — referencyjna implementacja C++ przeskalowania prefitu, cytowana w nowym dokumencie
 
 ---
 
-*Dokument roboczy projektu JFM. Wersja 1.0, 2026-07-05.*
+*Dokument roboczy projektu JFM. Wersja 1.0, 2026-07-05. Audyt stanu i uzupełnienie: wersja 1.1, 2026-07-14.*

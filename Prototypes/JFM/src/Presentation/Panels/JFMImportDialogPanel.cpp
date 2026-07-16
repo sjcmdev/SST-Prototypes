@@ -2,7 +2,10 @@
 
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
 
+#include "App/JFMCommands.hpp"
 #include "App/NativeFileDialog.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Undo/UndoStack.hpp"
 #include "Events/JFMEvents.hpp"
 
 #include <algorithm>
@@ -11,6 +14,7 @@
 #include <cstdio>
 #include <imgui.h>
 #include <implot.h>
+#include <limits>
 #include <map>
 #include <sstream>
 
@@ -24,10 +28,26 @@ namespace SST::Prototypes::JFM
 		const char *DecimalOptions[] = {"auto", ".", ","};
 		const char *TemperatureOptions[] = {"auto", "filename", "header", "off"};
 		const char *VariableSources[] = {"stem", "folder", "parent_folder"};
+		const char *PrefitModels[] = {
+			"SD-0",
+			"SD-Rs",
+			"SD-Rsh",
+			"SD-RsRsh",
+			"SD-0-I_ph",
+			"SD-Rs-I_ph",
+			"SD-Rsh-I_ph",
+			"SD-RsRsh-I_ph",
+			"SD-RsRsh-alpha-Rsh2",
+			"SD-RsRsh-alpha-Rsh2-I_ph"};
 
 		bool ContainsIndex(const std::vector<int> &indices, int index)
 		{
 			return std::find(indices.begin(), indices.end(), index) != indices.end();
+		}
+
+		bool ContainsId(const std::vector<CharacteristicId> &ids, CharacteristicId id)
+		{
+			return std::find(ids.begin(), ids.end(), id) != ids.end();
 		}
 
 		ImVec4 PreviewColor(std::size_t index)
@@ -72,8 +92,20 @@ namespace SST::Prototypes::JFM
 		return request;
 	}
 
-	JFMImportDialogPanel::JFMImportDialogPanel(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> store, Ref<JFMImportDialogState> state, Ref<JFMUserSettingsStore> settings)
-		: IPanel("Import Dialog", false), m_EventBus(std::move(eventBus)), m_Store(std::move(store)), m_State(std::move(state)), m_Settings(std::move(settings))
+	JFMImportDialogPanel::JFMImportDialogPanel(
+		Ref<EventBus> eventBus,
+		Ref<JFMWorkspaceStore> store,
+		Ref<JFMImportDialogState> state,
+		Ref<JFMUserSettingsStore> settings,
+		WeakRef<CommandRegistry> commandRegistry,
+		WeakRef<UndoStack> undoStack)
+		: IPanel("Import Dialog", false),
+		  m_EventBus(std::move(eventBus)),
+		  m_Store(std::move(store)),
+		  m_State(std::move(state)),
+		  m_Settings(std::move(settings)),
+		  m_CommandRegistry(std::move(commandRegistry)),
+		  m_UndoStack(std::move(undoStack))
 	{
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
 		std::snprintf(m_VariableDelimiter.data(), m_VariableDelimiter.size(), "%s", "_");
@@ -90,7 +122,7 @@ namespace SST::Prototypes::JFM
 
 	Ref<IPanel> JFMImportDialogPanel::Clone() const
 	{
-		return CreateRef<JFMImportDialogPanel>(m_EventBus, m_Store, m_State, m_Settings);
+		return CreateRef<JFMImportDialogPanel>(m_EventBus, m_Store, m_State, m_Settings, m_CommandRegistry, m_UndoStack);
 	}
 
 	void JFMImportDialogPanel::Render()
@@ -108,14 +140,29 @@ namespace SST::Prototypes::JFM
 		if (!m_Open)
 			return;
 
-		bool open = true;
-		if (!ImGui::Begin("Import Data", &open, ImGuiWindowFlags_AlwaysAutoResize))
+		if (m_ImportSubmitted && m_Store != nullptr &&
+			!m_Store->IsImportRunning(m_Request.project) &&
+			m_Store->GetProjectRevision(m_Request.project) != m_ImportStartRevision &&
+			m_Store->GetStatusMessage(m_Request.project) == "Import complete.")
 		{
+			m_ImportSubmitted = false;
+			m_SelectAnalysisTab = true;
+		}
+
+		bool open = true;
+		ImGui::SetNextWindowSize(ImVec2(1180.0f, 760.0f), ImGuiCond_FirstUseEver);
+		if (!ImGui::Begin("Import Data", &open))
+		{
+			finishRangeUndoGroup();
 			ImGui::End();
 			renderPreviewWindow();
 			return;
 		}
 
+		if (ImGui::BeginTabBar("##jfm_import_tabs"))
+		{
+			if (ImGui::BeginTabItem("Import"))
+			{
 		ImGui::Text("Files: %d", static_cast<int>(m_Request.paths.size()));
 		if (!m_Request.paths.empty())
 			ImGui::TextWrapped("%s", m_Request.paths.front().String().c_str());
@@ -235,8 +282,8 @@ namespace SST::Prototypes::JFM
 		ImGui::Checkbox("Plot after import", &m_PlotAfterImport);
 
 		const bool validDestination = m_Request.placement != JFMImportPlacement::ExistingSeries || !m_Request.targetSeriesId.empty();
-		ImGui::BeginDisabled(!validDestination);
-		if (ImGui::Button("Import"))
+		ImGui::BeginDisabled(!validDestination || m_ImportSubmitted);
+		if (ImGui::Button(m_ImportSubmitted ? "Importing..." : "Import"))
 		{
 			if (m_EventBus != nullptr)
 				m_EventBus->Queue(ImportRequested{
@@ -249,7 +296,8 @@ namespace SST::Prototypes::JFM
 					InvalidJFMOperationId,
 					m_Request.targetGroupId,
 					m_Request.placement});
-			m_Open = false;
+			m_ImportSubmitted = true;
+			m_ImportStartRevision = m_Store != nullptr ? m_Store->GetProjectRevision(m_Request.project) : 0;
 			m_PreviewOpen = false;
 		}
 		ImGui::EndDisabled();
@@ -259,9 +307,26 @@ namespace SST::Prototypes::JFM
 			m_Open = false;
 			m_PreviewOpen = false;
 		}
+				ImGui::EndTabItem();
+			}
+
+			const ImGuiTabItemFlags analysisFlags = m_SelectAnalysisTab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+			if (ImGui::BeginTabItem("Data range & prefit", nullptr, analysisFlags))
+			{
+				m_SelectAnalysisTab = false;
+				renderAnalysisTab();
+				ImGui::EndTabItem();
+			}
+			else
+			{
+				finishRangeUndoGroup();
+			}
+			ImGui::EndTabBar();
+		}
 
 		if (!open)
 		{
+			finishRangeUndoGroup();
 			m_Open = false;
 			m_PreviewOpen = false;
 		}
@@ -269,8 +334,436 @@ namespace SST::Prototypes::JFM
 		renderPreviewWindow();
 	}
 
+	void JFMImportDialogPanel::renderAnalysisTab()
+	{
+		if (m_Store == nullptr || m_Request.project == InvalidProjectHandle)
+		{
+			ImGui::TextDisabled("No project selected.");
+			return;
+		}
+
+		const JFMProject project = m_Store->GetProjectSnapshot(m_Request.project);
+		std::vector<CharacteristicId> visibleIds;
+		for (const JFMSeries &series : project.series)
+			visibleIds.insert(visibleIds.end(), series.characteristicIds.begin(), series.characteristicIds.end());
+		if (visibleIds.empty())
+		{
+			ImGui::TextDisabled("No imported characteristics.");
+			return;
+		}
+
+		auto projectState = m_Store->CaptureProjectState(m_Request.project);
+		if (!projectState)
+			return;
+		std::vector<CharacteristicId> selectedIds;
+		for (CharacteristicId id : projectState->selectedCharacteristicIds)
+		{
+			if (ContainsId(visibleIds, id))
+				selectedIds.push_back(id);
+		}
+		CharacteristicId active = projectState->selectedCharacteristicId;
+		if (!ContainsId(selectedIds, active))
+			active = selectedIds.empty() ? visibleIds.front() : selectedIds.front();
+		if (selectedIds.empty())
+		{
+			selectedIds = {active};
+			m_Store->SetSelectedCharacteristics(m_Request.project, selectedIds, active);
+		}
+
+		std::vector<CharacteristicId> missingPrefits;
+		for (CharacteristicId id : visibleIds)
+		{
+			const std::optional<JFMPrefitState> state = m_Store->GetPrefitState({m_Request.project, id});
+			const bool curveMissing = m_Store->GetPrefitCurve({m_Request.project, id}) == nullptr;
+			if (!state || state->status == "not_started" || (state->status == "completed" && curveMissing))
+				missingPrefits.push_back(id);
+		}
+		requestPrefit(m_Request.project, std::move(missingPrefits));
+
+		const float treeWidth = std::clamp(ImGui::GetContentRegionAvail().x * 0.27f, 250.0f, 340.0f);
+		if (ImGui::BeginChild("##jfm_analysis_tree", ImVec2(treeWidth, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_ResizeX))
+			renderAnalysisTree(project);
+		ImGui::EndChild();
+		ImGui::SameLine();
+
+		if (ImGui::BeginChild("##jfm_analysis_workspace", ImVec2(0.0f, 0.0f)))
+		{
+			ImGui::Checkbox("Show only active", &m_ShowOnlyActive);
+			ImGui::SameLine();
+			ImGui::TextDisabled("Selected: %d", static_cast<int>(selectedIds.size()));
+
+			std::string selectedModel = "SD-RsRsh";
+			bool mixedModels = false;
+			for (std::size_t index = 0; index < selectedIds.size(); ++index)
+			{
+				const auto state = m_Store->GetPrefitState({m_Request.project, selectedIds[index]});
+				const std::string model = state ? state->modelId : "SD-RsRsh";
+				if (index == 0)
+					selectedModel = model;
+				else if (model != selectedModel)
+					mixedModels = true;
+			}
+			const char *modelPreview = mixedModels ? "Mixed" : selectedModel.c_str();
+			if (ImGui::BeginCombo("Model", modelPreview))
+			{
+				for (const char *model : PrefitModels)
+				{
+					if (ImGui::Selectable(model, !mixedModels && selectedModel == model) && (mixedModels || selectedModel != model))
+					{
+						if (auto registry = m_CommandRegistry.lock())
+						{
+							CommandContext context;
+							context.Set("project", m_Request.project);
+							context.Set("characteristic_ids", selectedIds);
+							context.Set("model_id", std::string(model));
+							(void)registry->Execute(CommandID{JFMSetPrefitModelCommandId}, std::move(context));
+						}
+					}
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			const auto activePrefit = m_Store->GetPrefitState({m_Request.project, active});
+			const bool hasManualRange = activePrefit && activePrefit->manualLowerVoltage && activePrefit->manualUpperVoltage;
+			ImGui::BeginDisabled(!hasManualRange);
+			if (ImGui::Button("Automatic range"))
+			{
+				finishRangeUndoGroup();
+				if (auto registry = m_CommandRegistry.lock())
+				{
+					CommandContext context;
+					context.Set("project", m_Request.project);
+					context.Set("characteristic_id", active);
+					(void)registry->Execute(CommandID{JFMResetFitRangeCommandId}, std::move(context));
+				}
+				m_RangeInitialized = false;
+			}
+			ImGui::EndDisabled();
+
+			const std::vector<CharacteristicId> plotIds = m_ShowOnlyActive
+				? std::vector<CharacteristicId>{active}
+				: visibleIds;
+			renderAnalysisPlot(m_Request.project, plotIds, active);
+			renderPrefitParameters(m_Store->GetPrefitState({m_Request.project, active}));
+		}
+		ImGui::EndChild();
+	}
+
+	void JFMImportDialogPanel::renderAnalysisTree(const JFMProject &project)
+	{
+		std::vector<CharacteristicId> visibleIds;
+		for (const JFMSeries &series : project.series)
+			visibleIds.insert(visibleIds.end(), series.characteristicIds.begin(), series.characteristicIds.end());
+
+		const std::string projectLabel = project.name + "##jfm_analysis_project";
+		if (!ImGui::TreeNodeEx(projectLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
+			return;
+		for (const JFMGroup &group : project.groups)
+		{
+			if (group.parentId.empty())
+				renderAnalysisGroup(project, group, visibleIds);
+		}
+		for (const JFMSeries &series : project.series)
+		{
+			if (series.groupId.empty())
+				renderAnalysisSeries(series, visibleIds);
+		}
+		ImGui::TreePop();
+	}
+
+	void JFMImportDialogPanel::renderAnalysisGroup(const JFMProject &project, const JFMGroup &group, const std::vector<CharacteristicId> &visibleIds)
+	{
+		const std::string label = group.name + "##jfm_analysis_group_" + group.id;
+		if (!ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
+			return;
+		for (const JFMGroup &child : project.groups)
+		{
+			if (child.parentId == group.id)
+				renderAnalysisGroup(project, child, visibleIds);
+		}
+		for (const JFMSeries &series : project.series)
+		{
+			if (series.groupId == group.id)
+				renderAnalysisSeries(series, visibleIds);
+		}
+		ImGui::TreePop();
+	}
+
+	void JFMImportDialogPanel::renderAnalysisSeries(const JFMSeries &series, const std::vector<CharacteristicId> &visibleIds)
+	{
+		const std::string label = series.name + "##jfm_analysis_series_" + series.id;
+		if (!ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
+			return;
+		const auto snapshot = m_Store->CaptureProjectState(m_Request.project);
+		const std::vector<CharacteristicId> selected = snapshot ? snapshot->selectedCharacteristicIds : std::vector<CharacteristicId>{};
+		for (CharacteristicId id : series.characteristicIds)
+		{
+			const auto record = m_Store->FindCharacteristicRecord({m_Request.project, id});
+			if (!record)
+				continue;
+			std::string status;
+			if (record->info.prefit && (record->info.prefit->status == "running" || record->info.prefit->status == "queued"))
+				status = " [running]";
+			else if (record->info.prefit && record->info.prefit->status == "failed")
+				status = " [failed]";
+			const std::string itemLabel = record->info.name + status + "##jfm_analysis_characteristic_" + std::to_string(id);
+			if (ImGui::Selectable(itemLabel.c_str(), ContainsId(selected, id)))
+				selectAnalysisCharacteristic(series, id, visibleIds);
+		}
+		ImGui::TreePop();
+	}
+
+	void JFMImportDialogPanel::selectAnalysisCharacteristic(const JFMSeries &series, CharacteristicId id, const std::vector<CharacteristicId> &visibleIds)
+	{
+		if (m_Store == nullptr)
+			return;
+		finishRangeUndoGroup();
+		const auto snapshot = m_Store->CaptureProjectState(m_Request.project);
+		std::vector<CharacteristicId> selected = snapshot ? snapshot->selectedCharacteristicIds : std::vector<CharacteristicId>{};
+		CharacteristicId primary = id;
+		const ImGuiIO &io = ImGui::GetIO();
+		if (io.KeyShift && snapshot && snapshot->selectedCharacteristicId != InvalidCharacteristicId)
+		{
+			const auto first = std::find(visibleIds.begin(), visibleIds.end(), snapshot->selectedCharacteristicId);
+			const auto last = std::find(visibleIds.begin(), visibleIds.end(), id);
+			if (first != visibleIds.end() && last != visibleIds.end())
+			{
+				const auto begin = std::min(first, last);
+				const auto end = std::max(first, last);
+				selected.assign(begin, end + 1);
+			}
+			else
+			{
+				selected = {id};
+			}
+		}
+		else if (io.KeyCtrl)
+		{
+			if (ContainsId(selected, id))
+				selected.erase(std::remove(selected.begin(), selected.end(), id), selected.end());
+			else
+				selected.push_back(id);
+			if (selected.empty())
+				selected.push_back(id);
+			primary = ContainsId(selected, id) ? id : selected.back();
+		}
+		else
+		{
+			selected = {id};
+		}
+		m_Store->SetSelectedCharacteristics(m_Request.project, std::move(selected), primary, series.id);
+		m_RangeCharacteristic = primary;
+		m_RangeInitialized = false;
+	}
+
+	void JFMImportDialogPanel::renderAnalysisPlot(ProjectHandle project, const std::vector<CharacteristicId> &ids, CharacteristicId active)
+	{
+		if (m_Store == nullptr)
+			return;
+		const auto activeRecord = m_Store->FindCharacteristicRecord({project, active});
+		if (!activeRecord || activeRecord->data == nullptr || activeRecord->data->voltage.empty())
+		{
+			ImGui::TextDisabled("Active characteristic has no data.");
+			return;
+		}
+
+		double minimumVoltage = std::numeric_limits<double>::infinity();
+		double maximumVoltage = -std::numeric_limits<double>::infinity();
+		for (double voltage : activeRecord->data->voltage)
+		{
+			if (std::isfinite(voltage))
+			{
+				minimumVoltage = std::min(minimumVoltage, voltage);
+				maximumVoltage = std::max(maximumVoltage, voltage);
+			}
+		}
+		if (!std::isfinite(minimumVoltage) || !std::isfinite(maximumVoltage) || minimumVoltage >= maximumVoltage)
+		{
+			ImGui::TextDisabled("Active characteristic has no finite voltage range.");
+			return;
+		}
+		if (m_RangeCharacteristic != active)
+		{
+			finishRangeUndoGroup();
+			m_RangeCharacteristic = active;
+			m_RangeInitialized = false;
+		}
+		const auto activePrefit = m_Store->GetPrefitState({project, active});
+		if (!m_RangeInitialized)
+		{
+			m_RangeLower = minimumVoltage;
+			m_RangeUpper = maximumVoltage;
+			if (activePrefit && activePrefit->fitRange.upperVoltage > activePrefit->fitRange.lowerVoltage)
+			{
+				m_RangeLower = activePrefit->fitRange.lowerVoltage;
+				m_RangeUpper = activePrefit->fitRange.upperVoltage;
+			}
+			if (activePrefit && activePrefit->manualLowerVoltage && activePrefit->manualUpperVoltage)
+			{
+				m_RangeLower = *activePrefit->manualLowerVoltage;
+				m_RangeUpper = *activePrefit->manualUpperVoltage;
+			}
+			m_RangeInitialized = true;
+		}
+		else if (!m_RangeUndoGroupOpen && activePrefit && activePrefit->status == "completed")
+		{
+			if (activePrefit->manualLowerVoltage && activePrefit->manualUpperVoltage)
+			{
+				m_RangeLower = *activePrefit->manualLowerVoltage;
+				m_RangeUpper = *activePrefit->manualUpperVoltage;
+			}
+			else if (activePrefit->fitRange.upperVoltage > activePrefit->fitRange.lowerVoltage)
+			{
+				m_RangeLower = activePrefit->fitRange.lowerVoltage;
+				m_RangeUpper = activePrefit->fitRange.upperVoltage;
+			}
+		}
+
+		ImGui::Text("Fit range: %.6g V to %.6g V", m_RangeLower, m_RangeUpper);
+		const ImVec2 plotSize{-1.0f, std::max(300.0f, ImGui::GetContentRegionAvail().y * 0.62f)};
+		if (!ImPlot::BeginPlot("##jfm_data_range_prefit_plot", plotSize))
+			return;
+		ImPlot::SetupAxes("Voltage (V)", "Current / current density", ImPlotAxisFlags_AutoFit, ImPlotAxisFlags_AutoFit);
+		for (std::size_t index = 0; index < ids.size(); ++index)
+		{
+			const auto record = m_Store->FindCharacteristicRecord({project, ids[index]});
+			if (!record || record->data == nullptr)
+				continue;
+			const std::vector<double> &current = record->data->currentDensity.empty()
+				? record->data->current
+				: record->data->currentDensity;
+			const int count = static_cast<int>(std::min(record->data->voltage.size(), current.size()));
+			if (count > 0)
+			{
+				ImPlotSpec rawSpec;
+				rawSpec.LineColor = PreviewColor(index);
+				const std::string label = record->info.name + "##jfm_analysis_raw_" + std::to_string(ids[index]);
+				ImPlot::PlotLine(label.c_str(), record->data->voltage.data(), current.data(), count, rawSpec);
+			}
+			const auto curve = m_Store->GetPrefitCurve({project, ids[index]});
+			if (curve)
+			{
+				const int curveCount = static_cast<int>(std::min(curve->voltage.size(), curve->current.size()));
+				if (curveCount > 0)
+				{
+					ImPlotSpec prefitSpec;
+					prefitSpec.LineColor = ImVec4(0.20f, 0.85f, 0.36f, 1.0f);
+					prefitSpec.LineWeight = 2.0f;
+					prefitSpec.Flags = ImPlotItemFlags_NoLegend;
+					const std::string label = "##jfm_analysis_prefit_" + std::to_string(ids[index]);
+					ImPlot::PlotLine(label.c_str(), curve->voltage.data(), curve->current.data(), curveCount, prefitSpec);
+				}
+			}
+		}
+
+		bool lowerHeld = false;
+		bool upperHeld = false;
+		const ImVec4 rangeColor{0.96f, 0.60f, 0.16f, 1.0f};
+		const bool lowerChanged = ImPlot::DragLineX(3101, &m_RangeLower, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &lowerHeld);
+		const bool upperChanged = ImPlot::DragLineX(3102, &m_RangeUpper, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &upperHeld);
+		const bool changed = lowerChanged || upperChanged;
+		const bool held = lowerHeld || upperHeld;
+		if (changed)
+		{
+			if (!m_RangeUndoGroupOpen)
+			{
+				if (auto undoStack = m_UndoStack.lock())
+				{
+					if (undoStack->BeginGroup("Change fit range"))
+						m_RangeUndoGroupOpen = true;
+				}
+			}
+			m_RangeLower = std::clamp(m_RangeLower, minimumVoltage, maximumVoltage);
+			m_RangeUpper = std::clamp(m_RangeUpper, minimumVoltage, maximumVoltage);
+			if (m_RangeLower > m_RangeUpper)
+				std::swap(m_RangeLower, m_RangeUpper);
+			if (m_RangeLower != m_RangeUpper)
+			{
+				if (auto registry = m_CommandRegistry.lock())
+				{
+					CommandContext context;
+					context.Set("project", project);
+					context.Set("characteristic_id", active);
+					context.Set("lower_voltage", m_RangeLower);
+					context.Set("upper_voltage", m_RangeUpper);
+					(void)registry->Execute(CommandID{JFMSetFitRangeCommandId}, std::move(context));
+				}
+			}
+		}
+		ImPlot::EndPlot();
+
+		if (m_RangeUndoGroupOpen && !held && (m_RangeHeldLastFrame || changed))
+			finishRangeUndoGroup();
+		m_RangeHeldLastFrame = held;
+	}
+
+	void JFMImportDialogPanel::renderPrefitParameters(const std::optional<JFMPrefitState> &prefit) const
+	{
+		if (!prefit)
+			return;
+		ImGui::SeparatorText("Prefit parameters");
+		ImGui::Text("Status: %s", prefit->status.c_str());
+		std::vector<std::string> names;
+		names.reserve(prefit->parameters.size());
+		for (const auto &[name, estimate] : prefit->parameters)
+		{
+			(void)estimate;
+			names.push_back(name);
+		}
+		std::sort(names.begin(), names.end());
+		if (!names.empty() && ImGui::BeginTable("##jfm_prefit_parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Parameter");
+			ImGui::TableSetupColumn("Value");
+			ImGui::TableSetupColumn("Std. error");
+			ImGui::TableSetupColumn("Source");
+			ImGui::TableHeadersRow();
+			for (const std::string &name : names)
+			{
+				const JFMParameterEstimate &estimate = prefit->parameters.at(name);
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(name.c_str());
+				ImGui::TableSetColumnIndex(1);
+				ImGui::Text("%.8g", estimate.value);
+				ImGui::TableSetColumnIndex(2);
+				if (estimate.standardError)
+					ImGui::Text("%.8g", *estimate.standardError);
+				else
+					ImGui::TextDisabled("-");
+				ImGui::TableSetColumnIndex(3);
+				ImGui::TextUnformatted(estimate.source.c_str());
+			}
+			ImGui::EndTable();
+		}
+		for (const std::string &warning : prefit->warnings)
+			ImGui::TextWrapped("Warning: %s", warning.c_str());
+	}
+
+	void JFMImportDialogPanel::requestPrefit(ProjectHandle project, std::vector<CharacteristicId> ids) const
+	{
+		if (m_EventBus != nullptr && !ids.empty())
+			m_EventBus->Queue(PrefitRequested{project, std::move(ids)});
+	}
+
+	void JFMImportDialogPanel::finishRangeUndoGroup(bool cancel)
+	{
+		if (!m_RangeUndoGroupOpen)
+			return;
+		if (auto undoStack = m_UndoStack.lock())
+		{
+			if (cancel)
+				(void)undoStack->CancelGroup();
+			else
+				(void)undoStack->EndGroup();
+		}
+		m_RangeUndoGroupOpen = false;
+		m_RangeHeldLastFrame = false;
+	}
+
 	void JFMImportDialogPanel::loadRequest(JFMImportDialogRequest request)
 	{
+		finishRangeUndoGroup();
 		m_Request = std::move(request);
 		if (m_Request.project == InvalidProjectHandle && m_Store != nullptr)
 			m_Request.project = m_Store->GetActiveProjectHandle();
@@ -285,6 +778,12 @@ namespace SST::Prototypes::JFM
 		m_PreviewScale = 0;
 		m_PreviewFolderIndex = 0;
 		m_PlotAfterImport = m_Settings != nullptr && m_Settings->GetSnapshot().autoPlotAfterImport;
+		m_ImportSubmitted = false;
+		m_SelectAnalysisTab = false;
+		m_ShowOnlyActive = false;
+		m_RangeCharacteristic = InvalidCharacteristicId;
+		m_RangeInitialized = false;
+		m_RangeHeldLastFrame = false;
 		m_SelectedPreviewFileIndices.clear();
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
 		std::snprintf(m_VariableDelimiter.data(), m_VariableDelimiter.size(), "%s", "_");

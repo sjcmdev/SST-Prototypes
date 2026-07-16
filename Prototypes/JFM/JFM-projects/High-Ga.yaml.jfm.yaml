@@ -1,0 +1,4846 @@
+schema_version: 1
+project:
+  id: jfm-project
+  name: Untitled JFM Project
+  metadata:
+    prototype: JFM
+characteristics:
+  - id: 235
+    name: ivd_#1632S_T101_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T101_L0.dat
+    parser: dat
+    temperature_K: 101
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T101_L0
+      short_name: ivd_KS_101.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T101_L0.dat
+      parser: dat
+      temperature_K: 101.0
+      temperature_source: filename
+      T: 101.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T101
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 236
+    name: ivd_#1632S_T111_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T111_L0.dat
+    parser: dat
+    temperature_K: 111
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T111_L0
+      folder: ivd_KS
+      short_name: ivd_KS_111.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T111_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 111.0
+      temperature_source: filename
+      T: 111.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T111
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 237
+    name: ivd_#1632S_T120_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T120_L0.dat
+    parser: dat
+    temperature_K: 120
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T120_L0
+      short_name: ivd_KS_120.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T120_L0.dat
+      parser: dat
+      temperature_K: 120.0
+      temperature_source: filename
+      T: 120.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T120
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 238
+    name: ivd_#1632S_T130_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T130_L0.dat
+    parser: dat
+    temperature_K: 130
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T130_L0
+      folder: ivd_KS
+      short_name: ivd_KS_130.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T130_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 130.0
+      temperature_source: filename
+      T: 130.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T130
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 239
+    name: ivd_#1632S_T140_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T140_L0.dat
+    parser: dat
+    temperature_K: 140
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T140_L0
+      short_name: ivd_KS_140.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T140_L0.dat
+      parser: dat
+      temperature_K: 140.0
+      temperature_source: filename
+      T: 140.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T140
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 240
+    name: ivd_#1632S_T150_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T150_L0.dat
+    parser: dat
+    temperature_K: 150
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T150_L0
+      short_name: ivd_KS_150.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T150_L0.dat
+      parser: dat
+      temperature_K: 150.0
+      temperature_source: filename
+      T: 150.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T150
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 241
+    name: ivd_#1632S_T160_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T160_L0.dat
+    parser: dat
+    temperature_K: 160
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T160_L0
+      folder: ivd_KS
+      short_name: ivd_KS_160.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T160_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 160.0
+      temperature_source: filename
+      T: 160.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T160
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 242
+    name: ivd_#1632S_T170_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T170_L0.dat
+    parser: dat
+    temperature_K: 170
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T170_L0
+      folder: ivd_KS
+      short_name: ivd_KS_170.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T170_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 170.0
+      temperature_source: filename
+      T: 170.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T170
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 243
+    name: ivd_#1632S_T180_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T180_L0.dat
+    parser: dat
+    temperature_K: 180
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T180_L0
+      folder: ivd_KS
+      short_name: ivd_KS_180.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T180_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 180.0
+      temperature_source: filename
+      T: 180.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T180
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 244
+    name: ivd_#1632S_T190_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T190_L0.dat
+    parser: dat
+    temperature_K: 190
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T190_L0
+      short_name: ivd_KS_190.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T190_L0.dat
+      parser: dat
+      temperature_K: 190.0
+      temperature_source: filename
+      T: 190.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T190
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 245
+    name: ivd_#1632S_T200_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T200_L0.dat
+    parser: dat
+    temperature_K: 200
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T200_L0
+      short_name: ivd_KS_200.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T200_L0.dat
+      parser: dat
+      temperature_K: 200.0
+      temperature_source: filename
+      T: 200.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T200
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 246
+    name: ivd_#1632S_T210_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T210_L0.dat
+    parser: dat
+    temperature_K: 210
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T210_L0
+      short_name: ivd_KS_210.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T210_L0.dat
+      parser: dat
+      temperature_K: 210.0
+      temperature_source: filename
+      T: 210.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T210
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 247
+    name: ivd_#1632S_T220_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T220_L0.dat
+    parser: dat
+    temperature_K: 220
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T220_L0
+      short_name: ivd_KS_220.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T220_L0.dat
+      parser: dat
+      temperature_K: 220.0
+      temperature_source: filename
+      T: 220.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T220
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 248
+    name: ivd_#1632S_T230_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T230_L0.dat
+    parser: dat
+    temperature_K: 230
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T230_L0
+      folder: ivd_KS
+      short_name: ivd_KS_230.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T230_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 230.0
+      temperature_source: filename
+      T: 230.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T230
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 249
+    name: ivd_#1632S_T240_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T240_L0.dat
+    parser: dat
+    temperature_K: 240
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T240_L0
+      folder: ivd_KS
+      short_name: ivd_KS_240.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T240_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 240.0
+      temperature_source: filename
+      T: 240.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T240
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 250
+    name: ivd_#1632S_T250_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T250_L0.dat
+    parser: dat
+    temperature_K: 250
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T250_L0
+      folder: ivd_KS
+      short_name: ivd_KS_250.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T250_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 250.0
+      temperature_source: filename
+      T: 250.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T250
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 251
+    name: ivd_#1632S_T259_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T259_L0.dat
+    parser: dat
+    temperature_K: 259
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T259_L0
+      folder: ivd_KS
+      short_name: ivd_KS_259.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T259_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 259.0
+      temperature_source: filename
+      T: 259.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T259
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 252
+    name: ivd_#1632S_T269_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T269_L0.dat
+    parser: dat
+    temperature_K: 269
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T269_L0
+      folder: ivd_KS
+      short_name: ivd_KS_269.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T269_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 269.0
+      temperature_source: filename
+      T: 269.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T269
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 253
+    name: ivd_#1632S_T279_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T279_L0.dat
+    parser: dat
+    temperature_K: 279
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T279_L0
+      folder: ivd_KS
+      short_name: ivd_KS_279.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T279_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 279.0
+      temperature_source: filename
+      T: 279.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      stem_2: T279
+      folder_1: KS
+      stem_3: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 254
+    name: ivd_#1632S_T289_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T289_L0.dat
+    parser: dat
+    temperature_K: 289
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T289_L0
+      short_name: ivd_KS_289.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T289_L0.dat
+      parser: dat
+      temperature_K: 289.0
+      temperature_source: filename
+      T: 289.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T289
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 255
+    name: ivd_#1632S_T299_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T299_L0.dat
+    parser: dat
+    temperature_K: 299
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T299_L0
+      short_name: ivd_KS_299.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T299_L0.dat
+      parser: dat
+      temperature_K: 299.0
+      temperature_source: filename
+      T: 299.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T299
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 256
+    name: ivd_#1632S_T309_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T309_L0.dat
+    parser: dat
+    temperature_K: 309
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T309_L0
+      short_name: ivd_KS_309.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T309_L0.dat
+      parser: dat
+      temperature_K: 309.0
+      temperature_source: filename
+      T: 309.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T309
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 257
+    name: ivd_#1632S_T319_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T319_L0.dat
+    parser: dat
+    temperature_K: 319
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T319_L0
+      short_name: ivd_KS_319.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T319_L0.dat
+      parser: dat
+      temperature_K: 319.0
+      temperature_source: filename
+      T: 319.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T319
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 258
+    name: ivd_#1632S_T329_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T329_L0.dat
+    parser: dat
+    temperature_K: 329
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T329_L0
+      short_name: ivd_KS_329.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T329_L0.dat
+      parser: dat
+      temperature_K: 329.0
+      temperature_source: filename
+      T: 329.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T329
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 259
+    name: ivd_#1632S_T339_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T339_L0.dat
+    parser: dat
+    temperature_K: 339
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T339_L0
+      short_name: ivd_KS_339.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T339_L0.dat
+      parser: dat
+      temperature_K: 339.0
+      temperature_source: filename
+      T: 339.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T339
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 260
+    name: ivd_#1632S_T349_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T349_L0.dat
+    parser: dat
+    temperature_K: 349
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632S_T349_L0
+      short_name: ivd_KS_349.0K_L0
+      folder: ivd_KS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS\ivd_#1632S_T349_L0.dat
+      parser: dat
+      temperature_K: 349.0
+      temperature_source: filename
+      T: 349.0
+      stem_0: ivd
+      stem_1: "#1632S"
+      folder_1: KS
+      stem_2: T349
+      folder_0: ivd
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 261
+    name: ivd_T100_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T100_L0.dat
+    parser: dat
+    temperature_K: 100
+    temperature_source: filename
+    metadata:
+      stem: ivd_T100_L0
+      short_name: ivd_KSe_100.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T100_L0.dat
+      parser: dat
+      temperature_K: 100.0
+      temperature_source: filename
+      T: 100.0
+      stem_0: ivd
+      stem_1: T100
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.29
+      n_points: 231
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 231
+  - id: 262
+    name: ivd_T110_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T110_L0.dat
+    parser: dat
+    temperature_K: 110
+    temperature_source: filename
+    metadata:
+      stem: ivd_T110_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_110.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T110_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 110.0
+      temperature_source: filename
+      T: 110.0
+      stem_0: ivd
+      stem_1: T110
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.29
+      n_points: 231
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 231
+  - id: 263
+    name: ivd_T120_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T120_L0.dat
+    parser: dat
+    temperature_K: 120
+    temperature_source: filename
+    metadata:
+      stem: ivd_T120_L0
+      short_name: ivd_KSe_120.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T120_L0.dat
+      parser: dat
+      temperature_K: 120.0
+      temperature_source: filename
+      T: 120.0
+      stem_0: ivd
+      stem_1: T120
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.29
+      n_points: 231
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 231
+  - id: 264
+    name: ivd_T130_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T130_L0.dat
+    parser: dat
+    temperature_K: 130
+    temperature_source: filename
+    metadata:
+      stem: ivd_T130_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_130.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T130_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 130.0
+      temperature_source: filename
+      T: 130.0
+      stem_0: ivd
+      stem_1: T130
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.19
+      n_points: 221
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 221
+  - id: 265
+    name: ivd_T140_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T140_L0.dat
+    parser: dat
+    temperature_K: 140
+    temperature_source: filename
+    metadata:
+      stem: ivd_T140_L0
+      short_name: ivd_KSe_140.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T140_L0.dat
+      parser: dat
+      temperature_K: 140.0
+      temperature_source: filename
+      T: 140.0
+      stem_0: ivd
+      stem_1: T140
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.09
+      n_points: 211
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 211
+  - id: 266
+    name: ivd_T150_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T150_L0.dat
+    parser: dat
+    temperature_K: 150
+    temperature_source: filename
+    metadata:
+      stem: ivd_T150_L0
+      short_name: ivd_KSe_150.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T150_L0.dat
+      parser: dat
+      temperature_K: 150.0
+      temperature_source: filename
+      T: 150.0
+      stem_0: ivd
+      stem_1: T150
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.09
+      n_points: 211
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 211
+  - id: 267
+    name: ivd_T160_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T160_L0.dat
+    parser: dat
+    temperature_K: 160
+    temperature_source: filename
+    metadata:
+      stem: ivd_T160_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_160.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T160_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 160.0
+      temperature_source: filename
+      T: 160.0
+      stem_0: ivd
+      stem_1: T160
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 268
+    name: ivd_T170_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T170_L0.dat
+    parser: dat
+    temperature_K: 170
+    temperature_source: filename
+    metadata:
+      stem: ivd_T170_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_170.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T170_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 170.0
+      temperature_source: filename
+      T: 170.0
+      stem_0: ivd
+      stem_1: T170
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.89
+      n_points: 191
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 191
+  - id: 269
+    name: ivd_T180_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T180_L0.dat
+    parser: dat
+    temperature_K: 180
+    temperature_source: filename
+    metadata:
+      stem: ivd_T180_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_180.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T180_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 180.0
+      temperature_source: filename
+      T: 180.0
+      stem_0: ivd
+      stem_1: T180
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.79
+      n_points: 181
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 181
+  - id: 270
+    name: ivd_T190_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T190_L0.dat
+    parser: dat
+    temperature_K: 190
+    temperature_source: filename
+    metadata:
+      stem: ivd_T190_L0
+      short_name: ivd_KSe_190.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T190_L0.dat
+      parser: dat
+      temperature_K: 190.0
+      temperature_source: filename
+      T: 190.0
+      stem_0: ivd
+      stem_1: T190
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.79
+      n_points: 181
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 181
+  - id: 271
+    name: ivd_T200_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T200_L0.dat
+    parser: dat
+    temperature_K: 200
+    temperature_source: filename
+    metadata:
+      stem: ivd_T200_L0
+      short_name: ivd_KSe_200.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T200_L0.dat
+      parser: dat
+      temperature_K: 200.0
+      temperature_source: filename
+      T: 200.0
+      stem_0: ivd
+      stem_1: T200
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.59
+      n_points: 161
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 161
+  - id: 272
+    name: ivd_T210_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T210_L0.dat
+    parser: dat
+    temperature_K: 210
+    temperature_source: filename
+    metadata:
+      stem: ivd_T210_L0
+      short_name: ivd_KSe_210.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T210_L0.dat
+      parser: dat
+      temperature_K: 210.0
+      temperature_source: filename
+      T: 210.0
+      stem_0: ivd
+      stem_1: T210
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.59
+      n_points: 161
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 161
+  - id: 273
+    name: ivd_T220_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T220_L0.dat
+    parser: dat
+    temperature_K: 220
+    temperature_source: filename
+    metadata:
+      stem: ivd_T220_L0
+      short_name: ivd_KSe_220.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T220_L0.dat
+      parser: dat
+      temperature_K: 220.0
+      temperature_source: filename
+      T: 220.0
+      stem_0: ivd
+      stem_1: T220
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.39
+      n_points: 141
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 141
+  - id: 274
+    name: ivd_T230_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T230_L0.dat
+    parser: dat
+    temperature_K: 230
+    temperature_source: filename
+    metadata:
+      stem: ivd_T230_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_230.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T230_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 230.0
+      temperature_source: filename
+      T: 230.0
+      stem_0: ivd
+      stem_1: T230
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.39
+      n_points: 141
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 141
+  - id: 275
+    name: ivd_T240_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T240_L0.dat
+    parser: dat
+    temperature_K: 240
+    temperature_source: filename
+    metadata:
+      stem: ivd_T240_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_240.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T240_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 240.0
+      temperature_source: filename
+      T: 240.0
+      stem_0: ivd
+      stem_1: T240
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.19
+      n_points: 121
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 121
+  - id: 276
+    name: ivd_T250_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T250_L0.dat
+    parser: dat
+    temperature_K: 250
+    temperature_source: filename
+    metadata:
+      stem: ivd_T250_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_250.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T250_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 250.0
+      temperature_source: filename
+      T: 250.0
+      stem_0: ivd
+      stem_1: T250
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.19
+      n_points: 121
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 121
+  - id: 277
+    name: ivd_T260_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T260_L0.dat
+    parser: dat
+    temperature_K: 260
+    temperature_source: filename
+    metadata:
+      stem: ivd_T260_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_260.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T260_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 260.0
+      temperature_source: filename
+      T: 260.0
+      stem_0: ivd
+      stem_1: T260
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.09
+      n_points: 111
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 111
+  - id: 278
+    name: ivd_T270_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T270_L0.dat
+    parser: dat
+    temperature_K: 270
+    temperature_source: filename
+    metadata:
+      stem: ivd_T270_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_270.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T270_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 270.0
+      temperature_source: filename
+      T: 270.0
+      stem_0: ivd
+      stem_1: T270
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.09
+      n_points: 111
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 111
+  - id: 279
+    name: ivd_T280_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T280_L0.dat
+    parser: dat
+    temperature_K: 280
+    temperature_source: filename
+    metadata:
+      stem: ivd_T280_L0
+      folder: ivd_KSe
+      short_name: ivd_KSe_280.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T280_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 280.0
+      temperature_source: filename
+      T: 280.0
+      stem_0: ivd
+      stem_1: T280
+      stem_2: L0
+      folder_1: KSe
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.09
+      n_points: 111
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 111
+  - id: 280
+    name: ivd_T290_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T290_L0.dat
+    parser: dat
+    temperature_K: 290
+    temperature_source: filename
+    metadata:
+      stem: ivd_T290_L0
+      short_name: ivd_KSe_290.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T290_L0.dat
+      parser: dat
+      temperature_K: 290.0
+      temperature_source: filename
+      T: 290.0
+      stem_0: ivd
+      stem_1: T290
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 0.99
+      n_points: 101
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 101
+  - id: 281
+    name: ivd_T300_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T300_L0.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: ivd_T300_L0
+      short_name: ivd_KSe_300.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T300_L0.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+      T: 300.0
+      stem_0: ivd
+      stem_1: T300
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 0.99
+      n_points: 101
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 101
+  - id: 282
+    name: ivd_T310_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T310_L0.dat
+    parser: dat
+    temperature_K: 310
+    temperature_source: filename
+    metadata:
+      stem: ivd_T310_L0
+      short_name: ivd_KSe_310.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T310_L0.dat
+      parser: dat
+      temperature_K: 310.0
+      temperature_source: filename
+      T: 310.0
+      stem_0: ivd
+      stem_1: T310
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 0.99
+      n_points: 101
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 101
+  - id: 283
+    name: ivd_T320_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T320_L0.dat
+    parser: dat
+    temperature_K: 320
+    temperature_source: filename
+    metadata:
+      stem: ivd_T320_L0
+      short_name: ivd_KSe_320.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T320_L0.dat
+      parser: dat
+      temperature_K: 320.0
+      temperature_source: filename
+      T: 320.0
+      stem_0: ivd
+      stem_1: T320
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 0.99
+      n_points: 101
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 101
+  - id: 284
+    name: ivd_T330_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T330_L0.dat
+    parser: dat
+    temperature_K: 330
+    temperature_source: filename
+    metadata:
+      stem: ivd_T330_L0
+      short_name: ivd_KSe_330.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T330_L0.dat
+      parser: dat
+      temperature_K: 330.0
+      temperature_source: filename
+      T: 330.0
+      stem_0: ivd
+      stem_1: T330
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 0.99
+      n_points: 101
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 101
+  - id: 285
+    name: ivd_T340_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T340_L0.dat
+    parser: dat
+    temperature_K: 340
+    temperature_source: filename
+    metadata:
+      stem: ivd_T340_L0
+      short_name: ivd_KSe_340.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T340_L0.dat
+      parser: dat
+      temperature_K: 340.0
+      temperature_source: filename
+      T: 340.0
+      stem_0: ivd
+      stem_1: T340
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 0.89
+      n_points: 91
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 91
+  - id: 286
+    name: ivd_T350_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T350_L0.dat
+    parser: dat
+    temperature_K: 350
+    temperature_source: filename
+    metadata:
+      stem: ivd_T350_L0
+      short_name: ivd_KSe_350.0K_L0
+      folder: ivd_KSe
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSe\ivd_T350_L0.dat
+      parser: dat
+      temperature_K: 350.0
+      temperature_source: filename
+      T: 350.0
+      stem_0: ivd
+      stem_1: T350
+      folder_1: KSe
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 0.94
+      n_points: 96
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 96
+  - id: 287
+    name: ivd_T102_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T102_L0.dat
+    parser: dat
+    temperature_K: 102
+    temperature_source: filename
+    metadata:
+      stem: ivd_T102_L0
+      short_name: ivd_KSeS_102.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T102_L0.dat
+      parser: dat
+      temperature_K: 102.0
+      temperature_source: filename
+      T: 102.0
+      stem_0: ivd
+      stem_1: T102
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 288
+    name: ivd_T110_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T110_L0.dat
+    parser: dat
+    temperature_K: 110
+    temperature_source: filename
+    metadata:
+      stem: ivd_T110_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_110.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T110_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 110.0
+      temperature_source: filename
+      T: 110.0
+      stem_0: ivd
+      stem_1: T110
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 289
+    name: ivd_T120_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T120_L0.dat
+    parser: dat
+    temperature_K: 120
+    temperature_source: filename
+    metadata:
+      stem: ivd_T120_L0
+      short_name: ivd_KSeS_120.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T120_L0.dat
+      parser: dat
+      temperature_K: 120.0
+      temperature_source: filename
+      T: 120.0
+      stem_0: ivd
+      stem_1: T120
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 290
+    name: ivd_T130_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T130_L0.dat
+    parser: dat
+    temperature_K: 130
+    temperature_source: filename
+    metadata:
+      stem: ivd_T130_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_130.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T130_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 130.0
+      temperature_source: filename
+      T: 130.0
+      stem_0: ivd
+      stem_1: T130
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 291
+    name: ivd_T140_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T140_L0.dat
+    parser: dat
+    temperature_K: 140
+    temperature_source: filename
+    metadata:
+      stem: ivd_T140_L0
+      short_name: ivd_KSeS_140.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T140_L0.dat
+      parser: dat
+      temperature_K: 140.0
+      temperature_source: filename
+      T: 140.0
+      stem_0: ivd
+      stem_1: T140
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 292
+    name: ivd_T150_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T150_L0.dat
+    parser: dat
+    temperature_K: 150
+    temperature_source: filename
+    metadata:
+      stem: ivd_T150_L0
+      short_name: ivd_KSeS_150.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T150_L0.dat
+      parser: dat
+      temperature_K: 150.0
+      temperature_source: filename
+      T: 150.0
+      stem_0: ivd
+      stem_1: T150
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 293
+    name: ivd_T160_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T160_L0.dat
+    parser: dat
+    temperature_K: 160
+    temperature_source: filename
+    metadata:
+      stem: ivd_T160_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_160.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T160_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 160.0
+      temperature_source: filename
+      T: 160.0
+      stem_0: ivd
+      stem_1: T160
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 294
+    name: ivd_T170_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T170_L0.dat
+    parser: dat
+    temperature_K: 170
+    temperature_source: filename
+    metadata:
+      stem: ivd_T170_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_170.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T170_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 170.0
+      temperature_source: filename
+      T: 170.0
+      stem_0: ivd
+      stem_1: T170
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 295
+    name: ivd_T180_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T180_L0.dat
+    parser: dat
+    temperature_K: 180
+    temperature_source: filename
+    metadata:
+      stem: ivd_T180_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_180.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T180_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 180.0
+      temperature_source: filename
+      T: 180.0
+      stem_0: ivd
+      stem_1: T180
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 296
+    name: ivd_T190_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T190_L0.dat
+    parser: dat
+    temperature_K: 190
+    temperature_source: filename
+    metadata:
+      stem: ivd_T190_L0
+      short_name: ivd_KSeS_190.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T190_L0.dat
+      parser: dat
+      temperature_K: 190.0
+      temperature_source: filename
+      T: 190.0
+      stem_0: ivd
+      stem_1: T190
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 297
+    name: ivd_T200_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T200_L0.dat
+    parser: dat
+    temperature_K: 200
+    temperature_source: filename
+    metadata:
+      stem: ivd_T200_L0
+      short_name: ivd_KSeS_200.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T200_L0.dat
+      parser: dat
+      temperature_K: 200.0
+      temperature_source: filename
+      T: 200.0
+      stem_0: ivd
+      stem_1: T200
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 298
+    name: ivd_T210_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T210_L0.dat
+    parser: dat
+    temperature_K: 210
+    temperature_source: filename
+    metadata:
+      stem: ivd_T210_L0
+      short_name: ivd_KSeS_210.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T210_L0.dat
+      parser: dat
+      temperature_K: 210.0
+      temperature_source: filename
+      T: 210.0
+      stem_0: ivd
+      stem_1: T210
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 299
+    name: ivd_T220_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T220_L0.dat
+    parser: dat
+    temperature_K: 220
+    temperature_source: filename
+    metadata:
+      stem: ivd_T220_L0
+      short_name: ivd_KSeS_220.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T220_L0.dat
+      parser: dat
+      temperature_K: 220.0
+      temperature_source: filename
+      T: 220.0
+      stem_0: ivd
+      stem_1: T220
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 300
+    name: ivd_T230_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T230_L0.dat
+    parser: dat
+    temperature_K: 230
+    temperature_source: filename
+    metadata:
+      stem: ivd_T230_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_230.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T230_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 230.0
+      temperature_source: filename
+      T: 230.0
+      stem_0: ivd
+      stem_1: T230
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 301
+    name: ivd_T240_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T240_L0.dat
+    parser: dat
+    temperature_K: 240
+    temperature_source: filename
+    metadata:
+      stem: ivd_T240_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_240.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T240_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 240.0
+      temperature_source: filename
+      T: 240.0
+      stem_0: ivd
+      stem_1: T240
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 302
+    name: ivd_T250_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T250_L0.dat
+    parser: dat
+    temperature_K: 250
+    temperature_source: filename
+    metadata:
+      stem: ivd_T250_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_250.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T250_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 250.0
+      temperature_source: filename
+      T: 250.0
+      stem_0: ivd
+      stem_1: T250
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 303
+    name: ivd_T260_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T260_L0.dat
+    parser: dat
+    temperature_K: 260
+    temperature_source: filename
+    metadata:
+      stem: ivd_T260_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_260.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T260_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 260.0
+      temperature_source: filename
+      T: 260.0
+      stem_0: ivd
+      stem_1: T260
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 304
+    name: ivd_T270_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T270_L0.dat
+    parser: dat
+    temperature_K: 270
+    temperature_source: filename
+    metadata:
+      stem: ivd_T270_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_270.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T270_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 270.0
+      temperature_source: filename
+      T: 270.0
+      stem_0: ivd
+      stem_1: T270
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 305
+    name: ivd_T280_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T280_L0.dat
+    parser: dat
+    temperature_K: 280
+    temperature_source: filename
+    metadata:
+      stem: ivd_T280_L0
+      folder: ivd_KSeS
+      short_name: ivd_KSeS_280.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T280_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 280.0
+      temperature_source: filename
+      T: 280.0
+      stem_0: ivd
+      stem_1: T280
+      stem_2: L0
+      folder_1: KSeS
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 306
+    name: ivd_T290_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T290_L0.dat
+    parser: dat
+    temperature_K: 290
+    temperature_source: filename
+    metadata:
+      stem: ivd_T290_L0
+      short_name: ivd_KSeS_290.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T290_L0.dat
+      parser: dat
+      temperature_K: 290.0
+      temperature_source: filename
+      T: 290.0
+      stem_0: ivd
+      stem_1: T290
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 307
+    name: ivd_T300_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T300_L0.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: ivd_T300_L0
+      short_name: ivd_KSeS_300.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T300_L0.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+      T: 300.0
+      stem_0: ivd
+      stem_1: T300
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 308
+    name: ivd_T310_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T310_L0.dat
+    parser: dat
+    temperature_K: 310
+    temperature_source: filename
+    metadata:
+      stem: ivd_T310_L0
+      short_name: ivd_KSeS_310.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T310_L0.dat
+      parser: dat
+      temperature_K: 310.0
+      temperature_source: filename
+      T: 310.0
+      stem_0: ivd
+      stem_1: T310
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 309
+    name: ivd_T320_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T320_L0.dat
+    parser: dat
+    temperature_K: 320
+    temperature_source: filename
+    metadata:
+      stem: ivd_T320_L0
+      short_name: ivd_KSeS_320.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T320_L0.dat
+      parser: dat
+      temperature_K: 320.0
+      temperature_source: filename
+      T: 320.0
+      stem_0: ivd
+      stem_1: T320
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 310
+    name: ivd_T330_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T330_L0.dat
+    parser: dat
+    temperature_K: 330
+    temperature_source: filename
+    metadata:
+      stem: ivd_T330_L0
+      short_name: ivd_KSeS_330.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T330_L0.dat
+      parser: dat
+      temperature_K: 330.0
+      temperature_source: filename
+      T: 330.0
+      stem_0: ivd
+      stem_1: T330
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 311
+    name: ivd_T340_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T340_L0.dat
+    parser: dat
+    temperature_K: 340
+    temperature_source: filename
+    metadata:
+      stem: ivd_T340_L0
+      short_name: ivd_KSeS_340.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T340_L0.dat
+      parser: dat
+      temperature_K: 340.0
+      temperature_source: filename
+      T: 340.0
+      stem_0: ivd
+      stem_1: T340
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 312
+    name: ivd_T350_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T350_L0.dat
+    parser: dat
+    temperature_K: 350
+    temperature_source: filename
+    metadata:
+      stem: ivd_T350_L0
+      short_name: ivd_KSeS_350.0K_L0
+      folder: ivd_KSeS
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KSeS\ivd_T350_L0.dat
+      parser: dat
+      temperature_K: 350.0
+      temperature_source: filename
+      T: 350.0
+      stem_0: ivd
+      stem_1: T350
+      folder_1: KSeS
+      stem_2: L0
+      folder_0: ivd
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.79
+      n_points: 281
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 281
+  - id: 313
+    name: ivd_#1632_High_Ga_T100_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T100_L0.dat
+    parser: dat
+    temperature_K: 100
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T100_L0
+      short_name: ivd_REL_100.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T100_L0.dat
+      parser: dat
+      temperature_K: 100.0
+      temperature_source: filename
+      T: 100.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T100
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 314
+    name: ivd_#1632_High_Ga_T111_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T111_L0.dat
+    parser: dat
+    temperature_K: 111
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T111_L0
+      folder: ivd_REL
+      short_name: ivd_REL_111.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T111_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 111.0
+      temperature_source: filename
+      T: 111.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T111
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 315
+    name: ivd_#1632_High_Ga_T121_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T121_L0.dat
+    parser: dat
+    temperature_K: 121
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T121_L0
+      short_name: ivd_REL_121.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T121_L0.dat
+      parser: dat
+      temperature_K: 121.0
+      temperature_source: filename
+      T: 121.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T121
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 316
+    name: ivd_#1632_High_Ga_T130_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T130_L0.dat
+    parser: dat
+    temperature_K: 130
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T130_L0
+      folder: ivd_REL
+      short_name: ivd_REL_130.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T130_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 130.0
+      temperature_source: filename
+      T: 130.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T130
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 317
+    name: ivd_#1632_High_Ga_T140_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T140_L0.dat
+    parser: dat
+    temperature_K: 140
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T140_L0
+      short_name: ivd_REL_140.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T140_L0.dat
+      parser: dat
+      temperature_K: 140.0
+      temperature_source: filename
+      T: 140.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T140
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 318
+    name: ivd_#1632_High_Ga_T150_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T150_L0.dat
+    parser: dat
+    temperature_K: 150
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T150_L0
+      short_name: ivd_REL_150.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T150_L0.dat
+      parser: dat
+      temperature_K: 150.0
+      temperature_source: filename
+      T: 150.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T150
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 319
+    name: ivd_#1632_High_Ga_T160_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T160_L0.dat
+    parser: dat
+    temperature_K: 160
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T160_L0
+      folder: ivd_REL
+      short_name: ivd_REL_160.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T160_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 160.0
+      temperature_source: filename
+      T: 160.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T160
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 320
+    name: ivd_#1632_High_Ga_T170_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T170_L0.dat
+    parser: dat
+    temperature_K: 170
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T170_L0
+      folder: ivd_REL
+      short_name: ivd_REL_170.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T170_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 170.0
+      temperature_source: filename
+      T: 170.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T170
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 321
+    name: ivd_#1632_High_Ga_T180_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T180_L0.dat
+    parser: dat
+    temperature_K: 180
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T180_L0
+      folder: ivd_REL
+      short_name: ivd_REL_180.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T180_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 180.0
+      temperature_source: filename
+      T: 180.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T180
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 322
+    name: ivd_#1632_High_Ga_T190_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T190_L0.dat
+    parser: dat
+    temperature_K: 190
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T190_L0
+      short_name: ivd_REL_190.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T190_L0.dat
+      parser: dat
+      temperature_K: 190.0
+      temperature_source: filename
+      T: 190.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T190
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 323
+    name: ivd_#1632_High_Ga_T200_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T200_L0.dat
+    parser: dat
+    temperature_K: 200
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T200_L0
+      short_name: ivd_REL_200.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T200_L0.dat
+      parser: dat
+      temperature_K: 200.0
+      temperature_source: filename
+      T: 200.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T200
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 324
+    name: ivd_#1632_High_Ga_T210_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T210_L0.dat
+    parser: dat
+    temperature_K: 210
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T210_L0
+      short_name: ivd_REL_210.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T210_L0.dat
+      parser: dat
+      temperature_K: 210.0
+      temperature_source: filename
+      T: 210.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T210
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 325
+    name: ivd_#1632_High_Ga_T220_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T220_L0.dat
+    parser: dat
+    temperature_K: 220
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T220_L0
+      short_name: ivd_REL_220.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T220_L0.dat
+      parser: dat
+      temperature_K: 220.0
+      temperature_source: filename
+      T: 220.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T220
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 326
+    name: ivd_#1632_High_Ga_T230_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T230_L0.dat
+    parser: dat
+    temperature_K: 230
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T230_L0
+      folder: ivd_REL
+      short_name: ivd_REL_230.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T230_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 230.0
+      temperature_source: filename
+      T: 230.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T230
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 327
+    name: ivd_#1632_High_Ga_T240_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T240_L0.dat
+    parser: dat
+    temperature_K: 240
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T240_L0
+      folder: ivd_REL
+      short_name: ivd_REL_240.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T240_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 240.0
+      temperature_source: filename
+      T: 240.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T240
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 328
+    name: ivd_#1632_High_Ga_T249_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T249_L0.dat
+    parser: dat
+    temperature_K: 249
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T249_L0
+      folder: ivd_REL
+      short_name: ivd_REL_249.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T249_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 249.0
+      temperature_source: filename
+      T: 249.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T249
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 329
+    name: ivd_#1632_High_Ga_T259_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T259_L0.dat
+    parser: dat
+    temperature_K: 259
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T259_L0
+      folder: ivd_REL
+      short_name: ivd_REL_259.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T259_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 259.0
+      temperature_source: filename
+      T: 259.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T259
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 330
+    name: ivd_#1632_High_Ga_T269_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T269_L0.dat
+    parser: dat
+    temperature_K: 269
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T269_L0
+      folder: ivd_REL
+      short_name: ivd_REL_269.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T269_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 269.0
+      temperature_source: filename
+      T: 269.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T269
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 331
+    name: ivd_#1632_High_Ga_T279_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T279_L0.dat
+    parser: dat
+    temperature_K: 279
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T279_L0
+      folder: ivd_REL
+      short_name: ivd_REL_279.0K_L0
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T279_L0.dat
+      parent_folder: High-Ga
+      parser: dat
+      temperature_K: 279.0
+      temperature_source: filename
+      T: 279.0
+      stem_0: ivd
+      stem_1: "#1632"
+      stem_2: High
+      folder_1: REL
+      stem_3: Ga
+      folder_0: ivd
+      stem_4: T279
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 332
+    name: ivd_#1632_High_Ga_T289_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T289_L0.dat
+    parser: dat
+    temperature_K: 289
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T289_L0
+      short_name: ivd_REL_289.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T289_L0.dat
+      parser: dat
+      temperature_K: 289.0
+      temperature_source: filename
+      T: 289.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T289
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 333
+    name: ivd_#1632_High_Ga_T300_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T300_L0.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T300_L0
+      short_name: ivd_REL_300.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T300_L0.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+      T: 300.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T300
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 334
+    name: ivd_#1632_High_Ga_T310_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T310_L0.dat
+    parser: dat
+    temperature_K: 310
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T310_L0
+      short_name: ivd_REL_310.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T310_L0.dat
+      parser: dat
+      temperature_K: 310.0
+      temperature_source: filename
+      T: 310.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T310
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 335
+    name: ivd_#1632_High_Ga_T320_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T320_L0.dat
+    parser: dat
+    temperature_K: 320
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T320_L0
+      short_name: ivd_REL_320.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T320_L0.dat
+      parser: dat
+      temperature_K: 320.0
+      temperature_source: filename
+      T: 320.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T320
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 336
+    name: ivd_#1632_High_Ga_T329_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T329_L0.dat
+    parser: dat
+    temperature_K: 329
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T329_L0
+      short_name: ivd_REL_329.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T329_L0.dat
+      parser: dat
+      temperature_K: 329.0
+      temperature_source: filename
+      T: 329.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T329
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 337
+    name: ivd_#1632_High_Ga_T339_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T339_L0.dat
+    parser: dat
+    temperature_K: 339
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T339_L0
+      short_name: ivd_REL_339.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T339_L0.dat
+      parser: dat
+      temperature_K: 339.0
+      temperature_source: filename
+      T: 339.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T339
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+  - id: 338
+    name: ivd_#1632_High_Ga_T349_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T349_L0.dat
+    parser: dat
+    temperature_K: 349
+    temperature_source: filename
+    metadata:
+      stem: ivd_#1632_High_Ga_T349_L0
+      short_name: ivd_REL_349.0K_L0
+      folder: ivd_REL
+      parent_folder: High-Ga
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_REL\ivd_#1632_High_Ga_T349_L0.dat
+      parser: dat
+      temperature_K: 349.0
+      temperature_source: filename
+      T: 349.0
+      stem_0: ivd
+      stem_1: "#1632"
+      folder_1: REL
+      stem_2: High
+      folder_0: ivd
+      stem_3: Ga
+      stem_4: T349
+      stem_5: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 1.99
+      n_points: 201
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 201
+groups:
+  - id: group-11
+    name: High-Ga
+    parent_id: ""
+    metadata:
+      {}
+series:
+  - id: series-10
+    name: Series 1
+    group_id: ""
+    metadata:
+      {}
+    characteristics:
+      []
+  - id: series-12
+    name: ivd_KS
+    group_id: group-11
+    metadata:
+      {}
+    characteristics:
+      - 235
+      - 236
+      - 237
+      - 238
+      - 239
+      - 240
+      - 241
+      - 242
+      - 243
+      - 244
+      - 245
+      - 246
+      - 247
+      - 248
+      - 249
+      - 250
+      - 251
+      - 252
+      - 253
+      - 254
+      - 255
+      - 256
+      - 257
+      - 258
+      - 259
+      - 260
+  - id: series-13
+    name: ivd_KSe
+    group_id: group-11
+    metadata:
+      {}
+    characteristics:
+      - 261
+      - 262
+      - 263
+      - 264
+      - 265
+      - 266
+      - 267
+      - 268
+      - 269
+      - 270
+      - 271
+      - 272
+      - 273
+      - 274
+      - 275
+      - 276
+      - 277
+      - 278
+      - 279
+      - 280
+      - 281
+      - 282
+      - 283
+      - 284
+      - 285
+      - 286
+  - id: series-14
+    name: ivd_KSeS
+    group_id: group-11
+    metadata:
+      {}
+    characteristics:
+      - 287
+      - 288
+      - 289
+      - 290
+      - 291
+      - 292
+      - 293
+      - 294
+      - 295
+      - 296
+      - 297
+      - 298
+      - 299
+      - 300
+      - 301
+      - 302
+      - 303
+      - 304
+      - 305
+      - 306
+      - 307
+      - 308
+      - 309
+      - 310
+      - 311
+      - 312
+  - id: series-15
+    name: ivd_REL
+    group_id: group-11
+    metadata:
+      {}
+    characteristics:
+      - 313
+      - 314
+      - 315
+      - 316
+      - 317
+      - 318
+      - 319
+      - 320
+      - 321
+      - 322
+      - 323
+      - 324
+      - 325
+      - 326
+      - 327
+      - 328
+      - 329
+      - 330
+      - 331
+      - 332
+      - 333
+      - 334
+      - 335
+      - 336
+      - 337
+      - 338
+fit_runs:
+  []
+monte_carlo_runs:
+  []
+derived_analyses:
+  []
+scripts:
+  - id: script-1
+    name: dat_parser.py
+    path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\python\jfm_import\dat_parser.py
+    enabled: true
+    reload_count: 0
+  - id: script-2
+    name: scaps_iv_parser.py
+    path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\python\jfm_import\scaps_iv_parser.py
+    enabled: true
+    reload_count: 0

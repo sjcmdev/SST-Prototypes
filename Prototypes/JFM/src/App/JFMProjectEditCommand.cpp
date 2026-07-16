@@ -41,23 +41,29 @@ namespace SST::Prototypes::JFM
 				}
 				m_After = m_Workspace->CaptureProjectState(m_Request.project);
 				m_Request.apply = {};
-				return m_After
-					? Result<void>{}
-					: Result<void>{makeEditError("Project edit failed.", "The edited project disappeared before its state could be captured.")};
+				if (!m_After)
+					return makeEditError("Project edit failed.", "The edited project disappeared before its state could be captured.");
+				if (m_Request.afterChange)
+					m_Request.afterChange();
+				return {};
 			}
 
 			Result<void> Undo(CommandContext &) override
 			{
-				return m_Before && m_Workspace->RestoreProjectState(m_Request.project, *m_Before)
-					? Result<void>{}
-					: Result<void>{makeEditError("Undo failed.", "The target JFM project is no longer open.")};
+				if (!m_Before || !m_Workspace->RestoreProjectState(m_Request.project, *m_Before))
+					return makeEditError("Undo failed.", "The target JFM project is no longer open.");
+				if (m_Request.afterChange)
+					m_Request.afterChange();
+				return {};
 			}
 
 			Result<void> Redo(CommandContext &) override
 			{
-				return m_After && m_Workspace->RestoreProjectState(m_Request.project, *m_After)
-					? Result<void>{}
-					: Result<void>{makeEditError("Redo failed.", "The target JFM project is no longer open.")};
+				if (!m_After || !m_Workspace->RestoreProjectState(m_Request.project, *m_After))
+					return makeEditError("Redo failed.", "The target JFM project is no longer open.");
+				if (m_Request.afterChange)
+					m_Request.afterChange();
+				return {};
 			}
 
 			std::string Description() const override

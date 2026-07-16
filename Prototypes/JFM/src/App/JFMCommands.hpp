@@ -37,14 +37,19 @@ namespace SST::Prototypes::JFM
 	inline constexpr const char *JFMRemoveScriptCommandId = "jfm.script.remove";
 	inline constexpr const char *JFMUpsertGroupingCommandId = "jfm.grouping.upsert";
 	inline constexpr const char *JFMDeleteGroupingCommandId = "jfm.grouping.delete";
+	inline constexpr const char *JFMSetPrefitModelCommandId = "jfm.prefit.set_model";
+	inline constexpr const char *JFMSetFitRangeCommandId = "jfm.prefit.set_range";
+	inline constexpr const char *JFMResetFitRangeCommandId = "jfm.prefit.reset_range";
 
 	struct JFMProjectEditRequest
 	{
 		using Apply = std::function<Result<void>(JFMWorkspaceStore &, ProjectHandle)>;
+		using AfterChange = std::function<void()>;
 
 		ProjectHandle project = InvalidProjectHandle;
 		std::string description;
 		Apply apply;
+		AfterChange afterChange;
 	};
 
 	struct JFMCommandRegistrationContext

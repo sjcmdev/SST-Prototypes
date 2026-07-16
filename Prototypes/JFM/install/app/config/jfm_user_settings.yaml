@@ -1,0 +1,29 @@
+default_import_directory: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS
+default_projects_directory: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\JFM-projects
+default_scripts_directory: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\python\jfm_import
+default_plot_semilog: true
+default_plot_auto_fit: true
+default_plot_show_legend: false
+default_plot_fit_padding: 0.08
+auto_plot_after_import: false
+default_color_preset: Yello/Red
+color_presets:
+  - name: Cyan/Pink
+    start: [0.15, 0.75, 1, 1]
+    end: [1, 0.12, 0.55, 1]
+  - name: Blue/Orange
+    start: [0.22, 0.45, 1, 1]
+    end: [1, 0.55, 0.05, 1]
+  - name: Green/Yellow
+    start: [0.1, 0.85, 0.35, 1]
+    end: [1, 0.9, 0.15, 1]
+  - name: Violet/Red
+    start: [0.58, 0.2, 0.95, 1]
+    end: [1, 0.18, 0.18, 1]
+  - name: Yello/Red
+    start: [0.99607843, 1, 0, 1]
+    end: [1, 0, 0, 1]
+recent_projects:
+  - D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\JFM-projects\High-Ga.yaml.jfm.yaml
+  - D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\JFM-projects\C002.yaml.jfm.yaml
+  - D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\JFM-projects\R084.yaml.jfm.yaml

@@ -300,6 +300,45 @@ namespace SST::Prototypes::JFM
 		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
+	struct PrefitRequested final : public BusEvent
+	{
+		PrefitRequested() = default;
+		PrefitRequested(ProjectHandle requestedProject, std::vector<CharacteristicId> requestedIds)
+			: project(requestedProject), ids(std::move(requestedIds))
+		{
+		}
+
+		ProjectHandle project = InvalidProjectHandle;
+		std::vector<CharacteristicId> ids;
+	};
+
+	struct PrefitCompleted final : public BusEvent
+	{
+		PrefitCompleted() = default;
+		PrefitCompleted(JFMCharacteristicRef completedRef, std::uint64_t completedGeneration, JFMPrefitState completedState, JFMPrefitCurve completedCurve)
+			: ref(completedRef), generation(completedGeneration), state(std::move(completedState)), curve(std::move(completedCurve))
+		{
+		}
+
+		JFMCharacteristicRef ref;
+		std::uint64_t generation = 0;
+		JFMPrefitState state;
+		JFMPrefitCurve curve;
+	};
+
+	struct PrefitFailed final : public BusEvent
+	{
+		PrefitFailed() = default;
+		PrefitFailed(JFMCharacteristicRef failedRef, std::uint64_t failedGeneration, std::string failure)
+			: ref(failedRef), generation(failedGeneration), error(std::move(failure))
+		{
+		}
+
+		JFMCharacteristicRef ref;
+		std::uint64_t generation = 0;
+		std::string error;
+	};
+
 	struct ExportRawTsvRequested final : public BusEvent
 	{
 		ExportRawTsvRequested() = default;

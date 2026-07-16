@@ -11,7 +11,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	inline constexpr int JFMProjectSchemaVersion = 3;
+	inline constexpr int JFMProjectSchemaVersion = 4;
 	using ProjectHandle = std::uint64_t;
 	inline constexpr ProjectHandle InvalidProjectHandle = 0;
 	using JFMOperationId = std::uint64_t;
@@ -98,6 +98,40 @@ namespace SST::Prototypes::JFM
 		std::string customScriptPath;
 	};
 
+	struct JFMParameterEstimate
+	{
+		double value = 0.0;
+		std::optional<double> standardError;
+		std::string source;
+		std::vector<std::string> warnings;
+	};
+
+	struct JFMFitRange
+	{
+		std::size_t lowerIndex = 0;
+		std::size_t upperIndex = 0;
+		double lowerVoltage = 0.0;
+		double upperVoltage = 0.0;
+		std::string reason = "automatic";
+	};
+
+	struct JFMPrefitState
+	{
+		std::string modelId = "SD-RsRsh";
+		std::string status = "not_started";
+		std::optional<double> manualLowerVoltage;
+		std::optional<double> manualUpperVoltage;
+		JFMFitRange fitRange;
+		std::unordered_map<std::string, JFMParameterEstimate> parameters;
+		std::vector<std::string> warnings;
+	};
+
+	struct JFMPrefitCurve
+	{
+		std::vector<double> voltage;
+		std::vector<double> current;
+	};
+
 	enum class JFMImportPlacement
 	{
 		NewSeries,
@@ -120,6 +154,7 @@ namespace SST::Prototypes::JFM
 		JFMQualityControl qc;
 		std::unordered_map<std::string, std::string> metadata;
 		JFMImportOptions importOptions;
+		std::optional<JFMPrefitState> prefit;
 	};
 
 	struct JFMCharacteristicData

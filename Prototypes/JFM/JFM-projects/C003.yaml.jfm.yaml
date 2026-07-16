@@ -1,0 +1,1203 @@
+schema_version: 1
+project:
+  id: jfm-project
+  name: Untitled JFM Project
+  metadata:
+    prototype: JFM
+characteristics:
+  - id: 1
+    name: IV_C003_Z015_19_290,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_290,0K.dat
+    parser: dat
+    temperature_K: 290
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z015_19_290,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_290,0K.dat
+      parser: dat
+      temperature_K: 290.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 2
+    name: IV_C003_Z015_19_300,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_300,0K.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z015_19_300,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_300,0K.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 3
+    name: IV_C003_Z015_19_310,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_310,0K.dat
+    parser: dat
+    temperature_K: 310
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z015_19_310,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_310,0K.dat
+      parser: dat
+      temperature_K: 310.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 4
+    name: IV_C003_Z015_19_320,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_320,0K.dat
+    parser: dat
+    temperature_K: 320
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z015_19_320,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_320,0K.dat
+      parser: dat
+      temperature_K: 320.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 5
+    name: IV_C003_Z015_19_330,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_330,0K.dat
+    parser: dat
+    temperature_K: 330
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z015_19_330,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_330,0K.dat
+      parser: dat
+      temperature_K: 330.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 6
+    name: IV_C003_Z015_19_340,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_340,0K.dat
+    parser: dat
+    temperature_K: 340
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z015_19_340,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_340,0K.dat
+      parser: dat
+      temperature_K: 340.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 7
+    name: IV_C003_Z015_19_350,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_350,0K.dat
+    parser: dat
+    temperature_K: 350
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z015_19_350,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_350,0K.dat
+      parser: dat
+      temperature_K: 350.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 8
+    name: IV_C003_Z015_19_360,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_360,0K.dat
+    parser: dat
+    temperature_K: 360
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z015_19_360,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z015\IV_C003_Z015_19_360,0K.dat
+      parser: dat
+      temperature_K: 360.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 9
+    name: IV_C003_Z016_08_290,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_290,0K.dat
+    parser: dat
+    temperature_K: 290
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z016_08_290,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_290,0K.dat
+      parser: dat
+      temperature_K: 290.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 10
+    name: IV_C003_Z016_08_300,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_300,0K.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z016_08_300,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_300,0K.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 11
+    name: IV_C003_Z016_08_310,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_310,0K.dat
+    parser: dat
+    temperature_K: 310
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z016_08_310,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_310,0K.dat
+      parser: dat
+      temperature_K: 310.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 12
+    name: IV_C003_Z016_08_320,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_320,0K.dat
+    parser: dat
+    temperature_K: 320
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z016_08_320,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_320,0K.dat
+      parser: dat
+      temperature_K: 320.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 13
+    name: IV_C003_Z016_08_330,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_330,0K.dat
+    parser: dat
+    temperature_K: 330
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z016_08_330,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_330,0K.dat
+      parser: dat
+      temperature_K: 330.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 14
+    name: IV_C003_Z016_08_340,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_340,0K.dat
+    parser: dat
+    temperature_K: 340
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z016_08_340,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_340,0K.dat
+      parser: dat
+      temperature_K: 340.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 15
+    name: IV_C003_Z016_08_350,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_350,0K.dat
+    parser: dat
+    temperature_K: 350
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z016_08_350,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_350,0K.dat
+      parser: dat
+      temperature_K: 350.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 16
+    name: IV_C003_Z016_08_360,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_360,0K.dat
+    parser: dat
+    temperature_K: 360
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z016_08_360,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z016\IV_C003_Z016_08_360,0K.dat
+      parser: dat
+      temperature_K: 360.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 17
+    name: IV_C003_Z035_19_290,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_290,0K.dat
+    parser: dat
+    temperature_K: 290
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z035_19_290,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_290,0K.dat
+      parser: dat
+      temperature_K: 290.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 18
+    name: IV_C003_Z035_19_300,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_300,0K.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z035_19_300,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_300,0K.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 19
+    name: IV_C003_Z035_19_310,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_310,0K.dat
+    parser: dat
+    temperature_K: 310
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z035_19_310,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_310,0K.dat
+      parser: dat
+      temperature_K: 310.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 20
+    name: IV_C003_Z035_19_320,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_320,0K.dat
+    parser: dat
+    temperature_K: 320
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z035_19_320,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_320,0K.dat
+      parser: dat
+      temperature_K: 320.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 21
+    name: IV_C003_Z035_19_330,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_330,0K.dat
+    parser: dat
+    temperature_K: 330
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z035_19_330,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_330,0K.dat
+      parser: dat
+      temperature_K: 330.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 22
+    name: IV_C003_Z035_19_340,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_340,0K.dat
+    parser: dat
+    temperature_K: 340
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z035_19_340,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_340,0K.dat
+      parser: dat
+      temperature_K: 340.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 23
+    name: IV_C003_Z035_19_350,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_350,0K.dat
+    parser: dat
+    temperature_K: 350
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z035_19_350,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_350,0K.dat
+      parser: dat
+      temperature_K: 350.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 24
+    name: IV_C003_Z035_19_360,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_360,0K.dat
+    parser: dat
+    temperature_K: 360
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z035_19_360,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z035\IV_C003_Z035_19_360,0K.dat
+      parser: dat
+      temperature_K: 360.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 25
+    name: IV_C003_Z036_08_290,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_290,0K.dat
+    parser: dat
+    temperature_K: 290
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z036_08_290,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_290,0K.dat
+      parser: dat
+      temperature_K: 290.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 26
+    name: IV_C003_Z036_08_300,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_300,0K.dat
+    parser: dat
+    temperature_K: 300
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z036_08_300,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_300,0K.dat
+      parser: dat
+      temperature_K: 300.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 27
+    name: IV_C003_Z036_08_310,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_310,0K.dat
+    parser: dat
+    temperature_K: 310
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z036_08_310,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_310,0K.dat
+      parser: dat
+      temperature_K: 310.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 28
+    name: IV_C003_Z036_08_320,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_320,0K.dat
+    parser: dat
+    temperature_K: 320
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z036_08_320,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_320,0K.dat
+      parser: dat
+      temperature_K: 320.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 29
+    name: IV_C003_Z036_08_330,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_330,0K.dat
+    parser: dat
+    temperature_K: 330
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z036_08_330,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_330,0K.dat
+      parser: dat
+      temperature_K: 330.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 30
+    name: IV_C003_Z036_08_340,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_340,0K.dat
+    parser: dat
+    temperature_K: 340
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z036_08_340,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_340,0K.dat
+      parser: dat
+      temperature_K: 340.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 31
+    name: IV_C003_Z036_08_350,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_350,0K.dat
+    parser: dat
+    temperature_K: 350
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z036_08_350,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_350,0K.dat
+      parser: dat
+      temperature_K: 350.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+  - id: 32
+    name: IV_C003_Z036_08_360,0K
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_360,0K.dat
+    parser: dat
+    temperature_K: 360
+    temperature_source: filename
+    metadata:
+      stem: IV_C003_Z036_08_360,0K
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\C003\Z036\IV_C003_Z036_08_360,0K.dat
+      parser: dat
+      temperature_K: 360.0
+      temperature_source: filename
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.1
+      v_stop: 1
+      n_points: 220
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 220
+groups:
+  - id: group-10
+    name: C003
+    parent_id: ""
+  - id: group-11
+    name: Z015
+    parent_id: group-10
+  - id: group-13
+    name: Z016
+    parent_id: group-10
+  - id: group-15
+    name: Z035
+    parent_id: group-10
+  - id: group-17
+    name: Z036
+    parent_id: group-10
+series:
+  - id: series-default
+    name: Series 1
+    group_id: ""
+    characteristics:
+      []
+  - id: series-12
+    name: Imported Data
+    group_id: group-11
+    characteristics:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+  - id: series-14
+    name: Imported Data
+    group_id: group-13
+    characteristics:
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+  - id: series-16
+    name: Imported Data
+    group_id: group-15
+    characteristics:
+      - 17
+      - 18
+      - 19
+      - 20
+      - 21
+      - 22
+      - 23
+      - 24
+  - id: series-18
+    name: Imported Data
+    group_id: group-17
+    characteristics:
+      - 25
+      - 26
+      - 27
+      - 28
+      - 29
+      - 30
+      - 31
+      - 32
+fit_runs:
+  []
+monte_carlo_runs:
+  []
+derived_analyses:
+  []

@@ -12,6 +12,7 @@ namespace SST
 	class KeymapResolver;
 	class Notifier;
 	class ProgressTracker;
+	class UndoStack;
 
 	struct ApplicationRuntimeServices
 	{
@@ -19,6 +20,7 @@ namespace SST
 		WeakRef<JobSystem> jobSystem;
 		WeakRef<ProgressTracker> progressTracker;
 		WeakRef<CommandRegistry> commandRegistry;
+		WeakRef<UndoStack> undoStack;
 		WeakRef<KeymapResolver> keymapResolver;
 		WeakRef<ContextManager> contextManager;
 		WeakRef<Notifier> notifier;

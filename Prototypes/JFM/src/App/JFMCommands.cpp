@@ -922,6 +922,75 @@ namespace SST::Prototypes::JFM
 
 		registerEditCommand(
 			registry,
+			CommandMeta{CommandID{JFMSetPrefitModelCommandId}, "Set Prefit Model", "JFM", "Set the prefit model for selected characteristics.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
+			workspace,
+			[workspace, eventBus](CommandContext &commandContext) {
+				const ProjectHandle project = projectFromContext(workspace, commandContext);
+				std::vector<CharacteristicId> ids = workspace->GetSelectedCharacteristicIds();
+				if (auto *value = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids"))
+					ids = *value;
+				const std::string modelId = contextString(commandContext, "model_id", "SD-RsRsh");
+				return JFMProjectEditRequest{
+					project,
+					"Change prefit model",
+					[ids, modelId](JFMWorkspaceStore &store, ProjectHandle handle) {
+						(void)store.SetPrefitModel(handle, ids, modelId);
+						return Result<void>{};
+					},
+					[eventBus, project, ids]() {
+						if (eventBus != nullptr && !ids.empty())
+							eventBus->Queue(PrefitRequested{project, ids});
+					}};
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMSetFitRangeCommandId}, "Set Fit Range", "JFM", "Set a manual fit range for one characteristic.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
+			workspace,
+			[workspace, eventBus](CommandContext &commandContext) {
+				const ProjectHandle project = projectFromContext(workspace, commandContext);
+				const CharacteristicId id = commandContext.TryGet<CharacteristicId>("characteristic_id")
+					? *commandContext.TryGet<CharacteristicId>("characteristic_id")
+					: workspace->GetSelectedCharacteristicId();
+				const double lower = commandContext.TryGet<double>("lower_voltage") ? *commandContext.TryGet<double>("lower_voltage") : 0.0;
+				const double upper = commandContext.TryGet<double>("upper_voltage") ? *commandContext.TryGet<double>("upper_voltage") : 0.0;
+				return JFMProjectEditRequest{
+					project,
+					"Change fit range",
+					[id, lower, upper](JFMWorkspaceStore &store, ProjectHandle handle) {
+						(void)store.SetManualFitRange(handle, id, lower, upper);
+						return Result<void>{};
+					},
+					[eventBus, project, id]() {
+						if (eventBus != nullptr && id != InvalidCharacteristicId)
+							eventBus->Queue(PrefitRequested{project, {id}});
+					}};
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMResetFitRangeCommandId}, "Reset Fit Range", "JFM", "Restore automatic range detection.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
+			workspace,
+			[workspace, eventBus](CommandContext &commandContext) {
+				const ProjectHandle project = projectFromContext(workspace, commandContext);
+				const CharacteristicId id = commandContext.TryGet<CharacteristicId>("characteristic_id")
+					? *commandContext.TryGet<CharacteristicId>("characteristic_id")
+					: workspace->GetSelectedCharacteristicId();
+				return JFMProjectEditRequest{
+					project,
+					"Reset fit range",
+					[id](JFMWorkspaceStore &store, ProjectHandle handle) {
+						(void)store.ResetFitRange(handle, id);
+						return Result<void>{};
+					},
+					[eventBus, project, id]() {
+						if (eventBus != nullptr && id != InvalidCharacteristicId)
+							eventBus->Queue(PrefitRequested{project, {id}});
+					}};
+			});
+
+		registerEditCommand(
+			registry,
 			CommandMeta{CommandID{JFMImportApplyCommandId}, "Apply Imported Data", "JFM", "Apply one completed import as an undoable project edit.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
 			workspace,
 			[workspace, eventBus](CommandContext &commandContext) {
@@ -930,29 +999,44 @@ namespace SST::Prototypes::JFM
 					batches = std::move(*value);
 				const std::string targetGroupId = contextString(commandContext, "target_group_id");
 				const bool plotAfterImport = commandContext.TryGet<bool>("plot_after_import") != nullptr && *commandContext.TryGet<bool>("plot_after_import");
-				return makeEditRequest(workspace, commandContext, "Import JFM data", [batches = std::move(batches), targetGroupId, plotAfterImport, eventBus](JFMWorkspaceStore &store, ProjectHandle project) mutable {
-					for (ImportCompleted &batch : batches)
-					{
-						if (batch.characteristics.empty())
-							continue;
-						std::string seriesId = batch.targetSeriesId;
-						if (seriesId.empty())
+				const ProjectHandle project = projectFromContext(workspace, commandContext);
+				auto importedIds = CreateRef<std::vector<CharacteristicId>>();
+				JFMProjectEditRequest request{
+					project,
+					"Import JFM data",
+					[batches = std::move(batches), targetGroupId, plotAfterImport, eventBus, importedIds](JFMWorkspaceStore &store, ProjectHandle targetProject) mutable {
+						std::string selectedSeries;
+						for (ImportCompleted &batch : batches)
 						{
-							const std::string groupId = batch.groupPath.empty()
-								? targetGroupId
-								: store.FindOrCreateGroupPath(project, batch.groupPath, targetGroupId);
-							seriesId = store.AddSeries(project, batch.seriesName.empty() ? "Series" : batch.seriesName, groupId).id;
+							if (batch.characteristics.empty())
+								continue;
+							std::string seriesId = batch.targetSeriesId;
+							if (seriesId.empty())
+							{
+								const std::string groupId = batch.groupPath.empty()
+									? targetGroupId
+									: store.FindOrCreateGroupPath(targetProject, batch.groupPath, targetGroupId);
+								seriesId = store.AddSeries(targetProject, batch.seriesName.empty() ? "Series" : batch.seriesName, groupId).id;
+							}
+							std::vector<CharacteristicId> added = store.AddCharacteristicRecords(targetProject, std::move(batch.characteristics), seriesId);
+							selectedSeries = seriesId;
+							importedIds->insert(importedIds->end(), added.begin(), added.end());
+							if (plotAfterImport && eventBus != nullptr && !added.empty())
+							{
+								const std::string title = batch.seriesName.empty() ? "Series" : batch.seriesName;
+								eventBus->Queue(PlotRequested{targetProject, title, {{"import", title, std::move(added), {}, {}}}});
+							}
 						}
-						std::vector<CharacteristicId> added = store.AddCharacteristicRecords(project, std::move(batch.characteristics), seriesId);
-						if (plotAfterImport && eventBus != nullptr && !added.empty())
-						{
-							const std::string title = batch.seriesName.empty() ? "Series" : batch.seriesName;
-							eventBus->Queue(PlotRequested{project, title, {{"import", title, std::move(added), {}, {}}}});
-						}
-					}
-					store.SetStatusMessage(project, "Import complete.");
-					return Result<void>{};
-				});
+						if (!importedIds->empty())
+							store.SetSelectedCharacteristics(targetProject, *importedIds, importedIds->back(), selectedSeries);
+						store.SetStatusMessage(targetProject, "Import complete.");
+						return Result<void>{};
+					},
+					[eventBus, project, importedIds]() {
+						if (eventBus != nullptr && !importedIds->empty())
+							eventBus->Queue(PrefitRequested{project, *importedIds});
+					}};
+				return request;
 			});
 
 		registerCommand(

@@ -821,6 +821,7 @@ namespace SST
 		m_RuntimeServices.jobSystem = coreLayer->GetJobSystemHandle();
 		m_RuntimeServices.progressTracker = coreLayer->GetProgressTrackerHandle();
 		m_RuntimeServices.commandRegistry = coreLayer->GetCommandRegistryHandle();
+		m_RuntimeServices.undoStack = coreLayer->GetUndoStackHandle();
 		m_RuntimeServices.keymapResolver = coreLayer->GetKeymapResolverHandle();
 		m_RuntimeServices.contextManager = coreLayer->GetContextManagerHandle();
 		m_RuntimeServices.notifier = CreateWeakRef(m_Notifier);

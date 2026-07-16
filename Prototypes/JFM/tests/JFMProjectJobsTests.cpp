@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <future>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -11,9 +12,11 @@
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMImportPreviewJob.hpp"
 #include "IO/JFMImportPaths.hpp"
+#include "IO/JFMPrefitJob.hpp"
 #include "IO/JFMProjectJobs.hpp"
 #include "IO/JFMPythonBindings.hpp"
 #include "IO/JFMPythonImportBridge.hpp"
+#include "IO/JFMPythonPrefitBridge.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 #include "ScientificRuntime/Python/PythonInterpreter.hpp"
 
@@ -100,6 +103,27 @@ namespace SST::Prototypes::JFM
 		(void)saveSub;
 		(void)loadSub;
 		(void)FileSystem::Remove(path.Native());
+	}
+
+	TEST(JFMProjectJobsTests, PrefitWorkQueueKeepsOnlyLatestGeneration)
+	{
+		auto queue = CreateRef<JFMPrefitWorkQueue>();
+		JFMPrefitWorkItem first;
+		first.ref = {4, 7};
+		first.generation = 1;
+		JFMPrefitWorkItem latest = first;
+		latest.generation = 2;
+
+		EXPECT_TRUE(queue->Enqueue({first}));
+		EXPECT_FALSE(queue->Enqueue({latest}));
+		auto batch = queue->TakeNext();
+		ASSERT_TRUE(batch);
+		ASSERT_EQ(batch->size(), 1);
+		EXPECT_EQ(batch->front().generation, 2);
+		EXPECT_FALSE(queue->TakeNext());
+		EXPECT_TRUE(queue->Enqueue({first}));
+		queue->Reset();
+		EXPECT_TRUE(queue->Enqueue({latest}));
 	}
 
 	TEST(JFMProjectJobsTests, ImportJobPublishesProgressAndTerminalEvent)
@@ -299,6 +323,55 @@ namespace SST::Prototypes::JFM
 		Result<JFMImportBatchResult> result = workerResult.get();
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
 		ASSERT_FALSE(result->characteristics.empty());
+#endif
+	}
+
+	TEST(JFMProjectJobsTests, PythonPrefitBridgeReturnsManualRangeParametersAndCurve)
+	{
+#if DS_PYTHON_CAPI_AVAILABLE
+		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
+		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
+		auto runtime = EnsurePythonRuntimeForBridgeTests();
+		ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+
+		auto data = CreateRef<JFMCharacteristicData>();
+		constexpr std::size_t pointCount = 180;
+		data->voltage.reserve(pointCount);
+		data->current.reserve(pointCount);
+		for (std::size_t index = 0; index < pointCount; ++index)
+		{
+			const double voltage = -0.1 + static_cast<double>(index) / static_cast<double>(pointCount - 1);
+			data->voltage.push_back(voltage);
+			data->current.push_back(2.0e-9 * std::expm1(voltage / (1.6 * 8.6e-5 * 300.0)) + voltage / 2.0e4);
+		}
+		JFMCharacteristicRecord characteristic;
+		characteristic.info.id = 1;
+		characteristic.info.name = "Synthetic diode";
+		characteristic.info.temperatureK = 300.0;
+		characteristic.info.prefit = JFMPrefitState{};
+		characteristic.info.prefit->modelId = "SD-RsRsh";
+		characteristic.info.prefit->manualLowerVoltage = 0.2;
+		characteristic.info.prefit->manualUpperVoltage = 0.65;
+		characteristic.data = data;
+
+		const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+		JFMPythonPrefitBridge bridge(pythonRoot);
+		auto result = bridge.Run(characteristic);
+		PythonInterpreter::ReleaseRuntimeGil(gil);
+
+		ASSERT_TRUE(result) << result.Error().technicalDetails;
+		EXPECT_EQ(result->state.fitRange.reason, "manual");
+		EXPECT_GE(result->state.fitRange.lowerVoltage, 0.19);
+		EXPECT_LE(result->state.fitRange.upperVoltage, 0.66);
+		EXPECT_TRUE(result->state.parameters.contains("I0"));
+		EXPECT_TRUE(result->state.parameters.contains("A"));
+		EXPECT_EQ(result->curve.voltage.size(), result->curve.current.size());
+		ASSERT_FALSE(result->curve.current.empty());
+		EXPECT_TRUE(std::all_of(result->curve.current.begin(), result->curve.current.end(), [](double value) {
+			return std::isfinite(value);
+		}));
+#else
+		GTEST_SKIP() << "Embedded Python is unavailable in this build.";
 #endif
 	}
 

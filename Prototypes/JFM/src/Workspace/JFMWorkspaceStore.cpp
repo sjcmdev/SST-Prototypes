@@ -235,6 +235,12 @@ namespace SST::Prototypes::JFM
 		value.selectedCharacteristicId = snapshot.selectedCharacteristicId;
 		value.selectedCharacteristicIds = std::move(snapshot.selectedCharacteristicIds);
 		value.revision = snapshot.revision;
+		value.prefitCurves.clear();
+		for (auto &[id, generation] : value.prefitGenerations)
+		{
+			(void)id;
+			++generation;
+		}
 		updateNextCharacteristicIdLocked(value);
 		ensureSelectionLocked(value);
 		if (activate)
@@ -421,6 +427,26 @@ namespace SST::Prototypes::JFM
 		return ids;
 	}
 
+	std::optional<JFMPrefitState> JFMWorkspaceStore::GetPrefitState(JFMCharacteristicRef ref) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return std::nullopt;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		return info ? info->get().prefit : std::nullopt;
+	}
+
+	Ref<const JFMPrefitCurve> JFMWorkspaceStore::GetPrefitCurve(JFMCharacteristicRef ref) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return {};
+		const auto curve = document->get().prefitCurves.find(ref.characteristic);
+		return curve == document->get().prefitCurves.end() ? Ref<const JFMPrefitCurve>{} : curve->second;
+	}
+
 	JFMGroup JFMWorkspaceStore::AddGroup(std::string name, std::string parentId)
 	{
 		return AddGroup(GetActiveProjectHandle(), std::move(name), std::move(parentId));
@@ -556,6 +582,8 @@ namespace SST::Prototypes::JFM
 			else
 				document.project.characteristics.push_back(characteristic.info);
 			document.characteristicData[characteristic.info.id] = std::move(characteristic.data);
+			document.prefitCurves.erase(characteristic.info.id);
+			++document.prefitGenerations[characteristic.info.id];
 			target.characteristicIds.push_back(characteristic.info.id);
 			document.selectedCharacteristicId = characteristic.info.id;
 			addedIds.push_back(characteristic.info.id);
@@ -587,6 +615,8 @@ namespace SST::Prototypes::JFM
 		if (document.project.characteristics.size() == oldSize)
 			return false;
 		document.characteristicData.erase(id);
+		document.prefitCurves.erase(id);
+		document.prefitGenerations.erase(id);
 		removeCharacteristicReferencesLocked(document, id);
 		document.selectedCharacteristicIds.erase(std::remove(document.selectedCharacteristicIds.begin(), document.selectedCharacteristicIds.end(), id), document.selectedCharacteristicIds.end());
 		if (document.selectedCharacteristicId == id)
@@ -618,6 +648,8 @@ namespace SST::Prototypes::JFM
 				return info.id == id;
 			}), document.project.characteristics.end());
 			document.characteristicData.erase(id);
+			document.prefitCurves.erase(id);
+			document.prefitGenerations.erase(id);
 			document.selectedCharacteristicIds.erase(std::remove(document.selectedCharacteristicIds.begin(), document.selectedCharacteristicIds.end(), id), document.selectedCharacteristicIds.end());
 		}
 		document.project.series.erase(std::remove_if(document.project.series.begin(), document.project.series.end(), [&seriesId](const JFMSeries &candidate) {
@@ -665,7 +697,11 @@ namespace SST::Prototypes::JFM
 			return std::find(characteristicIds.begin(), characteristicIds.end(), info.id) != characteristicIds.end();
 		}), document.project.characteristics.end());
 		for (CharacteristicId id : characteristicIds)
+		{
 			document.characteristicData.erase(id);
+			document.prefitCurves.erase(id);
+			document.prefitGenerations.erase(id);
+		}
 		document.project.series.erase(std::remove_if(document.project.series.begin(), document.project.series.end(), [&seriesIds](const JFMSeries &series) {
 			return std::find(seriesIds.begin(), seriesIds.end(), series.id) != seriesIds.end();
 		}), document.project.series.end());
@@ -858,6 +894,148 @@ namespace SST::Prototypes::JFM
 			info->get().metadata.erase("short_name");
 		else
 			info->get().metadata["short_name"] = std::move(shortName);
+		bumpRevisionLocked(document->get());
+		return true;
+	}
+
+	bool JFMWorkspaceStore::SetPrefitModel(ProjectHandle handle, const std::vector<CharacteristicId> &ids, const std::string &modelId)
+	{
+		if (modelId.empty())
+			return false;
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return false;
+		bool changed = false;
+		for (CharacteristicId id : ids)
+		{
+			auto info = findInfoLocked(document->get(), id);
+			if (!info)
+				continue;
+			JFMPrefitState &state = info->get().prefit.emplace(info->get().prefit.value_or(JFMPrefitState{}));
+			if (state.modelId == modelId)
+				continue;
+			state.modelId = modelId;
+			state.status = "queued";
+			state.warnings.clear();
+			++document->get().prefitGenerations[id];
+			changed = true;
+		}
+		if (changed)
+			bumpRevisionLocked(document->get());
+		return changed;
+	}
+
+	bool JFMWorkspaceStore::SetManualFitRange(ProjectHandle handle, CharacteristicId id, double lowerVoltage, double upperVoltage)
+	{
+		if (!std::isfinite(lowerVoltage) || !std::isfinite(upperVoltage) || lowerVoltage == upperVoltage)
+			return false;
+		if (lowerVoltage > upperVoltage)
+			std::swap(lowerVoltage, upperVoltage);
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return false;
+		auto info = findInfoLocked(document->get(), id);
+		if (!info)
+			return false;
+		JFMPrefitState &state = info->get().prefit.emplace(info->get().prefit.value_or(JFMPrefitState{}));
+		if (state.manualLowerVoltage == lowerVoltage && state.manualUpperVoltage == upperVoltage)
+			return false;
+		state.manualLowerVoltage = lowerVoltage;
+		state.manualUpperVoltage = upperVoltage;
+		state.status = "queued";
+		state.warnings.clear();
+		++document->get().prefitGenerations[id];
+		bumpRevisionLocked(document->get());
+		return true;
+	}
+
+	bool JFMWorkspaceStore::ResetFitRange(ProjectHandle handle, CharacteristicId id)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return false;
+		auto info = findInfoLocked(document->get(), id);
+		if (!info || !info->get().prefit
+			|| (!info->get().prefit->manualLowerVoltage && !info->get().prefit->manualUpperVoltage))
+			return false;
+		info->get().prefit->manualLowerVoltage.reset();
+		info->get().prefit->manualUpperVoltage.reset();
+		info->get().prefit->status = "queued";
+		info->get().prefit->warnings.clear();
+		++document->get().prefitGenerations[id];
+		bumpRevisionLocked(document->get());
+		return true;
+	}
+
+	std::uint64_t JFMWorkspaceStore::BeginPrefit(JFMCharacteristicRef ref)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return 0;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info)
+			return 0;
+		JFMPrefitState &state = info->get().prefit.emplace(info->get().prefit.value_or(JFMPrefitState{}));
+		state.status = "running";
+		state.warnings.clear();
+		return ++document->get().prefitGenerations[ref.characteristic];
+	}
+
+	bool JFMWorkspaceStore::IsPrefitGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto current = document->get().prefitGenerations.find(ref.characteristic);
+		return current != document->get().prefitGenerations.end() && current->second == generation;
+	}
+
+	bool JFMWorkspaceStore::ApplyPrefitResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMPrefitState result, JFMPrefitCurve curve)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto currentGeneration = document->get().prefitGenerations.find(ref.characteristic);
+		if (currentGeneration == document->get().prefitGenerations.end() || currentGeneration->second != generation)
+			return false;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info)
+			return false;
+		const JFMPrefitState current = info->get().prefit.value_or(JFMPrefitState{});
+		if (current.modelId != result.modelId)
+			return false;
+		result.manualLowerVoltage = current.manualLowerVoltage;
+		result.manualUpperVoltage = current.manualUpperVoltage;
+		result.status = "completed";
+		info->get().prefit = std::move(result);
+		document->get().prefitCurves[ref.characteristic] = CreateRef<const JFMPrefitCurve>(std::move(curve));
+		bumpRevisionLocked(document->get());
+		return true;
+	}
+
+	bool JFMWorkspaceStore::FailPrefit(JFMCharacteristicRef ref, std::uint64_t generation, std::string error)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto currentGeneration = document->get().prefitGenerations.find(ref.characteristic);
+		if (currentGeneration == document->get().prefitGenerations.end() || currentGeneration->second != generation)
+			return false;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info)
+			return false;
+		JFMPrefitState &state = info->get().prefit.emplace(info->get().prefit.value_or(JFMPrefitState{}));
+		state.status = "failed";
+		state.warnings = {std::move(error)};
+		state.parameters.clear();
+		document->get().prefitCurves.erase(ref.characteristic);
 		bumpRevisionLocked(document->get());
 		return true;
 	}
@@ -1229,8 +1407,16 @@ namespace SST::Prototypes::JFM
 
 	void JFMWorkspaceStore::SetSelectedCharacteristics(std::vector<CharacteristicId> characteristicIds, CharacteristicId primary, std::string seriesId)
 	{
+		SetSelectedCharacteristics(GetActiveProjectHandle(), std::move(characteristicIds), primary, std::move(seriesId));
+	}
+
+	void JFMWorkspaceStore::SetSelectedCharacteristics(ProjectHandle handle, std::vector<CharacteristicId> characteristicIds, CharacteristicId primary, std::string seriesId)
+	{
 		std::scoped_lock lock(m_Mutex);
-		ProjectDocument &document = activeDocumentLocked();
+		auto documentRef = findDocumentLocked(handle);
+		if (!documentRef)
+			return;
+		ProjectDocument &document = documentRef->get();
 		characteristicIds.erase(std::remove_if(characteristicIds.begin(), characteristicIds.end(), [&document](CharacteristicId id) {
 			return !findInfoLocked(document, id).has_value();
 		}), characteristicIds.end());

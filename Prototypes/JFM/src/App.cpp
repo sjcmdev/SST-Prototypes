@@ -47,7 +47,13 @@ namespace SST
 		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
 		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace, settings, application.GetEventBusRef());
 		panelIds.details = editorLayer.RegisterPanel<CharacteristicDetailsPanel>(workspace);
-		editorLayer.RegisterPanel<JFMImportDialogPanel>(application.GetEventBusRef(), workspace, importDialog, settings);
+		editorLayer.RegisterPanel<JFMImportDialogPanel>(
+			application.GetEventBusRef(),
+			workspace,
+			importDialog,
+			settings,
+			application.GetRuntimeServices().commandRegistry,
+			application.GetRuntimeServices().undoStack);
 		auto jfmSettingsPanel = CreateRef<JFMSettingsPanel>(settings);
 		editorLayer.RegisterSettingsTab(SettingsTabExtension{
 			"jfm",
