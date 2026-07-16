@@ -310,6 +310,13 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
+	void RawPlotPanel::SetGroupVisible(PlotCurveGroup &group, bool visible)
+	{
+		group.visible = visible;
+		if (visible)
+			group.hiddenCharacteristicIds.clear();
+	}
+
 	void RawPlotPanel::Render()
 	{
 		if (!IsVisible())
@@ -446,6 +453,7 @@ namespace SST::Prototypes::JFM
 			}
 
 			int scale = static_cast<int>(area.scale);
+			ImGui::SameLine();
 			ImGui::RadioButton("Linear", &scale, static_cast<int>(PlotScale::Linear));
 			ImGui::SameLine();
 			ImGui::RadioButton("Semi-log", &scale, static_cast<int>(PlotScale::SemiLog));
@@ -457,10 +465,7 @@ namespace SST::Prototypes::JFM
 			ImGui::SliderFloat("Scroll out", &area.fitPadding, 0.0f, 0.5f, "%.2f");
 			ImGui::SameLine();
 			ImGui::Checkbox("Legend", &area.showLegend);
-
-			const float controlsWidth = std::clamp(ImGui::GetContentRegionAvail().x * 0.26f, 320.0f, 460.0f);
-			ImGui::BeginChild("##curve_groups", ImVec2(controlsWidth, 0.0f), true);
-			ImGui::TextDisabled("Curve groups");
+			ImGui::SameLine();
 			if (ImGui::SmallButton("Expand all"))
 				area.groupTreeOpenRequest = 1;
 			ImGui::SameLine();
@@ -470,103 +475,112 @@ namespace SST::Prototypes::JFM
 			if (ImGui::SmallButton("Hide all"))
 			{
 				for (PlotCurveGroup &group : area.groups)
-					group.visible = false;
+					SetGroupVisible(group, false);
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Unhide all"))
 			{
 				for (PlotCurveGroup &group : area.groups)
-				{
-					group.visible = true;
-					group.hiddenCharacteristicIds.clear();
-				}
+					SetGroupVisible(group, true);
 			}
-			for (std::size_t groupIndex = 0; groupIndex < area.groups.size();)
-			{
-				PlotCurveGroup &group = area.groups[groupIndex];
-				ImGui::PushID(group.key.c_str());
-				if (ImGui::SmallButton("x"))
-				{
-					area.groups.erase(area.groups.begin() + static_cast<std::ptrdiff_t>(groupIndex));
-					ImGui::PopID();
-					continue;
-				}
-				ImGui::SameLine();
-				ImGui::Checkbox("##group_visible", &group.visible);
-				ImGui::SameLine();
-				const std::string groupLabel = group.title + " (" + std::to_string(group.characteristicIds.size()) + ")";
-				if (area.groupTreeOpenRequest != 0)
-					ImGui::SetNextItemOpen(area.groupTreeOpenRequest > 0, ImGuiCond_Always);
-				const bool open = ImGui::TreeNodeEx(groupLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
-				if (open)
-				{
-					ImGui::ColorEdit4("Start", group.gradientStart.data(), ImGuiColorEditFlags_NoInputs);
-					ImGui::SameLine();
-					ImGui::ColorEdit4("End", group.gradientEnd.data(), ImGuiColorEditFlags_NoInputs);
-					if (ImGui::BeginCombo("Preset", "Color preset"))
-					{
-						const JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
-						for (std::size_t presetIndex = 0; presetIndex < settings.colorPresets.size(); ++presetIndex)
-						{
-							const JFMColorPreset &preset = settings.colorPresets[presetIndex];
-							ImGui::PushID(static_cast<int>(presetIndex));
-							ImGui::ColorButton("##start", toVec4(preset.start), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f, 18.0f));
-							ImGui::SameLine();
-							ImGui::ColorButton("##end", toVec4(preset.end), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f, 18.0f));
-							ImGui::SameLine();
-							if (ImGui::Selectable(preset.name.c_str()))
-							{
-								group.gradientStart = preset.start;
-								group.gradientEnd = preset.end;
-								ApplyColorRange(group);
-							}
-							ImGui::PopID();
-						}
-						ImGui::EndCombo();
-					}
-					ImGui::SameLine();
-					if (ImGui::Button("Apply"))
-						ApplyColorRange(group);
+			ImGui::SameLine();
+			ImGui::Checkbox("Curves", &area.curvesWindowVisible);
 
-					for (std::size_t idIndex = 0; idIndex < group.characteristicIds.size();)
+			const std::string curvesTitle = area.title + " Curves###jfm_raw_plot_curves_" + std::to_string(area.id);
+			if (area.curvesWindowVisible)
+			{
+				if (ImGui::Begin(curvesTitle.c_str(), &area.curvesWindowVisible, ImGuiWindowFlags_AlwaysAutoResize))
+				{
+					for (std::size_t groupIndex = 0; groupIndex < area.groups.size();)
 					{
-						const CharacteristicId id = group.characteristicIds[idIndex];
-						const auto characteristic = records.find(id);
-						ImGui::PushID(static_cast<int>(id));
+						PlotCurveGroup &group = area.groups[groupIndex];
+						ImGui::PushID(group.key.c_str());
 						if (ImGui::SmallButton("x"))
 						{
-							group.characteristicIds.erase(group.characteristicIds.begin() + static_cast<std::ptrdiff_t>(idIndex));
+							area.groups.erase(area.groups.begin() + static_cast<std::ptrdiff_t>(groupIndex));
 							ImGui::PopID();
 							continue;
 						}
 						ImGui::SameLine();
-						std::array<float, 4> &color = group.colors.try_emplace(
-							id,
-							toArray(colorFor(characteristic != records.end() ? characteristic->second.info : JFMCharacteristicInfo{id})))
-							.first->second;
-						ImGui::ColorEdit4("##color", color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+						bool groupVisible = group.visible;
+						if (ImGui::Checkbox("##group_visible", &groupVisible))
+							SetGroupVisible(group, groupVisible);
 						ImGui::SameLine();
-						bool shown = !containsId(group.hiddenCharacteristicIds, id);
-						if (ImGui::Checkbox("##visible", &shown))
-							setHidden(group.hiddenCharacteristicIds, id, !shown);
-						ImGui::SameLine();
-						const std::string label = characteristic != records.end() ? shortName(characteristic->second.info) : std::to_string(id);
-						ImGui::Selectable(label.c_str(), false);
-						if (characteristic != records.end() && ImGui::IsItemHovered())
-							ImGui::SetTooltip("%s", characteristic->second.info.name.c_str());
+						const std::string groupLabel = group.title + " (" + std::to_string(group.characteristicIds.size()) + ")";
+						if (area.groupTreeOpenRequest != 0)
+							ImGui::SetNextItemOpen(area.groupTreeOpenRequest > 0, ImGuiCond_Always);
+						const bool open = ImGui::TreeNodeEx(groupLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+						if (open)
+						{
+							ImGui::SameLine();
+							ImGui::ColorEdit4("Start", group.gradientStart.data(), ImGuiColorEditFlags_NoInputs);
+							ImGui::SameLine();
+							ImGui::ColorEdit4("End", group.gradientEnd.data(), ImGuiColorEditFlags_NoInputs);
+							if (ImGui::BeginCombo("Preset", "Color preset"))
+							{
+								const JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
+								for (std::size_t presetIndex = 0; presetIndex < settings.colorPresets.size(); ++presetIndex)
+								{
+									const JFMColorPreset &preset = settings.colorPresets[presetIndex];
+									ImGui::PushID(static_cast<int>(presetIndex));
+									ImGui::ColorButton("##start", toVec4(preset.start), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f, 18.0f));
+									ImGui::SameLine();
+									ImGui::ColorButton("##end", toVec4(preset.end), ImGuiColorEditFlags_NoTooltip, ImVec2(18.0f, 18.0f));
+									ImGui::SameLine();
+									if (ImGui::Selectable(preset.name.c_str()))
+									{
+										group.gradientStart = preset.start;
+										group.gradientEnd = preset.end;
+										ApplyColorRange(group);
+									}
+									ImGui::PopID();
+								}
+								ImGui::EndCombo();
+							}
+							ImGui::SameLine();
+							if (ImGui::Button("Apply"))
+								ApplyColorRange(group);
+
+							for (std::size_t idIndex = 0; idIndex < group.characteristicIds.size();)
+							{
+								const CharacteristicId id = group.characteristicIds[idIndex];
+								const auto characteristic = records.find(id);
+								ImGui::PushID(static_cast<int>(id));
+								if (ImGui::SmallButton("x"))
+								{
+									group.characteristicIds.erase(group.characteristicIds.begin() + static_cast<std::ptrdiff_t>(idIndex));
+									ImGui::PopID();
+									continue;
+								}
+								ImGui::SameLine();
+								std::array<float, 4> &color = group.colors.try_emplace(
+									id,
+									toArray(colorFor(characteristic != records.end() ? characteristic->second.info : JFMCharacteristicInfo{id})))
+									.first->second;
+								ImGui::ColorEdit4("##color", color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+								ImGui::SameLine();
+								bool shown = !containsId(group.hiddenCharacteristicIds, id);
+								if (ImGui::Checkbox("##visible", &shown))
+									setHidden(group.hiddenCharacteristicIds, id, !shown);
+								ImGui::SameLine();
+								const std::string label = characteristic != records.end() ? shortName(characteristic->second.info) : std::to_string(id);
+								ImGui::Selectable(label.c_str(), false);
+								if (characteristic != records.end() && ImGui::IsItemHovered())
+									ImGui::SetTooltip("%s", characteristic->second.info.name.c_str());
+								ImGui::PopID();
+								++idIndex;
+							}
+							ImGui::TreePop();
+						}
 						ImGui::PopID();
-						++idIndex;
+						++groupIndex;
 					}
-					ImGui::TreePop();
+					if (area.groups.empty())
+						ImGui::TextDisabled("Drop characteristics here or use selection.");
 				}
-				ImGui::PopID();
-				++groupIndex;
+				ImGui::End();
 			}
 			area.groupTreeOpenRequest = 0;
-			if (area.groups.empty())
-				ImGui::TextDisabled("Drop characteristics here or use selection.");
-			ImGui::EndChild();
-			ImGui::SameLine();
 
 			const std::string plotId = "##jfm_raw_plot_" + std::to_string(area.id);
 			const float plotHeight = std::max(420.0f, ImGui::GetContentRegionAvail().y);

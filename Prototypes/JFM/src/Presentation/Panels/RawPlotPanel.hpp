@@ -62,6 +62,7 @@ namespace SST::Prototypes::JFM
 			bool autoFit = true;
 			float fitPadding = 0.08f;
 			bool renaming = false;
+			bool curvesWindowVisible = true;
 			int groupTreeOpenRequest = 0;
 			std::array<char, 128> renameBuffer = {};
 		};
@@ -74,6 +75,7 @@ namespace SST::Prototypes::JFM
 		void PlotSelectedGroup();
 		void ApplyColorRange(PlotCurveGroup &group);
 		void RefreshDynamicGroups(PlotArea &area);
+		void SetGroupVisible(PlotCurveGroup &group, bool visible);
 
 		Ref<JFMWorkspaceStore> m_Store;
 		Ref<JFMUserSettingsStore> m_Settings;
