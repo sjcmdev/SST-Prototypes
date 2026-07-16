@@ -21,11 +21,14 @@ def import_file(path: str | Path, options: dict[str, Any] | None = None) -> dict
     return {
         "parser": result.get("parser", parser_name),
         "warnings": list(result.get("warnings", [])),
-        "characteristics": [_to_cpp_characteristic(source, str(result.get("parser", parser_name)), curve) for curve in result.get("curves", [])],
+        "characteristics": [
+            _to_cpp_characteristic(source, str(result.get("parser", parser_name)), curve, index)
+            for index, curve in enumerate(result.get("curves", []))
+        ],
     }
 
 
-def _to_cpp_characteristic(source: Path, parser_name: str, curve: dict[str, Any]) -> Any:
+def _to_cpp_characteristic(source: Path, parser_name: str, curve: dict[str, Any], record_index: int) -> Any:
     import sst_jfm
 
     characteristic = sst_jfm.JFMCharacteristic()
@@ -33,6 +36,8 @@ def _to_cpp_characteristic(source: Path, parser_name: str, curve: dict[str, Any]
     info.name = str(curve.get("name") or source.stem)
     info.measurement = str(curve.get("measurement") or "IV")
     info.source_path = str(source)
+    record_key = curve.get("source_record_key")
+    info.source_record_key = str(record_index if record_key is None else record_key)
     info.parser = parser_name
 
     metadata = curve.get("metadata") or {}

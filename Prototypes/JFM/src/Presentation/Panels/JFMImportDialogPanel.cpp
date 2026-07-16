@@ -3,27 +3,20 @@
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
 
 #include "App/NativeFileDialog.hpp"
-#include "Core/IO/TextFileIO.hpp"
 #include "Events/JFMEvents.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
-#include <filesystem>
-#include <iterator>
 #include <imgui.h>
 #include <implot.h>
-#include <regex>
+#include <map>
 #include <sstream>
-#include <set>
-#include <system_error>
-#include <unordered_map>
 
 namespace SST::Prototypes::JFM
 {
-	namespace
+	namespace ImportDialogDetail
 	{
 		constexpr NativeFileDialogFilter PythonScriptFilter{"Python", "py"};
 
@@ -31,191 +24,6 @@ namespace SST::Prototypes::JFM
 		const char *DecimalOptions[] = {"auto", ".", ","};
 		const char *TemperatureOptions[] = {"auto", "filename", "header", "off"};
 		const char *VariableSources[] = {"stem", "folder", "parent_folder"};
-
-		struct NameVariablePreview
-		{
-			std::string name;
-			std::string value;
-			std::string source;
-		};
-
-		std::string DetectTemperatureToken(const Path &path);
-
-		std::string ReplaceAll(std::string text, const std::string &from, const std::string &to)
-		{
-			std::size_t position = 0;
-			while ((position = text.find(from, position)) != std::string::npos)
-			{
-				text.replace(position, from.size(), to);
-				position += to.size();
-			}
-			return text;
-		}
-
-		std::vector<std::string> SplitTokens(const std::string &text, const std::string &delimiter)
-		{
-			if (delimiter.empty())
-				return {text};
-			std::vector<std::string> tokens;
-			std::size_t start = 0;
-			while (start <= text.size())
-			{
-				const std::size_t end = text.find(delimiter, start);
-				tokens.push_back(text.substr(start, end == std::string::npos ? std::string::npos : end - start));
-				if (end == std::string::npos)
-					break;
-				start = end + delimiter.size();
-			}
-			return tokens;
-		}
-
-		std::string ApplySubstring(std::string text, int start, int length)
-		{
-			const std::size_t safeStart = static_cast<std::size_t>(std::clamp(start, 0, static_cast<int>(text.size())));
-			if (length < 0)
-				return text.substr(safeStart);
-			return text.substr(safeStart, static_cast<std::size_t>(length));
-		}
-
-		void AddVariable(
-			std::vector<NameVariablePreview> &previews,
-			std::unordered_map<std::string, std::string> &variables,
-			std::string name,
-			std::string value,
-			std::string source)
-		{
-			variables[name] = value;
-			previews.push_back(NameVariablePreview{std::move(name), std::move(value), std::move(source)});
-		}
-
-		std::vector<NameVariablePreview> BuildNameVariables(
-			const Path &path,
-			const std::string &delimiter,
-			const std::vector<JFMNameVariableRule> &rules)
-		{
-			std::vector<NameVariablePreview> previews;
-			std::unordered_map<std::string, std::string> variables;
-			if (path.Empty())
-				return previews;
-
-			const std::string stem = path.Native().stem().string();
-			const std::string folder = path.parent_path().filename().String();
-			const std::string parentFolder = path.parent_path().parent_path().filename().String();
-			AddVariable(previews, variables, "stem", stem, "file name without extension");
-			AddVariable(previews, variables, "folder", folder, "parent folder name");
-			AddVariable(previews, variables, "parent_folder", parentFolder, "parent of parent folder");
-			AddVariable(previews, variables, "source_path", path.String(), "full source path");
-			const std::string temperature = DetectTemperatureToken(path);
-			AddVariable(previews, variables, "T", temperature, "temperature parsed from file name");
-			AddVariable(previews, variables, "temperature_K", temperature, "temperature parsed from file name");
-
-			for (const auto &[key, text] : std::vector<std::pair<std::string, std::string>>{{"stem", stem}, {"folder", folder}})
-			{
-				const std::vector<std::string> tokens = SplitTokens(text, delimiter);
-				for (std::size_t index = 0; index < tokens.size(); ++index)
-					AddVariable(previews, variables, key + "_" + std::to_string(index), tokens[index], key + " split by '" + delimiter + "'");
-			}
-
-			for (const JFMNameVariableRule &rule : rules)
-			{
-				if (rule.name.empty())
-					continue;
-				std::string value;
-				if (const auto it = variables.find(rule.source); it != variables.end())
-					value = it->second;
-				std::string source = rule.source;
-				if (rule.tokenIndex >= 0)
-				{
-					const std::vector<std::string> tokens = SplitTokens(value, delimiter);
-					value = rule.tokenIndex < static_cast<int>(tokens.size()) ? tokens[static_cast<std::size_t>(rule.tokenIndex)] : std::string{};
-					source += " token " + std::to_string(rule.tokenIndex);
-				}
-				value = ApplySubstring(std::move(value), rule.substringStart, rule.substringLength);
-				if (rule.substringStart > 0 || rule.substringLength >= 0)
-					source += " substring " + std::to_string(rule.substringStart) + ":" + (rule.substringLength < 0 ? std::string{"end"} : std::to_string(rule.substringLength));
-				AddVariable(previews, variables, rule.name, std::move(value), std::move(source));
-			}
-
-			return previews;
-		}
-
-		std::string DetectTemperatureToken(const Path &path)
-		{
-			const std::string name = path.filename().String();
-			const std::regex kelvinPattern(R"((\d+(?:[.,]\d+)?)\s*K\b)", std::regex::icase);
-			const std::regex tPattern(R"(T(?:emp(?:erature)?)?[_:= -]?(\d+(?:[.,]\d+)?))", std::regex::icase);
-			std::smatch match;
-			if ((!std::regex_search(name, match, kelvinPattern) && !std::regex_search(name, match, tPattern)) || match.size() < 2)
-				return {};
-			std::string value = match[1].str();
-			std::replace(value.begin(), value.end(), ',', '.');
-			return value;
-		}
-
-		std::string BuildNameFromPattern(
-			const std::string &pattern,
-			const Path &path,
-			const std::string &delimiter,
-			const std::vector<JFMNameVariableRule> &customVariables)
-		{
-			if (path.Empty())
-				return pattern;
-
-			std::string text = pattern;
-			for (const NameVariablePreview &variable : BuildNameVariables(path, delimiter, customVariables))
-				text = ReplaceAll(text, "{" + variable.name + "}", variable.value);
-			return text.empty() ? path.Native().stem().string() : text;
-		}
-
-		bool IsDataFile(const Path &path)
-		{
-			std::string extension = path.extension().String();
-			std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character) {
-				return static_cast<char>(std::tolower(character));
-			});
-			return extension == ".dat" || extension == ".iv" || extension == ".txt" || extension == ".csv";
-		}
-
-		bool IsDirectory(const Path &path)
-		{
-			std::error_code error;
-			return std::filesystem::is_directory(path.Native(), error);
-		}
-
-		bool IsRegularFile(const Path &path)
-		{
-			std::error_code error;
-			return std::filesystem::is_regular_file(path.Native(), error);
-		}
-
-		void AddFilesFromDirectory(const Path &directory, bool recursive, std::vector<Path> &files)
-		{
-			std::error_code error;
-			if (!recursive)
-			{
-				for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native(), error))
-				{
-					if (error)
-						break;
-					const Path path = Path::FromResolved(entry.path());
-					std::error_code fileError;
-					if (entry.is_regular_file(fileError) && IsDataFile(path))
-						files.push_back(path);
-				}
-				return;
-			}
-
-			const auto options = std::filesystem::directory_options::skip_permission_denied;
-			for (const std::filesystem::directory_entry &entry : std::filesystem::recursive_directory_iterator(directory.Native(), options, error))
-			{
-				if (error)
-					break;
-				const Path path = Path::FromResolved(entry.path());
-				std::error_code fileError;
-				if (entry.is_regular_file(fileError) && IsDataFile(path))
-					files.push_back(path);
-			}
-		}
 
 		bool ContainsIndex(const std::vector<int> &indices, int index)
 		{
@@ -247,7 +55,8 @@ namespace SST::Prototypes::JFM
 			x = std::move(nextX);
 			y = std::move(nextY);
 		}
-	}
+	} // namespace ImportDialogDetail
+	using namespace ImportDialogDetail;
 
 	void JFMImportDialogState::Open(JFMImportDialogRequest request)
 	{
@@ -268,11 +77,20 @@ namespace SST::Prototypes::JFM
 	{
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
 		std::snprintf(m_VariableDelimiter.data(), m_VariableDelimiter.size(), "%s", "_");
+		if (m_EventBus != nullptr)
+		{
+			AddSubscription(m_EventBus->Subscribe<ImportPreviewCompleted>([this](const ImportPreviewCompleted &event) {
+				handlePreviewCompleted(event);
+			}));
+			AddSubscription(m_EventBus->Subscribe<ImportPreviewFailed>([this](const ImportPreviewFailed &event) {
+				handlePreviewFailed(event);
+			}));
+		}
 	}
 
 	Ref<IPanel> JFMImportDialogPanel::Clone() const
 	{
-		return CreateRef<JFMImportDialogPanel>(*this);
+		return CreateRef<JFMImportDialogPanel>(m_EventBus, m_Store, m_State, m_Settings);
 	}
 
 	void JFMImportDialogPanel::Render()
@@ -397,12 +215,22 @@ namespace SST::Prototypes::JFM
 			renderVariablePreviewTable();
 			ImGui::EndTable();
 		}
+		const std::string currentPreviewOptionsKey = previewOptionsKey();
+		if (currentPreviewOptionsKey != m_LastPreviewOptionsKey)
+		{
+			m_LastPreviewOptionsKey = currentPreviewOptionsKey;
+			requestPreview();
+		}
 
 		const std::string name = previewName();
 		ImGui::Text("Preview name: %s", name.c_str());
 		const std::string shortName = previewShortName();
 		if (!shortName.empty())
 			ImGui::Text("Preview short: %s", shortName.c_str());
+		if (m_PreviewLoading)
+			ImGui::TextDisabled("Refreshing preview...");
+		else if (!m_PreviewError.empty())
+			ImGui::TextWrapped("Preview failed: %s", m_PreviewError.c_str());
 		ImGui::Checkbox("Preview window", &m_PreviewOpen);
 		ImGui::Checkbox("Plot after import", &m_PlotAfterImport);
 
@@ -460,33 +288,60 @@ namespace SST::Prototypes::JFM
 		m_SelectedPreviewFileIndices.clear();
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
 		std::snprintf(m_VariableDelimiter.data(), m_VariableDelimiter.size(), "%s", "_");
+		m_PreviewPayload.reset();
+		m_PreviewError.clear();
+		m_LastPreviewOptionsKey = previewOptionsKey();
+		requestPreview();
+	}
+
+	void JFMImportDialogPanel::requestPreview()
+	{
+		if (m_EventBus == nullptr || m_Request.paths.empty())
+			return;
+		m_PreviewLoading = true;
+		m_PreviewError.clear();
+		m_EventBus->Queue(ImportPreviewRequested{++m_PreviewGeneration, m_Request.paths, m_Request.recursive, buildOptions()});
+	}
+
+	void JFMImportDialogPanel::handlePreviewCompleted(const ImportPreviewCompleted &event)
+	{
+		if (event.generation != m_PreviewGeneration)
+			return;
+		m_PreviewPayload = event.payload;
+		m_PreviewLoading = false;
+		m_PreviewError.clear();
 		refreshPreviewFiles();
+	}
+
+	void JFMImportDialogPanel::handlePreviewFailed(const ImportPreviewFailed &event)
+	{
+		if (event.generation != m_PreviewGeneration)
+			return;
+		m_PreviewLoading = false;
+		m_PreviewError = event.error;
 	}
 
 	void JFMImportDialogPanel::refreshPreviewFiles()
 	{
 		m_AllPreviewFiles.clear();
-		std::set<std::string> folders;
-		for (const Path &path : m_Request.paths)
-		{
-			if (IsDirectory(path))
-				AddFilesFromDirectory(path, m_Request.recursive, m_AllPreviewFiles);
-			else if ((IsRegularFile(path) || !FileSystem::Exists(path.Native())) && IsDataFile(path))
-				m_AllPreviewFiles.push_back(path);
-		}
-		std::sort(m_AllPreviewFiles.begin(), m_AllPreviewFiles.end(), [](const Path &left, const Path &right) {
-			return left.String() < right.String();
-		});
-		for (const Path &path : m_AllPreviewFiles)
-			folders.insert(path.parent_path().String());
-
 		m_PreviewFolders.clear();
 		m_PreviewFolderLabels.clear();
 		m_PreviewFolders.push_back("All folders");
 		m_PreviewFolderLabels.push_back("All folders");
-		m_PreviewFolders.insert(m_PreviewFolders.end(), folders.begin(), folders.end());
-		for (auto it = std::next(m_PreviewFolders.begin()); it != m_PreviewFolders.end(); ++it)
-			m_PreviewFolderLabels.push_back(relativeLabel(Path::FromResolved(*it)));
+		if (m_PreviewPayload != nullptr)
+		{
+			std::map<std::string, std::string> folders;
+			for (const JFMImportPreviewItem &item : m_PreviewPayload->items)
+			{
+				m_AllPreviewFiles.emplace_back(item.path);
+				folders.try_emplace(item.folderKey, item.folderLabel);
+			}
+			for (const auto &[key, label] : folders)
+			{
+				m_PreviewFolders.emplace_back(key);
+				m_PreviewFolderLabels.emplace_back(label);
+			}
+		}
 		applyPreviewFolderFilter();
 	}
 
@@ -577,7 +432,8 @@ namespace SST::Prototypes::JFM
 		const Path path = selectedPreviewPath();
 		const std::string sampleName = path.Empty() ? std::string{"<none>"} : path.filename().String();
 		ImGui::TextDisabled("Sample: %s", sampleName.c_str());
-		const std::vector<NameVariablePreview> variables = BuildNameVariables(path, m_VariableDelimiter.data(), buildVariableRules());
+		const JFMImportPreviewItem *item = previewItem(path);
+		const JFMCharacteristicInfo *info = item != nullptr && !item->characteristics.empty() ? &item->characteristics.front().info : nullptr;
 		if (!ImGui::BeginTable("##jfm_variable_preview", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
 			return;
 
@@ -585,15 +441,29 @@ namespace SST::Prototypes::JFM
 		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.38f);
 		ImGui::TableSetupColumn("Source", ImGuiTableColumnFlags_WidthStretch, 0.40f);
 		ImGui::TableHeadersRow();
-		for (const NameVariablePreview &variable : variables)
+		if (info != nullptr)
 		{
-			ImGui::TableNextRow();
-			ImGui::TableSetColumnIndex(0);
-			ImGui::Text("{%s}", variable.name.c_str());
-			ImGui::TableSetColumnIndex(1);
-			ImGui::TextWrapped("%s", variable.value.c_str());
-			ImGui::TableSetColumnIndex(2);
-			ImGui::TextWrapped("%s", variable.source.c_str());
+			std::vector<std::pair<std::string, std::string>> variables(info->metadata.begin(), info->metadata.end());
+			std::sort(variables.begin(), variables.end());
+			for (const auto &[name, value] : variables)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::Text("{%s}", name.c_str());
+				ImGui::TableSetColumnIndex(1);
+				ImGui::TextWrapped("%s", value.c_str());
+				ImGui::TableSetColumnIndex(2);
+				if (name == "T" || name == "temperature_K")
+					ImGui::TextUnformatted("parser temperature extraction");
+				else if (name == "source_path")
+					ImGui::TextUnformatted("full source path");
+				else if (name.starts_with("stem_"))
+					ImGui::TextUnformatted("file stem token");
+				else if (name.starts_with("folder_"))
+					ImGui::TextUnformatted("folder token");
+				else
+					ImGui::TextUnformatted("parser metadata");
+			}
 		}
 		ImGui::EndTable();
 	}
@@ -622,7 +492,9 @@ namespace SST::Prototypes::JFM
 		{
 			const int itemIndex = static_cast<int>(index);
 			const bool selected = ContainsIndex(m_SelectedPreviewFileIndices, itemIndex);
-			const std::string label = m_PreviewFiles[index].filename().String() + "##preview_file_" + std::to_string(index);
+			const JFMImportPreviewItem *item = previewItem(m_PreviewFiles[index]);
+			const std::string visibleLabel = item != nullptr && !item->relativePath.empty() ? item->relativePath : m_PreviewFiles[index].filename().String();
+			const std::string label = visibleLabel + "##preview_file_" + std::to_string(index);
 			if (ImGui::Selectable(label.c_str(), selected))
 			{
 				const bool append = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift;
@@ -685,16 +557,25 @@ namespace SST::Prototypes::JFM
 				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
 			for (std::size_t index = 0; index < previewPaths.size(); ++index)
 			{
-				std::vector<double> x;
-				std::vector<double> y;
-				if (!buildPreviewCurve(previewPaths[index], x, y))
+				const JFMImportPreviewItem *item = previewItem(previewPaths[index]);
+				if (item == nullptr)
 					continue;
-				ApplyPreviewScale(m_PreviewScale, x, y);
-				if (x.empty() || y.empty())
-					continue;
-				const ImPlotSpec spec(ImPlotProp_LineColor, PreviewColor(index));
-				const std::string label = previewPaths[index].filename().String() + "##preview_plot_" + std::to_string(index);
-				ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(std::min(x.size(), y.size())), spec);
+				for (std::size_t curveIndex = 0; curveIndex < item->characteristics.size(); ++curveIndex)
+				{
+					const JFMCharacteristicRecord &characteristic = item->characteristics[curveIndex];
+					if (!characteristic.data)
+						continue;
+					std::vector<double> x = characteristic.data->voltage;
+					std::vector<double> y = characteristic.data->currentDensity.empty()
+						? characteristic.data->current
+						: characteristic.data->currentDensity;
+					ApplyPreviewScale(m_PreviewScale, x, y);
+					if (x.empty() || y.empty())
+						continue;
+					const ImPlotSpec spec(ImPlotProp_LineColor, PreviewColor(index + curveIndex));
+					const std::string label = characteristic.info.name + "##preview_plot_" + std::to_string(index) + "_" + std::to_string(curveIndex);
+					ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(std::min(x.size(), y.size())), spec);
+				}
 			}
 			ImPlot::EndPlot();
 		}
@@ -703,10 +584,12 @@ namespace SST::Prototypes::JFM
 			ImGui::TextDisabled("Mini plot unavailable for this file.");
 		}
 
-		const std::string preview = previewFileText();
+		const JFMImportPreviewItem *selectedItem = previewItem(selectedPreviewPath());
 		ImGui::SeparatorText("Text");
 		ImGui::BeginChild("##jfm_import_text_preview", ImVec2(0.0f, 220.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
-		ImGui::TextUnformatted(preview.empty() ? "No preview" : preview.c_str());
+		if (selectedItem != nullptr && !selectedItem->warning.empty())
+			ImGui::TextWrapped("Warning: %s", selectedItem->warning.c_str());
+		ImGui::TextUnformatted(selectedItem == nullptr || selectedItem->text.empty() ? "No preview" : selectedItem->text.c_str());
 		ImGui::EndChild();
 		ImGui::EndChild();
 		ImGui::End();
@@ -748,38 +631,19 @@ namespace SST::Prototypes::JFM
 
 	std::string JFMImportDialogPanel::previewName() const
 	{
-		const std::string pattern = m_NamePattern.data();
-		if (m_Request.paths.empty())
-			return pattern;
-
-		return BuildNameFromPattern(pattern, selectedPreviewPath(), m_VariableDelimiter.data(), buildVariableRules());
+		const JFMImportPreviewItem *item = previewItem(selectedPreviewPath());
+		if (item != nullptr && !item->characteristics.empty())
+			return item->characteristics.front().info.name;
+		return {};
 	}
 
 	std::string JFMImportDialogPanel::previewShortName() const
 	{
-		const std::string pattern = m_ShortNamePattern.data();
-		if (pattern.empty())
+		const JFMImportPreviewItem *item = previewItem(selectedPreviewPath());
+		if (item == nullptr || item->characteristics.empty())
 			return {};
-		return BuildNameFromPattern(pattern, selectedPreviewPath(), m_VariableDelimiter.data(), buildVariableRules());
-	}
-
-	std::string JFMImportDialogPanel::previewFileText() const
-	{
-		const Path path = selectedPreviewPath();
-		if (path.Empty())
-			return {};
-
-		std::string text;
-		std::string error;
-		if (!TextFileIO::Load(path, text, error))
-			return error;
-
-		std::istringstream stream(text);
-		std::ostringstream preview;
-		std::string line;
-		for (int index = 0; index < 12 && std::getline(stream, line); ++index)
-			preview << line << '\n';
-		return preview.str();
+		const auto value = item->characteristics.front().info.metadata.find("short_name");
+		return value == item->characteristics.front().info.metadata.end() ? std::string{} : value->second;
 	}
 
 	Path JFMImportDialogPanel::selectedPreviewPath() const
@@ -803,62 +667,30 @@ namespace SST::Prototypes::JFM
 		return paths;
 	}
 
-	bool JFMImportDialogPanel::buildPreviewCurve(const Path &path, std::vector<double> &x, std::vector<double> &y) const
+	const JFMImportPreviewItem *JFMImportDialogPanel::previewItem(const Path &path) const
 	{
-		std::string text;
-		std::string error;
-		if (!TextFileIO::Load(path, text, error))
-			return false;
-
-		std::istringstream lines(text);
-		std::string line;
-		const bool commaDecimal = std::string(DecimalOptions[static_cast<std::size_t>(m_DecimalSeparator)]) == ",";
-		const std::string delimiter = m_Delimiter.data();
-		while (x.size() < 512 && std::getline(lines, line))
-		{
-			if (commaDecimal)
-				std::replace(line.begin(), line.end(), ',', '.');
-			if (!delimiter.empty())
-			{
-				for (char &character : line)
-				{
-					if (delimiter.find(character) != std::string::npos)
-						character = ' ';
-				}
-			}
-
-			std::istringstream values(line);
-			double first = 0.0;
-			double second = 0.0;
-			if (values >> first >> second)
-			{
-				x.push_back(first);
-				y.push_back(second);
-			}
-		}
-		return x.size() > 1 && x.size() == y.size();
+		if (m_PreviewPayload == nullptr)
+			return nullptr;
+		const auto item = std::find_if(m_PreviewPayload->items.begin(), m_PreviewPayload->items.end(), [&path](const JFMImportPreviewItem &candidate) {
+			return candidate.path == path;
+		});
+		return item == m_PreviewPayload->items.end() ? nullptr : &*item;
 	}
 
-	Path JFMImportDialogPanel::importRoot() const
+	std::string JFMImportDialogPanel::previewOptionsKey() const
 	{
-		if (m_Request.paths.empty())
-			return {};
-		const Path first = m_Request.paths.front();
-		if (IsDirectory(first))
-			return first;
-		return first.parent_path();
-	}
-
-	std::string JFMImportDialogPanel::relativeLabel(const Path &path) const
-	{
-		const Path root = importRoot();
-		if (root.Empty())
-			return path.String();
-
-		std::error_code error;
-		const std::filesystem::path relative = std::filesystem::relative(path.Native(), root.Native(), error);
-		if (error || relative.empty() || relative == ".")
-			return path.filename().String().empty() ? path.String() : path.filename().String();
-		return relative.string();
+		const JFMImportOptions options = buildOptions();
+		std::ostringstream key;
+		key << options.parser << '\x1f'
+			<< options.namePattern << '\x1f'
+			<< options.shortNamePattern << '\x1f'
+			<< options.variableDelimiter << '\x1f'
+			<< options.delimiter << '\x1f'
+			<< options.decimalSeparator << '\x1f'
+			<< options.temperatureExtraction << '\x1f'
+			<< options.customScriptPath;
+		for (const JFMNameVariableRule &rule : options.customVariables)
+			key << '\x1e' << rule.name << '\x1f' << rule.source << '\x1f' << rule.tokenIndex << '\x1f' << rule.substringStart << '\x1f' << rule.substringLength;
+		return key.str();
 	}
 } // namespace SST::Prototypes::JFM

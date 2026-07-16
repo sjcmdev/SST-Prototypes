@@ -12,14 +12,11 @@
 #include "IO/IOLayer.hpp"
 #include "IO/JFMExportRawTsvJob.hpp"
 #include "IO/JFMImportJob.hpp"
+#include "IO/JFMImportPreviewJob.hpp"
 #include "IO/JFMProjectJobs.hpp"
 
 #include <algorithm>
-#include <cctype>
-#include <filesystem>
 #include <functional>
-#include <map>
-#include <system_error>
 
 namespace SST::Prototypes::JFM
 {
@@ -43,27 +40,6 @@ namespace SST::Prototypes::JFM
 		bool plotAfterImport = false;
 	};
 
-	bool IsDirectory(const Path &path)
-	{
-		std::error_code error;
-		return std::filesystem::is_directory(path.Native(), error);
-	}
-
-	bool IsRegularFile(const Path &path)
-	{
-		std::error_code error;
-		return std::filesystem::is_regular_file(path.Native(), error);
-	}
-
-	bool IsJFMDataFile(const Path &path)
-	{
-		std::string extension = path.extension().String();
-		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character) {
-			return static_cast<char>(std::tolower(character));
-		});
-		return extension == ".dat" || extension == ".iv" || extension == ".txt" || extension == ".csv";
-	}
-
 	void NotifyFailure(
 		const Ref<JFMIOState> &state,
 		NotificationCategory category,
@@ -83,118 +59,20 @@ namespace SST::Prototypes::JFM
 		state->eventBus->Queue(NotificationRequestedEvent{std::move(notification)});
 	}
 
-	std::string FolderName(const Path &path)
-	{
-		std::string name = path.filename().String();
-		return name.empty() ? path.String() : name;
-	}
-
-	std::vector<std::string> ParentGroupPathForFolder(const Path &root, const Path &folder)
-	{
-		std::error_code error;
-		const std::filesystem::path relative = std::filesystem::relative(folder.Native(), root.Native(), error);
-		if (error || relative.empty() || relative == ".")
-			return {};
-
-		const std::filesystem::path parent = relative.parent_path();
-		if (parent.empty())
-			return {FolderName(root)};
-
-		std::vector<std::string> names{FolderName(root)};
-		for (const std::filesystem::path &part : parent)
-			names.push_back(part.string());
-		return names;
-	}
-
-	std::vector<Path> DirectDataFilesInDirectory(const Path &directory)
-	{
-		std::vector<Path> paths;
-		std::error_code error;
-		for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native(), error))
-		{
-			if (error)
-				break;
-			const Path path = Path::FromResolved(entry.path());
-			std::error_code fileError;
-			if (entry.is_regular_file(fileError) && IsJFMDataFile(path))
-				paths.push_back(path);
-		}
-		return paths;
-	}
-
-	std::map<std::string, std::vector<Path>> DataFilesByFolder(const Path &directory, bool recursive)
-	{
-		std::map<std::string, std::vector<Path>> filesByFolder;
-		if (!recursive)
-		{
-			std::vector<Path> paths = DirectDataFilesInDirectory(directory);
-			if (!paths.empty())
-				filesByFolder[directory.String()] = std::move(paths);
-			return filesByFolder;
-		}
-
-		std::error_code error;
-		const auto options = std::filesystem::directory_options::skip_permission_denied;
-		for (const std::filesystem::directory_entry &entry : std::filesystem::recursive_directory_iterator(directory.Native(), options, error))
-		{
-			if (error)
-				break;
-			const Path path = Path::FromResolved(entry.path());
-			std::error_code fileError;
-			if (entry.is_regular_file(fileError) && IsJFMDataFile(path))
-				filesByFolder[path.parent_path().String()].push_back(path);
-		}
-		return filesByFolder;
-	}
-
-	void AddDirectoryImportGroups(const Path &directory, bool recursive, const std::string &targetSeriesId, std::vector<JFMImportGroup> &groups)
-	{
-		for (auto &[folder, paths] : DataFilesByFolder(directory, recursive))
-		{
-			const Path folderPath = Path::FromResolved(folder);
-			groups.push_back(JFMImportGroup{
-				std::move(paths),
-				targetSeriesId,
-				targetSeriesId.empty() ? ParentGroupPathForFolder(directory, folderPath) : std::vector<std::string>{},
-				targetSeriesId.empty() ? FolderName(folderPath) : std::string{}});
-		}
-	}
-
-	std::vector<JFMImportGroup> BuildImportGroups(const ImportRequested &event)
-	{
-		std::vector<JFMImportGroup> groups;
-		std::vector<Path> filePaths;
-		const std::string targetSeriesId = event.placement == JFMImportPlacement::ExistingSeries ? event.targetSeriesId : std::string{};
-		const bool recursive = event.recursive || event.placement == JFMImportPlacement::PreserveFolderTree;
-		for (const Path &path : event.paths)
-		{
-			if (IsDirectory(path))
-				AddDirectoryImportGroups(path, recursive, targetSeriesId, groups);
-			else if (IsRegularFile(path) || !FileSystem::Exists(path.Native()))
-				filePaths.push_back(path);
-		}
-
-		if (!filePaths.empty())
-		{
-			const std::string seriesName = FolderName(filePaths.front().parent_path());
-			groups.push_back(JFMImportGroup{std::move(filePaths), targetSeriesId, {}, seriesName.empty() ? "Series" : seriesName});
-		}
-		return groups;
-	}
-
 	void HandleImportRequested(const Ref<JFMIOState> &state, const ImportRequested &event)
 	{
 		if (event.paths.empty())
 			return;
 
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->importRunning)
 		{
-			state->eventBus->Queue(ImportFailed{"Another JFM import is already running.", event.project, event.operation});
+			NotifyFailure(state, NotificationCategory::Import, "JFM import not started", "Another JFM import is already running.");
+			DS_LOG_WARN("JFM import request [{}] rejected while operation [{}] is running", operation, state->importOperation);
 			return;
 		}
 
-		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
-		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		state->importRunning = true;
 		state->importProject = project;
 		state->importOperation = operation;
@@ -207,21 +85,29 @@ namespace SST::Prototypes::JFM
 			state->store->SetImportRunning(project, true);
 			state->store->SetStatusMessage(project, "Import queued.");
 		}
-		std::vector<JFMImportGroup> groups = BuildImportGroups(event);
-		if (groups.empty())
-		{
-			state->importRunning = false;
-			state->plotAfterImport = false;
-			if (state->store != nullptr)
-			{
-				state->store->SetImportRunning(project, false);
-				state->store->SetStatusMessage(project, "No JFM data files found for import.");
-			}
-			return;
-		}
-
-		auto job = CreateRef<JFMImportJob>(state->eventBus, std::move(groups), state->pythonRoot, event.options, project, operation);
+		auto job = CreateRef<JFMImportJob>(
+			state->eventBus,
+			event.paths,
+			event.recursive,
+			event.placement,
+			event.targetSeriesId,
+			state->pythonRoot,
+			event.options,
+			project,
+			operation);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
+	}
+
+	void HandleImportPreviewRequested(const Ref<JFMIOState> &state, const ImportPreviewRequested &event)
+	{
+		auto job = CreateRef<JFMImportPreviewJob>(
+			state->eventBus,
+			event.generation,
+			event.paths,
+			event.recursive,
+			state->pythonRoot,
+			event.options);
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Low, JFMIOJobSource});
 	}
 
 	void HandleImportProgress(const Ref<JFMIOState> &state, const ImportProgress &event)
@@ -255,37 +141,13 @@ namespace SST::Prototypes::JFM
 			auto registry = state->commandRegistry.lock();
 			if (registry != nullptr)
 			{
-				std::vector<ImportCompleted> batches = std::move(state->importBatches);
-				const std::string targetGroupId = state->importTargetGroupId;
-				const bool plotAfterImport = state->plotAfterImport;
-				Ref<EventBus> eventBus = state->eventBus;
-				JFMProjectEditRequest request;
-				request.project = project;
-				request.description = "Import JFM data";
-				request.apply = [batches = std::move(batches), targetGroupId, plotAfterImport, eventBus](JFMWorkspaceStore &workspace, ProjectHandle targetProject) mutable -> Result<void> {
-					for (ImportCompleted &batch : batches)
-					{
-						if (batch.characteristics.empty())
-							continue;
-						std::string seriesId = batch.targetSeriesId;
-						if (seriesId.empty())
-						{
-							const std::string groupId = batch.groupPath.empty()
-								? targetGroupId
-								: workspace.FindOrCreateGroupPath(targetProject, batch.groupPath, targetGroupId);
-							seriesId = workspace.AddSeries(targetProject, batch.seriesName.empty() ? "Series" : batch.seriesName, groupId).id;
-						}
-						std::vector<CharacteristicId> added = workspace.AddCharacteristics(targetProject, std::move(batch.characteristics), seriesId);
-						if (plotAfterImport && eventBus != nullptr && !added.empty())
-							eventBus->Queue(PlotCharacteristicsRequested{std::move(added), batch.seriesName.empty() ? "Series" : batch.seriesName, targetProject});
-					}
-					workspace.SetStatusMessage(targetProject, "Import complete.");
-					return {};
-				};
 				CommandContext context(ContextID{"jfm.import.complete"});
 				context.SetSource("JFM import completion");
-				context.Set("edit", std::move(request));
-				auto result = registry->Execute(CommandID{JFMApplyProjectEditCommandId}, std::move(context));
+				context.Set("project", project);
+				context.Set("batches", std::move(state->importBatches));
+				context.Set("target_group_id", state->importTargetGroupId);
+				context.Set("plot_after_import", state->plotAfterImport);
+				auto result = registry->Execute(CommandID{JFMImportApplyCommandId}, std::move(context));
 				if (!result)
 					NotifyFailure(state, NotificationCategory::Import, "JFM import could not be applied", result.Error().technicalDetails);
 			}
@@ -331,6 +193,7 @@ namespace SST::Prototypes::JFM
 	void RegisterImportHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
 	{
 		ioLayer.RegisterHandler<ImportRequested>(std::bind_front(&HandleImportRequested, state));
+		ioLayer.RegisterHandler<ImportPreviewRequested>(std::bind_front(&HandleImportPreviewRequested, state));
 		ioLayer.RegisterHandler<ImportProgress>(std::bind_front(&HandleImportProgress, state));
 		ioLayer.RegisterHandler<ImportCompleted>(std::bind_front(&HandleImportCompleted, state));
 		ioLayer.RegisterHandler<ImportFailed>(std::bind_front(&HandleImportFailed, state));
@@ -338,33 +201,37 @@ namespace SST::Prototypes::JFM
 
 	void HandleExportRawTsvRequested(const Ref<JFMIOState> &state, const ExportRawTsvRequested &event)
 	{
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage("Raw TSV export queued: " + event.path.String());
+			state->store->SetStatusMessage(project, "Raw TSV export queued: " + event.path.String());
 
-		auto job = CreateRef<JFMExportRawTsvJob>(state->eventBus, event.path, event.characteristic);
+		auto job = CreateRef<JFMExportRawTsvJob>(state->eventBus, event.path, event.characteristic, project, operation);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
 	void HandleExportRawTsvCompleted(const Ref<JFMIOState> &state, const ExportRawTsvCompleted &event)
 	{
 		if (state->store != nullptr)
-			state->store->SetStatusMessage("Raw TSV exported: " + event.path.String());
+			state->store->SetStatusMessage(event.project, "Raw TSV exported: " + event.path.String());
 	}
 
 	void HandleExportRawTsvFailed(const Ref<JFMIOState> &state, const ExportRawTsvFailed &event)
 	{
 		if (state->store != nullptr)
-			state->store->SetStatusMessage("Raw TSV export failed: " + event.error);
+			state->store->SetStatusMessage(event.project, "Raw TSV export failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Export, "JFM export failed", event.error);
 		DS_LOG_WARN("JFM raw TSV export failed [{}]: {}", event.path.String(), event.error);
 	}
 
 	void HandleExportRawTsvBatchRequested(const Ref<JFMIOState> &state, const ExportRawTsvBatchRequested &event)
 	{
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage("Raw TSV batch export queued: " + event.outputDirectory.String());
+			state->store->SetStatusMessage(project, "Raw TSV batch export queued: " + event.outputDirectory.String());
 
-		auto job = CreateRef<JFMExportRawTsvBatchJob>(state->eventBus, event.outputDirectory, event.items);
+		auto job = CreateRef<JFMExportRawTsvBatchJob>(state->eventBus, event.outputDirectory, event.items, project, operation);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
@@ -372,15 +239,15 @@ namespace SST::Prototypes::JFM
 	{
 		if (state->store != nullptr)
 		{
-			state->store->SetLastImportWarnings(event.warnings);
-			state->store->SetStatusMessage("Raw TSV batch exported: " + std::to_string(event.count) + " file(s).");
+			state->store->SetLastImportWarnings(event.project, event.warnings);
+			state->store->SetStatusMessage(event.project, "Raw TSV batch exported: " + std::to_string(event.count) + " file(s).");
 		}
 	}
 
 	void HandleExportRawTsvBatchFailed(const Ref<JFMIOState> &state, const ExportRawTsvBatchFailed &event)
 	{
 		if (state->store != nullptr)
-			state->store->SetStatusMessage("Raw TSV batch export failed: " + event.error);
+			state->store->SetStatusMessage(event.project, "Raw TSV batch export failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Export, "JFM export failed", event.error);
 		DS_LOG_WARN("JFM raw TSV batch export failed [{}]: {}", event.outputDirectory.String(), event.error);
 	}
@@ -480,7 +347,7 @@ namespace SST::Prototypes::JFM
 		if (state->store == nullptr)
 			return;
 
-		const std::size_t updated = state->store->UpdateCharacteristicData(event.project, event.characteristics);
+		const std::size_t updated = state->store->UpdateCharacteristicRecords(event.project, event.characteristics);
 		state->store->SetLastImportWarnings(event.project, event.warnings);
 		if (event.warnings.empty())
 			state->store->SetStatusMessage(event.project, "Project raw data materialized: " + std::to_string(updated) + " characteristic(s).");
@@ -499,6 +366,7 @@ namespace SST::Prototypes::JFM
 	void RegisterJFMIOHandlers(IOLayer &ioLayer, JFMIORegistrationContext context)
 	{
 		DS_ASSERT(context.eventBus != nullptr, "JFM IO registration requires EventBus");
+		DS_ASSERT(context.store != nullptr, "JFM IO registration requires workspace");
 
 		auto state = CreateRef<JFMIOState>();
 		state->eventBus = std::move(context.eventBus);

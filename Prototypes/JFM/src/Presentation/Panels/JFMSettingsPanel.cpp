@@ -71,20 +71,27 @@ namespace SST::Prototypes::JFM
 	void JFMSettingsPanel::renderPlotDefaults(JFMUserSettings settings)
 	{
 		ImGui::SeparatorText("JFM Plot Defaults");
-		bool semiLog = settings.defaultPlotSemiLog;
-		bool autoFit = settings.defaultPlotAutoFit;
-		bool showLegend = settings.defaultPlotShowLegend;
-		float fitPadding = settings.defaultPlotFitPadding;
+		if (!m_PlotDraftInitialized)
+		{
+			m_DefaultPlotSemiLog = settings.defaultPlotSemiLog;
+			m_DefaultPlotAutoFit = settings.defaultPlotAutoFit;
+			m_DefaultPlotShowLegend = settings.defaultPlotShowLegend;
+			m_DefaultPlotFitPadding = settings.defaultPlotFitPadding;
+			m_PlotDraftInitialized = true;
+		}
 		bool changed = false;
-		changed |= ImGui::Checkbox("Semi-log by default", &semiLog);
-		changed |= ImGui::Checkbox("Auto fit by default", &autoFit);
-		changed |= ImGui::Checkbox("Show legend by default", &showLegend);
-		changed |= ImGui::SliderFloat("Default scroll out", &fitPadding, 0.0f, 0.5f, "%.2f");
+		changed |= ImGui::Checkbox("Semi-log by default", &m_DefaultPlotSemiLog);
+		changed |= ImGui::Checkbox("Auto fit by default", &m_DefaultPlotAutoFit);
+		changed |= ImGui::Checkbox("Show legend by default", &m_DefaultPlotShowLegend);
+		ImGui::SliderFloat("Default scroll out", &m_DefaultPlotFitPadding, 0.0f, 0.5f, "%.2f");
+		const bool fitPaddingCommitted = ImGui::IsItemDeactivatedAfterEdit();
 		bool autoPlot = settings.autoPlotAfterImport;
 		if (ImGui::Checkbox("Plot after import by default", &autoPlot))
 			m_Settings->SetAutoPlotAfterImport(autoPlot);
 		if (changed)
-			m_Settings->SetPlotDefaults(semiLog, autoFit, showLegend, fitPadding);
+			m_Settings->SetPlotDefaults(m_DefaultPlotSemiLog, m_DefaultPlotAutoFit, m_DefaultPlotShowLegend, m_DefaultPlotFitPadding);
+		if (fitPaddingCommitted)
+			m_Settings->SetPlotDefaults(m_DefaultPlotSemiLog, m_DefaultPlotAutoFit, m_DefaultPlotShowLegend, m_DefaultPlotFitPadding);
 	}
 
 	void JFMSettingsPanel::renderColorPresets(JFMUserSettings settings)

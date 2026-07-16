@@ -113,7 +113,7 @@ namespace SST::Prototypes::JFM
 				commandMenuItem(services, "Selected Raw TSV", "Ctrl+Shift+E", "jfm.export.raw_tsv");
 				commandMenuItem(services, "Selected Series Raw TSV", nullptr, "jfm.export.series_raw_tsv");
 				ImGui::BeginDisabled(workspace == nullptr || workspace->GetProjectSnapshot().groups.empty());
-				commandMenuItem(services, "Selected Group Raw TSV", nullptr, "jfm.export.group_raw_tsv", false);
+				commandMenuItem(services, "Selected Group Raw TSV", nullptr, "jfm.export.group_raw_tsv", !workspace->GetSelectedGroupId().empty());
 				ImGui::EndDisabled();
 				ImGui::EndMenu();
 			}

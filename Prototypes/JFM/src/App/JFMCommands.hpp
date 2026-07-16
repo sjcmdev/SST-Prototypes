@@ -19,6 +19,24 @@ namespace SST
 namespace SST::Prototypes::JFM
 {
 	inline constexpr const char *JFMApplyProjectEditCommandId = "jfm.project.apply_edit";
+	inline constexpr const char *JFMImportApplyCommandId = "jfm.import.apply";
+	inline constexpr const char *JFMAddGroupCommandId = "jfm.tree.add_group";
+	inline constexpr const char *JFMAddSeriesCommandId = "jfm.tree.add_series";
+	inline constexpr const char *JFMDeleteTreeItemCommandId = "jfm.tree.delete";
+	inline constexpr const char *JFMMoveCharacteristicsCommandId = "jfm.tree.move_characteristics";
+	inline constexpr const char *JFMRenameTreeItemCommandId = "jfm.tree.rename";
+	inline constexpr const char *JFMSetShortNameCommandId = "jfm.tree.set_short_name";
+	inline constexpr const char *JFMCopyTreeItemCommandId = "jfm.tree.copy";
+	inline constexpr const char *JFMPasteTreeItemCommandId = "jfm.tree.paste";
+	inline constexpr const char *JFMDuplicateTreeItemCommandId = "jfm.tree.duplicate";
+	inline constexpr const char *JFMRequestRenameTreeItemCommandId = "jfm.tree.request_rename";
+	inline constexpr const char *JFMRequestPasteTreeItemCommandId = "jfm.tree.request_paste";
+	inline constexpr const char *JFMRequestDuplicateTreeItemCommandId = "jfm.tree.request_duplicate";
+	inline constexpr const char *JFMAddScriptCommandId = "jfm.script.add";
+	inline constexpr const char *JFMReloadScriptCommandId = "jfm.script.reload";
+	inline constexpr const char *JFMRemoveScriptCommandId = "jfm.script.remove";
+	inline constexpr const char *JFMUpsertGroupingCommandId = "jfm.grouping.upsert";
+	inline constexpr const char *JFMDeleteGroupingCommandId = "jfm.grouping.delete";
 
 	struct JFMProjectEditRequest
 	{

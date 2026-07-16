@@ -13,21 +13,67 @@
 
 namespace SST::Prototypes::JFM
 {
-
-	const JFMCharacteristic *FindMaterializedMatch(
-		const std::vector<JFMCharacteristic> &candidates,
-		const JFMCharacteristicInfo &info)
+	namespace Detail
 	{
-		const auto byName = std::find_if(
-			candidates.begin(),
-			candidates.end(),
-			[&info](const JFMCharacteristic &candidate) {
-				return candidate.info.name == info.name;
-			});
-		if (byName != candidates.end())
-			return &*byName;
+		struct MaterializedSource
+		{
+			std::vector<JFMCharacteristicRecord> records;
+		};
 
-		return candidates.size() == 1 ? &candidates.front() : nullptr;
+		void AppendCacheField(std::string &key, const std::string &value)
+		{
+			key += std::to_string(value.size()) + ':' + value;
+		}
+
+		std::string MaterializationCacheKey(const JFMCharacteristicInfo &info)
+		{
+			std::string key;
+			AppendCacheField(key, info.sourcePath.String());
+			AppendCacheField(key, info.importOptions.parser);
+			AppendCacheField(key, info.importOptions.namePattern);
+			AppendCacheField(key, info.importOptions.shortNamePattern);
+			AppendCacheField(key, info.importOptions.variableDelimiter);
+			AppendCacheField(key, info.importOptions.delimiter);
+			AppendCacheField(key, info.importOptions.decimalSeparator);
+			AppendCacheField(key, info.importOptions.temperatureExtraction);
+			AppendCacheField(key, info.importOptions.customScriptPath);
+			for (const JFMNameVariableRule &rule : info.importOptions.customVariables)
+			{
+				AppendCacheField(key, rule.name);
+				AppendCacheField(key, rule.source);
+				AppendCacheField(key, std::to_string(rule.tokenIndex));
+				AppendCacheField(key, std::to_string(rule.substringStart));
+				AppendCacheField(key, std::to_string(rule.substringLength));
+			}
+			return key;
+		}
+
+		const JFMCharacteristicRecord *FindMaterializedMatch(
+			const std::vector<JFMCharacteristicRecord> &candidates,
+			const JFMCharacteristicInfo &info)
+		{
+			if (!info.sourceRecordKey.empty())
+			{
+				const auto byKey = std::find_if(
+					candidates.begin(),
+					candidates.end(),
+					[&info](const JFMCharacteristicRecord &candidate) {
+						return candidate.info.sourceRecordKey == info.sourceRecordKey;
+					});
+				return byKey == candidates.end() ? nullptr : &*byKey;
+			}
+
+			const auto byName = std::find_if(
+				candidates.begin(),
+				candidates.end(),
+				[&info](const JFMCharacteristicRecord &candidate) {
+					return candidate.info.name == info.name;
+				});
+			if (byName != candidates.end())
+				return &*byName;
+
+			return candidates.size() == 1 ? &candidates.front() : nullptr;
+		}
 	}
 
 
@@ -165,11 +211,11 @@ namespace SST::Prototypes::JFM
 		context.SetProgress(0.0f, static_cast<float>(total));
 
 		JFMPythonImportBridge bridge(m_PythonRoot);
-		std::unordered_map<std::string, JFMImportBatchResult> parsedBySource;
-		std::vector<JFMCharacteristic> materialized;
+		std::unordered_map<std::string, Detail::MaterializedSource> parsedByRequest;
+		std::vector<JFMCharacteristicRecord> materialized;
 		std::vector<std::string> warnings;
 		std::size_t completed = 0;
-		parsedBySource.reserve(total);
+		parsedByRequest.reserve(total);
 		materialized.reserve(total);
 		warnings.reserve(total);
 
@@ -190,15 +236,16 @@ namespace SST::Prototypes::JFM
 				continue;
 			}
 
-			const std::string sourceKey = info.sourcePath.String();
-			auto parsed = parsedBySource.find(sourceKey);
-			if (parsed == parsedBySource.end())
+			const std::string sourcePath = info.sourcePath.String();
+			const std::string cacheKey = Detail::MaterializationCacheKey(info);
+			auto parsed = parsedByRequest.find(cacheKey);
+			if (parsed == parsedByRequest.end())
 			{
-				JFMImportBatchResult batch;
+				Detail::MaterializedSource source;
 				if (!FileSystem::Exists(info.sourcePath.Native()))
 				{
-					warnings.emplace_back("Source file missing for " + info.name + ": " + sourceKey);
-					parsedBySource.emplace(sourceKey, std::move(batch));
+					warnings.emplace_back("Source file missing for " + info.name + ": " + sourcePath);
+					parsedByRequest.emplace(cacheKey, std::move(source));
 					advanceProgress();
 					continue;
 				}
@@ -206,30 +253,34 @@ namespace SST::Prototypes::JFM
 				auto result = bridge.ImportFiles({info.sourcePath}, info.importOptions, {});
 				if (!result)
 				{
-					warnings.emplace_back("Raw data materialization failed for " + sourceKey + ": " + result.Error().technicalDetails);
-					parsedBySource.emplace(sourceKey, std::move(batch));
+					warnings.emplace_back("Raw data materialization failed for " + sourcePath + ": " + result.Error().technicalDetails);
+					parsedByRequest.emplace(cacheKey, std::move(source));
 					advanceProgress();
 					continue;
 				}
 
-				batch = std::move(result).Value();
+				JFMImportBatchResult batch = std::move(result).Value();
 				warnings.insert(warnings.end(), batch.warnings.begin(), batch.warnings.end());
-				parsed = parsedBySource.emplace(sourceKey, std::move(batch)).first;
+				source.records.reserve(batch.characteristics.size());
+				for (JFMCharacteristic &characteristic : batch.characteristics)
+				{
+					source.records.emplace_back(JFMCharacteristicRecord{
+						std::move(characteristic.info),
+						CreateRef<const JFMCharacteristicData>(std::move(characteristic.data))});
+				}
+				parsed = parsedByRequest.emplace(cacheKey, std::move(source)).first;
 			}
 
-			const JFMCharacteristic *match = FindMaterializedMatch(parsed->second.characteristics, info);
+			const JFMCharacteristicRecord *match = Detail::FindMaterializedMatch(parsed->second.records, info);
 			if (match == nullptr)
 			{
 				if (FileSystem::Exists(info.sourcePath.Native()))
-					warnings.emplace_back("No matching raw data found for " + info.name + " in " + sourceKey);
+					warnings.emplace_back("No matching raw data found for " + info.name + " in " + sourcePath);
 				advanceProgress();
 				continue;
 			}
 
-			JFMCharacteristic characteristic;
-			characteristic.info = info;
-			characteristic.data = match->data;
-			materialized.emplace_back(std::move(characteristic));
+			materialized.emplace_back(JFMCharacteristicRecord{info, match->data});
 			advanceProgress();
 		}
 

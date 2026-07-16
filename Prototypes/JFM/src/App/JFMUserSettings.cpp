@@ -11,7 +11,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	namespace
+	namespace UserSettingsDetail
 	{
 		Path ExistingOr(Path path, Path fallback)
 		{
@@ -56,7 +56,8 @@ namespace SST::Prototypes::JFM
 		{
 			return presets.empty() ? std::string{} : presets.front().name;
 		}
-	}
+	} // namespace UserSettingsDetail
+	using namespace UserSettingsDetail;
 
 	JFMUserSettingsStore::JFMUserSettingsStore(Path configDirectory, Path prototypeRoot)
 		: m_ConfigDirectory(std::move(configDirectory)),

@@ -560,7 +560,7 @@ JFM obsługuje:
 
 - skalę liniową;
 - skalę logarytmiczną;
-- signed-log dla danych zmieniających znak;
+- signed-log dla danych zmieniających znak (funkcja odłożona; nie należy do bieżącej iteracji prototypu);
 - osobne ustawienia dla `I` i `J`, jeżeli obie wielkości są dostępne.
 
 ### 14.3 Residua
@@ -569,7 +569,7 @@ JFM pokazuje residua:
 
 - bezwzględne;
 - względne;
-- logarytmiczne albo signed-log, jeżeli dana funkcja celu tego wymaga;
+- logarytmiczne; signed-log pozostaje odłożony razem z obsługą tej skali dla wykresów;
 - jako osobny wykres albo panel diagnostyczny.
 
 ### 14.4 Widoczność i aktywność

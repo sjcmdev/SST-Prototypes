@@ -169,6 +169,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "name" << YAML::Value << characteristic.name;
 		out << YAML::Key << "measurement" << YAML::Value << characteristic.measurement;
 		out << YAML::Key << "source_path" << YAML::Value << characteristic.sourcePath.String();
+		out << YAML::Key << "source_record_key" << YAML::Value << characteristic.sourceRecordKey;
 		out << YAML::Key << "parser" << YAML::Value << characteristic.parser;
 		out << YAML::Key << "import" << YAML::Value;
 		emitImportOptions(out, characteristic.importOptions);
@@ -209,6 +210,7 @@ namespace SST::Prototypes::JFM
 		characteristic.name = readOr<std::string>(characteristicNode, "name", "Characteristic");
 		characteristic.measurement = readOr<std::string>(characteristicNode, "measurement", "IV");
 		characteristic.sourcePath = Path::FromResolved(readOr<std::string>(characteristicNode, "source_path", {}));
+		characteristic.sourceRecordKey = readOr<std::string>(characteristicNode, "source_record_key", {});
 		characteristic.parser = readOr<std::string>(characteristicNode, "parser", {});
 		characteristic.importOptions = readImportOptions(characteristicNode["import"], characteristic.parser);
 		characteristic.temperatureK = readOptionalDouble(characteristicNode, "temperature_K");

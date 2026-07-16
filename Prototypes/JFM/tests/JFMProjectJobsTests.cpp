@@ -9,6 +9,7 @@
 #include "Events/JFMEvents.hpp"
 #include "IO/JFMExportRawTsvJob.hpp"
 #include "IO/JFMImportJob.hpp"
+#include "IO/JFMImportPreviewJob.hpp"
 #include "IO/JFMImportPaths.hpp"
 #include "IO/JFMProjectJobs.hpp"
 #include "IO/JFMPythonBindings.hpp"
@@ -139,7 +140,7 @@ namespace SST::Prototypes::JFM
 		bool completed = false;
 		ProjectHandle completedProject = InvalidProjectHandle;
 		JFMOperationId completedOperation = InvalidJFMOperationId;
-		std::vector<JFMCharacteristic> characteristics;
+		std::vector<JFMCharacteristicRecord> characteristics;
 		std::vector<std::string> warnings;
 		auto completedSub = bus->Subscribe<ProjectDataMaterializationCompleted>([&](const ProjectDataMaterializationCompleted &event) {
 			completed = true;
@@ -177,19 +178,21 @@ namespace SST::Prototypes::JFM
 	{
 		auto bus = CreateRef<EventBus>();
 		bool completed = false;
+		ProjectHandle completedProject = InvalidProjectHandle;
+		JFMOperationId completedOperation = InvalidJFMOperationId;
 		std::vector<std::string> warnings;
 		auto completedSub = bus->Subscribe<ExportRawTsvBatchCompleted>([&](const ExportRawTsvBatchCompleted &event) {
 			completed = true;
+			completedProject = event.project;
+			completedOperation = event.operation;
 			warnings = event.warnings;
 		});
 
-		JFMCharacteristic valid;
-		valid.info.name = "valid";
-		valid.data.voltage = {0.0, 1.0};
-		valid.data.current = {1.0, 2.0};
-
-		JFMCharacteristic missing;
-		missing.info.name = "missing";
+		JFMCharacteristicInfo validInfo;
+		validInfo.name = "valid";
+		auto validData = CreateRef<const JFMCharacteristicData>(JFMCharacteristicData{{0.0, 1.0}, {1.0, 2.0}, {}});
+		JFMCharacteristicInfo missingInfo;
+		missingInfo.name = "missing";
 
 		const Path output = Path::FromResolved(FileSystem::TempDirectoryPath() / "sst-jfm-batch-export");
 		(void)FileSystem::RemoveAll(output.Native());
@@ -199,14 +202,18 @@ namespace SST::Prototypes::JFM
 			bus,
 			output,
 			{
-				JFMExportItem{Path("series") / Path("valid.tsv"), valid},
-				JFMExportItem{Path("series") / Path("missing.tsv"), missing},
-			});
+				JFMExportItem{Path("series") / Path("valid.tsv"), {std::move(validInfo), std::move(validData)}},
+				JFMExportItem{Path("series") / Path("missing.tsv"), {std::move(missingInfo), nullptr}},
+			},
+			17,
+			19);
 		job.Execute(context);
 		bus->ProcessQueue();
 
 		ASSERT_TRUE(completed);
 		ASSERT_FALSE(warnings.empty());
+		EXPECT_EQ(completedProject, 17);
+		EXPECT_EQ(completedOperation, 19);
 		EXPECT_TRUE(FileSystem::Exists((output / Path("series") / Path("valid.tsv")).Native()));
 		(void)FileSystem::RemoveAll(output.Native());
 		(void)completedSub;
@@ -253,6 +260,7 @@ namespace SST::Prototypes::JFM
 		ASSERT_FALSE(result->characteristics.empty());
 		const JFMCharacteristic &characteristic = result->characteristics.front();
 		EXPECT_EQ(characteristic.info.parser, "dat");
+		EXPECT_FALSE(characteristic.info.sourceRecordKey.empty());
 		EXPECT_FALSE(characteristic.data.voltage.empty());
 		EXPECT_FALSE(characteristic.data.current.empty());
 		EXPECT_TRUE(characteristic.info.temperatureK.has_value());
@@ -291,6 +299,97 @@ namespace SST::Prototypes::JFM
 		Result<JFMImportBatchResult> result = workerResult.get();
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
 		ASSERT_FALSE(result->characteristics.empty());
+#endif
+	}
+
+	TEST(JFMProjectJobsTests, ImportPreviewMatchesRealImportMetadata)
+	{
+		if (!JFMPythonImportBridge::IsAvailable())
+			GTEST_SKIP() << "Embedded Python is unavailable in this build.";
+
+#if DS_PYTHON_CAPI_AVAILABLE
+		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
+		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
+		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
+		auto runtime = EnsurePythonRuntimeForBridgeTests();
+		ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+
+		auto bus = CreateRef<EventBus>();
+		Ref<const JFMImportPreviewPayload> preview;
+		auto subscription = bus->Subscribe<ImportPreviewCompleted>([&](const ImportPreviewCompleted &event) {
+			preview = event.payload;
+		});
+		const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+		JFMPythonImportBridge bridge(pythonRoot);
+		auto imported = bridge.ImportFiles({dataPath}, {});
+		JFMImportPreviewJob previewJob(bus, 3, {dataPath}, false, pythonRoot, {});
+		JobContext context = MakeTestJobContext();
+		previewJob.Execute(context);
+		PythonInterpreter::ReleaseRuntimeGil(gil);
+		bus->ProcessQueue();
+
+		ASSERT_TRUE(imported) << imported.Error().technicalDetails;
+		ASSERT_TRUE(preview);
+		ASSERT_EQ(preview->items.size(), 1);
+		ASSERT_FALSE(preview->items.front().characteristics.empty());
+		const auto &previewInfo = preview->items.front().characteristics.front().info;
+		const auto &importedInfo = imported->characteristics.front().info;
+		EXPECT_EQ(previewInfo.name, importedInfo.name);
+		EXPECT_EQ(previewInfo.sourceRecordKey, importedInfo.sourceRecordKey);
+		EXPECT_EQ(previewInfo.temperatureK, importedInfo.temperatureK);
+		(void)subscription;
+#endif
+	}
+
+	TEST(JFMProjectJobsTests, MaterializationUsesSourceRecordKeyAndFullImportOptions)
+	{
+		if (!JFMPythonImportBridge::IsAvailable())
+			GTEST_SKIP() << "Embedded Python is unavailable in this build.";
+
+#if DS_PYTHON_CAPI_AVAILABLE
+		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
+		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
+		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("scaps-batch-file.iv");
+		auto runtime = EnsurePythonRuntimeForBridgeTests();
+		ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+
+		JFMCharacteristicInfo valid;
+		valid.id = 1;
+		valid.name = "Renamed after import";
+		valid.sourcePath = dataPath;
+		valid.sourceRecordKey = "0";
+		valid.importOptions.parser = "scaps_iv";
+		JFMCharacteristicInfo invalid = valid;
+		invalid.id = 2;
+		invalid.name = "Different options";
+		invalid.importOptions.parser = "custom";
+		invalid.importOptions.customScriptPath = "missing-parser.py";
+
+		JFMProject project;
+		project.characteristics = {valid, invalid};
+		project.series.push_back(JFMSeries{"series", "Series", {}, {1, 2}});
+		auto bus = CreateRef<EventBus>();
+		std::vector<JFMCharacteristicRecord> materialized;
+		std::vector<std::string> warnings;
+		auto subscription = bus->Subscribe<ProjectDataMaterializationCompleted>([&](const ProjectDataMaterializationCompleted &event) {
+			materialized = event.characteristics;
+			warnings = event.warnings;
+		});
+
+		const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+		MaterializeProjectDataJob job(bus, project, pythonRoot, 4, 5);
+		JobContext context = MakeTestJobContext();
+		job.Execute(context);
+		PythonInterpreter::ReleaseRuntimeGil(gil);
+		bus->ProcessQueue();
+
+		ASSERT_EQ(materialized.size(), 1);
+		EXPECT_EQ(materialized.front().info.id, 1);
+		EXPECT_EQ(materialized.front().info.name, "Renamed after import");
+		ASSERT_TRUE(materialized.front().data);
+		EXPECT_FALSE(materialized.front().data->voltage.empty());
+		EXPECT_FALSE(warnings.empty());
+		(void)subscription;
 #endif
 	}
 } // namespace SST::Prototypes::JFM

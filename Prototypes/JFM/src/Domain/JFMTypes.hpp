@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 
 #include <cstdint>
@@ -10,7 +11,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	inline constexpr int JFMProjectSchemaVersion = 2;
+	inline constexpr int JFMProjectSchemaVersion = 3;
 	using ProjectHandle = std::uint64_t;
 	inline constexpr ProjectHandle InvalidProjectHandle = 0;
 	using JFMOperationId = std::uint64_t;
@@ -29,6 +30,28 @@ namespace SST::Prototypes::JFM
 		}
 
 		bool operator==(const JFMCharacteristicRef &) const = default;
+	};
+
+	enum class JFMTreeItemKind
+	{
+		None,
+		Project,
+		Group,
+		Series,
+		Characteristic
+	};
+
+	struct JFMTreeItemRef
+	{
+		ProjectHandle project = InvalidProjectHandle;
+		JFMTreeItemKind kind = JFMTreeItemKind::None;
+		std::string id;
+		std::vector<CharacteristicId> characteristicIds;
+
+		[[nodiscard]] bool IsValid() const noexcept
+		{
+			return project != InvalidProjectHandle && kind != JFMTreeItemKind::None;
+		}
 	};
 
 	struct JFMColumn
@@ -88,6 +111,7 @@ namespace SST::Prototypes::JFM
 		std::string name;
 		std::string measurement = "IV";
 		Path sourcePath;
+		std::string sourceRecordKey;
 		std::string parser;
 		std::optional<double> temperatureK;
 		std::string temperatureSource = "missing";
@@ -109,6 +133,12 @@ namespace SST::Prototypes::JFM
 	{
 		JFMCharacteristicInfo info;
 		JFMCharacteristicData data;
+	};
+
+	struct JFMCharacteristicRecord
+	{
+		JFMCharacteristicInfo info;
+		Ref<const JFMCharacteristicData> data;
 	};
 
 	struct JFMGroup

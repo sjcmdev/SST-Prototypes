@@ -13,11 +13,11 @@
 
 namespace SST::Prototypes::JFM
 {
-	namespace
+	namespace RawPlotDetail
 	{
-		const std::vector<double> &selectYValues(const JFMCharacteristic &characteristic)
+		const std::vector<double> &selectYValues(const JFMCharacteristicData &data)
 		{
-			return characteristic.data.currentDensity.empty() ? characteristic.data.current : characteristic.data.currentDensity;
+			return data.currentDensity.empty() ? data.current : data.currentDensity;
 		}
 
 		std::vector<double> absolutePositive(const std::vector<double> &values, const std::vector<double> &x, std::vector<double> &filteredX)
@@ -124,25 +124,24 @@ namespace SST::Prototypes::JFM
 		{
 			return "plot-" + std::to_string(areaId) + "-group-" + std::to_string(groupIndex + 1);
 		}
-	}
+	} // namespace RawPlotDetail
+	using namespace RawPlotDetail;
 
 	RawPlotPanel::RawPlotPanel(
 		Ref<JFMWorkspaceStore> store,
-		Ref<JFMPlotRequestState> plotRequests,
 		Ref<JFMUserSettingsStore> settings,
 		Ref<SST::EventBus> eventBus,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Store(std::move(store)),
-		  m_PlotRequests(std::move(plotRequests)),
 		  m_Settings(std::move(settings)),
 		  m_EventBus(std::move(eventBus))
 	{
 		if (m_EventBus != nullptr)
 		{
-			AddSubscription(m_EventBus->Subscribe<PlotCharacteristicsRequested>([this](const PlotCharacteristicsRequested &event) {
-				PlotIds(event.ids, event.title, event.project);
+			AddSubscription(m_EventBus->Subscribe<PlotRequested>([this](const PlotRequested &event) {
+				PlotRequest(event);
 			}));
 		}
 		m_PlotAreas.emplace_back(CreatePlotArea());
@@ -150,7 +149,7 @@ namespace SST::Prototypes::JFM
 
 	Ref<IPanel> RawPlotPanel::Clone() const
 	{
-		return CreateRef<RawPlotPanel>(m_Store, m_PlotRequests, m_Settings, m_EventBus, GetTitle(), IsVisible());
+		return CreateRef<RawPlotPanel>(m_Store, m_Settings, m_EventBus, GetTitle(), IsVisible());
 	}
 
 	RawPlotPanel::PlotArea RawPlotPanel::CreatePlotArea(ProjectHandle project)
@@ -170,7 +169,7 @@ namespace SST::Prototypes::JFM
 		return area;
 	}
 
-	RawPlotPanel::PlotCurveGroup RawPlotPanel::CreateCurveGroup(JFMPlotRequest::CurveGroup request) const
+	RawPlotPanel::PlotCurveGroup RawPlotPanel::CreateCurveGroup(JFMPlotCurveGroupRequest request) const
 	{
 		PlotCurveGroup group;
 		group.key = std::move(request.key);
@@ -190,7 +189,7 @@ namespace SST::Prototypes::JFM
 		return group;
 	}
 
-	void RawPlotPanel::PlotRequest(JFMPlotRequest request)
+	void RawPlotPanel::PlotRequest(PlotRequested request)
 	{
 		if (request.groups.empty())
 			return;
@@ -198,7 +197,7 @@ namespace SST::Prototypes::JFM
 		if (!request.title.empty())
 			area.title = std::move(request.title);
 		area.groups.reserve(request.groups.size());
-		for (JFMPlotRequest::CurveGroup &groupRequest : request.groups)
+		for (JFMPlotCurveGroupRequest &groupRequest : request.groups)
 		{
 			PlotCurveGroup group = CreateCurveGroup(std::move(groupRequest));
 			if (group.key.empty())
@@ -213,10 +212,10 @@ namespace SST::Prototypes::JFM
 	{
 		if (ids.empty())
 			return;
-		JFMPlotRequest request;
+		PlotRequested request;
 		request.project = project;
 		request.title = title;
-		request.groups.emplace_back(JFMPlotRequest::CurveGroup{"selection", title.empty() ? "Selection" : title, std::move(ids), {}, {}});
+		request.groups.emplace_back(JFMPlotCurveGroupRequest{"selection", title.empty() ? "Selection" : title, std::move(ids), {}, {}});
 		PlotRequest(std::move(request));
 	}
 
@@ -231,10 +230,7 @@ namespace SST::Prototypes::JFM
 		});
 		if (series == project.series.end())
 			return;
-		std::vector<CharacteristicId> ids;
-		for (const JFMCharacteristic &characteristic : m_Store->GetSeriesCharacteristics(projectHandle, seriesId))
-			ids.emplace_back(characteristic.info.id);
-		PlotIds(std::move(ids), displayName(series->name, series->metadata), projectHandle);
+		PlotIds(series->characteristicIds, displayName(series->name, series->metadata), projectHandle);
 	}
 
 	void RawPlotPanel::PlotSelectedGroup()
@@ -242,21 +238,15 @@ namespace SST::Prototypes::JFM
 		if (m_Store == nullptr)
 			return;
 		const ProjectHandle projectHandle = m_Store->GetActiveProjectHandle();
-		const std::string selectedSeriesId = m_Store->GetSelectedSeriesId();
-		const JFMProject project = m_Store->GetProjectSnapshot(projectHandle);
-		const auto series = std::find_if(project.series.begin(), project.series.end(), [&selectedSeriesId](const JFMSeries &candidate) {
-			return candidate.id == selectedSeriesId;
-		});
-		if (series == project.series.end() || series->groupId.empty())
+		const std::string groupId = m_Store->GetSelectedGroupId();
+		if (groupId.empty())
 			return;
-		const auto group = std::find_if(project.groups.begin(), project.groups.end(), [&series](const JFMGroup &candidate) {
-			return candidate.id == series->groupId;
+		const JFMProject project = m_Store->GetProjectSnapshot(projectHandle);
+		const auto group = std::find_if(project.groups.begin(), project.groups.end(), [&groupId](const JFMGroup &candidate) {
+			return candidate.id == groupId;
 		});
-		std::vector<CharacteristicId> ids;
-		for (const JFMCharacteristic &characteristic : m_Store->GetGroupCharacteristics(projectHandle, series->groupId))
-			ids.emplace_back(characteristic.info.id);
 		PlotIds(
-			std::move(ids),
+			m_Store->GetGroupCharacteristicIds(projectHandle, groupId),
 			group == project.groups.end() ? "Group" : displayName(group->name, group->metadata),
 			projectHandle);
 	}
@@ -280,11 +270,15 @@ namespace SST::Prototypes::JFM
 		if (m_Store == nullptr)
 			return;
 		const std::uint64_t revision = m_Store->GetProjectRevision(area.project);
+		std::unordered_map<std::string, std::vector<JFMGroupingBucket>> resolvedGroupings;
 		for (PlotCurveGroup &group : area.groups)
 		{
 			if (group.groupingId.empty() || group.resolvedRevision == revision)
 				continue;
-			const std::vector<JFMGroupingBucket> buckets = m_Store->ResolveGrouping(area.project, group.groupingId);
+			auto [resolved, inserted] = resolvedGroupings.try_emplace(group.groupingId);
+			if (inserted)
+				resolved->second = m_Store->ResolveGrouping(area.project, group.groupingId);
+			const std::vector<JFMGroupingBucket> &buckets = resolved->second;
 			const auto bucket = std::find_if(buckets.begin(), buckets.end(), [&group](const JFMGroupingBucket &candidate) {
 				return candidate.key == group.bucketKey;
 			});
@@ -337,12 +331,6 @@ namespace SST::Prototypes::JFM
 			SetVisible(visible);
 			return;
 		}
-		if (m_PlotRequests != nullptr)
-		{
-			for (JFMPlotRequest request : m_PlotRequests->ConsumeRequests())
-				PlotRequest(std::move(request));
-		}
-
 		if (ImGui::Button("+ Empty Plot"))
 			m_PlotAreas.emplace_back(CreatePlotArea());
 		ImGui::SameLine();
@@ -367,14 +355,25 @@ namespace SST::Prototypes::JFM
 		{
 			PlotArea &area = m_PlotAreas[areaIndex];
 			RefreshDynamicGroups(area);
+			std::unordered_map<CharacteristicId, JFMCharacteristicRecord> records;
+			for (const PlotCurveGroup &group : area.groups)
+			{
+				for (CharacteristicId id : group.characteristicIds)
+				{
+					if (records.contains(id))
+						continue;
+					if (auto record = m_Store->FindCharacteristicRecord({area.project, id}))
+						records.emplace(id, std::move(*record));
+				}
+			}
 			for (PlotCurveGroup &group : area.groups)
 			{
 				group.characteristicIds.erase(
 					std::remove_if(
 						group.characteristicIds.begin(),
 						group.characteristicIds.end(),
-						[this, &area](CharacteristicId id) {
-							return !m_Store->FindCharacteristic({area.project, id}).has_value();
+						[&records](CharacteristicId id) {
+							return !records.contains(id);
 						}),
 					group.characteristicIds.end());
 				group.hiddenCharacteristicIds.erase(
@@ -532,7 +531,7 @@ namespace SST::Prototypes::JFM
 					for (std::size_t idIndex = 0; idIndex < group.characteristicIds.size();)
 					{
 						const CharacteristicId id = group.characteristicIds[idIndex];
-						const auto characteristic = m_Store->FindCharacteristic({area.project, id});
+						const auto characteristic = records.find(id);
 						ImGui::PushID(static_cast<int>(id));
 						if (ImGui::SmallButton("x"))
 						{
@@ -543,7 +542,7 @@ namespace SST::Prototypes::JFM
 						ImGui::SameLine();
 						std::array<float, 4> &color = group.colors.try_emplace(
 							id,
-							toArray(colorFor(characteristic ? characteristic->info : JFMCharacteristicInfo{id})))
+							toArray(colorFor(characteristic != records.end() ? characteristic->second.info : JFMCharacteristicInfo{id})))
 							.first->second;
 						ImGui::ColorEdit4("##color", color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
 						ImGui::SameLine();
@@ -551,10 +550,10 @@ namespace SST::Prototypes::JFM
 						if (ImGui::Checkbox("##visible", &shown))
 							setHidden(group.hiddenCharacteristicIds, id, !shown);
 						ImGui::SameLine();
-						const std::string label = characteristic ? shortName(characteristic->info) : std::to_string(id);
+						const std::string label = characteristic != records.end() ? shortName(characteristic->second.info) : std::to_string(id);
 						ImGui::Selectable(label.c_str(), false);
-						if (characteristic && ImGui::IsItemHovered())
-							ImGui::SetTooltip("%s", characteristic->info.name.c_str());
+						if (characteristic != records.end() && ImGui::IsItemHovered())
+							ImGui::SetTooltip("%s", characteristic->second.info.name.c_str());
 						ImGui::PopID();
 						++idIndex;
 					}
@@ -593,11 +592,12 @@ namespace SST::Prototypes::JFM
 					{
 						if (containsId(group.hiddenCharacteristicIds, id))
 							continue;
-						const auto characteristic = m_Store->FindCharacteristic({area.project, id});
-						if (!characteristic)
+						const auto characteristic = records.find(id);
+						if (characteristic == records.end() || !characteristic->second.data)
 							continue;
-						const std::vector<double> &x = characteristic->data.voltage;
-						const std::vector<double> &rawY = selectYValues(*characteristic);
+						const JFMCharacteristicData &data = *characteristic->second.data;
+						const std::vector<double> &x = data.voltage;
+						const std::vector<double> &rawY = selectYValues(data);
 						for (std::size_t index = 0; index < x.size() && index < rawY.size(); ++index)
 						{
 							const double y = area.scale == PlotScale::SemiLog ? std::abs(rawY[index]) : rawY[index];
@@ -638,18 +638,19 @@ namespace SST::Prototypes::JFM
 					{
 						if (containsId(group.hiddenCharacteristicIds, id))
 							continue;
-						const auto characteristic = m_Store->FindCharacteristic({area.project, id});
-						if (!characteristic)
+						const auto characteristic = records.find(id);
+						if (characteristic == records.end() || !characteristic->second.data)
 							continue;
-						const std::vector<double> &x = characteristic->data.voltage;
-						const std::vector<double> &rawY = selectYValues(*characteristic);
+						const JFMCharacteristicData &data = *characteristic->second.data;
+						const std::vector<double> &x = data.voltage;
+						const std::vector<double> &rawY = selectYValues(data);
 						const std::size_t count = std::min(x.size(), rawY.size());
 						if (count == 0)
 							continue;
 						const auto color = group.colors.find(id);
-						const std::array<float, 4> fallbackColor = toArray(colorFor(characteristic->info));
+						const std::array<float, 4> fallbackColor = toArray(colorFor(characteristic->second.info));
 						const ImPlotSpec spec(ImPlotProp_LineColor, toVec4(color == group.colors.end() ? fallbackColor : color->second));
-						const std::string curveLabel = group.title + " / " + shortName(characteristic->info)
+						const std::string curveLabel = group.title + " / " + shortName(characteristic->second.info)
 							+ "###curve_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 						if (area.scale == PlotScale::Linear)
 							ImPlot::PlotLine(curveLabel.c_str(), x.data(), rawY.data(), static_cast<int>(count), spec);

@@ -9,22 +9,24 @@
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Domain/JFMTypes.hpp"
+#include "IO/JFMImportSources.hpp"
 
 namespace SST::Prototypes::JFM
 {
-	struct JFMImportGroup
-	{
-		std::vector<Path> paths;
-		std::string targetSeriesId;
-		std::vector<std::string> groupPath;
-		std::string seriesName;
-	};
-
 	class JFMImportJob final : public IJob
 	{
 	public:
 		JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot, JFMImportOptions options = {}, ProjectHandle project = InvalidProjectHandle, JFMOperationId operation = InvalidJFMOperationId);
-		JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot, JFMImportOptions options = {}, ProjectHandle project = InvalidProjectHandle, JFMOperationId operation = InvalidJFMOperationId);
+		JFMImportJob(
+			Ref<EventBus> eventBus,
+			std::vector<Path> paths,
+			bool recursive,
+			JFMImportPlacement placement,
+			std::string targetSeriesId,
+			Path pythonRoot,
+			JFMImportOptions options = {},
+			ProjectHandle project = InvalidProjectHandle,
+			JFMOperationId operation = InvalidJFMOperationId);
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -36,7 +38,10 @@ namespace SST::Prototypes::JFM
 
 	private:
 		Ref<EventBus> m_EventBus;
-		std::vector<JFMImportGroup> m_Groups;
+		std::vector<Path> m_Paths;
+		bool m_Recursive = false;
+		JFMImportPlacement m_Placement = JFMImportPlacement::NewSeries;
+		std::string m_TargetSeriesId;
 		Path m_PythonRoot;
 		JFMImportOptions m_Options;
 		ProjectHandle m_Project = InvalidProjectHandle;

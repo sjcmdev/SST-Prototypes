@@ -13,7 +13,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	namespace
+	namespace WorkspaceDetail
 	{
 		std::filesystem::path normalizedPath(const Path &path)
 		{
@@ -37,7 +37,8 @@ namespace SST::Prototypes::JFM
 			const double value = std::strtod(text.c_str(), &end);
 			return end != text.c_str() && end != nullptr && *end == '\0' ? std::optional<double>{value} : std::nullopt;
 		}
-	}
+	} // namespace WorkspaceDetail
+	using namespace WorkspaceDetail;
 
 	JFMWorkspaceStore::JFMWorkspaceStore()
 	{
@@ -264,10 +265,39 @@ namespace SST::Prototypes::JFM
 		return characteristics;
 	}
 
+	std::optional<JFMCharacteristicRecord> JFMWorkspaceStore::GetSelectedCharacteristicRecord() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		const ProjectDocument &document = activeDocumentLocked();
+		auto info = findInfoLocked(document, document.selectedCharacteristicId);
+		return info ? makeCharacteristicRecordLocked(document, info->get()) : std::nullopt;
+	}
+
+	std::vector<JFMCharacteristicRecord> JFMWorkspaceStore::GetSelectedCharacteristicRecords() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		const ProjectDocument &document = activeDocumentLocked();
+		std::vector<JFMCharacteristicRecord> characteristics;
+		characteristics.reserve(document.selectedCharacteristicIds.size());
+		for (const CharacteristicId id : document.selectedCharacteristicIds)
+		{
+			auto info = findInfoLocked(document, id);
+			if (info)
+				characteristics.emplace_back(*makeCharacteristicRecordLocked(document, info->get()));
+		}
+		return characteristics;
+	}
+
 	std::string JFMWorkspaceStore::GetSelectedSeriesId() const
 	{
 		std::scoped_lock lock(m_Mutex);
 		return activeDocumentLocked().selectedSeriesId;
+	}
+
+	std::string JFMWorkspaceStore::GetSelectedGroupId() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return activeDocumentLocked().selectedGroupId;
 	}
 
 	CharacteristicId JFMWorkspaceStore::GetSelectedCharacteristicId() const
@@ -303,6 +333,16 @@ namespace SST::Prototypes::JFM
 		return info ? makeCharacteristicLocked(document->get(), info->get()) : std::nullopt;
 	}
 
+	std::optional<JFMCharacteristicRecord> JFMWorkspaceStore::FindCharacteristicRecord(JFMCharacteristicRef ref) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return std::nullopt;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		return info ? makeCharacteristicRecordLocked(document->get(), info->get()) : std::nullopt;
+	}
+
 	std::optional<JFMCharacteristic> JFMWorkspaceStore::FindCharacteristicByName(const std::string &name) const
 	{
 		std::scoped_lock lock(m_Mutex);
@@ -328,6 +368,16 @@ namespace SST::Prototypes::JFM
 		return series ? seriesCharacteristicsLocked(document->get(), series->get()) : std::vector<JFMCharacteristic>{};
 	}
 
+	std::vector<JFMCharacteristicRecord> JFMWorkspaceStore::GetSeriesCharacteristicRecords(ProjectHandle handle, const std::string &seriesId) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return {};
+		auto series = findSeriesLocked(document->get(), seriesId);
+		return series ? seriesCharacteristicRecordsLocked(document->get(), series->get()) : std::vector<JFMCharacteristicRecord>{};
+	}
+
 	std::vector<JFMCharacteristic> JFMWorkspaceStore::GetGroupCharacteristics(const std::string &groupId) const
 	{
 		return GetGroupCharacteristics(GetActiveProjectHandle(), groupId);
@@ -351,6 +401,24 @@ namespace SST::Prototypes::JFM
 			characteristics.insert(characteristics.end(), current.begin(), current.end());
 		}
 		return characteristics;
+	}
+
+	std::vector<CharacteristicId> JFMWorkspaceStore::GetGroupCharacteristicIds(ProjectHandle handle, const std::string &groupId) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return {};
+		const ProjectDocument &value = document->get();
+		std::vector<std::string> groupIds;
+		collectGroupIdsLocked(value, groupId, groupIds);
+		std::vector<CharacteristicId> ids;
+		for (const JFMSeries &series : value.project.series)
+		{
+			if (std::find(groupIds.begin(), groupIds.end(), series.groupId) != groupIds.end())
+				ids.insert(ids.end(), series.characteristicIds.begin(), series.characteristicIds.end());
+		}
+		return ids;
 	}
 
 	JFMGroup JFMWorkspaceStore::AddGroup(std::string name, std::string parentId)
@@ -444,6 +512,15 @@ namespace SST::Prototypes::JFM
 
 	std::vector<CharacteristicId> JFMWorkspaceStore::AddCharacteristics(ProjectHandle handle, std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId)
 	{
+		std::vector<JFMCharacteristicRecord> records;
+		records.reserve(characteristics.size());
+		for (JFMCharacteristic &characteristic : characteristics)
+			records.push_back({std::move(characteristic.info), CreateRef<const JFMCharacteristicData>(std::move(characteristic.data))});
+		return AddCharacteristicRecords(handle, std::move(records), std::move(targetSeriesId));
+	}
+
+	std::vector<CharacteristicId> JFMWorkspaceStore::AddCharacteristicRecords(ProjectHandle handle, std::vector<JFMCharacteristicRecord> characteristics, std::string targetSeriesId)
+	{
 		std::scoped_lock lock(m_Mutex);
 		auto documentRef = findDocumentLocked(handle);
 		if (!documentRef || characteristics.empty())
@@ -461,7 +538,7 @@ namespace SST::Prototypes::JFM
 
 		std::vector<CharacteristicId> addedIds;
 		addedIds.reserve(characteristics.size());
-		for (JFMCharacteristic &characteristic : characteristics)
+		for (JFMCharacteristicRecord &characteristic : characteristics)
 		{
 			if (characteristic.info.id == InvalidCharacteristicId)
 				characteristic.info.id = document.nextCharacteristicId++;
@@ -478,7 +555,7 @@ namespace SST::Prototypes::JFM
 				existing->get() = characteristic.info;
 			else
 				document.project.characteristics.push_back(characteristic.info);
-			document.characteristicData[characteristic.info.id] = CreateRef<const JFMCharacteristicData>(std::move(characteristic.data));
+			document.characteristicData[characteristic.info.id] = std::move(characteristic.data);
 			target.characteristicIds.push_back(characteristic.info.id);
 			document.selectedCharacteristicId = characteristic.info.id;
 			addedIds.push_back(characteristic.info.id);
@@ -965,9 +1042,8 @@ namespace SST::Prototypes::JFM
 		if (!document)
 			return {};
 		auto &scripts = document->get().project.scripts;
-		const auto existing = std::find_if(scripts.begin(), scripts.end(), [&path](const JFMScriptInfo &script) { return script.path == path; });
-		if (existing != scripts.end())
-			return *existing;
+		if (auto existing = findScriptByPathLocked(document->get(), path))
+			return existing->get();
 		JFMScriptInfo script;
 		script.id = nextId(document->get(), "script");
 		script.path = std::move(path);
@@ -1003,10 +1079,11 @@ namespace SST::Prototypes::JFM
 		if (!document)
 			return false;
 		auto &scripts = document->get().project.scripts;
-		const auto oldSize = scripts.size();
-		scripts.erase(std::remove_if(scripts.begin(), scripts.end(), [&scriptId](const JFMScriptInfo &script) { return script.id == scriptId; }), scripts.end());
-		if (scripts.size() == oldSize)
+		auto script = findScriptLocked(document->get(), scriptId);
+		if (!script)
 			return false;
+		const auto index = static_cast<std::size_t>(&script->get() - scripts.data());
+		scripts.erase(scripts.begin() + static_cast<std::ptrdiff_t>(index));
 		document->get().status = "Script removed.";
 		bumpRevisionLocked(document->get());
 		return true;
@@ -1023,11 +1100,11 @@ namespace SST::Prototypes::JFM
 		auto document = findDocumentLocked(handle);
 		if (!document)
 			return false;
-		auto it = std::find_if(document->get().project.scripts.begin(), document->get().project.scripts.end(), [&scriptId](const JFMScriptInfo &script) { return script.id == scriptId; });
-		if (it == document->get().project.scripts.end())
+		auto script = findScriptLocked(document->get(), scriptId);
+		if (!script)
 			return false;
-		++it->reloadCount;
-		document->get().status = "Script reloaded: " + it->name;
+		++script->get().reloadCount;
+		document->get().status = "Script reloaded: " + script->get().name;
 		bumpRevisionLocked(document->get());
 		return true;
 	}
@@ -1134,6 +1211,13 @@ namespace SST::Prototypes::JFM
 		ensureSelectionLocked(document);
 	}
 
+	void JFMWorkspaceStore::SelectGroup(std::string groupId)
+	{
+		std::scoped_lock lock(m_Mutex);
+		ProjectDocument &document = activeDocumentLocked();
+		document.selectedGroupId = findGroupLocked(document, groupId) ? std::move(groupId) : std::string{};
+	}
+
 	void JFMWorkspaceStore::SelectCharacteristic(CharacteristicId characteristicId)
 	{
 		std::scoped_lock lock(m_Mutex);
@@ -1171,20 +1255,55 @@ namespace SST::Prototypes::JFM
 
 	std::size_t JFMWorkspaceStore::UpdateCharacteristicData(ProjectHandle handle, std::vector<JFMCharacteristic> characteristics)
 	{
+		std::vector<JFMCharacteristicRecord> records;
+		records.reserve(characteristics.size());
+		for (JFMCharacteristic &characteristic : characteristics)
+			records.emplace_back(JFMCharacteristicRecord{
+				std::move(characteristic.info),
+				CreateRef<const JFMCharacteristicData>(std::move(characteristic.data))});
+		return UpdateCharacteristicRecords(handle, std::move(records));
+	}
+
+	std::size_t JFMWorkspaceStore::UpdateCharacteristicRecords(ProjectHandle handle, std::vector<JFMCharacteristicRecord> characteristics)
+	{
 		std::scoped_lock lock(m_Mutex);
 		auto document = findDocumentLocked(handle);
 		if (!document)
 			return 0;
 		std::size_t updated = 0;
-		for (JFMCharacteristic &characteristic : characteristics)
+		for (JFMCharacteristicRecord &characteristic : characteristics)
 		{
 			if (characteristic.info.id == InvalidCharacteristicId || !findInfoLocked(document->get(), characteristic.info.id))
 				continue;
-			document->get().characteristicData[characteristic.info.id] = CreateRef<const JFMCharacteristicData>(std::move(characteristic.data));
+			document->get().characteristicData[characteristic.info.id] = std::move(characteristic.data);
 			++updated;
 		}
 		ensureSelectionLocked(document->get());
 		return updated;
+	}
+
+	void JFMWorkspaceStore::SetFocusedTreeItem(JFMTreeItemRef item)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_FocusedTreeItem = std::move(item);
+	}
+
+	JFMTreeItemRef JFMWorkspaceStore::GetFocusedTreeItem() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_FocusedTreeItem;
+	}
+
+	void JFMWorkspaceStore::SetTreeClipboard(JFMTreeItemRef item)
+	{
+		std::scoped_lock lock(m_Mutex);
+		m_TreeClipboard = item.IsValid() ? std::optional<JFMTreeItemRef>{std::move(item)} : std::nullopt;
+	}
+
+	std::optional<JFMTreeItemRef> JFMWorkspaceStore::GetTreeClipboard() const
+	{
+		std::scoped_lock lock(m_Mutex);
+		return m_TreeClipboard;
 	}
 
 	JFMProject JFMWorkspaceStore::MakeDefaultProject(std::string name)
@@ -1279,14 +1398,44 @@ namespace SST::Prototypes::JFM
 		return it == document.project.characteristics.end() ? std::nullopt : OptionalRef<const JFMCharacteristicInfo>{std::cref(*it)};
 	}
 
+	JFMWorkspaceStore::OptionalRef<JFMScriptInfo> JFMWorkspaceStore::findScriptLocked(ProjectDocument &document, const std::string &scriptId)
+	{
+		const auto it = std::find_if(document.project.scripts.begin(), document.project.scripts.end(), [&scriptId](const JFMScriptInfo &script) { return script.id == scriptId; });
+		return it == document.project.scripts.end() ? std::nullopt : OptionalRef<JFMScriptInfo>{std::ref(*it)};
+	}
+
+	JFMWorkspaceStore::OptionalRef<JFMScriptInfo> JFMWorkspaceStore::findScriptByPathLocked(ProjectDocument &document, const Path &path)
+	{
+		const auto it = std::find_if(document.project.scripts.begin(), document.project.scripts.end(), [&path](const JFMScriptInfo &script) { return script.path == path; });
+		return it == document.project.scripts.end() ? std::nullopt : OptionalRef<JFMScriptInfo>{std::ref(*it)};
+	}
+
 	std::optional<JFMCharacteristic> JFMWorkspaceStore::makeCharacteristicLocked(const ProjectDocument &document, const JFMCharacteristicInfo &info)
 	{
-		JFMCharacteristic characteristic;
-		characteristic.info = info;
-		const auto data = document.characteristicData.find(info.id);
-		if (data != document.characteristicData.end() && data->second)
-			characteristic.data = *data->second;
+		const auto record = makeCharacteristicRecordLocked(document, info);
+		JFMCharacteristic characteristic{record->info, {}};
+		if (record->data)
+			characteristic.data = *record->data;
 		return characteristic;
+	}
+
+	std::optional<JFMCharacteristicRecord> JFMWorkspaceStore::makeCharacteristicRecordLocked(const ProjectDocument &document, const JFMCharacteristicInfo &info)
+	{
+		const auto data = document.characteristicData.find(info.id);
+		return JFMCharacteristicRecord{info, data == document.characteristicData.end() ? nullptr : data->second};
+	}
+
+	std::vector<JFMCharacteristicRecord> JFMWorkspaceStore::seriesCharacteristicRecordsLocked(const ProjectDocument &document, const JFMSeries &series)
+	{
+		std::vector<JFMCharacteristicRecord> characteristics;
+		characteristics.reserve(series.characteristicIds.size());
+		for (CharacteristicId id : series.characteristicIds)
+		{
+			auto info = findInfoLocked(document, id);
+			if (info)
+				characteristics.emplace_back(*makeCharacteristicRecordLocked(document, info->get()));
+		}
+		return characteristics;
 	}
 
 	std::vector<JFMCharacteristic> JFMWorkspaceStore::seriesCharacteristicsLocked(const ProjectDocument &document, const JFMSeries &series)

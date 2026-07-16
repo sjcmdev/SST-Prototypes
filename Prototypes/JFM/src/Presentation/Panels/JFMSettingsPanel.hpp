@@ -27,5 +27,10 @@ namespace SST::Prototypes::JFM
 		std::array<char, 80> m_NewPresetName = {};
 		std::array<float, 4> m_NewPresetStart = {0.15f, 0.75f, 1.00f, 1.00f};
 		std::array<float, 4> m_NewPresetEnd = {1.00f, 0.12f, 0.55f, 1.00f};
+		bool m_PlotDraftInitialized = false;
+		bool m_DefaultPlotSemiLog = true;
+		bool m_DefaultPlotAutoFit = true;
+		bool m_DefaultPlotShowLegend = true;
+		float m_DefaultPlotFitPadding = 0.08f;
 	};
 } // namespace SST::Prototypes::JFM

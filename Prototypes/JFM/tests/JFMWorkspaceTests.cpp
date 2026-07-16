@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "App/JFMCommands.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Undo/UndoStack.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST::Prototypes::JFM
@@ -285,30 +287,84 @@ namespace SST::Prototypes::JFM
 		EXPECT_TRUE(store.IsDirty(project));
 	}
 
-	TEST(JFMWorkspaceStoreTests, ProjectEditCommandRestoresAndActivatesItsProject)
+	TEST(JFMWorkspaceStoreTests, ProjectEditCommandRunsThroughRegistryUndoAndRedo)
 	{
 		auto store = CreateRef<JFMWorkspaceStore>();
+		auto undoStack = CreateRef<UndoStack>();
+		CommandRegistry registry;
+		registry.SetUndoStack(undoStack);
 		const ProjectHandle editedProject = store->GetActiveProjectHandle();
 		const ProjectHandle otherProject = store->CreateProject("Other");
-		JFMProjectEditRequest request;
-		request.project = editedProject;
-		request.description = "Rename project";
-		request.apply = [](JFMWorkspaceStore &workspace, ProjectHandle project) {
-			(void)workspace.RenameProject(project, "Renamed");
-			return Result<void>{};
-		};
-		auto command = CreateJFMProjectEditCommand(store, std::move(request));
-		CommandContext context;
+		ASSERT_TRUE(registry.Register(
+			CommandMeta{CommandID{"test.jfm.rename"}, "Rename", "Test", {}, {}, CommandFlags::Undoable},
+			[store, editedProject](CommandContext &) {
+				return CreateJFMProjectEditCommand(store, JFMProjectEditRequest{
+					editedProject,
+					"Rename project",
+					[](JFMWorkspaceStore &workspace, ProjectHandle project) {
+						(void)workspace.RenameProject(project, "Renamed");
+						return Result<void>{};
+					}});
+			}));
 
-		ASSERT_TRUE(command->Execute(context));
+		auto outcome = registry.Execute(CommandID{"test.jfm.rename"});
+		ASSERT_TRUE(outcome) << outcome.Error().technicalDetails;
+		EXPECT_TRUE(outcome->pushedToUndoStack);
+		EXPECT_EQ(undoStack->GetUndoDepth(), 1);
 		EXPECT_EQ(store->GetProjectSnapshot(editedProject).name, "Renamed");
 		EXPECT_EQ(store->GetActiveProjectHandle(), otherProject);
-		ASSERT_TRUE(command->Undo(context));
+		ASSERT_TRUE(undoStack->Undo());
 		EXPECT_EQ(store->GetProjectSnapshot(editedProject).name, "Untitled JFM Project");
 		EXPECT_EQ(store->GetActiveProjectHandle(), editedProject);
 		ASSERT_TRUE(store->SetActiveProject(otherProject));
-		ASSERT_TRUE(command->Redo(context));
+		ASSERT_TRUE(undoStack->Redo());
 		EXPECT_EQ(store->GetProjectSnapshot(editedProject).name, "Renamed");
 		EXPECT_EQ(store->GetActiveProjectHandle(), editedProject);
+	}
+
+	TEST(JFMWorkspaceStoreTests, UndoRedoKeepsSharedRawDataPayload)
+	{
+		auto store = CreateRef<JFMWorkspaceStore>();
+		auto undoStack = CreateRef<UndoStack>();
+		CommandRegistry registry;
+		registry.SetUndoStack(undoStack);
+		const ProjectHandle project = store->GetActiveProjectHandle();
+		const std::string seriesId = store->AddSeries(project, "Series").id;
+		auto data = CreateRef<const JFMCharacteristicData>(JFMCharacteristicData{{0.0, 1.0}, {1.0, 2.0}, {}});
+		JFMCharacteristicInfo sourceInfo;
+		sourceInfo.name = "Source";
+		const CharacteristicId sourceId = store->AddCharacteristicRecords(project, {{sourceInfo, data}}, seriesId).front();
+
+		ASSERT_TRUE(registry.Register(
+			CommandMeta{CommandID{"test.jfm.duplicate"}, "Duplicate", "Test", {}, {}, CommandFlags::Undoable},
+			[store, project, seriesId, sourceId](CommandContext &) {
+				return CreateJFMProjectEditCommand(store, JFMProjectEditRequest{
+					project,
+					"Duplicate characteristic",
+					[seriesId, sourceId](JFMWorkspaceStore &workspace, ProjectHandle handle) {
+						auto source = workspace.FindCharacteristicRecord({handle, sourceId});
+						if (!source)
+							return Result<void>{};
+						source->info.id = InvalidCharacteristicId;
+						source->info.name = "Copy";
+						(void)workspace.AddCharacteristicRecords(handle, {std::move(*source)}, seriesId);
+						return Result<void>{};
+					}});
+			}));
+
+		ASSERT_TRUE(registry.Execute(CommandID{"test.jfm.duplicate"}));
+		auto copy = store->FindCharacteristicByName("Copy");
+		ASSERT_TRUE(copy);
+		auto copyRecord = store->FindCharacteristicRecord({project, copy->info.id});
+		ASSERT_TRUE(copyRecord);
+		EXPECT_EQ(copyRecord->data.get(), data.get());
+		ASSERT_TRUE(undoStack->Undo());
+		EXPECT_FALSE(store->FindCharacteristicByName("Copy"));
+		ASSERT_TRUE(undoStack->Redo());
+		copy = store->FindCharacteristicByName("Copy");
+		ASSERT_TRUE(copy);
+		copyRecord = store->FindCharacteristicRecord({project, copy->info.id});
+		ASSERT_TRUE(copyRecord);
+		EXPECT_EQ(copyRecord->data.get(), data.get());
 	}
 } // namespace SST::Prototypes::JFM

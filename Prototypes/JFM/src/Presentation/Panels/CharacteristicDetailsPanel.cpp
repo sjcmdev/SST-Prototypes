@@ -29,7 +29,7 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		auto selected = m_Store != nullptr ? m_Store->GetSelectedCharacteristic() : std::optional<JFMCharacteristic>{};
+		auto selected = m_Store != nullptr ? m_Store->GetSelectedCharacteristicRecord() : std::optional<JFMCharacteristicRecord>{};
 		if (!selected)
 		{
 			ImGui::TextDisabled("No characteristic selected");

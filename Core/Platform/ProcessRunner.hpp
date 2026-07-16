@@ -31,4 +31,6 @@ namespace SST::Platform
 	};
 
 	[[nodiscard]] Result<ProcessRunResult> RunProcess(const ProcessRunOptions &options);
+	[[nodiscard]] Result<Path> CurrentExecutablePath();
+	[[nodiscard]] Result<void> LaunchDetached(const ProcessRunOptions &options);
 } // namespace SST::Platform

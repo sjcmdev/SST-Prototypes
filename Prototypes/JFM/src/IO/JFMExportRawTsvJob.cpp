@@ -6,22 +6,23 @@
 #include "Core/JobSystem/JobContext.hpp"
 #include "Events/JFMEvents.hpp"
 
-namespace SST::Prototypes::JFM
+namespace SST::Prototypes::JFM::Detail
 {
-	namespace
+	const std::vector<double> &selectYValues(const JFMCharacteristicData &data)
 	{
-
-	const std::vector<double> &selectYValues(const JFMCharacteristic &characteristic)
-	{
-		if (!characteristic.data.currentDensity.empty())
-			return characteristic.data.currentDensity;
-		return characteristic.data.current;
+		return data.currentDensity.empty() ? data.current : data.currentDensity;
 	}
 
-	bool buildTsv(const JFMCharacteristic &characteristic, std::string &text, std::string &error)
+	bool buildTsv(const JFMCharacteristicRecord &characteristic, std::string &text, std::string &error)
 	{
-		const std::vector<double> &y = selectYValues(characteristic);
-		const std::size_t count = std::min(characteristic.data.voltage.size(), y.size());
+		if (!characteristic.data)
+		{
+			error = "Selected characteristic has no raw arrays.";
+			return false;
+		}
+		const JFMCharacteristicData &data = *characteristic.data;
+		const std::vector<double> &y = selectYValues(data);
+		const std::size_t count = std::min(data.voltage.size(), y.size());
 		if (count == 0)
 		{
 			error = "Selected characteristic has no raw arrays.";
@@ -29,16 +30,19 @@ namespace SST::Prototypes::JFM
 		}
 
 		std::ostringstream output;
-		output << "voltage\t" << (characteristic.data.currentDensity.empty() ? "current" : "current_density") << '\n';
+		output << "voltage\t" << (data.currentDensity.empty() ? "current" : "current_density") << '\n';
 		for (std::size_t index = 0; index < count; ++index)
-			output << characteristic.data.voltage[index] << '\t' << y[index] << '\n';
+			output << data.voltage[index] << '\t' << y[index] << '\n';
 		text = output.str();
 		return true;
 	}
-	}
+} // namespace SST::Prototypes::JFM::Detail
 
-	JFMExportRawTsvJob::JFMExportRawTsvJob(Ref<EventBus> eventBus, Path path, JFMCharacteristic characteristic)
-		: m_EventBus(std::move(eventBus)), m_Path(std::move(path)), m_Characteristic(std::move(characteristic))
+namespace SST::Prototypes::JFM
+{
+
+	JFMExportRawTsvJob::JFMExportRawTsvJob(Ref<EventBus> eventBus, Path path, JFMCharacteristicRecord characteristic, ProjectHandle project, JFMOperationId operation)
+		: m_EventBus(std::move(eventBus)), m_Path(std::move(path)), m_Characteristic(std::move(characteristic)), m_Project(project), m_Operation(operation)
 	{
 	}
 
@@ -58,10 +62,10 @@ namespace SST::Prototypes::JFM
 		context.SetProgress(0.0f, 2.0f);
 		std::string text;
 		std::string error;
-		if (!buildTsv(m_Characteristic, text, error))
+		if (!Detail::buildTsv(m_Characteristic, text, error))
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ExportRawTsvFailed{m_Path, error});
+				m_EventBus->Queue(ExportRawTsvFailed{m_Path, error, m_Project, m_Operation});
 			return;
 		}
 
@@ -71,17 +75,17 @@ namespace SST::Prototypes::JFM
 		if (!TextFileIO::Save(m_Path, text, error))
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ExportRawTsvFailed{m_Path, error});
+				m_EventBus->Queue(ExportRawTsvFailed{m_Path, error, m_Project, m_Operation});
 			return;
 		}
 
 		context.SetProgress(2.0f, 2.0f);
 		if (m_EventBus != nullptr)
-			m_EventBus->Queue(ExportRawTsvCompleted{m_Path});
+			m_EventBus->Queue(ExportRawTsvCompleted{m_Path, m_Project, m_Operation});
 	}
 
-	JFMExportRawTsvBatchJob::JFMExportRawTsvBatchJob(Ref<EventBus> eventBus, Path outputDirectory, std::vector<JFMExportItem> items)
-		: m_EventBus(std::move(eventBus)), m_OutputDirectory(std::move(outputDirectory)), m_Items(std::move(items))
+	JFMExportRawTsvBatchJob::JFMExportRawTsvBatchJob(Ref<EventBus> eventBus, Path outputDirectory, std::vector<JFMExportItem> items, ProjectHandle project, JFMOperationId operation)
+		: m_EventBus(std::move(eventBus)), m_OutputDirectory(std::move(outputDirectory)), m_Items(std::move(items)), m_Project(project), m_Operation(operation)
 	{
 	}
 
@@ -114,7 +118,7 @@ namespace SST::Prototypes::JFM
 
 			std::string text;
 			std::string error;
-			if (!buildTsv(item.characteristic, text, error))
+			if (!Detail::buildTsv(item.characteristic, text, error))
 			{
 				warnings.emplace_back(item.characteristic.info.name + ": " + error);
 				context.SetProgress(static_cast<float>(index + 1), static_cast<float>(m_Items.size()));
@@ -135,8 +139,8 @@ namespace SST::Prototypes::JFM
 		if (m_EventBus == nullptr)
 			return;
 		if (exported == 0 && !m_Items.empty())
-			m_EventBus->Queue(ExportRawTsvBatchFailed{m_OutputDirectory, warnings.empty() ? "No files exported." : warnings.front()});
+			m_EventBus->Queue(ExportRawTsvBatchFailed{m_OutputDirectory, warnings.empty() ? "No files exported." : warnings.front(), m_Project, m_Operation});
 		else
-			m_EventBus->Queue(ExportRawTsvBatchCompleted{m_OutputDirectory, exported, std::move(warnings)});
+			m_EventBus->Queue(ExportRawTsvBatchCompleted{m_OutputDirectory, exported, std::move(warnings), m_Project, m_Operation});
 	}
 } // namespace SST::Prototypes::JFM

@@ -7,20 +7,17 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Platform/ProcessRunner.hpp"
 #include "Core/Utils/KeyCodes.hpp"
 #include "Events/JFMEvents.hpp"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
+#include <sstream>
 #include <set>
 #include <system_error>
-
-#if defined(DS_PLATFORM_WINDOWS)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#endif
+#include <tuple>
 
 namespace SST::Prototypes::JFM
 {
@@ -130,6 +127,39 @@ namespace SST::Prototypes::JFM
 		return name;
 	}
 
+	std::string copyName(const std::string &name)
+	{
+		return name.empty() ? "Copy" : name + " Copy";
+	}
+
+	std::string replaceAll(std::string text, const std::string &from, const std::string &to)
+	{
+		std::size_t position = 0;
+		while ((position = text.find(from, position)) != std::string::npos)
+		{
+			text.replace(position, from.size(), to);
+			position += to.size();
+		}
+		return text;
+	}
+
+	std::string expandShortNamePattern(std::string pattern, const JFMCharacteristicInfo &info)
+	{
+		std::ostringstream temperature;
+		if (info.temperatureK)
+			temperature << *info.temperatureK;
+		pattern = replaceAll(std::move(pattern), "{name}", info.name);
+		pattern = replaceAll(std::move(pattern), "{id}", std::to_string(info.id));
+		pattern = replaceAll(std::move(pattern), "{stem}", info.sourcePath.Empty() ? info.name : info.sourcePath.Native().stem().string());
+		pattern = replaceAll(std::move(pattern), "{folder}", info.sourcePath.Empty() ? std::string{} : info.sourcePath.parent_path().filename().String());
+		pattern = replaceAll(std::move(pattern), "{parent_folder}", info.sourcePath.Empty() ? std::string{} : info.sourcePath.parent_path().parent_path().filename().String());
+		pattern = replaceAll(std::move(pattern), "{T}", temperature.str());
+		pattern = replaceAll(std::move(pattern), "{temperature_K}", temperature.str());
+		for (const auto &[key, value] : info.metadata)
+			pattern = replaceAll(std::move(pattern), "{" + key + "}", value);
+		return pattern;
+	}
+
 	std::optional<Path> chooseProjectOpenPath(const Ref<JFMUserSettingsStore> &settings)
 	{
 		return OpenFileDialog(JFMProjectFilter, settings != nullptr ? settings->GetDefaultProjectsDirectory() : Path{});
@@ -177,11 +207,11 @@ namespace SST::Prototypes::JFM
 		settings->SetDefaultImportDirectory(isDirectory(first) ? first : first.parent_path());
 	}
 
-	std::vector<JFMExportItem> makeExportItems(const std::vector<JFMCharacteristic> &characteristics, Path prefix = {})
+	std::vector<JFMExportItem> makeExportItems(const std::vector<JFMCharacteristicRecord> &characteristics, Path prefix = {})
 	{
 		std::vector<JFMExportItem> items;
 		items.reserve(characteristics.size());
-		for (const JFMCharacteristic &characteristic : characteristics)
+		for (const JFMCharacteristicRecord &characteristic : characteristics)
 		{
 			Path relative = prefix / Path(safeFileName(characteristic.info.name) + ".tsv");
 			items.push_back(JFMExportItem{relative, characteristic});
@@ -232,10 +262,144 @@ namespace SST::Prototypes::JFM
 		return path;
 	}
 
-	void queueBatchExport(EventBus &eventBus, const Path &directory, std::vector<JFMExportItem> items)
+	ProjectHandle projectFromContext(const Ref<JFMWorkspaceStore> &workspace, CommandContext &context)
+	{
+		if (ProjectHandle *project = context.TryGet<ProjectHandle>("project"))
+			return *project;
+		return workspace->GetActiveProjectHandle();
+	}
+
+	JFMTreeItemRef itemFromContext(const Ref<JFMWorkspaceStore> &workspace, CommandContext &context, const char *key = "item")
+	{
+		if (JFMTreeItemRef *item = context.TryGet<JFMTreeItemRef>(key))
+			return *item;
+		return workspace->GetFocusedTreeItem();
+	}
+
+	std::string contextString(CommandContext &context, const char *key, std::string fallback = {})
+	{
+		if (std::string *value = context.TryGet<std::string>(key))
+			return *value;
+		return fallback;
+	}
+
+	JFMProjectEditRequest makeEditRequest(
+		const Ref<JFMWorkspaceStore> &workspace,
+		CommandContext &context,
+		std::string description,
+		JFMProjectEditRequest::Apply apply)
+	{
+		return {projectFromContext(workspace, context), std::move(description), std::move(apply)};
+	}
+
+	Result<void> cloneTreeItem(
+		JFMWorkspaceStore &workspace,
+		ProjectHandle targetProject,
+		const JFMTreeItemRef &source,
+		const JFMTreeItemRef &target,
+		bool extractToGroup)
+	{
+		if (!source.IsValid())
+			return {};
+		const JFMProject sourceProject = workspace.GetProjectSnapshot(source.project);
+		const JFMProject targetSnapshot = workspace.GetProjectSnapshot(targetProject);
+		const bool sameProject = source.project == targetProject;
+
+		std::string targetGroupId;
+		std::string targetSeriesId;
+		if (target.kind == JFMTreeItemKind::Group)
+			targetGroupId = target.id;
+		else if (target.kind == JFMTreeItemKind::Series)
+		{
+			targetSeriesId = target.id;
+			if (const auto series = findSeries(targetSnapshot, target.id))
+				targetGroupId = series->groupId;
+		}
+		else if (target.kind == JFMTreeItemKind::Characteristic && !target.id.empty())
+		{
+			const CharacteristicId id = static_cast<CharacteristicId>(std::stoull(target.id));
+			for (const JFMSeries &series : targetSnapshot.series)
+			{
+				if (std::find(series.characteristicIds.begin(), series.characteristicIds.end(), id) != series.characteristicIds.end())
+				{
+					targetSeriesId = series.id;
+					targetGroupId = series.groupId;
+					break;
+				}
+			}
+		}
+
+		if (extractToGroup)
+			targetGroupId = workspace.AddGroup(targetProject, "Pasted", targetGroupId).id;
+
+		const auto cloneCharacteristics = [&](const std::vector<CharacteristicId> &ids, const std::string &seriesId) {
+			std::vector<JFMCharacteristicRecord> clones;
+			clones.reserve(ids.size());
+			for (CharacteristicId id : ids)
+			{
+				auto characteristic = workspace.FindCharacteristicRecord({source.project, id});
+				if (!characteristic)
+					continue;
+				characteristic->info.id = InvalidCharacteristicId;
+				characteristic->info.name = copyName(characteristic->info.name);
+				clones.emplace_back(std::move(*characteristic));
+			}
+			if (!clones.empty())
+				(void)workspace.AddCharacteristicRecords(targetProject, std::move(clones), seriesId);
+		};
+
+		std::function<void(const JFMSeries &, const std::string &)> cloneSeries;
+		cloneSeries = [&](const JFMSeries &sourceSeries, const std::string &groupId) {
+			const JFMSeries series = workspace.AddSeries(targetProject, copyName(sourceSeries.name), groupId);
+			if (const auto shortName = sourceSeries.metadata.find("short_name"); shortName != sourceSeries.metadata.end())
+				(void)workspace.SetSeriesShortName(targetProject, series.id, copyName(shortName->second));
+			cloneCharacteristics(sourceSeries.characteristicIds, series.id);
+		};
+
+		if (source.kind == JFMTreeItemKind::Characteristic)
+		{
+			if (targetSeriesId.empty())
+				targetSeriesId = workspace.AddSeries(targetProject, "Pasted Characteristics", targetGroupId).id;
+			cloneCharacteristics(source.characteristicIds, targetSeriesId);
+			return {};
+		}
+		if (source.kind == JFMTreeItemKind::Series)
+		{
+			if (const auto sourceSeries = findSeries(sourceProject, source.id))
+				cloneSeries(*sourceSeries, targetGroupId.empty() && sameProject ? sourceSeries->groupId : targetGroupId);
+			return {};
+		}
+		if (source.kind != JFMTreeItemKind::Group)
+			return {};
+
+		const auto copyGroup = [&](const auto &self, const std::string &sourceGroupId, const std::string &parentId) -> void {
+			const auto group = findGroup(sourceProject, sourceGroupId);
+			if (!group)
+				return;
+			const JFMGroup created = workspace.AddGroup(targetProject, copyName(group->name), parentId);
+			if (const auto shortName = group->metadata.find("short_name"); shortName != group->metadata.end())
+				(void)workspace.SetGroupShortName(targetProject, created.id, copyName(shortName->second));
+			for (const JFMSeries &series : sourceProject.series)
+			{
+				if (series.groupId == sourceGroupId)
+					cloneSeries(series, created.id);
+			}
+			for (const JFMGroup &child : sourceProject.groups)
+			{
+				if (child.parentId == sourceGroupId)
+					self(self, child.id, created.id);
+			}
+		};
+		const auto sourceGroup = findGroup(sourceProject, source.id);
+		if (sourceGroup)
+			copyGroup(copyGroup, source.id, targetGroupId.empty() && sameProject ? sourceGroup->parentId : targetGroupId);
+		return {};
+	}
+
+	void queueBatchExport(EventBus &eventBus, const Path &directory, std::vector<JFMExportItem> items, ProjectHandle project)
 	{
 		if (!items.empty())
-			eventBus.Queue(ExportRawTsvBatchRequested{directory, std::move(items)});
+			eventBus.Queue(ExportRawTsvBatchRequested{directory, std::move(items), project});
 	}
 
 	Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, Ref<JFMUserSettingsStore> settings, CommandContext &)
@@ -301,25 +465,13 @@ namespace SST::Prototypes::JFM
 
 	Result<void> handleOpenNewProjectWindow(CommandContext &)
 	{
-#if defined(DS_PLATFORM_WINDOWS)
-		wchar_t executable[MAX_PATH]{};
-		if (GetModuleFileNameW(nullptr, executable, MAX_PATH) == 0)
-			return Result<void>{makeCommandError("Open new project window failed.", "Could not resolve current executable path.")};
-
-		std::wstring commandLine = L"\"";
-		commandLine += executable;
-		commandLine += L"\"";
-		STARTUPINFOW startupInfo{};
-		startupInfo.cb = sizeof(startupInfo);
-		PROCESS_INFORMATION processInfo{};
-		if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, FALSE, 0, nullptr, nullptr, &startupInfo, &processInfo))
-			return Result<void>{makeCommandError("Open new project window failed.", "CreateProcessW failed with code " + std::to_string(GetLastError()))};
-		CloseHandle(processInfo.hThread);
-		CloseHandle(processInfo.hProcess);
-		return Result<void>{};
-#else
-		return Result<void>{makeCommandError("Open new project window failed.", "Launching a detached JFM instance is only implemented on Windows.")};
-#endif
+		auto executable = Platform::CurrentExecutablePath();
+		if (!executable)
+			return Result<void>{makeCommandError("Open new project window failed.", executable.Error().technicalDetails)};
+		auto launched = Platform::LaunchDetached(Platform::ProcessRunOptions{*executable, {}, executable->parent_path()});
+		if (!launched)
+			return Result<void>{makeCommandError("Open new project window failed.", launched.Error().technicalDetails)};
+		return {};
 	}
 
 	Result<void> handleImportFiles(Ref<JFMWorkspaceStore> workspace, Ref<JFMUserSettingsStore> settings, Ref<JFMImportDialogState> dialog, CommandContext &context)
@@ -382,7 +534,8 @@ namespace SST::Prototypes::JFM
 	{
 		try
 		{
-			std::vector<JFMCharacteristic> selected = workspace->GetSelectedCharacteristics();
+			const ProjectHandle project = workspace->GetActiveProjectHandle();
+			std::vector<JFMCharacteristicRecord> selected = workspace->GetSelectedCharacteristicRecords();
 			if (selected.empty())
 			{
 				workspace->SetStatusMessage("Raw TSV export failed: no characteristic selected.");
@@ -392,13 +545,13 @@ namespace SST::Prototypes::JFM
 			{
 				std::optional<Path> directory = chooseOutputDirectory(settings);
 				if (directory)
-					queueBatchExport(*eventBus, *directory, makeExportItems(selected));
+					queueBatchExport(*eventBus, *directory, makeExportItems(selected), project);
 				return Result<void>{};
 			}
 			const std::string defaultName = selected.front().info.name.empty() ? "raw.tsv" : selected.front().info.name + ".tsv";
 			std::optional<Path> path = chooseRawTsvSavePath(defaultName);
 			if (path)
-				eventBus->Queue(ExportRawTsvRequested{*path, selected.front()});
+				eventBus->Queue(ExportRawTsvRequested{*path, selected.front(), project});
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
@@ -415,7 +568,8 @@ namespace SST::Prototypes::JFM
 			if (std::string *contextSeriesId = context.TryGet<std::string>("series_id"))
 				seriesId = *contextSeriesId;
 
-			const JFMProject project = workspace->GetProjectSnapshot();
+			const ProjectHandle projectHandle = workspace->GetActiveProjectHandle();
+			const JFMProject project = workspace->GetProjectSnapshot(projectHandle);
 			auto series = findSeries(project, seriesId);
 			if (!series)
 				return Result<void>{};
@@ -424,7 +578,7 @@ namespace SST::Prototypes::JFM
 			if (!directory)
 				return Result<void>{};
 
-			queueBatchExport(*eventBus, *directory, makeExportItems(workspace->GetSeriesCharacteristics(seriesId), Path(safeFileName(series->name))));
+			queueBatchExport(*eventBus, *directory, makeExportItems(workspace->GetSeriesCharacteristicRecords(projectHandle, seriesId), Path(safeFileName(series->name))), projectHandle);
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
@@ -437,13 +591,14 @@ namespace SST::Prototypes::JFM
 	{
 		try
 		{
-			std::string groupId;
+			std::string groupId = workspace->GetSelectedGroupId();
 			if (std::string *contextGroupId = context.TryGet<std::string>("group_id"))
 				groupId = *contextGroupId;
 			if (groupId.empty())
 				return Result<void>{};
 
-			const JFMProject project = workspace->GetProjectSnapshot();
+			const ProjectHandle projectHandle = workspace->GetActiveProjectHandle();
+			const JFMProject project = workspace->GetProjectSnapshot(projectHandle);
 			std::set<std::string> groupIds;
 			collectGroupIds(project, groupId, groupIds);
 
@@ -457,11 +612,11 @@ namespace SST::Prototypes::JFM
 				if (groupIds.find(series.groupId) == groupIds.end())
 					continue;
 				std::vector<JFMExportItem> seriesItems = makeExportItems(
-					workspace->GetSeriesCharacteristics(series.id),
+					workspace->GetSeriesCharacteristicRecords(projectHandle, series.id),
 					groupPath(project, series.groupId) / Path(safeFileName(series.name)));
 				items.insert(items.end(), seriesItems.begin(), seriesItems.end());
 			}
-			queueBatchExport(*eventBus, *directory, std::move(items));
+			queueBatchExport(*eventBus, *directory, std::move(items), projectHandle);
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
@@ -488,6 +643,19 @@ namespace SST::Prototypes::JFM
 			std::bind(CreateLambdaCommand, description, std::move(handler), std::placeholders::_1));
 		if (!result)
 			DS_LOG_WARN("JFM command registration failed: {}", result.Error().technicalDetails);
+	}
+
+	using EditRequestBuilder = std::function<JFMProjectEditRequest(CommandContext &)>;
+
+	void registerEditCommand(Ref<CommandRegistry> registry, CommandMeta meta, Ref<JFMWorkspaceStore> workspace, EditRequestBuilder builder)
+	{
+		auto result = registry->Register(
+			std::move(meta),
+			[workspace = std::move(workspace), builder = std::move(builder)](CommandContext &context) mutable {
+				return CreateJFMProjectEditCommand(workspace, builder(context));
+			});
+		if (!result)
+			DS_LOG_WARN("JFM edit command registration failed: {}", result.Error().technicalDetails);
 	}
 
 	void registerBinding(Ref<KeymapResolver> resolver, KeyBinding binding)
@@ -520,6 +688,272 @@ namespace SST::Prototypes::JFM
 			std::bind(CreateProjectEditCommand, workspace, std::placeholders::_1));
 		if (!editRegistration)
 			throw std::runtime_error("JFM startup failed: project edit command could not be registered.");
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMAddGroupCommandId}, "Add Group", "JFM", "Add a group to the project tree.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				const std::string parentId = contextString(commandContext, "parent_group_id");
+				const std::string name = contextString(commandContext, "name", "Group");
+				return makeEditRequest(workspace, commandContext, "Add group", [parentId, name](JFMWorkspaceStore &store, ProjectHandle project) {
+					(void)store.AddGroup(project, name, parentId);
+					return Result<void>{};
+				});
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMAddSeriesCommandId}, "Add Series", "JFM", "Add a series to the project tree.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				const std::string groupId = contextString(commandContext, "group_id");
+				const std::string name = contextString(commandContext, "name", "Series");
+				return makeEditRequest(workspace, commandContext, "Add series", [groupId, name](JFMWorkspaceStore &store, ProjectHandle project) {
+					(void)store.AddSeries(project, name, groupId);
+					return Result<void>{};
+				});
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMDeleteTreeItemCommandId}, "Delete Project Tree Item", "JFM", "Delete the focused project tree item.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				JFMTreeItemRef item = itemFromContext(workspace, commandContext);
+				const ProjectHandle project = item.project == InvalidProjectHandle ? projectFromContext(workspace, commandContext) : item.project;
+				return JFMProjectEditRequest{project, "Delete project item", [item = std::move(item)](JFMWorkspaceStore &store, ProjectHandle handle) {
+					if (item.kind == JFMTreeItemKind::Group)
+						(void)store.DeleteGroup(handle, item.id);
+					else if (item.kind == JFMTreeItemKind::Series)
+						(void)store.DeleteSeries(handle, item.id);
+					else if (item.kind == JFMTreeItemKind::Characteristic)
+					{
+						std::vector<CharacteristicId> ids = item.characteristicIds;
+						if (ids.empty() && !item.id.empty())
+							ids.emplace_back(static_cast<CharacteristicId>(std::stoull(item.id)));
+						for (CharacteristicId id : ids)
+							(void)store.DeleteCharacteristic(handle, id);
+					}
+					return Result<void>{};
+				}};
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMMoveCharacteristicsCommandId}, "Move Characteristics", "JFM", "Move characteristics to another series.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				const std::vector<CharacteristicId> ids = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids")
+					? *commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids")
+					: workspace->GetSelectedCharacteristicIds();
+				const std::string seriesId = contextString(commandContext, "target_series_id");
+				return makeEditRequest(workspace, commandContext, "Move characteristics", [ids, seriesId](JFMWorkspaceStore &store, ProjectHandle project) {
+					for (CharacteristicId id : ids)
+						(void)store.MoveCharacteristic(project, id, seriesId);
+					return Result<void>{};
+				});
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMRenameTreeItemCommandId}, "Rename Project Tree Item", "JFM", "Rename the focused project tree item.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				JFMTreeItemRef item = itemFromContext(workspace, commandContext);
+				const std::string name = contextString(commandContext, "name");
+				const ProjectHandle project = item.project == InvalidProjectHandle ? projectFromContext(workspace, commandContext) : item.project;
+				return JFMProjectEditRequest{project, "Rename project item", [item = std::move(item), name](JFMWorkspaceStore &store, ProjectHandle handle) {
+					if (item.kind == JFMTreeItemKind::Project)
+						(void)store.RenameProject(handle, name);
+					else if (item.kind == JFMTreeItemKind::Group)
+						(void)store.RenameGroup(handle, item.id, name);
+					else if (item.kind == JFMTreeItemKind::Series)
+						(void)store.RenameSeries(handle, item.id, name);
+					else if (item.kind == JFMTreeItemKind::Characteristic && !item.id.empty())
+						(void)store.RenameCharacteristic(handle, static_cast<CharacteristicId>(std::stoull(item.id)), name);
+					return Result<void>{};
+				}};
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMSetShortNameCommandId}, "Set Short Name", "JFM", "Set short names for project tree items.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				JFMTreeItemRef item = itemFromContext(workspace, commandContext);
+				const std::string value = contextString(commandContext, "short_name");
+				const ProjectHandle project = item.project == InvalidProjectHandle ? projectFromContext(workspace, commandContext) : item.project;
+				return JFMProjectEditRequest{project, "Set short name", [item = std::move(item), value](JFMWorkspaceStore &store, ProjectHandle handle) {
+					if (item.kind == JFMTreeItemKind::Group)
+						(void)store.SetGroupShortName(handle, item.id, value);
+					else if (item.kind == JFMTreeItemKind::Series)
+						(void)store.SetSeriesShortName(handle, item.id, value);
+					else if (item.kind == JFMTreeItemKind::Characteristic)
+					{
+						for (CharacteristicId id : item.characteristicIds)
+						{
+							auto record = store.FindCharacteristicRecord({handle, id});
+							if (record)
+								(void)store.SetCharacteristicShortName(handle, id, expandShortNamePattern(value, record->info));
+						}
+					}
+					return Result<void>{};
+				}};
+			});
+
+		registerCommand(
+			registry,
+			CommandMeta{CommandID{JFMCopyTreeItemCommandId}, "Copy Project Tree Item", "JFM", "Copy the focused project tree item.", {}, CommandFlags::None},
+			[workspace](CommandContext &commandContext) {
+				JFMTreeItemRef item = itemFromContext(workspace, commandContext);
+				if (!item.IsValid())
+					return Result<void>{};
+				if (item.kind == JFMTreeItemKind::Characteristic && item.characteristicIds.empty())
+					item.characteristicIds = workspace->GetSelectedCharacteristicIds();
+				workspace->SetTreeClipboard(std::move(item));
+				return Result<void>{};
+			});
+
+		registerCommand(
+			registry,
+			CommandMeta{CommandID{JFMRequestRenameTreeItemCommandId}, "Rename Project Tree Item...", "JFM", "Open the rename editor for the focused project tree item.", {}, CommandFlags::None},
+			[workspace, eventBus](CommandContext &commandContext) {
+				JFMTreeItemRef item = itemFromContext(workspace, commandContext);
+				if (item.IsValid())
+					eventBus->Queue(ProjectTreeRenameRequested{std::move(item)});
+				return Result<void>{};
+			});
+
+		const auto registerPasteRequest = [&](const char *id, const char *title, bool duplicate) {
+			registerCommand(
+				registry,
+				CommandMeta{CommandID{id}, title, "JFM", "Open project tree copy options.", {}, CommandFlags::None},
+				[workspace, eventBus, duplicate](CommandContext &commandContext) {
+					if (!duplicate && !workspace->GetTreeClipboard())
+						return Result<void>{};
+					JFMTreeItemRef item = itemFromContext(workspace, commandContext);
+					if (item.IsValid())
+						eventBus->Queue(ProjectTreePasteRequested{std::move(item), duplicate});
+					return Result<void>{};
+				});
+		};
+		registerPasteRequest(JFMRequestPasteTreeItemCommandId, "Paste Project Tree Item...", false);
+		registerPasteRequest(JFMRequestDuplicateTreeItemCommandId, "Duplicate Project Tree Item...", true);
+
+		const auto registerPaste = [&](const char *id, const char *title, bool duplicate) {
+			registerEditCommand(
+				registry,
+				CommandMeta{CommandID{id}, title, "JFM", "Clone project tree items without copying raw arrays.", {}, CommandFlags::Undoable},
+				workspace,
+				[workspace, duplicate](CommandContext &commandContext) {
+					JFMTreeItemRef source = duplicate ? itemFromContext(workspace, commandContext) : workspace->GetTreeClipboard().value_or(JFMTreeItemRef{});
+					JFMTreeItemRef target = itemFromContext(workspace, commandContext, "target");
+					const bool extract = commandContext.TryGet<bool>("extract_to_group") != nullptr && *commandContext.TryGet<bool>("extract_to_group");
+					const ProjectHandle project = target.project == InvalidProjectHandle ? projectFromContext(workspace, commandContext) : target.project;
+					return JFMProjectEditRequest{project, duplicate ? "Duplicate project item" : "Paste project item", [source = std::move(source), target = std::move(target), extract](JFMWorkspaceStore &store, ProjectHandle handle) {
+						return cloneTreeItem(store, handle, source, target, extract);
+					}};
+				});
+		};
+		registerPaste(JFMPasteTreeItemCommandId, "Paste Project Tree Item", false);
+		registerPaste(JFMDuplicateTreeItemCommandId, "Duplicate Project Tree Item", true);
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMAddScriptCommandId}, "Add Import Script", "JFM", "Register an import script.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				const Path path = commandContext.TryGet<Path>("path") ? *commandContext.TryGet<Path>("path") : Path{};
+				return makeEditRequest(workspace, commandContext, "Add script", [path](JFMWorkspaceStore &store, ProjectHandle project) {
+					if (!path.Empty())
+						(void)store.AddScript(project, path);
+					return Result<void>{};
+				});
+			});
+
+		for (const auto &[id, title, remove] : std::array{
+				std::tuple{JFMReloadScriptCommandId, "Reload Import Script", false},
+				std::tuple{JFMRemoveScriptCommandId, "Remove Import Script", true}})
+		{
+			registerEditCommand(
+				registry,
+				CommandMeta{CommandID{id}, title, "JFM", "Update the project script registry.", {}, CommandFlags::Undoable},
+				workspace,
+				[workspace, remove](CommandContext &commandContext) {
+					const std::string scriptId = contextString(commandContext, "script_id");
+					return makeEditRequest(workspace, commandContext, remove ? "Remove script" : "Reload script", [scriptId, remove](JFMWorkspaceStore &store, ProjectHandle project) {
+						if (remove)
+							(void)store.RemoveScript(project, scriptId);
+						else
+							(void)store.ReloadScript(project, scriptId);
+						return Result<void>{};
+					});
+				});
+		}
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMUpsertGroupingCommandId}, "Create or Update Grouping", "JFM", "Create or update a metadata grouping.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				JFMGroupingDefinition grouping = commandContext.TryGet<JFMGroupingDefinition>("grouping") ? *commandContext.TryGet<JFMGroupingDefinition>("grouping") : JFMGroupingDefinition{};
+				const bool create = commandContext.TryGet<bool>("create") == nullptr || *commandContext.TryGet<bool>("create");
+				return makeEditRequest(workspace, commandContext, create ? "Create grouping" : "Update grouping", [grouping = std::move(grouping), create](JFMWorkspaceStore &store, ProjectHandle project) mutable {
+					if (create)
+						(void)store.AddGrouping(project, std::move(grouping));
+					else
+						(void)store.UpdateGrouping(project, std::move(grouping));
+					return Result<void>{};
+				});
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMDeleteGroupingCommandId}, "Delete Grouping", "JFM", "Delete a metadata grouping.", {}, CommandFlags::Undoable},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				const std::string groupingId = contextString(commandContext, "grouping_id");
+				return makeEditRequest(workspace, commandContext, "Delete grouping", [groupingId](JFMWorkspaceStore &store, ProjectHandle project) {
+					(void)store.DeleteGrouping(project, groupingId);
+					return Result<void>{};
+				});
+			});
+
+		registerEditCommand(
+			registry,
+			CommandMeta{CommandID{JFMImportApplyCommandId}, "Apply Imported Data", "JFM", "Apply one completed import as an undoable project edit.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
+			workspace,
+			[workspace, eventBus](CommandContext &commandContext) {
+				std::vector<ImportCompleted> batches;
+				if (auto *value = commandContext.TryGet<std::vector<ImportCompleted>>("batches"))
+					batches = std::move(*value);
+				const std::string targetGroupId = contextString(commandContext, "target_group_id");
+				const bool plotAfterImport = commandContext.TryGet<bool>("plot_after_import") != nullptr && *commandContext.TryGet<bool>("plot_after_import");
+				return makeEditRequest(workspace, commandContext, "Import JFM data", [batches = std::move(batches), targetGroupId, plotAfterImport, eventBus](JFMWorkspaceStore &store, ProjectHandle project) mutable {
+					for (ImportCompleted &batch : batches)
+					{
+						if (batch.characteristics.empty())
+							continue;
+						std::string seriesId = batch.targetSeriesId;
+						if (seriesId.empty())
+						{
+							const std::string groupId = batch.groupPath.empty()
+								? targetGroupId
+								: store.FindOrCreateGroupPath(project, batch.groupPath, targetGroupId);
+							seriesId = store.AddSeries(project, batch.seriesName.empty() ? "Series" : batch.seriesName, groupId).id;
+						}
+						std::vector<CharacteristicId> added = store.AddCharacteristicRecords(project, std::move(batch.characteristics), seriesId);
+						if (plotAfterImport && eventBus != nullptr && !added.empty())
+						{
+							const std::string title = batch.seriesName.empty() ? "Series" : batch.seriesName;
+							eventBus->Queue(PlotRequested{project, title, {{"import", title, std::move(added), {}, {}}}});
+						}
+					}
+					store.SetStatusMessage(project, "Import complete.");
+					return Result<void>{};
+				});
+			});
 
 		registerCommand(
 			registry,
@@ -591,5 +1025,11 @@ namespace SST::Prototypes::JFM
 		registerBinding(resolver, {"jfm.import_directories", KeyChord{KeyCode::D, KeyModifiers::Ctrl | KeyModifiers::Alt | KeyModifiers::Shift}, ImportDirectoriesCommand, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.import_directories_recursive", KeyChord{KeyCode::R, KeyModifiers::Ctrl | KeyModifiers::Alt | KeyModifiers::Shift}, ImportDirectoriesRecursiveCommand, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.export_raw_tsv", KeyChord{KeyCode::E, KeyModifiers::Ctrl | KeyModifiers::Shift}, ExportRawTsvCommand, {}, KeymapLayer::Project, true});
+		const ContextExpr projectTreeFocused{"jfm.project_tree.focused"};
+		registerBinding(resolver, {"jfm.tree.copy", KeyChord{KeyCode::C, KeyModifiers::Ctrl}, CommandID{JFMCopyTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
+		registerBinding(resolver, {"jfm.tree.paste", KeyChord{KeyCode::V, KeyModifiers::Ctrl}, CommandID{JFMRequestPasteTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
+		registerBinding(resolver, {"jfm.tree.duplicate", KeyChord{KeyCode::D, KeyModifiers::Ctrl}, CommandID{JFMRequestDuplicateTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
+		registerBinding(resolver, {"jfm.tree.delete", KeyChord{KeyCode::Delete, KeyModifiers::None}, CommandID{JFMDeleteTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
+		registerBinding(resolver, {"jfm.tree.rename", KeyChord{KeyCode::F2, KeyModifiers::None}, CommandID{JFMRequestRenameTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
 	}
 } // namespace SST::Prototypes::JFM

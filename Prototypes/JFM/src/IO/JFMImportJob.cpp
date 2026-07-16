@@ -19,12 +19,38 @@ namespace SST::Prototypes::JFM
 
 
 	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<Path> paths, Path pythonRoot, JFMImportOptions options, ProjectHandle project, JFMOperationId operation)
-		: JFMImportJob(std::move(eventBus), std::vector<JFMImportGroup>{{std::move(paths), {}}}, std::move(pythonRoot), std::move(options), project, operation)
+		: JFMImportJob(
+			std::move(eventBus),
+			std::move(paths),
+			false,
+			JFMImportPlacement::NewSeries,
+			{},
+			std::move(pythonRoot),
+			std::move(options),
+			project,
+			operation)
 	{
 	}
 
-	JFMImportJob::JFMImportJob(Ref<EventBus> eventBus, std::vector<JFMImportGroup> groups, Path pythonRoot, JFMImportOptions options, ProjectHandle project, JFMOperationId operation)
-		: m_EventBus(std::move(eventBus)), m_Groups(std::move(groups)), m_PythonRoot(std::move(pythonRoot)), m_Options(std::move(options)), m_Project(project), m_Operation(operation)
+	JFMImportJob::JFMImportJob(
+		Ref<EventBus> eventBus,
+		std::vector<Path> paths,
+		bool recursive,
+		JFMImportPlacement placement,
+		std::string targetSeriesId,
+		Path pythonRoot,
+		JFMImportOptions options,
+		ProjectHandle project,
+		JFMOperationId operation)
+		: m_EventBus(std::move(eventBus)),
+		  m_Paths(std::move(paths)),
+		  m_Recursive(recursive),
+		  m_Placement(placement),
+		  m_TargetSeriesId(std::move(targetSeriesId)),
+		  m_PythonRoot(std::move(pythonRoot)),
+		  m_Options(std::move(options)),
+		  m_Project(project),
+		  m_Operation(operation)
 	{
 	}
 
@@ -53,23 +79,31 @@ namespace SST::Prototypes::JFM
 
 	void JFMImportJob::Execute(JobContext &context)
 	{
-		const std::size_t total = CountPaths(m_Groups);
+		std::vector<JFMImportGroup> groups = BuildImportGroups(m_Paths, m_Recursive, m_Placement, m_TargetSeriesId);
+		const std::size_t total = CountPaths(groups);
 		context.SetStage("Python import");
 		context.SetProgress(0.0f, static_cast<float>(total));
 		if (m_EventBus != nullptr)
 			m_EventBus->Queue(ImportProgress{0.0f, static_cast<float>(total), "Import starting", m_Project, m_Operation});
+		if (groups.empty())
+		{
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(ImportFailed{"No supported JFM data files were found.", m_Project, m_Operation});
+			return;
+		}
 
 		JFMPythonImportBridge bridge(m_PythonRoot);
 		std::size_t completedOffset = 0;
 		std::size_t importedCount = 0;
 		std::vector<std::string> allWarnings;
-		for (std::size_t groupIndex = 0; groupIndex < m_Groups.size(); ++groupIndex)
+		for (std::size_t groupIndex = 0; groupIndex < groups.size(); ++groupIndex)
 		{
-			const JFMImportGroup &group = m_Groups[groupIndex];
+			const JFMImportGroup &group = groups[groupIndex];
 			if (group.paths.empty())
 				continue;
 
-			JFMImportBatchResult groupResult;
+			std::vector<JFMCharacteristicRecord> records;
+			std::vector<std::string> groupWarnings;
 			for (const Path &path : group.paths)
 			{
 				auto result = bridge.ImportFiles(
@@ -83,25 +117,33 @@ namespace SST::Prototypes::JFM
 
 				if (!result)
 				{
-					groupResult.warnings.push_back(result.Error().technicalDetails);
+					groupWarnings.push_back(result.Error().technicalDetails);
 					allWarnings.push_back(result.Error().technicalDetails);
 					reportProgress(context, completedOffset, total, "Skipped " + path.filename().String());
 					continue;
 				}
 
-				groupResult.warnings.insert(groupResult.warnings.end(), result->warnings.begin(), result->warnings.end());
-				groupResult.characteristics.insert(groupResult.characteristics.end(), result->characteristics.begin(), result->characteristics.end());
+				JFMImportBatchResult batch = std::move(result).Value();
+				for (std::string &warning : batch.warnings)
+					groupWarnings.emplace_back(std::move(warning));
+				records.reserve(records.size() + batch.characteristics.size());
+				for (JFMCharacteristic &characteristic : batch.characteristics)
+				{
+					records.emplace_back(JFMCharacteristicRecord{
+						std::move(characteristic.info),
+						CreateRef<const JFMCharacteristicData>(std::move(characteristic.data))});
+				}
 			}
 
-			importedCount += groupResult.characteristics.size();
+			importedCount += records.size();
 			if (m_EventBus != nullptr)
 				m_EventBus->Queue(ImportCompleted{
-					groupResult.characteristics,
-					groupResult.warnings,
+					std::move(records),
+					std::move(groupWarnings),
 					group.targetSeriesId,
 					group.groupPath,
 					group.seriesName,
-					groupIndex + 1 == m_Groups.size(),
+					groupIndex + 1 == groups.size(),
 					m_Project,
 					m_Operation});
 		}

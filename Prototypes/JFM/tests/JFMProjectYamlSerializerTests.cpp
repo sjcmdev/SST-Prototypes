@@ -17,6 +17,7 @@ namespace SST::Prototypes::JFM
 		characteristic.id = 1;
 		characteristic.name = "Curve";
 		characteristic.sourcePath = Path::FromResolved("data/example.dat");
+		characteristic.sourceRecordKey = "curve-0";
 		characteristic.parser = "dat";
 		characteristic.temperatureK = 300.0;
 		characteristic.temperatureSource = "filename";
@@ -72,6 +73,7 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(loaded->characteristics.front().temperatureK.has_value());
 		EXPECT_DOUBLE_EQ(*loaded->characteristics.front().temperatureK, 300.0);
 		EXPECT_EQ(loaded->characteristics.front().sourcePath.String(), Path::FromResolved("data/example.dat").String());
+		EXPECT_EQ(loaded->characteristics.front().sourceRecordKey, "curve-0");
 		EXPECT_EQ(loaded->characteristics.front().importOptions.delimiter, "\t");
 		ASSERT_EQ(loaded->characteristics.front().importOptions.customVariables.size(), 1);
 		EXPECT_EQ(loaded->characteristics.front().importOptions.customVariables.front().name, "sample");
@@ -101,5 +103,31 @@ series:
 		EXPECT_TRUE(loaded->groupings.empty());
 		ASSERT_EQ(loaded->characteristics.size(), 1);
 		EXPECT_EQ(loaded->characteristics.front().importOptions.parser, "dat");
+		EXPECT_TRUE(loaded->characteristics.front().sourceRecordKey.empty());
+	}
+
+	TEST(JFMProjectYamlSerializerTests, MigratesSchemaTwoWithoutSourceRecordKey)
+	{
+		const std::string yaml = R"yaml(
+schema_version: 2
+project:
+  id: legacy-v2
+  name: Legacy V2
+characteristics:
+  - id: 9
+    name: Renamed Curve
+    parser: dat
+    source_path: data/curves.dat
+series:
+  - id: series-1
+    name: Series
+    characteristics: [9]
+)yaml";
+
+		auto loaded = JFMProjectYamlSerializer::Deserialize(yaml);
+		ASSERT_TRUE(loaded) << loaded.Error().technicalDetails;
+		EXPECT_EQ(loaded->schemaVersion, JFMProjectSchemaVersion);
+		ASSERT_EQ(loaded->characteristics.size(), 1);
+		EXPECT_TRUE(loaded->characteristics.front().sourceRecordKey.empty());
 	}
 } // namespace SST::Prototypes::JFM

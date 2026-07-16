@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "App/JFMUserSettings.hpp"
@@ -15,6 +16,11 @@
 
 namespace SST::Prototypes::JFM
 {
+	struct ImportPreviewCompleted;
+	struct ImportPreviewFailed;
+	struct JFMImportPreviewItem;
+	struct JFMImportPreviewPayload;
+
 	struct JFMImportDialogRequest
 	{
 		std::vector<Path> paths;
@@ -36,7 +42,7 @@ namespace SST::Prototypes::JFM
 		std::optional<JFMImportDialogRequest> m_Request;
 	};
 
-	class JFMImportDialogPanel final : public IPanel
+	class JFMImportDialogPanel final : public IPanel, public EventReceiver
 	{
 	public:
 		JFMImportDialogPanel(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> store, Ref<JFMImportDialogState> state, Ref<JFMUserSettingsStore> settings);
@@ -55,6 +61,9 @@ namespace SST::Prototypes::JFM
 		};
 
 		void loadRequest(JFMImportDialogRequest request);
+		void requestPreview();
+		void handlePreviewCompleted(const ImportPreviewCompleted &event);
+		void handlePreviewFailed(const ImportPreviewFailed &event);
 		void refreshPreviewFiles();
 		void applyPreviewFolderFilter();
 		void renderCustomVariables();
@@ -64,12 +73,10 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::vector<JFMNameVariableRule> buildVariableRules() const;
 		[[nodiscard]] std::string previewName() const;
 		[[nodiscard]] std::string previewShortName() const;
-		[[nodiscard]] std::string previewFileText() const;
 		[[nodiscard]] Path selectedPreviewPath() const;
 		[[nodiscard]] std::vector<Path> selectedPreviewPaths() const;
-		[[nodiscard]] bool buildPreviewCurve(const Path &path, std::vector<double> &x, std::vector<double> &y) const;
-		[[nodiscard]] Path importRoot() const;
-		[[nodiscard]] std::string relativeLabel(const Path &path) const;
+		[[nodiscard]] const JFMImportPreviewItem *previewItem(const Path &path) const;
+		[[nodiscard]] std::string previewOptionsKey() const;
 
 	private:
 		Ref<EventBus> m_EventBus;
@@ -86,6 +93,11 @@ namespace SST::Prototypes::JFM
 		int m_PreviewFileIndex = 0;
 		int m_PreviewScale = 0;
 		int m_PreviewFolderIndex = 0;
+		std::uint64_t m_PreviewGeneration = 0;
+		bool m_PreviewLoading = false;
+		std::string m_PreviewError;
+		std::string m_LastPreviewOptionsKey;
+		Ref<const JFMImportPreviewPayload> m_PreviewPayload;
 		std::vector<Path> m_AllPreviewFiles;
 		std::vector<Path> m_PreviewFiles;
 		std::vector<std::string> m_PreviewFolders;

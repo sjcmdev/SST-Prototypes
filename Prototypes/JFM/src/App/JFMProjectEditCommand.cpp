@@ -4,7 +4,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	namespace
+	namespace ProjectEditDetail
 	{
 		StructuredError makeEditError(std::string message, std::string details)
 		{
@@ -76,7 +76,8 @@ namespace SST::Prototypes::JFM
 			std::optional<JFMProjectStateSnapshot> m_Before;
 			std::optional<JFMProjectStateSnapshot> m_After;
 		};
-	}
+	} // namespace ProjectEditDetail
+	using namespace ProjectEditDetail;
 
 	Unique<ICommand> CreateJFMProjectEditCommand(Ref<JFMWorkspaceStore> workspace, JFMProjectEditRequest request)
 	{

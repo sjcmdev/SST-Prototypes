@@ -4,7 +4,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Presentation/JFMPlotRequestState.hpp"
+#include "Events/JFMEvents.hpp"
 #include "Presentation/Panels/IPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
@@ -27,7 +27,6 @@ namespace SST::Prototypes::JFM
 	public:
 		explicit RawPlotPanel(
 			Ref<JFMWorkspaceStore> store,
-			Ref<JFMPlotRequestState> plotRequests,
 			Ref<JFMUserSettingsStore> settings,
 			Ref<SST::EventBus> eventBus,
 			std::string title = "Raw Plot",
@@ -68,8 +67,8 @@ namespace SST::Prototypes::JFM
 		};
 
 		[[nodiscard]] PlotArea CreatePlotArea(ProjectHandle project = InvalidProjectHandle);
-		[[nodiscard]] PlotCurveGroup CreateCurveGroup(JFMPlotRequest::CurveGroup request) const;
-		void PlotRequest(JFMPlotRequest request);
+		[[nodiscard]] PlotCurveGroup CreateCurveGroup(JFMPlotCurveGroupRequest request) const;
+		void PlotRequest(PlotRequested request);
 		void PlotIds(std::vector<CharacteristicId> ids, std::string title = {}, ProjectHandle project = InvalidProjectHandle);
 		void PlotSeries(const std::string &seriesId);
 		void PlotSelectedGroup();
@@ -77,7 +76,6 @@ namespace SST::Prototypes::JFM
 		void RefreshDynamicGroups(PlotArea &area);
 
 		Ref<JFMWorkspaceStore> m_Store;
-		Ref<JFMPlotRequestState> m_PlotRequests;
 		Ref<JFMUserSettingsStore> m_Settings;
 		Ref<SST::EventBus> m_EventBus;
 		std::vector<PlotArea> m_PlotAreas;

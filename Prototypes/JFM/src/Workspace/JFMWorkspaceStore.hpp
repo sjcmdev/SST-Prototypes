@@ -61,17 +61,23 @@ namespace SST::Prototypes::JFM
 
 		[[nodiscard]] std::optional<JFMCharacteristic> GetSelectedCharacteristic() const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetSelectedCharacteristics() const;
+		[[nodiscard]] std::optional<JFMCharacteristicRecord> GetSelectedCharacteristicRecord() const;
+		[[nodiscard]] std::vector<JFMCharacteristicRecord> GetSelectedCharacteristicRecords() const;
 		[[nodiscard]] std::string GetSelectedSeriesId() const;
+		[[nodiscard]] std::string GetSelectedGroupId() const;
 		[[nodiscard]] CharacteristicId GetSelectedCharacteristicId() const;
 		[[nodiscard]] std::vector<CharacteristicId> GetSelectedCharacteristicIds() const;
 		[[nodiscard]] std::vector<std::string> GetLastImportWarnings() const;
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristic(const CharacteristicId &id) const;
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristic(JFMCharacteristicRef ref) const;
+		[[nodiscard]] std::optional<JFMCharacteristicRecord> FindCharacteristicRecord(JFMCharacteristicRef ref) const;
 		[[nodiscard]] std::optional<JFMCharacteristic> FindCharacteristicByName(const std::string &name) const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetSeriesCharacteristics(const std::string &seriesId) const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetSeriesCharacteristics(ProjectHandle handle, const std::string &seriesId) const;
+		[[nodiscard]] std::vector<JFMCharacteristicRecord> GetSeriesCharacteristicRecords(ProjectHandle handle, const std::string &seriesId) const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetGroupCharacteristics(const std::string &groupId) const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetGroupCharacteristics(ProjectHandle handle, const std::string &groupId) const;
+		[[nodiscard]] std::vector<CharacteristicId> GetGroupCharacteristicIds(ProjectHandle handle, const std::string &groupId) const;
 
 		JFMGroup AddGroup(std::string name, std::string parentId = {});
 		JFMGroup AddGroup(ProjectHandle handle, std::string name, std::string parentId = {});
@@ -82,6 +88,7 @@ namespace SST::Prototypes::JFM
 		JFMSeries AddSeries(ProjectHandle handle, std::string name, std::string groupId = {});
 		std::vector<CharacteristicId> AddCharacteristics(std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId = {});
 		std::vector<CharacteristicId> AddCharacteristics(ProjectHandle handle, std::vector<JFMCharacteristic> characteristics, std::string targetSeriesId = {});
+		std::vector<CharacteristicId> AddCharacteristicRecords(ProjectHandle handle, std::vector<JFMCharacteristicRecord> characteristics, std::string targetSeriesId = {});
 		bool DeleteCharacteristic(const CharacteristicId &id);
 		bool DeleteCharacteristic(ProjectHandle handle, const CharacteristicId &id);
 		bool DeleteSeries(const std::string &seriesId);
@@ -133,11 +140,17 @@ namespace SST::Prototypes::JFM
 		void SetLastImportWarnings(std::vector<std::string> warnings);
 		void SetLastImportWarnings(ProjectHandle handle, std::vector<std::string> warnings);
 		void SelectSeries(std::string seriesId);
+		void SelectGroup(std::string groupId);
 		void SelectCharacteristic(CharacteristicId characteristicId);
 		void SetSelectedCharacteristics(std::vector<CharacteristicId> characteristicIds, CharacteristicId primary, std::string seriesId = {});
 		void AddImportedCharacteristics(std::vector<JFMCharacteristic> characteristics);
 		std::size_t UpdateCharacteristicData(std::vector<JFMCharacteristic> characteristics);
 		std::size_t UpdateCharacteristicData(ProjectHandle handle, std::vector<JFMCharacteristic> characteristics);
+		std::size_t UpdateCharacteristicRecords(ProjectHandle handle, std::vector<JFMCharacteristicRecord> characteristics);
+		void SetFocusedTreeItem(JFMTreeItemRef item);
+		[[nodiscard]] JFMTreeItemRef GetFocusedTreeItem() const;
+		void SetTreeClipboard(JFMTreeItemRef item);
+		[[nodiscard]] std::optional<JFMTreeItemRef> GetTreeClipboard() const;
 
 	private:
 		template <typename T>
@@ -150,6 +163,7 @@ namespace SST::Prototypes::JFM
 			std::unordered_map<CharacteristicId, Ref<const JFMCharacteristicData>> characteristicData;
 			std::optional<Path> path;
 			std::string selectedSeriesId;
+			std::string selectedGroupId;
 			CharacteristicId selectedCharacteristicId = InvalidCharacteristicId;
 			std::vector<CharacteristicId> selectedCharacteristicIds;
 			std::string status = "Ready.";
@@ -174,7 +188,11 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] static OptionalRef<const JFMSeries> findSeriesLocked(const ProjectDocument &document, const std::string &seriesId);
 		[[nodiscard]] static OptionalRef<JFMCharacteristicInfo> findInfoLocked(ProjectDocument &document, const CharacteristicId &id);
 		[[nodiscard]] static OptionalRef<const JFMCharacteristicInfo> findInfoLocked(const ProjectDocument &document, const CharacteristicId &id);
+		[[nodiscard]] static OptionalRef<JFMScriptInfo> findScriptLocked(ProjectDocument &document, const std::string &scriptId);
+		[[nodiscard]] static OptionalRef<JFMScriptInfo> findScriptByPathLocked(ProjectDocument &document, const Path &path);
+		[[nodiscard]] static std::optional<JFMCharacteristicRecord> makeCharacteristicRecordLocked(const ProjectDocument &document, const JFMCharacteristicInfo &info);
 		[[nodiscard]] static std::optional<JFMCharacteristic> makeCharacteristicLocked(const ProjectDocument &document, const JFMCharacteristicInfo &info);
+		[[nodiscard]] static std::vector<JFMCharacteristicRecord> seriesCharacteristicRecordsLocked(const ProjectDocument &document, const JFMSeries &series);
 		[[nodiscard]] static std::vector<JFMCharacteristic> seriesCharacteristicsLocked(const ProjectDocument &document, const JFMSeries &series);
 		static void collectGroupIdsLocked(const ProjectDocument &document, const std::string &groupId, std::vector<std::string> &groupIds);
 		static void ensureSelectionLocked(ProjectDocument &document);
@@ -192,5 +210,7 @@ namespace SST::Prototypes::JFM
 		ProjectHandle m_ActiveProject = InvalidProjectHandle;
 		ProjectHandle m_NextProjectHandle = 1;
 		std::uint64_t m_NextRevision = 2;
+		JFMTreeItemRef m_FocusedTreeItem;
+		std::optional<JFMTreeItemRef> m_TreeClipboard;
 	};
 } // namespace SST::Prototypes::JFM

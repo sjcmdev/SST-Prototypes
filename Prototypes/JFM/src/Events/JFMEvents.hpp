@@ -140,17 +140,103 @@ namespace SST::Prototypes::JFM
 		JFMImportPlacement placement = JFMImportPlacement::NewSeries;
 	};
 
-	struct PlotCharacteristicsRequested final : public BusEvent
+	struct JFMImportPreviewItem
 	{
-		PlotCharacteristicsRequested() = default;
-		PlotCharacteristicsRequested(std::vector<CharacteristicId> requestedIds, std::string requestedTitle, ProjectHandle requestedProject = InvalidProjectHandle)
-			: ids(std::move(requestedIds)), title(std::move(requestedTitle)), project(requestedProject)
+		Path path;
+		std::string relativePath;
+		std::string folderKey;
+		std::string folderLabel;
+		std::string text;
+		std::vector<JFMCharacteristicRecord> characteristics;
+		std::string warning;
+	};
+
+	struct JFMImportPreviewPayload
+	{
+		std::vector<JFMImportPreviewItem> items;
+	};
+
+	struct ImportPreviewRequested final : public BusEvent
+	{
+		ImportPreviewRequested() = default;
+		ImportPreviewRequested(std::uint64_t requestedGeneration, std::vector<Path> requestedPaths, bool requestedRecursive, JFMImportOptions requestedOptions)
+			: generation(requestedGeneration), paths(std::move(requestedPaths)), recursive(requestedRecursive), options(std::move(requestedOptions))
 		{
 		}
 
-		std::vector<CharacteristicId> ids;
+		std::uint64_t generation = 0;
+		std::vector<Path> paths;
+		bool recursive = false;
+		JFMImportOptions options;
+	};
+
+	struct ImportPreviewCompleted final : public BusEvent
+	{
+		ImportPreviewCompleted() = default;
+		ImportPreviewCompleted(std::uint64_t completedGeneration, Ref<const JFMImportPreviewPayload> completedPayload)
+			: generation(completedGeneration), payload(std::move(completedPayload))
+		{
+		}
+
+		std::uint64_t generation = 0;
+		Ref<const JFMImportPreviewPayload> payload;
+	};
+
+	struct ImportPreviewFailed final : public BusEvent
+	{
+		ImportPreviewFailed() = default;
+		ImportPreviewFailed(std::uint64_t failedGeneration, std::string failure)
+			: generation(failedGeneration), error(std::move(failure))
+		{
+		}
+
+		std::uint64_t generation = 0;
+		std::string error;
+	};
+
+	struct JFMPlotCurveGroupRequest
+	{
+		std::string key;
 		std::string title;
+		std::vector<CharacteristicId> ids;
+		std::string groupingId;
+		std::string bucketKey;
+	};
+
+	struct PlotRequested final : public BusEvent
+	{
+		PlotRequested() = default;
+		PlotRequested(ProjectHandle requestedProject, std::string requestedTitle, std::vector<JFMPlotCurveGroupRequest> requestedGroups)
+			: project(requestedProject), title(std::move(requestedTitle)), groups(std::move(requestedGroups))
+		{
+		}
+
 		ProjectHandle project = InvalidProjectHandle;
+		std::string title;
+		std::vector<JFMPlotCurveGroupRequest> groups;
+	};
+
+	struct ProjectTreeRenameRequested final : public BusEvent
+	{
+		ProjectTreeRenameRequested() = default;
+		explicit ProjectTreeRenameRequested(JFMTreeItemRef requestedItem)
+			: item(std::move(requestedItem))
+		{
+		}
+
+		JFMTreeItemRef item;
+	};
+
+	struct ProjectTreePasteRequested final : public BusEvent
+	{
+		ProjectTreePasteRequested() = default;
+		ProjectTreePasteRequested(JFMTreeItemRef requestedTarget, bool duplicateItem)
+			: target(std::move(requestedTarget)), duplicate(duplicateItem)
+		{
+		}
+
+		JFMTreeItemRef target;
+		bool duplicate = false;
 	};
 
 	struct ImportProgress final : public BusEvent
@@ -172,7 +258,7 @@ namespace SST::Prototypes::JFM
 	{
 		ImportCompleted() = default;
 		ImportCompleted(
-			std::vector<JFMCharacteristic> importedCharacteristics,
+			std::vector<JFMCharacteristicRecord> importedCharacteristics,
 			std::vector<std::string> importWarnings,
 			std::string completedTargetSeriesId = {},
 			std::vector<std::string> completedGroupPath = {},
@@ -191,7 +277,7 @@ namespace SST::Prototypes::JFM
 		{
 		}
 
-		std::vector<JFMCharacteristic> characteristics;
+		std::vector<JFMCharacteristicRecord> characteristics;
 		std::vector<std::string> warnings;
 		std::string targetSeriesId;
 		std::vector<std::string> groupPath;
@@ -217,86 +303,98 @@ namespace SST::Prototypes::JFM
 	struct ExportRawTsvRequested final : public BusEvent
 	{
 		ExportRawTsvRequested() = default;
-		ExportRawTsvRequested(Path requestedPath, JFMCharacteristic selectedCharacteristic)
-			: path(std::move(requestedPath)), characteristic(std::move(selectedCharacteristic))
+		ExportRawTsvRequested(Path requestedPath, JFMCharacteristicRecord selectedCharacteristic, ProjectHandle requestedProject = InvalidProjectHandle, JFMOperationId requestedOperation = InvalidJFMOperationId)
+			: path(std::move(requestedPath)), characteristic(std::move(selectedCharacteristic)), project(requestedProject), operation(requestedOperation)
 		{
 		}
 
 		Path path;
-		JFMCharacteristic characteristic;
+		JFMCharacteristicRecord characteristic;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
 	struct ExportRawTsvCompleted final : public BusEvent
 	{
 		ExportRawTsvCompleted() = default;
-		explicit ExportRawTsvCompleted(Path exportedPath)
-			: path(std::move(exportedPath))
+		explicit ExportRawTsvCompleted(Path exportedPath, ProjectHandle exportedProject = InvalidProjectHandle, JFMOperationId completedOperation = InvalidJFMOperationId)
+			: path(std::move(exportedPath)), project(exportedProject), operation(completedOperation)
 		{
 		}
 
 		Path path;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
 	struct ExportRawTsvFailed final : public BusEvent
 	{
 		ExportRawTsvFailed() = default;
-		ExportRawTsvFailed(Path failedPath, std::string failure)
-			: path(std::move(failedPath)), error(std::move(failure))
+		ExportRawTsvFailed(Path failedPath, std::string failure, ProjectHandle failedProject = InvalidProjectHandle, JFMOperationId failedOperation = InvalidJFMOperationId)
+			: path(std::move(failedPath)), error(std::move(failure)), project(failedProject), operation(failedOperation)
 		{
 		}
 
 		Path path;
 		std::string error;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
 	struct JFMExportItem
 	{
 		Path relativePath;
-		JFMCharacteristic characteristic;
+		JFMCharacteristicRecord characteristic;
 	};
 
 	struct ExportRawTsvBatchRequested final : public BusEvent
 	{
 		ExportRawTsvBatchRequested() = default;
-		ExportRawTsvBatchRequested(Path requestedDirectory, std::vector<JFMExportItem> requestedItems)
-			: outputDirectory(std::move(requestedDirectory)), items(std::move(requestedItems))
+		ExportRawTsvBatchRequested(Path requestedDirectory, std::vector<JFMExportItem> requestedItems, ProjectHandle requestedProject = InvalidProjectHandle, JFMOperationId requestedOperation = InvalidJFMOperationId)
+			: outputDirectory(std::move(requestedDirectory)), items(std::move(requestedItems)), project(requestedProject), operation(requestedOperation)
 		{
 		}
 
 		Path outputDirectory;
 		std::vector<JFMExportItem> items;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
 	struct ExportRawTsvBatchCompleted final : public BusEvent
 	{
 		ExportRawTsvBatchCompleted() = default;
-		ExportRawTsvBatchCompleted(Path requestedDirectory, std::size_t exportedCount, std::vector<std::string> exportWarnings)
-			: outputDirectory(std::move(requestedDirectory)), count(exportedCount), warnings(std::move(exportWarnings))
+		ExportRawTsvBatchCompleted(Path requestedDirectory, std::size_t exportedCount, std::vector<std::string> exportWarnings, ProjectHandle exportedProject = InvalidProjectHandle, JFMOperationId completedOperation = InvalidJFMOperationId)
+			: outputDirectory(std::move(requestedDirectory)), count(exportedCount), warnings(std::move(exportWarnings)), project(exportedProject), operation(completedOperation)
 		{
 		}
 
 		Path outputDirectory;
 		std::size_t count = 0;
 		std::vector<std::string> warnings;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
 	struct ExportRawTsvBatchFailed final : public BusEvent
 	{
 		ExportRawTsvBatchFailed() = default;
-		ExportRawTsvBatchFailed(Path requestedDirectory, std::string failure)
-			: outputDirectory(std::move(requestedDirectory)), error(std::move(failure))
+		ExportRawTsvBatchFailed(Path requestedDirectory, std::string failure, ProjectHandle failedProject = InvalidProjectHandle, JFMOperationId failedOperation = InvalidJFMOperationId)
+			: outputDirectory(std::move(requestedDirectory)), error(std::move(failure)), project(failedProject), operation(failedOperation)
 		{
 		}
 
 		Path outputDirectory;
 		std::string error;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
 	struct ProjectDataMaterializationCompleted final : public BusEvent
 	{
 		ProjectDataMaterializationCompleted() = default;
 		ProjectDataMaterializationCompleted(
-			std::vector<JFMCharacteristic> materializedCharacteristics,
+			std::vector<JFMCharacteristicRecord> materializedCharacteristics,
 			std::vector<std::string> materializationWarnings,
 			ProjectHandle materializedProject = InvalidProjectHandle,
 			JFMOperationId materializationOperation = InvalidJFMOperationId)
@@ -307,7 +405,7 @@ namespace SST::Prototypes::JFM
 		{
 		}
 
-		std::vector<JFMCharacteristic> characteristics;
+		std::vector<JFMCharacteristicRecord> characteristics;
 		std::vector<std::string> warnings;
 		ProjectHandle project = InvalidProjectHandle;
 		JFMOperationId operation = InvalidJFMOperationId;

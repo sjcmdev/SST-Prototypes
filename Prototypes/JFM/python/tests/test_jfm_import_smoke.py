@@ -72,6 +72,7 @@ def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
 
     assert result["parser"] == "dat"
     assert characteristic.info.source_path.endswith("IV_C002_Z015_6_300,0K.dat")
+    assert characteristic.info.source_record_key == "0"
     assert characteristic.info.columns[0].role == "voltage"
     assert characteristic.info.temperature_K == 300.0
     assert characteristic.data.voltage

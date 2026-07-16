@@ -38,7 +38,7 @@ namespace SST::Prototypes::JFM
 
 		const JFMProject project = m_Store != nullptr ? m_Store->GetProjectSnapshot() : JFMProject{};
 		const auto projectPath = m_Store != nullptr ? m_Store->GetProjectPath() : std::optional<Path>{};
-		const auto selected = m_Store != nullptr ? m_Store->GetSelectedCharacteristic() : std::optional<JFMCharacteristic>{};
+		const auto selected = m_Store != nullptr ? m_Store->GetSelectedCharacteristicRecord() : std::optional<JFMCharacteristicRecord>{};
 
 		ImGui::TextUnformatted(project.name.c_str());
 		ImGui::Separator();
@@ -51,7 +51,7 @@ namespace SST::Prototypes::JFM
 		if (selected)
 		{
 			ImGui::Text("Selected: %s", selected->info.name.c_str());
-			ImGui::Text("Points: %zu", selected->data.voltage.size());
+			ImGui::Text("Points: %zu", selected->data ? selected->data->voltage.size() : 0);
 			ImGui::Text("Temperature: %s",
 			            selected->info.temperatureK ? std::to_string(*selected->info.temperatureK).c_str() : "<missing>");
 			ImGui::Text("Source: %s", selected->info.sourcePath.String().c_str());

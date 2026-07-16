@@ -64,7 +64,7 @@ stop
 - Rejestracja zewnętrznych skryptów importu (Python, hot-reload, dynamiczna rejestracja) na bazie istniejącego osadzenia Pythona (§4.1)
 - QC: braki kolumn, jednostki (domyślne gdy brak), brak `T`, duplikaty, niemonotoniczność `V`, puste/nienumeryczne punkty, saturacja/compliance, wiele sweepów + rozdzielanie (§4.5)
 - Panel statusu importu w UI, nie konsola (§18.1)
-- Wykres surowych danych: liniowy / semi-log / signed-log (§14.1–14.2)
+- Wykres surowych danych: liniowy / semi-log (§14.1–14.2). Signed-log jest świadomie odłożony poza bieżącą iterację.
 - Minimalny eksport `.tsv` danych surowych — wczesna weryfikacja w OriginPro
 
 ## Faza 2 — Preprocessing + zakres dopasowania

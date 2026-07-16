@@ -53,6 +53,7 @@ NB_MODULE(sst_jfm, module)
 			"source_path",
 			[](const JFMCharacteristicInfo &info) { return info.sourcePath.String(); },
 			[](JFMCharacteristicInfo &info, const std::string &path) { info.sourcePath = SST::Path::FromResolved(path); })
+		.def_rw("source_record_key", &JFMCharacteristicInfo::sourceRecordKey)
 		.def_rw("parser", &JFMCharacteristicInfo::parser)
 		.def_rw("temperature_K", &JFMCharacteristicInfo::temperatureK)
 		.def_rw("temperature_source", &JFMCharacteristicInfo::temperatureSource)

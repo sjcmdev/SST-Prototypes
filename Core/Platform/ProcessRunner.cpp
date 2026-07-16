@@ -340,4 +340,96 @@ namespace SST::Platform
 #endif
 		return result;
 	}
+
+	Result<Path> CurrentExecutablePath()
+	{
+#if defined(DS_PLATFORM_WINDOWS)
+		std::vector<wchar_t> buffer(1024);
+		for (;;)
+		{
+			const DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+			if (length == 0)
+				return MakeProcessError("GetModuleFileNameW failed with code " + std::to_string(GetLastError()), "process.executable_path_failed");
+			if (length < buffer.size() - 1)
+				return Path::FromResolved(std::wstring(buffer.data(), length));
+			buffer.resize(buffer.size() * 2);
+		}
+#elif defined(__linux__)
+		std::vector<char> buffer(1024);
+		for (;;)
+		{
+			const ssize_t length = readlink("/proc/self/exe", buffer.data(), buffer.size());
+			if (length < 0)
+				return MakeProcessError(std::string("readlink failed: ") + std::strerror(errno), "process.executable_path_failed");
+			if (static_cast<std::size_t>(length) < buffer.size())
+				return Path::FromResolved(std::string(buffer.data(), static_cast<std::size_t>(length)));
+			buffer.resize(buffer.size() * 2);
+		}
+#else
+		return MakeProcessError("Current executable path is not implemented on this platform.", "process.executable_path_unsupported");
+#endif
+	}
+
+	Result<void> LaunchDetached(const ProcessRunOptions &options)
+	{
+		if (options.executable.Empty())
+			return MakeProcessError("Executable path is empty.", "process.executable_missing");
+
+#if defined(DS_PLATFORM_WINDOWS)
+		std::wstring commandLine = ToWideString(BuildCommandLine(options.executable, options.arguments));
+		const std::wstring workingDirectory = options.workingDirectory.Empty() ? std::wstring{} : options.workingDirectory.wstring();
+		STARTUPINFOW startupInfo{};
+		startupInfo.cb = sizeof(startupInfo);
+		PROCESS_INFORMATION processInfo{};
+		if (!CreateProcessW(
+				nullptr,
+				commandLine.data(),
+				nullptr,
+				nullptr,
+				FALSE,
+				CREATE_NEW_PROCESS_GROUP,
+				nullptr,
+				workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
+				&startupInfo,
+				&processInfo))
+		{
+			return MakeProcessError("CreateProcessW failed with code " + std::to_string(GetLastError()), "process.create_failed");
+		}
+		CloseHandle(processInfo.hThread);
+		CloseHandle(processInfo.hProcess);
+#else
+		const pid_t firstChild = fork();
+		if (firstChild < 0)
+			return MakeProcessError(std::string("fork failed: ") + std::strerror(errno), "process.create_failed");
+		if (firstChild == 0)
+		{
+			if (setsid() < 0)
+				_exit(126);
+			const pid_t secondChild = fork();
+			if (secondChild < 0)
+				_exit(126);
+			if (secondChild > 0)
+				_exit(0);
+
+			std::vector<std::string> storage;
+			storage.reserve(options.arguments.size() + 1);
+			storage.push_back(options.executable.String());
+			storage.insert(storage.end(), options.arguments.begin(), options.arguments.end());
+			std::vector<char *> argv;
+			argv.reserve(storage.size() + 1);
+			for (std::string &item : storage)
+				argv.push_back(item.data());
+			argv.push_back(nullptr);
+			if (!options.workingDirectory.Empty())
+				(void)chdir(options.workingDirectory.String().c_str());
+			execvp(options.executable.String().c_str(), argv.data());
+			_exit(127);
+		}
+		int status = 0;
+		(void)waitpid(firstChild, &status, 0);
+		if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+			return MakeProcessError("Detached process bootstrap failed.", "process.create_failed");
+#endif
+		return {};
+	}
 } // namespace SST::Platform
