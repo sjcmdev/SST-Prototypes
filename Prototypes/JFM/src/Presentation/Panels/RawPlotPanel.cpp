@@ -462,6 +462,26 @@ namespace SST::Prototypes::JFM
 			const float controlsWidth = std::clamp(ImGui::GetContentRegionAvail().x * 0.26f, 320.0f, 460.0f);
 			ImGui::BeginChild("##curve_groups", ImVec2(controlsWidth, 0.0f), true);
 			ImGui::TextDisabled("Curve groups");
+			if (ImGui::SmallButton("Expand all"))
+				area.groupTreeOpenRequest = 1;
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Collapse all"))
+				area.groupTreeOpenRequest = -1;
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Hide all"))
+			{
+				for (PlotCurveGroup &group : area.groups)
+					group.visible = false;
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Unhide all"))
+			{
+				for (PlotCurveGroup &group : area.groups)
+				{
+					group.visible = true;
+					group.hiddenCharacteristicIds.clear();
+				}
+			}
 			for (std::size_t groupIndex = 0; groupIndex < area.groups.size();)
 			{
 				PlotCurveGroup &group = area.groups[groupIndex];
@@ -476,6 +496,8 @@ namespace SST::Prototypes::JFM
 				ImGui::Checkbox("##group_visible", &group.visible);
 				ImGui::SameLine();
 				const std::string groupLabel = group.title + " (" + std::to_string(group.characteristicIds.size()) + ")";
+				if (area.groupTreeOpenRequest != 0)
+					ImGui::SetNextItemOpen(area.groupTreeOpenRequest > 0, ImGuiCond_Always);
 				const bool open = ImGui::TreeNodeEx(groupLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 				if (open)
 				{
@@ -541,6 +563,7 @@ namespace SST::Prototypes::JFM
 				ImGui::PopID();
 				++groupIndex;
 			}
+			area.groupTreeOpenRequest = 0;
 			if (area.groups.empty())
 				ImGui::TextDisabled("Drop characteristics here or use selection.");
 			ImGui::EndChild();

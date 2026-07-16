@@ -63,6 +63,7 @@ namespace SST::Prototypes::JFM
 			bool autoFit = true;
 			float fitPadding = 0.08f;
 			bool renaming = false;
+			int groupTreeOpenRequest = 0;
 			std::array<char, 128> renameBuffer = {};
 		};
 
