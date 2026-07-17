@@ -575,7 +575,15 @@ namespace SST::Prototypes::JFM
 		const std::string label = group.name + "##jfm_analysis_group_" + group.id;
 		if (m_AnalysisTreeOpenRequest != 0)
 			ImGui::SetNextItemOpen(m_AnalysisTreeOpenRequest > 0, ImGuiCond_Always);
-		if (!ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
+		const bool open = ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth);
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+		{
+			std::vector<CharacteristicId> ids = m_Store->GetGroupCharacteristicIds(m_StagingProject, group.id);
+			ids.erase(std::remove_if(ids.begin(), ids.end(), [&visibleIds](CharacteristicId id) { return !ContainsId(visibleIds, id); }), ids.end());
+			if (!ids.empty())
+				selectAnalysisIds(std::move(ids), ids.front());
+		}
+		if (!open)
 			return;
 		for (const JFMGroup &child : project.groups)
 		{
@@ -597,7 +605,15 @@ namespace SST::Prototypes::JFM
 		const std::string label = series.name + "##jfm_analysis_series_" + series.id;
 		if (m_AnalysisTreeOpenRequest != 0)
 			ImGui::SetNextItemOpen(m_AnalysisTreeOpenRequest > 0, ImGuiCond_Always);
-		if (!ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth))
+		const bool open = ImGui::TreeNodeEx(label.c_str(), ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth);
+		if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+		{
+			std::vector<CharacteristicId> ids = series.characteristicIds;
+			ids.erase(std::remove_if(ids.begin(), ids.end(), [&visibleIds](CharacteristicId id) { return !ContainsId(visibleIds, id); }), ids.end());
+			if (!ids.empty())
+				selectAnalysisIds(std::move(ids), ids.front(), series.id);
+		}
+		if (!open)
 			return;
 		const auto snapshot = m_Store->CaptureProjectState(m_StagingProject);
 		const std::vector<CharacteristicId> selected = snapshot ? snapshot->selectedCharacteristicIds : std::vector<CharacteristicId>{};
@@ -616,6 +632,18 @@ namespace SST::Prototypes::JFM
 				selectAnalysisCharacteristic(series, id, visibleIds);
 		}
 		ImGui::TreePop();
+	}
+
+	void JFMImportDialogPanel::selectAnalysisIds(std::vector<CharacteristicId> ids, CharacteristicId primary, std::string seriesId)
+	{
+		if (m_Store == nullptr || ids.empty())
+			return;
+		finishRangeUndoGroup();
+		if (!ContainsId(ids, primary))
+			primary = ids.front();
+		m_Store->SetSelectedCharacteristics(m_StagingProject, std::move(ids), primary, std::move(seriesId));
+		m_RangeCharacteristic = primary;
+		m_RangeInitialized = false;
 	}
 
 	void JFMImportDialogPanel::selectAnalysisCharacteristic(const JFMSeries &series, CharacteristicId id, const std::vector<CharacteristicId> &visibleIds)
@@ -656,9 +684,7 @@ namespace SST::Prototypes::JFM
 		{
 			selected = {id};
 		}
-		m_Store->SetSelectedCharacteristics(m_StagingProject, std::move(selected), primary, series.id);
-		m_RangeCharacteristic = primary;
-		m_RangeInitialized = false;
+		selectAnalysisIds(std::move(selected), primary, series.id);
 	}
 
 	void JFMImportDialogPanel::renderAnalysisPlot(ProjectHandle project, const std::vector<CharacteristicId> &ids, CharacteristicId active)
@@ -1018,7 +1044,7 @@ namespace SST::Prototypes::JFM
 
 		if (!allIds.empty())
 		{
-			m_Store->SetSelectedCharacteristics(m_StagingProject, allIds, allIds.front());
+			m_Store->SetSelectedCharacteristics(m_StagingProject, {allIds.front()}, allIds.front());
 			requestPrefit(m_StagingProject, std::move(allIds));
 		}
 	}

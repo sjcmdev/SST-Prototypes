@@ -102,6 +102,7 @@ namespace SST::Prototypes::JFM
 		void renderAnalysisTree(const JFMProject &project);
 		void renderAnalysisGroup(const JFMProject &project, const JFMGroup &group, const std::vector<CharacteristicId> &visibleIds);
 		void renderAnalysisSeries(const JFMSeries &series, const std::vector<CharacteristicId> &visibleIds);
+		void selectAnalysisIds(std::vector<CharacteristicId> ids, CharacteristicId primary, std::string seriesId = {});
 		void selectAnalysisCharacteristic(const JFMSeries &series, CharacteristicId id, const std::vector<CharacteristicId> &visibleIds);
 		void renderAnalysisPlot(ProjectHandle project, const std::vector<CharacteristicId> &ids, CharacteristicId active);
 		void renderPrefitParameters(const std::optional<JFMPrefitState> &prefit) const;
