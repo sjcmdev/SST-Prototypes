@@ -27,7 +27,25 @@ namespace SST::Prototypes::JFM
 		const char *ParserOptions[] = {"auto", "dat", "scaps_iv", "custom"};
 		const char *DecimalOptions[] = {"auto", ".", ","};
 		const char *TemperatureOptions[] = {"auto", "filename", "header", "off"};
-		const char *VariableSources[] = {"stem", "folder", "parent_folder"};
+		const char *VariableSources[] = {
+			"stem",
+			"file_name",
+			"file_stem",
+			"folder",
+			"parent_folder",
+			"parent_folder_1",
+			"parent_folder_2",
+			"parent_folder_3",
+			"parent_folder_4",
+			"parent_folder_5",
+			"source_path",
+			"folder_path",
+			"parent_path",
+			"parent_path_1",
+			"parent_path_2",
+			"parent_path_3",
+			"parent_path_4",
+			"parent_path_5"};
 		const char *PrefitModels[] = {
 			"SD-0",
 			"SD-Rs",
@@ -250,7 +268,7 @@ namespace SST::Prototypes::JFM
 			ImGui::InputText("Name pattern", m_NamePattern.data(), m_NamePattern.size());
 			ImGui::InputText("Short name", m_ShortNamePattern.data(), m_ShortNamePattern.size());
 			ImGui::InputText("Variable delimiter", m_VariableDelimiter.data(), m_VariableDelimiter.size());
-			ImGui::TextDisabled("Variables: {stem}, {folder}, {parent_folder}, {T}, {stem_0}, {folder_0}");
+			ImGui::TextDisabled("Variables: {stem}, {file_name}, {folder}, {parent_folder}, {parent_folder_2}, {source_path}, {T}, {stem_0}, {folder_0}");
 			renderCustomVariables();
 			ImGui::InputText("Delimiter", m_Delimiter.data(), m_Delimiter.size());
 			ImGui::Combo("Decimal", &m_DecimalSeparator, DecimalOptions, IM_ARRAYSIZE(DecimalOptions));
@@ -297,6 +315,11 @@ namespace SST::Prototypes::JFM
 			ImGui::TextDisabled("Refreshing preview...");
 		else if (!m_PreviewError.empty())
 			ImGui::TextWrapped("Preview failed: %s", m_PreviewError.c_str());
+		ImGui::RadioButton("Linear##inline_preview", &m_PreviewScale, 0);
+		ImGui::SameLine();
+		ImGui::RadioButton("Semi-log##inline_preview", &m_PreviewScale, 1);
+		if (!m_PreviewFiles.empty())
+			renderPreviewPlot("Preview Plot##import_inline_preview", 240.0f);
 		ImGui::Checkbox("Preview window", &m_PreviewOpen);
 		ImGui::Checkbox("Plot after add", &m_PlotAfterImport);
 
@@ -1147,7 +1170,7 @@ namespace SST::Prototypes::JFM
 		if (!ImGui::TreeNodeEx("Custom short-name variables", ImGuiTreeNodeFlags_DefaultOpen))
 			return;
 
-		ImGui::TextDisabled("Use custom variables in patterns as {variable_name}.");
+		ImGui::TextDisabled("Use custom variables in patterns as {variable_name}; duplicate names override built-ins.");
 		if (ImGui::BeginTable("##jfm_custom_variables", 6, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV))
 		{
 			ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 0.28f);
@@ -1208,8 +1231,13 @@ namespace SST::Prototypes::JFM
 		ImGui::TextDisabled("Sample: %s", sampleName.c_str());
 		const JFMImportPreviewItem *item = previewItem(path);
 		const JFMCharacteristicInfo *info = item != nullptr && !item->characteristics.empty() ? &item->characteristics.front().info : nullptr;
-		if (!ImGui::BeginTable("##jfm_variable_preview", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg))
+		if (!ImGui::BeginChild("##jfm_variable_preview_scroll", ImVec2(0.0f, 430.0f), false, ImGuiWindowFlags_HorizontalScrollbar))
 			return;
+		if (!ImGui::BeginTable("##jfm_variable_preview", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY))
+		{
+			ImGui::EndChild();
+			return;
+		}
 
 		ImGui::TableSetupColumn("Variable", ImGuiTableColumnFlags_WidthStretch, 0.22f);
 		ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.38f);
@@ -1231,6 +1259,12 @@ namespace SST::Prototypes::JFM
 					ImGui::TextUnformatted("parser temperature extraction");
 				else if (name == "source_path")
 					ImGui::TextUnformatted("full source path");
+				else if (name == "file_name" || name == "file_stem")
+					ImGui::TextUnformatted("source file");
+				else if (name == "folder" || name == "parent_folder" || name.starts_with("parent_folder_"))
+					ImGui::TextUnformatted("source folder");
+				else if (name == "folder_path" || name == "parent_path" || name.starts_with("parent_path_"))
+					ImGui::TextUnformatted("source path");
 				else if (name.starts_with("stem_"))
 					ImGui::TextUnformatted("file stem token");
 				else if (name.starts_with("folder_"))
@@ -1240,6 +1274,45 @@ namespace SST::Prototypes::JFM
 			}
 		}
 		ImGui::EndTable();
+		ImGui::EndChild();
+	}
+
+	void JFMImportDialogPanel::renderPreviewPlot(const char *plotId, float plotHeight) const
+	{
+		const std::vector<Path> previewPaths = selectedPreviewPaths();
+		if (previewPaths.empty() || !ImPlot::BeginPlot(plotId, ImVec2(-1.0f, plotHeight)))
+		{
+			ImGui::TextDisabled("Mini plot unavailable for this file.");
+			return;
+		}
+
+		ImPlot::SetupAxes("x", "y");
+		ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
+		if (m_PreviewScale == 1)
+			ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+		for (std::size_t index = 0; index < previewPaths.size(); ++index)
+		{
+			const JFMImportPreviewItem *item = previewItem(previewPaths[index]);
+			if (item == nullptr)
+				continue;
+			for (std::size_t curveIndex = 0; curveIndex < item->characteristics.size(); ++curveIndex)
+			{
+				const JFMCharacteristicRecord &characteristic = item->characteristics[curveIndex];
+				if (!characteristic.data)
+					continue;
+				std::vector<double> x = characteristic.data->voltage;
+				std::vector<double> y = characteristic.data->currentDensity.empty()
+					? characteristic.data->current
+					: characteristic.data->currentDensity;
+				ApplyPreviewScale(m_PreviewScale, x, y);
+				if (x.empty() || y.empty())
+					continue;
+				const ImPlotSpec spec(ImPlotProp_LineColor, PreviewColor(index + curveIndex));
+				const std::string label = characteristic.info.name + "##preview_plot_" + std::to_string(index) + "_" + std::to_string(curveIndex);
+				ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(std::min(x.size(), y.size())), spec);
+			}
+		}
+		ImPlot::EndPlot();
 	}
 
 	void JFMImportDialogPanel::renderPreviewWindow()
@@ -1321,42 +1394,8 @@ namespace SST::Prototypes::JFM
 		ImGui::SameLine();
 		if (ImGui::Button("Clear"))
 			m_SelectedPreviewFileIndices.clear();
-		const std::vector<Path> previewPaths = selectedPreviewPaths();
 		const float plotHeight = std::max(360.0f, ImGui::GetContentRegionAvail().y * 0.58f);
-		if (!previewPaths.empty() && ImPlot::BeginPlot("Preview Plot", ImVec2(-1.0f, plotHeight)))
-		{
-			ImPlot::SetupAxes("x", "y");
-			ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
-			if (m_PreviewScale == 1)
-				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
-			for (std::size_t index = 0; index < previewPaths.size(); ++index)
-			{
-				const JFMImportPreviewItem *item = previewItem(previewPaths[index]);
-				if (item == nullptr)
-					continue;
-				for (std::size_t curveIndex = 0; curveIndex < item->characteristics.size(); ++curveIndex)
-				{
-					const JFMCharacteristicRecord &characteristic = item->characteristics[curveIndex];
-					if (!characteristic.data)
-						continue;
-					std::vector<double> x = characteristic.data->voltage;
-					std::vector<double> y = characteristic.data->currentDensity.empty()
-						? characteristic.data->current
-						: characteristic.data->currentDensity;
-					ApplyPreviewScale(m_PreviewScale, x, y);
-					if (x.empty() || y.empty())
-						continue;
-					const ImPlotSpec spec(ImPlotProp_LineColor, PreviewColor(index + curveIndex));
-					const std::string label = characteristic.info.name + "##preview_plot_" + std::to_string(index) + "_" + std::to_string(curveIndex);
-					ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(std::min(x.size(), y.size())), spec);
-				}
-			}
-			ImPlot::EndPlot();
-		}
-		else
-		{
-			ImGui::TextDisabled("Mini plot unavailable for this file.");
-		}
+		renderPreviewPlot("Preview Plot##import_preview_window", plotHeight);
 
 		const JFMImportPreviewItem *selectedItem = previewItem(selectedPreviewPath());
 		ImGui::SeparatorText("Text");

@@ -42,10 +42,11 @@ def normalize_options(options: ParseOptions | dict[str, Any] | None) -> ParseOpt
 
 def detect_temperature(path: str | Path, header_lines: list[str]) -> tuple[float | None, str, list[str]]:
     warnings: list[str] = []
-    filename = Path(path).name
-    filename_temperature = _find_temperature(filename)
-    if filename_temperature is not None:
-        return filename_temperature, "filename", warnings
+    source = Path(path)
+    for part in (source.name, *(parent.name for parent in source.parents[:8])):
+        path_temperature = _find_temperature(part)
+        if path_temperature is not None:
+            return path_temperature, "filename" if part == source.name else "path", warnings
 
     for line in header_lines:
         header_temperature = _find_temperature(line)
@@ -74,7 +75,7 @@ def build_curve_name(
         values.update(user_overrides)
     try:
         return pattern.format(**values)
-    except KeyError:
+    except (KeyError, ValueError):
         return values.get("stem") or values.get("source_path") or "curve"
 
 
@@ -88,21 +89,30 @@ def add_token_variables(metadata: dict[str, Any], key: str, text: str, delimiter
 def add_custom_variables(metadata: dict[str, Any], options: ParseOptions) -> None:
     delimiter = options.variable_delimiter
     for rule in options.custom_variables:
-        name = str(rule.get("name") or "")
-        source = str(rule.get("source") or "stem")
+        if not isinstance(rule, dict):
+            continue
+        name = str(rule.get("name") or "").strip()
+        source = str(rule.get("source") or "stem").strip()
         if not name:
             continue
 
         value = "" if metadata.get(source) is None else str(metadata.get(source, ""))
-        token_index = int(rule.get("token_index", -1))
+        token_index = _int_or_default(rule.get("token_index"), -1)
         if token_index >= 0 and delimiter:
             tokens = value.split(delimiter)
             value = tokens[token_index] if token_index < len(tokens) else ""
 
-        start = max(0, int(rule.get("substring_start", 0)))
-        length = int(rule.get("substring_length", -1))
+        start = max(0, _int_or_default(rule.get("substring_start"), 0))
+        length = _int_or_default(rule.get("substring_length"), -1)
         value = value[start:] if length < 0 else value[start : start + max(0, length)]
         metadata[name] = value
+
+
+def _int_or_default(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def split_numeric_rows(
@@ -229,21 +239,29 @@ def make_curve(
             direction = "non_monotonic"
             all_warnings.append("non_monotonic_sweep")
 
+    parents = list(source.parents)
     metadata = {
         "stem": source.stem,
+        "file_name": source.name,
+        "file_stem": source.stem,
         "folder": source.parent.name,
         "parent_folder": source.parent.parent.name if source.parent.parent != source.parent else "",
         "source_path": str(source),
+        "folder_path": str(source.parent),
+        "parent_path": str(source.parent.parent) if source.parent.parent != source.parent else "",
         "parser": parser,
         "temperature_K": temperature,
         "T": temperature,
         "temperature_source": temperature_source,
     }
+    for index in range(1, 6):
+        metadata[f"parent_folder_{index}"] = parents[index].name if index < len(parents) else ""
+        metadata[f"parent_path_{index}"] = str(parents[index]) if index < len(parents) else ""
     add_token_variables(metadata, "stem", source.stem, options.variable_delimiter)
     add_token_variables(metadata, "folder", source.parent.name, options.variable_delimiter)
-    add_custom_variables(metadata, options)
     if extra_metadata:
         metadata.update(extra_metadata)
+    add_custom_variables(metadata, options)
     short_name = build_curve_name(metadata, options.short_name_pattern, options.user_overrides)
     if options.short_name_pattern and short_name:
         metadata["short_name"] = short_name

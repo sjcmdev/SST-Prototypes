@@ -266,7 +266,7 @@ namespace SST::Prototypes::JFM
 
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
-		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
+		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("real-measurement") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
 		ASSERT_TRUE(FileSystem::Exists(pythonRoot.Native())) << pythonRoot.String();
 		ASSERT_TRUE(FileSystem::Exists(dataPath.Native())) << dataPath.String();
 
@@ -298,7 +298,7 @@ namespace SST::Prototypes::JFM
 
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
-		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
+		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("real-measurement") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
 
 #if DS_PYTHON_CAPI_AVAILABLE
 		auto runtime = EnsurePythonRuntimeForBridgeTests();
@@ -383,7 +383,7 @@ namespace SST::Prototypes::JFM
 #if DS_PYTHON_CAPI_AVAILABLE
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
-		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
+		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("real-measurement") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
 		auto runtime = EnsurePythonRuntimeForBridgeTests();
 		ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
 

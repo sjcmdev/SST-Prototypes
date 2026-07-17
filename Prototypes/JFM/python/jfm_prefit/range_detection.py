@@ -55,8 +55,6 @@ def _automatic_bounds(sample: Sample, options: RangeOptions) -> tuple[int, int, 
 
     lower_voltage = options.n_sigma_lower * thermal_voltage(sample.temperature_k)
     eligible = voltage >= lower_voltage
-    if sample.characteristic_type == "dark":
-        eligible &= current >= 0.0
     candidates = np.flatnonzero(eligible)
     lo = int(candidates[0]) if candidates.size else 0
     lo = min(lo + max(0, options.margin_points), max(0, count - 4))

@@ -8,14 +8,17 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parents[2]
+DAT_FILE = REPO / "Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat"
+SYNTHETIC_FILE = REPO / "Prototypes/JFM/example-data/syntetic-data/single-diode/canonical/SD-0/T-300K/I0-1e-10__A-1p5/clean.dat"
 sys.path.insert(0, str(ROOT))
 
 from jfm_import.dat_parser import parse_dat
 from jfm_import.scaps_iv_parser import parse_scaps_iv
+from jfm_import.common import build_curve_name
 
 
 def test_dat_parser_returns_unified_shape() -> None:
-    result = parse_dat(REPO / "Prototypes/JFM/example-data/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat")
+    result = parse_dat(DAT_FILE)
 
     assert result["ok"] is True
     assert result["parser"] == "dat"
@@ -67,7 +70,7 @@ def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
 
     from jfm_import.cpp_adapter import import_file
 
-    result = import_file(REPO / "Prototypes/JFM/example-data/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat")
+    result = import_file(DAT_FILE)
     characteristic = result["characteristics"][0]
 
     assert result["parser"] == "dat"
@@ -108,7 +111,7 @@ def test_cpp_adapter_applies_parse_options(monkeypatch) -> None:
     from jfm_import.cpp_adapter import import_file
 
     result = import_file(
-        REPO / "Prototypes/JFM/example-data/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat",
+        DAT_FILE,
         {
             "parser": "dat",
             "name_pattern": "curve_{stem}",
@@ -129,6 +132,95 @@ def test_cpp_adapter_applies_parse_options(monkeypatch) -> None:
 
     assert result["characteristics"][0].info.name.startswith("curve_IV_C002")
     assert result["characteristics"][0].info.metadata["short_name"] == "C002_300.0"
+
+
+def test_import_variables_include_paths_and_allow_overrides(monkeypatch) -> None:
+    class JFMColumn:
+        pass
+
+    class JFMSweepInfo:
+        pass
+
+    class JFMQualityControl:
+        pass
+
+    class JFMCharacteristic:
+        pass
+
+    monkeypatch.setitem(
+        sys.modules,
+        "sst_jfm",
+        SimpleNamespace(
+            JFMColumn=JFMColumn,
+            JFMSweepInfo=JFMSweepInfo,
+            JFMQualityControl=JFMQualityControl,
+            JFMCharacteristic=JFMCharacteristic,
+            JFMCharacteristicInfo=SimpleNamespace,
+            JFMCharacteristicData=SimpleNamespace,
+        ),
+    )
+
+    from jfm_import.cpp_adapter import import_file
+
+    result = import_file(
+        DAT_FILE,
+        {
+            "parser": "dat",
+            "short_name_pattern": "{T}_{parent_folder_1}_{file_name}",
+            "variable_delimiter": "_",
+            "custom_variables": [
+                {
+                    "name": "T",
+                    "source": "parent_folder_1",
+                    "token_index": -1,
+                    "substring_start": 0,
+                    "substring_length": -1,
+                }
+            ],
+        },
+    )
+
+    metadata = result["characteristics"][0].info.metadata
+    assert metadata["T"] == "C002"
+    assert metadata["file_name"].endswith(".dat")
+    assert metadata["parent_folder_1"] == "C002"
+    assert metadata["parent_path_1"].endswith("real-measurement\\C002") or metadata["parent_path_1"].endswith("real-measurement/C002")
+    assert metadata["short_name"].startswith("C002_C002_IV_C002")
+
+
+def test_synthetic_single_diode_import_gets_temperature_from_path() -> None:
+    result = parse_dat(SYNTHETIC_FILE)
+
+    metadata = result["curves"][0]["metadata"]
+    assert result["temperature_K"] == 300.0
+    assert metadata["temperature_source"] == "path"
+    assert metadata["parent_folder_1"] == "T-300K"
+
+
+def test_custom_variable_override_tolerates_partial_numeric_fields() -> None:
+    result = parse_dat(
+        SYNTHETIC_FILE,
+        {
+            "short_name_pattern": "{T}_{stem}",
+            "custom_variables": [
+                {
+                    "name": "T",
+                    "source": "parent_folder_1",
+                    "token_index": "",
+                    "substring_start": "",
+                    "substring_length": "",
+                }
+            ],
+        },
+    )
+
+    metadata = result["curves"][0]["metadata"]
+    assert metadata["T"] == "T-300K"
+    assert metadata["short_name"] == "T-300K_clean"
+
+
+def test_incomplete_name_pattern_keeps_preview_metadata_alive() -> None:
+    assert build_curve_name({"stem": "sample"}, "{stem") == "sample"
 
 
 def test_cpp_adapter_custom_script(monkeypatch, tmp_path: Path) -> None:

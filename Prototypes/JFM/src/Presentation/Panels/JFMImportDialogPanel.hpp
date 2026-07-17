@@ -96,6 +96,7 @@ namespace SST::Prototypes::JFM
 		void applyPreviewFolderFilter();
 		void renderCustomVariables();
 		void renderVariablePreviewTable() const;
+		void renderPreviewPlot(const char *plotId, float plotHeight) const;
 		void renderPreviewWindow();
 		void renderAnalysisTab();
 		void renderAnalysisTree(const JFMProject &project);
