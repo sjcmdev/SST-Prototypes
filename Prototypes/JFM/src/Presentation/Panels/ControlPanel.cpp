@@ -105,6 +105,18 @@ namespace SST::Prototypes::JFM
 			SetVisible(visible);
 			return;
 		}
+		const ImGuiIO &io = ImGui::GetIO();
+		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && io.KeyCtrl && !io.WantTextInput && !ImGui::IsAnyItemActive())
+		{
+			const bool redo = (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false)) || ImGui::IsKeyPressed(ImGuiKey_Y, false);
+			const bool undo = !redo && ImGui::IsKeyPressed(ImGuiKey_Z, false);
+			if (undo || redo)
+			{
+				FinishRangeUndoGroup();
+				if (auto registry = m_CommandRegistry.lock())
+					(void)registry->Execute(CommandID{redo ? "edit.redo" : "edit.undo"});
+			}
+		}
 
 		if (m_Store == nullptr)
 		{
@@ -128,6 +140,7 @@ namespace SST::Prototypes::JFM
 
 		ImGui::Text("Selected: %d", static_cast<int>(ids.size()));
 		RenderModelControls(project, ids);
+		RenderPrefitDisplayControls();
 		RenderColorControls(project, ids, activeRecord->info);
 		RenderRangeControls(project, ids, *activeRecord);
 		RenderParameterTable(activeRecord->info);
@@ -172,6 +185,25 @@ namespace SST::Prototypes::JFM
 		ImGui::BeginDisabled();
 		ImGui::Button("Fit");
 		ImGui::EndDisabled();
+	}
+
+	void ControlPanel::RenderPrefitDisplayControls()
+	{
+		if (m_Settings == nullptr)
+			return;
+		JFMUserSettings settings = m_Settings->GetSnapshot();
+		bool changed = false;
+		changed |= ImGui::Checkbox("Show prefit", &settings.showPrefitCurves);
+		ImGui::SameLine();
+		changed |= ImGui::ColorEdit4("Prefit color", settings.prefitCurveColor.data(), ImGuiColorEditFlags_NoInputs);
+		if (changed)
+		{
+			m_Settings->SetPrefitCurveDefaults(
+				settings.showPrefitCurves,
+				settings.prefitCurveColor,
+				settings.prefitCurveLineWeight,
+				settings.hoveredCurveLineWeight);
+		}
 	}
 
 	void ControlPanel::RenderColorControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo)

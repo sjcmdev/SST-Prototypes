@@ -2,11 +2,16 @@
 
 #include "Presentation/Panels/RawPlotPanel.hpp"
 
+#include "App/JFMCommands.hpp"
+#include "Core/Commands/Command.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/Undo/UndoStack.hpp"
 #include "Events/JFMEvents.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 #include <imgui.h>
 #include <implot.h>
@@ -133,19 +138,85 @@ namespace SST::Prototypes::JFM
 		{
 			return "plot-" + std::to_string(areaId) + "-group-" + std::to_string(groupIndex + 1);
 		}
+
+		std::string seriesIdForCharacteristic(const JFMProject &project, CharacteristicId id)
+		{
+			for (const JFMSeries &series : project.series)
+			{
+				if (containsId(series.characteristicIds, id))
+					return series.id;
+			}
+			return {};
+		}
+
+		std::string colorToMetadata(const std::array<float, 4> &color)
+		{
+			char buffer[96]{};
+			std::snprintf(buffer, sizeof(buffer), "%.6g,%.6g,%.6g,%.6g", color[0], color[1], color[2], color[3]);
+			return buffer;
+		}
+
 	} // namespace RawPlotDetail
 	using namespace RawPlotDetail;
+
+	class RawPlotPanel::PlotStateCommand final : public ICommand
+	{
+	public:
+		PlotStateCommand(RawPlotPanel *panel, std::vector<PlotArea> before, std::vector<PlotArea> after, std::string description)
+			: m_Panel(panel), m_Before(std::move(before)), m_After(std::move(after)), m_Description(std::move(description))
+		{
+		}
+
+		Result<void> Execute(CommandContext &) override
+		{
+			return {};
+		}
+
+		Result<void> Undo(CommandContext &) override
+		{
+			if (m_Panel != nullptr)
+				m_Panel->m_PlotAreas = m_Before;
+			return {};
+		}
+
+		Result<void> Redo(CommandContext &) override
+		{
+			if (m_Panel != nullptr)
+				m_Panel->m_PlotAreas = m_After;
+			return {};
+		}
+
+		std::string Description() const override
+		{
+			return m_Description;
+		}
+
+		bool IsUndoable() const noexcept override
+		{
+			return true;
+		}
+
+	private:
+		RawPlotPanel *m_Panel = nullptr;
+		std::vector<PlotArea> m_Before;
+		std::vector<PlotArea> m_After;
+		std::string m_Description;
+	};
 
 	RawPlotPanel::RawPlotPanel(
 		Ref<JFMWorkspaceStore> store,
 		Ref<JFMUserSettingsStore> settings,
 		Ref<SST::EventBus> eventBus,
+		WeakRef<CommandRegistry> commandRegistry,
+		WeakRef<UndoStack> undoStack,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
 		  m_Store(std::move(store)),
 		  m_Settings(std::move(settings)),
-		  m_EventBus(std::move(eventBus))
+		  m_EventBus(std::move(eventBus)),
+		  m_CommandRegistry(std::move(commandRegistry)),
+		  m_UndoStack(std::move(undoStack))
 	{
 		if (m_EventBus != nullptr)
 		{
@@ -158,7 +229,7 @@ namespace SST::Prototypes::JFM
 
 	Ref<IPanel> RawPlotPanel::Clone() const
 	{
-		return CreateRef<RawPlotPanel>(m_Store, m_Settings, m_EventBus, GetTitle(), IsVisible());
+		return CreateRef<RawPlotPanel>(m_Store, m_Settings, m_EventBus, m_CommandRegistry, m_UndoStack, GetTitle(), IsVisible());
 	}
 
 	RawPlotPanel::PlotArea RawPlotPanel::CreatePlotArea(ProjectHandle project)
@@ -326,10 +397,201 @@ namespace SST::Prototypes::JFM
 			group.hiddenCharacteristicIds.clear();
 	}
 
+	void RawPlotPanel::Execute(const char *commandId, CommandContext context) const
+	{
+		if (auto registry = m_CommandRegistry.lock())
+		{
+			context.SetContextId(ContextID{"jfm.raw_plot"});
+			context.SetSource("Raw Plot");
+			(void)registry->Execute(CommandID{commandId}, std::move(context));
+		}
+	}
+
+	void RawPlotPanel::FinishRangeUndoGroup(PlotArea &area, bool cancel)
+	{
+		if (!area.rangeUndoGroupOpen)
+			return;
+		if (auto undoStack = m_UndoStack.lock())
+		{
+			if (cancel)
+				(void)undoStack->CancelGroup();
+			else
+				(void)undoStack->EndGroup();
+		}
+		area.rangeUndoGroupOpen = false;
+		area.rangeHeldLastFrame = false;
+	}
+
+	void RawPlotPanel::PushPlotUndo(std::vector<PlotArea> before, std::string description)
+	{
+		if (auto undoStack = m_UndoStack.lock())
+			(void)undoStack->PushExecuted(CreateUnique<PlotStateCommand>(this, std::move(before), m_PlotAreas, std::move(description)));
+	}
+
+	bool RawPlotPanel::HandleUndoShortcuts()
+	{
+		const ImGuiIO &io = ImGui::GetIO();
+		if (!io.KeyCtrl || io.WantTextInput || ImGui::IsAnyItemActive())
+			return false;
+		const bool redo = (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false)) || ImGui::IsKeyPressed(ImGuiKey_Y, false);
+		const bool undo = !redo && ImGui::IsKeyPressed(ImGuiKey_Z, false);
+		if (!undo && !redo)
+			return false;
+		for (PlotArea &area : m_PlotAreas)
+			FinishRangeUndoGroup(area);
+		if (auto registry = m_CommandRegistry.lock())
+		{
+			(void)registry->Execute(CommandID{redo ? "edit.redo" : "edit.undo"});
+			return true;
+		}
+		if (auto undoStack = m_UndoStack.lock())
+		{
+			if (redo)
+				(void)undoStack->Redo();
+			else
+				(void)undoStack->Undo();
+			return true;
+		}
+		return false;
+	}
+
+	void RawPlotPanel::SelectCurveInWorkspace(const PlotArea &area, const PlotCurveGroup &group, CharacteristicId id)
+	{
+		if (m_Store == nullptr)
+			return;
+		const auto snapshot = m_Store->CaptureProjectState(area.project);
+		std::vector<CharacteristicId> selected = snapshot ? snapshot->selectedCharacteristicIds : std::vector<CharacteristicId>{};
+		const ImGuiIO &io = ImGui::GetIO();
+		if (io.KeyShift && snapshot && snapshot->selectedCharacteristicId != InvalidCharacteristicId)
+		{
+			const auto first = std::find(group.characteristicIds.begin(), group.characteristicIds.end(), snapshot->selectedCharacteristicId);
+			const auto last = std::find(group.characteristicIds.begin(), group.characteristicIds.end(), id);
+			if (first != group.characteristicIds.end() && last != group.characteristicIds.end())
+			{
+				const auto begin = std::min(first, last);
+				const auto end = std::max(first, last);
+				selected.assign(begin, end + 1);
+			}
+			else
+			{
+				selected = {id};
+			}
+		}
+		else if (io.KeyCtrl)
+		{
+			if (containsId(selected, id))
+				selected.erase(std::remove(selected.begin(), selected.end(), id), selected.end());
+			else
+				selected.push_back(id);
+			if (selected.empty())
+				selected.push_back(id);
+		}
+		else
+		{
+			selected = {id};
+		}
+		const JFMProject project = m_Store->GetProjectSnapshot(area.project);
+		m_Store->SetSelectedCharacteristics(area.project, std::move(selected), id, seriesIdForCharacteristic(project, id));
+	}
+
+	void RawPlotPanel::RenderRangeDragLines(PlotArea &area, const std::unordered_map<CharacteristicId, JFMCharacteristicRecord> &records)
+	{
+		if (m_Store == nullptr)
+			return;
+		const auto snapshot = m_Store->CaptureProjectState(area.project);
+		const CharacteristicId active = snapshot ? snapshot->selectedCharacteristicId : InvalidCharacteristicId;
+		if (active == InvalidCharacteristicId || !records.contains(active))
+		{
+			FinishRangeUndoGroup(area);
+			area.rangeCharacteristic = InvalidCharacteristicId;
+			area.rangeInitialized = false;
+			return;
+		}
+		const auto activeRecord = records.find(active);
+		if (activeRecord == records.end() || activeRecord->second.data == nullptr || activeRecord->second.data->voltage.empty())
+			return;
+
+		const std::vector<double> &voltage = activeRecord->second.data->voltage;
+		double minimumVoltage = std::numeric_limits<double>::infinity();
+		double maximumVoltage = -std::numeric_limits<double>::infinity();
+		for (double value : voltage)
+		{
+			if (!std::isfinite(value))
+				continue;
+			minimumVoltage = std::min(minimumVoltage, value);
+			maximumVoltage = std::max(maximumVoltage, value);
+		}
+		if (!std::isfinite(minimumVoltage) || !std::isfinite(maximumVoltage) || minimumVoltage >= maximumVoltage)
+			return;
+
+		if (area.rangeCharacteristic != active)
+		{
+			FinishRangeUndoGroup(area);
+			area.rangeCharacteristic = active;
+			area.rangeInitialized = false;
+		}
+		const auto prefit = m_Store->GetPrefitState({area.project, active});
+		if (!area.rangeInitialized || (!area.rangeUndoGroupOpen && prefit && prefit->status == "completed"))
+		{
+			area.rangeLower = minimumVoltage;
+			area.rangeUpper = maximumVoltage;
+			if (prefit && prefit->fitRange.upperVoltage > prefit->fitRange.lowerVoltage)
+			{
+				area.rangeLower = prefit->fitRange.lowerVoltage;
+				area.rangeUpper = prefit->fitRange.upperVoltage;
+			}
+			if (prefit && prefit->manualLowerVoltage && prefit->manualUpperVoltage)
+			{
+				area.rangeLower = *prefit->manualLowerVoltage;
+				area.rangeUpper = *prefit->manualUpperVoltage;
+			}
+			area.rangeInitialized = true;
+		}
+
+		bool lowerHeld = false;
+		bool upperHeld = false;
+		const ImVec4 rangeColor{0.96f, 0.60f, 0.16f, 1.0f};
+		const bool lowerChanged = ImPlot::DragLineX(static_cast<int>(area.id * 10 + 1), &area.rangeLower, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &lowerHeld);
+		const bool upperChanged = ImPlot::DragLineX(static_cast<int>(area.id * 10 + 2), &area.rangeUpper, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &upperHeld);
+		const bool changed = lowerChanged || upperChanged;
+		const bool held = lowerHeld || upperHeld;
+		if (changed)
+		{
+			if (!area.rangeUndoGroupOpen)
+			{
+				if (auto undoStack = m_UndoStack.lock())
+				{
+					if (undoStack->BeginGroup("Change fit range"))
+						area.rangeUndoGroupOpen = true;
+				}
+			}
+			area.rangeLower = std::clamp(area.rangeLower, minimumVoltage, maximumVoltage);
+			area.rangeUpper = std::clamp(area.rangeUpper, minimumVoltage, maximumVoltage);
+			if (area.rangeLower > area.rangeUpper)
+				std::swap(area.rangeLower, area.rangeUpper);
+			if (area.rangeLower != area.rangeUpper)
+			{
+				CommandContext context;
+				context.Set("project", area.project);
+				context.Set("characteristic_id", active);
+				context.Set("lower_voltage", area.rangeLower);
+				context.Set("upper_voltage", area.rangeUpper);
+				Execute(JFMSetFitRangeCommandId, std::move(context));
+			}
+		}
+		if (area.rangeUndoGroupOpen && !held && (area.rangeHeldLastFrame || changed))
+			FinishRangeUndoGroup(area);
+		area.rangeHeldLastFrame = held;
+	}
+
 	void RawPlotPanel::Render()
 	{
 		if (!IsVisible())
+		{
+			for (PlotArea &area : m_PlotAreas)
+				FinishRangeUndoGroup(area);
 			return;
+		}
 
 		bool visible = IsVisible();
 		const std::string managerTitle = GetTitle() + " Manager###jfm_raw_plot_manager";
@@ -411,13 +673,18 @@ namespace SST::Prototypes::JFM
 			{
 				ImGui::End();
 				if (!plotVisible)
+				{
+					FinishRangeUndoGroup(area);
 					m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
+				}
 				else
 					++areaIndex;
 				continue;
 			}
 
 			ImGui::PushID(static_cast<int>(area.id));
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				(void)HandleUndoShortcuts();
 			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F2))
 			{
 				area.renaming = true;
@@ -451,12 +718,17 @@ namespace SST::Prototypes::JFM
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Clear"))
+			{
+				std::vector<PlotArea> before = m_PlotAreas;
 				area.groups.clear();
+				PushPlotUndo(std::move(before), "Clear raw plot");
+			}
 			ImGui::SameLine();
 			if (m_PlotAreas.size() > 1 && ImGui::Button("Close Plot"))
 			{
 				ImGui::PopID();
 				ImGui::End();
+				FinishRangeUndoGroup(area);
 				m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
 				continue;
 			}
@@ -483,37 +755,52 @@ namespace SST::Prototypes::JFM
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Hide all"))
 			{
+				std::vector<PlotArea> before = m_PlotAreas;
 				for (PlotCurveGroup &group : area.groups)
 					SetGroupVisible(group, false);
+				PushPlotUndo(std::move(before), "Hide raw plot curves");
 			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Unhide all"))
 			{
+				std::vector<PlotArea> before = m_PlotAreas;
 				for (PlotCurveGroup &group : area.groups)
 					SetGroupVisible(group, true);
+				PushPlotUndo(std::move(before), "Unhide raw plot curves");
 			}
 			ImGui::SameLine();
 			ImGui::Checkbox("Curves", &area.curvesWindowVisible);
 
+			area.hoveredCharacteristicId = InvalidCharacteristicId;
+			const auto areaSelection = m_Store->CaptureProjectState(area.project);
+			const std::vector<CharacteristicId> areaSelectedIds = areaSelection ? areaSelection->selectedCharacteristicIds : std::vector<CharacteristicId>{};
 			const std::string curvesTitle = area.title + " Curves###jfm_raw_plot_curves_" + std::to_string(area.id);
 			if (area.curvesWindowVisible)
 			{
 				if (ImGui::Begin(curvesTitle.c_str(), &area.curvesWindowVisible, ImGuiWindowFlags_AlwaysAutoResize))
 				{
+					if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+						(void)HandleUndoShortcuts();
 					for (std::size_t groupIndex = 0; groupIndex < area.groups.size();)
 					{
 						PlotCurveGroup &group = area.groups[groupIndex];
 						ImGui::PushID(group.key.c_str());
 						if (ImGui::SmallButton("x"))
 						{
+							std::vector<PlotArea> before = m_PlotAreas;
 							area.groups.erase(area.groups.begin() + static_cast<std::ptrdiff_t>(groupIndex));
+							PushPlotUndo(std::move(before), "Remove raw plot group");
 							ImGui::PopID();
 							continue;
 						}
 						ImGui::SameLine();
 						bool groupVisible = group.visible;
 						if (ImGui::Checkbox("##group_visible", &groupVisible))
+						{
+							std::vector<PlotArea> before = m_PlotAreas;
 							SetGroupVisible(group, groupVisible);
+							PushPlotUndo(std::move(before), "Toggle raw plot group");
+						}
 						ImGui::SameLine();
 						const std::string groupLabel = group.title + " (" + std::to_string(group.characteristicIds.size()) + ")";
 						if (area.groupTreeOpenRequest != 0)
@@ -539,9 +826,11 @@ namespace SST::Prototypes::JFM
 									ImGui::SameLine();
 									if (ImGui::Selectable(preset.name.c_str()))
 									{
+										std::vector<PlotArea> before = m_PlotAreas;
 										group.gradientStart = preset.start;
 										group.gradientEnd = preset.end;
 										ApplyColorRange(group);
+										PushPlotUndo(std::move(before), "Apply raw plot color preset");
 									}
 									ImGui::PopID();
 								}
@@ -549,7 +838,11 @@ namespace SST::Prototypes::JFM
 							}
 							ImGui::SameLine();
 							if (ImGui::Button("Apply"))
+							{
+								std::vector<PlotArea> before = m_PlotAreas;
 								ApplyColorRange(group);
+								PushPlotUndo(std::move(before), "Apply raw plot colors");
+							}
 
 							for (std::size_t idIndex = 0; idIndex < group.characteristicIds.size();)
 							{
@@ -558,25 +851,67 @@ namespace SST::Prototypes::JFM
 								ImGui::PushID(static_cast<int>(id));
 								if (ImGui::SmallButton("x"))
 								{
+									std::vector<PlotArea> before = m_PlotAreas;
 									group.characteristicIds.erase(group.characteristicIds.begin() + static_cast<std::ptrdiff_t>(idIndex));
+									PushPlotUndo(std::move(before), "Remove raw plot curve");
 									ImGui::PopID();
 									continue;
 								}
 								ImGui::SameLine();
+								JFMCharacteristicInfo fallbackInfo;
+								fallbackInfo.id = id;
 								std::array<float, 4> &color = group.colors.try_emplace(
 									id,
-									toArray(colorFor(characteristic != records.end() ? characteristic->second.info : JFMCharacteristicInfo{id})))
+									toArray(colorFor(characteristic != records.end() ? characteristic->second.info : fallbackInfo)))
 									.first->second;
-								ImGui::ColorEdit4("##color", color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+								if (characteristic != records.end() && characteristic->second.info.metadata.find("plot_color") != characteristic->second.info.metadata.end())
+									color = toArray(colorFor(characteristic->second.info));
+								const std::string colorEditKey = std::to_string(area.id) + ":" + group.key + ":" + std::to_string(id);
+								const std::array<float, 4> colorBeforeItem = color;
+								(void)ImGui::ColorEdit4("##color", color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+								if (ImGui::IsItemActivated())
+									m_ColorEditBefore[colorEditKey] = colorBeforeItem;
+								if (ImGui::IsItemDeactivatedAfterEdit())
+								{
+									const std::array<float, 4> editedColor = color;
+									CommandContext context;
+									context.Set("project", area.project);
+									context.Set("characteristic_ids", std::vector<CharacteristicId>{id});
+									context.Set("plot_color", colorToMetadata(editedColor));
+									Execute(JFMSetPlotColorCommandId, std::move(context));
+									if (const auto before = m_ColorEditBefore.find(colorEditKey); before != m_ColorEditBefore.end())
+									{
+										color = before->second;
+										m_ColorEditBefore.erase(before);
+									}
+								}
 								ImGui::SameLine();
 								bool shown = !containsId(group.hiddenCharacteristicIds, id);
 								if (ImGui::Checkbox("##visible", &shown))
+								{
+									std::vector<PlotArea> before = m_PlotAreas;
 									setHidden(group.hiddenCharacteristicIds, id, !shown);
+									PushPlotUndo(std::move(before), "Toggle raw plot curve");
+								}
 								ImGui::SameLine();
 								const std::string label = characteristic != records.end() ? shortName(characteristic->second.info) : std::to_string(id);
-								ImGui::Selectable(label.c_str(), false);
-								if (characteristic != records.end() && ImGui::IsItemHovered())
-									ImGui::SetTooltip("%s", characteristic->second.info.name.c_str());
+								const bool selectedInWorkspace = containsId(areaSelectedIds, id);
+								if (selectedInWorkspace)
+								{
+									ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.70f, 0.48f, 0.26f, 0.95f));
+									ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.82f, 0.58f, 0.30f, 1.00f));
+									ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.95f, 0.64f, 0.32f, 1.00f));
+								}
+								if (ImGui::Selectable(label.c_str(), selectedInWorkspace))
+									SelectCurveInWorkspace(area, group, id);
+								if (selectedInWorkspace)
+									ImGui::PopStyleColor(3);
+								if (ImGui::IsItemHovered())
+								{
+									area.hoveredCharacteristicId = id;
+									if (characteristic != records.end())
+										ImGui::SetTooltip("%s", characteristic->second.info.name.c_str());
+								}
 								ImGui::PopID();
 								++idIndex;
 							}
@@ -654,6 +989,7 @@ namespace SST::Prototypes::JFM
 					ImPlot::SetupAxesLimits(minX, maxX, minY, maxY, ImPlotCond_Always);
 				}
 
+				const JFMUserSettings plotSettings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
 				for (const PlotCurveGroup &group : area.groups)
 				{
 					if (!group.visible)
@@ -675,19 +1011,45 @@ namespace SST::Prototypes::JFM
 						const std::array<float, 4> fallbackColor = toArray(colorFor(characteristic->second.info));
 						const bool hasMetadataColor = characteristic->second.info.metadata.find("plot_color") != characteristic->second.info.metadata.end();
 						const ImPlotSpec spec(ImPlotProp_LineColor, toVec4(hasMetadataColor || color == group.colors.end() ? fallbackColor : color->second));
+						ImPlotSpec rawSpec = spec;
+						if (area.hoveredCharacteristicId == id)
+							rawSpec.LineWeight = plotSettings.hoveredCurveLineWeight;
 						const std::string curveLabel = group.title + " / " + shortName(characteristic->second.info)
 							+ "###curve_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 						if (area.scale == PlotScale::Linear)
-							ImPlot::PlotLine(curveLabel.c_str(), x.data(), rawY.data(), static_cast<int>(count), spec);
+							ImPlot::PlotLine(curveLabel.c_str(), x.data(), rawY.data(), static_cast<int>(count), rawSpec);
 						else
 						{
 							std::vector<double> filteredX;
 							std::vector<double> filteredY = absolutePositive(rawY, x, filteredX);
 							if (!filteredX.empty())
-								ImPlot::PlotLine(curveLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), spec);
+								ImPlot::PlotLine(curveLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), rawSpec);
+						}
+						const auto curve = m_Store->GetPrefitCurve({area.project, id});
+						if (plotSettings.showPrefitCurves && curve)
+						{
+							const std::size_t curveCount = std::min(curve->voltage.size(), curve->current.size());
+							if (curveCount > 0)
+							{
+								ImPlotSpec prefitSpec;
+								prefitSpec.LineColor = toVec4(plotSettings.prefitCurveColor);
+								prefitSpec.LineWeight = area.hoveredCharacteristicId == id ? plotSettings.hoveredCurveLineWeight : plotSettings.prefitCurveLineWeight;
+								prefitSpec.Flags = ImPlotItemFlags_NoLegend;
+								const std::string prefitLabel = "##jfm_raw_prefit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
+								if (area.scale == PlotScale::Linear)
+									ImPlot::PlotLine(prefitLabel.c_str(), curve->voltage.data(), curve->current.data(), static_cast<int>(curveCount), prefitSpec);
+								else
+								{
+									std::vector<double> filteredX;
+									std::vector<double> filteredY = absolutePositive(curve->current, curve->voltage, filteredX);
+									if (!filteredX.empty())
+										ImPlot::PlotLine(prefitLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), prefitSpec);
+								}
+							}
 						}
 					}
 				}
+				RenderRangeDragLines(area, records);
 				ImPlot::EndPlot();
 			}
 			if (area.project == m_Store->GetActiveProjectHandle() && ImGui::BeginDragDropTarget())
@@ -715,7 +1077,10 @@ namespace SST::Prototypes::JFM
 			ImGui::End();
 
 			if (!plotVisible)
+			{
+				FinishRangeUndoGroup(area);
 				m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
+			}
 			else
 				++areaIndex;
 		}

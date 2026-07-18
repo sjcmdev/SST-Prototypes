@@ -104,6 +104,16 @@ namespace SST::Prototypes::JFM
 			minY = std::min(minY, y);
 			maxY = std::max(maxY, y);
 		}
+
+		std::string SeriesIdForCharacteristic(const JFMProject &project, CharacteristicId id)
+		{
+			for (const JFMSeries &series : project.series)
+			{
+				if (ContainsId(series.characteristicIds, id))
+					return series.id;
+			}
+			return {};
+		}
 	} // namespace ImportDialogDetail
 	using namespace ImportDialogDetail;
 
@@ -183,6 +193,18 @@ namespace SST::Prototypes::JFM
 			ImGui::End();
 			renderPreviewWindow();
 			return;
+		}
+		const ImGuiIO &io = ImGui::GetIO();
+		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && io.KeyCtrl && !io.WantTextInput && !ImGui::IsAnyItemActive())
+		{
+			const bool redo = (io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_Z, false)) || ImGui::IsKeyPressed(ImGuiKey_Y, false);
+			const bool undo = !redo && ImGui::IsKeyPressed(ImGuiKey_Z, false);
+			if (undo || redo)
+			{
+				finishRangeUndoGroup();
+				if (auto registry = m_CommandRegistry.lock())
+					(void)registry->Execute(CommandID{redo ? "edit.redo" : "edit.undo"});
+			}
 		}
 
 		if (ImGui::BeginTabBar("##jfm_import_tabs"))
@@ -415,6 +437,7 @@ namespace SST::Prototypes::JFM
 			selectedIds = {active};
 			m_Store->SetSelectedCharacteristics(analysisProject, selectedIds, active);
 		}
+		handleAnalysisKeyboard(project, visibleIds, active);
 
 		std::vector<CharacteristicId> missingPrefits;
 		for (CharacteristicId id : allIds)
@@ -651,10 +674,41 @@ namespace SST::Prototypes::JFM
 			else if (record->info.prefit && record->info.prefit->status == "failed")
 				status = " [failed]";
 			const std::string itemLabel = record->info.name + status + "##jfm_analysis_characteristic_" + std::to_string(id);
-			if (ImGui::Selectable(itemLabel.c_str(), ContainsId(selected, id)))
+			const bool itemSelected = ContainsId(selected, id);
+			if (itemSelected)
+			{
+				ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.70f, 0.48f, 0.26f, 0.95f));
+				ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.82f, 0.58f, 0.30f, 1.00f));
+				ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.95f, 0.64f, 0.32f, 1.00f));
+			}
+			if (ImGui::Selectable(itemLabel.c_str(), itemSelected))
 				selectAnalysisCharacteristic(series, id, visibleIds);
+			if (itemSelected)
+				ImGui::PopStyleColor(3);
 		}
 		ImGui::TreePop();
+	}
+
+	void JFMImportDialogPanel::handleAnalysisKeyboard(const JFMProject &project, const std::vector<CharacteristicId> &visibleIds, CharacteristicId active)
+	{
+		if (visibleIds.empty() || ImGui::GetIO().WantTextInput || ImGui::IsAnyItemActive())
+			return;
+		if (!ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+			return;
+		const bool down = ImGui::IsKeyPressed(ImGuiKey_DownArrow, false);
+		const bool up = ImGui::IsKeyPressed(ImGuiKey_UpArrow, false);
+		if (!down && !up)
+			return;
+		const auto current = std::find(visibleIds.begin(), visibleIds.end(), active);
+		std::size_t index = current == visibleIds.end() ? 0 : static_cast<std::size_t>(std::distance(visibleIds.begin(), current));
+		if (down && index + 1 < visibleIds.size())
+			++index;
+		else if (up && index > 0)
+			--index;
+		else
+			return;
+		const CharacteristicId next = visibleIds[index];
+		selectAnalysisIds({next}, next, SeriesIdForCharacteristic(project, next));
 	}
 
 	void JFMImportDialogPanel::selectAnalysisIds(std::vector<CharacteristicId> ids, CharacteristicId primary, std::string seriesId)
@@ -838,6 +892,7 @@ namespace SST::Prototypes::JFM
 
 		if (m_AnalysisShowCurves || m_AnalysisShowPrefitCurves)
 		{
+			const JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
 			for (std::size_t index = 0; index < ids.size(); ++index)
 			{
 				const auto record = m_Store->FindCharacteristicRecord({project, ids[index]});
@@ -849,6 +904,8 @@ namespace SST::Prototypes::JFM
 				{
 					ImPlotSpec rawSpec;
 					rawSpec.LineColor = PreviewColor(index);
+					if (ids[index] == active)
+						rawSpec.LineWeight = settings.hoveredCurveLineWeight;
 					const std::string label = record->info.name + "##jfm_analysis_raw_" + std::to_string(ids[index]);
 					if (m_AnalysisScale == 0)
 						ImPlot::PlotLine(label.c_str(), record->data->voltage.data(), current.data(), count, rawSpec);
@@ -868,8 +925,8 @@ namespace SST::Prototypes::JFM
 					if (curveCount > 0)
 					{
 						ImPlotSpec prefitSpec;
-						prefitSpec.LineColor = ImVec4(0.20f, 0.85f, 0.36f, 1.0f);
-						prefitSpec.LineWeight = 2.0f;
+						prefitSpec.LineColor = ImVec4(settings.prefitCurveColor[0], settings.prefitCurveColor[1], settings.prefitCurveColor[2], settings.prefitCurveColor[3]);
+						prefitSpec.LineWeight = settings.prefitCurveLineWeight;
 						prefitSpec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##jfm_analysis_prefit_" + std::to_string(ids[index]);
 						if (m_AnalysisScale == 0)
@@ -1123,7 +1180,7 @@ namespace SST::Prototypes::JFM
 		m_AnalysisAutoFit = true;
 		m_AnalysisShowLegend = false;
 		m_AnalysisShowCurves = true;
-		m_AnalysisShowPrefitCurves = true;
+		m_AnalysisShowPrefitCurves = m_Settings == nullptr || m_Settings->GetSnapshot().showPrefitCurves;
 		m_AnalysisScale = 0;
 		m_AnalysisTreeOpenRequest = 0;
 		m_AnalysisFitPadding = 0.08f;

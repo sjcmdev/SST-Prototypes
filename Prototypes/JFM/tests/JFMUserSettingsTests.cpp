@@ -19,6 +19,7 @@ namespace SST::Prototypes::JFM
 		store.SetDefaultProjectsDirectory(prototype / Path("JFM-projects"));
 		store.SetDefaultScriptsDirectory(prototype / Path("python") / Path("custom_scripts"));
 		store.SetDefaultColorPreset("Green/Yellow");
+		store.SetPrefitCurveDefaults(false, {0.1f, 0.2f, 0.3f, 1.0f}, 3.5f, 5.0f);
 		store.AddRecentProject(prototype / Path("JFM-projects") / Path("one.jfm.yaml"));
 
 		JFMUserSettingsStore loaded(config, prototype);
@@ -29,6 +30,10 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(settings.defaultScriptsDirectory, prototype / Path("python") / Path("custom_scripts"));
 		EXPECT_FALSE(settings.colorPresets.empty());
 		EXPECT_TRUE(settings.defaultPlotSemiLog);
+		EXPECT_FALSE(settings.showPrefitCurves);
+		EXPECT_FLOAT_EQ(settings.prefitCurveColor[1], 0.2f);
+		EXPECT_FLOAT_EQ(settings.prefitCurveLineWeight, 3.5f);
+		EXPECT_FLOAT_EQ(settings.hoveredCurveLineWeight, 5.0f);
 		EXPECT_EQ(settings.defaultColorPresetName, "Green/Yellow");
 		ASSERT_EQ(settings.recentProjects.size(), 1);
 		EXPECT_EQ(settings.recentProjects.front(), prototype / Path("JFM-projects") / Path("one.jfm.yaml"));

@@ -119,6 +119,10 @@ namespace SST::Prototypes::JFM
 			m_Settings.defaultPlotAutoFit = root["default_plot_auto_fit"] ? root["default_plot_auto_fit"].as<bool>() : m_Settings.defaultPlotAutoFit;
 			m_Settings.defaultPlotShowLegend = root["default_plot_show_legend"] ? root["default_plot_show_legend"].as<bool>() : m_Settings.defaultPlotShowLegend;
 			m_Settings.defaultPlotFitPadding = root["default_plot_fit_padding"] ? root["default_plot_fit_padding"].as<float>() : m_Settings.defaultPlotFitPadding;
+			m_Settings.showPrefitCurves = root["show_prefit_curves"] ? root["show_prefit_curves"].as<bool>() : m_Settings.showPrefitCurves;
+			m_Settings.prefitCurveColor = ReadColor(root["prefit_curve_color"], m_Settings.prefitCurveColor);
+			m_Settings.prefitCurveLineWeight = root["prefit_curve_line_weight"] ? std::clamp(root["prefit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.prefitCurveLineWeight;
+			m_Settings.hoveredCurveLineWeight = root["hovered_curve_line_weight"] ? std::clamp(root["hovered_curve_line_weight"].as<float>(), 0.5f, 10.0f) : m_Settings.hoveredCurveLineWeight;
 			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
 			m_Settings.defaultColorPresetName = root["default_color_preset"] ? root["default_color_preset"].as<std::string>() : m_Settings.defaultColorPresetName;
 			if (const YAML::Node presets = root["color_presets"])
@@ -160,6 +164,11 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "default_plot_auto_fit" << YAML::Value << snapshot.defaultPlotAutoFit;
 		out << YAML::Key << "default_plot_show_legend" << YAML::Value << snapshot.defaultPlotShowLegend;
 		out << YAML::Key << "default_plot_fit_padding" << YAML::Value << snapshot.defaultPlotFitPadding;
+		out << YAML::Key << "show_prefit_curves" << YAML::Value << snapshot.showPrefitCurves;
+		out << YAML::Key << "prefit_curve_color" << YAML::Value;
+		EmitColor(out, snapshot.prefitCurveColor);
+		out << YAML::Key << "prefit_curve_line_weight" << YAML::Value << snapshot.prefitCurveLineWeight;
+		out << YAML::Key << "hovered_curve_line_weight" << YAML::Value << snapshot.hoveredCurveLineWeight;
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
 		out << YAML::Key << "default_color_preset" << YAML::Value << snapshot.defaultColorPresetName;
 		out << YAML::Key << "color_presets" << YAML::Value << YAML::BeginSeq;
@@ -222,6 +231,18 @@ namespace SST::Prototypes::JFM
 			m_Settings.defaultPlotAutoFit = autoFit;
 			m_Settings.defaultPlotShowLegend = showLegend;
 			m_Settings.defaultPlotFitPadding = std::clamp(fitPadding, 0.0f, 0.5f);
+		}
+		Save();
+	}
+
+	void JFMUserSettingsStore::SetPrefitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, float hoverLineWeight)
+	{
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.showPrefitCurves = show;
+			m_Settings.prefitCurveColor = color;
+			m_Settings.prefitCurveLineWeight = std::clamp(lineWeight, 0.5f, 8.0f);
+			m_Settings.hoveredCurveLineWeight = std::clamp(hoverLineWeight, 0.5f, 10.0f);
 		}
 		Save();
 	}

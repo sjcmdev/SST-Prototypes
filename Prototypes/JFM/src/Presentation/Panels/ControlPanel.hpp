@@ -35,6 +35,7 @@ namespace SST::Prototypes::JFM
 		void Execute(const char *commandId, CommandContext context = {}) const;
 		void FinishRangeUndoGroup(bool cancel = false);
 		void RenderModelControls(ProjectHandle project, const std::vector<CharacteristicId> &ids);
+		void RenderPrefitDisplayControls();
 		void RenderColorControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo);
 		void RenderRangeControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicRecord &activeRecord);
 		void RenderParameterTable(const JFMCharacteristicInfo &activeInfo) const;

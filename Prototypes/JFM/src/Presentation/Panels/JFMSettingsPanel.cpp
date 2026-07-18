@@ -77,6 +77,10 @@ namespace SST::Prototypes::JFM
 			m_DefaultPlotAutoFit = settings.defaultPlotAutoFit;
 			m_DefaultPlotShowLegend = settings.defaultPlotShowLegend;
 			m_DefaultPlotFitPadding = settings.defaultPlotFitPadding;
+			m_ShowPrefitCurves = settings.showPrefitCurves;
+			m_PrefitCurveColor = settings.prefitCurveColor;
+			m_PrefitCurveLineWeight = settings.prefitCurveLineWeight;
+			m_HoveredCurveLineWeight = settings.hoveredCurveLineWeight;
 			m_PlotDraftInitialized = true;
 		}
 		bool changed = false;
@@ -92,6 +96,17 @@ namespace SST::Prototypes::JFM
 			m_Settings->SetPlotDefaults(m_DefaultPlotSemiLog, m_DefaultPlotAutoFit, m_DefaultPlotShowLegend, m_DefaultPlotFitPadding);
 		if (fitPaddingCommitted)
 			m_Settings->SetPlotDefaults(m_DefaultPlotSemiLog, m_DefaultPlotAutoFit, m_DefaultPlotShowLegend, m_DefaultPlotFitPadding);
+
+		ImGui::SeparatorText("Prefit curves");
+		bool prefitChanged = false;
+		prefitChanged |= ImGui::Checkbox("Show prefit curves", &m_ShowPrefitCurves);
+		prefitChanged |= ImGui::ColorEdit4("Prefit curve color", m_PrefitCurveColor.data(), ImGuiColorEditFlags_NoInputs);
+		ImGui::SliderFloat("Prefit curve thickness", &m_PrefitCurveLineWeight, 0.5f, 8.0f, "%.1f");
+		const bool prefitWeightCommitted = ImGui::IsItemDeactivatedAfterEdit();
+		ImGui::SliderFloat("Hovered curve thickness", &m_HoveredCurveLineWeight, 0.5f, 10.0f, "%.1f");
+		const bool hoverWeightCommitted = ImGui::IsItemDeactivatedAfterEdit();
+		if (prefitChanged || prefitWeightCommitted || hoverWeightCommitted)
+			m_Settings->SetPrefitCurveDefaults(m_ShowPrefitCurves, m_PrefitCurveColor, m_PrefitCurveLineWeight, m_HoveredCurveLineWeight);
 	}
 
 	void JFMSettingsPanel::renderColorPresets(JFMUserSettings settings)

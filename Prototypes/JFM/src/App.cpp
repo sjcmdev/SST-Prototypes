@@ -46,7 +46,12 @@ namespace SST
 			application.GetRuntimeServices().contextManager);
 		panelIds.overview = editorLayer.RegisterPanel<JFMOverviewPanel>(workspace);
 		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
-		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace, settings, application.GetEventBusRef());
+		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(
+			workspace,
+			settings,
+			application.GetEventBusRef(),
+			application.GetRuntimeServices().commandRegistry,
+			application.GetRuntimeServices().undoStack);
 		panelIds.details = editorLayer.RegisterPanel<CharacteristicDetailsPanel>(workspace);
 		panelIds.control = editorLayer.RegisterPanel<ControlPanel>(
 			workspace,

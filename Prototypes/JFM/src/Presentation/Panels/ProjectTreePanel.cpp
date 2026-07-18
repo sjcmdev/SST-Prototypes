@@ -696,14 +696,28 @@ namespace SST::Prototypes::JFM
 		if (ImGui::BeginPopupContextItem())
 		{
 			FocusItem(RenameTarget::Characteristic, std::to_string(characteristicId));
+			const std::vector<CharacteristicId> targetIds = selected && state.selectedIds.size() > 1
+				? state.selectedIds
+				: std::vector<CharacteristicId>{characteristicId};
 			if (ImGui::MenuItem("Delete"))
 			{
-				const std::vector<CharacteristicId> ids = selected && state.selectedIds.size() > 1
-					? state.selectedIds
-					: std::vector<CharacteristicId>{characteristicId};
 				CommandContext context;
-				context.Set("item", JFMTreeItemRef{m_CurrentProject, JFMTreeItemKind::Characteristic, std::to_string(characteristicId), ids});
+				context.Set("item", JFMTreeItemRef{m_CurrentProject, JFMTreeItemKind::Characteristic, std::to_string(characteristicId), targetIds});
 				ExecuteCommand(JFMDeleteTreeItemCommandId, std::move(context));
+			}
+			if (ImGui::BeginMenu("Prefit model"))
+			{
+				for (const char *model : PrefitModels)
+				{
+					if (ImGui::MenuItem(model, nullptr, false, !targetIds.empty()))
+					{
+						CommandContext context;
+						context.Set("characteristic_ids", targetIds);
+						context.Set("model_id", std::string(model));
+						ExecuteCommand(JFMSetPrefitModelCommandId, std::move(context));
+					}
+				}
+				ImGui::EndMenu();
 			}
 			if (ImGui::MenuItem("Rename"))
 				ExecuteCommand(JFMRequestRenameTreeItemCommandId);
