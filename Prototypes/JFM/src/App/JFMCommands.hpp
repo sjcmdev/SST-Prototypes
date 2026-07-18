@@ -37,6 +37,7 @@ namespace SST::Prototypes::JFM
 	inline constexpr const char *JFMRemoveScriptCommandId = "jfm.script.remove";
 	inline constexpr const char *JFMUpsertGroupingCommandId = "jfm.grouping.upsert";
 	inline constexpr const char *JFMDeleteGroupingCommandId = "jfm.grouping.delete";
+	inline constexpr const char *JFMSetPlotColorCommandId = "jfm.characteristic.set_plot_color";
 	inline constexpr const char *JFMSetPrefitModelCommandId = "jfm.prefit.set_model";
 	inline constexpr const char *JFMSetFitRangeCommandId = "jfm.prefit.set_range";
 	inline constexpr const char *JFMResetFitRangeCommandId = "jfm.prefit.reset_range";

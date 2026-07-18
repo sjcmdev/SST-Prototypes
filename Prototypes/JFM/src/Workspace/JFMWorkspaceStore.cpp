@@ -916,6 +916,33 @@ namespace SST::Prototypes::JFM
 		return true;
 	}
 
+	bool JFMWorkspaceStore::SetCharacteristicPlotColor(ProjectHandle handle, const std::vector<CharacteristicId> &ids, std::string color)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return false;
+		bool changed = false;
+		for (CharacteristicId id : ids)
+		{
+			auto info = findInfoLocked(document->get(), id);
+			if (!info)
+				continue;
+			if (color.empty())
+			{
+				changed = info->get().metadata.erase("plot_color") > 0 || changed;
+				continue;
+			}
+			if (info->get().metadata["plot_color"] == color)
+				continue;
+			info->get().metadata["plot_color"] = color;
+			changed = true;
+		}
+		if (changed)
+			bumpRevisionLocked(document->get());
+		return changed;
+	}
+
 	bool JFMWorkspaceStore::SetPrefitModel(ProjectHandle handle, const std::vector<CharacteristicId> &ids, const std::string &modelId)
 	{
 		if (modelId.empty())

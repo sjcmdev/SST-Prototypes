@@ -14,6 +14,7 @@
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/JFMMenu.hpp"
 #include "Presentation/Panels/CharacteristicDetailsPanel.hpp"
+#include "Presentation/Panels/ControlPanel.hpp"
 #include "Presentation/Panels/ImportStatusPanel.hpp"
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
 #include "Presentation/Panels/JFMOverviewPanel.hpp"
@@ -47,6 +48,12 @@ namespace SST
 		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
 		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(workspace, settings, application.GetEventBusRef());
 		panelIds.details = editorLayer.RegisterPanel<CharacteristicDetailsPanel>(workspace);
+		panelIds.control = editorLayer.RegisterPanel<ControlPanel>(
+			workspace,
+			settings,
+			application.GetEventBusRef(),
+			application.GetRuntimeServices().commandRegistry,
+			application.GetRuntimeServices().undoStack);
 		editorLayer.RegisterPanel<JFMImportDialogPanel>(
 			application.GetEventBusRef(),
 			workspace,

@@ -129,6 +129,7 @@ namespace SST::Prototypes::JFM
 		bool m_PreviewOpen = false;
 		bool m_PlotAfterImport = false;
 		bool m_ImportSubmitted = false;
+		bool m_SelectImportTab = false;
 		bool m_SelectAnalysisTab = false;
 		bool m_ShowOnlyActive = false;
 		bool m_DataAddedToProject = false;

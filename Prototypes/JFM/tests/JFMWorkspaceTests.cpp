@@ -340,6 +340,33 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(store.GetPrefitCurve({project, id}));
 	}
 
+	TEST(JFMWorkspaceStoreTests, StoresPlotColorMetadataForManyCharacteristics)
+	{
+		JFMWorkspaceStore store;
+		const ProjectHandle project = store.GetActiveProjectHandle();
+		JFMCharacteristic first;
+		first.info.name = "A";
+		JFMCharacteristic second;
+		second.info.name = "B";
+		const std::vector<CharacteristicId> ids = store.AddCharacteristics(project, {first, second}, store.GetSelectedSeriesId());
+
+		ASSERT_TRUE(store.SetCharacteristicPlotColor(project, ids, "1,0,0,1"));
+		for (CharacteristicId id : ids)
+		{
+			const auto record = store.FindCharacteristicRecord({project, id});
+			ASSERT_TRUE(record);
+			EXPECT_EQ(record->info.metadata.at("plot_color"), "1,0,0,1");
+		}
+
+		ASSERT_TRUE(store.SetCharacteristicPlotColor(project, ids, {}));
+		for (CharacteristicId id : ids)
+		{
+			const auto record = store.FindCharacteristicRecord({project, id});
+			ASSERT_TRUE(record);
+			EXPECT_FALSE(record->info.metadata.contains("plot_color"));
+		}
+	}
+
 	TEST(JFMWorkspaceStoreTests, ProjectEditCommandRunsThroughRegistryUndoAndRedo)
 	{
 		auto store = CreateRef<JFMWorkspaceStore>();

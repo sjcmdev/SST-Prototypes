@@ -39,6 +39,15 @@ namespace SST::Prototypes::JFM
 
 		ImVec4 colorFor(const JFMCharacteristicInfo &info)
 		{
+			if (const auto it = info.metadata.find("plot_color"); it != info.metadata.end())
+			{
+				float r = 0.0f;
+				float g = 0.0f;
+				float b = 0.0f;
+				float a = 1.0f;
+				if (std::sscanf(it->second.c_str(), "%f,%f,%f,%f", &r, &g, &b, &a) >= 3)
+					return {r, g, b, a};
+			}
 			const float hue = static_cast<float>(std::fmod(static_cast<double>((info.id * 37) % 997) / 997.0, 1.0));
 			return ImColor::HSV(hue, 0.78f, 0.96f).Value;
 		}
@@ -516,6 +525,7 @@ namespace SST::Prototypes::JFM
 							ImGui::ColorEdit4("Start", group.gradientStart.data(), ImGuiColorEditFlags_NoInputs);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("End", group.gradientEnd.data(), ImGuiColorEditFlags_NoInputs);
+							ImGui::SetNextItemWidth(250.0f);
 							if (ImGui::BeginCombo("Preset", "Color preset"))
 							{
 								const JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
@@ -663,7 +673,8 @@ namespace SST::Prototypes::JFM
 							continue;
 						const auto color = group.colors.find(id);
 						const std::array<float, 4> fallbackColor = toArray(colorFor(characteristic->second.info));
-						const ImPlotSpec spec(ImPlotProp_LineColor, toVec4(color == group.colors.end() ? fallbackColor : color->second));
+						const bool hasMetadataColor = characteristic->second.info.metadata.find("plot_color") != characteristic->second.info.metadata.end();
+						const ImPlotSpec spec(ImPlotProp_LineColor, toVec4(hasMetadataColor || color == group.colors.end() ? fallbackColor : color->second));
 						const std::string curveLabel = group.title + " / " + shortName(characteristic->second.info)
 							+ "###curve_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 						if (area.scale == PlotScale::Linear)

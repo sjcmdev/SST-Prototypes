@@ -6,6 +6,7 @@
 #include "App/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Undo/UndoStack.hpp"
+#include "Domain/JFMPrefitModels.hpp"
 #include "Events/JFMEvents.hpp"
 
 #include <algorithm>
@@ -46,18 +47,6 @@ namespace SST::Prototypes::JFM
 			"parent_path_3",
 			"parent_path_4",
 			"parent_path_5"};
-		const char *PrefitModels[] = {
-			"SD-0",
-			"SD-Rs",
-			"SD-Rsh",
-			"SD-RsRsh",
-			"SD-0-I_ph",
-			"SD-Rs-I_ph",
-			"SD-Rsh-I_ph",
-			"SD-RsRsh-I_ph",
-			"SD-RsRsh-alpha-Rsh2",
-			"SD-RsRsh-alpha-Rsh2-I_ph"};
-
 		bool ContainsIndex(const std::vector<int> &indices, int index)
 		{
 			return std::find(indices.begin(), indices.end(), index) != indices.end();
@@ -198,8 +187,10 @@ namespace SST::Prototypes::JFM
 
 		if (ImGui::BeginTabBar("##jfm_import_tabs"))
 		{
-			if (ImGui::BeginTabItem("Import"))
+			const ImGuiTabItemFlags importFlags = m_SelectImportTab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+			if (ImGui::BeginTabItem("Import", nullptr, importFlags))
 			{
+				m_SelectImportTab = false;
 		ImGui::Text("Files: %d", static_cast<int>(m_Request.paths.size()));
 		if (!m_Request.paths.empty())
 			ImGui::TextWrapped("%s", m_Request.paths.front().String().c_str());
@@ -458,7 +449,12 @@ namespace SST::Prototypes::JFM
 					context.Set("target_group_id", m_Request.targetGroupId);
 					context.Set("plot_after_import", m_PlotAfterImport);
 					if (auto result = registry->Execute(CommandID{JFMImportApplyCommandId}, std::move(context)))
+					{
 						m_DataAddedToProject = true;
+						finishRangeUndoGroup();
+						m_Open = false;
+						m_PreviewOpen = false;
+					}
 				}
 			}
 			ImGui::EndDisabled();
@@ -485,7 +481,7 @@ namespace SST::Prototypes::JFM
 					mixedModels = true;
 			}
 			const char *modelPreview = mixedModels ? "Mixed" : selectedModel.c_str();
-			ImGui::SetNextItemWidth(132.0f);
+			ImGui::SetNextItemWidth(250.0f);
 			if (ImGui::BeginCombo("Model", modelPreview))
 			{
 				for (const char *model : PrefitModels)
@@ -1003,6 +999,7 @@ namespace SST::Prototypes::JFM
 		m_StagedImportBatches.clear();
 		m_StagedSeries.clear();
 		m_DataAddedToProject = false;
+		m_SelectImportTab = false;
 		m_SelectAnalysisTab = false;
 		m_RangeCharacteristic = InvalidCharacteristicId;
 		m_RangeInitialized = false;
@@ -1119,6 +1116,7 @@ namespace SST::Prototypes::JFM
 		m_PreviewFolderIndex = 0;
 		m_PlotAfterImport = m_Settings != nullptr && m_Settings->GetSnapshot().autoPlotAfterImport;
 		m_ImportSubmitted = false;
+		m_SelectImportTab = true;
 		m_SelectAnalysisTab = false;
 		m_ShowOnlyActive = false;
 		m_DataAddedToProject = false;

@@ -4,6 +4,7 @@
 
 #include "App/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
+#include "Domain/JFMPrefitModels.hpp"
 #include "Events/JFMEvents.hpp"
 
 #include <algorithm>
@@ -478,6 +479,21 @@ namespace SST::Prototypes::JFM
 				OpenImportFolderDialog({}, group.id, true);
 			if (ImGui::MenuItem("Plot Group"))
 				QueuePlot(idsForGroup(m_Store, m_CurrentProject, group.id), shownName);
+			if (ImGui::BeginMenu("Prefit model"))
+			{
+				const std::vector<CharacteristicId> ids = idsForGroup(m_Store, m_CurrentProject, group.id);
+				for (const char *model : PrefitModels)
+				{
+					if (ImGui::MenuItem(model, nullptr, false, !ids.empty()))
+					{
+						CommandContext context;
+						context.Set("characteristic_ids", ids);
+						context.Set("model_id", std::string(model));
+						ExecuteCommand(JFMSetPrefitModelCommandId, std::move(context));
+					}
+				}
+				ImGui::EndMenu();
+			}
 			if (ImGui::MenuItem("Plot Child Groups"))
 				QueuePlotsForChildGroups(project, group.id);
 			if (ImGui::MenuItem("Export Raw TSV"))
@@ -555,6 +571,20 @@ namespace SST::Prototypes::JFM
 				OpenImportFolderDialog(series.id, {}, true);
 			if (ImGui::MenuItem("Plot Series"))
 				QueuePlot(series.characteristicIds, shownName);
+			if (ImGui::BeginMenu("Prefit model"))
+			{
+				for (const char *model : PrefitModels)
+				{
+					if (ImGui::MenuItem(model, nullptr, false, !series.characteristicIds.empty()))
+					{
+						CommandContext context;
+						context.Set("characteristic_ids", series.characteristicIds);
+						context.Set("model_id", std::string(model));
+						ExecuteCommand(JFMSetPrefitModelCommandId, std::move(context));
+					}
+				}
+				ImGui::EndMenu();
+			}
 			if (ImGui::MenuItem("Export Raw TSV"))
 			{
 				CommandContext context;

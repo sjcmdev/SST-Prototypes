@@ -894,6 +894,25 @@ namespace SST::Prototypes::JFM
 
 		registerEditCommand(
 			registry,
+			CommandMeta{CommandID{JFMSetPlotColorCommandId}, "Set Plot Color", "JFM", "Set plot color for selected characteristics.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				const ProjectHandle project = projectFromContext(workspace, commandContext);
+				std::vector<CharacteristicId> ids = workspace->GetSelectedCharacteristicIds();
+				if (auto *value = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids"))
+					ids = *value;
+				const std::string color = contextString(commandContext, "plot_color");
+				return JFMProjectEditRequest{
+					project,
+					"Set plot color",
+					[ids, color](JFMWorkspaceStore &store, ProjectHandle handle) {
+						(void)store.SetCharacteristicPlotColor(handle, ids, color);
+						return Result<void>{};
+					}};
+			});
+
+		registerEditCommand(
+			registry,
 			CommandMeta{CommandID{JFMUpsertGroupingCommandId}, "Create or Update Grouping", "JFM", "Create or update a metadata grouping.", {}, CommandFlags::Undoable},
 			workspace,
 			[workspace](CommandContext &commandContext) {
@@ -949,21 +968,29 @@ namespace SST::Prototypes::JFM
 			workspace,
 			[workspace, eventBus](CommandContext &commandContext) {
 				const ProjectHandle project = projectFromContext(workspace, commandContext);
-				const CharacteristicId id = commandContext.TryGet<CharacteristicId>("characteristic_id")
-					? *commandContext.TryGet<CharacteristicId>("characteristic_id")
-					: workspace->GetSelectedCharacteristicId();
+				std::vector<CharacteristicId> ids = workspace->GetSelectedCharacteristicIds();
+				if (auto *value = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids"))
+					ids = *value;
+				else if (auto *value = commandContext.TryGet<CharacteristicId>("characteristic_id"))
+					ids = {*value};
+				if (ids.empty())
+					ids = {workspace->GetSelectedCharacteristicId()};
+				ids.erase(std::remove(ids.begin(), ids.end(), InvalidCharacteristicId), ids.end());
+				std::sort(ids.begin(), ids.end());
+				ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
 				const double lower = commandContext.TryGet<double>("lower_voltage") ? *commandContext.TryGet<double>("lower_voltage") : 0.0;
 				const double upper = commandContext.TryGet<double>("upper_voltage") ? *commandContext.TryGet<double>("upper_voltage") : 0.0;
 				return JFMProjectEditRequest{
 					project,
 					"Change fit range",
-					[id, lower, upper](JFMWorkspaceStore &store, ProjectHandle handle) {
-						(void)store.SetManualFitRange(handle, id, lower, upper);
+					[ids, lower, upper](JFMWorkspaceStore &store, ProjectHandle handle) {
+						for (CharacteristicId id : ids)
+							(void)store.SetManualFitRange(handle, id, lower, upper);
 						return Result<void>{};
 					},
-					[eventBus, project, id]() {
-						if (eventBus != nullptr && id != InvalidCharacteristicId)
-							eventBus->Queue(PrefitRequested{project, {id}});
+					[eventBus, project, ids]() {
+						if (eventBus != nullptr && !ids.empty())
+							eventBus->Queue(PrefitRequested{project, ids});
 					}};
 			});
 
@@ -973,19 +1000,27 @@ namespace SST::Prototypes::JFM
 			workspace,
 			[workspace, eventBus](CommandContext &commandContext) {
 				const ProjectHandle project = projectFromContext(workspace, commandContext);
-				const CharacteristicId id = commandContext.TryGet<CharacteristicId>("characteristic_id")
-					? *commandContext.TryGet<CharacteristicId>("characteristic_id")
-					: workspace->GetSelectedCharacteristicId();
+				std::vector<CharacteristicId> ids = workspace->GetSelectedCharacteristicIds();
+				if (auto *value = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids"))
+					ids = *value;
+				else if (auto *value = commandContext.TryGet<CharacteristicId>("characteristic_id"))
+					ids = {*value};
+				if (ids.empty())
+					ids = {workspace->GetSelectedCharacteristicId()};
+				ids.erase(std::remove(ids.begin(), ids.end(), InvalidCharacteristicId), ids.end());
+				std::sort(ids.begin(), ids.end());
+				ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
 				return JFMProjectEditRequest{
 					project,
 					"Reset fit range",
-					[id](JFMWorkspaceStore &store, ProjectHandle handle) {
-						(void)store.ResetFitRange(handle, id);
+					[ids](JFMWorkspaceStore &store, ProjectHandle handle) {
+						for (CharacteristicId id : ids)
+							(void)store.ResetFitRange(handle, id);
 						return Result<void>{};
 					},
-					[eventBus, project, id]() {
-						if (eventBus != nullptr && id != InvalidCharacteristicId)
-							eventBus->Queue(PrefitRequested{project, {id}});
+					[eventBus, project, ids]() {
+						if (eventBus != nullptr && !ids.empty())
+							eventBus->Queue(PrefitRequested{project, ids});
 					}};
 			});
 
