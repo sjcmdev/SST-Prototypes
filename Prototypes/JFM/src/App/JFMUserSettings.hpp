@@ -30,6 +30,7 @@ namespace SST::Prototypes::JFM
 		bool showPrefitCurves = true;
 		std::array<float, 4> prefitCurveColor = {0.20f, 0.85f, 0.36f, 1.00f};
 		float prefitCurveLineWeight = 2.0f;
+		bool prefitCurvesFitRangeOnly = false;
 		float hoveredCurveLineWeight = 3.5f;
 		bool autoPlotAfterImport = false;
 		std::vector<Path> recentProjects;
@@ -53,7 +54,7 @@ namespace SST::Prototypes::JFM
 		void SetDefaultProjectsDirectory(Path path);
 		void SetDefaultScriptsDirectory(Path path);
 		void SetPlotDefaults(bool semiLog, bool autoFit, bool showLegend, float fitPadding);
-		void SetPrefitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, float hoverLineWeight);
+		void SetPrefitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, bool fitRangeOnly, float hoverLineWeight);
 		void SetAutoPlotAfterImport(bool enabled);
 		void SetColorPresets(std::vector<JFMColorPreset> presets);
 		void SetDefaultColorPreset(std::string presetName);

@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <optional>
 
 #include <imgui.h>
 #include <implot.h>
@@ -154,6 +155,23 @@ namespace SST::Prototypes::JFM
 			char buffer[96]{};
 			std::snprintf(buffer, sizeof(buffer), "%.6g,%.6g,%.6g,%.6g", color[0], color[1], color[2], color[3]);
 			return buffer;
+		}
+
+		void copyPrefitFitRange(const JFMPrefitCurve &curve, const JFMPrefitState &state, std::vector<double> &x, std::vector<double> &y)
+		{
+			const std::size_t count = std::min(curve.voltage.size(), curve.current.size());
+			const double lower = std::min(state.fitRange.lowerVoltage, state.fitRange.upperVoltage);
+			const double upper = std::max(state.fitRange.lowerVoltage, state.fitRange.upperVoltage);
+			x.reserve(count);
+			y.reserve(count);
+			for (std::size_t index = 0; index < count; ++index)
+			{
+				const double voltage = curve.voltage[index];
+				if (voltage < lower || voltage > upper)
+					continue;
+				x.push_back(voltage);
+				y.push_back(curve.current[index]);
+			}
 		}
 
 	} // namespace RawPlotDetail
@@ -395,6 +413,8 @@ namespace SST::Prototypes::JFM
 		group.visible = visible;
 		if (visible)
 			group.hiddenCharacteristicIds.clear();
+		else
+			group.hiddenCharacteristicIds = group.characteristicIds;
 	}
 
 	void RawPlotPanel::Execute(const char *commandId, CommandContext context) const
@@ -1028,7 +1048,20 @@ namespace SST::Prototypes::JFM
 						const auto curve = m_Store->GetPrefitCurve({area.project, id});
 						if (plotSettings.showPrefitCurves && curve)
 						{
-							const std::size_t curveCount = std::min(curve->voltage.size(), curve->current.size());
+							std::optional<JFMPrefitState> prefitState;
+							if (plotSettings.prefitCurvesFitRangeOnly)
+								prefitState = m_Store->GetPrefitState({area.project, id});
+							std::vector<double> fitRangeX;
+							std::vector<double> fitRangeY;
+							const std::vector<double> *prefitX = &curve->voltage;
+							const std::vector<double> *prefitY = &curve->current;
+							if (prefitState && prefitState->fitRange.upperVoltage > prefitState->fitRange.lowerVoltage)
+							{
+								copyPrefitFitRange(*curve, *prefitState, fitRangeX, fitRangeY);
+								prefitX = &fitRangeX;
+								prefitY = &fitRangeY;
+							}
+							const std::size_t curveCount = std::min(prefitX->size(), prefitY->size());
 							if (curveCount > 0)
 							{
 								ImPlotSpec prefitSpec;
@@ -1037,11 +1070,11 @@ namespace SST::Prototypes::JFM
 								prefitSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string prefitLabel = "##jfm_raw_prefit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 								if (area.scale == PlotScale::Linear)
-									ImPlot::PlotLine(prefitLabel.c_str(), curve->voltage.data(), curve->current.data(), static_cast<int>(curveCount), prefitSpec);
+									ImPlot::PlotLine(prefitLabel.c_str(), prefitX->data(), prefitY->data(), static_cast<int>(curveCount), prefitSpec);
 								else
 								{
 									std::vector<double> filteredX;
-									std::vector<double> filteredY = absolutePositive(curve->current, curve->voltage, filteredX);
+									std::vector<double> filteredY = absolutePositive(*prefitY, *prefitX, filteredX);
 									if (!filteredX.empty())
 										ImPlot::PlotLine(prefitLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), prefitSpec);
 								}

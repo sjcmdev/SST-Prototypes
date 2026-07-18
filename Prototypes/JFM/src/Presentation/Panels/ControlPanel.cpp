@@ -196,12 +196,16 @@ namespace SST::Prototypes::JFM
 		changed |= ImGui::Checkbox("Show prefit", &settings.showPrefitCurves);
 		ImGui::SameLine();
 		changed |= ImGui::ColorEdit4("Prefit color", settings.prefitCurveColor.data(), ImGuiColorEditFlags_NoInputs);
+		changed |= ImGui::Checkbox("Fit range only", &settings.prefitCurvesFitRangeOnly);
+		ImGui::SetNextItemWidth(160.0f);
+		changed |= ImGui::SliderFloat("Prefit thickness", &settings.prefitCurveLineWeight, 0.5f, 8.0f, "%.1f");
 		if (changed)
 		{
 			m_Settings->SetPrefitCurveDefaults(
 				settings.showPrefitCurves,
 				settings.prefitCurveColor,
 				settings.prefitCurveLineWeight,
+				settings.prefitCurvesFitRangeOnly,
 				settings.hoveredCurveLineWeight);
 		}
 	}

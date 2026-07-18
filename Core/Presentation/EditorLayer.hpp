@@ -70,6 +70,7 @@ namespace SST
 		PanelId RegisterPanel(Args &&...args);
 		[[nodiscard]] WeakRef<IPanel> FindPanel(PanelId panelId);
 		[[nodiscard]] WeakRef<const IPanel> FindPanel(PanelId panelId) const;
+		void RenderCorePanelMenuItems();
 		void RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer);
 		void RegisterSettingsTab(SettingsTabExtension extension);
 
@@ -107,6 +108,10 @@ namespace SST
 		WeakRef<KeymapResolver> m_KeymapResolver;
 		WeakRef<ContextManager> m_ContextManager;
 		WeakRef<CommandRegistry> m_CommandRegistry;
+		PanelId m_ProgressMonitorPanelId = 0;
+		PanelId m_TaskMonitorPanelId = 0;
+		PanelId m_LoggingPanelId = 0;
+		PanelId m_SettingsPanelId = 0;
 		bool m_PanelsInitialized = false;
 		bool m_CommandPaletteOpenRequested = false;
 		int m_CommandPaletteSelection = 0;

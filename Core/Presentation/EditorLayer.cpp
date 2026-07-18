@@ -122,6 +122,21 @@ namespace SST
 		return m_Panels.Get(panelId);
 	}
 
+	void EditorLayer::RenderCorePanelMenuItems()
+	{
+		initializePanelsIfNeeded();
+		const PanelId panelIds[] = {m_ProgressMonitorPanelId, m_TaskMonitorPanelId, m_LoggingPanelId, m_SettingsPanelId};
+		for (PanelId panelId : panelIds)
+		{
+			auto panel = FindPanel(panelId).lock();
+			if (panel == nullptr)
+				continue;
+			bool visible = panel->IsVisible();
+			if (ImGui::MenuItem(panel->GetTitle().c_str(), nullptr, visible))
+				panel->SetVisible(!visible);
+		}
+	}
+
 	void EditorLayer::RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer)
 	{
 		if (!renderer)
@@ -172,6 +187,10 @@ namespace SST
 		m_KeymapResolver.reset();
 		m_ContextManager.reset();
 		m_CommandRegistry.reset();
+		m_ProgressMonitorPanelId = 0;
+		m_TaskMonitorPanelId = 0;
+		m_LoggingPanelId = 0;
+		m_SettingsPanelId = 0;
 		m_UiState.reset();
 		m_CurrentConfig.reset();
 	}
@@ -209,15 +228,15 @@ namespace SST
 		Ref<EventBus> eventBus = m_EventBus != nullptr ? m_EventBus : application.GetEventBusRef();
 
 		initializeUiState();
-		RegisterPanel<ProgressMonitorWindow>(eventBus, m_ProgressTracker, "Progress Monitor", true);
-		RegisterPanel<TaskMonitorWindow>(eventBus, m_JobSystem, "Task Monitor", true);
-		RegisterPanel<LoggingPanel>(
+		m_ProgressMonitorPanelId = RegisterPanel<ProgressMonitorWindow>(eventBus, m_ProgressTracker, "Progress Monitor", true);
+		m_TaskMonitorPanelId = RegisterPanel<TaskMonitorWindow>(eventBus, m_JobSystem, "Task Monitor", true);
+		m_LoggingPanelId = RegisterPanel<LoggingPanel>(
 			eventBus,
 			m_LogRegistry != nullptr ? m_LogRegistry : application.GetLogRegistry(),
 			config.paths.exportsDirectory / Path("event-log-export.csv"),
 			"Logging Panel",
 			true);
-		RegisterPanel<SettingsPanel>(
+		m_SettingsPanelId = RegisterPanel<SettingsPanel>(
 			eventBus,
 			m_JobSystem,
 			CreateWeakRef(m_UiState),

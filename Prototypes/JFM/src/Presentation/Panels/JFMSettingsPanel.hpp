@@ -35,6 +35,7 @@ namespace SST::Prototypes::JFM
 		bool m_ShowPrefitCurves = true;
 		std::array<float, 4> m_PrefitCurveColor = {0.20f, 0.85f, 0.36f, 1.00f};
 		float m_PrefitCurveLineWeight = 2.0f;
+		bool m_PrefitCurvesFitRangeOnly = false;
 		float m_HoveredCurveLineWeight = 3.5f;
 	};
 } // namespace SST::Prototypes::JFM

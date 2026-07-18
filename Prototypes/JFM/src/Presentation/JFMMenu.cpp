@@ -64,7 +64,6 @@ namespace SST::Prototypes::JFM
 		if (ImGui::MenuItem(label, nullptr, visible))
 			panel->SetVisible(!visible);
 	}
-	
 
 	void recentProjectMenuItem(EditorServices &services, const Path &path)
 	{
@@ -148,6 +147,8 @@ namespace SST::Prototypes::JFM
 			panelMenuItem(editorLayer, panelIds.rawPlot, "Raw Plot");
 			panelMenuItem(editorLayer, panelIds.details, "Characteristic Details");
 			panelMenuItem(editorLayer, panelIds.control, "Control Panel");
+			ImGui::Separator();
+			editorLayer.RenderCorePanelMenuItems();
 			ImGui::EndMenu();
 		}
 	}

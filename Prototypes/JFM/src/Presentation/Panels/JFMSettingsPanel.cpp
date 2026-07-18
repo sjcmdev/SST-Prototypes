@@ -80,6 +80,7 @@ namespace SST::Prototypes::JFM
 			m_ShowPrefitCurves = settings.showPrefitCurves;
 			m_PrefitCurveColor = settings.prefitCurveColor;
 			m_PrefitCurveLineWeight = settings.prefitCurveLineWeight;
+			m_PrefitCurvesFitRangeOnly = settings.prefitCurvesFitRangeOnly;
 			m_HoveredCurveLineWeight = settings.hoveredCurveLineWeight;
 			m_PlotDraftInitialized = true;
 		}
@@ -100,13 +101,14 @@ namespace SST::Prototypes::JFM
 		ImGui::SeparatorText("Prefit curves");
 		bool prefitChanged = false;
 		prefitChanged |= ImGui::Checkbox("Show prefit curves", &m_ShowPrefitCurves);
+		prefitChanged |= ImGui::Checkbox("Show only in fit range", &m_PrefitCurvesFitRangeOnly);
 		prefitChanged |= ImGui::ColorEdit4("Prefit curve color", m_PrefitCurveColor.data(), ImGuiColorEditFlags_NoInputs);
 		ImGui::SliderFloat("Prefit curve thickness", &m_PrefitCurveLineWeight, 0.5f, 8.0f, "%.1f");
 		const bool prefitWeightCommitted = ImGui::IsItemDeactivatedAfterEdit();
 		ImGui::SliderFloat("Hovered curve thickness", &m_HoveredCurveLineWeight, 0.5f, 10.0f, "%.1f");
 		const bool hoverWeightCommitted = ImGui::IsItemDeactivatedAfterEdit();
 		if (prefitChanged || prefitWeightCommitted || hoverWeightCommitted)
-			m_Settings->SetPrefitCurveDefaults(m_ShowPrefitCurves, m_PrefitCurveColor, m_PrefitCurveLineWeight, m_HoveredCurveLineWeight);
+			m_Settings->SetPrefitCurveDefaults(m_ShowPrefitCurves, m_PrefitCurveColor, m_PrefitCurveLineWeight, m_PrefitCurvesFitRangeOnly, m_HoveredCurveLineWeight);
 	}
 
 	void JFMSettingsPanel::renderColorPresets(JFMUserSettings settings)

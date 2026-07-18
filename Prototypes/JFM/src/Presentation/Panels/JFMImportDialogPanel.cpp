@@ -114,6 +114,23 @@ namespace SST::Prototypes::JFM
 			}
 			return {};
 		}
+
+		void CopyPrefitFitRange(const JFMPrefitCurve &curve, const JFMPrefitState &state, std::vector<double> &x, std::vector<double> &y)
+		{
+			const std::size_t count = std::min(curve.voltage.size(), curve.current.size());
+			const double lower = std::min(state.fitRange.lowerVoltage, state.fitRange.upperVoltage);
+			const double upper = std::max(state.fitRange.lowerVoltage, state.fitRange.upperVoltage);
+			x.reserve(count);
+			y.reserve(count);
+			for (std::size_t index = 0; index < count; ++index)
+			{
+				const double voltage = curve.voltage[index];
+				if (voltage < lower || voltage > upper)
+					continue;
+				x.push_back(voltage);
+				y.push_back(curve.current[index]);
+			}
+		}
 	} // namespace ImportDialogDetail
 	using namespace ImportDialogDetail;
 
@@ -921,7 +938,20 @@ namespace SST::Prototypes::JFM
 				const auto curve = m_Store->GetPrefitCurve({project, ids[index]});
 				if (m_AnalysisShowPrefitCurves && curve)
 				{
-					const int curveCount = static_cast<int>(std::min(curve->voltage.size(), curve->current.size()));
+					std::optional<JFMPrefitState> prefitState;
+					if (settings.prefitCurvesFitRangeOnly)
+						prefitState = m_Store->GetPrefitState({project, ids[index]});
+					std::vector<double> fitRangeX;
+					std::vector<double> fitRangeY;
+					const std::vector<double> *prefitX = &curve->voltage;
+					const std::vector<double> *prefitY = &curve->current;
+					if (prefitState && prefitState->fitRange.upperVoltage > prefitState->fitRange.lowerVoltage)
+					{
+						CopyPrefitFitRange(*curve, *prefitState, fitRangeX, fitRangeY);
+						prefitX = &fitRangeX;
+						prefitY = &fitRangeY;
+					}
+					const int curveCount = static_cast<int>(std::min(prefitX->size(), prefitY->size()));
 					if (curveCount > 0)
 					{
 						ImPlotSpec prefitSpec;
@@ -930,11 +960,11 @@ namespace SST::Prototypes::JFM
 						prefitSpec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##jfm_analysis_prefit_" + std::to_string(ids[index]);
 						if (m_AnalysisScale == 0)
-							ImPlot::PlotLine(label.c_str(), curve->voltage.data(), curve->current.data(), curveCount, prefitSpec);
+							ImPlot::PlotLine(label.c_str(), prefitX->data(), prefitY->data(), curveCount, prefitSpec);
 						else
 						{
-							std::vector<double> x(curve->voltage.begin(), curve->voltage.begin() + curveCount);
-							std::vector<double> y(curve->current.begin(), curve->current.begin() + curveCount);
+							std::vector<double> x(prefitX->begin(), prefitX->begin() + curveCount);
+							std::vector<double> y(prefitY->begin(), prefitY->begin() + curveCount);
 							ApplyPreviewScale(m_AnalysisScale, x, y);
 							if (!x.empty())
 								ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), prefitSpec);

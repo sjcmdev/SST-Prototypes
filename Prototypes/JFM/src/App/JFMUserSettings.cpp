@@ -122,6 +122,7 @@ namespace SST::Prototypes::JFM
 			m_Settings.showPrefitCurves = root["show_prefit_curves"] ? root["show_prefit_curves"].as<bool>() : m_Settings.showPrefitCurves;
 			m_Settings.prefitCurveColor = ReadColor(root["prefit_curve_color"], m_Settings.prefitCurveColor);
 			m_Settings.prefitCurveLineWeight = root["prefit_curve_line_weight"] ? std::clamp(root["prefit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.prefitCurveLineWeight;
+			m_Settings.prefitCurvesFitRangeOnly = root["prefit_curves_fit_range_only"] ? root["prefit_curves_fit_range_only"].as<bool>() : m_Settings.prefitCurvesFitRangeOnly;
 			m_Settings.hoveredCurveLineWeight = root["hovered_curve_line_weight"] ? std::clamp(root["hovered_curve_line_weight"].as<float>(), 0.5f, 10.0f) : m_Settings.hoveredCurveLineWeight;
 			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
 			m_Settings.defaultColorPresetName = root["default_color_preset"] ? root["default_color_preset"].as<std::string>() : m_Settings.defaultColorPresetName;
@@ -168,6 +169,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "prefit_curve_color" << YAML::Value;
 		EmitColor(out, snapshot.prefitCurveColor);
 		out << YAML::Key << "prefit_curve_line_weight" << YAML::Value << snapshot.prefitCurveLineWeight;
+		out << YAML::Key << "prefit_curves_fit_range_only" << YAML::Value << snapshot.prefitCurvesFitRangeOnly;
 		out << YAML::Key << "hovered_curve_line_weight" << YAML::Value << snapshot.hoveredCurveLineWeight;
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
 		out << YAML::Key << "default_color_preset" << YAML::Value << snapshot.defaultColorPresetName;
@@ -235,13 +237,14 @@ namespace SST::Prototypes::JFM
 		Save();
 	}
 
-	void JFMUserSettingsStore::SetPrefitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, float hoverLineWeight)
+	void JFMUserSettingsStore::SetPrefitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, bool fitRangeOnly, float hoverLineWeight)
 	{
 		{
 			std::scoped_lock lock(m_Mutex);
 			m_Settings.showPrefitCurves = show;
 			m_Settings.prefitCurveColor = color;
 			m_Settings.prefitCurveLineWeight = std::clamp(lineWeight, 0.5f, 8.0f);
+			m_Settings.prefitCurvesFitRangeOnly = fitRangeOnly;
 			m_Settings.hoveredCurveLineWeight = std::clamp(hoverLineWeight, 0.5f, 10.0f);
 		}
 		Save();
