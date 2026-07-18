@@ -24,7 +24,9 @@ def _sample() -> tuple[np.ndarray, np.ndarray]:
 def test_prefit_returns_every_model_parameter_and_curve() -> None:
     voltage, current = _sample()
     for model_id, spec in MODEL_REGISTRY.items():
-        result = prefit_characteristic(voltage, current, 300.0, model_id, spec.characteristic_type)
+        result = prefit_characteristic(
+            voltage, current, 300.0, model_id, spec.characteristic_type
+        )
         assert set(result["parameters"]) == set(spec.parameter_names)
         assert len(result["voltage"]) == len(result["prefit_current"])
         assert np.all(np.isfinite(result["prefit_current"]))
@@ -36,8 +38,41 @@ def test_light_prefit_keeps_photocurrent_on_original_data_scale() -> None:
     current = evaluate_current(voltage, 300.0, "SD-0-I_ph", parameters)
     result = prefit_characteristic(voltage, current, 300.0, "SD-0-I_ph", "light")
 
-    assert result["parameters"]["I_ph"]["value"] == pytest.approx(parameters["I_ph"], rel=0.02)
-    assert np.interp(0.0, result["voltage"], result["prefit_current"]) == pytest.approx(np.interp(0.0, voltage, current), rel=0.02)
+    assert result["parameters"]["I_ph"]["value"] == pytest.approx(
+        parameters["I_ph"], rel=0.02
+    )
+    assert np.interp(0.0, result["voltage"], result["prefit_current"]) == pytest.approx(
+        np.interp(0.0, voltage, current), rel=0.02
+    )
+
+
+@pytest.mark.parametrize(
+    ("model_id", "parameters", "parameter_name", "relative_tolerance"),
+    (
+        ("SD-Rs", {"I0": 1.0e-10, "A": 1.5, "Rs": 2.0}, "Rs", 0.12),
+        ("SD-Rsh", {"I0": 1.0e-10, "A": 1.5, "Rsh": 1.0e5}, "Rsh", 0.20),
+    ),
+)
+def test_resistance_range_scan_recovers_noisy_synthetic_parameter(
+    model_id: str,
+    parameters: dict[str, float],
+    parameter_name: str,
+    relative_tolerance: float,
+) -> None:
+    voltage = np.linspace(-0.2, 0.8, 1001)
+    clean = evaluate_current(voltage, 300.0, model_id, parameters)
+    generator = np.random.Generator(np.random.MT19937(42))
+    noisy = clean + generator.normal(size=clean.size) * clean * 0.05
+
+    result = prefit_characteristic(
+        voltage, noisy, 300.0, model_id, options={"refinement_passes": 0}
+    )
+    estimate = result["parameters"][parameter_name]
+
+    assert estimate["source"].endswith("_range_scan")
+    assert estimate["value"] == pytest.approx(
+        parameters[parameter_name], rel=relative_tolerance
+    )
 
 
 def test_manual_range_is_respected() -> None:
@@ -47,7 +82,9 @@ def test_manual_range_is_respected() -> None:
         current,
         300.0,
         "SD-RsRsh",
-        options={"range_options": {"manual_lower_voltage": 0.2, "manual_upper_voltage": 0.65}},
+        options={
+            "range_options": {"manual_lower_voltage": 0.2, "manual_upper_voltage": 0.65}
+        },
     )
     assert result["fit_range"]["reason"] == "manual"
     assert result["fit_range"]["voltage_min"] >= 0.19
@@ -61,7 +98,12 @@ def test_very_narrow_manual_range_stays_inside_selected_data() -> None:
         current,
         300.0,
         "SD-RsRsh",
-        options={"range_options": {"manual_lower_voltage": 0.4, "manual_upper_voltage": 0.405}},
+        options={
+            "range_options": {
+                "manual_lower_voltage": 0.4,
+                "manual_upper_voltage": 0.405,
+            }
+        },
     )
     fit_range = result["fit_range"]
     for window in result["segmentation"].values():
@@ -84,7 +126,11 @@ def test_preprocessing_sorts_filters_and_averages_duplicates() -> None:
     dirty_current = np.concatenate((current[::-1], [1.0, current[20]]))
     result = prefit_characteristic(dirty_voltage, dirty_current, 300.0, "SD-RsRsh")
     assert result["voltage"] == sorted(set(voltage.tolist()))
-    assert {"voltage_sorted", "non_finite_points_removed", "duplicate_voltage_averaged"} <= set(result["warnings"])
+    assert {
+        "voltage_sorted",
+        "non_finite_points_removed",
+        "duplicate_voltage_averaged",
+    } <= set(result["warnings"])
 
 
 def test_current_models_match_documented_lambert_w_equations() -> None:
@@ -96,11 +142,19 @@ def test_current_models_match_documented_lambert_w_equations() -> None:
     diode = np.real(lambertw(argument)) * avt / parameters["Rs"]
     internal_voltage = voltage - diode * parameters["Rs"]
     expected = diode + internal_voltage / parameters["Rsh"]
-    np.testing.assert_allclose(evaluate_current(voltage, temperature_k, "SD-RsRsh", parameters), expected)
+    np.testing.assert_allclose(
+        evaluate_current(voltage, temperature_k, "SD-RsRsh", parameters), expected
+    )
 
     nonlinear_parameters = {**parameters, "alpha": 2.0, "Rsh2": 8.0e4}
-    nonlinear_expected = expected + np.power(internal_voltage, nonlinear_parameters["alpha"]) / nonlinear_parameters["Rsh2"]
+    nonlinear_expected = (
+        expected
+        + np.power(internal_voltage, nonlinear_parameters["alpha"])
+        / nonlinear_parameters["Rsh2"]
+    )
     np.testing.assert_allclose(
-        evaluate_current(voltage, temperature_k, "SD-RsRsh-alpha-Rsh2", nonlinear_parameters),
+        evaluate_current(
+            voltage, temperature_k, "SD-RsRsh-alpha-Rsh2", nonlinear_parameters
+        ),
         nonlinear_expected,
     )

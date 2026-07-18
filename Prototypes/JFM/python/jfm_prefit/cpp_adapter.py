@@ -8,7 +8,13 @@ import numpy as np
 from .current_models import evaluate_current
 from .prefit import run_prefit
 from .preprocessing import prepare_sample
-from .types import CharacteristicType, NoiseModel, PrefitOptions, RangeOptions
+from .types import (
+    CharacteristicType,
+    NoiseModel,
+    PrefitOptions,
+    RangeOptions,
+    ResistanceOptions,
+)
 
 
 def prefit_characteristic(
@@ -28,8 +34,12 @@ def prefit_characteristic(
         current_unit,
     )
     result = run_prefit(sample, model_id, _options_from_dict(options or {}))
-    parameter_values = {name: estimate.value for name, estimate in result.parameters.items()}
-    predicted = evaluate_current(sample.voltage, sample.temperature_k, model_id, parameter_values)
+    parameter_values = {
+        name: estimate.value for name, estimate in result.parameters.items()
+    }
+    predicted = evaluate_current(
+        sample.voltage, sample.temperature_k, model_id, parameter_values
+    )
     fit_window = result.fit_range.fit_range
     return {
         "model_id": result.model_id,
@@ -50,7 +60,11 @@ def prefit_characteristic(
             "reason": fit_window.reason,
         },
         "segmentation": {
-            name: None if window is None else {"lo": window.lo, "hi": window.hi, "reason": window.reason}
+            name: (
+                None
+                if window is None
+                else {"lo": window.lo, "hi": window.hi, "reason": window.reason}
+            )
             for name, window in (
                 ("shunt", result.fit_range.segmentation.shunt),
                 ("exponential", result.fit_range.segmentation.exponential),
@@ -68,4 +82,10 @@ def prefit_characteristic(
 def _options_from_dict(raw: dict[str, Any]) -> PrefitOptions:
     range_options = RangeOptions(**raw.get("range_options", {}))
     noise_model = NoiseModel(**raw.get("noise_model", {}))
-    return PrefitOptions(range_options, noise_model, int(raw.get("refinement_passes", 1)))
+    resistance_options = ResistanceOptions(**raw.get("resistance_options", {}))
+    return PrefitOptions(
+        range_options=range_options,
+        noise_model=noise_model,
+        refinement_passes=int(raw.get("refinement_passes", 1)),
+        resistance_options=resistance_options,
+    )

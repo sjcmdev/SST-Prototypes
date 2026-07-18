@@ -112,11 +112,6 @@ class RangeOptions:
                                  an automatic boundary is trusted; otherwise the
                                  detector backs off to the full range
 
-    segmentation settings (shunt/exponential/series windows; out of scope for
-    the current automatic-range rewrite, kept unchanged)
-    --------------------------------------------------------------------------
-    shunt_ratio_threshold
-
     manual override
     ----------------
     manual_lower_voltage, manual_upper_voltage
@@ -132,9 +127,18 @@ class RangeOptions:
     plateau_relative_quietness: float = 0.05
     plateau_vote_fraction: float = 0.7
     min_remaining_points: int = 20
-    shunt_ratio_threshold: float = 0.8
     manual_lower_voltage: float | None = None
     manual_upper_voltage: float | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class ResistanceOptions:
+    min_points: int = 8
+    scan_step: int = 4
+    degradation_patience: int = 4
+    degradation_r_squared: float = 0.02
+    width_exponent: float = 0.15
+    smoothing_window: int = 31
 
 
 @dataclass(slots=True, frozen=True)
@@ -142,6 +146,7 @@ class PrefitOptions:
     range_options: RangeOptions = field(default_factory=RangeOptions)
     noise_model: NoiseModel = field(default_factory=NoiseModel)
     refinement_passes: int = 1
+    resistance_options: ResistanceOptions = field(default_factory=ResistanceOptions)
 
 
 @dataclass(slots=True, frozen=True)

@@ -315,11 +315,6 @@ namespace SST::Prototypes::JFM
 			ImGui::TextDisabled("Refreshing preview...");
 		else if (!m_PreviewError.empty())
 			ImGui::TextWrapped("Preview failed: %s", m_PreviewError.c_str());
-		ImGui::RadioButton("Linear##inline_preview", &m_PreviewScale, 0);
-		ImGui::SameLine();
-		ImGui::RadioButton("Semi-log##inline_preview", &m_PreviewScale, 1);
-		if (!m_PreviewFiles.empty())
-			renderPreviewPlot("Preview Plot##import_inline_preview", 240.0f);
 		ImGui::Checkbox("Preview window", &m_PreviewOpen);
 		ImGui::Checkbox("Plot after add", &m_PlotAfterImport);
 
