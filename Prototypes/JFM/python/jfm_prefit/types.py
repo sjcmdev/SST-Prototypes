@@ -68,10 +68,69 @@ class NoiseModel:
 
 @dataclass(slots=True, frozen=True)
 class RangeOptions:
+    """Configuration for automatic fit-range (and prefit-segmentation) detection.
+
+    NUMERICAL-SETTINGS SURFACE
+    ---------------------------
+    Every field below is a user-facing numerical setting: it must eventually be
+    exposed in the application's numerical settings panel (see
+    JFM_functional_specification.md, e.g. §8.4/§12.2 conventions for numeric
+    knobs), not hidden as an internal implementation constant. None of these
+    values encode a magic number tuned to one dataset; the automatic-range
+    detector in range_detection.py derives its actual thresholds from the data
+    itself (robust local noise estimates), and only uses these fields as
+    multipliers/fractions/window sizes around that estimate.
+
+    lo (lower bound) settings
+    --------------------------
+    n_sigma_lower       -- exclude V < n_sigma_lower * kT/q (thermal-voltage margin)
+    margin_points       -- extra points to skip past the detected lower boundary
+
+    hi (upper bound / plateau) settings
+    -------------------------------------
+    smoothing_enabled        -- median-smooth current before slope/plateau analysis
+                                 (detection-only; never mutates the returned Sample)
+    smoothing_window         -- window size (points) for the median smoothing
+    upper_window              -- trailing window size (points) used for the
+                                 plateau majority-vote walk
+    upper_rel_tol             -- numerical safety floor only, relative to the
+                                 local |I| scale (guards against a degenerate
+                                 zero noise estimate on near-noiseless data);
+                                 NOT the primary flatness criterion
+    plateau_sigma_multiplier  -- how many robust noise-sigmas of slope count as
+                                 "statistically flat"
+    plateau_relative_quietness -- the trailing anchor region must have a slope
+                                 noise level below this fraction of the curve's
+                                 peak slope before a plateau is trusted at all
+                                 (guards against mistaking a still-rising curve
+                                 for a saturated one)
+    plateau_vote_fraction     -- fraction of points within `upper_window` that
+                                 must be flat for that window to count as
+                                 "inside the plateau" (robust to isolated noise
+                                 spikes, unlike a single-point break test)
+    min_remaining_points      -- minimum points required inside [lo, hi) before
+                                 an automatic boundary is trusted; otherwise the
+                                 detector backs off to the full range
+
+    segmentation settings (shunt/exponential/series windows; out of scope for
+    the current automatic-range rewrite, kept unchanged)
+    --------------------------------------------------------------------------
+    shunt_ratio_threshold
+
+    manual override
+    ----------------
+    manual_lower_voltage, manual_upper_voltage
+    """
+
     n_sigma_lower: float = 3.0
     margin_points: int = 3
+    smoothing_enabled: bool = True
+    smoothing_window: int = 5
     upper_window: int = 5
-    upper_rel_tol: float = 1.0e-3
+    upper_rel_tol: float = 1.0e-4
+    plateau_sigma_multiplier: float = 5.0
+    plateau_relative_quietness: float = 0.05
+    plateau_vote_fraction: float = 0.7
     min_remaining_points: int = 20
     shunt_ratio_threshold: float = 0.8
     manual_lower_voltage: float | None = None
