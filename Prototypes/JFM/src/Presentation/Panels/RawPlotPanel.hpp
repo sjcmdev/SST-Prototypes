@@ -95,6 +95,7 @@ namespace SST::Prototypes::JFM
 		void ApplyColorRange(PlotCurveGroup &group);
 		void RefreshDynamicGroups(PlotArea &area);
 		void SetGroupVisible(PlotCurveGroup &group, bool visible);
+		void SetGroupCharacteristicsVisible(PlotCurveGroup &group, bool visible);
 		void FinishRangeUndoGroup(PlotArea &area, bool cancel = false);
 		void PushPlotUndo(std::vector<PlotArea> before, std::string description);
 		bool HandleUndoShortcuts();

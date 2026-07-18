@@ -417,6 +417,15 @@ namespace SST::Prototypes::JFM
 			group.hiddenCharacteristicIds = group.characteristicIds;
 	}
 
+	void RawPlotPanel::SetGroupCharacteristicsVisible(PlotCurveGroup &group, bool visible)
+	{
+		group.visible = true;
+		if (visible)
+			group.hiddenCharacteristicIds.clear();
+		else
+			group.hiddenCharacteristicIds = group.characteristicIds;
+	}
+
 	void RawPlotPanel::Execute(const char *commandId, CommandContext context) const
 	{
 		if (auto registry = m_CommandRegistry.lock())
@@ -862,6 +871,20 @@ namespace SST::Prototypes::JFM
 								std::vector<PlotArea> before = m_PlotAreas;
 								ApplyColorRange(group);
 								PushPlotUndo(std::move(before), "Apply raw plot colors");
+							}
+							ImGui::SameLine();
+							if (ImGui::SmallButton("Hide curves"))
+							{
+								std::vector<PlotArea> before = m_PlotAreas;
+								SetGroupCharacteristicsVisible(group, false);
+								PushPlotUndo(std::move(before), "Hide raw plot group curves");
+							}
+							ImGui::SameLine();
+							if (ImGui::SmallButton("Show curves"))
+							{
+								std::vector<PlotArea> before = m_PlotAreas;
+								SetGroupCharacteristicsVisible(group, true);
+								PushPlotUndo(std::move(before), "Show raw plot group curves");
 							}
 
 							for (std::size_t idIndex = 0; idIndex < group.characteristicIds.size();)
