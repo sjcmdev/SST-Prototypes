@@ -11,7 +11,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	inline constexpr int JFMProjectSchemaVersion = 4;
+	inline constexpr int JFMProjectSchemaVersion = 5;
 	using ProjectHandle = std::uint64_t;
 	inline constexpr ProjectHandle InvalidProjectHandle = 0;
 	using JFMOperationId = std::uint64_t;
@@ -132,6 +132,56 @@ namespace SST::Prototypes::JFM
 		std::vector<double> current;
 	};
 
+	struct JFMFitState
+	{
+		std::string modelId = "SD-RsRsh";
+		std::string status = "not_started";
+		JFMFitRange fitRange;
+		std::unordered_map<std::string, JFMParameterEstimate> parameters;
+		double chiSquared = 0.0;
+		double reducedChiSquared = 0.0;
+		int iterations = 0;
+		bool converged = false;
+		std::string backend = "cpu";
+		std::vector<std::string> warnings;
+	};
+
+	struct JFMFitCurve
+	{
+		std::vector<double> voltage;
+		std::vector<double> current;
+	};
+
+	struct JFMMonteCarloState
+	{
+		std::string modelId = "SD-RsRsh";
+		std::string status = "not_started";
+		int sampleCount = 0;
+		int acceptedCount = 0;
+		double noisePercent = 0.0;
+		double startPerturbationPercent = 0.0;
+		std::uint32_t seed = 42;
+		std::string backend;
+		Path outputPath;
+		double totalMilliseconds = 0.0;
+		std::vector<std::string> warnings;
+	};
+
+	struct JFMMonteCarloSample
+	{
+		std::vector<double> parameters;
+		double chiSquared = 0.0;
+		double reducedChiSquared = 0.0;
+		int iterations = 0;
+		bool converged = false;
+	};
+
+	struct JFMMonteCarloResult
+	{
+		std::vector<std::string> parameterNames;
+		std::vector<JFMMonteCarloSample> samples;
+	};
+
 	enum class JFMImportPlacement
 	{
 		NewSeries,
@@ -155,6 +205,8 @@ namespace SST::Prototypes::JFM
 		std::unordered_map<std::string, std::string> metadata;
 		JFMImportOptions importOptions;
 		std::optional<JFMPrefitState> prefit;
+		std::optional<JFMFitState> fit;
+		std::optional<JFMMonteCarloState> monteCarlo;
 	};
 
 	struct JFMCharacteristicData

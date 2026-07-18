@@ -8,6 +8,7 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Domain/JFMPrefitModels.hpp"
 #include "Events/JFMEvents.hpp"
+#include "Presentation/JFMFitMonteCarloWidgets.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -383,7 +384,18 @@ namespace SST::Prototypes::JFM
 			if (ImGui::BeginTabItem("Data range & prefit", nullptr, analysisFlags))
 			{
 				m_SelectAnalysisTab = false;
-				renderAnalysisTab();
+				renderAnalysisTab(false);
+				ImGui::EndTabItem();
+			}
+			else
+			{
+				finishRangeUndoGroup();
+			}
+			const ImGuiTabItemFlags fitFlags = m_SelectFitTab ? ImGuiTabItemFlags_SetSelected : ImGuiTabItemFlags_None;
+			if (ImGui::BeginTabItem("Fit & Monte Carlo", nullptr, fitFlags))
+			{
+				m_SelectFitTab = false;
+				renderAnalysisTab(true);
 				ImGui::EndTabItem();
 			}
 			else
@@ -403,7 +415,7 @@ namespace SST::Prototypes::JFM
 		renderPreviewWindow();
 	}
 
-	void JFMImportDialogPanel::renderAnalysisTab()
+	void JFMImportDialogPanel::renderAnalysisTab(bool fitMode)
 	{
 		if (m_Store == nullptr || m_Request.project == InvalidProjectHandle)
 		{
@@ -465,6 +477,21 @@ namespace SST::Prototypes::JFM
 				missingPrefits.push_back(id);
 		}
 		requestPrefit(analysisProject, std::move(missingPrefits));
+		if (fitMode)
+		{
+			std::vector<CharacteristicId> missingFits;
+			for (CharacteristicId id : allIds)
+			{
+				const auto prefit = m_Store->GetPrefitState({analysisProject, id});
+				if (!prefit || prefit->status != "completed")
+					continue;
+				const auto state = m_Store->GetFitState({analysisProject, id});
+				const bool curveMissing = m_Store->GetFitCurve({analysisProject, id}) == nullptr;
+				if (!state || state->status == "not_started" || (state->status == "completed" && curveMissing))
+					missingFits.push_back(id);
+			}
+			requestFit(analysisProject, std::move(missingFits));
+		}
 
 		const float treeWidth = std::clamp(ImGui::GetContentRegionAvail().x * 0.27f, 250.0f, 340.0f);
 		if (ImGui::BeginChild("##jfm_analysis_tree", ImVec2(treeWidth, 0.0f), ImGuiChildFlags_Borders | ImGuiChildFlags_ResizeX))
@@ -566,6 +593,11 @@ namespace SST::Prototypes::JFM
 			ImGui::Checkbox("Legend", &m_AnalysisShowLegend);
 			ImGui::SameLine();
 			ImGui::Checkbox("Prefit curves", &m_AnalysisShowPrefitCurves);
+			if (fitMode)
+			{
+				ImGui::SameLine();
+				ImGui::Checkbox("Fit curves", &m_AnalysisShowFitCurves);
+			}
 			ImGui::SameLine();
 			if (ImGui::SmallButton("Expand all"))
 				m_AnalysisTreeOpenRequest = 1;
@@ -590,8 +622,10 @@ namespace SST::Prototypes::JFM
 			const std::vector<CharacteristicId> plotIds = m_ShowOnlyActive
 				? std::vector<CharacteristicId>{active}
 				: visibleIds;
-			renderAnalysisPlot(analysisProject, plotIds, active);
+			renderAnalysisPlot(analysisProject, plotIds, active, fitMode && m_AnalysisShowFitCurves);
 			renderPrefitParameters(m_Store->GetPrefitState({analysisProject, active}));
+			if (fitMode)
+				renderFitMonteCarloResults(analysisProject, active, selectedIds);
 		}
 		ImGui::EndChild();
 	}
@@ -781,7 +815,7 @@ namespace SST::Prototypes::JFM
 		selectAnalysisIds(std::move(selected), primary, series.id);
 	}
 
-	void JFMImportDialogPanel::renderAnalysisPlot(ProjectHandle project, const std::vector<CharacteristicId> &ids, CharacteristicId active)
+	void JFMImportDialogPanel::renderAnalysisPlot(ProjectHandle project, const std::vector<CharacteristicId> &ids, CharacteristicId active, bool showFit)
 	{
 		if (m_Store == nullptr)
 			return;
@@ -847,7 +881,7 @@ namespace SST::Prototypes::JFM
 		ImGui::Text("Fit range: %.6g V to %.6g V", m_RangeLower, m_RangeUpper);
 		const ImVec2 plotSize{-1.0f, std::max(300.0f, ImGui::GetContentRegionAvail().y * 0.62f)};
 		const ImPlotFlags plotFlags = m_AnalysisShowLegend ? ImPlotFlags_None : ImPlotFlags_NoLegend;
-		if (!ImPlot::BeginPlot("##jfm_data_range_prefit_plot", plotSize, plotFlags))
+		if (!ImPlot::BeginPlot(showFit ? "##jfm_fit_mc_plot" : "##jfm_data_range_prefit_plot", plotSize, plotFlags))
 			return;
 		ImPlot::SetupAxes("Voltage (V)", "Current / current density");
 		if (m_AnalysisShowLegend)
@@ -907,7 +941,7 @@ namespace SST::Prototypes::JFM
 			}
 		}
 
-		if (m_AnalysisShowCurves || m_AnalysisShowPrefitCurves)
+		if (m_AnalysisShowCurves || m_AnalysisShowPrefitCurves || showFit)
 		{
 			const JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
 			for (std::size_t index = 0; index < ids.size(); ++index)
@@ -968,6 +1002,29 @@ namespace SST::Prototypes::JFM
 							ApplyPreviewScale(m_AnalysisScale, x, y);
 							if (!x.empty())
 								ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), prefitSpec);
+						}
+					}
+				}
+				const auto fitCurve = showFit ? m_Store->GetFitCurve({project, ids[index]}) : Ref<const JFMFitCurve>{};
+				if (fitCurve)
+				{
+					const int fitCount = static_cast<int>(std::min(fitCurve->voltage.size(), fitCurve->current.size()));
+					if (fitCount > 0)
+					{
+						ImPlotSpec fitSpec;
+						fitSpec.LineColor = ImVec4(0.20f, 0.76f, 1.00f, 1.0f);
+						fitSpec.LineWeight = 2.0f;
+						fitSpec.Flags = ImPlotItemFlags_NoLegend;
+						const std::string label = "##jfm_analysis_fit_" + std::to_string(ids[index]);
+						if (m_AnalysisScale == 0)
+							ImPlot::PlotLine(label.c_str(), fitCurve->voltage.data(), fitCurve->current.data(), fitCount, fitSpec);
+						else
+						{
+							std::vector<double> x(fitCurve->voltage.begin(), fitCurve->voltage.begin() + fitCount);
+							std::vector<double> y(fitCurve->current.begin(), fitCurve->current.begin() + fitCount);
+							ApplyPreviewScale(m_AnalysisScale, x, y);
+							if (!x.empty())
+								ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), fitSpec);
 						}
 					}
 				}
@@ -1058,10 +1115,87 @@ namespace SST::Prototypes::JFM
 			ImGui::TextWrapped("Warning: %s", warning.c_str());
 	}
 
+	void JFMImportDialogPanel::renderFitMonteCarloResults(ProjectHandle project, CharacteristicId active, const std::vector<CharacteristicId> &selectedIds)
+	{
+		const auto record = m_Store != nullptr ? m_Store->FindCharacteristicRecord({project, active}) : std::nullopt;
+		if (!record)
+			return;
+		ImGui::SeparatorText("Fit & Monte Carlo");
+		if (m_Settings != nullptr)
+		{
+			JFMUserSettings settings = m_Settings->GetSnapshot();
+			const std::string model = record->info.prefit ? record->info.prefit->modelId : "SD-RsRsh";
+			if (RenderJFMFitMonteCarloSettings(settings.fitMonteCarlo, model, "import_fit_mc"))
+				m_Settings->SetFitMonteCarloSettings(std::move(settings.fitMonteCarlo));
+		}
+		if (ImGui::Button("Run Monte Carlo") && m_EventBus != nullptr)
+			m_EventBus->Queue(MonteCarloRequested{project, selectedIds});
+
+		if (record->info.fit)
+		{
+			const JFMFitState &fit = *record->info.fit;
+			ImGui::SameLine();
+			ImGui::Text("Fit: %s, reduced chi2 %.6g, %d iterations", fit.status.c_str(), fit.reducedChiSquared, fit.iterations);
+			std::vector<std::string> names;
+			names.reserve(fit.parameters.size());
+			for (const auto &[name, estimate] : fit.parameters)
+			{
+				(void)estimate;
+				names.push_back(name);
+			}
+			std::sort(names.begin(), names.end());
+			if (!names.empty() && ImGui::BeginTable("##jfm_fit_parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn("Parameter");
+				ImGui::TableSetupColumn("Value");
+				ImGui::TableSetupColumn("Std. error");
+				ImGui::TableSetupColumn("Source");
+				ImGui::TableHeadersRow();
+				for (const std::string &name : names)
+				{
+					const JFMParameterEstimate &estimate = fit.parameters.at(name);
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextUnformatted(name.c_str());
+					ImGui::TableSetColumnIndex(1);
+					ImGui::Text("%.8g", estimate.value);
+					ImGui::TableSetColumnIndex(2);
+					if (estimate.standardError)
+						ImGui::Text("%.8g", *estimate.standardError);
+					else
+						ImGui::TextDisabled("-");
+					ImGui::TableSetColumnIndex(3);
+					ImGui::TextUnformatted(estimate.source.c_str());
+				}
+				ImGui::EndTable();
+			}
+			for (const std::string &warning : fit.warnings)
+				ImGui::TextWrapped("Fit warning: %s", warning.c_str());
+		}
+
+		if (record->info.monteCarlo)
+		{
+			const JFMMonteCarloState &state = *record->info.monteCarlo;
+			ImGui::Text("MC: %s, %d/%d converged, %s, %.3f ms", state.status.c_str(), state.acceptedCount, state.sampleCount, state.backend.c_str(), state.totalMilliseconds);
+			if (!state.outputPath.Empty())
+				ImGui::TextWrapped("Output: %s", state.outputPath.String().c_str());
+			for (const std::string &warning : state.warnings)
+				ImGui::TextWrapped("MC warning: %s", warning.c_str());
+		}
+		if (Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult({project, active}); result != nullptr)
+			RenderJFMCovariancePlot(*result, m_CovarianceX, m_CovarianceY, "import_covariance");
+	}
+
 	void JFMImportDialogPanel::requestPrefit(ProjectHandle project, std::vector<CharacteristicId> ids) const
 	{
 		if (m_EventBus != nullptr && !ids.empty())
 			m_EventBus->Queue(PrefitRequested{project, std::move(ids)});
+	}
+
+	void JFMImportDialogPanel::requestFit(ProjectHandle project, std::vector<CharacteristicId> ids) const
+	{
+		if (m_EventBus != nullptr && !ids.empty())
+			m_EventBus->Queue(FitRequested{project, std::move(ids)});
 	}
 
 	void JFMImportDialogPanel::finishRangeUndoGroup(bool cancel)
@@ -1088,6 +1222,7 @@ namespace SST::Prototypes::JFM
 		m_DataAddedToProject = false;
 		m_SelectImportTab = false;
 		m_SelectAnalysisTab = false;
+		m_SelectFitTab = false;
 		m_RangeCharacteristic = InvalidCharacteristicId;
 		m_RangeInitialized = false;
 	}
@@ -1211,9 +1346,12 @@ namespace SST::Prototypes::JFM
 		m_AnalysisShowLegend = false;
 		m_AnalysisShowCurves = true;
 		m_AnalysisShowPrefitCurves = m_Settings == nullptr || m_Settings->GetSnapshot().showPrefitCurves;
+		m_AnalysisShowFitCurves = true;
 		m_AnalysisScale = 0;
 		m_AnalysisTreeOpenRequest = 0;
 		m_AnalysisFitPadding = 0.08f;
+		m_CovarianceX = 0;
+		m_CovarianceY = 1;
 		m_AnalysisOnlySeriesId.clear();
 		m_ImportOperation = InvalidJFMOperationId;
 		m_StagingProject = InvalidProjectHandle;

@@ -1,4 +1,10 @@
 ﻿project "JFM"
+    local jfmCudaPath = os.getenv("CUDA_PATH")
+    local jfmCudaAvailable = _ACTION == "vs2022"
+        and jfmCudaPath ~= nil
+        and os.isfile(path.join(jfmCudaPath, "bin/nvcc.exe"))
+    local jfmSolverRoot = _SST_ROOT .. "/Prototypes/JFM/src/Analysis/Solver"
+
     location (_SST_ROOT .. "/build/generated/%{_ACTION}/%{prj.name}")
     kind "ConsoleApp"
     language "C++"
@@ -21,6 +27,9 @@
         _SST_ROOT,
         _SST_ROOT .. "/Core",
         _SST_ROOT .. "/Prototypes/JFM/src",
+        jfmSolverRoot,
+        jfmSolverRoot .. "/gpu",
+        jfmSolverRoot .. "/lambertw-gpu",
         _SST_ROOT .. "/Vendor/ImGui",
         _SST_ROOT .. "/Vendor/ImGui/backends",
         _SST_ROOT .. "/Vendor/implot",
@@ -34,6 +43,20 @@
         _SST_ROOT .. "/Vendor/json/include",
         _SST_ROOT .. "/Vendor/yaml-cpp/include"
     }
+
+    if jfmCudaAvailable then
+        files {
+            jfmSolverRoot .. "/gpu/diode_model_device.cuh",
+            jfmSolverRoot .. "/gpu/gpu_backend.cu",
+            jfmSolverRoot .. "/lambertw-gpu/lambert_w_device.cuh"
+        }
+        includedirs { jfmCudaPath .. "/include" }
+        libdirs { jfmCudaPath .. "/lib/x64" }
+        links { "cudart" }
+        defines { "JFM_CUDA_AVAILABLE=1" }
+    else
+        defines { "JFM_CUDA_AVAILABLE=0" }
+    end
 
     links {
         "Core",
@@ -67,6 +90,32 @@
         entrypoint "mainCRTStartup"
         systemversion "latest"
         buildoptions { "/utf-8" }
+
+    if jfmCudaAvailable then
+        filter { "files:**.cu" }
+            buildmessage "NVCC: %{file.relpath}"
+            buildoutputs { "$(IntDir)%{file.basename}.obj" }
+
+        filter { "files:**.cu", "configurations:Debug" }
+            buildcommands {
+                '"$(CUDA_PATH)/bin/nvcc" -c -G -g -O0 -std=c++17 -Xcompiler "/MDd /Zi /FS /utf-8"'
+                .. ' -I"$(CUDA_PATH)/include"'
+                .. ' -I"' .. jfmSolverRoot .. '"'
+                .. ' -I"' .. jfmSolverRoot .. '/gpu"'
+                .. ' -I"' .. jfmSolverRoot .. '/lambertw-gpu"'
+                .. ' -o "$(IntDir)%{file.basename}.obj" "%{file.abspath}"'
+            }
+
+        filter { "files:**.cu", "configurations:Release or Dist" }
+            buildcommands {
+                '"$(CUDA_PATH)/bin/nvcc" -c -O2 -std=c++17 -Xcompiler "/MD /FS /utf-8" -DNDEBUG'
+                .. ' -I"$(CUDA_PATH)/include"'
+                .. ' -I"' .. jfmSolverRoot .. '"'
+                .. ' -I"' .. jfmSolverRoot .. '/gpu"'
+                .. ' -I"' .. jfmSolverRoot .. '/lambertw-gpu"'
+                .. ' -o "$(IntDir)%{file.basename}.obj" "%{file.abspath}"'
+            }
+    end
 
     filter "system:windows"
         defines { "DS_PLATFORM_WINDOWS" }
@@ -106,6 +155,8 @@ project "JFMTests"
 
     files {
         _SST_ROOT .. "/Prototypes/JFM/src/Domain/JFMTypes.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/Analysis/JFMFitEngine.hpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/Analysis/JFMFitEngine.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/App/JFMUserSettings.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/App/JFMUserSettings.cpp",
 		_SST_ROOT .. "/Prototypes/JFM/src/App/JFMProjectEditCommand.cpp",
@@ -136,6 +187,25 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMExportRawTsvJob.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMExportRawTsvJob.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Events/JFMEvents.hpp",
+        jfmSolverRoot .. "/solver/solver_types.hpp",
+        jfmSolverRoot .. "/solver/param_utils.hpp",
+        jfmSolverRoot .. "/solver/param_utils.cpp",
+        jfmSolverRoot .. "/solver/objective.hpp",
+        jfmSolverRoot .. "/solver/objective.cpp",
+		jfmSolverRoot .. "/solver/diode_model.hpp",
+		jfmSolverRoot .. "/solver/diode_model.cpp",
+		jfmSolverRoot .. "/solver/diode_objective.hpp",
+		jfmSolverRoot .. "/solver/diode_objective.cpp",
+		jfmSolverRoot .. "/solver/lambertw.hpp",
+		jfmSolverRoot .. "/solver/phys_const.hpp",
+        jfmSolverRoot .. "/solver/nelder_mead.hpp",
+        jfmSolverRoot .. "/solver/nelder_mead.cpp",
+        jfmSolverRoot .. "/lambertw/Horner.hpp",
+        jfmSolverRoot .. "/lambertw/LambertW.hpp",
+        jfmSolverRoot .. "/lambertw/LambertW.cpp",
+        jfmSolverRoot .. "/gpu/gpu_types.hpp",
+        jfmSolverRoot .. "/gpu/gpu_backend.hpp",
+        jfmSolverRoot .. "/gpu/gpu_backend_stub.cpp",
         _SST_ROOT .. "/Prototypes/JFM/tests/**.hpp",
         _SST_ROOT .. "/Prototypes/JFM/tests/**.cpp"
     }
@@ -144,6 +214,8 @@ project "JFMTests"
         _SST_ROOT,
         _SST_ROOT .. "/Core",
         _SST_ROOT .. "/Prototypes/JFM/src",
+        jfmSolverRoot,
+        jfmSolverRoot .. "/gpu",
         _SST_ROOT .. "/Vendor/GoogleTest/googletest/include",
         _SST_ROOT .. "/Vendor/nanobind/include",
         _SST_ROOT .. "/Vendor/nanobind/ext/robin_map/include",
@@ -152,6 +224,8 @@ project "JFMTests"
         _SST_ROOT .. "/Vendor/json/include",
         _SST_ROOT .. "/Vendor/yaml-cpp/include"
     }
+
+    defines { "JFM_CUDA_AVAILABLE=0" }
 
     links {
         "Core",

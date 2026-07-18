@@ -971,8 +971,8 @@ namespace SST::Prototypes::JFM
 				std::vector<CharacteristicId> ids = workspace->GetSelectedCharacteristicIds();
 				if (auto *value = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids"))
 					ids = *value;
-				else if (auto *value = commandContext.TryGet<CharacteristicId>("characteristic_id"))
-					ids = {*value};
+				else if (auto *idValue = commandContext.TryGet<CharacteristicId>("characteristic_id"))
+					ids = {*idValue};
 				if (ids.empty())
 					ids = {workspace->GetSelectedCharacteristicId()};
 				ids.erase(std::remove(ids.begin(), ids.end(), InvalidCharacteristicId), ids.end());
@@ -1003,8 +1003,8 @@ namespace SST::Prototypes::JFM
 				std::vector<CharacteristicId> ids = workspace->GetSelectedCharacteristicIds();
 				if (auto *value = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids"))
 					ids = *value;
-				else if (auto *value = commandContext.TryGet<CharacteristicId>("characteristic_id"))
-					ids = {*value};
+				else if (auto *idValue = commandContext.TryGet<CharacteristicId>("characteristic_id"))
+					ids = {*idValue};
 				if (ids.empty())
 					ids = {workspace->GetSelectedCharacteristicId()};
 				ids.erase(std::remove(ids.begin(), ids.end(), InvalidCharacteristicId), ids.end());

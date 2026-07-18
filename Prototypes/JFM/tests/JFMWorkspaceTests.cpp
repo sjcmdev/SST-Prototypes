@@ -447,4 +447,42 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(copyRecord);
 		EXPECT_EQ(copyRecord->data.get(), data.get());
 	}
+
+	TEST(JFMWorkspaceStoreTests, FitAndMonteCarloResultsRejectStaleGenerationsAndInvalidateWithRange)
+	{
+		JFMWorkspaceStore store;
+		const ProjectHandle project = store.GetActiveProjectHandle();
+		JFMCharacteristic characteristic;
+		characteristic.info.name = "Fit source";
+		characteristic.info.temperatureK = 300.0;
+		characteristic.data.voltage = {0.0, 0.5, 1.0};
+		characteristic.data.current = {0.0, 1.0, 2.0};
+		const CharacteristicId id = store.AddCharacteristics(project, {std::move(characteristic)}).front();
+		const JFMCharacteristicRef ref{project, id};
+		ASSERT_TRUE(store.SetPrefitModel(project, {id}, "SD-0"));
+
+		const std::uint64_t prefitGeneration = store.BeginPrefit(ref);
+		JFMPrefitState prefit;
+		prefit.modelId = "SD-0";
+		prefit.fitRange = {0, 3, 0.0, 1.0, "test"};
+		ASSERT_TRUE(store.ApplyPrefitResult(ref, prefitGeneration, prefit, {{0.0, 1.0}, {0.0, 2.0}}));
+		const std::uint64_t fitGeneration = store.BeginFit(ref);
+		JFMFitState fit;
+		fit.modelId = "SD-0";
+		fit.fitRange = prefit.fitRange;
+		ASSERT_TRUE(store.ApplyFitResult(ref, fitGeneration, fit, {{0.0, 1.0}, {0.0, 2.0}}));
+		EXPECT_FALSE(store.ApplyFitResult(ref, fitGeneration - 1, fit, {}));
+		const std::uint64_t mcGeneration = store.BeginMonteCarlo(ref);
+		JFMMonteCarloState monteCarlo;
+		monteCarlo.modelId = "SD-0";
+		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, mcGeneration, monteCarlo, {{"I0", "A"}, {}}));
+		EXPECT_NE(store.GetFitCurve(ref), nullptr);
+		EXPECT_NE(store.GetMonteCarloResult(ref), nullptr);
+
+		ASSERT_TRUE(store.SetManualFitRange(project, id, 0.0, 0.5));
+		EXPECT_FALSE(store.GetFitState(ref).has_value());
+		EXPECT_FALSE(store.GetMonteCarloState(ref).has_value());
+		EXPECT_EQ(store.GetFitCurve(ref), nullptr);
+		EXPECT_EQ(store.GetMonteCarloResult(ref), nullptr);
+	}
 } // namespace SST::Prototypes::JFM

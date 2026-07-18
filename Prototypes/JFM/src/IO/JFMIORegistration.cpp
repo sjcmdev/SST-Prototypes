@@ -11,6 +11,7 @@
 #include "Events/JFMEvents.hpp"
 #include "IO/IOLayer.hpp"
 #include "IO/JFMExportRawTsvJob.hpp"
+#include "IO/JFMFitJobs.hpp"
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMImportPreviewJob.hpp"
 #include "IO/JFMProjectJobs.hpp"
@@ -38,10 +39,29 @@ namespace SST::Prototypes::JFM
 		JFMOperationId nextOperation = 1;
 		std::string importTargetGroupId;
 		Ref<JFMPrefitWorkQueue> prefitQueue = CreateRef<JFMPrefitWorkQueue>();
+		Ref<JFMFitWorkQueue> fitQueue = CreateRef<JFMFitWorkQueue>();
+		Ref<JFMMonteCarloWorkQueue> monteCarloQueue = CreateRef<JFMMonteCarloWorkQueue>();
+		std::vector<JFMCharacteristicRef> pendingFits;
+		std::vector<JFMCharacteristicRef> pendingMonteCarlo;
 		bool importRunning = false;
 		bool plotAfterImport = false;
 		bool deferImportApply = false;
 	};
+
+	bool TakePending(std::vector<JFMCharacteristicRef> &pending, JFMCharacteristicRef ref)
+	{
+		const auto found = std::find(pending.begin(), pending.end(), ref);
+		if (found == pending.end())
+			return false;
+		pending.erase(found);
+		return true;
+	}
+
+	void AddPending(std::vector<JFMCharacteristicRef> &pending, JFMCharacteristicRef ref)
+	{
+		if (std::find(pending.begin(), pending.end(), ref) == pending.end())
+			pending.push_back(ref);
+	}
 
 	void NotifyFailure(
 		const Ref<JFMIOState> &state,
@@ -238,8 +258,114 @@ namespace SST::Prototypes::JFM
 
 	void HandlePrefitCompleted(const Ref<JFMIOState> &state, const PrefitCompleted &event)
 	{
+		if (state->store != nullptr
+			&& state->store->ApplyPrefitResult(event.ref, event.generation, event.state, event.curve)
+			&& TakePending(state->pendingFits, event.ref))
+			state->eventBus->Queue(FitRequested{event.ref.project, {event.ref.characteristic}});
+	}
+
+	void HandleFitRequested(const Ref<JFMIOState> &state, const FitRequested &event)
+	{
+		if (state->store == nullptr || event.project == InvalidProjectHandle || event.ids.empty())
+			return;
+		std::vector<CharacteristicId> ids = event.ids;
+		std::sort(ids.begin(), ids.end());
+		ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+		std::vector<CharacteristicId> prefitIds;
+		std::vector<JFMFitWorkItem> items;
+		const JFMFitMonteCarloSettings settings = state->settings != nullptr
+			? state->settings->GetSnapshot().fitMonteCarlo
+			: JFMFitMonteCarloSettings{};
+		for (CharacteristicId id : ids)
+		{
+			const JFMCharacteristicRef ref{event.project, id};
+			const auto prefit = state->store->GetPrefitState(ref);
+			if (!prefit || prefit->status != "completed")
+			{
+				AddPending(state->pendingFits, ref);
+				if (!prefit || prefit->status != "running")
+					prefitIds.push_back(id);
+				continue;
+			}
+			const std::uint64_t generation = state->store->BeginFit(ref);
+			if (generation == 0)
+				continue;
+			auto characteristic = state->store->FindCharacteristicRecord(ref);
+			if (characteristic)
+				items.push_back(JFMFitWorkItem{ref, generation, std::move(*characteristic), settings});
+		}
+		if (!prefitIds.empty())
+			state->eventBus->Queue(PrefitRequested{event.project, std::move(prefitIds)});
+		if (items.empty() || state->fitQueue == nullptr || !state->fitQueue->Enqueue(std::move(items)))
+			return;
+		state->eventBus->Queue(JobSubmitRequested{CreateRef<JFMFitJob>(state->eventBus, state->store, state->fitQueue), JobPriority::High, "jfm.fit"});
+	}
+
+	void HandleFitCompleted(const Ref<JFMIOState> &state, const FitCompleted &event)
+	{
+		if (state->store != nullptr
+			&& state->store->ApplyFitResult(event.ref, event.generation, event.state, event.curve)
+			&& TakePending(state->pendingMonteCarlo, event.ref))
+			state->eventBus->Queue(MonteCarloRequested{event.ref.project, {event.ref.characteristic}});
+	}
+
+	void HandleFitFailed(const Ref<JFMIOState> &state, const FitFailed &event)
+	{
+		if (state->store != nullptr && state->store->FailFit(event.ref, event.generation, event.error))
+			DS_LOG_WARN("JFM fit failed [{}:{}]: {}", event.ref.project, event.ref.characteristic, event.error);
+	}
+
+	void HandleMonteCarloRequested(const Ref<JFMIOState> &state, const MonteCarloRequested &event)
+	{
+		if (state->store == nullptr || event.project == InvalidProjectHandle || event.ids.empty())
+			return;
+		std::vector<CharacteristicId> ids = event.ids;
+		std::sort(ids.begin(), ids.end());
+		ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+		std::vector<CharacteristicId> fitIds;
+		std::vector<JFMMonteCarloWorkItem> items;
+		const JFMFitMonteCarloSettings settings = state->settings != nullptr
+			? state->settings->GetSnapshot().fitMonteCarlo
+			: JFMFitMonteCarloSettings{};
+		Path outputRoot = state->settings != nullptr ? state->settings->GetDefaultProjectsDirectory() : Path{};
+		if (outputRoot.Empty())
+			outputRoot = Path{FileSystem::CurrentPath()};
+		for (CharacteristicId id : ids)
+		{
+			const JFMCharacteristicRef ref{event.project, id};
+			const auto prefit = state->store->GetPrefitState(ref);
+			const auto fit = state->store->GetFitState(ref);
+			if (!prefit || prefit->status != "completed" || !fit || fit->status != "completed" || prefit->modelId != fit->modelId)
+			{
+				AddPending(state->pendingMonteCarlo, ref);
+				if (!fit || fit->status != "running")
+					fitIds.push_back(id);
+				continue;
+			}
+			const std::uint64_t generation = state->store->BeginMonteCarlo(ref);
+			if (generation == 0)
+				continue;
+			auto characteristic = state->store->FindCharacteristicRecord(ref);
+			if (characteristic)
+				items.push_back(JFMMonteCarloWorkItem{ref, generation, std::move(*characteristic), *prefit, *fit, settings, outputRoot});
+		}
+		if (!fitIds.empty())
+			state->eventBus->Queue(FitRequested{event.project, std::move(fitIds)});
+		if (items.empty() || state->monteCarloQueue == nullptr || !state->monteCarloQueue->Enqueue(std::move(items)))
+			return;
+		state->eventBus->Queue(JobSubmitRequested{CreateRef<JFMMonteCarloJob>(state->eventBus, state->store, state->monteCarloQueue), JobPriority::Normal, "jfm.monte_carlo"});
+	}
+
+	void HandleMonteCarloCompleted(const Ref<JFMIOState> &state, const MonteCarloCompleted &event)
+	{
 		if (state->store != nullptr)
-			(void)state->store->ApplyPrefitResult(event.ref, event.generation, event.state, event.curve);
+			(void)state->store->ApplyMonteCarloResult(event.ref, event.generation, event.state, event.result);
+	}
+
+	void HandleMonteCarloFailed(const Ref<JFMIOState> &state, const MonteCarloFailed &event)
+	{
+		if (state->store != nullptr && state->store->FailMonteCarlo(event.ref, event.generation, event.error))
+			DS_LOG_WARN("JFM Monte Carlo failed [{}:{}]: {}", event.ref.project, event.ref.characteristic, event.error);
 	}
 
 	void HandlePrefitFailed(const Ref<JFMIOState> &state, const PrefitFailed &event)
@@ -253,6 +379,12 @@ namespace SST::Prototypes::JFM
 		ioLayer.RegisterHandler<PrefitRequested>(std::bind_front(&HandlePrefitRequested, state));
 		ioLayer.RegisterHandler<PrefitCompleted>(std::bind_front(&HandlePrefitCompleted, state));
 		ioLayer.RegisterHandler<PrefitFailed>(std::bind_front(&HandlePrefitFailed, state));
+		ioLayer.RegisterHandler<FitRequested>(std::bind_front(&HandleFitRequested, state));
+		ioLayer.RegisterHandler<FitCompleted>(std::bind_front(&HandleFitCompleted, state));
+		ioLayer.RegisterHandler<FitFailed>(std::bind_front(&HandleFitFailed, state));
+		ioLayer.RegisterHandler<MonteCarloRequested>(std::bind_front(&HandleMonteCarloRequested, state));
+		ioLayer.RegisterHandler<MonteCarloCompleted>(std::bind_front(&HandleMonteCarloCompleted, state));
+		ioLayer.RegisterHandler<MonteCarloFailed>(std::bind_front(&HandleMonteCarloFailed, state));
 	}
 
 	void HandleExportRawTsvRequested(const Ref<JFMIOState> &state, const ExportRawTsvRequested &event)

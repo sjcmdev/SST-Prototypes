@@ -47,3 +47,9 @@ graphify-out/**
 Core-Copy/
 .codex/*
 Hazel/
+
+# Local JFM measurement datasets
+Prototypes/JFM/example-data/**
+
+# JFM solver integration reference drop
+Prototypes/JFM/solver-to-integrate/**

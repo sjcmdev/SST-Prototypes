@@ -6,6 +6,7 @@
 #include "Core/Logging/Logger.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include <yaml-cpp/yaml.h>
 
@@ -13,6 +14,13 @@ namespace SST::Prototypes::JFM
 {
 	namespace UserSettingsDetail
 	{
+		template <typename T>
+		T ReadOr(const YAML::Node &node, const char *key, T fallback)
+		{
+			const YAML::Node value = node[key];
+			return value && !value.IsNull() ? value.as<T>() : fallback;
+		}
+
 		Path ExistingOr(Path path, Path fallback)
 		{
 			if (path.Empty() || !FileSystem::Exists(path.Native()))
@@ -125,6 +133,33 @@ namespace SST::Prototypes::JFM
 			m_Settings.prefitCurvesFitRangeOnly = root["prefit_curves_fit_range_only"] ? root["prefit_curves_fit_range_only"].as<bool>() : m_Settings.prefitCurvesFitRangeOnly;
 			m_Settings.hoveredCurveLineWeight = root["hovered_curve_line_weight"] ? std::clamp(root["hovered_curve_line_weight"].as<float>(), 0.5f, 10.0f) : m_Settings.hoveredCurveLineWeight;
 			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
+			if (const YAML::Node fit = root["fit_monte_carlo"]; fit && fit.IsMap())
+			{
+				m_Settings.fitMonteCarlo.fitMaxIterations = std::max(1, ReadOr<int>(fit, "fit_max_iterations", m_Settings.fitMonteCarlo.fitMaxIterations));
+				m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance = std::max(0.0, ReadOr<double>(fit, "fit_reduced_chi2_tolerance", m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance));
+				m_Settings.fitMonteCarlo.monteCarloSamples = std::max(1, ReadOr<int>(fit, "mc_samples", m_Settings.fitMonteCarlo.monteCarloSamples));
+				m_Settings.fitMonteCarlo.monteCarloMaxIterations = std::max(1, ReadOr<int>(fit, "mc_max_iterations", m_Settings.fitMonteCarlo.monteCarloMaxIterations));
+				m_Settings.fitMonteCarlo.monteCarloNoisePercent = std::clamp(ReadOr<double>(fit, "mc_noise_percent", m_Settings.fitMonteCarlo.monteCarloNoisePercent), 0.0, 100.0);
+				m_Settings.fitMonteCarlo.monteCarloStartPerturbationPercent = std::clamp(ReadOr<double>(fit, "mc_start_perturbation_percent", m_Settings.fitMonteCarlo.monteCarloStartPerturbationPercent), 0.0, 1000.0);
+				m_Settings.fitMonteCarlo.monteCarloSeed = ReadOr<std::uint32_t>(fit, "mc_seed", m_Settings.fitMonteCarlo.monteCarloSeed);
+				m_Settings.fitMonteCarlo.preferGpu = ReadOr<bool>(fit, "prefer_gpu", m_Settings.fitMonteCarlo.preferGpu);
+				if (const YAML::Node parameters = fit["parameters"]; parameters && parameters.IsMap())
+				{
+					for (const auto &entry : parameters)
+					{
+						const std::string name = entry.first.as<std::string>();
+						auto existing = m_Settings.fitMonteCarlo.parameters.find(name);
+						JFMParameterSolverSetting setting = existing == m_Settings.fitMonteCarlo.parameters.end()
+							? JFMParameterSolverSetting{}
+							: existing->second;
+						setting.minimum = ReadOr<double>(entry.second, "minimum", setting.minimum);
+						setting.maximum = ReadOr<double>(entry.second, "maximum", setting.maximum);
+						setting.monteCarloFree = ReadOr<bool>(entry.second, "free", setting.monteCarloFree);
+						if (std::isfinite(setting.minimum) && std::isfinite(setting.maximum) && setting.minimum < setting.maximum)
+							m_Settings.fitMonteCarlo.parameters[name] = setting;
+					}
+				}
+			}
 			m_Settings.defaultColorPresetName = root["default_color_preset"] ? root["default_color_preset"].as<std::string>() : m_Settings.defaultColorPresetName;
 			if (const YAML::Node presets = root["color_presets"])
 			{
@@ -172,6 +207,25 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "prefit_curves_fit_range_only" << YAML::Value << snapshot.prefitCurvesFitRangeOnly;
 		out << YAML::Key << "hovered_curve_line_weight" << YAML::Value << snapshot.hoveredCurveLineWeight;
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
+		out << YAML::Key << "fit_monte_carlo" << YAML::Value << YAML::BeginMap;
+		out << YAML::Key << "fit_max_iterations" << YAML::Value << snapshot.fitMonteCarlo.fitMaxIterations;
+		out << YAML::Key << "fit_reduced_chi2_tolerance" << YAML::Value << snapshot.fitMonteCarlo.fitReducedChiSquaredTolerance;
+		out << YAML::Key << "mc_samples" << YAML::Value << snapshot.fitMonteCarlo.monteCarloSamples;
+		out << YAML::Key << "mc_max_iterations" << YAML::Value << snapshot.fitMonteCarlo.monteCarloMaxIterations;
+		out << YAML::Key << "mc_noise_percent" << YAML::Value << snapshot.fitMonteCarlo.monteCarloNoisePercent;
+		out << YAML::Key << "mc_start_perturbation_percent" << YAML::Value << snapshot.fitMonteCarlo.monteCarloStartPerturbationPercent;
+		out << YAML::Key << "mc_seed" << YAML::Value << snapshot.fitMonteCarlo.monteCarloSeed;
+		out << YAML::Key << "prefer_gpu" << YAML::Value << snapshot.fitMonteCarlo.preferGpu;
+		out << YAML::Key << "parameters" << YAML::Value << YAML::BeginMap;
+		for (const auto &[name, setting] : snapshot.fitMonteCarlo.parameters)
+		{
+			out << YAML::Key << name << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "minimum" << YAML::Value << setting.minimum;
+			out << YAML::Key << "maximum" << YAML::Value << setting.maximum;
+			out << YAML::Key << "free" << YAML::Value << setting.monteCarloFree;
+			out << YAML::EndMap;
+		}
+		out << YAML::EndMap << YAML::EndMap;
 		out << YAML::Key << "default_color_preset" << YAML::Value << snapshot.defaultColorPresetName;
 		out << YAML::Key << "color_presets" << YAML::Value << YAML::BeginSeq;
 		for (const JFMColorPreset &preset : snapshot.colorPresets)
@@ -259,6 +313,34 @@ namespace SST::Prototypes::JFM
 		Save();
 	}
 
+	void JFMUserSettingsStore::SetFitMonteCarloSettings(JFMFitMonteCarloSettings settings)
+	{
+		settings.fitMaxIterations = std::max(1, settings.fitMaxIterations);
+		settings.fitReducedChiSquaredTolerance = std::max(0.0, settings.fitReducedChiSquaredTolerance);
+		settings.monteCarloSamples = std::max(1, settings.monteCarloSamples);
+		settings.monteCarloMaxIterations = std::max(1, settings.monteCarloMaxIterations);
+		settings.monteCarloNoisePercent = std::clamp(settings.monteCarloNoisePercent, 0.0, 100.0);
+		settings.monteCarloStartPerturbationPercent = std::clamp(settings.monteCarloStartPerturbationPercent, 0.0, 1000.0);
+		for (auto &[name, parameter] : settings.parameters)
+		{
+			(void)name;
+			if (!std::isfinite(parameter.minimum) || !std::isfinite(parameter.maximum))
+			{
+				parameter.minimum = 0.0;
+				parameter.maximum = 1.0;
+			}
+			else if (parameter.minimum > parameter.maximum)
+				std::swap(parameter.minimum, parameter.maximum);
+			if (parameter.minimum == parameter.maximum)
+				parameter.maximum = std::nextafter(parameter.minimum, std::numeric_limits<double>::infinity());
+		}
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.fitMonteCarlo = std::move(settings);
+		}
+		Save();
+	}
+
 	void JFMUserSettingsStore::SetColorPresets(std::vector<JFMColorPreset> presets)
 	{
 		{
@@ -328,6 +410,14 @@ namespace SST::Prototypes::JFM
 			JFMColorPreset{"Violet/Red", {0.58f, 0.20f, 0.95f, 1.00f}, {1.00f, 0.18f, 0.18f, 1.00f}},
 		};
 		settings.defaultColorPresetName = settings.colorPresets.front().name;
+		settings.fitMonteCarlo.parameters = {
+			{"I0", {1.0e-300, 1.0, true}},
+			{"A", {0.1, 10.0, true}},
+			{"Rs", {0.0, 1.0e9, true}},
+			{"Rsh", {1.0e-6, 1.0e15, true}},
+			{"alpha", {0.1, 10.0, true}},
+			{"Rsh2", {1.0e-6, 1.0e15, true}},
+			{"I_ph", {0.0, 1.0e6, true}}};
 		return settings;
 	}
 } // namespace SST::Prototypes::JFM

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "Core/Utils/Path.hpp"
@@ -14,6 +16,26 @@ namespace SST::Prototypes::JFM
 		std::string name;
 		std::array<float, 4> start = {0.15f, 0.75f, 1.00f, 1.00f};
 		std::array<float, 4> end = {1.00f, 0.12f, 0.55f, 1.00f};
+	};
+
+	struct JFMParameterSolverSetting
+	{
+		double minimum = 0.0;
+		double maximum = 1.0;
+		bool monteCarloFree = true;
+	};
+
+	struct JFMFitMonteCarloSettings
+	{
+		int fitMaxIterations = 2500;
+		double fitReducedChiSquaredTolerance = 1.0;
+		int monteCarloSamples = 512;
+		int monteCarloMaxIterations = 1500;
+		double monteCarloNoisePercent = 1.0;
+		double monteCarloStartPerturbationPercent = 5.0;
+		std::uint32_t monteCarloSeed = 42;
+		bool preferGpu = true;
+		std::unordered_map<std::string, JFMParameterSolverSetting> parameters;
 	};
 
 	struct JFMUserSettings
@@ -33,6 +55,7 @@ namespace SST::Prototypes::JFM
 		bool prefitCurvesFitRangeOnly = false;
 		float hoveredCurveLineWeight = 3.5f;
 		bool autoPlotAfterImport = false;
+		JFMFitMonteCarloSettings fitMonteCarlo;
 		std::vector<Path> recentProjects;
 	};
 
@@ -56,6 +79,7 @@ namespace SST::Prototypes::JFM
 		void SetPlotDefaults(bool semiLog, bool autoFit, bool showLegend, float fitPadding);
 		void SetPrefitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, bool fitRangeOnly, float hoverLineWeight);
 		void SetAutoPlotAfterImport(bool enabled);
+		void SetFitMonteCarloSettings(JFMFitMonteCarloSettings settings);
 		void SetColorPresets(std::vector<JFMColorPreset> presets);
 		void SetDefaultColorPreset(std::string presetName);
 		void AddRecentProject(Path path);

@@ -214,6 +214,113 @@ namespace SST::Prototypes::JFM
 		return prefit;
 	}
 
+	void emitFitState(YAML::Emitter &out, const JFMFitState &fit)
+	{
+		out << YAML::BeginMap;
+		out << YAML::Key << "model" << YAML::Value << fit.modelId;
+		out << YAML::Key << "status" << YAML::Value << fit.status;
+		out << YAML::Key << "fit_range" << YAML::Value << YAML::BeginMap;
+		out << YAML::Key << "lower_index" << YAML::Value << fit.fitRange.lowerIndex;
+		out << YAML::Key << "upper_index" << YAML::Value << fit.fitRange.upperIndex;
+		out << YAML::Key << "lower_voltage" << YAML::Value << fit.fitRange.lowerVoltage;
+		out << YAML::Key << "upper_voltage" << YAML::Value << fit.fitRange.upperVoltage;
+		out << YAML::Key << "reason" << YAML::Value << fit.fitRange.reason;
+		out << YAML::EndMap;
+		out << YAML::Key << "parameters" << YAML::Value << YAML::BeginMap;
+		for (const auto &[name, estimate] : fit.parameters)
+		{
+			out << YAML::Key << name << YAML::Value << YAML::BeginMap;
+			out << YAML::Key << "value" << YAML::Value << estimate.value;
+			emitOptionalDouble(out, "standard_error", estimate.standardError);
+			out << YAML::Key << "source" << YAML::Value << estimate.source;
+			out << YAML::Key << "warnings" << YAML::Value << estimate.warnings;
+			out << YAML::EndMap;
+		}
+		out << YAML::EndMap;
+		out << YAML::Key << "chi_squared" << YAML::Value << fit.chiSquared;
+		out << YAML::Key << "reduced_chi_squared" << YAML::Value << fit.reducedChiSquared;
+		out << YAML::Key << "iterations" << YAML::Value << fit.iterations;
+		out << YAML::Key << "converged" << YAML::Value << fit.converged;
+		out << YAML::Key << "backend" << YAML::Value << fit.backend;
+		out << YAML::Key << "warnings" << YAML::Value << fit.warnings;
+		out << YAML::EndMap;
+	}
+
+	std::optional<JFMFitState> readFitState(const YAML::Node &node)
+	{
+		if (!node || !node.IsMap())
+			return std::nullopt;
+		JFMFitState fit;
+		fit.modelId = readOr<std::string>(node, "model", "SD-RsRsh");
+		fit.status = readOr<std::string>(node, "status", "not_started");
+		const YAML::Node range = node["fit_range"];
+		fit.fitRange.lowerIndex = readOr<std::size_t>(range, "lower_index", 0);
+		fit.fitRange.upperIndex = readOr<std::size_t>(range, "upper_index", 0);
+		fit.fitRange.lowerVoltage = readOr<double>(range, "lower_voltage", 0.0);
+		fit.fitRange.upperVoltage = readOr<double>(range, "upper_voltage", 0.0);
+		fit.fitRange.reason = readOr<std::string>(range, "reason", "automatic");
+		const YAML::Node parameters = node["parameters"];
+		if (parameters && parameters.IsMap())
+		{
+			for (const auto &entry : parameters)
+			{
+				const YAML::Node estimateNode = entry.second;
+				JFMParameterEstimate estimate;
+				estimate.value = readOr<double>(estimateNode, "value", 0.0);
+				estimate.standardError = readOptionalDouble(estimateNode, "standard_error");
+				estimate.source = readOr<std::string>(estimateNode, "source", {});
+				if (estimateNode["warnings"])
+					estimate.warnings = estimateNode["warnings"].as<std::vector<std::string>>();
+				fit.parameters[entry.first.as<std::string>()] = std::move(estimate);
+			}
+		}
+		fit.chiSquared = readOr<double>(node, "chi_squared", 0.0);
+		fit.reducedChiSquared = readOr<double>(node, "reduced_chi_squared", 0.0);
+		fit.iterations = readOr<int>(node, "iterations", 0);
+		fit.converged = readOr<bool>(node, "converged", false);
+		fit.backend = readOr<std::string>(node, "backend", "cpu");
+		if (node["warnings"])
+			fit.warnings = node["warnings"].as<std::vector<std::string>>();
+		return fit;
+	}
+
+	void emitMonteCarloState(YAML::Emitter &out, const JFMMonteCarloState &state)
+	{
+		out << YAML::BeginMap;
+		out << YAML::Key << "model" << YAML::Value << state.modelId;
+		out << YAML::Key << "status" << YAML::Value << state.status;
+		out << YAML::Key << "sample_count" << YAML::Value << state.sampleCount;
+		out << YAML::Key << "accepted_count" << YAML::Value << state.acceptedCount;
+		out << YAML::Key << "noise_percent" << YAML::Value << state.noisePercent;
+		out << YAML::Key << "start_perturbation_percent" << YAML::Value << state.startPerturbationPercent;
+		out << YAML::Key << "seed" << YAML::Value << state.seed;
+		out << YAML::Key << "backend" << YAML::Value << state.backend;
+		out << YAML::Key << "output_path" << YAML::Value << state.outputPath.String();
+		out << YAML::Key << "total_milliseconds" << YAML::Value << state.totalMilliseconds;
+		out << YAML::Key << "warnings" << YAML::Value << state.warnings;
+		out << YAML::EndMap;
+	}
+
+	std::optional<JFMMonteCarloState> readMonteCarloState(const YAML::Node &node)
+	{
+		if (!node || !node.IsMap())
+			return std::nullopt;
+		JFMMonteCarloState state;
+		state.modelId = readOr<std::string>(node, "model", "SD-RsRsh");
+		state.status = readOr<std::string>(node, "status", "not_started");
+		state.sampleCount = readOr<int>(node, "sample_count", 0);
+		state.acceptedCount = readOr<int>(node, "accepted_count", 0);
+		state.noisePercent = readOr<double>(node, "noise_percent", 0.0);
+		state.startPerturbationPercent = readOr<double>(node, "start_perturbation_percent", 0.0);
+		state.seed = readOr<std::uint32_t>(node, "seed", 42);
+		state.backend = readOr<std::string>(node, "backend", {});
+		state.outputPath = Path::FromResolved(readOr<std::string>(node, "output_path", {}));
+		state.totalMilliseconds = readOr<double>(node, "total_milliseconds", 0.0);
+		if (node["warnings"])
+			state.warnings = node["warnings"].as<std::vector<std::string>>();
+		return state;
+	}
+
 	const char *groupingModeName(JFMGroupingMode mode)
 	{
 		return mode == JFMGroupingMode::Exact ? "exact" : "numeric_step";
@@ -267,6 +374,16 @@ namespace SST::Prototypes::JFM
 			out << YAML::Key << "prefit" << YAML::Value;
 			emitPrefitState(out, *characteristic.prefit);
 		}
+		if (characteristic.fit)
+		{
+			out << YAML::Key << "fit" << YAML::Value;
+			emitFitState(out, *characteristic.fit);
+		}
+		if (characteristic.monteCarlo)
+		{
+			out << YAML::Key << "monte_carlo" << YAML::Value;
+			emitMonteCarloState(out, *characteristic.monteCarlo);
+		}
 		out << YAML::Key << "raw_data" << YAML::Value << "external_only";
 		out << YAML::Key << "raw_point_count" << YAML::Value << characteristic.sweep.pointCount;
 		out << YAML::EndMap;
@@ -306,6 +423,8 @@ namespace SST::Prototypes::JFM
 		if (qcNode && qcNode.IsMap() && qcNode["warnings"])
 			characteristic.qc.warnings = qcNode["warnings"].as<std::vector<std::string>>();
 		characteristic.prefit = readPrefitState(characteristicNode["prefit"]);
+		characteristic.fit = readFitState(characteristicNode["fit"]);
+		characteristic.monteCarlo = readMonteCarloState(characteristicNode["monte_carlo"]);
 
 		return characteristic;
 	}

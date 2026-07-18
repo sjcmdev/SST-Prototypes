@@ -7,6 +7,7 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Domain/JFMPrefitModels.hpp"
 #include "Events/JFMEvents.hpp"
+#include "Presentation/JFMFitMonteCarloWidgets.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -143,6 +144,7 @@ namespace SST::Prototypes::JFM
 		RenderPrefitDisplayControls();
 		RenderColorControls(project, ids, activeRecord->info);
 		RenderRangeControls(project, ids, *activeRecord);
+		RenderSolverControls(project, ids, activeRecord->info);
 		RenderParameterTable(activeRecord->info);
 
 		ImGui::End();
@@ -182,9 +184,44 @@ namespace SST::Prototypes::JFM
 		if (ImGui::Button("Prefit") && m_EventBus != nullptr)
 			m_EventBus->Queue(PrefitRequested{project, ids});
 		ImGui::SameLine();
-		ImGui::BeginDisabled();
-		ImGui::Button("Fit");
-		ImGui::EndDisabled();
+		if (ImGui::Button("Fit") && m_EventBus != nullptr)
+			m_EventBus->Queue(FitRequested{project, ids});
+	}
+
+	void ControlPanel::RenderSolverControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo)
+	{
+		if (m_Settings == nullptr)
+			return;
+		ImGui::SeparatorText("Fit & Monte Carlo");
+		JFMUserSettings settings = m_Settings->GetSnapshot();
+		const std::string model = activeInfo.prefit ? activeInfo.prefit->modelId : "SD-RsRsh";
+		if (RenderJFMFitMonteCarloSettings(settings.fitMonteCarlo, model, "control_panel"))
+			m_Settings->SetFitMonteCarloSettings(std::move(settings.fitMonteCarlo));
+		if (ImGui::Button("Run Monte Carlo") && m_EventBus != nullptr)
+			m_EventBus->Queue(MonteCarloRequested{project, ids});
+
+		if (activeInfo.fit)
+		{
+			ImGui::SameLine();
+			ImGui::Text("Fit: %s, reduced chi2 %.6g", activeInfo.fit->status.c_str(), activeInfo.fit->reducedChiSquared);
+			for (const std::string &warning : activeInfo.fit->warnings)
+				ImGui::TextWrapped("Fit warning: %s", warning.c_str());
+		}
+		if (activeInfo.monteCarlo)
+		{
+			ImGui::Text("MC: %s, %d/%d converged, %s, %.3f ms",
+				activeInfo.monteCarlo->status.c_str(),
+				activeInfo.monteCarlo->acceptedCount,
+				activeInfo.monteCarlo->sampleCount,
+				activeInfo.monteCarlo->backend.c_str(),
+				activeInfo.monteCarlo->totalMilliseconds);
+			if (!activeInfo.monteCarlo->outputPath.Empty())
+				ImGui::TextWrapped("Output: %s", activeInfo.monteCarlo->outputPath.String().c_str());
+			for (const std::string &warning : activeInfo.monteCarlo->warnings)
+				ImGui::TextWrapped("MC warning: %s", warning.c_str());
+		}
+		if (Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult({project, activeInfo.id}); result != nullptr)
+			RenderJFMCovariancePlot(*result, m_CovarianceX, m_CovarianceY, "control_panel_covariance");
 	}
 
 	void ControlPanel::RenderPrefitDisplayControls()
@@ -358,7 +395,37 @@ namespace SST::Prototypes::JFM
 				}
 			}
 
-			for (const char *stage : {"fit", "tuned"})
+			if (activeInfo.fit)
+			{
+				std::vector<std::string> names;
+				names.reserve(activeInfo.fit->parameters.size());
+				for (const auto &[name, estimate] : activeInfo.fit->parameters)
+				{
+					(void)estimate;
+					names.push_back(name);
+				}
+				std::sort(names.begin(), names.end());
+				for (const std::string &name : names)
+				{
+					const JFMParameterEstimate &estimate = activeInfo.fit->parameters.at(name);
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextUnformatted("fit");
+					ImGui::TableSetColumnIndex(1);
+					ImGui::TextUnformatted(name.c_str());
+					ImGui::TableSetColumnIndex(2);
+					ImGui::Text("%.8g", estimate.value);
+					ImGui::TableSetColumnIndex(3);
+					if (estimate.standardError)
+						ImGui::Text("%.8g", *estimate.standardError);
+					else
+						ImGui::TextUnformatted("-");
+					ImGui::TableSetColumnIndex(4);
+					ImGui::TextUnformatted(estimate.source.c_str());
+				}
+			}
+
+			for (const char *stage : {"tuned"})
 			{
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);

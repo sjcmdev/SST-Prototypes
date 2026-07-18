@@ -254,7 +254,19 @@ namespace SST::Prototypes::JFM
 		value.selectedCharacteristicIds = std::move(snapshot.selectedCharacteristicIds);
 		value.revision = snapshot.revision;
 		value.prefitCurves.clear();
+		value.fitCurves.clear();
+		value.monteCarloResults.clear();
 		for (auto &[id, generation] : value.prefitGenerations)
+		{
+			(void)id;
+			++generation;
+		}
+		for (auto &[id, generation] : value.fitGenerations)
+		{
+			(void)id;
+			++generation;
+		}
+		for (auto &[id, generation] : value.monteCarloGenerations)
 		{
 			(void)id;
 			++generation;
@@ -465,6 +477,46 @@ namespace SST::Prototypes::JFM
 		return curve == document->get().prefitCurves.end() ? Ref<const JFMPrefitCurve>{} : curve->second;
 	}
 
+	std::optional<JFMFitState> JFMWorkspaceStore::GetFitState(JFMCharacteristicRef ref) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return std::nullopt;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		return info ? info->get().fit : std::nullopt;
+	}
+
+	Ref<const JFMFitCurve> JFMWorkspaceStore::GetFitCurve(JFMCharacteristicRef ref) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return {};
+		const auto curve = document->get().fitCurves.find(ref.characteristic);
+		return curve == document->get().fitCurves.end() ? Ref<const JFMFitCurve>{} : curve->second;
+	}
+
+	std::optional<JFMMonteCarloState> JFMWorkspaceStore::GetMonteCarloState(JFMCharacteristicRef ref) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return std::nullopt;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		return info ? info->get().monteCarlo : std::nullopt;
+	}
+
+	Ref<const JFMMonteCarloResult> JFMWorkspaceStore::GetMonteCarloResult(JFMCharacteristicRef ref) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return {};
+		const auto result = document->get().monteCarloResults.find(ref.characteristic);
+		return result == document->get().monteCarloResults.end() ? Ref<const JFMMonteCarloResult>{} : result->second;
+	}
+
 	JFMGroup JFMWorkspaceStore::AddGroup(std::string name, std::string parentId)
 	{
 		return AddGroup(GetActiveProjectHandle(), std::move(name), std::move(parentId));
@@ -602,6 +654,10 @@ namespace SST::Prototypes::JFM
 			document.characteristicData[characteristic.info.id] = std::move(characteristic.data);
 			document.prefitCurves.erase(characteristic.info.id);
 			++document.prefitGenerations[characteristic.info.id];
+			document.fitCurves.erase(characteristic.info.id);
+			++document.fitGenerations[characteristic.info.id];
+			document.monteCarloResults.erase(characteristic.info.id);
+			++document.monteCarloGenerations[characteristic.info.id];
 			target.characteristicIds.push_back(characteristic.info.id);
 			document.selectedCharacteristicId = characteristic.info.id;
 			addedIds.push_back(characteristic.info.id);
@@ -635,6 +691,10 @@ namespace SST::Prototypes::JFM
 		document.characteristicData.erase(id);
 		document.prefitCurves.erase(id);
 		document.prefitGenerations.erase(id);
+		document.fitCurves.erase(id);
+		document.fitGenerations.erase(id);
+		document.monteCarloResults.erase(id);
+		document.monteCarloGenerations.erase(id);
 		removeCharacteristicReferencesLocked(document, id);
 		document.selectedCharacteristicIds.erase(std::remove(document.selectedCharacteristicIds.begin(), document.selectedCharacteristicIds.end(), id), document.selectedCharacteristicIds.end());
 		if (document.selectedCharacteristicId == id)
@@ -668,6 +728,10 @@ namespace SST::Prototypes::JFM
 			document.characteristicData.erase(id);
 			document.prefitCurves.erase(id);
 			document.prefitGenerations.erase(id);
+			document.fitCurves.erase(id);
+			document.fitGenerations.erase(id);
+			document.monteCarloResults.erase(id);
+			document.monteCarloGenerations.erase(id);
 			document.selectedCharacteristicIds.erase(std::remove(document.selectedCharacteristicIds.begin(), document.selectedCharacteristicIds.end(), id), document.selectedCharacteristicIds.end());
 		}
 		document.project.series.erase(std::remove_if(document.project.series.begin(), document.project.series.end(), [&seriesId](const JFMSeries &candidate) {
@@ -719,6 +783,10 @@ namespace SST::Prototypes::JFM
 			document.characteristicData.erase(id);
 			document.prefitCurves.erase(id);
 			document.prefitGenerations.erase(id);
+			document.fitCurves.erase(id);
+			document.fitGenerations.erase(id);
+			document.monteCarloResults.erase(id);
+			document.monteCarloGenerations.erase(id);
 		}
 		document.project.series.erase(std::remove_if(document.project.series.begin(), document.project.series.end(), [&seriesIds](const JFMSeries &series) {
 			return std::find(seriesIds.begin(), seriesIds.end(), series.id) != seriesIds.end();
@@ -964,6 +1032,12 @@ namespace SST::Prototypes::JFM
 			state.status = "queued";
 			state.warnings.clear();
 			++document->get().prefitGenerations[id];
+			info->get().fit.reset();
+			info->get().monteCarlo.reset();
+			document->get().fitCurves.erase(id);
+			document->get().monteCarloResults.erase(id);
+			++document->get().fitGenerations[id];
+			++document->get().monteCarloGenerations[id];
 			changed = true;
 		}
 		if (changed)
@@ -992,6 +1066,12 @@ namespace SST::Prototypes::JFM
 		state.status = "queued";
 		state.warnings.clear();
 		++document->get().prefitGenerations[id];
+		info->get().fit.reset();
+		info->get().monteCarlo.reset();
+		document->get().fitCurves.erase(id);
+		document->get().monteCarloResults.erase(id);
+		++document->get().fitGenerations[id];
+		++document->get().monteCarloGenerations[id];
 		bumpRevisionLocked(document->get());
 		return true;
 	}
@@ -1011,6 +1091,12 @@ namespace SST::Prototypes::JFM
 		info->get().prefit->status = "queued";
 		info->get().prefit->warnings.clear();
 		++document->get().prefitGenerations[id];
+		info->get().fit.reset();
+		info->get().monteCarlo.reset();
+		document->get().fitCurves.erase(id);
+		document->get().monteCarloResults.erase(id);
+		++document->get().fitGenerations[id];
+		++document->get().monteCarloGenerations[id];
 		bumpRevisionLocked(document->get());
 		return true;
 	}
@@ -1027,6 +1113,12 @@ namespace SST::Prototypes::JFM
 		JFMPrefitState &state = info->get().prefit.emplace(info->get().prefit.value_or(JFMPrefitState{}));
 		state.status = "running";
 		state.warnings.clear();
+		info->get().fit.reset();
+		info->get().monteCarlo.reset();
+		document->get().fitCurves.erase(ref.characteristic);
+		document->get().monteCarloResults.erase(ref.characteristic);
+		++document->get().fitGenerations[ref.characteristic];
+		++document->get().monteCarloGenerations[ref.characteristic];
 		return ++document->get().prefitGenerations[ref.characteristic];
 	}
 
@@ -1081,6 +1173,155 @@ namespace SST::Prototypes::JFM
 		state.warnings = {std::move(error)};
 		state.parameters.clear();
 		document->get().prefitCurves.erase(ref.characteristic);
+		info->get().fit.reset();
+		info->get().monteCarlo.reset();
+		document->get().fitCurves.erase(ref.characteristic);
+		document->get().monteCarloResults.erase(ref.characteristic);
+		++document->get().fitGenerations[ref.characteristic];
+		++document->get().monteCarloGenerations[ref.characteristic];
+		bumpRevisionLocked(document->get());
+		return true;
+	}
+
+	std::uint64_t JFMWorkspaceStore::BeginFit(JFMCharacteristicRef ref)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return 0;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info || !info->get().prefit || info->get().prefit->status != "completed")
+			return 0;
+		JFMFitState &state = info->get().fit.emplace(info->get().fit.value_or(JFMFitState{}));
+		state.modelId = info->get().prefit->modelId;
+		state.fitRange = info->get().prefit->fitRange;
+		state.status = "running";
+		state.warnings.clear();
+		info->get().monteCarlo.reset();
+		document->get().fitCurves.erase(ref.characteristic);
+		document->get().monteCarloResults.erase(ref.characteristic);
+		++document->get().monteCarloGenerations[ref.characteristic];
+		return ++document->get().fitGenerations[ref.characteristic];
+	}
+
+	bool JFMWorkspaceStore::IsFitGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto current = document->get().fitGenerations.find(ref.characteristic);
+		return current != document->get().fitGenerations.end() && current->second == generation;
+	}
+
+	bool JFMWorkspaceStore::ApplyFitResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMFitState result, JFMFitCurve curve)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto current = document->get().fitGenerations.find(ref.characteristic);
+		if (current == document->get().fitGenerations.end() || current->second != generation)
+			return false;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info || !info->get().prefit || info->get().prefit->modelId != result.modelId)
+			return false;
+		result.status = "completed";
+		info->get().fit = std::move(result);
+		document->get().fitCurves[ref.characteristic] = CreateRef<const JFMFitCurve>(std::move(curve));
+		info->get().monteCarlo.reset();
+		document->get().monteCarloResults.erase(ref.characteristic);
+		++document->get().monteCarloGenerations[ref.characteristic];
+		bumpRevisionLocked(document->get());
+		return true;
+	}
+
+	bool JFMWorkspaceStore::FailFit(JFMCharacteristicRef ref, std::uint64_t generation, std::string error)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto current = document->get().fitGenerations.find(ref.characteristic);
+		if (current == document->get().fitGenerations.end() || current->second != generation)
+			return false;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info)
+			return false;
+		JFMFitState &state = info->get().fit.emplace(info->get().fit.value_or(JFMFitState{}));
+		state.status = "failed";
+		state.warnings = {std::move(error)};
+		state.parameters.clear();
+		document->get().fitCurves.erase(ref.characteristic);
+		info->get().monteCarlo.reset();
+		document->get().monteCarloResults.erase(ref.characteristic);
+		++document->get().monteCarloGenerations[ref.characteristic];
+		bumpRevisionLocked(document->get());
+		return true;
+	}
+
+	std::uint64_t JFMWorkspaceStore::BeginMonteCarlo(JFMCharacteristicRef ref)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return 0;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info || !info->get().fit || info->get().fit->status != "completed")
+			return 0;
+		JFMMonteCarloState &state = info->get().monteCarlo.emplace(info->get().monteCarlo.value_or(JFMMonteCarloState{}));
+		state.modelId = info->get().fit->modelId;
+		state.status = "running";
+		state.warnings.clear();
+		document->get().monteCarloResults.erase(ref.characteristic);
+		return ++document->get().monteCarloGenerations[ref.characteristic];
+	}
+
+	bool JFMWorkspaceStore::IsMonteCarloGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto current = document->get().monteCarloGenerations.find(ref.characteristic);
+		return current != document->get().monteCarloGenerations.end() && current->second == generation;
+	}
+
+	bool JFMWorkspaceStore::ApplyMonteCarloResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMMonteCarloState state, JFMMonteCarloResult result)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto current = document->get().monteCarloGenerations.find(ref.characteristic);
+		if (current == document->get().monteCarloGenerations.end() || current->second != generation)
+			return false;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info || !info->get().fit || info->get().fit->modelId != state.modelId)
+			return false;
+		state.status = "completed";
+		info->get().monteCarlo = std::move(state);
+		document->get().monteCarloResults[ref.characteristic] = CreateRef<const JFMMonteCarloResult>(std::move(result));
+		bumpRevisionLocked(document->get());
+		return true;
+	}
+
+	bool JFMWorkspaceStore::FailMonteCarlo(JFMCharacteristicRef ref, std::uint64_t generation, std::string error)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(ref.project);
+		if (!document)
+			return false;
+		const auto current = document->get().monteCarloGenerations.find(ref.characteristic);
+		if (current == document->get().monteCarloGenerations.end() || current->second != generation)
+			return false;
+		auto info = findInfoLocked(document->get(), ref.characteristic);
+		if (!info)
+			return false;
+		JFMMonteCarloState &state = info->get().monteCarlo.emplace(info->get().monteCarlo.value_or(JFMMonteCarloState{}));
+		state.status = "failed";
+		state.warnings = {std::move(error)};
+		document->get().monteCarloResults.erase(ref.characteristic);
 		bumpRevisionLocked(document->get());
 		return true;
 	}
@@ -1338,6 +1579,12 @@ namespace SST::Prototypes::JFM
 		ProjectDocument &document = activeDocumentLocked();
 		document.project = MakeDefaultProject(std::move(name));
 		document.characteristicData.clear();
+		document.prefitCurves.clear();
+		document.prefitGenerations.clear();
+		document.fitCurves.clear();
+		document.fitGenerations.clear();
+		document.monteCarloResults.clear();
+		document.monteCarloGenerations.clear();
 		document.nextCharacteristicId = 1;
 		document.path.reset();
 		document.lastImportWarnings.clear();
@@ -1355,6 +1602,12 @@ namespace SST::Prototypes::JFM
 		document.project = std::move(project);
 		document.project.schemaVersion = JFMProjectSchemaVersion;
 		document.characteristicData.clear();
+		document.prefitCurves.clear();
+		document.prefitGenerations.clear();
+		document.fitCurves.clear();
+		document.fitGenerations.clear();
+		document.monteCarloResults.clear();
+		document.monteCarloGenerations.clear();
 		updateNextCharacteristicIdLocked(document);
 		document.path = std::move(path);
 		document.selectedCharacteristicIds.clear();

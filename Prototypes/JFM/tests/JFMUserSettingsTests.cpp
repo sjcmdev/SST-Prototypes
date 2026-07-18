@@ -20,6 +20,12 @@ namespace SST::Prototypes::JFM
 		store.SetDefaultScriptsDirectory(prototype / Path("python") / Path("custom_scripts"));
 		store.SetDefaultColorPreset("Green/Yellow");
 		store.SetPrefitCurveDefaults(false, {0.1f, 0.2f, 0.3f, 1.0f}, 3.5f, true, 5.0f);
+		JFMFitMonteCarloSettings solverSettings = store.GetSnapshot().fitMonteCarlo;
+		solverSettings.monteCarloSamples = 2048;
+		solverSettings.monteCarloNoisePercent = 2.5;
+		solverSettings.monteCarloStartPerturbationPercent = 12.0;
+		solverSettings.parameters["Rs"] = {0.01, 50.0, false};
+		store.SetFitMonteCarloSettings(std::move(solverSettings));
 		store.AddRecentProject(prototype / Path("JFM-projects") / Path("one.jfm.yaml"));
 
 		JFMUserSettingsStore loaded(config, prototype);
@@ -36,6 +42,10 @@ namespace SST::Prototypes::JFM
 		EXPECT_TRUE(settings.prefitCurvesFitRangeOnly);
 		EXPECT_FLOAT_EQ(settings.hoveredCurveLineWeight, 5.0f);
 		EXPECT_EQ(settings.defaultColorPresetName, "Green/Yellow");
+		EXPECT_EQ(settings.fitMonteCarlo.monteCarloSamples, 2048);
+		EXPECT_DOUBLE_EQ(settings.fitMonteCarlo.monteCarloNoisePercent, 2.5);
+		EXPECT_DOUBLE_EQ(settings.fitMonteCarlo.monteCarloStartPerturbationPercent, 12.0);
+		EXPECT_FALSE(settings.fitMonteCarlo.parameters.at("Rs").monteCarloFree);
 		ASSERT_EQ(settings.recentProjects.size(), 1);
 		EXPECT_EQ(settings.recentProjects.front(), prototype / Path("JFM-projects") / Path("one.jfm.yaml"));
 

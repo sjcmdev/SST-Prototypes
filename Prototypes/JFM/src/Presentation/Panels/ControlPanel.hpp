@@ -38,6 +38,7 @@ namespace SST::Prototypes::JFM
 		void RenderPrefitDisplayControls();
 		void RenderColorControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo);
 		void RenderRangeControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicRecord &activeRecord);
+		void RenderSolverControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo);
 		void RenderParameterTable(const JFMCharacteristicInfo &activeInfo) const;
 
 		Ref<JFMWorkspaceStore> m_Store;
@@ -51,5 +52,7 @@ namespace SST::Prototypes::JFM
 		bool m_RangeUndoGroupOpen = false;
 		bool m_RangeHeldLastFrame = false;
 		std::array<float, 4> m_ColorDraft = {0.95f, 0.45f, 0.08f, 1.0f};
+		int m_CovarianceX = 0;
+		int m_CovarianceY = 1;
 	};
 } // namespace SST::Prototypes::JFM

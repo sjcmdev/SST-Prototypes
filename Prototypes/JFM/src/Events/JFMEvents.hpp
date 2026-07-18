@@ -342,6 +342,84 @@ namespace SST::Prototypes::JFM
 		std::string error;
 	};
 
+	struct FitRequested final : public BusEvent
+	{
+		FitRequested() = default;
+		FitRequested(ProjectHandle requestedProject, std::vector<CharacteristicId> requestedIds)
+			: project(requestedProject), ids(std::move(requestedIds))
+		{
+		}
+
+		ProjectHandle project = InvalidProjectHandle;
+		std::vector<CharacteristicId> ids;
+	};
+
+	struct FitCompleted final : public BusEvent
+	{
+		FitCompleted() = default;
+		FitCompleted(JFMCharacteristicRef completedRef, std::uint64_t completedGeneration, JFMFitState completedState, JFMFitCurve completedCurve)
+			: ref(completedRef), generation(completedGeneration), state(std::move(completedState)), curve(std::move(completedCurve))
+		{
+		}
+
+		JFMCharacteristicRef ref;
+		std::uint64_t generation = 0;
+		JFMFitState state;
+		JFMFitCurve curve;
+	};
+
+	struct FitFailed final : public BusEvent
+	{
+		FitFailed() = default;
+		FitFailed(JFMCharacteristicRef failedRef, std::uint64_t failedGeneration, std::string failure)
+			: ref(failedRef), generation(failedGeneration), error(std::move(failure))
+		{
+		}
+
+		JFMCharacteristicRef ref;
+		std::uint64_t generation = 0;
+		std::string error;
+	};
+
+	struct MonteCarloRequested final : public BusEvent
+	{
+		MonteCarloRequested() = default;
+		MonteCarloRequested(ProjectHandle requestedProject, std::vector<CharacteristicId> requestedIds)
+			: project(requestedProject), ids(std::move(requestedIds))
+		{
+		}
+
+		ProjectHandle project = InvalidProjectHandle;
+		std::vector<CharacteristicId> ids;
+	};
+
+	struct MonteCarloCompleted final : public BusEvent
+	{
+		MonteCarloCompleted() = default;
+		MonteCarloCompleted(JFMCharacteristicRef completedRef, std::uint64_t completedGeneration, JFMMonteCarloState completedState, JFMMonteCarloResult completedResult)
+			: ref(completedRef), generation(completedGeneration), state(std::move(completedState)), result(std::move(completedResult))
+		{
+		}
+
+		JFMCharacteristicRef ref;
+		std::uint64_t generation = 0;
+		JFMMonteCarloState state;
+		JFMMonteCarloResult result;
+	};
+
+	struct MonteCarloFailed final : public BusEvent
+	{
+		MonteCarloFailed() = default;
+		MonteCarloFailed(JFMCharacteristicRef failedRef, std::uint64_t failedGeneration, std::string failure)
+			: ref(failedRef), generation(failedGeneration), error(std::move(failure))
+		{
+		}
+
+		JFMCharacteristicRef ref;
+		std::uint64_t generation = 0;
+		std::string error;
+	};
+
 	struct ExportRawTsvRequested final : public BusEvent
 	{
 		ExportRawTsvRequested() = default;

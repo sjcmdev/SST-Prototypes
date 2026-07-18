@@ -36,6 +36,21 @@ namespace SST::Prototypes::JFM
 		characteristic.prefit->manualUpperVoltage = 0.7;
 		characteristic.prefit->fitRange = {4, 48, 0.1, 0.7, "manual"};
 		characteristic.prefit->parameters["A"] = JFMParameterEstimate{1.6, 0.05, "semilog_block", {}};
+		characteristic.fit = JFMFitState{};
+		characteristic.fit->modelId = characteristic.prefit->modelId;
+		characteristic.fit->status = "completed";
+		characteristic.fit->fitRange = characteristic.prefit->fitRange;
+		characteristic.fit->parameters["A"] = JFMParameterEstimate{1.58, 0.01, "simplex_cpu", {}};
+		characteristic.fit->reducedChiSquared = 0.98;
+		characteristic.fit->iterations = 75;
+		characteristic.fit->converged = true;
+		characteristic.monteCarlo = JFMMonteCarloState{};
+		characteristic.monteCarlo->modelId = characteristic.prefit->modelId;
+		characteristic.monteCarlo->status = "completed";
+		characteristic.monteCarlo->sampleCount = 512;
+		characteristic.monteCarlo->acceptedCount = 490;
+		characteristic.monteCarlo->backend = "cuda";
+		characteristic.monteCarlo->outputPath = Path::FromResolved("results/mc");
 
 		project.characteristics.push_back(characteristic);
 		JFMGroup group{"group-1", "Folder", {}};
@@ -88,6 +103,12 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(loaded->characteristics.front().prefit->modelId, "SD-RsRsh-alpha-Rsh2");
 		EXPECT_EQ(loaded->characteristics.front().prefit->fitRange.reason, "manual");
 		EXPECT_DOUBLE_EQ(loaded->characteristics.front().prefit->parameters.at("A").value, 1.6);
+		ASSERT_TRUE(loaded->characteristics.front().fit.has_value());
+		EXPECT_DOUBLE_EQ(loaded->characteristics.front().fit->parameters.at("A").value, 1.58);
+		EXPECT_TRUE(loaded->characteristics.front().fit->converged);
+		ASSERT_TRUE(loaded->characteristics.front().monteCarlo.has_value());
+		EXPECT_EQ(loaded->characteristics.front().monteCarlo->acceptedCount, 490);
+		EXPECT_EQ(loaded->characteristics.front().monteCarlo->outputPath.String(), Path::FromResolved("results/mc").String());
 	}
 
 	TEST(JFMProjectYamlSerializerTests, MigratesSchemaOneWithDefaultGroupingAndMaterializationOptions)

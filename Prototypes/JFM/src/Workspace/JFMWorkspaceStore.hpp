@@ -81,6 +81,10 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::vector<CharacteristicId> GetGroupCharacteristicIds(ProjectHandle handle, const std::string &groupId) const;
 		[[nodiscard]] std::optional<JFMPrefitState> GetPrefitState(JFMCharacteristicRef ref) const;
 		[[nodiscard]] Ref<const JFMPrefitCurve> GetPrefitCurve(JFMCharacteristicRef ref) const;
+		[[nodiscard]] std::optional<JFMFitState> GetFitState(JFMCharacteristicRef ref) const;
+		[[nodiscard]] Ref<const JFMFitCurve> GetFitCurve(JFMCharacteristicRef ref) const;
+		[[nodiscard]] std::optional<JFMMonteCarloState> GetMonteCarloState(JFMCharacteristicRef ref) const;
+		[[nodiscard]] Ref<const JFMMonteCarloResult> GetMonteCarloResult(JFMCharacteristicRef ref) const;
 
 		JFMGroup AddGroup(std::string name, std::string parentId = {});
 		JFMGroup AddGroup(ProjectHandle handle, std::string name, std::string parentId = {});
@@ -122,6 +126,14 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] bool IsPrefitGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const;
 		bool ApplyPrefitResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMPrefitState result, JFMPrefitCurve curve);
 		bool FailPrefit(JFMCharacteristicRef ref, std::uint64_t generation, std::string error);
+		[[nodiscard]] std::uint64_t BeginFit(JFMCharacteristicRef ref);
+		[[nodiscard]] bool IsFitGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const;
+		bool ApplyFitResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMFitState result, JFMFitCurve curve);
+		bool FailFit(JFMCharacteristicRef ref, std::uint64_t generation, std::string error);
+		[[nodiscard]] std::uint64_t BeginMonteCarlo(JFMCharacteristicRef ref);
+		[[nodiscard]] bool IsMonteCarloGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const;
+		bool ApplyMonteCarloResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMMonteCarloState state, JFMMonteCarloResult result);
+		bool FailMonteCarlo(JFMCharacteristicRef ref, std::uint64_t generation, std::string error);
 
 		JFMGroupingDefinition AddGrouping(ProjectHandle handle, JFMGroupingDefinition grouping);
 		bool UpdateGrouping(ProjectHandle handle, JFMGroupingDefinition grouping);
@@ -175,6 +187,10 @@ namespace SST::Prototypes::JFM
 			std::unordered_map<CharacteristicId, Ref<const JFMCharacteristicData>> characteristicData;
 			std::unordered_map<CharacteristicId, Ref<const JFMPrefitCurve>> prefitCurves;
 			std::unordered_map<CharacteristicId, std::uint64_t> prefitGenerations;
+			std::unordered_map<CharacteristicId, Ref<const JFMFitCurve>> fitCurves;
+			std::unordered_map<CharacteristicId, std::uint64_t> fitGenerations;
+			std::unordered_map<CharacteristicId, Ref<const JFMMonteCarloResult>> monteCarloResults;
+			std::unordered_map<CharacteristicId, std::uint64_t> monteCarloGenerations;
 			std::optional<Path> path;
 			std::string selectedSeriesId;
 			std::string selectedGroupId;
