@@ -13,6 +13,8 @@ sys.path.insert(0, str(ROOT))
 from jfm_prefit.cpp_adapter import prefit_characteristic
 from jfm_prefit.current_models import evaluate_current
 from jfm_prefit.model_registry import MODEL_REGISTRY
+from jfm_prefit.range_detection import _tail_plateau_bound
+from jfm_prefit.types import RangeOptions
 
 
 def _sample() -> tuple[np.ndarray, np.ndarray]:
@@ -111,13 +113,14 @@ def test_very_narrow_manual_range_stays_inside_selected_data() -> None:
     assert np.all(np.isfinite(result["prefit_current"]))
 
 
-def test_automatic_range_cuts_saturated_current_tail() -> None:
-    voltage = np.linspace(0.0, 1.0, 160)
-    rising = 1.0e-10 * np.exp(16.0 * (voltage - 0.25))
-    plateau = rising[np.searchsorted(voltage, 0.64)]
-    current = np.minimum(rising, plateau)
-    result = prefit_characteristic(voltage, current, 300.0, "SD-RsRsh")
-    assert 0.50 < result["fit_range"]["voltage_max"] < 0.78
+def test_tail_plateau_bound_matches_legacy_reverse_average_algorithm() -> None:
+    voltage = np.arange(100, dtype=float)
+    current = np.concatenate((np.linspace(0.0, 0.9, 90), np.ones(10)))
+
+    hi, detected = _tail_plateau_bound(voltage, current, 0, RangeOptions())
+
+    assert detected
+    assert hi == 89
 
 
 def test_preprocessing_sorts_filters_and_averages_duplicates() -> None:
