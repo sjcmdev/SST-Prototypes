@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 
 import numpy as np
+import pytest
 from scipy.special import lambertw
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,16 @@ def test_prefit_returns_every_model_parameter_and_curve() -> None:
         assert set(result["parameters"]) == set(spec.parameter_names)
         assert len(result["voltage"]) == len(result["prefit_current"])
         assert np.all(np.isfinite(result["prefit_current"]))
+
+
+def test_light_prefit_keeps_photocurrent_on_original_data_scale() -> None:
+    voltage = np.linspace(-0.2, 0.8, 400)
+    parameters = {"I0": 1.0e-10, "A": 1.5, "I_ph": 0.03}
+    current = evaluate_current(voltage, 300.0, "SD-0-I_ph", parameters)
+    result = prefit_characteristic(voltage, current, 300.0, "SD-0-I_ph", "light")
+
+    assert result["parameters"]["I_ph"]["value"] == pytest.approx(parameters["I_ph"], rel=0.02)
+    assert np.interp(0.0, result["voltage"], result["prefit_current"]) == pytest.approx(np.interp(0.0, voltage, current), rel=0.02)
 
 
 def test_manual_range_is_respected() -> None:

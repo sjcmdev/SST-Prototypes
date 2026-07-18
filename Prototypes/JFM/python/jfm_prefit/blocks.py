@@ -10,7 +10,7 @@ from .types import ParameterEstimate, PrefitContext, Sample
 
 
 def estimate_photocurrent(sample: Sample) -> ParameterEstimate:
-    value = float(np.interp(0.0, sample.voltage, sample.current))
+    value = -float(np.interp(0.0, sample.voltage, sample.current))
     extrapolated = not (sample.voltage[0] <= 0.0 <= sample.voltage[-1])
     return ParameterEstimate(value, None, "photocurrent_interp", ("I_ph_extrapolated",) if extrapolated else ())
 

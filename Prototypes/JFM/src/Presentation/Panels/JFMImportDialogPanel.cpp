@@ -393,9 +393,19 @@ namespace SST::Prototypes::JFM
 
 		const ProjectHandle analysisProject = m_StagingProject;
 		const JFMProject project = m_Store->GetProjectSnapshot(analysisProject);
+		std::vector<CharacteristicId> allIds;
 		std::vector<CharacteristicId> visibleIds;
 		for (const JFMSeries &series : project.series)
-			visibleIds.insert(visibleIds.end(), series.characteristicIds.begin(), series.characteristicIds.end());
+		{
+			allIds.insert(allIds.end(), series.characteristicIds.begin(), series.characteristicIds.end());
+			if (m_AnalysisOnlySeriesId.empty() || series.id == m_AnalysisOnlySeriesId)
+				visibleIds.insert(visibleIds.end(), series.characteristicIds.begin(), series.characteristicIds.end());
+		}
+		if (!m_AnalysisOnlySeriesId.empty() && visibleIds.empty())
+		{
+			m_AnalysisOnlySeriesId.clear();
+			visibleIds = allIds;
+		}
 		if (visibleIds.empty())
 		{
 			ImGui::TextDisabled("No imported characteristics.");
@@ -408,12 +418,12 @@ namespace SST::Prototypes::JFM
 		std::vector<CharacteristicId> selectedIds;
 		for (CharacteristicId id : projectState->selectedCharacteristicIds)
 		{
-			if (ContainsId(visibleIds, id))
+			if (ContainsId(allIds, id))
 				selectedIds.push_back(id);
 		}
 		CharacteristicId active = projectState->selectedCharacteristicId;
 		if (!ContainsId(selectedIds, active))
-			active = selectedIds.empty() ? visibleIds.front() : selectedIds.front();
+			active = selectedIds.empty() ? allIds.front() : selectedIds.front();
 		if (selectedIds.empty())
 		{
 			selectedIds = {active};
@@ -421,7 +431,7 @@ namespace SST::Prototypes::JFM
 		}
 
 		std::vector<CharacteristicId> missingPrefits;
-		for (CharacteristicId id : visibleIds)
+		for (CharacteristicId id : allIds)
 		{
 			const std::optional<JFMPrefitState> state = m_Store->GetPrefitState({analysisProject, id});
 			const bool curveMissing = m_Store->GetPrefitCurve({analysisProject, id}) == nullptr;
@@ -457,7 +467,7 @@ namespace SST::Prototypes::JFM
 				}
 			}
 			ImGui::EndDisabled();
-			ImGui::SameLine();
+			ImGui::SeparatorText("Control Panel");
 			int scale = m_AnalysisScale;
 			ImGui::RadioButton("Linear", &scale, 0);
 			ImGui::SameLine();
@@ -480,6 +490,7 @@ namespace SST::Prototypes::JFM
 					mixedModels = true;
 			}
 			const char *modelPreview = mixedModels ? "Mixed" : selectedModel.c_str();
+			ImGui::SetNextItemWidth(132.0f);
 			if (ImGui::BeginCombo("Model", modelPreview))
 			{
 				for (const char *model : PrefitModels)
@@ -523,6 +534,8 @@ namespace SST::Prototypes::JFM
 			ImGui::SameLine();
 			ImGui::Checkbox("Legend", &m_AnalysisShowLegend);
 			ImGui::SameLine();
+			ImGui::Checkbox("Prefit curves", &m_AnalysisShowPrefitCurves);
+			ImGui::SameLine();
 			if (ImGui::SmallButton("Expand all"))
 				m_AnalysisTreeOpenRequest = 1;
 			ImGui::SameLine();
@@ -536,6 +549,12 @@ namespace SST::Prototypes::JFM
 				m_ShowOnlyActive = false;
 			ImGui::SameLine();
 			ImGui::Checkbox("Curves", &m_AnalysisShowCurves);
+			if (!m_AnalysisOnlySeriesId.empty())
+			{
+				ImGui::SameLine();
+				if (ImGui::SmallButton("All series"))
+					m_AnalysisOnlySeriesId.clear();
+			}
 
 			const std::vector<CharacteristicId> plotIds = m_ShowOnlyActive
 				? std::vector<CharacteristicId>{active}
@@ -612,6 +631,19 @@ namespace SST::Prototypes::JFM
 			ids.erase(std::remove_if(ids.begin(), ids.end(), [&visibleIds](CharacteristicId id) { return !ContainsId(visibleIds, id); }), ids.end());
 			if (!ids.empty())
 				selectAnalysisIds(std::move(ids), ids.front(), series.id);
+		}
+		if (ImGui::BeginPopupContextItem())
+		{
+			if (ImGui::MenuItem("Show only this series"))
+			{
+				m_AnalysisOnlySeriesId = series.id;
+				std::vector<CharacteristicId> ids = series.characteristicIds;
+				if (!ids.empty())
+					selectAnalysisIds(std::move(ids), ids.front(), series.id);
+			}
+			if (ImGui::MenuItem("Show all series", nullptr, false, !m_AnalysisOnlySeriesId.empty()))
+				m_AnalysisOnlySeriesId.clear();
+			ImGui::EndPopup();
 		}
 		if (!open)
 			return;
@@ -813,7 +845,7 @@ namespace SST::Prototypes::JFM
 			}
 		}
 
-		if (m_AnalysisShowCurves)
+		if (m_AnalysisShowCurves || m_AnalysisShowPrefitCurves)
 		{
 			for (std::size_t index = 0; index < ids.size(); ++index)
 			{
@@ -822,7 +854,7 @@ namespace SST::Prototypes::JFM
 					continue;
 				const std::vector<double> &current = AnalysisCurrent(*record->data);
 				const int count = static_cast<int>(std::min(record->data->voltage.size(), current.size()));
-				if (count > 0)
+				if (m_AnalysisShowCurves && count > 0)
 				{
 					ImPlotSpec rawSpec;
 					rawSpec.LineColor = PreviewColor(index);
@@ -839,7 +871,7 @@ namespace SST::Prototypes::JFM
 					}
 				}
 				const auto curve = m_Store->GetPrefitCurve({project, ids[index]});
-				if (curve)
+				if (m_AnalysisShowPrefitCurves && curve)
 				{
 					const int curveCount = static_cast<int>(std::min(curve->voltage.size(), curve->current.size()));
 					if (curveCount > 0)
@@ -1098,9 +1130,11 @@ namespace SST::Prototypes::JFM
 		m_AnalysisAutoFit = true;
 		m_AnalysisShowLegend = false;
 		m_AnalysisShowCurves = true;
+		m_AnalysisShowPrefitCurves = true;
 		m_AnalysisScale = 0;
 		m_AnalysisTreeOpenRequest = 0;
 		m_AnalysisFitPadding = 0.08f;
+		m_AnalysisOnlySeriesId.clear();
 		m_ImportOperation = InvalidJFMOperationId;
 		m_StagingProject = InvalidProjectHandle;
 		m_StagedImportBatches.clear();
@@ -1312,8 +1346,7 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		ImPlot::SetupAxes("x", "y");
-		ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
+		ImPlot::SetupAxes("Voltage", "Current");
 		if (m_PreviewScale == 1)
 			ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
 		for (std::size_t index = 0; index < previewPaths.size(); ++index)
@@ -1346,7 +1379,8 @@ namespace SST::Prototypes::JFM
 		if (!m_PreviewOpen)
 			return;
 
-		if (!ImGui::Begin("Import Preview", &m_PreviewOpen, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDocking))
+		ImGui::SetNextWindowSize(ImVec2(1180.0f, 720.0f), ImGuiCond_FirstUseEver);
+		if (!ImGui::Begin("Import Preview", &m_PreviewOpen, ImGuiWindowFlags_NoDocking))
 		{
 			ImGui::End();
 			return;
@@ -1359,7 +1393,7 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		ImGui::BeginChild("##jfm_preview_files", ImVec2(360.0f, 0.0f), true);
+		ImGui::BeginChild("##jfm_preview_files", ImVec2(360.0f, 0.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
 		ImGui::Separator();
 		for (std::size_t index = 0; index < m_PreviewFiles.size(); ++index)
 		{
@@ -1420,7 +1454,7 @@ namespace SST::Prototypes::JFM
 		ImGui::SameLine();
 		if (ImGui::Button("Clear"))
 			m_SelectedPreviewFileIndices.clear();
-		const float plotHeight = std::max(360.0f, ImGui::GetContentRegionAvail().y * 0.58f);
+		const float plotHeight = std::max(360.0f, ImGui::GetContentRegionAvail().y - 250.0f);
 		renderPreviewPlot("Preview Plot##import_preview_window", plotHeight);
 
 		const JFMImportPreviewItem *selectedItem = previewItem(selectedPreviewPath());

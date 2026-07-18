@@ -135,9 +135,11 @@ namespace SST::Prototypes::JFM
 		bool m_AnalysisAutoFit = true;
 		bool m_AnalysisShowLegend = false;
 		bool m_AnalysisShowCurves = true;
+		bool m_AnalysisShowPrefitCurves = true;
 		int m_AnalysisScale = 0;
 		int m_AnalysisTreeOpenRequest = 0;
 		float m_AnalysisFitPadding = 0.08f;
+		std::string m_AnalysisOnlySeriesId;
 		JFMOperationId m_NextImportOperation = 1;
 		JFMOperationId m_ImportOperation = InvalidJFMOperationId;
 		ProjectHandle m_StagingProject = InvalidProjectHandle;
