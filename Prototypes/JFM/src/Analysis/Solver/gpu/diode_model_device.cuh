@@ -1,8 +1,7 @@
 #pragma once
 
 #include "lambert_w_device.cuh"
-
-#define GPU_PHYS_K 8.617333262145179e-5
+#include "solver/phys_const.hpp"
 
 __device__ __forceinline__ double gpu_nan()
 {
@@ -35,26 +34,13 @@ __device__ __forceinline__ bool gpu_model_has_photocurrent(GpuModelType model)
         model == GpuModelType::SDRsRshAlphaRsh2Iph;
 }
 
-__device__ __forceinline__ double gpu_wright_omega(double value)
-{
-    double omega = value > 1.0 ? value - log(value) : exp(value);
-    for (int iteration = 0; iteration < 5; ++iteration)
-    {
-        if (!(omega > 0.0) || !isfinite(omega))
-            return gpu_nan();
-        const double residual = omega + log(omega) - value;
-        omega -= residual * omega / (omega + 1.0);
-    }
-    return omega;
-}
-
 __device__ __forceinline__ double evaluateJFMCurrent_d(GpuModelType model, double voltage, const double* params, double temperature)
 {
     const double i0 = params[0];
     const double ideality = params[1];
     if (!(i0 > 0.0) || !(ideality > 0.0) || !(temperature > 0.0))
         return gpu_nan();
-    const double thermal = ideality * GPU_PHYS_K * temperature;
+    const double thermal = ideality * PhysConst::k * temperature;
     double diode = 0.0;
     double internal_voltage = voltage;
     if (gpu_model_has_rs(model))
@@ -62,23 +48,15 @@ __device__ __forceinline__ double evaluateJFMCurrent_d(GpuModelType model, doubl
         const double series = params[2];
         if (!(series >= 0.0))
             return gpu_nan();
-        if (series <= 1.0e-30)
-            diode = i0 * expm1(fmin(fmax(voltage / thermal, -745.0), 700.0));
-        else
-        {
-            const double log_argument = log(i0 * series / thermal) + voltage / thermal;
-            const double w = log_argument <= 700.0
-                ? LambertW0_d(exp(fmin(fmax(log_argument, -745.0), 700.0)))
-                : gpu_wright_omega(log_argument);
-            if (!isfinite(w))
-                return gpu_nan();
-            diode = w * thermal / series;
-        }
+        const double argument = (i0 * series / thermal) * exp(voltage / thermal);
+        diode = LambertW0_d(argument) * thermal / series;
         internal_voltage = voltage - diode * series;
     }
     else
     {
-        diode = i0 * expm1(fmin(fmax(voltage / thermal, -745.0), 700.0));
+        diode = i0 * exp(gpu_model_has_rsh(model)
+            ? voltage / thermal
+            : fmin(fmax(voltage / thermal, -745.0), 700.0));
     }
 
     double current = diode;
@@ -94,9 +72,7 @@ __device__ __forceinline__ double evaluateJFMCurrent_d(GpuModelType model, doubl
         const double rsh2 = params[5];
         if (!(alpha > 0.0) || !(rsh2 > 0.0))
             return gpu_nan();
-        const double rounded = round(alpha);
-        const bool integer_alpha = fabs(alpha - rounded) < 1.0e-12;
-        current += pow(integer_alpha ? internal_voltage : fmax(internal_voltage, 0.0), integer_alpha ? rounded : alpha) / rsh2;
+        current += pow(internal_voltage, alpha) / rsh2;
     }
     if (gpu_model_has_photocurrent(model))
         current -= params[6];
@@ -112,5 +88,3 @@ __device__ __forceinline__ double evaluateDiodeIV6_d(double voltage, const doubl
 {
     return evaluateJFMCurrent_d(GpuModelType::SDRsRshAlphaRsh2, voltage, params, temperature);
 }
-
-#undef GPU_PHYS_K

@@ -7,7 +7,6 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Domain/JFMPrefitModels.hpp"
 #include "Events/JFMEvents.hpp"
-#include "Presentation/JFMFitMonteCarloWidgets.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -190,13 +189,7 @@ namespace SST::Prototypes::JFM
 
 	void ControlPanel::RenderSolverControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo)
 	{
-		if (m_Settings == nullptr)
-			return;
 		ImGui::SeparatorText("Fit & Monte Carlo");
-		JFMUserSettings settings = m_Settings->GetSnapshot();
-		const std::string model = activeInfo.prefit ? activeInfo.prefit->modelId : "SD-RsRsh";
-		if (RenderJFMFitMonteCarloSettings(settings.fitMonteCarlo, model, "control_panel"))
-			m_Settings->SetFitMonteCarloSettings(std::move(settings.fitMonteCarlo));
 		if (ImGui::Button("Run Monte Carlo") && m_EventBus != nullptr)
 			m_EventBus->Queue(MonteCarloRequested{project, ids});
 
@@ -220,8 +213,6 @@ namespace SST::Prototypes::JFM
 			for (const std::string &warning : activeInfo.monteCarlo->warnings)
 				ImGui::TextWrapped("MC warning: %s", warning.c_str());
 		}
-		if (Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult({project, activeInfo.id}); result != nullptr)
-			RenderJFMCovariancePlot(*result, m_CovarianceX, m_CovarianceY, "control_panel_covariance");
 	}
 
 	void ControlPanel::RenderPrefitDisplayControls()
@@ -245,6 +236,15 @@ namespace SST::Prototypes::JFM
 				settings.prefitCurvesFitRangeOnly,
 				settings.hoveredCurveLineWeight);
 		}
+
+		bool fitChanged = false;
+		fitChanged |= ImGui::Checkbox("Show fit", &settings.showFitCurves);
+		ImGui::SameLine();
+		fitChanged |= ImGui::ColorEdit4("Fit color", settings.fitCurveColor.data(), ImGuiColorEditFlags_NoInputs);
+		ImGui::SetNextItemWidth(160.0f);
+		fitChanged |= ImGui::SliderFloat("Fit thickness", &settings.fitCurveLineWeight, 0.5f, 8.0f, "%.1f");
+		if (fitChanged)
+			m_Settings->SetFitCurveDefaults(settings.showFitCurves, settings.fitCurveColor, settings.fitCurveLineWeight);
 	}
 
 	void ControlPanel::RenderColorControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo)

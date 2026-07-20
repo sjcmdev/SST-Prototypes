@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 
 #include "Analysis/JFMFitEngine.hpp"
+#include "lambertw/LambertW.hpp"
+#include "solver/diode_model.hpp"
+#include "solver/objective.hpp"
 
 #include <array>
 #include <cmath>
@@ -52,6 +55,56 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
+	TEST(JFMFitEngineTests, CurrentModelsMatchCanonicalLambertWEquations)
+	{
+		constexpr double voltage = 0.55;
+		constexpr double temperature = 300.0;
+		constexpr double k = 8.6e-5;
+		const double thermal = Parameters.at("A") * k * temperature;
+		const double argument = Parameters.at("I0") * Parameters.at("Rs") / thermal * std::exp(voltage / thermal);
+		const double diode = utl::LambertW<0>(argument) * thermal / Parameters.at("Rs");
+		const double internalVoltage = voltage - diode * Parameters.at("Rs");
+		const double expected4 = diode + internalVoltage / Parameters.at("Rsh");
+		const double expected6 = expected4 + std::pow(internalVoltage, Parameters.at("alpha")) / Parameters.at("Rsh2");
+		const double parameters4[] = {Parameters.at("I0"), Parameters.at("A"), Parameters.at("Rs"), Parameters.at("Rsh")};
+		const double parameters6[] = {Parameters.at("I0"), Parameters.at("A"), Parameters.at("Rs"), Parameters.at("Rsh"), Parameters.at("alpha"), Parameters.at("Rsh2")};
+
+		EXPECT_NEAR(EvaluateJFMCurrent("SD-RsRsh", voltage, temperature, Parameters), expected4, std::abs(expected4) * 1.0e-12);
+		EXPECT_NEAR(EvaluateJFMCurrent("SD-RsRsh-alpha-Rsh2", voltage, temperature, Parameters), expected6, std::abs(expected6) * 1.0e-12);
+		EXPECT_NEAR(evaluateDiodeIV4(voltage, parameters4, temperature), expected4, std::abs(expected4) * 1.0e-12);
+		EXPECT_NEAR(evaluateDiodeIV6(voltage, parameters6, temperature), expected6, std::abs(expected6) * 1.0e-12);
+	}
+
+	TEST(JFMFitEngineTests, ChiSquaredUsesSimplexLogRatioResiduals)
+	{
+		const double voltage[] = {0.0, 1.0};
+		const double measured[] = {10.0, 20.0};
+		const double sigma[] = {2.0, 4.0};
+		const double params[] = {1.0};
+
+		const double chiSquared = computeChiSquared(params, voltage, measured, sigma, 2, [](double v, const double *) {
+			return v == 0.0 ? 8.0 : 24.0;
+		});
+
+		const double expected = std::pow(1.0 - std::log(8.0) / std::log(10.0), 2.0)
+			+ std::pow(1.0 - std::log(24.0) / std::log(20.0), 2.0);
+		EXPECT_DOUBLE_EQ(chiSquared, expected);
+	}
+
+	TEST(JFMFitEngineTests, MissingResistanceTermsAreRemoved)
+	{
+		constexpr double voltage = 0.2;
+		constexpr double temperature = 300.0;
+		const double thermal = Parameters.at("A") * 8.6e-5 * temperature;
+		const double noSeries = Parameters.at("I0") * std::exp(voltage / thermal);
+		const double argument = Parameters.at("I0") * Parameters.at("Rs") / thermal * std::exp(voltage / thermal);
+		const double withSeries = utl::LambertW<0>(argument) * thermal / Parameters.at("Rs");
+
+		EXPECT_NEAR(EvaluateJFMCurrent("SD-0", voltage, temperature, Parameters), noSeries, std::abs(noSeries) * 1.0e-12);
+		EXPECT_NEAR(EvaluateJFMCurrent("SD-Rsh", voltage, temperature, Parameters), noSeries + voltage / Parameters.at("Rsh"), std::abs(noSeries) * 1.0e-12);
+		EXPECT_NEAR(EvaluateJFMCurrent("SD-Rs", voltage, temperature, Parameters), withSeries, std::abs(withSeries) * 1.0e-12);
+	}
+
 	TEST(JFMFitEngineTests, CpuSimplexUsesCompletedPrefitStart)
 	{
 		JFMCharacteristicRecord record = MakeRecord("SD-0");
@@ -90,11 +143,16 @@ namespace SST::Prototypes::JFM
 		ASSERT_EQ(result->result.samples.size(), 4);
 		EXPECT_EQ(result->idealCurrent.size(), record.data->current.size());
 		EXPECT_EQ(result->noisyCurrent.size(), 4 * record.data->current.size());
+		bool sawNonZeroDeltaChiSquared = false;
 		for (const JFMMonteCarloSample &sample : result->result.samples)
 		{
 			ASSERT_EQ(sample.parameters.size(), 2);
 			EXPECT_DOUBLE_EQ(sample.parameters[0], Parameters.at("I0"));
+			EXPECT_DOUBLE_EQ(sample.reducedChiSquared, sample.chiSquared);
+			EXPECT_EQ(sample.iterations, settings.monteCarloMaxIterations);
+			sawNonZeroDeltaChiSquared = sawNonZeroDeltaChiSquared || sample.chiSquared > 0.0;
 		}
+		EXPECT_TRUE(sawNonZeroDeltaChiSquared);
 	}
 
 	TEST(JFMFitEngineTests, CpuMonteCarloWithZeroNoisePreservesIdealCurve)
@@ -116,5 +174,25 @@ namespace SST::Prototypes::JFM
 		for (std::size_t sample = 0; sample < 2; ++sample)
 			for (std::size_t point = 0; point < result->idealCurrent.size(); ++point)
 				EXPECT_DOUBLE_EQ(result->noisyCurrent[sample * result->idealCurrent.size() + point], result->idealCurrent[point]);
+	}
+
+	TEST(JFMFitEngineTests, CpuMonteCarloReportsFinalErrorAgainstCleanCurve)
+	{
+		JFMCharacteristicRecord record = MakeRecord("SD-0");
+		JFMFitState fit;
+		fit.modelId = "SD-0";
+		fit.status = "completed";
+		fit.parameters = record.info.prefit->parameters;
+		JFMFitMonteCarloSettings settings;
+		settings.preferGpu = false;
+		settings.monteCarloSamples = 1;
+		settings.monteCarloNoisePercent = 5.0;
+		settings.parameters = {{"I0", {1.0e-15, 1.0e-5, false}}, {"A", {0.5, 3.0, false}}};
+
+		auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
+		ASSERT_TRUE(result) << result.Error().technicalDetails;
+		ASSERT_EQ(result->result.samples.size(), 1);
+		EXPECT_DOUBLE_EQ(result->result.samples.front().chiSquared, 0.0);
+		EXPECT_DOUBLE_EQ(result->result.samples.front().reducedChiSquared, 0.0);
 	}
 } // namespace SST::Prototypes::JFM

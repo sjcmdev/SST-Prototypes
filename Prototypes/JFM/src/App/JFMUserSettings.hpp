@@ -25,6 +25,12 @@ namespace SST::Prototypes::JFM
 		bool monteCarloFree = true;
 	};
 
+	struct JFMMonteCarloParameterPair
+	{
+		std::string x;
+		std::string y;
+	};
+
 	struct JFMFitMonteCarloSettings
 	{
 		int fitMaxIterations = 2500;
@@ -35,6 +41,16 @@ namespace SST::Prototypes::JFM
 		double monteCarloStartPerturbationPercent = 5.0;
 		std::uint32_t monteCarloSeed = 42;
 		bool preferGpu = true;
+		bool saveSamples = true;
+		int savedSampleLimit = 0;
+		std::array<std::array<float, 4>, 3> sigmaColors = {{
+			{1.00f, 0.12f, 0.08f, 1.00f},
+			{1.00f, 0.48f, 0.06f, 1.00f},
+			{0.05f, 0.85f, 0.95f, 1.00f}}};
+		std::array<bool, 3> showSigmaClasses = {true, true, true};
+		std::array<bool, 3> showSigmaEllipses = {true, true, true};
+		float scatterZoomOut = 0.08f;
+		std::vector<JFMMonteCarloParameterPair> defaultParameterPairs = {{"i0", "a"}, {"RsH", "Rs"}};
 		std::unordered_map<std::string, JFMParameterSolverSetting> parameters;
 	};
 
@@ -53,6 +69,9 @@ namespace SST::Prototypes::JFM
 		std::array<float, 4> prefitCurveColor = {0.20f, 0.85f, 0.36f, 1.00f};
 		float prefitCurveLineWeight = 2.0f;
 		bool prefitCurvesFitRangeOnly = false;
+		bool showFitCurves = true;
+		std::array<float, 4> fitCurveColor = {0.12f, 0.58f, 1.00f, 1.00f};
+		float fitCurveLineWeight = 2.0f;
 		float hoveredCurveLineWeight = 3.5f;
 		bool autoPlotAfterImport = false;
 		JFMFitMonteCarloSettings fitMonteCarlo;
@@ -78,6 +97,7 @@ namespace SST::Prototypes::JFM
 		void SetDefaultScriptsDirectory(Path path);
 		void SetPlotDefaults(bool semiLog, bool autoFit, bool showLegend, float fitPadding);
 		void SetPrefitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, bool fitRangeOnly, float hoverLineWeight);
+		void SetFitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight);
 		void SetAutoPlotAfterImport(bool enabled);
 		void SetFitMonteCarloSettings(JFMFitMonteCarloSettings settings);
 		void SetColorPresets(std::vector<JFMColorPreset> presets);

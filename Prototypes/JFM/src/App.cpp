@@ -19,6 +19,9 @@
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
 #include "Presentation/Panels/JFMOverviewPanel.hpp"
 #include "Presentation/Panels/JFMSettingsPanel.hpp"
+#include "Presentation/Panels/MonteCarloCurvesPanel.hpp"
+#include "Presentation/Panels/MonteCarloScatterPanel.hpp"
+#include "Presentation/Panels/MonteCarloSettingsPanel.hpp"
 #include "Presentation/Panels/ProjectTreePanel.hpp"
 #include "Presentation/Panels/RawPlotPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
@@ -59,6 +62,18 @@ namespace SST
 			application.GetEventBusRef(),
 			application.GetRuntimeServices().commandRegistry,
 			application.GetRuntimeServices().undoStack);
+		panelIds.monteCarloSettings = editorLayer.RegisterPanel<MonteCarloSettingsPanel>(
+			workspace,
+			settings,
+			application.GetEventBusRef(),
+			application.GetRuntimeServices().commandRegistry);
+		panelIds.monteCarloScatter = editorLayer.RegisterPanel<MonteCarloScatterPanel>(
+			workspace,
+			settings,
+			application.GetEventBusRef());
+		panelIds.monteCarloCurves = editorLayer.RegisterPanel<MonteCarloCurvesPanel>(
+			workspace,
+			application.GetEventBusRef());
 		editorLayer.RegisterPanel<JFMImportDialogPanel>(
 			application.GetEventBusRef(),
 			workspace,

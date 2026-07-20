@@ -68,13 +68,19 @@ namespace SST::Prototypes::JFM
 			(void)FileSystem::CreateDirectories(directory.Native(), error);
 			if (error)
 				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo results could not be saved.", error.message(), "Check the projects directory permissions.", "JFMMonteCarloJob", "jfm.mc.write"};
+			if (!item.settings.saveSamples)
+				return directory;
+
+			const std::size_t savedSamples = item.settings.savedSampleLimit > 0
+				? std::min(computation.result.samples.size(), static_cast<std::size_t>(item.settings.savedSampleLimit))
+				: computation.result.samples.size();
 
 			std::ofstream noise(directory.Join("noise.tsv").Native());
 			if (!noise)
 				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo noise could not be saved.", "Cannot open noise.tsv.", "Check the projects directory permissions.", "JFMMonteCarloJob", "jfm.mc.noise"};
 			noise << std::setprecision(17) << "sample\tvoltage\tideal_current\tnoisy_current\tnoise\tsigma\n";
 			const std::size_t points = computation.voltage.size();
-			for (std::size_t sample = 0; sample < computation.result.samples.size(); ++sample)
+			for (std::size_t sample = 0; sample < savedSamples; ++sample)
 			{
 				for (std::size_t point = 0; point < points; ++point)
 				{
@@ -94,7 +100,7 @@ namespace SST::Prototypes::JFM
 			for (const std::string &name : computation.result.parameterNames)
 				parameters << '\t' << name;
 			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\n";
-			for (std::size_t index = 0; index < computation.result.samples.size(); ++index)
+			for (std::size_t index = 0; index < savedSamples; ++index)
 			{
 				const JFMMonteCarloSample &sample = computation.result.samples[index];
 				parameters << index;

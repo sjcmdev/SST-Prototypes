@@ -1326,6 +1326,28 @@ namespace SST::Prototypes::JFM
 		return true;
 	}
 
+	bool JFMWorkspaceStore::ClearMonteCarloResults(ProjectHandle handle, const std::vector<CharacteristicId> &ids)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return false;
+		bool changed = false;
+		for (CharacteristicId id : ids)
+		{
+			auto info = findInfoLocked(document->get(), id);
+			if (!info)
+				continue;
+			changed |= info->get().monteCarlo.has_value() || document->get().monteCarloResults.contains(id);
+			info->get().monteCarlo.reset();
+			document->get().monteCarloResults.erase(id);
+			++document->get().monteCarloGenerations[id];
+		}
+		if (changed)
+			bumpRevisionLocked(document->get());
+		return changed;
+	}
+
 	JFMGroupingDefinition JFMWorkspaceStore::AddGrouping(ProjectHandle handle, JFMGroupingDefinition grouping)
 	{
 		std::scoped_lock lock(m_Mutex);

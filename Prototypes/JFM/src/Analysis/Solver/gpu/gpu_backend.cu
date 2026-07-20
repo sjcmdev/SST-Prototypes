@@ -160,12 +160,43 @@ __device__ double evaluateChi2Serial_d(
     double chi2 = 0.0;
     for (int i = 0; i < count; ++i)
     {
-        if (sigma[i] <= 0.0)
+        (void)sigma;
+        if (!(measured[i] > 0.0) || !isfinite(measured[i]))
             return kDeviceInf;
         const double current = evaluateJFMCurrent_d(model, voltages[i], params, layout.T);
-        if (!isfinite(current))
+        if (!(current > 0.0) || !isfinite(current))
             return kDeviceInf;
-        const double residual = (measured[i] - current) / sigma[i];
+        const double residual = 1.0 - log(current) / log(measured[i]);
+        if (!isfinite(residual))
+            return kDeviceInf;
+        chi2 += residual * residual;
+    }
+    return chi2;
+}
+
+__device__ double evaluateFinalChi2Serial_d(
+    GpuModelType model,
+    const GpuParamLayout& layout,
+    const double* free_values,
+    const double* voltages,
+    const double* true_current,
+    double noise_fraction,
+    int count)
+{
+    const double kDeviceInf = __longlong_as_double(0x7FF0000000000000ULL);
+    const double noise = fmax(noise_fraction, 1.0e-30);
+    double params[GpuParamLayout::MAX_PARAMS] = {};
+    buildFullParams_d(layout, free_values, params);
+
+    double chi2 = 0.0;
+    for (int i = 0; i < count; ++i)
+    {
+        const double current = evaluateJFMCurrent_d(model, voltages[i], params, layout.T);
+        if (!(true_current[i] > 0.0) || !(current > 0.0) || !isfinite(true_current[i]) || !isfinite(current))
+            return kDeviceInf;
+        const double residual = (std::log(current) - std::log(true_current[i])) / noise;
+        if (!isfinite(residual))
+            return kDeviceInf;
         chi2 += residual * residual;
     }
     return chi2;
@@ -564,10 +595,12 @@ __global__ void simplexFullKernel(
     GpuNmConfig config,
     const double* voltages,
     const double* measured,
+    const double* reference_current,
     const double* sigma,
     int point_count,
     uint64_t start_seed,
     double start_perturbation_pct,
+    double noise_fraction,
     GpuMcResult* result)
 {
     if (threadIdx.x != 0)
@@ -593,24 +626,8 @@ __global__ void simplexFullKernel(
         const double centered = unitFromBits(bits) * 2.0 - 1.0;
         vertices[0][j] = fmin(fmax(start + centered * start_perturbation_pct * 0.01 * scale, layout.min_bounds[j]), layout.max_bounds[j]);
     }
-
-    for (int vertex = 1; vertex < n_vertices; ++vertex)
-    {
-        for (int j = 0; j < n_free; ++j)
-            vertices[vertex][j] = vertices[0][j];
-        const int dim = vertex - 1;
-        const double range = layout.max_bounds[dim] - layout.min_bounds[dim];
-        const double delta = simplexDelta_d(vertices[0][dim], range);
-        double candidate = vertices[0][dim] + delta;
-        if (candidate > layout.max_bounds[dim])
-            candidate = vertices[0][dim] - delta;
-        vertices[vertex][dim] = candidate;
-        clipToBounds_d(layout, vertices[vertex]);
-    }
-
-    for (int vertex = 0; vertex < n_vertices; ++vertex)
-        chi2[vertex] = evaluateChi2Serial_d(model, layout, vertices[vertex], voltages, measured_run, sigma, point_count);
-    const double ref_reduced_chi2 = chi2[0] / static_cast<double>(layout.dof);
+    initSimplexFromStart_d(model, layout, vertices[0], voltages, measured_run, sigma, point_count, vertices, chi2);
+    const double ref_clean_chi2 = evaluateFinalChi2Serial_d(model, layout, vertices[0], voltages, reference_current, noise_fraction, point_count);
 
     for (; iteration < config.max_iter; ++iteration)
     {
@@ -638,27 +655,10 @@ __global__ void simplexFullKernel(
         }
         if (sqrt(maxDistanceSquared) < config.degenerate_tol)
         {
-            const double bestPoint[GpuSimplexStepResult::MAX_FREE] = {
-                vertices[best][0], vertices[best][1], vertices[best][2], vertices[best][3],
-                vertices[best][4], vertices[best][5], vertices[best][6], vertices[best][7]
-            };
+            double bestPoint[GpuSimplexStepResult::MAX_FREE] = {};
             for (int j = 0; j < n_free; ++j)
-                vertices[0][j] = bestPoint[j];
-            for (int vertex = 1; vertex < n_vertices; ++vertex)
-            {
-                for (int j = 0; j < n_free; ++j)
-                    vertices[vertex][j] = bestPoint[j];
-                const int dim = vertex - 1;
-                const double range = layout.max_bounds[dim] - layout.min_bounds[dim];
-                const double delta = simplexDelta_d(bestPoint[dim], range);
-                double candidate = bestPoint[dim] + delta;
-                if (candidate > layout.max_bounds[dim])
-                    candidate = bestPoint[dim] - delta;
-                vertices[vertex][dim] = candidate;
-                clipToBounds_d(layout, vertices[vertex]);
-            }
-            for (int vertex = 0; vertex < n_vertices; ++vertex)
-                chi2[vertex] = evaluateChi2Serial_d(model, layout, vertices[vertex], voltages, measured_run, sigma, point_count);
+                bestPoint[j] = vertices[best][j];
+            initSimplexFromStart_d(model, layout, bestPoint, voltages, measured_run, sigma, point_count, vertices, chi2);
             continue;
         }
 
@@ -735,14 +735,15 @@ __global__ void simplexFullKernel(
 
     sortOrder_d(chi2, n_vertices, order);
     const int best = order[0];
+    const double final_clean_chi2 = evaluateFinalChi2Serial_d(model, layout, vertices[best], voltages, reference_current, noise_fraction, point_count);
     for (int j = 0; j < n_free; ++j)
         out->best_free_params[j] = vertices[best][j];
-    out->chi2_min = chi2[best];
-    out->reduced_chi2_min = chi2[best] / static_cast<double>(layout.dof);
-    out->ref_reduced_chi2 = ref_reduced_chi2;
-    out->delta_reduced_chi2 = out->reduced_chi2_min - ref_reduced_chi2;
+    out->chi2_min = final_clean_chi2;
+    out->reduced_chi2_min = final_clean_chi2;
+    out->ref_reduced_chi2 = ref_clean_chi2;
+    out->delta_reduced_chi2 = final_clean_chi2;
     out->iterations = iteration;
-    out->converged = out->reduced_chi2_min < config.reduced_chi2_tol ? 1 : 0;
+    out->converged = isfinite(final_clean_chi2) ? 1 : 0;
     out->n_free = n_free;
 }
 
@@ -1362,7 +1363,7 @@ GpuNumericValidationResult gpuValidateSimplexFull()
     if (error != cudaSuccess)
         goto cuda_failure;
 
-    simplexFullKernel<<<1, 32>>>(GpuModelType::Diode4P, layout, config, deviceVoltages, deviceMeasured, deviceSigma, pointCount, 42, 0.0, deviceResult);
+    simplexFullKernel<<<1, 32>>>(GpuModelType::Diode4P, layout, config, deviceVoltages, deviceMeasured, deviceMeasured, deviceSigma, pointCount, 42, 0.0, 0.05, deviceResult);
     error = cudaGetLastError();
     if (error != cudaSuccess)
         goto cuda_failure;
@@ -1746,10 +1747,12 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
         request.nm_config,
         deviceVoltages,
         deviceNoisy,
+        deviceTrueCurrent,
         deviceSigma,
         pointCount,
         static_cast<uint64_t>(request.noise_seed),
         request.start_perturbation_pct,
+        noiseFactor,
         deviceResults);
     error = cudaGetLastError();
     if (error != cudaSuccess)

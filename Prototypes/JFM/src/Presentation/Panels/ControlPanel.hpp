@@ -52,7 +52,5 @@ namespace SST::Prototypes::JFM
 		bool m_RangeUndoGroupOpen = false;
 		bool m_RangeHeldLastFrame = false;
 		std::array<float, 4> m_ColorDraft = {0.95f, 0.45f, 0.08f, 1.0f};
-		int m_CovarianceX = 0;
-		int m_CovarianceY = 1;
 	};
 } // namespace SST::Prototypes::JFM

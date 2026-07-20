@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Callable
 
 import numpy as np
-from scipy.special import lambertw, wrightomega
+from scipy.special import lambertw
 
 from .constants import thermal_voltage
 
@@ -16,7 +16,7 @@ def _diode_current(
 ) -> np.ndarray:
     vt_a = max(float(parameters["A"]) * thermal_voltage(temperature_k), 1.0e-30)
     i0 = max(abs(float(parameters["I0"])), 1.0e-300)
-    return i0 * np.expm1(np.clip(voltage / vt_a, -745.0, 700.0))
+    return i0 * np.exp(np.clip(voltage / vt_a, -745.0, 700.0))
 
 
 def _series_diode_current(
@@ -25,19 +25,12 @@ def _series_diode_current(
     vt_a = max(float(parameters["A"]) * thermal_voltage(temperature_k), 1.0e-30)
     i0 = max(abs(float(parameters["I0"])), 1.0e-300)
     rs = max(float(parameters["Rs"]), 0.0)
-    if rs <= 1.0e-30:
-        diode = _diode_current(voltage, temperature_k, parameters)
-        return diode, voltage
-
-    log_argument = np.log(i0 * rs / vt_a) + voltage / vt_a
-    principal = np.empty_like(voltage)
-    regular = log_argument <= 700.0
-    principal[regular] = np.real(
-        lambertw(np.exp(np.clip(log_argument[regular], -745.0, 700.0)))
-    )
-    principal[~regular] = np.real(wrightomega(log_argument[~regular]))
-    diode = principal * vt_a / rs
-    return diode, voltage - diode * rs
+    if rs <= 0.0:
+        return _diode_current(voltage, temperature_k, parameters), voltage
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        argument = (i0 * rs / vt_a) * np.exp(voltage / vt_a)
+        I_LW = np.real(lambertw(argument, k=0)) * vt_a / rs
+    return I_LW, voltage - I_LW * rs
 
 
 def _with_photocurrent(
@@ -76,9 +69,10 @@ def single_diode_rsh_current(
     dark: bool,
 ) -> np.ndarray:
     values = np.asarray(voltage, dtype=float)
-    current = _diode_current(values, temperature_k, parameters) + values / float(
-        parameters["Rsh"]
-    )
+    thermal = max(float(parameters["A"]) * thermal_voltage(temperature_k), 1.0e-30)
+    current = max(abs(float(parameters["I0"])), 1.0e-300) * np.exp(
+        values / thermal
+    ) + values / float(parameters["Rsh"])
     return _with_photocurrent(current, parameters, dark)
 
 
@@ -103,12 +97,8 @@ def single_diode_nonlinear_shunt_current(
     values = np.asarray(voltage, dtype=float)
     diode, internal_voltage = _series_diode_current(values, temperature_k, parameters)
     alpha = float(parameters["alpha"])
-    rounded = round(alpha)
-    nonlinear = (
-        np.power(internal_voltage, rounded)
-        if abs(alpha - rounded) < 1.0e-12
-        else np.power(np.maximum(internal_voltage, 0.0), alpha)
-    )
+    with np.errstate(invalid="ignore"):
+        nonlinear = np.power(internal_voltage, alpha)
     current = (
         diode
         + internal_voltage / float(parameters["Rsh"])

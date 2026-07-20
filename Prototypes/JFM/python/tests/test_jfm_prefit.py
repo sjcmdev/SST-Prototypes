@@ -31,7 +31,19 @@ def test_prefit_returns_every_model_parameter_and_curve() -> None:
         )
         assert set(result["parameters"]) == set(spec.parameter_names)
         assert len(result["voltage"]) == len(result["prefit_current"])
-        assert np.all(np.isfinite(result["prefit_current"]))
+        prefit_current = np.asarray(result["prefit_current"])
+        if "alpha" in spec.parameter_names:
+            lo, hi = result["fit_range"]["lo"], result["fit_range"]["hi"]
+            prefit_current = prefit_current[lo:hi]
+        assert np.all(np.isfinite(prefit_current))
+
+
+def test_cpp_adapter_returns_plain_float_prefit_curve() -> None:
+    voltage, current = _sample()
+
+    result = prefit_characteristic(voltage, current, 300.0, "SD-RsRsh")
+
+    assert all(type(value) is float for value in result["prefit_current"])
 
 
 def test_light_prefit_keeps_photocurrent_on_original_data_scale() -> None:
@@ -160,4 +172,25 @@ def test_current_models_match_documented_lambert_w_equations() -> None:
             voltage, temperature_k, "SD-RsRsh-alpha-Rsh2", nonlinear_parameters
         ),
         nonlinear_expected,
+    )
+
+
+def test_missing_resistance_terms_are_removed() -> None:
+    voltage = np.linspace(0.0, 0.3, 8)
+    temperature_k = 300.0
+    parameters = {"I0": 2.0e-9, "A": 1.6, "Rs": 1.2, "Rsh": 2.0e4}
+    avt = parameters["A"] * 8.6e-5 * temperature_k
+    no_series = parameters["I0"] * np.exp(voltage / avt)
+    argument = parameters["I0"] * parameters["Rs"] / avt * np.exp(voltage / avt)
+    with_series = np.real(lambertw(argument)) * avt / parameters["Rs"]
+
+    np.testing.assert_allclose(
+        evaluate_current(voltage, temperature_k, "SD-0", parameters), no_series
+    )
+    np.testing.assert_allclose(
+        evaluate_current(voltage, temperature_k, "SD-Rsh", parameters),
+        no_series + voltage / parameters["Rsh"],
+    )
+    np.testing.assert_allclose(
+        evaluate_current(voltage, temperature_k, "SD-Rs", parameters), with_series
     )

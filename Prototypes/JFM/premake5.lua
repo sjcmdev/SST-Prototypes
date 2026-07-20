@@ -157,6 +157,8 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/Domain/JFMTypes.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Analysis/JFMFitEngine.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Analysis/JFMFitEngine.cpp",
+		_SST_ROOT .. "/Prototypes/JFM/src/Analysis/JFMMonteCarloStatistics.hpp",
+		_SST_ROOT .. "/Prototypes/JFM/src/Analysis/JFMMonteCarloStatistics.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/App/JFMUserSettings.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/App/JFMUserSettings.cpp",
 		_SST_ROOT .. "/Prototypes/JFM/src/App/JFMProjectEditCommand.cpp",

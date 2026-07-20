@@ -145,8 +145,6 @@ namespace SST::Prototypes::JFM
 		int m_AnalysisScale = 0;
 		int m_AnalysisTreeOpenRequest = 0;
 		float m_AnalysisFitPadding = 0.08f;
-		int m_CovarianceX = 0;
-		int m_CovarianceY = 1;
 		std::string m_AnalysisOnlySeriesId;
 		JFMOperationId m_NextImportOperation = 1;
 		JFMOperationId m_ImportOperation = InvalidJFMOperationId;

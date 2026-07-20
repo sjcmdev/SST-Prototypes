@@ -478,6 +478,11 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, mcGeneration, monteCarlo, {{"I0", "A"}, {}}));
 		EXPECT_NE(store.GetFitCurve(ref), nullptr);
 		EXPECT_NE(store.GetMonteCarloResult(ref), nullptr);
+		ASSERT_TRUE(store.ClearMonteCarloResults(project, {id}));
+		EXPECT_FALSE(store.GetMonteCarloState(ref).has_value());
+		EXPECT_EQ(store.GetMonteCarloResult(ref), nullptr);
+		const std::uint64_t rerunGeneration = store.BeginMonteCarlo(ref);
+		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, rerunGeneration, monteCarlo, {{"I0", "A"}, {}}));
 
 		ASSERT_TRUE(store.SetManualFitRange(project, id, 0.0, 0.5));
 		EXPECT_FALSE(store.GetFitState(ref).has_value());

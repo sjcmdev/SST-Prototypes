@@ -53,6 +53,25 @@ namespace SST::Prototypes::JFM
 			out << YAML::Flow << YAML::BeginSeq << color[0] << color[1] << color[2] << color[3] << YAML::EndSeq;
 		}
 
+		template <std::size_t Size>
+		std::array<bool, Size> ReadFlags(const YAML::Node &node, std::array<bool, Size> fallback)
+		{
+			if (!node || !node.IsSequence() || node.size() < Size)
+				return fallback;
+			for (std::size_t index = 0; index < Size; ++index)
+				fallback[index] = node[index].as<bool>();
+			return fallback;
+		}
+
+		template <std::size_t Size>
+		void EmitFlags(YAML::Emitter &out, const std::array<bool, Size> &flags)
+		{
+			out << YAML::Flow << YAML::BeginSeq;
+			for (bool flag : flags)
+				out << flag;
+			out << YAML::EndSeq;
+		}
+
 		bool HasPreset(const std::vector<JFMColorPreset> &presets, const std::string &name)
 		{
 			return std::any_of(presets.begin(), presets.end(), [&name](const JFMColorPreset &preset) {
@@ -131,6 +150,9 @@ namespace SST::Prototypes::JFM
 			m_Settings.prefitCurveColor = ReadColor(root["prefit_curve_color"], m_Settings.prefitCurveColor);
 			m_Settings.prefitCurveLineWeight = root["prefit_curve_line_weight"] ? std::clamp(root["prefit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.prefitCurveLineWeight;
 			m_Settings.prefitCurvesFitRangeOnly = root["prefit_curves_fit_range_only"] ? root["prefit_curves_fit_range_only"].as<bool>() : m_Settings.prefitCurvesFitRangeOnly;
+			m_Settings.showFitCurves = root["show_fit_curves"] ? root["show_fit_curves"].as<bool>() : m_Settings.showFitCurves;
+			m_Settings.fitCurveColor = ReadColor(root["fit_curve_color"], m_Settings.fitCurveColor);
+			m_Settings.fitCurveLineWeight = root["fit_curve_line_weight"] ? std::clamp(root["fit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.fitCurveLineWeight;
 			m_Settings.hoveredCurveLineWeight = root["hovered_curve_line_weight"] ? std::clamp(root["hovered_curve_line_weight"].as<float>(), 0.5f, 10.0f) : m_Settings.hoveredCurveLineWeight;
 			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
 			if (const YAML::Node fit = root["fit_monte_carlo"]; fit && fit.IsMap())
@@ -143,6 +165,27 @@ namespace SST::Prototypes::JFM
 				m_Settings.fitMonteCarlo.monteCarloStartPerturbationPercent = std::clamp(ReadOr<double>(fit, "mc_start_perturbation_percent", m_Settings.fitMonteCarlo.monteCarloStartPerturbationPercent), 0.0, 1000.0);
 				m_Settings.fitMonteCarlo.monteCarloSeed = ReadOr<std::uint32_t>(fit, "mc_seed", m_Settings.fitMonteCarlo.monteCarloSeed);
 				m_Settings.fitMonteCarlo.preferGpu = ReadOr<bool>(fit, "prefer_gpu", m_Settings.fitMonteCarlo.preferGpu);
+				m_Settings.fitMonteCarlo.saveSamples = ReadOr<bool>(fit, "save_samples", m_Settings.fitMonteCarlo.saveSamples);
+				m_Settings.fitMonteCarlo.savedSampleLimit = std::max(0, ReadOr<int>(fit, "saved_sample_limit", m_Settings.fitMonteCarlo.savedSampleLimit));
+				m_Settings.fitMonteCarlo.scatterZoomOut = std::clamp(ReadOr<float>(fit, "scatter_zoom_out", m_Settings.fitMonteCarlo.scatterZoomOut), 0.0f, 1.0f);
+				m_Settings.fitMonteCarlo.showSigmaClasses = ReadFlags(fit["show_sigma_classes"], m_Settings.fitMonteCarlo.showSigmaClasses);
+				m_Settings.fitMonteCarlo.showSigmaEllipses = ReadFlags(fit["show_sigma_ellipses"], m_Settings.fitMonteCarlo.showSigmaEllipses);
+				if (const YAML::Node colors = fit["sigma_colors"]; colors && colors.IsSequence())
+				{
+					for (std::size_t index = 0; index < m_Settings.fitMonteCarlo.sigmaColors.size() && index < colors.size(); ++index)
+						m_Settings.fitMonteCarlo.sigmaColors[index] = ReadColor(colors[index], m_Settings.fitMonteCarlo.sigmaColors[index]);
+				}
+				if (const YAML::Node pairs = fit["default_parameter_pairs"]; pairs && pairs.IsSequence())
+				{
+					std::vector<JFMMonteCarloParameterPair> parsed;
+					for (const YAML::Node &pair : pairs)
+					{
+						if (pair.IsSequence() && pair.size() >= 2)
+							parsed.push_back({pair[0].as<std::string>(), pair[1].as<std::string>()});
+					}
+					if (!parsed.empty())
+						m_Settings.fitMonteCarlo.defaultParameterPairs = std::move(parsed);
+				}
 				if (const YAML::Node parameters = fit["parameters"]; parameters && parameters.IsMap())
 				{
 					for (const auto &entry : parameters)
@@ -205,6 +248,10 @@ namespace SST::Prototypes::JFM
 		EmitColor(out, snapshot.prefitCurveColor);
 		out << YAML::Key << "prefit_curve_line_weight" << YAML::Value << snapshot.prefitCurveLineWeight;
 		out << YAML::Key << "prefit_curves_fit_range_only" << YAML::Value << snapshot.prefitCurvesFitRangeOnly;
+		out << YAML::Key << "show_fit_curves" << YAML::Value << snapshot.showFitCurves;
+		out << YAML::Key << "fit_curve_color" << YAML::Value;
+		EmitColor(out, snapshot.fitCurveColor);
+		out << YAML::Key << "fit_curve_line_weight" << YAML::Value << snapshot.fitCurveLineWeight;
 		out << YAML::Key << "hovered_curve_line_weight" << YAML::Value << snapshot.hoveredCurveLineWeight;
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
 		out << YAML::Key << "fit_monte_carlo" << YAML::Value << YAML::BeginMap;
@@ -216,6 +263,21 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "mc_start_perturbation_percent" << YAML::Value << snapshot.fitMonteCarlo.monteCarloStartPerturbationPercent;
 		out << YAML::Key << "mc_seed" << YAML::Value << snapshot.fitMonteCarlo.monteCarloSeed;
 		out << YAML::Key << "prefer_gpu" << YAML::Value << snapshot.fitMonteCarlo.preferGpu;
+		out << YAML::Key << "save_samples" << YAML::Value << snapshot.fitMonteCarlo.saveSamples;
+		out << YAML::Key << "saved_sample_limit" << YAML::Value << snapshot.fitMonteCarlo.savedSampleLimit;
+		out << YAML::Key << "scatter_zoom_out" << YAML::Value << snapshot.fitMonteCarlo.scatterZoomOut;
+		out << YAML::Key << "show_sigma_classes" << YAML::Value;
+		EmitFlags(out, snapshot.fitMonteCarlo.showSigmaClasses);
+		out << YAML::Key << "show_sigma_ellipses" << YAML::Value;
+		EmitFlags(out, snapshot.fitMonteCarlo.showSigmaEllipses);
+		out << YAML::Key << "sigma_colors" << YAML::Value << YAML::BeginSeq;
+		for (const auto &color : snapshot.fitMonteCarlo.sigmaColors)
+			EmitColor(out, color);
+		out << YAML::EndSeq;
+		out << YAML::Key << "default_parameter_pairs" << YAML::Value << YAML::BeginSeq;
+		for (const JFMMonteCarloParameterPair &pair : snapshot.fitMonteCarlo.defaultParameterPairs)
+			out << YAML::Flow << YAML::BeginSeq << pair.x << pair.y << YAML::EndSeq;
+		out << YAML::EndSeq;
 		out << YAML::Key << "parameters" << YAML::Value << YAML::BeginMap;
 		for (const auto &[name, setting] : snapshot.fitMonteCarlo.parameters)
 		{
@@ -304,6 +366,17 @@ namespace SST::Prototypes::JFM
 		Save();
 	}
 
+	void JFMUserSettingsStore::SetFitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight)
+	{
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.showFitCurves = show;
+			m_Settings.fitCurveColor = color;
+			m_Settings.fitCurveLineWeight = std::clamp(lineWeight, 0.5f, 8.0f);
+		}
+		Save();
+	}
+
 	void JFMUserSettingsStore::SetAutoPlotAfterImport(bool enabled)
 	{
 		{
@@ -321,6 +394,8 @@ namespace SST::Prototypes::JFM
 		settings.monteCarloMaxIterations = std::max(1, settings.monteCarloMaxIterations);
 		settings.monteCarloNoisePercent = std::clamp(settings.monteCarloNoisePercent, 0.0, 100.0);
 		settings.monteCarloStartPerturbationPercent = std::clamp(settings.monteCarloStartPerturbationPercent, 0.0, 1000.0);
+		settings.savedSampleLimit = std::max(0, settings.savedSampleLimit);
+		settings.scatterZoomOut = std::clamp(settings.scatterZoomOut, 0.0f, 1.0f);
 		for (auto &[name, parameter] : settings.parameters)
 		{
 			(void)name;

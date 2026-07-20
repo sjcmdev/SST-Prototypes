@@ -14,6 +14,9 @@ namespace SST::Prototypes::JFM
 		PanelId rawPlot = 0;
 		PanelId details = 0;
 		PanelId control = 0;
+		PanelId monteCarloSettings = 0;
+		PanelId monteCarloScatter = 0;
+		PanelId monteCarloCurves = 0;
 	};
 
 	void RenderJFMMenu(

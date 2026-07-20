@@ -1103,6 +1103,28 @@ namespace SST::Prototypes::JFM
 								}
 							}
 						}
+						const auto fitCurve = m_Store->GetFitCurve({area.project, id});
+						if (plotSettings.showFitCurves && fitCurve)
+						{
+							const std::size_t fitCount = std::min(fitCurve->voltage.size(), fitCurve->current.size());
+							if (fitCount > 0)
+							{
+								ImPlotSpec fitSpec;
+								fitSpec.LineColor = toVec4(plotSettings.fitCurveColor);
+								fitSpec.LineWeight = area.hoveredCharacteristicId == id ? plotSettings.hoveredCurveLineWeight : plotSettings.fitCurveLineWeight;
+								fitSpec.Flags = ImPlotItemFlags_NoLegend;
+								const std::string fitLabel = "##jfm_raw_fit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
+								if (area.scale == PlotScale::Linear)
+									ImPlot::PlotLine(fitLabel.c_str(), fitCurve->voltage.data(), fitCurve->current.data(), static_cast<int>(fitCount), fitSpec);
+								else
+								{
+									std::vector<double> filteredX;
+									std::vector<double> filteredY = absolutePositive(fitCurve->current, fitCurve->voltage, filteredX);
+									if (!filteredX.empty())
+										ImPlot::PlotLine(fitLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), fitSpec);
+								}
+							}
+						}
 					}
 				}
 				RenderRangeDragLines(area, records);

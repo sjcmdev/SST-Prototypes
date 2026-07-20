@@ -179,7 +179,11 @@ namespace SST::Prototypes::JFM
 	struct JFMMonteCarloResult
 	{
 		std::vector<std::string> parameterNames;
+		int freeParameterCount = 0;
 		std::vector<JFMMonteCarloSample> samples;
+		std::vector<double> voltage;
+		std::vector<double> idealCurrent;
+		std::vector<double> noisyCurrent;
 	};
 
 	enum class JFMImportPlacement

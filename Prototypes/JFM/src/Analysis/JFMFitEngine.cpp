@@ -4,6 +4,7 @@
 
 #include "gpu/gpu_backend.hpp"
 #include "lambertw/LambertW.hpp"
+#include "solver/phys_const.hpp"
 #include "solver/nelder_mead.hpp"
 #include "solver/objective.hpp"
 
@@ -94,75 +95,57 @@ namespace SST::Prototypes::JFM
 
 		double ThermalVoltage(double temperature, const ParameterArray &parameters) noexcept
 		{
-			constexpr double BoltzmannOverCharge = 8.617333262145179e-5;
-			return parameters[A] * BoltzmannOverCharge * temperature;
+			return parameters[A] * PhysConst::k * temperature;
 		}
 
 		double DiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
 			if (!(parameters[I0] > 0.0) || !(parameters[A] > 0.0) || !(temperature > 0.0))
 				return std::numeric_limits<double>::quiet_NaN();
-			const double current = parameters[I0] * std::expm1(std::clamp(voltage / ThermalVoltage(temperature, parameters), -745.0, 700.0));
+			const double current = parameters[I0] * std::exp(std::clamp(voltage / ThermalVoltage(temperature, parameters), -745.0, 700.0));
 			return WithPhotocurrent(current, parameters, dark);
 		}
 
-		struct SeriesCurrent
-		{
-			double diode = 0.0;
-			double internalVoltage = 0.0;
-		};
-
-		SeriesCurrent EvaluateSeries(double voltage, double temperature, const ParameterArray &parameters) noexcept
+		double EvaluateSeries(double voltage, double temperature, const ParameterArray &parameters) noexcept
 		{
 			if (!(parameters[I0] > 0.0) || !(parameters[A] > 0.0) || !(parameters[Rs] >= 0.0) || !(temperature > 0.0))
-				return {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()};
-			const double thermal = ThermalVoltage(temperature, parameters);
-			if (parameters[Rs] <= 1.0e-30)
-			{
-				const double diode = parameters[I0] * std::expm1(std::clamp(voltage / thermal, -745.0, 700.0));
-				return {diode, voltage};
-			}
-			const double logArgument = std::log(parameters[I0] * parameters[Rs] / thermal) + voltage / thermal;
-			const double w = logArgument <= 700.0
-				? utl::LambertW<0>(std::exp(std::clamp(logArgument, -745.0, 700.0)))
-				: WrightOmega(logArgument);
-			if (!std::isfinite(w))
-				return {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()};
-			const double diode = w * thermal / parameters[Rs];
-			return {diode, voltage - diode * parameters[Rs]};
+				return std::numeric_limits<double>::quiet_NaN();
+			const double thermal = parameters[A] * PhysConst::k * temperature;
+			const double x = ((parameters[I0] * parameters[Rs]) / thermal) * std::exp(voltage / thermal);
+			return utl::LambertW<0>(x) * thermal / parameters[Rs];
 		}
 
 		double SeriesDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			return WithPhotocurrent(EvaluateSeries(voltage, temperature, parameters).diode, parameters, dark);
+			return WithPhotocurrent(EvaluateSeries(voltage, temperature, parameters), parameters, dark);
 		}
 
 		double ShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
 			if (!(parameters[Rsh] > 0.0))
 				return std::numeric_limits<double>::quiet_NaN();
-			const double diode = DiodeCurrent(voltage, temperature, parameters, true);
-			return WithPhotocurrent(diode + voltage / parameters[Rsh], parameters, dark);
+			const double current = parameters[I0] * std::exp(voltage / (parameters[A] * PhysConst::k * temperature))
+				+ voltage / parameters[Rsh];
+			return WithPhotocurrent(current, parameters, dark);
 		}
 
 		double SeriesShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
 			if (!(parameters[Rsh] > 0.0))
 				return std::numeric_limits<double>::quiet_NaN();
-			const SeriesCurrent series = EvaluateSeries(voltage, temperature, parameters);
-			return WithPhotocurrent(series.diode + series.internalVoltage / parameters[Rsh], parameters, dark);
+			const double diode = EvaluateSeries(voltage, temperature, parameters);
+			const double current = diode + (voltage - diode * parameters[Rs]) / parameters[Rsh];
+			return WithPhotocurrent(current, parameters, dark);
 		}
 
 		double NonlinearShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
 			if (!(parameters[Rsh] > 0.0) || !(parameters[Alpha] > 0.0) || !(parameters[Rsh2] > 0.0))
 				return std::numeric_limits<double>::quiet_NaN();
-			const SeriesCurrent series = EvaluateSeries(voltage, temperature, parameters);
-			const double rounded = std::round(parameters[Alpha]);
-			const bool integerAlpha = std::abs(parameters[Alpha] - rounded) < 1.0e-12;
-			const double base = integerAlpha ? series.internalVoltage : std::max(series.internalVoltage, 0.0);
-			const double current = series.diode + series.internalVoltage / parameters[Rsh]
-				+ std::pow(base, integerAlpha ? rounded : parameters[Alpha]) / parameters[Rsh2];
+			const double diode = EvaluateSeries(voltage, temperature, parameters);
+			const double internalVoltage = voltage - diode * parameters[Rs];
+			const double additionalFactor = std::pow(internalVoltage, parameters[Alpha]) / parameters[Rsh2];
+			const double current = diode + internalVoltage / parameters[Rsh] + additionalFactor;
 			return WithPhotocurrent(current, parameters, dark);
 		}
 
@@ -354,6 +337,37 @@ namespace SST::Prototypes::JFM
 				current[index] = Evaluate(model, voltage[index], temperature, parameters);
 			return current;
 		}
+
+		double ChiSquaredFor(const ModelSpec &model, const FitData &data, double temperature, const ParameterArray &parameters)
+		{
+			return computeChiSquared(
+				parameters.data(), data.voltage.data(), data.current.data(), data.sigma.data(), static_cast<int>(data.voltage.size()),
+				[&model, temperature](double voltage, const double *values) { return Evaluate(model, voltage, temperature, values); });
+		}
+
+		double FinalMonteCarloChiSquared(
+			const ModelSpec &model,
+			const std::vector<double> &voltage,
+			const std::vector<double> &trueCurrent,
+			double temperature,
+			const ParameterArray &parameters,
+			double noisePercent)
+		{
+			const double noise = std::max(std::clamp(noisePercent, 0.0, 100.0) / 100.0, 1.0e-30);
+			double chiSquared = 0.0;
+			const std::size_t count = std::min(voltage.size(), trueCurrent.size());
+			for (std::size_t index = 0; index < count; ++index)
+			{
+				const double fitCurrent = Evaluate(model, voltage[index], temperature, parameters);
+				if (!(trueCurrent[index] > 0.0) || !(fitCurrent > 0.0) || !std::isfinite(trueCurrent[index]) || !std::isfinite(fitCurrent))
+					return std::numeric_limits<double>::infinity();
+				const double residual = (std::log(fitCurrent) - std::log(trueCurrent[index])) / noise;
+				if (!std::isfinite(residual))
+					return std::numeric_limits<double>::infinity();
+				chiSquared += residual * residual;
+			}
+			return chiSquared;
+		}
 	} // namespace FitEngineDetail
 
 	using namespace FitEngineDetail;
@@ -437,6 +451,8 @@ namespace SST::Prototypes::JFM
 		ParameterArray prefitValues = ParametersFrom(prefit.parameters);
 		ParameterArray fitValues = ParametersFrom(fit.parameters);
 		const FreeMask freeMask = MonteCarloParameters(*model, settings);
+		JFMFitMonteCarloSettings monteCarloSolverSettings = settings;
+		monteCarloSolverSettings.fitReducedChiSquaredTolerance = -1.0;
 
 		JFMMonteCarloComputation output;
 		output.state.modelId = fit.modelId;
@@ -446,6 +462,12 @@ namespace SST::Prototypes::JFM
 		output.state.seed = settings.monteCarloSeed;
 		for (std::string_view name : model->parameters)
 			output.result.parameterNames.emplace_back(name);
+		output.result.freeParameterCount = static_cast<int>(std::count(freeMask.begin(), freeMask.end(), true));
+		auto attachCurvesToResult = [&output]() {
+			output.result.voltage = output.voltage;
+			output.result.idealCurrent = output.idealCurrent;
+			output.result.noisyCurrent = output.noisyCurrent;
+		};
 
 		const FitData source = BuildFitData(characteristic, prefit, nullptr, settings.monteCarloNoisePercent);
 		output.voltage = source.voltage;
@@ -482,7 +504,7 @@ namespace SST::Prototypes::JFM
 			}
 			request.layout.dof = std::max(1, static_cast<int>(output.voltage.size()) - request.layout.n_free);
 			request.nm_config.max_iter = settings.monteCarloMaxIterations;
-			request.nm_config.reduced_chi2_tol = settings.fitReducedChiSquaredTolerance;
+			request.nm_config.reduced_chi2_tol = monteCarloSolverSettings.fitReducedChiSquaredTolerance;
 			GpuMonteCarloOutput gpu = gpuRunMonteCarlo(request);
 			if (!gpu.success)
 				output.state.warnings.push_back(gpu.message + "; CPU fallback used.");
@@ -509,6 +531,7 @@ namespace SST::Prototypes::JFM
 					output.result.samples.push_back(std::move(sample));
 				}
 				output.state.status = "completed";
+				attachCurvesToResult();
 				return output;
 			}
 		}
@@ -548,19 +571,21 @@ namespace SST::Prototypes::JFM
 					: std::max((setting.maximum - setting.minimum) * 1.0e-12, 1.0e-15);
 				start[index] = std::clamp(start[index] + perturbation(rng) * perturbationFactor * scale, setting.minimum, setting.maximum);
 			}
-			const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, settings, settings.monteCarloMaxIterations);
+			const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations);
+			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.voltage, output.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent);
 			JFMMonteCarloSample sample;
 			for (std::string_view name : model->parameters)
 				sample.parameters.push_back(solved.parameters[IndexOf(name)]);
-			sample.chiSquared = solved.result.chi2_min;
-			sample.reducedChiSquared = solved.result.reduced_chi2_min;
+			sample.chiSquared = finalChiSquared;
+			sample.reducedChiSquared = finalChiSquared;
 			sample.iterations = solved.result.iterations;
-			sample.converged = solved.result.converged;
+			sample.converged = std::isfinite(finalChiSquared);
 			output.state.acceptedCount += sample.converged ? 1 : 0;
 			output.result.samples.push_back(std::move(sample));
 		}
 		output.state.totalMilliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
 		output.state.status = "completed";
+		attachCurvesToResult();
 		return output;
 	}
 } // namespace SST::Prototypes::JFM

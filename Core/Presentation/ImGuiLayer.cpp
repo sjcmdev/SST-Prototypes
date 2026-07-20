@@ -6,6 +6,14 @@
 
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
+#ifndef GLFW_INCLUDE_NONE
+#define GLFW_INCLUDE_NONE
+#endif
+#include <GLFW/glfw3.h>
+#if defined(GLFW_APIENTRY_DEFINED)
+#undef APIENTRY
+#undef GLFW_APIENTRY_DEFINED
+#endif
 #include <imgui.h>
 #include <implot.h>
 
@@ -111,7 +119,8 @@ namespace SST
 				return;
 
 			ImGuiStyle &style = ImGui::GetStyle();
-			style.WindowRounding = appearance.windowRounding;
+			const bool viewportsEnabled = (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0;
+			style.WindowRounding = viewportsEnabled ? 0.0f : appearance.windowRounding;
 			style.ChildRounding = appearance.windowRounding;
 			style.PopupRounding = appearance.popupRounding;
 			style.FrameRounding = appearance.frameRounding;
@@ -205,6 +214,8 @@ namespace SST
 			colors[ImGuiCol_NavWindowingHighlight] = withAlpha(white, 0.65f);
 			colors[ImGuiCol_NavWindowingDimBg] = withAlpha(black, 0.20f);
 			colors[ImGuiCol_ModalWindowDimBg] = withAlpha(black, 0.45f);
+			if (viewportsEnabled)
+				colors[ImGuiCol_WindowBg].w = 1.0f;
 		}
 	} // namespace ImGuiLayerDetail
 
@@ -311,6 +322,13 @@ namespace SST
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
+		{
+			GLFWwindow *backupContext = glfwGetCurrentContext();
+			ImGui::UpdatePlatformWindows();
+			ImGui::RenderPlatformWindowsDefault();
+			glfwMakeContextCurrent(backupContext);
+		}
 	}
 
 	void ImGuiLayer::SetBlockingError(const StructuredError &error)
@@ -334,6 +352,7 @@ namespace SST
 		ImPlot::CreateContext();
 		ImGuiIO &io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 		io.ConfigWindowsResizeFromEdges = true;
 		io.IniFilename = nullptr;
 

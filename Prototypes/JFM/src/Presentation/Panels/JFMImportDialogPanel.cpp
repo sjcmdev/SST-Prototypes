@@ -1182,8 +1182,6 @@ namespace SST::Prototypes::JFM
 			for (const std::string &warning : state.warnings)
 				ImGui::TextWrapped("MC warning: %s", warning.c_str());
 		}
-		if (Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult({project, active}); result != nullptr)
-			RenderJFMCovariancePlot(*result, m_CovarianceX, m_CovarianceY, "import_covariance");
 	}
 
 	void JFMImportDialogPanel::requestPrefit(ProjectHandle project, std::vector<CharacteristicId> ids) const
@@ -1350,8 +1348,6 @@ namespace SST::Prototypes::JFM
 		m_AnalysisScale = 0;
 		m_AnalysisTreeOpenRequest = 0;
 		m_AnalysisFitPadding = 0.08f;
-		m_CovarianceX = 0;
-		m_CovarianceY = 1;
 		m_AnalysisOnlySeriesId.clear();
 		m_ImportOperation = InvalidJFMOperationId;
 		m_StagingProject = InvalidProjectHandle;

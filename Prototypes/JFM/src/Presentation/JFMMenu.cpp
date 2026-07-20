@@ -147,6 +147,9 @@ namespace SST::Prototypes::JFM
 			panelMenuItem(editorLayer, panelIds.rawPlot, "Raw Plot");
 			panelMenuItem(editorLayer, panelIds.details, "Characteristic Details");
 			panelMenuItem(editorLayer, panelIds.control, "Control Panel");
+			panelMenuItem(editorLayer, panelIds.monteCarloSettings, "MC Settings");
+			panelMenuItem(editorLayer, panelIds.monteCarloScatter, "MC Scatter");
+			panelMenuItem(editorLayer, panelIds.monteCarloCurves, "MC Curves");
 			ImGui::Separator();
 			editorLayer.RenderCorePanelMenuItems();
 			ImGui::EndMenu();

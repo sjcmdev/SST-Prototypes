@@ -24,6 +24,13 @@ namespace SST::Prototypes::JFM
 		solverSettings.monteCarloSamples = 2048;
 		solverSettings.monteCarloNoisePercent = 2.5;
 		solverSettings.monteCarloStartPerturbationPercent = 12.0;
+		solverSettings.saveSamples = false;
+		solverSettings.savedSampleLimit = 321;
+		solverSettings.sigmaColors[2] = {0.2f, 0.3f, 0.4f, 0.9f};
+		solverSettings.showSigmaClasses = {true, false, true};
+		solverSettings.showSigmaEllipses = {false, true, false};
+		solverSettings.scatterZoomOut = 0.23f;
+		solverSettings.defaultParameterPairs = {{"Rs", "Rsh"}, {"A", "I0"}};
 		solverSettings.parameters["Rs"] = {0.01, 50.0, false};
 		store.SetFitMonteCarloSettings(std::move(solverSettings));
 		store.AddRecentProject(prototype / Path("JFM-projects") / Path("one.jfm.yaml"));
@@ -45,6 +52,14 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(settings.fitMonteCarlo.monteCarloSamples, 2048);
 		EXPECT_DOUBLE_EQ(settings.fitMonteCarlo.monteCarloNoisePercent, 2.5);
 		EXPECT_DOUBLE_EQ(settings.fitMonteCarlo.monteCarloStartPerturbationPercent, 12.0);
+		EXPECT_FALSE(settings.fitMonteCarlo.saveSamples);
+		EXPECT_EQ(settings.fitMonteCarlo.savedSampleLimit, 321);
+		EXPECT_FLOAT_EQ(settings.fitMonteCarlo.sigmaColors[2][2], 0.4f);
+		EXPECT_FALSE(settings.fitMonteCarlo.showSigmaClasses[1]);
+		EXPECT_TRUE(settings.fitMonteCarlo.showSigmaEllipses[1]);
+		EXPECT_FLOAT_EQ(settings.fitMonteCarlo.scatterZoomOut, 0.23f);
+		ASSERT_EQ(settings.fitMonteCarlo.defaultParameterPairs.size(), 2);
+		EXPECT_EQ(settings.fitMonteCarlo.defaultParameterPairs.front().x, "Rs");
 		EXPECT_FALSE(settings.fitMonteCarlo.parameters.at("Rs").monteCarloFree);
 		ASSERT_EQ(settings.recentProjects.size(), 1);
 		EXPECT_EQ(settings.recentProjects.front(), prototype / Path("JFM-projects") / Path("one.jfm.yaml"));

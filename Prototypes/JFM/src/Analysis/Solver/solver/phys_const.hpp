@@ -11,16 +11,12 @@ namespace PhysConst
     /// Ładunek elementarny [C]
     static constexpr double q = 1.602176634e-19;
 
-    /// k = k_B / q [V/K]
-    ///
-    /// UWAGA: w dostarczonych formułach modelu IV 'k' oznacza k_B/q, nie k_B.
-    /// Sprawdzenie jednostek: A * k * T = A * (k_B/q) * T = A * Vt [V] ✓
-    /// Przy T=300K: k * 300 = 8.617e-5 * 300 ≈ 0.025852 V = Vt
-    static constexpr double k = k_B / q; // ≈ 8.617333e-5 V/K
+    /// Stała modelu IV [V/K]. Musi być identyczna w Pythonie, CPU i CUDA.
+    static constexpr double k = 8.6e-5;
 
     /// Temperatura referencyjna [K]
     static constexpr double T_ref = 300.0;
 
-    /// Napięcie termiczne przy T_ref: Vt = k_B·T/q [V]
-    static constexpr double Vt_ref = k * T_ref; // ≈ 0.025852 V
+    /// Napięcie termiczne przy T_ref [V]
+    static constexpr double Vt_ref = k * T_ref;
 }
