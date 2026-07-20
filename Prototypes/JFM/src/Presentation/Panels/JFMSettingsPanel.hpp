@@ -20,6 +20,7 @@ namespace SST::Prototypes::JFM
 	private:
 		void renderPathRow(const char *label, const Path &path, void (JFMUserSettingsStore::*setter)(Path));
 		void renderPlotDefaults(JFMUserSettings settings);
+		void renderNumericSettings(JFMUserSettings settings);
 		void renderColorPresets(JFMUserSettings settings);
 
 	private:

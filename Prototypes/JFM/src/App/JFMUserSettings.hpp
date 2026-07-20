@@ -29,6 +29,8 @@ namespace SST::Prototypes::JFM
 	{
 		std::string x;
 		std::string y;
+
+		[[nodiscard]] bool operator==(const JFMMonteCarloParameterPair &) const = default;
 	};
 
 	struct JFMFitMonteCarloSettings
@@ -37,6 +39,9 @@ namespace SST::Prototypes::JFM
 		double fitReducedChiSquaredTolerance = 1.0;
 		int monteCarloSamples = 512;
 		int monteCarloMaxIterations = 1500;
+		bool autoCalibrateGpuSimplexIterations = true;
+		int simplexCalibrationRuns = 100;
+		int simplexCalibrationExtraIterations = 50;
 		double monteCarloNoisePercent = 1.0;
 		double monteCarloStartPerturbationPercent = 5.0;
 		std::uint32_t monteCarloSeed = 42;
@@ -44,13 +49,13 @@ namespace SST::Prototypes::JFM
 		bool saveSamples = true;
 		int savedSampleLimit = 0;
 		std::array<std::array<float, 4>, 3> sigmaColors = {{
-			{1.00f, 0.12f, 0.08f, 1.00f},
-			{1.00f, 0.48f, 0.06f, 1.00f},
-			{0.05f, 0.85f, 0.95f, 1.00f}}};
+			{1.00f, 0.12156863f, 0.07843137f, 1.00f},
+			{1.00f, 0.90196078f, 0.05882353f, 1.00f},
+			{0.00f, 1.00f, 0.90980392f, 1.00f}}};
 		std::array<bool, 3> showSigmaClasses = {true, true, true};
-		std::array<bool, 3> showSigmaEllipses = {true, true, true};
+		std::array<bool, 3> showSigmaEllipses = {false, false, false};
 		float scatterZoomOut = 0.08f;
-		std::vector<JFMMonteCarloParameterPair> defaultParameterPairs = {{"i0", "a"}, {"RsH", "Rs"}};
+		std::vector<JFMMonteCarloParameterPair> defaultParameterPairs = {{"A", "I0"}, {"Rs", "Rsh"}};
 		std::unordered_map<std::string, JFMParameterSolverSetting> parameters;
 	};
 

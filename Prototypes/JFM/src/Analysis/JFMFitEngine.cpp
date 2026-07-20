@@ -538,6 +538,21 @@ namespace SST::Prototypes::JFM
 			request.layout.dof = std::max(1, static_cast<int>(output.voltage.size()) - request.layout.n_free);
 			request.nm_config.max_iter = settings.monteCarloMaxIterations;
 			request.nm_config.reduced_chi2_tol = monteCarloSolverSettings.fitReducedChiSquaredTolerance;
+			if (settings.autoCalibrateGpuSimplexIterations && settings.simplexCalibrationRuns > 0)
+			{
+				GpuMonteCarloRequest calibration = request;
+				calibration.n_samples = settings.simplexCalibrationRuns;
+				GpuMonteCarloOutput calibrationOutput = gpuRunMonteCarlo(calibration);
+				if (calibrationOutput.success && !calibrationOutput.results.empty())
+				{
+					int maxIterations = 0;
+					for (const GpuMcResult &sample : calibrationOutput.results)
+						maxIterations = std::max(maxIterations, sample.iterations);
+					request.nm_config.max_iter = std::max(1, maxIterations + settings.simplexCalibrationExtraIterations);
+				}
+				else if (!calibrationOutput.message.empty())
+					output.state.warnings.push_back("GPU simplex calibration failed: " + calibrationOutput.message);
+			}
 			GpuMonteCarloOutput gpu = gpuRunMonteCarlo(request);
 			if (!gpu.success)
 				output.state.warnings.push_back(gpu.message + "; CPU fallback used.");

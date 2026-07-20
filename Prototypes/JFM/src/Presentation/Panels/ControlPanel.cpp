@@ -383,7 +383,7 @@ namespace SST::Prototypes::JFM
 			ImGui::EndCombo();
 		}
 
-		const ImVec2 actionButtonSize{104.0f, 0.0f};
+		const ImVec2 actionButtonSize{150.0f, 0.0f};
 		if (ImGui::Button("Prefit", actionButtonSize) && m_EventBus != nullptr)
 			m_EventBus->Queue(PrefitRequested{project, ids});
 		ImGui::SameLine();

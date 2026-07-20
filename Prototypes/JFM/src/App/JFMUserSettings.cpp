@@ -167,6 +167,9 @@ namespace SST::Prototypes::JFM
 				m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance = std::max(0.0, ReadOr<double>(fit, "fit_reduced_chi2_tolerance", m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance));
 				m_Settings.fitMonteCarlo.monteCarloSamples = std::max(1, ReadOr<int>(fit, "mc_samples", m_Settings.fitMonteCarlo.monteCarloSamples));
 				m_Settings.fitMonteCarlo.monteCarloMaxIterations = std::max(1, ReadOr<int>(fit, "mc_max_iterations", m_Settings.fitMonteCarlo.monteCarloMaxIterations));
+				m_Settings.fitMonteCarlo.autoCalibrateGpuSimplexIterations = ReadOr<bool>(fit, "auto_calibrate_gpu_simplex_iterations", m_Settings.fitMonteCarlo.autoCalibrateGpuSimplexIterations);
+				m_Settings.fitMonteCarlo.simplexCalibrationRuns = std::max(1, ReadOr<int>(fit, "simplex_calibration_runs", m_Settings.fitMonteCarlo.simplexCalibrationRuns));
+				m_Settings.fitMonteCarlo.simplexCalibrationExtraIterations = std::max(0, ReadOr<int>(fit, "simplex_calibration_extra_iterations", m_Settings.fitMonteCarlo.simplexCalibrationExtraIterations));
 				m_Settings.fitMonteCarlo.monteCarloNoisePercent = std::clamp(ReadOr<double>(fit, "mc_noise_percent", m_Settings.fitMonteCarlo.monteCarloNoisePercent), 0.0, 100.0);
 				m_Settings.fitMonteCarlo.monteCarloStartPerturbationPercent = std::clamp(ReadOr<double>(fit, "mc_start_perturbation_percent", m_Settings.fitMonteCarlo.monteCarloStartPerturbationPercent), 0.0, 1000.0);
 				m_Settings.fitMonteCarlo.monteCarloSeed = ReadOr<std::uint32_t>(fit, "mc_seed", m_Settings.fitMonteCarlo.monteCarloSeed);
@@ -278,6 +281,9 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "fit_reduced_chi2_tolerance" << YAML::Value << snapshot.fitMonteCarlo.fitReducedChiSquaredTolerance;
 		out << YAML::Key << "mc_samples" << YAML::Value << snapshot.fitMonteCarlo.monteCarloSamples;
 		out << YAML::Key << "mc_max_iterations" << YAML::Value << snapshot.fitMonteCarlo.monteCarloMaxIterations;
+		out << YAML::Key << "auto_calibrate_gpu_simplex_iterations" << YAML::Value << snapshot.fitMonteCarlo.autoCalibrateGpuSimplexIterations;
+		out << YAML::Key << "simplex_calibration_runs" << YAML::Value << snapshot.fitMonteCarlo.simplexCalibrationRuns;
+		out << YAML::Key << "simplex_calibration_extra_iterations" << YAML::Value << snapshot.fitMonteCarlo.simplexCalibrationExtraIterations;
 		out << YAML::Key << "mc_noise_percent" << YAML::Value << snapshot.fitMonteCarlo.monteCarloNoisePercent;
 		out << YAML::Key << "mc_start_perturbation_percent" << YAML::Value << snapshot.fitMonteCarlo.monteCarloStartPerturbationPercent;
 		out << YAML::Key << "mc_seed" << YAML::Value << snapshot.fitMonteCarlo.monteCarloSeed;
@@ -433,6 +439,8 @@ namespace SST::Prototypes::JFM
 		settings.fitReducedChiSquaredTolerance = std::max(0.0, settings.fitReducedChiSquaredTolerance);
 		settings.monteCarloSamples = std::max(1, settings.monteCarloSamples);
 		settings.monteCarloMaxIterations = std::max(1, settings.monteCarloMaxIterations);
+		settings.simplexCalibrationRuns = std::max(1, settings.simplexCalibrationRuns);
+		settings.simplexCalibrationExtraIterations = std::max(0, settings.simplexCalibrationExtraIterations);
 		settings.monteCarloNoisePercent = std::clamp(settings.monteCarloNoisePercent, 0.0, 100.0);
 		settings.monteCarloStartPerturbationPercent = std::clamp(settings.monteCarloStartPerturbationPercent, 0.0, 1000.0);
 		settings.savedSampleLimit = std::max(0, settings.savedSampleLimit);

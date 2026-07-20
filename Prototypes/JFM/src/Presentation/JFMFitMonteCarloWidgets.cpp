@@ -18,16 +18,18 @@ namespace SST::Prototypes::JFM
 	{
 		bool changed = false;
 		ImGui::PushID(id);
+		int simplexIterations = std::max(settings.fitMaxIterations, settings.monteCarloMaxIterations);
 		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputInt("Fit iterations", &settings.fitMaxIterations, 100, 1000);
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputDouble("Reduced chi2 target", &settings.fitReducedChiSquaredTolerance, 0.1, 1.0, "%.6g");
+		if (ImGui::InputInt("Simplex iterations", &simplexIterations, 100, 1000))
+		{
+			settings.fitMaxIterations = simplexIterations;
+			settings.monteCarloMaxIterations = simplexIterations;
+			changed = true;
+		}
 		ImGui::SeparatorText("Monte Carlo");
 		ImGui::SetNextItemWidth(130.0f);
 		changed |= ImGui::InputInt("N", &settings.monteCarloSamples, 64, 512);
 		changed |= ImGui::Checkbox("Save samples", &settings.saveSamples);
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputInt("Simplex iterations", &settings.monteCarloMaxIterations, 100, 1000);
 		ImGui::SetNextItemWidth(130.0f);
 		changed |= ImGui::InputDouble("Sigma (%)", &settings.monteCarloNoisePercent, 0.1, 1.0, "%.6g");
 		int seed = static_cast<int>(settings.monteCarloSeed);
@@ -86,30 +88,59 @@ namespace SST::Prototypes::JFM
 		return changed;
 	}
 
+	namespace
+	{
+		std::vector<JFMMonteCarloParameterPair> DefaultPairsForModel(std::string_view modelId)
+		{
+			if (modelId == "SD-RsRsh-alpha-Rsh2")
+				return {{"A", "I0"}, {"Rs", "Rsh"}, {"Rsh", "Rsh2"}, {"alpha", "Rsh2"}};
+			return {{"A", "I0"}, {"Rs", "Rsh"}};
+		}
+
+		bool IsKnownDefaultPairs(const std::vector<JFMMonteCarloParameterPair> &pairs)
+		{
+			return pairs == std::vector<JFMMonteCarloParameterPair>{{"A", "I0"}, {"Rs", "Rsh"}}
+				|| pairs == std::vector<JFMMonteCarloParameterPair>{{"A", "I0"}, {"Rs", "Rsh"}, {"Rsh", "Rsh2"}, {"alpha", "Rsh2"}}
+				|| pairs == std::vector<JFMMonteCarloParameterPair>{{"i0", "a"}, {"RsH", "Rs"}};
+		}
+	} // namespace
+
 	bool RenderJFMMonteCarloScatterDefaults(JFMFitMonteCarloSettings &settings, const char *id)
 	{
+		return RenderJFMMonteCarloScatterDefaults(settings, "SD-RsRsh", id);
+	}
+
+	bool RenderJFMMonteCarloScatterDefaults(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id)
+	{
 		bool changed = false;
-		static constexpr const char *labels[] = {"<= 1 sigma", "1-2 sigma", "> 2 sigma"};
-		static constexpr const char *parameters[] = {"I0", "A", "Rs", "Rsh", "alpha", "Rsh2", "I_ph"};
+		static constexpr const char *labels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
+		const auto &parameters = JFMModelParameterNames(modelId);
 		ImGui::PushID(id);
-		ImGui::SetNextItemWidth(170.0f);
-		changed |= ImGui::SliderFloat("Zoom-out", &settings.scatterZoomOut, 0.0f, 1.0f, "%.2f");
+		if (settings.defaultParameterPairs.empty() || IsKnownDefaultPairs(settings.defaultParameterPairs))
+			settings.defaultParameterPairs = DefaultPairsForModel(modelId);
 		for (std::size_t index = 0; index < settings.showSigmaClasses.size(); ++index)
 		{
 			ImGui::PushID(static_cast<int>(index));
 			changed |= ImGui::Checkbox(labels[index], &settings.showSigmaClasses[index]);
 			ImGui::SameLine();
 			changed |= ImGui::ColorEdit4("##color", settings.sigmaColors[index].data(), ImGuiColorEditFlags_NoInputs);
+			ImGui::SameLine();
 			ImGui::PopID();
 		}
-		for (std::size_t index = 0; index < settings.showSigmaEllipses.size(); ++index)
-		{
-			ImGui::PushID(static_cast<int>(index));
-			const std::string label = "Ellipse " + std::to_string(index + 1) + " sigma";
-			changed |= ImGui::Checkbox(label.c_str(), &settings.showSigmaEllipses[index]);
-			ImGui::PopID();
-		}
+		ImGui::SetNextItemWidth(170.0f);
+		changed |= ImGui::SliderFloat("Zoom-out", &settings.scatterZoomOut, 0.0f, 1.0f, "%.2f");
 		ImGui::SeparatorText("Default parameter pairs");
+		if (ImGui::Button("Add pair"))
+		{
+			settings.defaultParameterPairs.push_back({"A", "I0"});
+			changed = true;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Model defaults"))
+		{
+			settings.defaultParameterPairs = DefaultPairsForModel(modelId);
+			changed = true;
+		}
 		std::optional<std::size_t> removePair;
 		for (std::size_t index = 0; index < settings.defaultParameterPairs.size(); ++index)
 		{
@@ -118,8 +149,8 @@ namespace SST::Prototypes::JFM
 			ImGui::SetNextItemWidth(100.0f);
 			if (ImGui::BeginCombo("##x", pair.x.c_str()))
 			{
-				for (const char *parameter : parameters)
-					if (ImGui::Selectable(parameter, pair.x == parameter))
+				for (std::string_view parameter : parameters)
+					if (ImGui::Selectable(std::string(parameter).c_str(), pair.x == parameter))
 					{
 						pair.x = parameter;
 						changed = true;
@@ -132,8 +163,8 @@ namespace SST::Prototypes::JFM
 			ImGui::SetNextItemWidth(100.0f);
 			if (ImGui::BeginCombo("##y", pair.y.c_str()))
 			{
-				for (const char *parameter : parameters)
-					if (ImGui::Selectable(parameter, pair.y == parameter))
+				for (std::string_view parameter : parameters)
+					if (ImGui::Selectable(std::string(parameter).c_str(), pair.y == parameter))
 					{
 						pair.y = parameter;
 						changed = true;
@@ -148,11 +179,6 @@ namespace SST::Prototypes::JFM
 		if (removePair)
 		{
 			settings.defaultParameterPairs.erase(settings.defaultParameterPairs.begin() + static_cast<std::ptrdiff_t>(*removePair));
-			changed = true;
-		}
-		if (ImGui::Button("Add pair"))
-		{
-			settings.defaultParameterPairs.push_back({"A", "I0"});
 			changed = true;
 		}
 		ImGui::PopID();
@@ -208,7 +234,7 @@ namespace SST::Prototypes::JFM
 		ImGui::SetNextItemWidth(120.0f);
 		changed |= ImGui::SliderFloat("Zoom-out", &options.zoomOut, 0.0f, 1.0f, "%.2f");
 
-		static constexpr const char *classLabels[] = {"<= 1 sigma", "1-2 sigma", "> 2 sigma"};
+		static constexpr const char *classLabels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
 		for (std::size_t index = 0; index < options.showSigmaClasses.size(); ++index)
 		{
 			ImGui::PushID(static_cast<int>(index));
@@ -219,15 +245,6 @@ namespace SST::Prototypes::JFM
 			ImGui::PopID();
 		}
 		ImGui::NewLine();
-		for (std::size_t index = 0; index < options.showSigmaEllipses.size(); ++index)
-		{
-			ImGui::PushID(static_cast<int>(index));
-			const std::string label = std::to_string(index + 1) + " sigma ellipse";
-			changed |= ImGui::Checkbox(label.c_str(), &options.showSigmaEllipses[index]);
-			if (index + 1 < options.showSigmaEllipses.size())
-				ImGui::SameLine();
-			ImGui::PopID();
-		}
 
 		const auto statistics = CalculateJFMMonteCarloScatterStatistics(result, options.xParameter, options.yParameter);
 		if (!statistics)
@@ -292,33 +309,6 @@ namespace SST::Prototypes::JFM
 					options.sigmaColors[sigmaClass][2], options.sigmaColors[sigmaClass][3]);
 				points.MarkerFillColor = points.LineColor;
 				ImPlot::PlotScatter(classLabels[sigmaClass], x[sigmaClass].data(), y[sigmaClass].data(), static_cast<int>(x[sigmaClass].size()), points);
-			}
-			const double cosAngle = std::cos(statistics->eigenvectorAngle);
-			const double sinAngle = std::sin(statistics->eigenvectorAngle);
-			for (int level = 2; level >= 0; --level)
-			{
-				if (!options.showSigmaEllipses[level])
-					continue;
-				std::array<double, 129> ellipseX{};
-				std::array<double, 129> ellipseY{};
-				const double sigma = static_cast<double>(level + 1);
-				const double radius1 = sigma * std::sqrt(statistics->eigenvalueMajor);
-				const double radius2 = sigma * std::sqrt(statistics->eigenvalueMinor);
-				for (std::size_t point = 0; point < ellipseX.size(); ++point)
-				{
-					const double phase = 2.0 * 3.14159265358979323846 * static_cast<double>(point) / static_cast<double>(ellipseX.size() - 1);
-					const double ex = radius1 * std::cos(phase);
-					const double ey = radius2 * std::sin(phase);
-					ellipseX[point] = statistics->meanX + ex * cosAngle - ey * sinAngle;
-					ellipseY[point] = statistics->meanY + ex * sinAngle + ey * cosAngle;
-				}
-				ImPlotSpec line;
-				line.LineColor = ImVec4(
-					options.sigmaColors[level][0], options.sigmaColors[level][1],
-					options.sigmaColors[level][2], options.sigmaColors[level][3]);
-				line.LineWeight = 2.0f;
-				const std::string label = std::to_string(level + 1) + " sigma ellipse";
-				ImPlot::PlotLine(label.c_str(), ellipseX.data(), ellipseY.data(), static_cast<int>(ellipseX.size()), line);
 			}
 			ImPlot::EndPlot();
 		}

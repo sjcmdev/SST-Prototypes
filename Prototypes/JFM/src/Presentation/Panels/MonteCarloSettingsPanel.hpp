@@ -22,7 +22,7 @@ namespace SST::Prototypes::JFM
 			Ref<EventBus> eventBus,
 			WeakRef<CommandRegistry> commandRegistry,
 			std::string title = "MC Settings",
-			bool visibleByDefault = false);
+			bool visibleByDefault = true);
 
 		[[nodiscard]] Ref<IPanel> Clone() const override;
 		void Render() override;
@@ -30,6 +30,7 @@ namespace SST::Prototypes::JFM
 	private:
 		void Execute(const char *commandId, CommandContext context = {}) const;
 		void ApplyDraft();
+		void RunMonteCarlo(ProjectHandle project, const std::vector<CharacteristicId> &ids);
 
 		Ref<JFMWorkspaceStore> m_Store;
 		Ref<JFMUserSettingsStore> m_Settings;
@@ -37,6 +38,7 @@ namespace SST::Prototypes::JFM
 		WeakRef<CommandRegistry> m_CommandRegistry;
 		JFMFitMonteCarloSettings m_Draft;
 		bool m_DraftInitialized = false;
+		bool m_BulkMode = false;
 		std::string m_Status;
 	};
 } // namespace SST::Prototypes::JFM

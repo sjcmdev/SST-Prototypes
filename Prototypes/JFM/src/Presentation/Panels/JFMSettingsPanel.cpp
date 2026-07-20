@@ -52,6 +52,7 @@ namespace SST::Prototypes::JFM
 		renderPathRow("Projects directory", settings.defaultProjectsDirectory, &JFMUserSettingsStore::SetDefaultProjectsDirectory);
 		renderPathRow("Scripts directory", settings.defaultScriptsDirectory, &JFMUserSettingsStore::SetDefaultScriptsDirectory);
 		renderPlotDefaults(settings);
+		renderNumericSettings(settings);
 		renderColorPresets(settings);
 	}
 
@@ -109,6 +110,22 @@ namespace SST::Prototypes::JFM
 		const bool hoverWeightCommitted = ImGui::IsItemDeactivatedAfterEdit();
 		if (prefitChanged || prefitWeightCommitted || hoverWeightCommitted)
 			m_Settings->SetPrefitCurveDefaults(m_ShowPrefitCurves, m_PrefitCurveColor, m_PrefitCurveLineWeight, m_PrefitCurvesFitRangeOnly, m_HoveredCurveLineWeight);
+	}
+
+	void JFMSettingsPanel::renderNumericSettings(JFMUserSettings settings)
+	{
+		ImGui::SeparatorText("JFM Numeric");
+		JFMFitMonteCarloSettings solver = settings.fitMonteCarlo;
+		bool changed = false;
+		ImGui::SetNextItemWidth(130.0f);
+		changed |= ImGui::InputDouble("Reduced chi2 target", &solver.fitReducedChiSquaredTolerance, 0.1, 1.0, "%.6g");
+		changed |= ImGui::Checkbox("Auto-calibrate GPU simplex iterations", &solver.autoCalibrateGpuSimplexIterations);
+		ImGui::SetNextItemWidth(130.0f);
+		changed |= ImGui::InputInt("Simplex calibration runs", &solver.simplexCalibrationRuns, 10, 100);
+		ImGui::SetNextItemWidth(130.0f);
+		changed |= ImGui::InputInt("Simplex calibration margin", &solver.simplexCalibrationExtraIterations, 10, 50);
+		if (changed)
+			m_Settings->SetFitMonteCarloSettings(std::move(solver));
 	}
 
 	void JFMSettingsPanel::renderColorPresets(JFMUserSettings settings)
