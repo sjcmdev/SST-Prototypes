@@ -34,12 +34,14 @@ namespace SST::Prototypes::JFM
 	private:
 		void Execute(const char *commandId, CommandContext context = {}) const;
 		void FinishRangeUndoGroup(bool cancel = false);
+		void FinishTunedUndoGroup(bool cancel = false);
 		void RenderModelControls(ProjectHandle project, const std::vector<CharacteristicId> &ids);
 		void RenderPrefitDisplayControls();
 		void RenderColorControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo);
 		void RenderRangeControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicRecord &activeRecord);
 		void RenderSolverControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo);
-		void RenderParameterTable(const JFMCharacteristicInfo &activeInfo) const;
+		void RenderTunedControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo);
+		void RenderParameterTable(ProjectHandle project, const JFMCharacteristicInfo &activeInfo);
 
 		Ref<JFMWorkspaceStore> m_Store;
 		Ref<JFMUserSettingsStore> m_Settings;
@@ -51,6 +53,12 @@ namespace SST::Prototypes::JFM
 		int m_UpperIndex = 0;
 		bool m_RangeUndoGroupOpen = false;
 		bool m_RangeHeldLastFrame = false;
+		bool m_TunedUndoGroupOpen = false;
+		bool m_TunedHeldLastFrame = false;
+		bool m_AutoFixDuringTuning = true;
+		std::string m_TunedAutoFixedParameter;
+		bool m_TunedAutoFixedWasFree = false;
+		bool m_HidePrefitParameters = false;
 		std::array<float, 4> m_ColorDraft = {0.95f, 0.45f, 0.08f, 1.0f};
 	};
 } // namespace SST::Prototypes::JFM

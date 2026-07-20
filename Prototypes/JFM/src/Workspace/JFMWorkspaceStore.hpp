@@ -119,6 +119,7 @@ namespace SST::Prototypes::JFM
 		bool SetCharacteristicShortName(const CharacteristicId &id, std::string shortName);
 		bool SetCharacteristicShortName(ProjectHandle handle, const CharacteristicId &id, std::string shortName);
 		bool SetCharacteristicPlotColor(ProjectHandle handle, const std::vector<CharacteristicId> &ids, std::string color);
+		bool SetCharacteristicMetadata(ProjectHandle handle, const std::vector<CharacteristicId> &ids, std::string key, std::string value);
 		bool SetPrefitModel(ProjectHandle handle, const std::vector<CharacteristicId> &ids, const std::string &modelId);
 		bool SetManualFitRange(ProjectHandle handle, CharacteristicId id, double lowerVoltage, double upperVoltage);
 		bool ResetFitRange(ProjectHandle handle, CharacteristicId id);

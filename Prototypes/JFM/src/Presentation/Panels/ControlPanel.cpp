@@ -7,10 +7,14 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Domain/JFMPrefitModels.hpp"
 #include "Events/JFMEvents.hpp"
+#include "Analysis/JFMFitEngine.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <imgui.h>
+#include <sstream>
 
 namespace SST::Prototypes::JFM
 {
@@ -34,6 +38,53 @@ namespace SST::Prototypes::JFM
 			return buffer;
 		}
 
+		std::optional<double> metadataDouble(const JFMCharacteristicInfo &info, const std::string &key)
+		{
+			const auto found = info.metadata.find(key);
+			if (found == info.metadata.end())
+				return std::nullopt;
+			char *end = nullptr;
+			const double value = std::strtod(found->second.c_str(), &end);
+			return end != found->second.c_str() && std::isfinite(value) ? std::optional<double>{value} : std::nullopt;
+		}
+
+		std::string formatDouble(double value)
+		{
+			char buffer[96]{};
+			std::snprintf(buffer, sizeof(buffer), "%.17g", value);
+			return buffer;
+		}
+
+		double parameterValue(const JFMCharacteristicInfo &info, std::string_view name)
+		{
+			const std::string key = "tuned." + std::string(name);
+			if (const std::optional<double> tuned = metadataDouble(info, key))
+				return *tuned;
+			if (info.fit)
+			{
+				if (const auto found = info.fit->parameters.find(std::string(name)); found != info.fit->parameters.end())
+					return found->second.value;
+			}
+			if (info.prefit)
+			{
+				if (const auto found = info.prefit->parameters.find(std::string(name)); found != info.prefit->parameters.end())
+					return found->second.value;
+			}
+			return 0.0;
+		}
+
+		void decomposeScientific(double value, float &mantissa, int &exponent)
+		{
+			if (value == 0.0 || !std::isfinite(value))
+			{
+				mantissa = 0.0f;
+				exponent = 0;
+				return;
+			}
+			exponent = static_cast<int>(std::floor(std::log10(std::abs(value))));
+			mantissa = static_cast<float>(value / std::pow(10.0, exponent));
+		}
+
 		int indexForVoltage(const std::vector<double> &voltage, double value)
 		{
 			if (voltage.empty())
@@ -42,6 +93,60 @@ namespace SST::Prototypes::JFM
 			if (it == voltage.end())
 				return static_cast<int>(voltage.size() - 1);
 			return static_cast<int>(std::distance(voltage.begin(), it));
+		}
+
+		bool curveSettingsRow(
+			const char *label,
+			bool &show,
+			bool &rangeOnly,
+			std::array<float, 4> &color,
+			float &lineWeight)
+		{
+			ImGui::PushID(label);
+			bool changed = false;
+			ImGui::TableNextRow();
+			ImGui::TableSetColumnIndex(0);
+			ImGui::TextUnformatted(label);
+			ImGui::TableSetColumnIndex(1);
+			changed |= ImGui::Checkbox("##show", &show);
+			ImGui::TableSetColumnIndex(2);
+			changed |= ImGui::Checkbox("##range", &rangeOnly);
+			ImGui::TableSetColumnIndex(3);
+			changed |= ImGui::ColorEdit4("##color", color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+			ImGui::TableSetColumnIndex(4);
+			ImGui::SetNextItemWidth(-1.0f);
+			changed |= ImGui::SliderFloat("##thickness", &lineWeight, 0.5f, 8.0f, "%.1f");
+			ImGui::PopID();
+			return changed;
+		}
+
+		std::optional<double> monteCarloStdError(const JFMMonteCarloResult &result, const std::string &name)
+		{
+			const auto parameter = std::find(result.parameterNames.begin(), result.parameterNames.end(), name);
+			if (parameter == result.parameterNames.end())
+				return std::nullopt;
+			const std::size_t index = static_cast<std::size_t>(std::distance(result.parameterNames.begin(), parameter));
+			double sum = 0.0;
+			int count = 0;
+			for (const JFMMonteCarloSample &sample : result.samples)
+			{
+				if (!sample.converged || index >= sample.parameters.size() || !std::isfinite(sample.parameters[index]))
+					continue;
+				sum += sample.parameters[index];
+				++count;
+			}
+			if (count < 2)
+				return std::nullopt;
+			const double mean = sum / static_cast<double>(count);
+			double variance = 0.0;
+			for (const JFMMonteCarloSample &sample : result.samples)
+			{
+				if (!sample.converged || index >= sample.parameters.size() || !std::isfinite(sample.parameters[index]))
+					continue;
+				const double delta = sample.parameters[index] - mean;
+				variance += delta * delta;
+			}
+			return std::sqrt(variance / static_cast<double>(count - 1));
 		}
 	} // namespace ControlPanelDetail
 	using namespace ControlPanelDetail;
@@ -92,6 +197,30 @@ namespace SST::Prototypes::JFM
 		m_RangeHeldLastFrame = false;
 	}
 
+	void ControlPanel::FinishTunedUndoGroup(bool cancel)
+	{
+		if (m_TunedUndoGroupOpen)
+		{
+			if (auto undoStack = m_UndoStack.lock())
+			{
+				if (cancel)
+					(void)undoStack->CancelGroup();
+				else
+					(void)undoStack->EndGroup();
+			}
+		}
+		if (!m_TunedAutoFixedParameter.empty() && m_Settings != nullptr && m_TunedAutoFixedWasFree)
+		{
+			JFMUserSettings settings = m_Settings->GetSnapshot();
+			settings.fitMonteCarlo.parameters[m_TunedAutoFixedParameter].monteCarloFree = true;
+			m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
+		}
+		m_TunedUndoGroupOpen = false;
+		m_TunedHeldLastFrame = false;
+		m_TunedAutoFixedParameter.clear();
+		m_TunedAutoFixedWasFree = false;
+	}
+
 	void ControlPanel::Render()
 	{
 		if (!IsVisible())
@@ -101,6 +230,7 @@ namespace SST::Prototypes::JFM
 		if (!ImGui::Begin(GetTitle().c_str(), &visible))
 		{
 			FinishRangeUndoGroup();
+			FinishTunedUndoGroup();
 			ImGui::End();
 			SetVisible(visible);
 			return;
@@ -113,6 +243,7 @@ namespace SST::Prototypes::JFM
 			if (undo || redo)
 			{
 				FinishRangeUndoGroup();
+				FinishTunedUndoGroup();
 				if (auto registry = m_CommandRegistry.lock())
 					(void)registry->Execute(CommandID{redo ? "edit.redo" : "edit.undo"});
 			}
@@ -120,6 +251,7 @@ namespace SST::Prototypes::JFM
 
 		if (m_Store == nullptr)
 		{
+			FinishTunedUndoGroup();
 			ImGui::TextDisabled("Workspace unavailable");
 			ImGui::End();
 			SetVisible(visible);
@@ -132,6 +264,7 @@ namespace SST::Prototypes::JFM
 		if (ids.empty() || !activeRecord)
 		{
 			FinishRangeUndoGroup();
+			FinishTunedUndoGroup();
 			ImGui::TextDisabled("No characteristic selected");
 			ImGui::End();
 			SetVisible(visible);
@@ -143,8 +276,9 @@ namespace SST::Prototypes::JFM
 		RenderPrefitDisplayControls();
 		RenderColorControls(project, ids, activeRecord->info);
 		RenderRangeControls(project, ids, *activeRecord);
+		RenderTunedControls(project, ids, activeRecord->info);
 		RenderSolverControls(project, ids, activeRecord->info);
-		RenderParameterTable(activeRecord->info);
+		RenderParameterTable(project, activeRecord->info);
 
 		ImGui::End();
 		SetVisible(visible);
@@ -189,29 +323,54 @@ namespace SST::Prototypes::JFM
 
 	void ControlPanel::RenderSolverControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo)
 	{
-		ImGui::SeparatorText("Fit & Monte Carlo");
-		if (ImGui::Button("Run Monte Carlo") && m_EventBus != nullptr)
-			m_EventBus->Queue(MonteCarloRequested{project, ids});
+		ImGui::SeparatorText("Fit");
+		if (m_Settings != nullptr)
+		{
+			JFMUserSettings settings = m_Settings->GetSnapshot();
+			ImGui::SetNextItemWidth(120.0f);
+			if (ImGui::InputInt("Simplex iterations", &settings.fitMonteCarlo.fitMaxIterations, 100, 1000)
+				&& settings.fitMonteCarlo.fitMaxIterations > 0)
+				m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
+
+			const std::string model = activeInfo.fit ? activeInfo.fit->modelId : activeInfo.prefit ? activeInfo.prefit->modelId : "SD-RsRsh";
+			const auto &names = JFMModelParameterNames(model);
+			if (!names.empty() && ImGui::BeginTable("##jfm_control_solver_params", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn("Parameter");
+				ImGui::TableSetupColumn("Optimize", ImGuiTableColumnFlags_WidthFixed, 76.0f);
+				ImGui::TableSetupColumn("Minimum");
+				ImGui::TableSetupColumn("Maximum");
+				ImGui::TableHeadersRow();
+				bool changed = false;
+				for (std::string_view nameView : names)
+				{
+					const std::string name(nameView);
+					JFMParameterSolverSetting &parameter = settings.fitMonteCarlo.parameters[name];
+					ImGui::PushID(name.c_str());
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::TextUnformatted(name.c_str());
+					ImGui::TableSetColumnIndex(1);
+					changed |= ImGui::Checkbox("##free", &parameter.monteCarloFree);
+					ImGui::TableSetColumnIndex(2);
+					ImGui::SetNextItemWidth(-1.0f);
+					changed |= ImGui::InputDouble("##min", &parameter.minimum, 0.0, 0.0, "%.6g");
+					ImGui::TableSetColumnIndex(3);
+					ImGui::SetNextItemWidth(-1.0f);
+					changed |= ImGui::InputDouble("##max", &parameter.maximum, 0.0, 0.0, "%.6g");
+					ImGui::PopID();
+				}
+				ImGui::EndTable();
+				if (changed)
+					m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
+			}
+		}
 
 		if (activeInfo.fit)
 		{
-			ImGui::SameLine();
 			ImGui::Text("Fit: %s, reduced chi2 %.6g", activeInfo.fit->status.c_str(), activeInfo.fit->reducedChiSquared);
 			for (const std::string &warning : activeInfo.fit->warnings)
 				ImGui::TextWrapped("Fit warning: %s", warning.c_str());
-		}
-		if (activeInfo.monteCarlo)
-		{
-			ImGui::Text("MC: %s, %d/%d converged, %s, %.3f ms",
-				activeInfo.monteCarlo->status.c_str(),
-				activeInfo.monteCarlo->acceptedCount,
-				activeInfo.monteCarlo->sampleCount,
-				activeInfo.monteCarlo->backend.c_str(),
-				activeInfo.monteCarlo->totalMilliseconds);
-			if (!activeInfo.monteCarlo->outputPath.Empty())
-				ImGui::TextWrapped("Output: %s", activeInfo.monteCarlo->outputPath.String().c_str());
-			for (const std::string &warning : activeInfo.monteCarlo->warnings)
-				ImGui::TextWrapped("MC warning: %s", warning.c_str());
 		}
 	}
 
@@ -220,13 +379,39 @@ namespace SST::Prototypes::JFM
 		if (m_Settings == nullptr)
 			return;
 		JFMUserSettings settings = m_Settings->GetSnapshot();
+		ImGui::SeparatorText("Curve overlays");
+		if (ImGui::BeginTable("##jfm_overlay_settings", 5, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Curve");
+			ImGui::TableSetupColumn("Show", ImGuiTableColumnFlags_WidthFixed, 52.0f);
+			ImGui::TableSetupColumn("Range only", ImGuiTableColumnFlags_WidthFixed, 86.0f);
+			ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthFixed, 58.0f);
+			ImGui::TableSetupColumn("Thickness");
+			ImGui::TableHeadersRow();
+			const bool prefitChanged = curveSettingsRow("Prefit", settings.showPrefitCurves, settings.prefitCurvesFitRangeOnly, settings.prefitCurveColor, settings.prefitCurveLineWeight);
+			const bool fitChanged = curveSettingsRow("Fit", settings.showFitCurves, settings.fitCurvesFitRangeOnly, settings.fitCurveColor, settings.fitCurveLineWeight);
+			const bool tunedChanged = curveSettingsRow("Tuned", settings.showTunedCurves, settings.tunedCurvesFitRangeOnly, settings.tunedCurveColor, settings.tunedCurveLineWeight);
+			ImGui::EndTable();
+			if (prefitChanged)
+				m_Settings->SetPrefitCurveDefaults(
+					settings.showPrefitCurves,
+					settings.prefitCurveColor,
+					settings.prefitCurveLineWeight,
+					settings.prefitCurvesFitRangeOnly,
+					settings.hoveredCurveLineWeight);
+			if (fitChanged)
+				m_Settings->SetFitCurveDefaults(settings.showFitCurves, settings.fitCurveColor, settings.fitCurveLineWeight, settings.fitCurvesFitRangeOnly);
+			if (tunedChanged)
+				m_Settings->SetTunedCurveDefaults(settings.showTunedCurves, settings.tunedCurveColor, settings.tunedCurveLineWeight, settings.tunedCurvesFitRangeOnly);
+		}
+
+		bool autoPrefitFit = settings.autoPrefitFitOnRangeChange;
+		if (ImGui::Checkbox("Auto prefit + fit after range change", &autoPrefitFit))
+			m_Settings->SetAutoPrefitFitOnRangeChange(autoPrefitFit);
+
 		bool changed = false;
-		changed |= ImGui::Checkbox("Show prefit", &settings.showPrefitCurves);
-		ImGui::SameLine();
-		changed |= ImGui::ColorEdit4("Prefit color", settings.prefitCurveColor.data(), ImGuiColorEditFlags_NoInputs);
-		changed |= ImGui::Checkbox("Fit range only", &settings.prefitCurvesFitRangeOnly);
 		ImGui::SetNextItemWidth(160.0f);
-		changed |= ImGui::SliderFloat("Prefit thickness", &settings.prefitCurveLineWeight, 0.5f, 8.0f, "%.1f");
+		changed |= ImGui::SliderFloat("Hovered curve thickness", &settings.hoveredCurveLineWeight, 0.5f, 10.0f, "%.1f");
 		if (changed)
 		{
 			m_Settings->SetPrefitCurveDefaults(
@@ -236,15 +421,6 @@ namespace SST::Prototypes::JFM
 				settings.prefitCurvesFitRangeOnly,
 				settings.hoveredCurveLineWeight);
 		}
-
-		bool fitChanged = false;
-		fitChanged |= ImGui::Checkbox("Show fit", &settings.showFitCurves);
-		ImGui::SameLine();
-		fitChanged |= ImGui::ColorEdit4("Fit color", settings.fitCurveColor.data(), ImGuiColorEditFlags_NoInputs);
-		ImGui::SetNextItemWidth(160.0f);
-		fitChanged |= ImGui::SliderFloat("Fit thickness", &settings.fitCurveLineWeight, 0.5f, 8.0f, "%.1f");
-		if (fitChanged)
-			m_Settings->SetFitCurveDefaults(settings.showFitCurves, settings.fitCurveColor, settings.fitCurveLineWeight);
 	}
 
 	void ControlPanel::RenderColorControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo)
@@ -337,6 +513,8 @@ namespace SST::Prototypes::JFM
 			context.Set("lower_voltage", voltage[m_LowerIndex]);
 			context.Set("upper_voltage", voltage[m_UpperIndex]);
 			Execute(JFMSetFitRangeCommandId, std::move(context));
+			if (m_EventBus != nullptr && m_Settings != nullptr && m_Settings->GetSnapshot().autoPrefitFitOnRangeChange)
+				m_EventBus->Queue(FitRequested{project, ids});
 		}
 
 		if (m_RangeUndoGroupOpen && !held && (m_RangeHeldLastFrame || changed))
@@ -350,12 +528,118 @@ namespace SST::Prototypes::JFM
 			context.Set("project", project);
 			context.Set("characteristic_ids", ids);
 			Execute(JFMResetFitRangeCommandId, std::move(context));
+			if (m_EventBus != nullptr && m_Settings != nullptr && m_Settings->GetSnapshot().autoPrefitFitOnRangeChange)
+				m_EventBus->Queue(FitRequested{project, ids});
 		}
 	}
 
-	void ControlPanel::RenderParameterTable(const JFMCharacteristicInfo &activeInfo) const
+	void ControlPanel::RenderTunedControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo)
+	{
+		const std::string model = activeInfo.fit ? activeInfo.fit->modelId : activeInfo.prefit ? activeInfo.prefit->modelId : std::string{};
+		if (model.empty())
+		{
+			FinishTunedUndoGroup();
+			return;
+		}
+		const auto &names = JFMModelParameterNames(model);
+		if (names.empty())
+		{
+			FinishTunedUndoGroup();
+			return;
+		}
+
+		ImGui::SeparatorText("Tuned");
+		ImGui::Checkbox("Fix edited parameter while tuning", &m_AutoFixDuringTuning);
+		bool anyHeld = false;
+		bool settingsChanged = false;
+		JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
+
+		if (ImGui::BeginTable("##jfm_control_tuned_params", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Parameter");
+			ImGui::TableSetupColumn("Fix", ImGuiTableColumnFlags_WidthFixed, 44.0f);
+			ImGui::TableSetupColumn("Mantissa");
+			ImGui::TableSetupColumn("Exponent", ImGuiTableColumnFlags_WidthFixed, 104.0f);
+			ImGui::TableSetupColumn("Value");
+			ImGui::TableHeadersRow();
+			for (std::string_view nameView : names)
+			{
+				const std::string name(nameView);
+				JFMParameterSolverSetting &parameter = settings.fitMonteCarlo.parameters[name];
+				bool fixed = !parameter.monteCarloFree;
+				double value = parameterValue(activeInfo, nameView);
+				float mantissa = 0.0f;
+				int exponent = 0;
+				decomposeScientific(value, mantissa, exponent);
+
+				ImGui::PushID(name.c_str());
+				ImGui::TableNextRow();
+				ImGui::TableSetColumnIndex(0);
+				ImGui::TextUnformatted(name.c_str());
+				ImGui::TableSetColumnIndex(1);
+				if (ImGui::Checkbox("##fix", &fixed))
+				{
+					parameter.monteCarloFree = !fixed;
+					settingsChanged = true;
+				}
+				ImGui::TableSetColumnIndex(2);
+				ImGui::SetNextItemWidth(-1.0f);
+				const bool mantissaChanged = ImGui::SliderFloat("##mantissa", &mantissa, -9.999f, 9.999f, "%.6g");
+				const bool mantissaActive = ImGui::IsItemActive();
+				ImGui::TableSetColumnIndex(3);
+				ImGui::SetNextItemWidth(-1.0f);
+				const bool exponentChanged = ImGui::SliderInt("##exponent", &exponent, -300, 300);
+				const bool exponentActive = ImGui::IsItemActive();
+				ImGui::TableSetColumnIndex(4);
+				const double tunedValue = static_cast<double>(mantissa) * std::pow(10.0, exponent);
+				ImGui::Text("%.8g", tunedValue);
+				const bool active = mantissaActive || exponentActive;
+				anyHeld = anyHeld || active;
+				if ((mantissaChanged || exponentChanged) && std::isfinite(tunedValue))
+				{
+					if (!m_TunedUndoGroupOpen)
+					{
+						if (auto undoStack = m_UndoStack.lock())
+							m_TunedUndoGroupOpen = undoStack->BeginGroup("Tune parameter");
+					}
+					if (m_AutoFixDuringTuning && active && m_Settings != nullptr)
+					{
+						if (m_TunedAutoFixedParameter.empty())
+						{
+							m_TunedAutoFixedParameter = name;
+							m_TunedAutoFixedWasFree = parameter.monteCarloFree;
+						}
+						if (m_TunedAutoFixedParameter == name && parameter.monteCarloFree)
+						{
+							parameter.monteCarloFree = false;
+							settingsChanged = true;
+						}
+					}
+					CommandContext context;
+					context.Set("project", project);
+					context.Set("characteristic_ids", ids);
+					context.Set("metadata_key", "tuned." + name);
+					context.Set("metadata_value", formatDouble(tunedValue));
+					Execute(JFMSetCharacteristicMetadataCommandId, std::move(context));
+					if (m_EventBus != nullptr)
+						m_EventBus->Queue(FitRequested{project, ids});
+				}
+				ImGui::PopID();
+			}
+			ImGui::EndTable();
+		}
+		if (settingsChanged && m_Settings != nullptr)
+			m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
+		if (m_TunedUndoGroupOpen && !anyHeld && m_TunedHeldLastFrame)
+			FinishTunedUndoGroup();
+		m_TunedHeldLastFrame = anyHeld;
+	}
+
+	void ControlPanel::RenderParameterTable(ProjectHandle project, const JFMCharacteristicInfo &activeInfo)
 	{
 		ImGui::SeparatorText("Parameters");
+		ImGui::Checkbox("Hide prefit parameters", &m_HidePrefitParameters);
+		const Ref<const JFMMonteCarloResult> monteCarlo = m_Store != nullptr ? m_Store->GetMonteCarloResult({project, activeInfo.id}) : Ref<const JFMMonteCarloResult>{};
 		if (ImGui::BeginTable("##jfm_control_parameters", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 		{
 			ImGui::TableSetupColumn("Stage");
@@ -365,7 +649,7 @@ namespace SST::Prototypes::JFM
 			ImGui::TableSetupColumn("Source");
 			ImGui::TableHeadersRow();
 
-			if (activeInfo.prefit)
+			if (activeInfo.prefit && !m_HidePrefitParameters)
 			{
 				std::vector<std::string> names;
 				names.reserve(activeInfo.prefit->parameters.size());
@@ -416,8 +700,11 @@ namespace SST::Prototypes::JFM
 					ImGui::TableSetColumnIndex(2);
 					ImGui::Text("%.8g", estimate.value);
 					ImGui::TableSetColumnIndex(3);
+					const std::optional<double> mcError = monteCarlo ? monteCarloStdError(*monteCarlo, name) : std::nullopt;
 					if (estimate.standardError)
 						ImGui::Text("%.8g", *estimate.standardError);
+					else if (mcError)
+						ImGui::Text("%.8g", *mcError);
 					else
 						ImGui::TextUnformatted("-");
 					ImGui::TableSetColumnIndex(4);
@@ -425,13 +712,20 @@ namespace SST::Prototypes::JFM
 				}
 			}
 
-			for (const char *stage : {"tuned"})
+			const std::string model = activeInfo.fit ? activeInfo.fit->modelId : activeInfo.prefit ? activeInfo.prefit->modelId : std::string{};
+			for (std::string_view nameView : JFMModelParameterNames(model))
 			{
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
-				ImGui::TextDisabled("%s", stage);
+				ImGui::TextUnformatted("tuned");
 				ImGui::TableSetColumnIndex(1);
-				ImGui::TextDisabled("-");
+				ImGui::TextUnformatted(std::string(nameView).c_str());
+				ImGui::TableSetColumnIndex(2);
+				ImGui::Text("%.8g", parameterValue(activeInfo, nameView));
+				ImGui::TableSetColumnIndex(3);
+				ImGui::TextUnformatted("-");
+				ImGui::TableSetColumnIndex(4);
+				ImGui::TextUnformatted("manual");
 			}
 			ImGui::EndTable();
 		}

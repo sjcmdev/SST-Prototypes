@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/RawPlotPanel.hpp"
 
+#include "Analysis/JFMFitEngine.hpp"
 #include "App/JFMCommands.hpp"
 #include "Core/Commands/Command.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
@@ -11,6 +12,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <limits>
 #include <optional>
 
@@ -66,6 +68,40 @@ namespace SST::Prototypes::JFM
 		ImVec4 toVec4(const std::array<float, 4> &color)
 		{
 			return {color[0], color[1], color[2], color[3]};
+		}
+
+		std::optional<double> metadataDouble(const JFMCharacteristicInfo &info, const std::string &key)
+		{
+			const auto found = info.metadata.find(key);
+			if (found == info.metadata.end())
+				return std::nullopt;
+			char *end = nullptr;
+			const double value = std::strtod(found->second.c_str(), &end);
+			return end != found->second.c_str() && std::isfinite(value) ? std::optional<double>{value} : std::nullopt;
+		}
+
+		std::unordered_map<std::string, double> tunedParameters(const JFMCharacteristicInfo &info)
+		{
+			std::unordered_map<std::string, double> result;
+			const JFMFitState *state = info.fit ? &*info.fit : nullptr;
+			if (state != nullptr)
+			{
+				for (const auto &[name, estimate] : state->parameters)
+					result[name] = estimate.value;
+			}
+			else if (info.prefit)
+			{
+				for (const auto &[name, estimate] : info.prefit->parameters)
+					result[name] = estimate.value;
+			}
+			const std::string model = state != nullptr ? state->modelId : info.prefit ? info.prefit->modelId : std::string{};
+			for (std::string_view nameView : JFMModelParameterNames(model))
+			{
+				const std::string name(nameView);
+				if (const std::optional<double> tuned = metadataDouble(info, "tuned." + name))
+					result[name] = *tuned;
+			}
+			return result;
 		}
 
 		void appendUnique(std::vector<CharacteristicId> &target, const std::vector<CharacteristicId> &ids)
@@ -157,11 +193,12 @@ namespace SST::Prototypes::JFM
 			return buffer;
 		}
 
-		void copyPrefitFitRange(const JFMPrefitCurve &curve, const JFMPrefitState &state, std::vector<double> &x, std::vector<double> &y)
+		template <typename Curve>
+		void copyFitRange(const Curve &curve, const JFMFitRange &range, std::vector<double> &x, std::vector<double> &y)
 		{
 			const std::size_t count = std::min(curve.voltage.size(), curve.current.size());
-			const double lower = std::min(state.fitRange.lowerVoltage, state.fitRange.upperVoltage);
-			const double upper = std::max(state.fitRange.lowerVoltage, state.fitRange.upperVoltage);
+			const double lower = std::min(range.lowerVoltage, range.upperVoltage);
+			const double upper = std::max(range.lowerVoltage, range.upperVoltage);
 			x.reserve(count);
 			y.reserve(count);
 			for (std::size_t index = 0; index < count; ++index)
@@ -1080,7 +1117,7 @@ namespace SST::Prototypes::JFM
 							const std::vector<double> *prefitY = &curve->current;
 							if (prefitState && prefitState->fitRange.upperVoltage > prefitState->fitRange.lowerVoltage)
 							{
-								copyPrefitFitRange(*curve, *prefitState, fitRangeX, fitRangeY);
+								copyFitRange(*curve, prefitState->fitRange, fitRangeX, fitRangeY);
 								prefitX = &fitRangeX;
 								prefitY = &fitRangeY;
 							}
@@ -1106,7 +1143,17 @@ namespace SST::Prototypes::JFM
 						const auto fitCurve = m_Store->GetFitCurve({area.project, id});
 						if (plotSettings.showFitCurves && fitCurve)
 						{
-							const std::size_t fitCount = std::min(fitCurve->voltage.size(), fitCurve->current.size());
+							std::vector<double> fitRangeX;
+							std::vector<double> fitRangeY;
+							const std::vector<double> *fitX = &fitCurve->voltage;
+							const std::vector<double> *fitY = &fitCurve->current;
+							if (plotSettings.fitCurvesFitRangeOnly && characteristic->second.info.fit && characteristic->second.info.fit->fitRange.upperVoltage > characteristic->second.info.fit->fitRange.lowerVoltage)
+							{
+								copyFitRange(*fitCurve, characteristic->second.info.fit->fitRange, fitRangeX, fitRangeY);
+								fitX = &fitRangeX;
+								fitY = &fitRangeY;
+							}
+							const std::size_t fitCount = std::min(fitX->size(), fitY->size());
 							if (fitCount > 0)
 							{
 								ImPlotSpec fitSpec;
@@ -1115,13 +1162,54 @@ namespace SST::Prototypes::JFM
 								fitSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string fitLabel = "##jfm_raw_fit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 								if (area.scale == PlotScale::Linear)
-									ImPlot::PlotLine(fitLabel.c_str(), fitCurve->voltage.data(), fitCurve->current.data(), static_cast<int>(fitCount), fitSpec);
+									ImPlot::PlotLine(fitLabel.c_str(), fitX->data(), fitY->data(), static_cast<int>(fitCount), fitSpec);
 								else
 								{
 									std::vector<double> filteredX;
-									std::vector<double> filteredY = absolutePositive(fitCurve->current, fitCurve->voltage, filteredX);
+									std::vector<double> filteredY = absolutePositive(*fitY, *fitX, filteredX);
 									if (!filteredX.empty())
 										ImPlot::PlotLine(fitLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), fitSpec);
+								}
+							}
+						}
+						if (plotSettings.showTunedCurves && characteristic->second.info.temperatureK && (characteristic->second.info.fit || characteristic->second.info.prefit))
+						{
+							const std::string model = characteristic->second.info.fit ? characteristic->second.info.fit->modelId : characteristic->second.info.prefit->modelId;
+							std::vector<double> tunedX = x;
+							std::vector<double> tunedY;
+							tunedY.reserve(tunedX.size());
+							const auto parameters = tunedParameters(characteristic->second.info);
+							for (double voltage : tunedX)
+								tunedY.push_back(EvaluateJFMCurrent(model, voltage, *characteristic->second.info.temperatureK, parameters));
+							if (plotSettings.tunedCurvesFitRangeOnly)
+							{
+								const JFMFitRange *range = characteristic->second.info.fit ? &characteristic->second.info.fit->fitRange : &characteristic->second.info.prefit->fitRange;
+								if (range->upperVoltage > range->lowerVoltage)
+								{
+									JFMFitCurve tunedCurve{tunedX, tunedY};
+									std::vector<double> rangeX;
+									std::vector<double> rangeY;
+									copyFitRange(tunedCurve, *range, rangeX, rangeY);
+									tunedX = std::move(rangeX);
+									tunedY = std::move(rangeY);
+								}
+							}
+							const std::size_t tunedCount = std::min(tunedX.size(), tunedY.size());
+							if (tunedCount > 0)
+							{
+								ImPlotSpec tunedSpec;
+								tunedSpec.LineColor = toVec4(plotSettings.tunedCurveColor);
+								tunedSpec.LineWeight = area.hoveredCharacteristicId == id ? plotSettings.hoveredCurveLineWeight : plotSettings.tunedCurveLineWeight;
+								tunedSpec.Flags = ImPlotItemFlags_NoLegend;
+								const std::string tunedLabel = "##jfm_raw_tuned_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
+								if (area.scale == PlotScale::Linear)
+									ImPlot::PlotLine(tunedLabel.c_str(), tunedX.data(), tunedY.data(), static_cast<int>(tunedCount), tunedSpec);
+								else
+								{
+									std::vector<double> filteredX;
+									std::vector<double> filteredY = absolutePositive(tunedY, tunedX, filteredX);
+									if (!filteredX.empty())
+										ImPlot::PlotLine(tunedLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), tunedSpec);
 								}
 							}
 						}

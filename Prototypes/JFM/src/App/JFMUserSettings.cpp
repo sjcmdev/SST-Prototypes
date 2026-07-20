@@ -153,6 +153,12 @@ namespace SST::Prototypes::JFM
 			m_Settings.showFitCurves = root["show_fit_curves"] ? root["show_fit_curves"].as<bool>() : m_Settings.showFitCurves;
 			m_Settings.fitCurveColor = ReadColor(root["fit_curve_color"], m_Settings.fitCurveColor);
 			m_Settings.fitCurveLineWeight = root["fit_curve_line_weight"] ? std::clamp(root["fit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.fitCurveLineWeight;
+			m_Settings.fitCurvesFitRangeOnly = root["fit_curves_fit_range_only"] ? root["fit_curves_fit_range_only"].as<bool>() : m_Settings.fitCurvesFitRangeOnly;
+			m_Settings.showTunedCurves = root["show_tuned_curves"] ? root["show_tuned_curves"].as<bool>() : m_Settings.showTunedCurves;
+			m_Settings.tunedCurveColor = ReadColor(root["tuned_curve_color"], m_Settings.tunedCurveColor);
+			m_Settings.tunedCurveLineWeight = root["tuned_curve_line_weight"] ? std::clamp(root["tuned_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.tunedCurveLineWeight;
+			m_Settings.tunedCurvesFitRangeOnly = root["tuned_curves_fit_range_only"] ? root["tuned_curves_fit_range_only"].as<bool>() : m_Settings.tunedCurvesFitRangeOnly;
+			m_Settings.autoPrefitFitOnRangeChange = root["auto_prefit_fit_on_range_change"] ? root["auto_prefit_fit_on_range_change"].as<bool>() : m_Settings.autoPrefitFitOnRangeChange;
 			m_Settings.hoveredCurveLineWeight = root["hovered_curve_line_weight"] ? std::clamp(root["hovered_curve_line_weight"].as<float>(), 0.5f, 10.0f) : m_Settings.hoveredCurveLineWeight;
 			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
 			if (const YAML::Node fit = root["fit_monte_carlo"]; fit && fit.IsMap())
@@ -252,6 +258,13 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "fit_curve_color" << YAML::Value;
 		EmitColor(out, snapshot.fitCurveColor);
 		out << YAML::Key << "fit_curve_line_weight" << YAML::Value << snapshot.fitCurveLineWeight;
+		out << YAML::Key << "fit_curves_fit_range_only" << YAML::Value << snapshot.fitCurvesFitRangeOnly;
+		out << YAML::Key << "show_tuned_curves" << YAML::Value << snapshot.showTunedCurves;
+		out << YAML::Key << "tuned_curve_color" << YAML::Value;
+		EmitColor(out, snapshot.tunedCurveColor);
+		out << YAML::Key << "tuned_curve_line_weight" << YAML::Value << snapshot.tunedCurveLineWeight;
+		out << YAML::Key << "tuned_curves_fit_range_only" << YAML::Value << snapshot.tunedCurvesFitRangeOnly;
+		out << YAML::Key << "auto_prefit_fit_on_range_change" << YAML::Value << snapshot.autoPrefitFitOnRangeChange;
 		out << YAML::Key << "hovered_curve_line_weight" << YAML::Value << snapshot.hoveredCurveLineWeight;
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
 		out << YAML::Key << "fit_monte_carlo" << YAML::Value << YAML::BeginMap;
@@ -366,13 +379,35 @@ namespace SST::Prototypes::JFM
 		Save();
 	}
 
-	void JFMUserSettingsStore::SetFitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight)
+	void JFMUserSettingsStore::SetFitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, bool fitRangeOnly)
 	{
 		{
 			std::scoped_lock lock(m_Mutex);
 			m_Settings.showFitCurves = show;
 			m_Settings.fitCurveColor = color;
 			m_Settings.fitCurveLineWeight = std::clamp(lineWeight, 0.5f, 8.0f);
+			m_Settings.fitCurvesFitRangeOnly = fitRangeOnly;
+		}
+		Save();
+	}
+
+	void JFMUserSettingsStore::SetTunedCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, bool fitRangeOnly)
+	{
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.showTunedCurves = show;
+			m_Settings.tunedCurveColor = color;
+			m_Settings.tunedCurveLineWeight = std::clamp(lineWeight, 0.5f, 8.0f);
+			m_Settings.tunedCurvesFitRangeOnly = fitRangeOnly;
+		}
+		Save();
+	}
+
+	void JFMUserSettingsStore::SetAutoPrefitFitOnRangeChange(bool enabled)
+	{
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.autoPrefitFitOnRangeChange = enabled;
 		}
 		Save();
 	}

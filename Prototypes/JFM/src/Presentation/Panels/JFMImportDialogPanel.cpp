@@ -116,11 +116,12 @@ namespace SST::Prototypes::JFM
 			return {};
 		}
 
-		void CopyPrefitFitRange(const JFMPrefitCurve &curve, const JFMPrefitState &state, std::vector<double> &x, std::vector<double> &y)
+		template <typename Curve>
+		void CopyFitRange(const Curve &curve, const JFMFitRange &range, std::vector<double> &x, std::vector<double> &y)
 		{
 			const std::size_t count = std::min(curve.voltage.size(), curve.current.size());
-			const double lower = std::min(state.fitRange.lowerVoltage, state.fitRange.upperVoltage);
-			const double upper = std::max(state.fitRange.lowerVoltage, state.fitRange.upperVoltage);
+			const double lower = std::min(range.lowerVoltage, range.upperVoltage);
+			const double upper = std::max(range.lowerVoltage, range.upperVoltage);
 			x.reserve(count);
 			y.reserve(count);
 			for (std::size_t index = 0; index < count; ++index)
@@ -981,7 +982,7 @@ namespace SST::Prototypes::JFM
 					const std::vector<double> *prefitY = &curve->current;
 					if (prefitState && prefitState->fitRange.upperVoltage > prefitState->fitRange.lowerVoltage)
 					{
-						CopyPrefitFitRange(*curve, *prefitState, fitRangeX, fitRangeY);
+						CopyFitRange(*curve, prefitState->fitRange, fitRangeX, fitRangeY);
 						prefitX = &fitRangeX;
 						prefitY = &fitRangeY;
 					}
@@ -1008,20 +1009,30 @@ namespace SST::Prototypes::JFM
 				const auto fitCurve = showFit ? m_Store->GetFitCurve({project, ids[index]}) : Ref<const JFMFitCurve>{};
 				if (fitCurve)
 				{
-					const int fitCount = static_cast<int>(std::min(fitCurve->voltage.size(), fitCurve->current.size()));
+					std::vector<double> fitRangeX;
+					std::vector<double> fitRangeY;
+					const std::vector<double> *fitX = &fitCurve->voltage;
+					const std::vector<double> *fitY = &fitCurve->current;
+					if (settings.fitCurvesFitRangeOnly && record->info.fit && record->info.fit->fitRange.upperVoltage > record->info.fit->fitRange.lowerVoltage)
+					{
+						CopyFitRange(*fitCurve, record->info.fit->fitRange, fitRangeX, fitRangeY);
+						fitX = &fitRangeX;
+						fitY = &fitRangeY;
+					}
+					const int fitCount = static_cast<int>(std::min(fitX->size(), fitY->size()));
 					if (fitCount > 0)
 					{
 						ImPlotSpec fitSpec;
-						fitSpec.LineColor = ImVec4(0.20f, 0.76f, 1.00f, 1.0f);
-						fitSpec.LineWeight = 2.0f;
+						fitSpec.LineColor = ImVec4(settings.fitCurveColor[0], settings.fitCurveColor[1], settings.fitCurveColor[2], settings.fitCurveColor[3]);
+						fitSpec.LineWeight = settings.fitCurveLineWeight;
 						fitSpec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##jfm_analysis_fit_" + std::to_string(ids[index]);
 						if (m_AnalysisScale == 0)
-							ImPlot::PlotLine(label.c_str(), fitCurve->voltage.data(), fitCurve->current.data(), fitCount, fitSpec);
+							ImPlot::PlotLine(label.c_str(), fitX->data(), fitY->data(), fitCount, fitSpec);
 						else
 						{
-							std::vector<double> x(fitCurve->voltage.begin(), fitCurve->voltage.begin() + fitCount);
-							std::vector<double> y(fitCurve->current.begin(), fitCurve->current.begin() + fitCount);
+							std::vector<double> x(fitX->begin(), fitX->begin() + fitCount);
+							std::vector<double> y(fitY->begin(), fitY->begin() + fitCount);
 							ApplyPreviewScale(m_AnalysisScale, x, y);
 							if (!x.empty())
 								ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), fitSpec);

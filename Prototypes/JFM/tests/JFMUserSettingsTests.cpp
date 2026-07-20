@@ -20,6 +20,9 @@ namespace SST::Prototypes::JFM
 		store.SetDefaultScriptsDirectory(prototype / Path("python") / Path("custom_scripts"));
 		store.SetDefaultColorPreset("Green/Yellow");
 		store.SetPrefitCurveDefaults(false, {0.1f, 0.2f, 0.3f, 1.0f}, 3.5f, true, 5.0f);
+		store.SetFitCurveDefaults(false, {0.4f, 0.5f, 0.6f, 1.0f}, 4.5f, true);
+		store.SetTunedCurveDefaults(true, {0.7f, 0.8f, 0.9f, 1.0f}, 5.5f, true);
+		store.SetAutoPrefitFitOnRangeChange(true);
 		JFMFitMonteCarloSettings solverSettings = store.GetSnapshot().fitMonteCarlo;
 		solverSettings.monteCarloSamples = 2048;
 		solverSettings.monteCarloNoisePercent = 2.5;
@@ -47,6 +50,15 @@ namespace SST::Prototypes::JFM
 		EXPECT_FLOAT_EQ(settings.prefitCurveColor[1], 0.2f);
 		EXPECT_FLOAT_EQ(settings.prefitCurveLineWeight, 3.5f);
 		EXPECT_TRUE(settings.prefitCurvesFitRangeOnly);
+		EXPECT_FALSE(settings.showFitCurves);
+		EXPECT_FLOAT_EQ(settings.fitCurveColor[1], 0.5f);
+		EXPECT_FLOAT_EQ(settings.fitCurveLineWeight, 4.5f);
+		EXPECT_TRUE(settings.fitCurvesFitRangeOnly);
+		EXPECT_TRUE(settings.showTunedCurves);
+		EXPECT_FLOAT_EQ(settings.tunedCurveColor[1], 0.8f);
+		EXPECT_FLOAT_EQ(settings.tunedCurveLineWeight, 5.5f);
+		EXPECT_TRUE(settings.tunedCurvesFitRangeOnly);
+		EXPECT_TRUE(settings.autoPrefitFitOnRangeChange);
 		EXPECT_FLOAT_EQ(settings.hoveredCurveLineWeight, 5.0f);
 		EXPECT_EQ(settings.defaultColorPresetName, "Green/Yellow");
 		EXPECT_EQ(settings.fitMonteCarlo.monteCarloSamples, 2048);

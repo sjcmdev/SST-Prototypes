@@ -913,6 +913,26 @@ namespace SST::Prototypes::JFM
 
 		registerEditCommand(
 			registry,
+			CommandMeta{CommandID{JFMSetCharacteristicMetadataCommandId}, "Set Characteristic Metadata", "JFM", "Set metadata for selected characteristics.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
+			workspace,
+			[workspace](CommandContext &commandContext) {
+				const ProjectHandle project = projectFromContext(workspace, commandContext);
+				std::vector<CharacteristicId> ids = workspace->GetSelectedCharacteristicIds();
+				if (auto *value = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids"))
+					ids = *value;
+				const std::string key = contextString(commandContext, "metadata_key");
+				const std::string value = contextString(commandContext, "metadata_value");
+				return JFMProjectEditRequest{
+					project,
+					"Set characteristic metadata",
+					[ids, key, value](JFMWorkspaceStore &store, ProjectHandle handle) {
+						(void)store.SetCharacteristicMetadata(handle, ids, key, value);
+						return Result<void>{};
+					}};
+			});
+
+		registerEditCommand(
+			registry,
 			CommandMeta{CommandID{JFMUpsertGroupingCommandId}, "Create or Update Grouping", "JFM", "Create or update a metadata grouping.", {}, CommandFlags::Undoable},
 			workspace,
 			[workspace](CommandContext &commandContext) {

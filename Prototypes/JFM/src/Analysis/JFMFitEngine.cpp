@@ -12,6 +12,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <random>
 
@@ -73,6 +74,20 @@ namespace SST::Prototypes::JFM
 					result[index] = found->second.value;
 			}
 			return result;
+		}
+
+		void ApplyTunedMetadata(ParameterArray &parameters, const std::unordered_map<std::string, std::string> &metadata)
+		{
+			for (std::size_t index = 0; index < ParameterCount; ++index)
+			{
+				const auto found = metadata.find("tuned." + std::string(ParameterNames[index]));
+				if (found == metadata.end())
+					continue;
+				char *end = nullptr;
+				const double value = std::strtod(found->second.c_str(), &end);
+				if (end != found->second.c_str() && std::isfinite(value))
+					parameters[index] = value;
+			}
 		}
 
 		double WrightOmega(double value) noexcept
@@ -421,11 +436,12 @@ namespace SST::Prototypes::JFM
 		if (model == nullptr)
 			return MakeError("Unsupported model: " + characteristic.info.prefit->modelId);
 
-		const ParameterArray start = ParametersFrom(characteristic.info.prefit->parameters);
+		ParameterArray start = ParametersFrom(characteristic.info.prefit->parameters);
+		ApplyTunedMetadata(start, characteristic.info.metadata);
 		const FitData data = BuildFitData(characteristic, *characteristic.info.prefit, nullptr, settings.monteCarloNoisePercent);
 		if (data.voltage.size() < model->parameters.size() + 2)
 			return MakeError("Fit range contains too few points.");
-		const SolverOutput solved = Solve(*model, data, *characteristic.info.temperatureK, start, start, AllModelParameters(*model), settings, settings.fitMaxIterations);
+		const SolverOutput solved = Solve(*model, data, *characteristic.info.temperatureK, start, start, MonteCarloParameters(*model, settings), settings, settings.fitMaxIterations);
 
 		JFMFitComputation output;
 		output.state.modelId = std::string(model->id);
