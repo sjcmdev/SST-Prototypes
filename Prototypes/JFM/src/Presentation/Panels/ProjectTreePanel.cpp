@@ -498,6 +498,18 @@ namespace SST::Prototypes::JFM
 				QueuePlotsForChildGroups(project, group.id);
 			if (ImGui::MenuItem("Export Raw TSV"))
 				ExportGroup(project, group);
+			if (ImGui::MenuItem("Export Arrhenius TSV"))
+			{
+				CommandContext context;
+				context.Set("group_id", group.id);
+				ExecuteCommand(JFMExportArrheniusTsvCommandId, std::move(context));
+			}
+			if (ImGui::MenuItem("Export Characteristics + Fit TSV"))
+			{
+				CommandContext context;
+				context.Set("group_id", group.id);
+				ExecuteCommand(JFMExportCharacteristicsFitTsvCommandId, std::move(context));
+			}
 			if (ImGui::MenuItem("Rename"))
 				ExecuteCommand(JFMRequestRenameTreeItemCommandId);
 			if (ImGui::MenuItem("Edit Short Name"))
@@ -590,6 +602,18 @@ namespace SST::Prototypes::JFM
 				CommandContext context;
 				context.Set("series_id", series.id);
 				ExecuteCommand("jfm.export.series_raw_tsv", std::move(context));
+			}
+			if (ImGui::MenuItem("Export Arrhenius TSV"))
+			{
+				CommandContext context;
+				context.Set("series_id", series.id);
+				ExecuteCommand(JFMExportArrheniusTsvCommandId, std::move(context));
+			}
+			if (ImGui::MenuItem("Export Characteristics + Fit TSV"))
+			{
+				CommandContext context;
+				context.Set("series_id", series.id);
+				ExecuteCommand(JFMExportCharacteristicsFitTsvCommandId, std::move(context));
 			}
 			if (ImGui::MenuItem("Rename"))
 				ExecuteCommand(JFMRequestRenameTreeItemCommandId);

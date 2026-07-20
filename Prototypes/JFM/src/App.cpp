@@ -13,6 +13,7 @@
 #include "IO/JFMPythonBindings.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/JFMMenu.hpp"
+#include "Presentation/Panels/ArrheniusPlotPanel.hpp"
 #include "Presentation/Panels/CharacteristicDetailsPanel.hpp"
 #include "Presentation/Panels/ControlPanel.hpp"
 #include "Presentation/Panels/ImportStatusPanel.hpp"
@@ -74,6 +75,7 @@ namespace SST
 		panelIds.monteCarloCurves = editorLayer.RegisterPanel<MonteCarloCurvesPanel>(
 			workspace,
 			application.GetEventBusRef());
+		panelIds.arrhenius = editorLayer.RegisterPanel<ArrheniusPlotPanel>(workspace);
 		editorLayer.RegisterPanel<JFMImportDialogPanel>(
 			application.GetEventBusRef(),
 			workspace,

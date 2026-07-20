@@ -34,6 +34,8 @@ namespace SST::Prototypes::JFM
 	const CommandID ExportRawTsvCommand{"jfm.export.raw_tsv"};
 	const CommandID ExportSeriesRawTsvCommand{"jfm.export.series_raw_tsv"};
 	const CommandID ExportGroupRawTsvCommand{"jfm.export.group_raw_tsv"};
+	const CommandID ExportArrheniusTsvCommand{JFMExportArrheniusTsvCommandId};
+	const CommandID ExportCharacteristicsFitTsvCommand{JFMExportCharacteristicsFitTsvCommandId};
 
 	constexpr NativeFileDialogFilter JFMProjectFilter{"JFM Project", "jfm.yaml,yaml"};
 	constexpr NativeFileDialogFilter JFMDataFilter{"JFM Data", "dat,iv,txt,csv"};
@@ -402,6 +404,52 @@ namespace SST::Prototypes::JFM
 			eventBus.Queue(ExportRawTsvBatchRequested{directory, std::move(items), project});
 	}
 
+	std::vector<JFMCharacteristicRecord> collectSeriesRecords(const Ref<JFMWorkspaceStore> &workspace, ProjectHandle project, const std::string &seriesId)
+	{
+		return seriesId.empty() ? std::vector<JFMCharacteristicRecord>{} : workspace->GetSeriesCharacteristicRecords(project, seriesId);
+	}
+
+	std::vector<JFMCharacteristicRecord> collectGroupRecords(const Ref<JFMWorkspaceStore> &workspace, ProjectHandle projectHandle, const JFMProject &project, const std::string &groupId)
+	{
+		std::set<std::string> groupIds;
+		collectGroupIds(project, groupId, groupIds);
+		std::vector<JFMCharacteristicRecord> records;
+		for (const JFMSeries &series : project.series)
+		{
+			if (groupIds.find(series.groupId) == groupIds.end())
+				continue;
+			std::vector<JFMCharacteristicRecord> seriesRecords = workspace->GetSeriesCharacteristicRecords(projectHandle, series.id);
+			records.insert(records.end(), seriesRecords.begin(), seriesRecords.end());
+		}
+		return records;
+	}
+
+	std::optional<std::tuple<std::string, std::vector<JFMCharacteristicRecord>>> recordsFromSeriesOrGroupContext(
+		const Ref<JFMWorkspaceStore> &workspace,
+		CommandContext &context)
+	{
+		const ProjectHandle projectHandle = workspace->GetActiveProjectHandle();
+		const JFMProject project = workspace->GetProjectSnapshot(projectHandle);
+		if (std::string *seriesId = context.TryGet<std::string>("series_id"))
+		{
+			auto series = findSeries(project, *seriesId);
+			if (!series)
+				return std::nullopt;
+			return std::tuple{series->name, collectSeriesRecords(workspace, projectHandle, *seriesId)};
+		}
+		if (std::string *groupId = context.TryGet<std::string>("group_id"))
+		{
+			auto group = findGroup(project, *groupId);
+			if (!group)
+				return std::nullopt;
+			return std::tuple{group->name, collectGroupRecords(workspace, projectHandle, project, *groupId)};
+		}
+		const std::string seriesId = workspace->GetSelectedSeriesId();
+		if (auto series = findSeries(project, seriesId))
+			return std::tuple{series->name, collectSeriesRecords(workspace, projectHandle, seriesId)};
+		return std::nullopt;
+	}
+
 	Result<void> handleNewProject(Ref<JFMWorkspaceStore> workspace, Ref<JFMUserSettingsStore> settings, CommandContext &)
 	{
 		(void)workspace->CreateProject("Untitled JFM Project");
@@ -622,6 +670,44 @@ namespace SST::Prototypes::JFM
 		catch (const std::exception &error)
 		{
 			return Result<void>{makeCommandError("Group TSV export failed.", error.what())};
+		}
+	}
+
+	Result<void> handleExportArrheniusTsv(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &context)
+	{
+		try
+		{
+			auto source = recordsFromSeriesOrGroupContext(workspace, context);
+			if (!source || std::get<1>(*source).empty())
+				return Result<void>{};
+			const std::string defaultName = safeFileName(std::get<0>(*source)) + "_arrhenius.tsv";
+			std::optional<Path> path = chooseRawTsvSavePath(defaultName);
+			if (path)
+				eventBus->Queue(ExportArrheniusTsvRequested{*path, std::move(std::get<1>(*source)), workspace->GetActiveProjectHandle()});
+			return Result<void>{};
+		}
+		catch (const std::exception &error)
+		{
+			return Result<void>{makeCommandError("Arrhenius TSV export failed.", error.what())};
+		}
+	}
+
+	Result<void> handleExportCharacteristicsFitTsv(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, CommandContext &context)
+	{
+		try
+		{
+			auto source = recordsFromSeriesOrGroupContext(workspace, context);
+			if (!source || std::get<1>(*source).empty())
+				return Result<void>{};
+			const std::string defaultName = safeFileName(std::get<0>(*source)) + "_characteristics_fit.tsv";
+			std::optional<Path> path = chooseRawTsvSavePath(defaultName);
+			if (path)
+				eventBus->Queue(ExportCharacteristicsFitTsvRequested{*path, std::move(std::get<1>(*source)), workspace->GetActiveProjectHandle()});
+			return Result<void>{};
+		}
+		catch (const std::exception &error)
+		{
+			return Result<void>{makeCommandError("Characteristics + fit TSV export failed.", error.what())};
 		}
 	}
 
@@ -1153,6 +1239,16 @@ namespace SST::Prototypes::JFM
 			registry,
 			CommandMeta{ExportGroupRawTsvCommand, "Export Group Raw TSV", "JFM", "Export a group to TSV files.", {}, CommandFlags::AsyncCapable},
 			std::bind(handleExportGroupRawTsv, eventBus, workspace, settings, std::placeholders::_1));
+
+		registerCommand(
+			registry,
+			CommandMeta{ExportArrheniusTsvCommand, "Export Arrhenius TSV", "JFM", "Export fitted parameters versus temperature.", {}, CommandFlags::AsyncCapable},
+			std::bind(handleExportArrheniusTsv, eventBus, workspace, std::placeholders::_1));
+
+		registerCommand(
+			registry,
+			CommandMeta{ExportCharacteristicsFitTsvCommand, "Export Characteristics + Fit TSV", "JFM", "Export measured characteristics and fitted curves in one TSV.", {}, CommandFlags::AsyncCapable},
+			std::bind(handleExportCharacteristicsFitTsv, eventBus, workspace, std::placeholders::_1));
 
 		registerBinding(resolver, {"jfm.new_project", KeyChord{KeyCode::N, KeyModifiers::Ctrl}, NewProjectCommand, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.open_project", KeyChord{KeyCode::O, KeyModifiers::Ctrl}, OpenProjectCommand, {}, KeymapLayer::Project, true});

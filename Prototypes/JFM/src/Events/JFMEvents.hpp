@@ -510,6 +510,63 @@ namespace SST::Prototypes::JFM
 		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
+	struct ExportArrheniusTsvRequested final : public BusEvent
+	{
+		ExportArrheniusTsvRequested() = default;
+		ExportArrheniusTsvRequested(Path requestedPath, std::vector<JFMCharacteristicRecord> requestedCharacteristics, ProjectHandle requestedProject = InvalidProjectHandle, JFMOperationId requestedOperation = InvalidJFMOperationId)
+			: path(std::move(requestedPath)), characteristics(std::move(requestedCharacteristics)), project(requestedProject), operation(requestedOperation)
+		{
+		}
+
+		Path path;
+		std::vector<JFMCharacteristicRecord> characteristics;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
+	};
+
+	struct ExportCharacteristicsFitTsvRequested final : public BusEvent
+	{
+		ExportCharacteristicsFitTsvRequested() = default;
+		ExportCharacteristicsFitTsvRequested(Path requestedPath, std::vector<JFMCharacteristicRecord> requestedCharacteristics, ProjectHandle requestedProject = InvalidProjectHandle, JFMOperationId requestedOperation = InvalidJFMOperationId)
+			: path(std::move(requestedPath)), characteristics(std::move(requestedCharacteristics)), project(requestedProject), operation(requestedOperation)
+		{
+		}
+
+		Path path;
+		std::vector<JFMCharacteristicRecord> characteristics;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
+	};
+
+	struct ExportAnalysisTsvCompleted final : public BusEvent
+	{
+		ExportAnalysisTsvCompleted() = default;
+		ExportAnalysisTsvCompleted(Path exportedPath, std::string exportedKind, ProjectHandle exportedProject = InvalidProjectHandle, JFMOperationId completedOperation = InvalidJFMOperationId)
+			: path(std::move(exportedPath)), kind(std::move(exportedKind)), project(exportedProject), operation(completedOperation)
+		{
+		}
+
+		Path path;
+		std::string kind;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
+	};
+
+	struct ExportAnalysisTsvFailed final : public BusEvent
+	{
+		ExportAnalysisTsvFailed() = default;
+		ExportAnalysisTsvFailed(Path failedPath, std::string failedKind, std::string failure, ProjectHandle failedProject = InvalidProjectHandle, JFMOperationId failedOperation = InvalidJFMOperationId)
+			: path(std::move(failedPath)), kind(std::move(failedKind)), error(std::move(failure)), project(failedProject), operation(failedOperation)
+		{
+		}
+
+		Path path;
+		std::string kind;
+		std::string error;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
+	};
+
 	struct ProjectDataMaterializationCompleted final : public BusEvent
 	{
 		ProjectDataMaterializationCompleted() = default;

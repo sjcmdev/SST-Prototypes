@@ -440,6 +440,38 @@ namespace SST::Prototypes::JFM
 		DS_LOG_WARN("JFM raw TSV batch export failed [{}]: {}", event.outputDirectory.String(), event.error);
 	}
 
+	void HandleExportArrheniusTsvRequested(const Ref<JFMIOState> &state, const ExportArrheniusTsvRequested &event)
+	{
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
+		if (state->store != nullptr)
+			state->store->SetStatusMessage(project, "Arrhenius TSV export queued: " + event.path.String());
+		state->eventBus->Queue(JobSubmitRequested{CreateRef<JFMExportArrheniusTsvJob>(state->eventBus, event.path, event.characteristics, project, operation), JobPriority::Normal, JFMIOJobSource});
+	}
+
+	void HandleExportCharacteristicsFitTsvRequested(const Ref<JFMIOState> &state, const ExportCharacteristicsFitTsvRequested &event)
+	{
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
+		if (state->store != nullptr)
+			state->store->SetStatusMessage(project, "Characteristics + fit TSV export queued: " + event.path.String());
+		state->eventBus->Queue(JobSubmitRequested{CreateRef<JFMExportCharacteristicsFitTsvJob>(state->eventBus, event.path, event.characteristics, project, operation), JobPriority::Normal, JFMIOJobSource});
+	}
+
+	void HandleExportAnalysisTsvCompleted(const Ref<JFMIOState> &state, const ExportAnalysisTsvCompleted &event)
+	{
+		if (state->store != nullptr)
+			state->store->SetStatusMessage(event.project, event.kind + " exported: " + event.path.String());
+	}
+
+	void HandleExportAnalysisTsvFailed(const Ref<JFMIOState> &state, const ExportAnalysisTsvFailed &event)
+	{
+		if (state->store != nullptr)
+			state->store->SetStatusMessage(event.project, event.kind + " export failed: " + event.error);
+		NotifyFailure(state, NotificationCategory::Export, "JFM export failed", event.error);
+		DS_LOG_WARN("JFM analysis TSV export failed [{}]: {}", event.path.String(), event.error);
+	}
+
 	void RegisterExportHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
 	{
 		ioLayer.RegisterHandler<ExportRawTsvRequested>(std::bind_front(&HandleExportRawTsvRequested, state));
@@ -448,6 +480,10 @@ namespace SST::Prototypes::JFM
 		ioLayer.RegisterHandler<ExportRawTsvBatchRequested>(std::bind_front(&HandleExportRawTsvBatchRequested, state));
 		ioLayer.RegisterHandler<ExportRawTsvBatchCompleted>(std::bind_front(&HandleExportRawTsvBatchCompleted, state));
 		ioLayer.RegisterHandler<ExportRawTsvBatchFailed>(std::bind_front(&HandleExportRawTsvBatchFailed, state));
+		ioLayer.RegisterHandler<ExportArrheniusTsvRequested>(std::bind_front(&HandleExportArrheniusTsvRequested, state));
+		ioLayer.RegisterHandler<ExportCharacteristicsFitTsvRequested>(std::bind_front(&HandleExportCharacteristicsFitTsvRequested, state));
+		ioLayer.RegisterHandler<ExportAnalysisTsvCompleted>(std::bind_front(&HandleExportAnalysisTsvCompleted, state));
+		ioLayer.RegisterHandler<ExportAnalysisTsvFailed>(std::bind_front(&HandleExportAnalysisTsvFailed, state));
 	}
 
 	void HandleProjectSaveRequested(const Ref<JFMIOState> &state, const ProjectSaveRequested &event)

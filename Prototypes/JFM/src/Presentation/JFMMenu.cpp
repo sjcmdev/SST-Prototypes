@@ -4,6 +4,7 @@
 
 #include <imgui.h>
 
+#include "App/JFMCommands.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Logging/Logger.hpp"
@@ -114,6 +115,8 @@ namespace SST::Prototypes::JFM
 				ImGui::BeginDisabled(workspace == nullptr || workspace->GetProjectSnapshot().groups.empty());
 				commandMenuItem(services, "Selected Group Raw TSV", nullptr, "jfm.export.group_raw_tsv", !workspace->GetSelectedGroupId().empty());
 				ImGui::EndDisabled();
+				commandMenuItem(services, "Series/Group Arrhenius TSV", nullptr, JFMExportArrheniusTsvCommandId);
+				commandMenuItem(services, "Series/Group Characteristics + Fit TSV", nullptr, JFMExportCharacteristicsFitTsvCommandId);
 				ImGui::EndMenu();
 			}
 			ImGui::Separator();
@@ -150,6 +153,7 @@ namespace SST::Prototypes::JFM
 			panelMenuItem(editorLayer, panelIds.monteCarloSettings, "MC Settings");
 			panelMenuItem(editorLayer, panelIds.monteCarloScatter, "MC Scatter");
 			panelMenuItem(editorLayer, panelIds.monteCarloCurves, "MC Curves");
+			panelMenuItem(editorLayer, panelIds.arrhenius, "Arrhenius Plots");
 			ImGui::Separator();
 			editorLayer.RenderCorePanelMenuItems();
 			ImGui::EndMenu();

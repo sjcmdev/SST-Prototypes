@@ -17,6 +17,7 @@ namespace SST::Prototypes::JFM
 		PanelId monteCarloSettings = 0;
 		PanelId monteCarloScatter = 0;
 		PanelId monteCarloCurves = 0;
+		PanelId arrhenius = 0;
 	};
 
 	void RenderJFMMenu(

@@ -44,4 +44,38 @@ namespace SST::Prototypes::JFM
 		ProjectHandle m_Project = InvalidProjectHandle;
 		JFMOperationId m_Operation = InvalidJFMOperationId;
 	};
+
+	class JFMExportArrheniusTsvJob final : public IJob
+	{
+	public:
+		JFMExportArrheniusTsvJob(Ref<EventBus> eventBus, Path path, std::vector<JFMCharacteristicRecord> characteristics, ProjectHandle project = InvalidProjectHandle, JFMOperationId operation = InvalidJFMOperationId);
+
+		[[nodiscard]] std::string GetName() const override;
+		[[nodiscard]] std::string GetType() const override;
+		void Execute(JobContext &context) override;
+
+	private:
+		Ref<EventBus> m_EventBus;
+		Path m_Path;
+		std::vector<JFMCharacteristicRecord> m_Characteristics;
+		ProjectHandle m_Project = InvalidProjectHandle;
+		JFMOperationId m_Operation = InvalidJFMOperationId;
+	};
+
+	class JFMExportCharacteristicsFitTsvJob final : public IJob
+	{
+	public:
+		JFMExportCharacteristicsFitTsvJob(Ref<EventBus> eventBus, Path path, std::vector<JFMCharacteristicRecord> characteristics, ProjectHandle project = InvalidProjectHandle, JFMOperationId operation = InvalidJFMOperationId);
+
+		[[nodiscard]] std::string GetName() const override;
+		[[nodiscard]] std::string GetType() const override;
+		void Execute(JobContext &context) override;
+
+	private:
+		Ref<EventBus> m_EventBus;
+		Path m_Path;
+		std::vector<JFMCharacteristicRecord> m_Characteristics;
+		ProjectHandle m_Project = InvalidProjectHandle;
+		JFMOperationId m_Operation = InvalidJFMOperationId;
+	};
 } // namespace SST::Prototypes::JFM
