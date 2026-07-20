@@ -267,9 +267,17 @@ namespace SST::Prototypes::JFM
 			int freeCount = 0;
 			for (std::size_t index = 0; index < ParameterCount; ++index)
 			{
-				const JFMParameterSolverSetting setting = ParameterSetting(settings, index);
-				const bool free = HasParameter(model, index) && freeMask[index];
+				JFMParameterSolverSetting setting = ParameterSetting(settings, index);
+				const bool inModel = HasParameter(model, index);
+				const bool free = inModel && freeMask[index];
 				double value = free ? start[index] : fixed[index];
+				if (inModel && std::isfinite(value))
+				{
+					setting.minimum = std::min(setting.minimum, value);
+					setting.maximum = std::max(setting.maximum, value);
+					if (setting.minimum == setting.maximum)
+						setting.maximum = std::nextafter(setting.minimum, std::numeric_limits<double>::infinity());
+				}
 				value = std::clamp(value, setting.minimum, setting.maximum);
 				fitParameters.emplace_back(std::string(ParameterNames[index]), value, setting.minimum, setting.maximum, free);
 				freeCount += free ? 1 : 0;
@@ -498,9 +506,12 @@ namespace SST::Prototypes::JFM
 					continue;
 				const int freeIndex = request.layout.n_free++;
 				const JFMParameterSolverSetting setting = ParameterSetting(settings, index);
+				const double value = request.layout.fixed_values[index];
 				request.layout.free_to_total[freeIndex] = static_cast<int>(index);
-				request.layout.min_bounds[freeIndex] = setting.minimum;
-				request.layout.max_bounds[freeIndex] = setting.maximum;
+				request.layout.min_bounds[freeIndex] = std::isfinite(value) ? std::min(setting.minimum, value) : setting.minimum;
+				request.layout.max_bounds[freeIndex] = std::isfinite(value) ? std::max(setting.maximum, value) : setting.maximum;
+				if (request.layout.min_bounds[freeIndex] == request.layout.max_bounds[freeIndex])
+					request.layout.max_bounds[freeIndex] = std::nextafter(request.layout.min_bounds[freeIndex], std::numeric_limits<double>::infinity());
 			}
 			request.layout.dof = std::max(1, static_cast<int>(output.voltage.size()) - request.layout.n_free);
 			request.nm_config.max_iter = settings.monteCarloMaxIterations;

@@ -123,6 +123,21 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(result->curve.current.size(), record.data->current.size());
 	}
 
+	TEST(JFMFitEngineTests, CpuSimplexDoesNotClampPrefitStartOutsideConfiguredBounds)
+	{
+		JFMCharacteristicRecord record = MakeRecord("SD-RsRsh-alpha-Rsh2");
+		JFMFitMonteCarloSettings settings;
+		settings.fitMaxIterations = 100;
+		settings.fitReducedChiSquaredTolerance = 1.0e-12;
+		settings.monteCarloNoisePercent = 1.0;
+		settings.parameters["Rsh"] = {1.0, 1.0e4, true};
+
+		auto result = RunJFMSimplexFit(record, settings);
+		ASSERT_TRUE(result) << result.Error().technicalDetails;
+		EXPECT_LT(result->state.chiSquared, 1.0e-18);
+		EXPECT_NEAR(result->state.parameters.at("Rsh").value, Parameters.at("Rsh"), Parameters.at("Rsh") * 1.0e-9);
+	}
+
 	TEST(JFMFitEngineTests, CpuMonteCarloKeepsUncheckedParametersAtFitValues)
 	{
 		JFMCharacteristicRecord record = MakeRecord("SD-0");
