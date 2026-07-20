@@ -1089,7 +1089,7 @@ namespace SST::Prototypes::JFM
 					},
 					[eventBus, project, importedIds]() {
 						if (eventBus != nullptr && !importedIds->empty())
-							eventBus->Queue(PrefitRequested{project, *importedIds});
+							eventBus->Queue(FitRequested{project, *importedIds});
 					}};
 				return request;
 			});

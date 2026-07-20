@@ -90,6 +90,7 @@ namespace SST::Prototypes::JFM
 		void handlePreviewCompleted(const ImportPreviewCompleted &event);
 		void handlePreviewFailed(const ImportPreviewFailed &event);
 		void resetStaging();
+		void submitStagingImport(bool selectFitTabAfterImport);
 		void buildStagingProject();
 		[[nodiscard]] std::vector<ImportCompleted> buildApplyBatchesFromStaging() const;
 		void refreshPreviewFiles();
@@ -106,7 +107,7 @@ namespace SST::Prototypes::JFM
 		void selectAnalysisIds(std::vector<CharacteristicId> ids, CharacteristicId primary, std::string seriesId = {});
 		void selectAnalysisCharacteristic(const JFMSeries &series, CharacteristicId id, const std::vector<CharacteristicId> &visibleIds);
 		void renderAnalysisPlot(ProjectHandle project, const std::vector<CharacteristicId> &ids, CharacteristicId active, bool showFit);
-		void renderPrefitParameters(const std::optional<JFMPrefitState> &prefit) const;
+		void renderParameterTable(ProjectHandle project, CharacteristicId active);
 		void renderFitMonteCarloResults(ProjectHandle project, CharacteristicId active, const std::vector<CharacteristicId> &selectedIds);
 		void requestPrefit(ProjectHandle project, std::vector<CharacteristicId> ids) const;
 		void requestFit(ProjectHandle project, std::vector<CharacteristicId> ids) const;
@@ -130,11 +131,12 @@ namespace SST::Prototypes::JFM
 		JFMImportDialogRequest m_Request;
 		bool m_Open = false;
 		bool m_PreviewOpen = false;
-		bool m_PlotAfterImport = false;
+		bool m_PlotAfterImport = true;
 		bool m_ImportSubmitted = false;
 		bool m_SelectImportTab = false;
 		bool m_SelectAnalysisTab = false;
 		bool m_SelectFitTab = false;
+		bool m_PrepareTargetFitTab = false;
 		bool m_ShowOnlyActive = false;
 		bool m_DataAddedToProject = false;
 		bool m_AnalysisAutoFit = true;

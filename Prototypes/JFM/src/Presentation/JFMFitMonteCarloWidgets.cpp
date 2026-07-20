@@ -14,7 +14,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	bool RenderJFMFitMonteCarloSettings(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id)
+	bool RenderJFMFitMonteCarloSettings(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id, bool showParameterBounds)
 	{
 		bool changed = false;
 		ImGui::PushID(id);
@@ -26,16 +26,10 @@ namespace SST::Prototypes::JFM
 		ImGui::SetNextItemWidth(130.0f);
 		changed |= ImGui::InputInt("N", &settings.monteCarloSamples, 64, 512);
 		changed |= ImGui::Checkbox("Save samples", &settings.saveSamples);
-		ImGui::BeginDisabled(!settings.saveSamples);
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputInt("Save N (0 = all)", &settings.savedSampleLimit, 64, 512);
-		ImGui::EndDisabled();
 		ImGui::SetNextItemWidth(130.0f);
 		changed |= ImGui::InputInt("Simplex iterations", &settings.monteCarloMaxIterations, 100, 1000);
 		ImGui::SetNextItemWidth(130.0f);
 		changed |= ImGui::InputDouble("Sigma (%)", &settings.monteCarloNoisePercent, 0.1, 1.0, "%.6g");
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputDouble("Start perturbation (%)", &settings.monteCarloStartPerturbationPercent, 0.5, 5.0, "%.6g");
 		int seed = static_cast<int>(settings.monteCarloSeed);
 		ImGui::SetNextItemWidth(130.0f);
 		if (ImGui::InputInt("Seed", &seed))
@@ -61,7 +55,7 @@ namespace SST::Prototypes::JFM
 		}
 
 		const auto &names = JFMModelParameterNames(modelId);
-		if (ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 		{
 			ImGui::TableSetupColumn("Parameter");
 			ImGui::TableSetupColumn("Free", ImGuiTableColumnFlags_WidthFixed, 44.0f);

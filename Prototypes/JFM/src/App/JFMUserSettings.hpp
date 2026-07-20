@@ -79,7 +79,7 @@ namespace SST::Prototypes::JFM
 		bool tunedCurvesFitRangeOnly = false;
 		bool autoPrefitFitOnRangeChange = false;
 		float hoveredCurveLineWeight = 3.5f;
-		bool autoPlotAfterImport = false;
+		bool autoPlotAfterImport = true;
 		JFMFitMonteCarloSettings fitMonteCarlo;
 		std::vector<Path> recentProjects;
 	};

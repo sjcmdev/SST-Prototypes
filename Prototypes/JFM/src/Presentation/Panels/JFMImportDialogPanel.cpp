@@ -2,6 +2,7 @@
 
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
 
+#include "Analysis/JFMFitEngine.hpp"
 #include "App/JFMCommands.hpp"
 #include "App/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
@@ -132,6 +133,81 @@ namespace SST::Prototypes::JFM
 				x.push_back(voltage);
 				y.push_back(curve.current[index]);
 			}
+		}
+
+		std::optional<double> EstimateValue(const std::optional<JFMPrefitState> &prefit, const std::optional<JFMFitState> &fit, std::string_view name)
+		{
+			if (fit)
+			{
+				if (const auto value = fit->parameters.find(std::string(name)); value != fit->parameters.end() && std::isfinite(value->second.value))
+					return value->second.value;
+			}
+			if (prefit)
+			{
+				if (const auto value = prefit->parameters.find(std::string(name)); value != prefit->parameters.end() && std::isfinite(value->second.value))
+					return value->second.value;
+			}
+			return std::nullopt;
+		}
+
+		JFMParameterSolverSetting SuggestedBounds(std::string_view name, double value)
+		{
+			if (!std::isfinite(value))
+				return {};
+			if (name == "A")
+				return {std::max(0.0, value - 0.5), std::min(5.0, value + 0.5), true};
+			if (name == "alpha")
+				return {std::max(0.1, value - 0.5), std::min(10.0, value + 0.5), true};
+			const double magnitude = std::max(std::abs(value), 1.0e-30);
+			if (name == "I0")
+				return {std::max(1.0e-300, magnitude * 0.2), std::min(1.0, magnitude * 5.0), true};
+			if (name == "Rs")
+				return {std::max(0.0, value * 0.2), std::max(value * 5.0, 1.0e-9), true};
+			if (name == "Rsh" || name == "Rsh2")
+				return {std::max(1.0e-6, value * 0.2), std::min(1.0e15, std::max(value * 5.0, 1.0e-6)), true};
+			if (name == "I_ph")
+				return {0.0, std::max(magnitude * 5.0, 1.0e-12), true};
+			return {value - magnitude, value + magnitude, true};
+		}
+
+		bool HasDefaultishBounds(std::string_view name, const JFMParameterSolverSetting &setting)
+		{
+			if (name == "I0")
+				return setting.minimum <= 1.0e-299 && setting.maximum >= 1.0;
+			if (name == "A")
+				return setting.minimum <= 0.0 && setting.maximum >= 5.0;
+			if (name == "Rs")
+				return setting.minimum <= 0.0 && setting.maximum >= 1.0e9;
+			if (name == "Rsh" || name == "Rsh2")
+				return setting.minimum <= 1.0e-6 && setting.maximum >= 1.0e15;
+			if (name == "alpha")
+				return setting.minimum <= 0.1 && setting.maximum >= 10.0;
+			if (name == "I_ph")
+				return setting.minimum <= 0.0 && setting.maximum >= 1.0e6;
+			return false;
+		}
+
+		bool ApplySuggestedBounds(JFMFitMonteCarloSettings &settings, const std::optional<JFMPrefitState> &prefit, const std::optional<JFMFitState> &fit, std::string_view model, bool onlyDefaultish)
+		{
+			bool changed = false;
+			for (std::string_view nameView : JFMModelParameterNames(model))
+			{
+				const std::string name{nameView};
+				if (const std::optional<double> value = EstimateValue(prefit, fit, nameView))
+				{
+					JFMParameterSolverSetting &current = settings.parameters[name];
+					if (onlyDefaultish && !HasDefaultishBounds(nameView, current))
+						continue;
+					JFMParameterSolverSetting suggested = SuggestedBounds(nameView, *value);
+					suggested.monteCarloFree = current.monteCarloFree;
+					if (current.minimum != suggested.minimum || current.maximum != suggested.maximum)
+					{
+						current = suggested;
+						changed = true;
+					}
+				}
+			}
+			return changed;
 		}
 	} // namespace ImportDialogDetail
 	using namespace ImportDialogDetail;
@@ -351,28 +427,10 @@ namespace SST::Prototypes::JFM
 		ImGui::Checkbox("Plot after add", &m_PlotAfterImport);
 
 		const bool validDestination = m_Request.placement != JFMImportPlacement::ExistingSeries || !m_Request.targetSeriesId.empty();
-		ImGui::BeginDisabled(!validDestination || m_ImportSubmitted);
-		if (ImGui::Button(m_ImportSubmitted ? "Preparing..." : "Prepare data"))
-		{
-			resetStaging();
-			m_ImportOperation = m_NextImportOperation++;
-			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ImportRequested{
-					m_Request.paths,
-					m_Request.targetSeriesId,
-					m_Request.recursive,
-					buildOptions(),
-					m_PlotAfterImport,
-					m_Request.project,
-					m_ImportOperation,
-					m_Request.targetGroupId,
-					m_Request.placement,
-					true});
-			m_ImportSubmitted = true;
-			m_PreviewOpen = false;
-		}
-		ImGui::EndDisabled();
-		ImGui::SameLine();
+		if (!validDestination)
+			ImGui::TextDisabled("Select target series before staging.");
+		else if (m_ImportSubmitted)
+			ImGui::TextDisabled("Preparing data...");
 		if (ImGui::Button("Cancel"))
 		{
 			m_Open = false;
@@ -425,7 +483,8 @@ namespace SST::Prototypes::JFM
 		}
 		if (m_StagingProject == InvalidProjectHandle)
 		{
-			ImGui::TextDisabled("Prepare data in the Import tab first.");
+			submitStagingImport(fitMode);
+			ImGui::TextDisabled(m_ImportSubmitted ? "Preparing data..." : "Cannot prepare data.");
 			return;
 		}
 
@@ -624,7 +683,7 @@ namespace SST::Prototypes::JFM
 				? std::vector<CharacteristicId>{active}
 				: visibleIds;
 			renderAnalysisPlot(analysisProject, plotIds, active, fitMode && m_AnalysisShowFitCurves);
-			renderPrefitParameters(m_Store->GetPrefitState({analysisProject, active}));
+			renderParameterTable(analysisProject, active);
 			if (fitMode)
 				renderFitMonteCarloResults(analysisProject, active, selectedIds);
 		}
@@ -1083,47 +1142,99 @@ namespace SST::Prototypes::JFM
 		m_RangeHeldLastFrame = held;
 	}
 
-	void JFMImportDialogPanel::renderPrefitParameters(const std::optional<JFMPrefitState> &prefit) const
+	void JFMImportDialogPanel::renderParameterTable(ProjectHandle project, CharacteristicId active)
 	{
-		if (!prefit)
+		const auto record = m_Store != nullptr ? m_Store->FindCharacteristicRecord({project, active}) : std::nullopt;
+		if (!record)
 			return;
-		ImGui::SeparatorText("Prefit parameters");
-		ImGui::Text("Status: %s", prefit->status.c_str());
-		std::vector<std::string> names;
-		names.reserve(prefit->parameters.size());
-		for (const auto &[name, estimate] : prefit->parameters)
+		const std::optional<JFMPrefitState> &prefit = record->info.prefit;
+		const std::optional<JFMFitState> &fit = record->info.fit;
+		if (!prefit && !fit)
+			return;
+		ImGui::SeparatorText("Parameters");
+		if (prefit)
+			ImGui::Text("Prefit: %s", prefit->status.c_str());
+		if (fit)
 		{
-			(void)estimate;
-			names.push_back(name);
+			ImGui::SameLine();
+			ImGui::Text("Fit: %s, reduced chi2 %.6g", fit->status.c_str(), fit->reducedChiSquared);
 		}
-		std::sort(names.begin(), names.end());
-		if (!names.empty() && ImGui::BeginTable("##jfm_prefit_parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
+		const std::string model = fit ? fit->modelId : prefit ? prefit->modelId : "SD-RsRsh";
+		bool settingsChanged = ApplySuggestedBounds(settings.fitMonteCarlo, prefit, fit, model, true);
+		if (ImGui::Button("Suggest bounds"))
 		{
+			settingsChanged |= ApplySuggestedBounds(settings.fitMonteCarlo, prefit, fit, model, false);
+		}
+		if (ImGui::BeginTable("##jfm_import_parameters", 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		{
+			ImGui::TableSetupColumn("Stage", ImGuiTableColumnFlags_WidthFixed, 64.0f);
 			ImGui::TableSetupColumn("Parameter");
 			ImGui::TableSetupColumn("Value");
 			ImGui::TableSetupColumn("Std. error");
 			ImGui::TableSetupColumn("Source");
+			ImGui::TableSetupColumn("Minimum");
+			ImGui::TableSetupColumn("Maximum");
 			ImGui::TableHeadersRow();
-			for (const std::string &name : names)
-			{
-				const JFMParameterEstimate &estimate = prefit->parameters.at(name);
+			auto renderRow = [&](const char *stage, const std::string &name, const JFMParameterEstimate &estimate) {
+				JFMParameterSolverSetting &parameter = settings.fitMonteCarlo.parameters[name];
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
-				ImGui::TextUnformatted(name.c_str());
+				ImGui::TextUnformatted(stage);
 				ImGui::TableSetColumnIndex(1);
-				ImGui::Text("%.8g", estimate.value);
+				ImGui::TextUnformatted(name.c_str());
 				ImGui::TableSetColumnIndex(2);
+				ImGui::Text("%.8g", estimate.value);
+				ImGui::TableSetColumnIndex(3);
 				if (estimate.standardError)
 					ImGui::Text("%.8g", *estimate.standardError);
 				else
 					ImGui::TextDisabled("-");
-				ImGui::TableSetColumnIndex(3);
+				ImGui::TableSetColumnIndex(4);
 				ImGui::TextUnformatted(estimate.source.c_str());
+				ImGui::TableSetColumnIndex(5);
+				ImGui::SetNextItemWidth(-1.0f);
+				settingsChanged |= ImGui::InputDouble(("##min_" + std::string(stage) + name).c_str(), &parameter.minimum, 0.0, 0.0, "%.6g");
+				ImGui::TableSetColumnIndex(6);
+				ImGui::SetNextItemWidth(-1.0f);
+				settingsChanged |= ImGui::InputDouble(("##max_" + std::string(stage) + name).c_str(), &parameter.maximum, 0.0, 0.0, "%.6g");
+			};
+			if (prefit)
+			{
+				std::vector<std::string> names;
+				names.reserve(prefit->parameters.size());
+				for (const auto &[name, estimate] : prefit->parameters)
+				{
+					(void)estimate;
+					names.push_back(name);
+				}
+				std::sort(names.begin(), names.end());
+				for (const std::string &name : names)
+					renderRow("prefit", name, prefit->parameters.at(name));
+			}
+			if (fit)
+			{
+				std::vector<std::string> names;
+				names.reserve(fit->parameters.size());
+				for (const auto &[name, estimate] : fit->parameters)
+				{
+					(void)estimate;
+					names.push_back(name);
+				}
+				std::sort(names.begin(), names.end());
+				for (const std::string &name : names)
+					renderRow("fit", name, fit->parameters.at(name));
 			}
 			ImGui::EndTable();
 		}
-		for (const std::string &warning : prefit->warnings)
+		if (settingsChanged && m_Settings != nullptr)
+			m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
+		if (prefit)
+			for (const std::string &warning : prefit->warnings)
 			ImGui::TextWrapped("Warning: %s", warning.c_str());
+		if (fit)
+			for (const std::string &warning : fit->warnings)
+				ImGui::TextWrapped("Fit warning: %s", warning.c_str());
 	}
 
 	void JFMImportDialogPanel::renderFitMonteCarloResults(ProjectHandle project, CharacteristicId active, const std::vector<CharacteristicId> &selectedIds)
@@ -1136,7 +1247,7 @@ namespace SST::Prototypes::JFM
 		{
 			JFMUserSettings settings = m_Settings->GetSnapshot();
 			const std::string model = record->info.prefit ? record->info.prefit->modelId : "SD-RsRsh";
-			if (RenderJFMFitMonteCarloSettings(settings.fitMonteCarlo, model, "import_fit_mc"))
+			if (RenderJFMFitMonteCarloSettings(settings.fitMonteCarlo, model, "import_fit_mc", false))
 				m_Settings->SetFitMonteCarloSettings(std::move(settings.fitMonteCarlo));
 		}
 		if (ImGui::Button("Run Monte Carlo") && m_EventBus != nullptr)
@@ -1147,41 +1258,6 @@ namespace SST::Prototypes::JFM
 			const JFMFitState &fit = *record->info.fit;
 			ImGui::SameLine();
 			ImGui::Text("Fit: %s, reduced chi2 %.6g, %d iterations", fit.status.c_str(), fit.reducedChiSquared, fit.iterations);
-			std::vector<std::string> names;
-			names.reserve(fit.parameters.size());
-			for (const auto &[name, estimate] : fit.parameters)
-			{
-				(void)estimate;
-				names.push_back(name);
-			}
-			std::sort(names.begin(), names.end());
-			if (!names.empty() && ImGui::BeginTable("##jfm_fit_parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
-			{
-				ImGui::TableSetupColumn("Parameter");
-				ImGui::TableSetupColumn("Value");
-				ImGui::TableSetupColumn("Std. error");
-				ImGui::TableSetupColumn("Source");
-				ImGui::TableHeadersRow();
-				for (const std::string &name : names)
-				{
-					const JFMParameterEstimate &estimate = fit.parameters.at(name);
-					ImGui::TableNextRow();
-					ImGui::TableSetColumnIndex(0);
-					ImGui::TextUnformatted(name.c_str());
-					ImGui::TableSetColumnIndex(1);
-					ImGui::Text("%.8g", estimate.value);
-					ImGui::TableSetColumnIndex(2);
-					if (estimate.standardError)
-						ImGui::Text("%.8g", *estimate.standardError);
-					else
-						ImGui::TextDisabled("-");
-					ImGui::TableSetColumnIndex(3);
-					ImGui::TextUnformatted(estimate.source.c_str());
-				}
-				ImGui::EndTable();
-			}
-			for (const std::string &warning : fit.warnings)
-				ImGui::TextWrapped("Fit warning: %s", warning.c_str());
 		}
 
 		if (record->info.monteCarlo)
@@ -1232,8 +1308,33 @@ namespace SST::Prototypes::JFM
 		m_SelectImportTab = false;
 		m_SelectAnalysisTab = false;
 		m_SelectFitTab = false;
+		m_PrepareTargetFitTab = false;
 		m_RangeCharacteristic = InvalidCharacteristicId;
 		m_RangeInitialized = false;
+	}
+
+	void JFMImportDialogPanel::submitStagingImport(bool selectFitTabAfterImport)
+	{
+		const bool validDestination = m_Request.placement != JFMImportPlacement::ExistingSeries || !m_Request.targetSeriesId.empty();
+		if (m_ImportSubmitted || !validDestination)
+			return;
+		resetStaging();
+		m_PrepareTargetFitTab = selectFitTabAfterImport;
+		m_ImportOperation = m_NextImportOperation++;
+		if (m_EventBus != nullptr)
+			m_EventBus->Queue(ImportRequested{
+				m_Request.paths,
+				m_Request.targetSeriesId,
+				m_Request.recursive,
+				buildOptions(),
+				m_PlotAfterImport,
+				m_Request.project,
+				m_ImportOperation,
+				m_Request.targetGroupId,
+				m_Request.placement,
+				true});
+		m_ImportSubmitted = true;
+		m_PreviewOpen = false;
 	}
 
 	void JFMImportDialogPanel::handleImportCompleted(const ImportCompleted &event)
@@ -1246,7 +1347,9 @@ namespace SST::Prototypes::JFM
 
 		m_ImportSubmitted = false;
 		buildStagingProject();
-		m_SelectAnalysisTab = true;
+		m_SelectAnalysisTab = !m_PrepareTargetFitTab;
+		m_SelectFitTab = m_PrepareTargetFitTab;
+		m_PrepareTargetFitTab = false;
 	}
 
 	void JFMImportDialogPanel::handleImportFailed(const ImportFailed &event)
@@ -1345,7 +1448,7 @@ namespace SST::Prototypes::JFM
 		m_PreviewFileIndex = 0;
 		m_PreviewScale = 0;
 		m_PreviewFolderIndex = 0;
-		m_PlotAfterImport = m_Settings != nullptr && m_Settings->GetSnapshot().autoPlotAfterImport;
+		m_PlotAfterImport = true;
 		m_ImportSubmitted = false;
 		m_SelectImportTab = true;
 		m_SelectAnalysisTab = false;
@@ -1354,7 +1457,7 @@ namespace SST::Prototypes::JFM
 		m_AnalysisAutoFit = true;
 		m_AnalysisShowLegend = false;
 		m_AnalysisShowCurves = true;
-		m_AnalysisShowPrefitCurves = m_Settings == nullptr || m_Settings->GetSnapshot().showPrefitCurves;
+		m_AnalysisShowPrefitCurves = true;
 		m_AnalysisShowFitCurves = true;
 		m_AnalysisScale = 0;
 		m_AnalysisTreeOpenRequest = 0;

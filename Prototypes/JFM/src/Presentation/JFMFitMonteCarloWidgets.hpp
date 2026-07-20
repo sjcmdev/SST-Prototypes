@@ -11,7 +11,8 @@ namespace SST::Prototypes::JFM
 	[[nodiscard]] bool RenderJFMFitMonteCarloSettings(
 		JFMFitMonteCarloSettings &settings,
 		std::string_view modelId,
-		const char *id);
+		const char *id,
+		bool showParameterBounds = true);
 	[[nodiscard]] bool RenderJFMMonteCarloScatterDefaults(JFMFitMonteCarloSettings &settings, const char *id);
 
 	struct JFMMonteCarloScatterPlotOptions
