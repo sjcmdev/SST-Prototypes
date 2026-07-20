@@ -643,6 +643,8 @@ namespace SST::Prototypes::JFM
 				context.Set("lower_voltage", area.rangeLower);
 				context.Set("upper_voltage", area.rangeUpper);
 				Execute(JFMSetFitRangeCommandId, std::move(context));
+				if (m_EventBus != nullptr && m_Settings != nullptr && m_Settings->GetSnapshot().autoPrefitFitOnRangeChange)
+					m_EventBus->Queue(FitRequested{area.project, {active}});
 			}
 		}
 		if (area.rangeUndoGroupOpen && !held && (area.rangeHeldLastFrame || changed))

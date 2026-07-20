@@ -14,7 +14,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <imgui.h>
-#include <sstream>
 
 namespace SST::Prototypes::JFM
 {
@@ -46,6 +45,16 @@ namespace SST::Prototypes::JFM
 			char *end = nullptr;
 			const double value = std::strtod(found->second.c_str(), &end);
 			return end != found->second.c_str() && std::isfinite(value) ? std::optional<double>{value} : std::nullopt;
+		}
+
+		std::optional<int> metadataInt(const JFMCharacteristicInfo &info, const std::string &key)
+		{
+			const auto found = info.metadata.find(key);
+			if (found == info.metadata.end())
+				return std::nullopt;
+			char *end = nullptr;
+			const long value = std::strtol(found->second.c_str(), &end, 10);
+			return end != found->second.c_str() ? std::optional<int>{static_cast<int>(value)} : std::nullopt;
 		}
 
 		std::string formatDouble(double value)
@@ -83,6 +92,26 @@ namespace SST::Prototypes::JFM
 			}
 			exponent = static_cast<int>(std::floor(std::log10(std::abs(value))));
 			mantissa = static_cast<float>(value / std::pow(10.0, exponent));
+		}
+
+		float tunedMantissa(const JFMCharacteristicInfo &info, std::string_view name)
+		{
+			if (const std::optional<double> value = metadataDouble(info, "tuned_mantissa." + std::string(name)))
+				return static_cast<float>(*value);
+			float mantissa = 0.0f;
+			int exponent = 0;
+			decomposeScientific(parameterValue(info, name), mantissa, exponent);
+			return std::clamp(mantissa, 0.0f, 10.0f);
+		}
+
+		int tunedExponent(const JFMCharacteristicInfo &info, std::string_view name)
+		{
+			if (const std::optional<int> value = metadataInt(info, "tuned_exponent." + std::string(name)))
+				return *value;
+			float mantissa = 0.0f;
+			int exponent = 0;
+			decomposeScientific(parameterValue(info, name), mantissa, exponent);
+			return exponent;
 		}
 
 		int indexForVoltage(const std::vector<double> &voltage, double value)
@@ -221,6 +250,46 @@ namespace SST::Prototypes::JFM
 		m_TunedAutoFixedWasFree = false;
 	}
 
+	void ControlPanel::ResetTuning(ProjectHandle project, const std::vector<CharacteristicId> &ids)
+	{
+		if (m_Store == nullptr)
+			return;
+		bool groupOpen = false;
+		if (auto undoStack = m_UndoStack.lock())
+			groupOpen = undoStack->BeginGroup("Reset tuning");
+		for (CharacteristicId id : ids)
+		{
+			const auto record = m_Store->FindCharacteristicRecord({project, id});
+			if (!record || !record->info.fit)
+				continue;
+			for (const auto &[name, estimate] : record->info.fit->parameters)
+			{
+				float mantissa = 0.0f;
+				int exponent = 0;
+				decomposeScientific(estimate.value, mantissa, exponent);
+				for (const auto &[key, value] : std::array{
+						 std::pair{"tuned." + name, formatDouble(estimate.value)},
+						 std::pair{"tuned_mantissa." + name, formatDouble(mantissa)},
+						 std::pair{"tuned_exponent." + name, std::to_string(exponent)}})
+				{
+					CommandContext context;
+					context.Set("project", project);
+					context.Set("characteristic_ids", std::vector<CharacteristicId>{id});
+					context.Set("metadata_key", key);
+					context.Set("metadata_value", value);
+					Execute(JFMSetCharacteristicMetadataCommandId, std::move(context));
+				}
+			}
+		}
+		if (groupOpen)
+		{
+			const auto undoStack = m_UndoStack.lock();
+			if (undoStack == nullptr)
+				return;
+			(void)undoStack->EndGroup();
+		}
+	}
+
 	void ControlPanel::Render()
 	{
 		if (!IsVisible())
@@ -276,9 +345,9 @@ namespace SST::Prototypes::JFM
 		RenderPrefitDisplayControls();
 		RenderColorControls(project, ids, activeRecord->info);
 		RenderRangeControls(project, ids, *activeRecord);
+		RenderParameterTable(project, activeRecord->info);
 		RenderTunedControls(project, ids, activeRecord->info);
 		RenderSolverControls(project, ids, activeRecord->info);
-		RenderParameterTable(project, activeRecord->info);
 
 		ImGui::End();
 		SetVisible(visible);
@@ -314,11 +383,15 @@ namespace SST::Prototypes::JFM
 			ImGui::EndCombo();
 		}
 
-		if (ImGui::Button("Prefit") && m_EventBus != nullptr)
+		const ImVec2 actionButtonSize{104.0f, 0.0f};
+		if (ImGui::Button("Prefit", actionButtonSize) && m_EventBus != nullptr)
 			m_EventBus->Queue(PrefitRequested{project, ids});
 		ImGui::SameLine();
-		if (ImGui::Button("Fit") && m_EventBus != nullptr)
+		if (ImGui::Button("Fit", actionButtonSize) && m_EventBus != nullptr)
 			m_EventBus->Queue(FitRequested{project, ids});
+		ImGui::SameLine();
+		if (ImGui::Button("Reset tuning", actionButtonSize))
+			ResetTuning(project, ids);
 	}
 
 	void ControlPanel::RenderSolverControls(ProjectHandle project, const std::vector<CharacteristicId> &ids, const JFMCharacteristicInfo &activeInfo)
@@ -567,10 +640,8 @@ namespace SST::Prototypes::JFM
 				const std::string name(nameView);
 				JFMParameterSolverSetting &parameter = settings.fitMonteCarlo.parameters[name];
 				bool fixed = !parameter.monteCarloFree;
-				double value = parameterValue(activeInfo, nameView);
-				float mantissa = 0.0f;
-				int exponent = 0;
-				decomposeScientific(value, mantissa, exponent);
+				float mantissa = tunedMantissa(activeInfo, nameView);
+				int exponent = tunedExponent(activeInfo, nameView);
 
 				ImGui::PushID(name.c_str());
 				ImGui::TableNextRow();
@@ -584,7 +655,7 @@ namespace SST::Prototypes::JFM
 				}
 				ImGui::TableSetColumnIndex(2);
 				ImGui::SetNextItemWidth(-1.0f);
-				const bool mantissaChanged = ImGui::SliderFloat("##mantissa", &mantissa, -9.999f, 9.999f, "%.6g");
+				const bool mantissaChanged = ImGui::DragFloat("##mantissa", &mantissa, 0.002f, 0.0f, 10.0f, "%.6g", ImGuiSliderFlags_AlwaysClamp);
 				const bool mantissaActive = ImGui::IsItemActive();
 				ImGui::TableSetColumnIndex(3);
 				ImGui::SetNextItemWidth(-1.0f);
@@ -621,6 +692,18 @@ namespace SST::Prototypes::JFM
 					context.Set("metadata_key", "tuned." + name);
 					context.Set("metadata_value", formatDouble(tunedValue));
 					Execute(JFMSetCharacteristicMetadataCommandId, std::move(context));
+					CommandContext mantissaContext;
+					mantissaContext.Set("project", project);
+					mantissaContext.Set("characteristic_ids", ids);
+					mantissaContext.Set("metadata_key", "tuned_mantissa." + name);
+					mantissaContext.Set("metadata_value", formatDouble(mantissa));
+					Execute(JFMSetCharacteristicMetadataCommandId, std::move(mantissaContext));
+					CommandContext exponentContext;
+					exponentContext.Set("project", project);
+					exponentContext.Set("characteristic_ids", ids);
+					exponentContext.Set("metadata_key", "tuned_exponent." + name);
+					exponentContext.Set("metadata_value", std::to_string(exponent));
+					Execute(JFMSetCharacteristicMetadataCommandId, std::move(exponentContext));
 					if (m_EventBus != nullptr)
 						m_EventBus->Queue(FitRequested{project, ids});
 				}

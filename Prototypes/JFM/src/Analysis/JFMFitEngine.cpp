@@ -256,7 +256,7 @@ namespace SST::Prototypes::JFM
 			if (found != settings.parameters.end() && std::isfinite(found->second.minimum) && std::isfinite(found->second.maximum) && found->second.minimum < found->second.maximum)
 				return found->second;
 			const std::array<JFMParameterSolverSetting, ParameterCount> fallback = {{
-				{1.0e-300, 1.0, true}, {0.1, 10.0, true}, {0.0, 1.0e9, true},
+				{1.0e-300, 1.0, true}, {0.0, 5.0, true}, {0.0, 1.0e9, true},
 				{1.0e-6, 1.0e15, true}, {0.1, 10.0, true}, {1.0e-6, 1.0e15, true}, {0.0, 1.0e6, true}}};
 			return fallback[index];
 		}

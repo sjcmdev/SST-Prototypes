@@ -208,6 +208,12 @@ namespace SST::Prototypes::JFM
 							m_Settings.fitMonteCarlo.parameters[name] = setting;
 					}
 				}
+				if (auto ideality = m_Settings.fitMonteCarlo.parameters.find("A"); ideality != m_Settings.fitMonteCarlo.parameters.end()
+					&& ideality->second.minimum == 0.1 && ideality->second.maximum == 10.0)
+				{
+					ideality->second.minimum = 0.0;
+					ideality->second.maximum = 5.0;
+				}
 			}
 			m_Settings.defaultColorPresetName = root["default_color_preset"] ? root["default_color_preset"].as<std::string>() : m_Settings.defaultColorPresetName;
 			if (const YAML::Node presets = root["color_presets"])
@@ -522,7 +528,7 @@ namespace SST::Prototypes::JFM
 		settings.defaultColorPresetName = settings.colorPresets.front().name;
 		settings.fitMonteCarlo.parameters = {
 			{"I0", {1.0e-300, 1.0, true}},
-			{"A", {0.1, 10.0, true}},
+			{"A", {0.0, 5.0, true}},
 			{"Rs", {0.0, 1.0e9, true}},
 			{"Rsh", {1.0e-6, 1.0e15, true}},
 			{"alpha", {0.1, 10.0, true}},
