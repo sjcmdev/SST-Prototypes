@@ -246,6 +246,21 @@ namespace SST::Prototypes::JFM
 			return fallback[index];
 		}
 
+		JFMParameterSolverSetting ParameterSettingIncludingValue(const JFMFitMonteCarloSettings &settings, std::size_t index, double value)
+		{
+			JFMParameterSolverSetting setting = ParameterSetting(settings, index);
+			if (!std::isfinite(value))
+				return setting;
+			const JFMParameterSolverSetting fallback = ParameterSetting(JFMFitMonteCarloSettings{}, index);
+			if (value < setting.minimum)
+				setting.minimum = std::min(fallback.minimum, value);
+			if (value > setting.maximum)
+				setting.maximum = std::max(fallback.maximum, value);
+			if (setting.minimum == setting.maximum)
+				setting.maximum = std::nextafter(setting.minimum, std::numeric_limits<double>::infinity());
+			return setting;
+		}
+
 		struct SolverOutput
 		{
 			ParameterArray parameters{};
@@ -267,17 +282,10 @@ namespace SST::Prototypes::JFM
 			int freeCount = 0;
 			for (std::size_t index = 0; index < ParameterCount; ++index)
 			{
-				JFMParameterSolverSetting setting = ParameterSetting(settings, index);
 				const bool inModel = HasParameter(model, index);
 				const bool free = inModel && freeMask[index];
 				double value = free ? start[index] : fixed[index];
-				if (inModel && std::isfinite(value))
-				{
-					setting.minimum = std::min(setting.minimum, value);
-					setting.maximum = std::max(setting.maximum, value);
-					if (setting.minimum == setting.maximum)
-						setting.maximum = std::nextafter(setting.minimum, std::numeric_limits<double>::infinity());
-				}
+				const JFMParameterSolverSetting setting = inModel ? ParameterSettingIncludingValue(settings, index, value) : ParameterSetting(settings, index);
 				value = std::clamp(value, setting.minimum, setting.maximum);
 				fitParameters.emplace_back(std::string(ParameterNames[index]), value, setting.minimum, setting.maximum, free);
 				freeCount += free ? 1 : 0;
@@ -505,13 +513,11 @@ namespace SST::Prototypes::JFM
 				if (!freeMask[index])
 					continue;
 				const int freeIndex = request.layout.n_free++;
-				const JFMParameterSolverSetting setting = ParameterSetting(settings, index);
 				const double value = request.layout.fixed_values[index];
+				const JFMParameterSolverSetting setting = ParameterSettingIncludingValue(settings, index, value);
 				request.layout.free_to_total[freeIndex] = static_cast<int>(index);
-				request.layout.min_bounds[freeIndex] = std::isfinite(value) ? std::min(setting.minimum, value) : setting.minimum;
-				request.layout.max_bounds[freeIndex] = std::isfinite(value) ? std::max(setting.maximum, value) : setting.maximum;
-				if (request.layout.min_bounds[freeIndex] == request.layout.max_bounds[freeIndex])
-					request.layout.max_bounds[freeIndex] = std::nextafter(request.layout.min_bounds[freeIndex], std::numeric_limits<double>::infinity());
+				request.layout.min_bounds[freeIndex] = setting.minimum;
+				request.layout.max_bounds[freeIndex] = setting.maximum;
 			}
 			request.layout.dof = std::max(1, static_cast<int>(output.voltage.size()) - request.layout.n_free);
 			request.nm_config.max_iter = settings.monteCarloMaxIterations;
@@ -576,7 +582,7 @@ namespace SST::Prototypes::JFM
 			{
 				if (!freeMask[index])
 					continue;
-				const JFMParameterSolverSetting setting = ParameterSetting(settings, index);
+				const JFMParameterSolverSetting setting = ParameterSettingIncludingValue(settings, index, start[index]);
 				const double scale = std::abs(start[index]) > 1.0e-300
 					? std::abs(start[index])
 					: std::max((setting.maximum - setting.minimum) * 1.0e-12, 1.0e-15);

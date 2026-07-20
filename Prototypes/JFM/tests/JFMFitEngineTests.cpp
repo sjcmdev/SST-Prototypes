@@ -138,6 +138,21 @@ namespace SST::Prototypes::JFM
 		EXPECT_NEAR(result->state.parameters.at("Rsh").value, Parameters.at("Rsh"), Parameters.at("Rsh") * 1.0e-9);
 	}
 
+	TEST(JFMFitEngineTests, CpuSimplexDoesNotMakeOutOfRangePrefitValueABoundary)
+	{
+		JFMCharacteristicRecord record = MakeRecord("SD-0");
+		JFMFitMonteCarloSettings settings;
+		settings.fitMaxIterations = 100;
+		settings.fitReducedChiSquaredTolerance = 1.0e-12;
+		settings.monteCarloNoisePercent = 1.0;
+		settings.parameters = {{"I0", {1.0e-9, 1.0e-5, true}}, {"A", {0.5, 3.0, true}}};
+
+		auto result = RunJFMSimplexFit(record, settings);
+		ASSERT_TRUE(result) << result.Error().technicalDetails;
+		EXPECT_LT(result->state.chiSquared, 1.0e-18);
+		EXPECT_NEAR(result->state.parameters.at("I0").value, Parameters.at("I0"), Parameters.at("I0") * 1.0e-9);
+	}
+
 	TEST(JFMFitEngineTests, CpuMonteCarloKeepsUncheckedParametersAtFitValues)
 	{
 		JFMCharacteristicRecord record = MakeRecord("SD-0");
