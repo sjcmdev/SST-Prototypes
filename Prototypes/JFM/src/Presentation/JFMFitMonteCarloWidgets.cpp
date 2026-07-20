@@ -95,7 +95,7 @@ namespace SST::Prototypes::JFM
 	bool RenderJFMMonteCarloScatterDefaults(JFMFitMonteCarloSettings &settings, const char *id)
 	{
 		bool changed = false;
-		static constexpr const char *labels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
+		static constexpr const char *labels[] = {"<= 1 sigma", "1-2 sigma", "> 2 sigma"};
 		static constexpr const char *parameters[] = {"I0", "A", "Rs", "Rsh", "alpha", "Rsh2", "I_ph"};
 		ImGui::PushID(id);
 		ImGui::SetNextItemWidth(170.0f);
@@ -214,7 +214,7 @@ namespace SST::Prototypes::JFM
 		ImGui::SetNextItemWidth(120.0f);
 		changed |= ImGui::SliderFloat("Zoom-out", &options.zoomOut, 0.0f, 1.0f, "%.2f");
 
-		static constexpr const char *classLabels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
+		static constexpr const char *classLabels[] = {"<= 1 sigma", "1-2 sigma", "> 2 sigma"};
 		for (std::size_t index = 0; index < options.showSigmaClasses.size(); ++index)
 		{
 			ImGui::PushID(static_cast<int>(index));
@@ -252,10 +252,9 @@ namespace SST::Prototypes::JFM
 		double maximumY = 0.0;
 		for (const JFMMonteCarloScatterPoint &point : statistics->points)
 		{
-			if (point.sigmaClass >= x.size())
-				continue;
-			x[point.sigmaClass].push_back(point.x);
-			y[point.sigmaClass].push_back(point.y);
+			const std::size_t displayClass = std::min<std::size_t>(point.sigmaClass, x.size() - 1);
+			x[displayClass].push_back(point.x);
+			y[displayClass].push_back(point.y);
 			if (!hasVisiblePoint)
 			{
 				minimumX = maximumX = point.x;
