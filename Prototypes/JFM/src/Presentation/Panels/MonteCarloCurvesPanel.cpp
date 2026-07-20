@@ -65,12 +65,10 @@ namespace SST::Prototypes::JFM
 		if (m_EventBus != nullptr)
 		{
 			AddSubscription(m_EventBus->Subscribe<MonteCarloRequested>([this](const MonteCarloRequested &event) {
-				SetVisible(true);
 				for (CharacteristicId id : event.ids)
 					AddPlot({event.project, id});
 			}));
 			AddSubscription(m_EventBus->Subscribe<MonteCarloCompleted>([this](const MonteCarloCompleted &event) {
-				SetVisible(true);
 				AddPlot(event.ref);
 			}));
 		}
