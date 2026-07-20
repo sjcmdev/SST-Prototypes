@@ -9,6 +9,7 @@
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,11 @@ namespace SST::Prototypes::JFM
 			JFMCharacteristicRef ref;
 			JFMMonteCarloScatterPlotOptions options;
 			bool axesInitialized = false;
+			bool open = true;
+			bool needsInitialPlacement = false;
+			int initialPlacement = 0;
+			bool needsDock = false;
+			int dockSlot = -1;
 		};
 
 		struct PlotGroup
@@ -43,12 +49,23 @@ namespace SST::Prototypes::JFM
 			std::vector<PlotState> plots;
 		};
 
-		void AddGroup();
+		void AddGroup(std::string title = {});
 		void AddPlot(JFMCharacteristicRef ref);
+		void AddPlot(JFMCharacteristicRef ref, int xParameter, int yParameter, int initialPlacement = -1, int dockSlot = -1);
 		void AddPlots(ProjectHandle project, const std::vector<CharacteristicId> &ids);
+		void AddDefaultPlotsForCharacteristic(ProjectHandle project, const JFMCharacteristicInfo &info, int &placement);
 		void InitializeAxes(PlotState &plot, const JFMMonteCarloResult &result) const;
-		[[nodiscard]] bool ExportPlot(const PlotState &plot, bool uncertaintyOnly) const;
+		[[nodiscard]] std::string PlotWindowTitle(const PlotState &plot, const JFMMonteCarloResult &result) const;
+		[[nodiscard]] std::string PlotDataFileName(const PlotState &plot, const JFMMonteCarloResult &result, bool uncertaintyOnly) const;
+		[[nodiscard]] bool ExportPlot(const PlotState &plot, bool uncertaintyOnly, std::optional<Path> directory = std::nullopt) const;
+		[[nodiscard]] bool ExportPlotToFile(const PlotState &plot, bool uncertaintyOnly, const Path &path) const;
+		[[nodiscard]] bool SavePlotImage(const PlotState &plot, std::optional<Path> outputPath = std::nullopt) const;
+		[[nodiscard]] bool SaveAllPlotImages(const Path &directory);
 		[[nodiscard]] Path OutputDirectory(JFMCharacteristicRef ref) const;
+		[[nodiscard]] std::string LastSavePlotError() const;
+		void RenderAddPlotControls(ProjectHandle project);
+		void RenderDockspace();
+		void RenderPlotWindow(PlotState &plot);
 		void SetStatus(std::string action, int saved, int total);
 
 		Ref<JFMWorkspaceStore> m_Store;
@@ -59,6 +76,13 @@ namespace SST::Prototypes::JFM
 		std::uint64_t m_ActivePlot = 0;
 		std::uint64_t m_NextGroupId = 1;
 		std::uint64_t m_NextPlotId = 1;
+		unsigned int m_DockspaceId = 0;
+		unsigned int m_LeftDockId = 0;
+		unsigned int m_RightDockId = 0;
+		bool m_RebuildDockLayout = false;
+		CharacteristicId m_AddPlotCharacteristic = InvalidCharacteristicId;
+		int m_AddPlotPair = 0;
+		mutable std::string m_LastSavePlotError;
 		std::string m_Status;
 	};
 } // namespace SST::Prototypes::JFM

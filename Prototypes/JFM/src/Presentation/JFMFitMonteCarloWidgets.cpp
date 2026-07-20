@@ -200,51 +200,53 @@ namespace SST::Prototypes::JFM
 			options.yParameter = (options.xParameter + 1) % count;
 
 		ImGui::PushID(id);
-		ImGui::SetNextItemWidth(120.0f);
-		if (ImGui::BeginCombo("X", result.parameterNames[options.xParameter].c_str()))
-		{
-			for (int index = 0; index < count; ++index)
-				if (ImGui::Selectable(result.parameterNames[index].c_str(), index == options.xParameter))
-				{
-					options.xParameter = index;
-					changed = true;
-				}
-			ImGui::EndCombo();
-		}
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(120.0f);
-		if (ImGui::BeginCombo("Y", result.parameterNames[options.yParameter].c_str()))
-		{
-			for (int index = 0; index < count; ++index)
-				if (ImGui::Selectable(result.parameterNames[index].c_str(), index == options.yParameter))
-				{
-					options.yParameter = index;
-					changed = true;
-				}
-			ImGui::EndCombo();
-		}
-		if (options.xParameter == options.yParameter)
-		{
-			options.yParameter = (options.xParameter + 1) % count;
-			changed = true;
-		}
-		ImGui::SameLine();
-		changed |= ImGui::Checkbox("Auto-fit", &options.autoFit);
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(120.0f);
-		changed |= ImGui::SliderFloat("Zoom-out", &options.zoomOut, 0.0f, 1.0f, "%.2f");
-
 		static constexpr const char *classLabels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
-		for (std::size_t index = 0; index < options.showSigmaClasses.size(); ++index)
+		if (ImGui::BeginChild("##scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 2.0f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 		{
-			ImGui::PushID(static_cast<int>(index));
-			changed |= ImGui::Checkbox(classLabels[index], &options.showSigmaClasses[index]);
+			ImGui::SetNextItemWidth(120.0f);
+			if (ImGui::BeginCombo("X", result.parameterNames[options.xParameter].c_str()))
+			{
+				for (int index = 0; index < count; ++index)
+					if (ImGui::Selectable(result.parameterNames[index].c_str(), index == options.xParameter))
+					{
+						options.xParameter = index;
+						changed = true;
+					}
+				ImGui::EndCombo();
+			}
 			ImGui::SameLine();
-			changed |= ImGui::ColorEdit4("##color", options.sigmaColors[index].data(), ImGuiColorEditFlags_NoInputs);
+			ImGui::SetNextItemWidth(120.0f);
+			if (ImGui::BeginCombo("Y", result.parameterNames[options.yParameter].c_str()))
+			{
+				for (int index = 0; index < count; ++index)
+					if (ImGui::Selectable(result.parameterNames[index].c_str(), index == options.yParameter))
+					{
+						options.yParameter = index;
+						changed = true;
+					}
+				ImGui::EndCombo();
+			}
+			if (options.xParameter == options.yParameter)
+			{
+				options.yParameter = (options.xParameter + 1) % count;
+				changed = true;
+			}
 			ImGui::SameLine();
-			ImGui::PopID();
+			for (std::size_t index = 0; index < options.showSigmaClasses.size(); ++index)
+			{
+				ImGui::PushID(static_cast<int>(index));
+				changed |= ImGui::Checkbox(classLabels[index], &options.showSigmaClasses[index]);
+				ImGui::SameLine();
+				changed |= ImGui::ColorEdit4("##color", options.sigmaColors[index].data(), ImGuiColorEditFlags_NoInputs);
+				ImGui::SameLine();
+				ImGui::PopID();
+			}
+			changed |= ImGui::Checkbox("Auto-fit", &options.autoFit);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(120.0f);
+			changed |= ImGui::SliderFloat("Zoom-out", &options.zoomOut, 0.0f, 1.0f, "%.2f");
 		}
-		ImGui::NewLine();
+		ImGui::EndChild();
 
 		const auto statistics = CalculateJFMMonteCarloScatterStatistics(result, options.xParameter, options.yParameter);
 		if (!statistics)
@@ -310,6 +312,12 @@ namespace SST::Prototypes::JFM
 				points.MarkerFillColor = points.LineColor;
 				ImPlot::PlotScatter(classLabels[sigmaClass], x[sigmaClass].data(), y[sigmaClass].data(), static_cast<int>(x[sigmaClass].size()), points);
 			}
+			const ImPlotRect limits = ImPlot::GetPlotLimits();
+			options.xMinimum = limits.X.Min;
+			options.xMaximum = limits.X.Max;
+			options.yMinimum = limits.Y.Min;
+			options.yMaximum = limits.Y.Max;
+			options.hasAxisLimits = true;
 			ImPlot::EndPlot();
 		}
 		ImGui::PopID();
