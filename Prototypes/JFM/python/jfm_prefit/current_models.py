@@ -95,6 +95,11 @@ def single_diode_nonlinear_shunt_current(
     dark: bool,
 ) -> np.ndarray:
     values = np.asarray(voltage, dtype=float)
+    # I0, A, Rs, Rsh = parameters["I0"], parameters["A"], parameters["Rs"], parameters["Rsh"]
+    # alpha,Rsh2 = parameters["alpha"],parameters["Rsh2"]
+    # AkT = thermal_voltage(temperature_k)
+    # x = ((Rs*(voltage-)) + ())/AkT
+    # lambertW_argument = I0*Rs/AkT * np.exp(voltage/AkT) * np.exp(-x)
     diode, internal_voltage = _series_diode_current(values, temperature_k, parameters)
     alpha = float(parameters["alpha"])
     with np.errstate(invalid="ignore"):
