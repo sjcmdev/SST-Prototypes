@@ -225,8 +225,15 @@ namespace SST::Prototypes::JFM
 			return;
 		AddGroup(info.name);
 		const JFMFitMonteCarloSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot().fitMonteCarlo : JFMFitMonteCarloSettings{};
+		std::vector<JFMMonteCarloParameterPair> pairs = DefaultPairsForResult(settings, *result);
+		if (pairs.empty())
+		{
+			const std::vector<JFMMonteCarloParameterPair> allPairs = AllPairsForResult(*result);
+			if (!allPairs.empty())
+				pairs.push_back(allPairs[static_cast<std::size_t>(std::clamp(m_AddPlotPair, 0, static_cast<int>(allPairs.size()) - 1))]);
+		}
 		int pairIndex = 0;
-		for (const JFMMonteCarloParameterPair &pair : DefaultPairsForResult(settings, *result))
+		for (const JFMMonteCarloParameterPair &pair : pairs)
 		{
 			const std::optional<int> x = ParameterIndex(*result, pair.x);
 			const std::optional<int> y = ParameterIndex(*result, pair.y);
@@ -687,35 +694,37 @@ namespace SST::Prototypes::JFM
 		}
 
 		const ProjectHandle project = m_Store->GetActiveProjectHandle();
-		if (ImGui::Button("Add group"))
-			AddGroup();
-		ImGui::SameLine();
-		if (ImGui::Button("Plot all MC"))
+		if (ImGui::BeginChild("##mc_scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 1.8f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 		{
-			m_Groups.clear();
-			m_ActiveGroup = 0;
-			m_LeftDockId = 0;
-			m_RightDockId = 0;
-			m_RebuildDockLayout = true;
-			int placement = 0;
-			const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
-			for (const JFMCharacteristicInfo &info : snapshot.characteristics)
-				if (m_Store->GetMonteCarloResult({project, info.id}) != nullptr)
-					AddDefaultPlotsForCharacteristic(project, info, placement);
-			if (m_Groups.empty())
+			if (ImGui::Button("Add group"))
 				AddGroup();
-		}
-		ImGui::SameLine();
-		if (ImGui::Button("Clear all plots"))
-		{
-			for (PlotGroup &group : m_Groups)
-				group.plots.clear();
-			m_ActivePlot = 0;
-		}
-		ImGui::SameLine();
-		RenderAddPlotControls(project);
+			ImGui::SameLine();
+			if (ImGui::Button("Plot all MC"))
+			{
+				m_Groups.clear();
+				m_ActiveGroup = 0;
+				m_LeftDockId = 0;
+				m_RightDockId = 0;
+				m_RebuildDockLayout = true;
+				int placement = 0;
+				const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
+				for (const JFMCharacteristicInfo &info : snapshot.characteristics)
+					if (m_Store->GetMonteCarloResult({project, info.id}) != nullptr)
+						AddDefaultPlotsForCharacteristic(project, info, placement);
+				if (m_Groups.empty())
+					AddGroup();
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Clear all plots"))
+			{
+				for (PlotGroup &group : m_Groups)
+					group.plots.clear();
+				m_ActivePlot = 0;
+			}
+			ImGui::SameLine();
+			RenderAddPlotControls(project);
 
-		auto exportAll = [this](bool uncertaintyOnly) {
+			auto exportAll = [this](bool uncertaintyOnly) {
 			int saved = 0;
 			int total = 0;
 			for (const PlotGroup &group : m_Groups)
@@ -725,76 +734,81 @@ namespace SST::Prototypes::JFM
 					saved += ExportPlot(plot, uncertaintyOnly) ? 1 : 0;
 				}
 			SetStatus(uncertaintyOnly ? "Uncertainty saved" : "MC data saved", saved, total);
-		};
-		ImGui::SameLine();
-		if (ImGui::Button("Save all MC data"))
-			if (std::vector<Path> paths = PickFoldersDialog(false, m_Settings != nullptr ? m_Settings->GetDefaultProjectsDirectory() : Path{}); !paths.empty())
-			{
-				const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
-				int saved = 0;
-				int total = 0;
-				const JFMFitMonteCarloSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot().fitMonteCarlo : JFMFitMonteCarloSettings{};
-				for (const JFMCharacteristicInfo &info : snapshot.characteristics)
-				{
-					const Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult({project, info.id});
-					if (result == nullptr)
-						continue;
-					for (const JFMMonteCarloParameterPair &pair : DefaultPairsForResult(settings, *result))
-					{
-						const std::optional<int> x = ParameterIndex(*result, pair.x);
-						const std::optional<int> y = ParameterIndex(*result, pair.y);
-						if (!x || !y)
-							continue;
-						PlotState plot;
-						plot.ref = {project, info.id};
-						plot.options.xParameter = *x;
-						plot.options.yParameter = *y;
-						plot.axesInitialized = true;
-						++total;
-						saved += ExportPlot(plot, false, paths.front()) ? 1 : 0;
-					}
-				}
-				SetStatus("MC data saved", saved, total);
-			}
-		ImGui::SameLine();
-		if (ImGui::Button("Save all MC plots"))
-			if (std::vector<Path> paths = PickFoldersDialog(false, m_Settings != nullptr ? m_Settings->GetDefaultProjectsDirectory() : Path{}); !paths.empty())
-			{
-				std::vector<PlotGroup> previousGroups = m_Groups;
-				std::size_t previousActiveGroup = m_ActiveGroup;
-				const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
-				m_Groups.clear();
-				int placement = 0;
-				for (const JFMCharacteristicInfo &info : snapshot.characteristics)
-					if (m_Store->GetMonteCarloResult({project, info.id}) != nullptr)
-						AddDefaultPlotsForCharacteristic(project, info, placement);
-				(void)SaveAllPlotImages(paths.front());
-				m_Groups = std::move(previousGroups);
-				m_ActiveGroup = std::min(previousActiveGroup, m_Groups.empty() ? 0 : m_Groups.size() - 1);
-			}
-		ImGui::SameLine();
-		if (ImGui::Button("Save uncertainty"))
-			exportAll(true);
-		ImGui::SameLine();
-		if (ImGui::Button("Clear simulations"))
-		{
-			const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
-			std::vector<CharacteristicId> ids;
-			for (const JFMCharacteristicInfo &info : snapshot.characteristics)
-				if (info.monteCarlo)
-					ids.push_back(info.id);
-			(void)m_Store->ClearMonteCarloResults(project, ids);
-			for (PlotGroup &group : m_Groups)
-				group.plots.clear();
-		}
-		if (!m_Status.empty())
-		{
+			};
 			ImGui::SameLine();
-			ImGui::TextUnformatted(m_Status.c_str());
+			if (ImGui::Button("Save all MC data"))
+				if (std::vector<Path> paths = PickFoldersDialog(false, m_Settings != nullptr ? m_Settings->GetDefaultProjectsDirectory() : Path{}); !paths.empty())
+				{
+					const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
+					int saved = 0;
+					int total = 0;
+					const JFMFitMonteCarloSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot().fitMonteCarlo : JFMFitMonteCarloSettings{};
+					for (const JFMCharacteristicInfo &info : snapshot.characteristics)
+					{
+						const Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult({project, info.id});
+						if (result == nullptr)
+							continue;
+						std::vector<JFMMonteCarloParameterPair> pairs = DefaultPairsForResult(settings, *result);
+						if (pairs.empty())
+							pairs = AllPairsForResult(*result);
+						for (const JFMMonteCarloParameterPair &pair : pairs)
+						{
+							const std::optional<int> x = ParameterIndex(*result, pair.x);
+							const std::optional<int> y = ParameterIndex(*result, pair.y);
+							if (!x || !y)
+								continue;
+							PlotState plot;
+							plot.ref = {project, info.id};
+							plot.options.xParameter = *x;
+							plot.options.yParameter = *y;
+							plot.axesInitialized = true;
+							++total;
+							saved += ExportPlot(plot, false, paths.front()) ? 1 : 0;
+						}
+					}
+					SetStatus("MC data saved", saved, total);
+				}
+			ImGui::SameLine();
+			if (ImGui::Button("Save all MC plots"))
+				if (std::vector<Path> paths = PickFoldersDialog(false, m_Settings != nullptr ? m_Settings->GetDefaultProjectsDirectory() : Path{}); !paths.empty())
+				{
+					std::vector<PlotGroup> previousGroups = m_Groups;
+					std::size_t previousActiveGroup = m_ActiveGroup;
+					const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
+					m_Groups.clear();
+					int placement = 0;
+					for (const JFMCharacteristicInfo &info : snapshot.characteristics)
+						if (m_Store->GetMonteCarloResult({project, info.id}) != nullptr)
+							AddDefaultPlotsForCharacteristic(project, info, placement);
+					(void)SaveAllPlotImages(paths.front());
+					m_Groups = std::move(previousGroups);
+					m_ActiveGroup = std::min(previousActiveGroup, m_Groups.empty() ? 0 : m_Groups.size() - 1);
+				}
+			ImGui::SameLine();
+			if (ImGui::Button("Save uncertainty"))
+				exportAll(true);
+			ImGui::SameLine();
+			if (ImGui::Button("Clear simulations"))
+			{
+				const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
+				std::vector<CharacteristicId> ids;
+				for (const JFMCharacteristicInfo &info : snapshot.characteristics)
+					if (info.monteCarlo)
+						ids.push_back(info.id);
+				(void)m_Store->ClearMonteCarloResults(project, ids);
+				for (PlotGroup &group : m_Groups)
+					group.plots.clear();
+			}
+			if (!m_Status.empty())
+			{
+				ImGui::SameLine();
+				ImGui::TextUnformatted(m_Status.c_str());
+			}
 		}
+		ImGui::EndChild();
 
 		if (ImGui::BeginChild("##mc_scatter_plot_list", ImVec2(0.0f, 150.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar)
-			&& ImGui::BeginTable("##mc_scatter_list", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+			&& ImGui::BeginTable("##mc_scatter_list", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
 			ImGui::TableSetupColumn("Group");
 			ImGui::TableSetupColumn("Plot");

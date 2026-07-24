@@ -57,7 +57,7 @@ namespace SST::Prototypes::JFM
 		}
 
 		const auto &names = JFMModelParameterNames(modelId);
-		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
 			ImGui::TableSetupColumn("Parameter");
 			ImGui::TableSetupColumn("Free", ImGuiTableColumnFlags_WidthFixed, 44.0f);
@@ -109,6 +109,19 @@ namespace SST::Prototypes::JFM
 			return pairs == std::vector<JFMMonteCarloParameterPair>{{"A", "I0"}, {"Rs", "Rsh"}}
 				|| pairs == std::vector<JFMMonteCarloParameterPair>{{"A", "I0"}, {"Rs", "Rsh"}, {"Rsh", "Rsh2"}, {"alpha", "Rsh2"}}
 				|| pairs == std::vector<JFMMonteCarloParameterPair>{{"i0", "a"}, {"RsH", "Rs"}};
+		}
+
+		ImPlotMarker ScatterMarker(int marker)
+		{
+			switch (std::clamp(marker, 0, 5))
+			{
+			case 1: return ImPlotMarker_Square;
+			case 2: return ImPlotMarker_Diamond;
+			case 3: return ImPlotMarker_Cross;
+			case 4: return ImPlotMarker_Plus;
+			case 5: return ImPlotMarker_Asterisk;
+			default: return ImPlotMarker_Circle;
+			}
 		}
 	} // namespace
 
@@ -208,7 +221,7 @@ namespace SST::Prototypes::JFM
 
 		ImGui::PushID(id);
 		static constexpr const char *classLabels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
-		if (ImGui::BeginChild("##scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 3.2f), ImGuiChildFlags_None, ImGuiWindowFlags_None))
+		if (ImGui::BeginChild("##scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 1.8f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 		{
 			ImGui::SetNextItemWidth(120.0f);
 			if (ImGui::BeginCombo("X", result.parameterNames[options.xParameter].c_str()))
@@ -252,6 +265,10 @@ namespace SST::Prototypes::JFM
 			SameLineIfFits(190.0f);
 			ImGui::SetNextItemWidth(120.0f);
 			changed |= ImGui::SliderFloat("Zoom-out", &options.zoomOut, 0.0f, 1.0f, "%.2f");
+			SameLineIfFits(130.0f);
+			ImGui::SetNextItemWidth(100.0f);
+			static constexpr const char *markers[] = {"Circle", "Square", "Diamond", "Cross", "Plus", "Asterisk"};
+			changed |= ImGui::Combo("Marker", &options.marker, markers, IM_ARRAYSIZE(markers));
 		}
 		ImGui::EndChild();
 
@@ -311,7 +328,7 @@ namespace SST::Prototypes::JFM
 				if (!options.showSigmaClasses[sigmaClass] || x[sigmaClass].empty())
 					continue;
 				ImPlotSpec points;
-				points.Marker = ImPlotMarker_Circle;
+				points.Marker = ScatterMarker(options.marker);
 				points.MarkerSize = 3.0f;
 				points.LineColor = ImVec4(
 					options.sigmaColors[sigmaClass][0], options.sigmaColors[sigmaClass][1],

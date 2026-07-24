@@ -27,6 +27,7 @@ namespace SST::Prototypes::JFM
 		double xMaximum = 0.0;
 		double yMinimum = 0.0;
 		double yMaximum = 0.0;
+		int marker = 0;
 		std::array<bool, 3> showSigmaClasses = {true, true, true};
 		std::array<bool, 3> showSigmaEllipses = {false, false, false};
 		std::array<std::array<float, 4>, 3> sigmaColors = {{

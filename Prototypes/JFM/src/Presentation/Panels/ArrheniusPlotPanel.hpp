@@ -33,6 +33,8 @@ namespace SST::Prototypes::JFM
 			double j00 = 0.0;
 			double i00 = 0.0;
 			double tStar = 0.0;
+			bool hasEa = false;
+			bool hasEg = false;
 			bool hasJ00 = false;
 			bool hasI00 = false;
 			bool hasTStar = false;
@@ -45,6 +47,7 @@ namespace SST::Prototypes::JFM
 			float pointSize = 5.0f;
 			float lineWeight = 1.5f;
 			int drawMode = 2;
+			int marker = 0;
 			bool visible = true;
 		};
 
@@ -68,6 +71,8 @@ namespace SST::Prototypes::JFM
 			bool preferFit = true;
 			bool autoRefit = true;
 			bool open = true;
+			bool needsInitialPlacement = false;
+			int initialPlacement = 0;
 			int activeSeries = 0;
 			std::vector<SeriesEntry> series;
 		};
@@ -75,6 +80,7 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::vector<JFMCharacteristicRecord> RecordsForSeries(ProjectHandle project, const JFMSeries &series) const;
 		[[nodiscard]] std::vector<JFMCharacteristicRecord> RecordsForGroup(ProjectHandle projectHandle, const JFMProject &snapshot, const JFMGroup &group) const;
 		[[nodiscard]] std::vector<JFMCharacteristicRecord> RecordsForEntry(ProjectHandle projectHandle, const JFMProject &snapshot, const SeriesEntry &entry) const;
+		[[nodiscard]] std::vector<JFMArrheniusPoint> PointsForEntry(ProjectHandle projectHandle, const JFMProject &snapshot, const SeriesEntry &entry, JFMArrheniusQuantity quantity, bool preferFit) const;
 		void RenderSelector(ProjectHandle projectHandle, const JFMProject &snapshot);
 		void RenderPlotWindow(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow &window);
 		void AddSelectedSource(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow *target);

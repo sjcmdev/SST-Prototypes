@@ -47,16 +47,6 @@ namespace SST::Prototypes::JFM
 			return end != found->second.c_str() && std::isfinite(value) ? std::optional<double>{value} : std::nullopt;
 		}
 
-		std::optional<int> metadataInt(const JFMCharacteristicInfo &info, const std::string &key)
-		{
-			const auto found = info.metadata.find(key);
-			if (found == info.metadata.end())
-				return std::nullopt;
-			char *end = nullptr;
-			const long value = std::strtol(found->second.c_str(), &end, 10);
-			return end != found->second.c_str() ? std::optional<int>{static_cast<int>(value)} : std::nullopt;
-		}
-
 		std::string formatDouble(double value)
 		{
 			char buffer[96]{};
@@ -96,22 +86,18 @@ namespace SST::Prototypes::JFM
 
 		float tunedMantissa(const JFMCharacteristicInfo &info, std::string_view name)
 		{
-			if (const std::optional<double> value = metadataDouble(info, "tuned_mantissa." + std::string(name)))
-				return static_cast<float>(*value);
 			float mantissa = 0.0f;
 			int exponent = 0;
 			decomposeScientific(parameterValue(info, name), mantissa, exponent);
-			return std::clamp(mantissa, 0.0f, 10.0f);
+			return std::clamp(mantissa, 0.0f, 9.999999f);
 		}
 
 		int tunedExponent(const JFMCharacteristicInfo &info, std::string_view name)
 		{
-			if (const std::optional<int> value = metadataInt(info, "tuned_exponent." + std::string(name)))
-				return *value;
 			float mantissa = 0.0f;
 			int exponent = 0;
 			decomposeScientific(parameterValue(info, name), mantissa, exponent);
-			return exponent;
+			return std::clamp(exponent, -18, 18);
 		}
 
 		int indexForVoltage(const std::vector<double> &voltage, double value)
@@ -407,7 +393,7 @@ namespace SST::Prototypes::JFM
 
 			const std::string model = activeInfo.fit ? activeInfo.fit->modelId : activeInfo.prefit ? activeInfo.prefit->modelId : "SD-RsRsh";
 			const auto &names = JFMModelParameterNames(model);
-			if (!names.empty() && ImGui::BeginTable("##jfm_control_solver_params", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+			if (!names.empty() && ImGui::BeginTable("##jfm_control_solver_params", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 			{
 				ImGui::TableSetupColumn("Parameter");
 				ImGui::TableSetupColumn("Optimize", ImGuiTableColumnFlags_WidthFixed, 76.0f);
@@ -453,7 +439,7 @@ namespace SST::Prototypes::JFM
 			return;
 		JFMUserSettings settings = m_Settings->GetSnapshot();
 		ImGui::SeparatorText("Curve overlays");
-		if (ImGui::BeginTable("##jfm_overlay_settings", 5, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp))
+		if (ImGui::BeginTable("##jfm_overlay_settings", 5, ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
 			ImGui::TableSetupColumn("Curve");
 			ImGui::TableSetupColumn("Show", ImGuiTableColumnFlags_WidthFixed, 52.0f);
@@ -627,7 +613,7 @@ namespace SST::Prototypes::JFM
 		bool settingsChanged = false;
 		JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
 
-		if (ImGui::BeginTable("##jfm_control_tuned_params", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		if (ImGui::BeginTable("##jfm_control_tuned_params", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
 			ImGui::TableSetupColumn("Parameter");
 			ImGui::TableSetupColumn("Fix", ImGuiTableColumnFlags_WidthFixed, 44.0f);
@@ -655,11 +641,11 @@ namespace SST::Prototypes::JFM
 				}
 				ImGui::TableSetColumnIndex(2);
 				ImGui::SetNextItemWidth(-1.0f);
-				const bool mantissaChanged = ImGui::DragFloat("##mantissa", &mantissa, 0.002f, 0.0f, 10.0f, "%.6g", ImGuiSliderFlags_AlwaysClamp);
+				const bool mantissaChanged = ImGui::DragFloat("##mantissa", &mantissa, 0.0005f, 0.0f, 9.999999f, "%.6g", ImGuiSliderFlags_AlwaysClamp);
 				const bool mantissaActive = ImGui::IsItemActive();
 				ImGui::TableSetColumnIndex(3);
 				ImGui::SetNextItemWidth(-1.0f);
-				const bool exponentChanged = ImGui::SliderInt("##exponent", &exponent, -300, 300);
+				const bool exponentChanged = ImGui::SliderInt("##exponent", &exponent, -18, 18);
 				const bool exponentActive = ImGui::IsItemActive();
 				ImGui::TableSetColumnIndex(4);
 				const double tunedValue = static_cast<double>(mantissa) * std::pow(10.0, exponent);
@@ -723,7 +709,7 @@ namespace SST::Prototypes::JFM
 		ImGui::SeparatorText("Parameters");
 		ImGui::Checkbox("Hide prefit parameters", &m_HidePrefitParameters);
 		const Ref<const JFMMonteCarloResult> monteCarlo = m_Store != nullptr ? m_Store->GetMonteCarloResult({project, activeInfo.id}) : Ref<const JFMMonteCarloResult>{};
-		if (ImGui::BeginTable("##jfm_control_parameters", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		if (ImGui::BeginTable("##jfm_control_parameters", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
 			ImGui::TableSetupColumn("Stage");
 			ImGui::TableSetupColumn("Parameter");
