@@ -73,8 +73,15 @@ namespace SST::Prototypes::JFM
 				if (x != result.parameterNames.end() && y != result.parameterNames.end() && x != y)
 					pairs.push_back(pair);
 			}
-			if (pairs.empty() && result.parameterNames.size() >= 2)
-				pairs.push_back({result.parameterNames[0], result.parameterNames[1]});
+			return pairs;
+		}
+
+		std::vector<JFMMonteCarloParameterPair> AllPairsForResult(const JFMMonteCarloResult &result)
+		{
+			std::vector<JFMMonteCarloParameterPair> pairs;
+			for (std::size_t x = 0; x < result.parameterNames.size(); ++x)
+				for (std::size_t y = x + 1; y < result.parameterNames.size(); ++y)
+					pairs.push_back({result.parameterNames[x], result.parameterNames[y]});
 			return pairs;
 		}
 
@@ -161,7 +168,7 @@ namespace SST::Prototypes::JFM
 		AddPlot(ref, -1, -1);
 	}
 
-	void MonteCarloScatterPanel::AddPlot(JFMCharacteristicRef ref, int xParameter, int yParameter, int initialPlacement, int dockSlot)
+	void MonteCarloScatterPanel::AddPlot(JFMCharacteristicRef ref, int xParameter, int yParameter, int initialPlacement, int dockSlot, bool open)
 	{
 		if (ref.project == InvalidProjectHandle || ref.characteristic == InvalidCharacteristicId)
 			return;
@@ -176,7 +183,7 @@ namespace SST::Prototypes::JFM
 		if (existing != group.plots.end())
 		{
 			m_ActivePlot = existing->id;
-			existing->open = true;
+			existing->open = existing->open || open;
 			return;
 		}
 		PlotState plot;
@@ -200,6 +207,7 @@ namespace SST::Prototypes::JFM
 		plot.initialPlacement = initialPlacement;
 		plot.needsDock = dockSlot >= 0;
 		plot.dockSlot = dockSlot;
+		plot.open = open;
 		m_ActivePlot = plot.id;
 		group.plots.push_back(std::move(plot));
 	}
@@ -223,7 +231,10 @@ namespace SST::Prototypes::JFM
 			const std::optional<int> x = ParameterIndex(*result, pair.x);
 			const std::optional<int> y = ParameterIndex(*result, pair.y);
 			if (x && y)
-				AddPlot({project, info.id}, *x, *y, placement++, pairIndex++ == 0 ? 0 : 1);
+			{
+				const bool open = placement < 2;
+				AddPlot({project, info.id}, *x, *y, placement++, pairIndex++ == 0 ? 0 : 1, open);
+			}
 		}
 	}
 
@@ -434,22 +445,30 @@ namespace SST::Prototypes::JFM
 			arguments.push_back(std::to_string(plot.options.yMinimum));
 			arguments.push_back(std::to_string(plot.options.yMaximum));
 		}
-		auto process = Platform::RunProcess(Platform::ProcessRunOptions{
-			Platform::ResolvePreferredPythonExecutable(),
-			std::move(arguments),
-			Path::FromResolved(FileSystem::CurrentPath()),
-			std::chrono::seconds(30)});
+		const std::array<Path, 2> pythonCandidates = {Path("python"), Platform::ResolvePreferredPythonExecutable()};
+		std::optional<Platform::ProcessRunResult> process;
+		for (const Path &python : pythonCandidates)
+		{
+			auto candidate = Platform::RunProcess(Platform::ProcessRunOptions{
+				python,
+				arguments,
+				Path::FromResolved(FileSystem::CurrentPath()),
+				std::chrono::seconds(30)});
+			if (candidate && candidate->exitCode == 0)
+			{
+				process = *candidate;
+				break;
+			}
+			if (!candidate)
+				m_LastSavePlotError = "python process failed: " + candidate.error().technicalDetails;
+			else
+			{
+				const std::string details = candidate->standardError.empty() ? candidate->standardOutput : candidate->standardError;
+				m_LastSavePlotError = "python exit " + std::to_string(candidate->exitCode) + ": " + CompactProcessError(details);
+			}
+		}
 		if (!process)
-		{
-			m_LastSavePlotError = "python process failed: " + process.error().technicalDetails;
 			return false;
-		}
-		if (process->exitCode != 0)
-		{
-			const std::string details = process->standardError.empty() ? process->standardOutput : process->standardError;
-			m_LastSavePlotError = "python exit " + std::to_string(process->exitCode) + ": " + CompactProcessError(details);
-			return false;
-		}
 		if (!FileSystem::Exists(outputPath->Native()))
 		{
 			m_LastSavePlotError = "PNG was not created";
@@ -531,6 +550,8 @@ namespace SST::Prototypes::JFM
 		{
 			const JFMFitMonteCarloSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot().fitMonteCarlo : JFMFitMonteCarloSettings{};
 			pairs = DefaultPairsForResult(settings, *result);
+			if (pairs.empty())
+				pairs = AllPairsForResult(*result);
 		}
 		m_AddPlotPair = std::clamp(m_AddPlotPair, 0, std::max(0, static_cast<int>(pairs.size()) - 1));
 		std::string pairLabel = "Pair";
@@ -637,7 +658,10 @@ namespace SST::Prototypes::JFM
 		}
 		ImGui::SameLine();
 		if (ImGui::Button("Remove"))
+		{
 			plot.open = false;
+			plot.remove = true;
+		}
 		const float height = std::max(360.0f, ImGui::GetContentRegionAvail().y - 8.0f);
 		(void)RenderJFMCovariancePlot(*result, plot.options, "plot", height);
 		ImGui::End();
@@ -769,7 +793,8 @@ namespace SST::Prototypes::JFM
 			ImGui::TextUnformatted(m_Status.c_str());
 		}
 
-		if (ImGui::BeginTable("##mc_scatter_list", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
+		if (ImGui::BeginChild("##mc_scatter_plot_list", ImVec2(0.0f, 150.0f), ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar)
+			&& ImGui::BeginTable("##mc_scatter_list", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp))
 		{
 			ImGui::TableSetupColumn("Group");
 			ImGui::TableSetupColumn("Plot");
@@ -791,12 +816,16 @@ namespace SST::Prototypes::JFM
 						plot.open = !plot.open;
 					ImGui::SameLine();
 					if (ImGui::SmallButton("x"))
+					{
 						plot.open = false;
+						plot.remove = true;
+					}
 					ImGui::PopID();
 				}
 			}
 			ImGui::EndTable();
 		}
+		ImGui::EndChild();
 		RenderDockspace();
 
 		ImGui::End();
@@ -808,7 +837,7 @@ namespace SST::Prototypes::JFM
 					RenderPlotWindow(plot);
 		for (PlotGroup &group : m_Groups)
 			group.plots.erase(std::remove_if(group.plots.begin(), group.plots.end(), [](const PlotState &plot) {
-				return !plot.open;
+				return plot.remove;
 			}), group.plots.end());
 	}
 } // namespace SST::Prototypes::JFM

@@ -30,6 +30,12 @@ namespace SST::Prototypes::JFM
 			double intercept = 0.0;
 			double eaEv = 0.0;
 			double egEv = 0.0;
+			double j00 = 0.0;
+			double i00 = 0.0;
+			double tStar = 0.0;
+			bool hasJ00 = false;
+			bool hasI00 = false;
+			bool hasTStar = false;
 		};
 
 	private:
@@ -72,6 +78,7 @@ namespace SST::Prototypes::JFM
 		void RenderSelector(ProjectHandle projectHandle, const JFMProject &snapshot);
 		void RenderPlotWindow(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow &window);
 		void AddSelectedSource(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow *target);
+		void AddAllPlots(ProjectHandle projectHandle, const JFMProject &snapshot);
 
 		Ref<JFMWorkspaceStore> m_Store;
 		int m_SourceMode = 0;

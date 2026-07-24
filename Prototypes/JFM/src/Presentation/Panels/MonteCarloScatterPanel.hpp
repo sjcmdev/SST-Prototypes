@@ -36,6 +36,7 @@ namespace SST::Prototypes::JFM
 			JFMMonteCarloScatterPlotOptions options;
 			bool axesInitialized = false;
 			bool open = true;
+			bool remove = false;
 			bool needsInitialPlacement = false;
 			int initialPlacement = 0;
 			bool needsDock = false;
@@ -51,7 +52,7 @@ namespace SST::Prototypes::JFM
 
 		void AddGroup(std::string title = {});
 		void AddPlot(JFMCharacteristicRef ref);
-		void AddPlot(JFMCharacteristicRef ref, int xParameter, int yParameter, int initialPlacement = -1, int dockSlot = -1);
+		void AddPlot(JFMCharacteristicRef ref, int xParameter, int yParameter, int initialPlacement = -1, int dockSlot = -1, bool open = true);
 		void AddPlots(ProjectHandle project, const std::vector<CharacteristicId> &ids);
 		void AddDefaultPlotsForCharacteristic(ProjectHandle project, const JFMCharacteristicInfo &info, int &placement);
 		void InitializeAxes(PlotState &plot, const JFMMonteCarloResult &result) const;

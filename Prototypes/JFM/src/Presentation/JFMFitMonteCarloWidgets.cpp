@@ -90,6 +90,13 @@ namespace SST::Prototypes::JFM
 
 	namespace
 	{
+		void SameLineIfFits(float width)
+		{
+			const float right = ImGui::GetWindowContentRegionMax().x;
+			if (ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x + width < right)
+				ImGui::SameLine();
+		}
+
 		std::vector<JFMMonteCarloParameterPair> DefaultPairsForModel(std::string_view modelId)
 		{
 			if (modelId == "SD-RsRsh-alpha-Rsh2")
@@ -116,7 +123,7 @@ namespace SST::Prototypes::JFM
 		static constexpr const char *labels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
 		const auto &parameters = JFMModelParameterNames(modelId);
 		ImGui::PushID(id);
-		if (settings.defaultParameterPairs.empty() || IsKnownDefaultPairs(settings.defaultParameterPairs))
+		if (IsKnownDefaultPairs(settings.defaultParameterPairs))
 			settings.defaultParameterPairs = DefaultPairsForModel(modelId);
 		for (std::size_t index = 0; index < settings.showSigmaClasses.size(); ++index)
 		{
@@ -201,7 +208,7 @@ namespace SST::Prototypes::JFM
 
 		ImGui::PushID(id);
 		static constexpr const char *classLabels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
-		if (ImGui::BeginChild("##scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 2.0f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
+		if (ImGui::BeginChild("##scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 3.2f), ImGuiChildFlags_None, ImGuiWindowFlags_None))
 		{
 			ImGui::SetNextItemWidth(120.0f);
 			if (ImGui::BeginCombo("X", result.parameterNames[options.xParameter].c_str()))
@@ -214,7 +221,7 @@ namespace SST::Prototypes::JFM
 					}
 				ImGui::EndCombo();
 			}
-			ImGui::SameLine();
+			SameLineIfFits(160.0f);
 			ImGui::SetNextItemWidth(120.0f);
 			if (ImGui::BeginCombo("Y", result.parameterNames[options.yParameter].c_str()))
 			{
@@ -231,18 +238,18 @@ namespace SST::Prototypes::JFM
 				options.yParameter = (options.xParameter + 1) % count;
 				changed = true;
 			}
-			ImGui::SameLine();
+			SameLineIfFits(170.0f);
 			for (std::size_t index = 0; index < options.showSigmaClasses.size(); ++index)
 			{
 				ImGui::PushID(static_cast<int>(index));
 				changed |= ImGui::Checkbox(classLabels[index], &options.showSigmaClasses[index]);
 				ImGui::SameLine();
 				changed |= ImGui::ColorEdit4("##color", options.sigmaColors[index].data(), ImGuiColorEditFlags_NoInputs);
-				ImGui::SameLine();
 				ImGui::PopID();
+				SameLineIfFits(170.0f);
 			}
 			changed |= ImGui::Checkbox("Auto-fit", &options.autoFit);
-			ImGui::SameLine();
+			SameLineIfFits(190.0f);
 			ImGui::SetNextItemWidth(120.0f);
 			changed |= ImGui::SliderFloat("Zoom-out", &options.zoomOut, 0.0f, 1.0f, "%.2f");
 		}
