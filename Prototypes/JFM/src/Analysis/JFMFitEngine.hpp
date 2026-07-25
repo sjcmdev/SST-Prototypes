@@ -32,7 +32,8 @@ namespace SST::Prototypes::JFM
 		const std::unordered_map<std::string, double> &parameters) noexcept;
 	[[nodiscard]] Result<JFMFitComputation> RunJFMSimplexFit(
 		const JFMCharacteristicRecord &characteristic,
-		const JFMFitMonteCarloSettings &settings);
+		const JFMFitMonteCarloSettings &settings,
+		bool useTunedStart = false);
 	[[nodiscard]] Result<JFMMonteCarloComputation> RunJFMMonteCarlo(
 		const JFMCharacteristicRecord &characteristic,
 		const JFMPrefitState &prefit,

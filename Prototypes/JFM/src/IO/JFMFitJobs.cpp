@@ -144,7 +144,7 @@ namespace SST::Prototypes::JFM
 					context.SetMessage(item.characteristic.info.name);
 					if (m_Store == nullptr || !m_Store->IsFitGenerationCurrent(item.ref, item.generation))
 						continue;
-					auto result = RunJFMSimplexFit(item.characteristic, item.settings);
+					auto result = RunJFMSimplexFit(item.characteristic, item.settings, item.useTunedStart);
 					if (m_EventBus == nullptr)
 						continue;
 					if (result)

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "Analysis/JFMArrheniusAnalysis.hpp"
 #include "Analysis/JFMFitEngine.hpp"
 #include "lambertw/LambertW.hpp"
 #include "solver/diode_model.hpp"
@@ -121,6 +122,42 @@ namespace SST::Prototypes::JFM
 		EXPECT_NEAR(result->state.parameters.at("I0").value, Parameters.at("I0"), 1.0e-18);
 		EXPECT_NEAR(result->state.parameters.at("A").value, Parameters.at("A"), 1.0e-9);
 		EXPECT_EQ(result->curve.current.size(), record.data->current.size());
+	}
+
+	TEST(JFMFitEngineTests, RegularFitStartsFromPrefitAndTuningFitStartsFromTunedValues)
+	{
+		JFMCharacteristicRecord record = MakeRecord("SD-0");
+		record.info.metadata["tuned.I0"] = "1e-6";
+		JFMFitMonteCarloSettings settings;
+		settings.fitMaxIterations = 1;
+		settings.fitReducedChiSquaredTolerance = 1.0e-20;
+		settings.monteCarloNoisePercent = 1.0;
+		settings.parameters = {{"I0", {1.0e-15, 1.0e-5, true}}, {"A", {0.5, 3.0, false}}};
+
+		auto regular = RunJFMSimplexFit(record, settings);
+		auto tuning = RunJFMSimplexFit(record, settings, true);
+
+		ASSERT_TRUE(regular) << regular.Error().technicalDetails;
+		ASSERT_TRUE(tuning) << tuning.Error().technicalDetails;
+		EXPECT_LT(regular->state.chiSquared, tuning->state.chiSquared);
+		EXPECT_NEAR(regular->state.parameters.at("I0").value, Parameters.at("I0"), 1.0e-18);
+	}
+
+	TEST(JFMFitEngineTests, ArrheniusMonteCarloUncertaintyTransformsEachCorrelatedSample)
+	{
+		JFMMonteCarloResult result;
+		result.parameterNames = {"A", "I0"};
+		result.samples = {
+			{{1.0, std::exp(-10.0)}, 0.0, 0.0, 0, true},
+			{{2.0, std::exp(-5.0)}, 0.0, 0.0, 0, true}};
+
+		const auto lnI0 = JFMArrheniusMonteCarloUncertainty(JFMArrheniusQuantity::LnI0, result);
+		const auto aLnI0 = JFMArrheniusMonteCarloUncertainty(JFMArrheniusQuantity::ALnI0, result);
+
+		ASSERT_TRUE(lnI0);
+		ASSERT_TRUE(aLnI0);
+		EXPECT_NEAR(*lnI0, std::sqrt(12.5), 1.0e-12);
+		EXPECT_NEAR(*aLnI0, 0.0, 1.0e-12);
 	}
 
 	TEST(JFMFitEngineTests, CpuSimplexDoesNotClampPrefitStartOutsideConfiguredBounds)

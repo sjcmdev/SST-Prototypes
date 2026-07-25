@@ -345,13 +345,14 @@ namespace SST::Prototypes::JFM
 	struct FitRequested final : public BusEvent
 	{
 		FitRequested() = default;
-		FitRequested(ProjectHandle requestedProject, std::vector<CharacteristicId> requestedIds)
-			: project(requestedProject), ids(std::move(requestedIds))
+		FitRequested(ProjectHandle requestedProject, std::vector<CharacteristicId> requestedIds, bool requestedUseTunedStart = false)
+			: project(requestedProject), ids(std::move(requestedIds)), useTunedStart(requestedUseTunedStart)
 		{
 		}
 
 		ProjectHandle project = InvalidProjectHandle;
 		std::vector<CharacteristicId> ids;
+		bool useTunedStart = false;
 	};
 
 	struct FitCompleted final : public BusEvent

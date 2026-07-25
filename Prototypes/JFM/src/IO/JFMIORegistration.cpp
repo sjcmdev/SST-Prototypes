@@ -292,7 +292,7 @@ namespace SST::Prototypes::JFM
 				continue;
 			auto characteristic = state->store->FindCharacteristicRecord(ref);
 			if (characteristic)
-				items.push_back(JFMFitWorkItem{ref, generation, std::move(*characteristic), settings});
+				items.push_back(JFMFitWorkItem{ref, generation, std::move(*characteristic), settings, event.useTunedStart});
 		}
 		if (!prefitIds.empty())
 			state->eventBus->Queue(PrefitRequested{event.project, std::move(prefitIds)});

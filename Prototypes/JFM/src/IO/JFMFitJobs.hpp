@@ -20,6 +20,7 @@ namespace SST::Prototypes::JFM
 		std::uint64_t generation = 0;
 		JFMCharacteristicRecord characteristic;
 		JFMFitMonteCarloSettings settings;
+		bool useTunedStart = false;
 	};
 
 	class JFMFitWorkQueue

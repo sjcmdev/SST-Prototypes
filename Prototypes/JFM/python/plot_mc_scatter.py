@@ -161,7 +161,17 @@ def main():
         fallback_png(args, columns)
         return
 
-    fig, ax = plt.subplots(figsize=(8, 7), dpi=150)
+    def good_limits(limits):
+        if not limits:
+            return None
+        lo, hi = limits
+        if lo == hi:
+            return None
+        return limits
+
+    fig, ax = plt.subplots(figsize=(10, 8), dpi=160)
+    fig.patch.set_facecolor("#1c1917")
+    ax.set_facecolor("#1c1917")
     for prefix, label, color in [
         ("2_3_sigma", "2-3 sigma", args.color3),
         ("1_2_sigma", "1-2 sigma", args.color2),
@@ -169,18 +179,26 @@ def main():
     ]:
         x, y, _ = triple(columns, prefix)
         if x and y:
-            ax.scatter(x, y, s=8, c=color, label=label, edgecolors="none")
+            ax.scatter(x, y, s=9, c=color, label=label, edgecolors="none")
 
-    ax.set_title(args.title)
-    ax.set_xlabel(args.xlabel)
-    ax.set_ylabel(args.ylabel)
-    ax.grid(True, which="both", alpha=0.35)
-    ax.tick_params(axis="both", which="both", direction="in", top=True, right=True)
-    if args.xlim:
-        ax.set_xlim(args.xlim)
-    if args.ylim:
-        ax.set_ylim(args.ylim)
-    ax.legend(frameon=True)
+    ax.set_title(args.title, color="#e8e0d7")
+    ax.set_xlabel(args.xlabel, color="#e8e0d7")
+    ax.set_ylabel(args.ylabel, color="#e8e0d7")
+    ax.grid(True, which="major", color="#59534e", alpha=0.75, linewidth=0.7)
+    ax.grid(True, which="minor", color="#383431", alpha=0.45, linewidth=0.45)
+    ax.minorticks_on()
+    ax.tick_params(axis="both", which="both", direction="in", top=True, right=True, colors="#e8e0d7")
+    for spine in ax.spines.values():
+        spine.set_color("#6b6762")
+    xlim = good_limits(args.xlim)
+    ylim = good_limits(args.ylim)
+    if xlim:
+        ax.set_xlim(xlim)
+    if ylim:
+        ax.set_ylim(ylim)
+    legend = ax.legend(frameon=True, facecolor="#1c1917", edgecolor="#6b6762", framealpha=0.95)
+    for text in legend.get_texts():
+        text.set_color("#e8e0d7")
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()
     fig.savefig(args.output)

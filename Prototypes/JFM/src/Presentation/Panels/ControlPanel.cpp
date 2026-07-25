@@ -691,7 +691,7 @@ namespace SST::Prototypes::JFM
 					exponentContext.Set("metadata_value", std::to_string(exponent));
 					Execute(JFMSetCharacteristicMetadataCommandId, std::move(exponentContext));
 					if (m_EventBus != nullptr)
-						m_EventBus->Queue(FitRequested{project, ids});
+						m_EventBus->Queue(FitRequested{project, ids, true});
 				}
 				ImGui::PopID();
 			}
@@ -700,7 +700,12 @@ namespace SST::Prototypes::JFM
 		if (settingsChanged && m_Settings != nullptr)
 			m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
 		if (m_TunedUndoGroupOpen && !anyHeld && m_TunedHeldLastFrame)
+		{
+			const bool restoreUnconstrainedFit = m_TunedAutoFixedWasFree;
 			FinishTunedUndoGroup();
+			if (restoreUnconstrainedFit && m_EventBus != nullptr)
+				m_EventBus->Queue(FitRequested{project, ids});
+		}
 		m_TunedHeldLastFrame = anyHeld;
 	}
 

@@ -10,6 +10,7 @@
 #include <string>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <implot.h>
 
 namespace SST::Prototypes::JFM
@@ -68,82 +69,6 @@ namespace SST::Prototypes::JFM
 			return colors[index % colors.size()];
 		}
 
-		std::optional<double> MonteCarloStdError(const JFMMonteCarloResult &result, const std::string &name)
-		{
-			const auto parameter = std::find(result.parameterNames.begin(), result.parameterNames.end(), name);
-			if (parameter == result.parameterNames.end())
-				return std::nullopt;
-			const std::size_t index = static_cast<std::size_t>(std::distance(result.parameterNames.begin(), parameter));
-			double sum = 0.0;
-			int count = 0;
-			for (const JFMMonteCarloSample &sample : result.samples)
-			{
-				if (!sample.converged || index >= sample.parameters.size() || !std::isfinite(sample.parameters[index]))
-					continue;
-				sum += sample.parameters[index];
-				++count;
-			}
-			if (count < 2)
-				return std::nullopt;
-			const double mean = sum / static_cast<double>(count);
-			double variance = 0.0;
-			for (const JFMMonteCarloSample &sample : result.samples)
-			{
-				if (!sample.converged || index >= sample.parameters.size() || !std::isfinite(sample.parameters[index]))
-					continue;
-				const double delta = sample.parameters[index] - mean;
-				variance += delta * delta;
-			}
-			return std::sqrt(variance / static_cast<double>(count - 1));
-		}
-
-		std::optional<double> MonteCarloArrheniusUncertainty(
-			JFMArrheniusQuantity quantity,
-			const JFMCharacteristicInfo &info,
-			const JFMMonteCarloResult *result,
-			bool preferFit)
-		{
-			if (result == nullptr)
-				return std::nullopt;
-			auto direct = [&](const char *name) {
-				return MonteCarloStdError(*result, name);
-			};
-			switch (quantity)
-			{
-			case JFMArrheniusQuantity::A: return direct("A");
-			case JFMArrheniusQuantity::Rs: return direct("Rs");
-			case JFMArrheniusQuantity::Rsh: return direct("Rsh");
-			case JFMArrheniusQuantity::Alpha: return direct("alpha");
-			case JFMArrheniusQuantity::Rsh2: return direct("Rsh2");
-			case JFMArrheniusQuantity::InvA:
-				if (const auto a = JFMParameterValue(info, "A", preferFit); a && *a != 0.0)
-					if (const auto da = direct("A"))
-						return *da / (*a * *a);
-				break;
-			case JFMArrheniusQuantity::LnI0:
-				if (const auto i0 = JFMParameterValue(info, "I0", preferFit); i0 && *i0 > 0.0)
-					if (const auto di0 = direct("I0"))
-						return *di0 / *i0;
-				break;
-			case JFMArrheniusQuantity::ALnI0:
-			{
-				const auto a = JFMParameterValue(info, "A", preferFit);
-				const auto i0 = JFMParameterValue(info, "I0", preferFit);
-				const auto da = direct("A");
-				const auto di0 = direct("I0");
-				if (a && i0 && *i0 > 0.0 && (da || di0))
-				{
-					const double lnI0 = std::log(*i0);
-					const double aTerm = lnI0 * da.value_or(0.0);
-					const double i0Term = *a * di0.value_or(0.0) / *i0;
-					return std::sqrt(aTerm * aTerm + i0Term * i0Term);
-				}
-				break;
-			}
-			}
-			return std::nullopt;
-		}
-
 		int NearestPointIndex(const std::vector<JFMArrheniusPoint> &points, double x)
 		{
 			if (points.empty())
@@ -199,6 +124,20 @@ namespace SST::Prototypes::JFM
 			fit.name = std::string(FitModelLabels[fit.model]) + " " + std::to_string(fitIndex + 1);
 			fit.slope = (count * sxy - sx * sy) / denominator;
 			fit.intercept = (sy - fit.slope * sx) / count;
+			if (count > 2)
+			{
+				double residualSum = 0.0;
+				for (int index = lower; index <= upper; ++index)
+				{
+					const double residual = points[index].y - (fit.intercept + fit.slope * points[index].x);
+					residualSum += residual * residual;
+				}
+				const double variance = residualSum / static_cast<double>(count - 2);
+				fit.slopeStd = std::sqrt(std::max(0.0, variance * static_cast<double>(count) / denominator));
+				fit.interceptStd = std::sqrt(std::max(0.0, variance * sxx / denominator));
+				fit.hasSlopeStd = std::isfinite(fit.slopeStd);
+				fit.hasInterceptStd = std::isfinite(fit.interceptStd);
+			}
 			constexpr double kEvPerK = 8.617333262e-5;
 			if (quantity == JFMArrheniusQuantity::ALnI0 || quantity == JFMArrheniusQuantity::LnI0)
 			{
@@ -206,11 +145,17 @@ namespace SST::Prototypes::JFM
 				fit.egEv = 2.0 * fit.eaEv;
 				fit.hasEa = std::isfinite(fit.eaEv);
 				fit.hasEg = std::isfinite(fit.egEv);
+				fit.eaStd = fit.slopeStd * kEvPerK * 1000.0;
+				fit.egStd = 2.0 * fit.eaStd;
+				fit.hasEaStd = fit.hasSlopeStd && std::isfinite(fit.eaStd);
+				fit.hasEgStd = fit.hasEaStd && std::isfinite(fit.egStd);
 			}
 			if (quantity == JFMArrheniusQuantity::ALnI0)
 			{
 				fit.j00 = std::exp(fit.intercept);
 				fit.hasJ00 = std::isfinite(fit.j00);
+				fit.j00Std = std::abs(fit.j00) * fit.interceptStd;
+				fit.hasJ00Std = fit.hasJ00 && fit.hasInterceptStd && std::isfinite(fit.j00Std);
 			}
 			if (quantity == JFMArrheniusQuantity::InvA)
 			{
@@ -218,6 +163,10 @@ namespace SST::Prototypes::JFM
 				fit.tStar = fit.slope;
 				fit.hasI00 = std::isfinite(fit.i00);
 				fit.hasTStar = std::isfinite(fit.tStar);
+				fit.i00Std = std::abs(fit.i00) * fit.interceptStd;
+				fit.tStarStd = fit.slopeStd;
+				fit.hasI00Std = fit.hasI00 && fit.hasInterceptStd && std::isfinite(fit.i00Std);
+				fit.hasTStarStd = fit.hasSlopeStd && std::isfinite(fit.tStarStd);
 			}
 			return fit;
 		}
@@ -227,11 +176,25 @@ namespace SST::Prototypes::JFM
 			if (auto updated = BuildFit(points, fit.lower, fit.upper, quantity, fit.model, 0))
 			{
 				const std::string name = fit.name;
+				const auto color = fit.color;
+				const float lineWeight = fit.lineWeight;
+				const bool visible = fit.visible;
 				fit = *updated;
 				fit.name = name;
+				fit.color = color;
+				fit.lineWeight = lineWeight;
+				fit.visible = visible;
 				return true;
 			}
 			return false;
+		}
+
+		void TextValue(double value, bool hasStd, double std)
+		{
+			if (hasStd)
+				ImGui::Text("%.8g +/- %.3g", value, std);
+			else
+				ImGui::Text("%.8g", value);
 		}
 	}
 
@@ -310,13 +273,15 @@ namespace SST::Prototypes::JFM
 
 			std::string source;
 			(void)JFMFindParameter(record.info, quantity == JFMArrheniusQuantity::LnI0 ? "I0" : "A", preferFit, &source);
-			std::optional<double> uncertainty = JFMArrheniusUncertainty(quantity, record.info, preferFit);
-			if (!uncertainty && m_Store != nullptr)
+			std::optional<double> uncertainty;
+			if (m_Store != nullptr)
 			{
 				const Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult({projectHandle, record.info.id});
 				if (result != nullptr)
-					uncertainty = MonteCarloArrheniusUncertainty(quantity, record.info, result.get(), preferFit);
+					uncertainty = JFMArrheniusMonteCarloUncertainty(quantity, *result);
 			}
+			if (!uncertainty)
+				uncertainty = JFMArrheniusUncertainty(quantity, record.info, preferFit);
 
 			const double temperature = *record.info.temperatureK;
 			points.push_back(JFMArrheniusPoint{
@@ -375,6 +340,9 @@ namespace SST::Prototypes::JFM
 		window.preferFit = m_PreferFit;
 		window.title = entry.title + " - " + QuantityLabels[std::clamp(m_Quantity, 0, 7)];
 		window.series.push_back(std::move(entry));
+		window.needsDock = true;
+		window.dockSlot = 0;
+		m_RebuildDockLayout = true;
 		m_ActivePlotId = window.id;
 		m_PlotWindows.push_back(std::move(window));
 	}
@@ -412,10 +380,62 @@ namespace SST::Prototypes::JFM
 			{
 				window.needsInitialPlacement = true;
 				window.initialPlacement = static_cast<int>(m_PlotWindows.size());
+				window.needsDock = true;
+				window.dockSlot = window.initialPlacement % static_cast<int>(m_DockIds.size());
+				m_RebuildDockLayout = true;
 				m_ActivePlotId = window.id;
 				m_PlotWindows.push_back(std::move(window));
 			}
 		}
+	}
+
+	void ArrheniusPlotPanel::RenderDockspace()
+	{
+		ImVec2 available = ImGui::GetContentRegionAvail();
+		available.y = std::max(420.0f, available.y);
+		m_DockspaceId = ImGui::GetID("##arrhenius_dockspace");
+		if (m_RebuildDockLayout && ImGui::DockBuilderGetNode(m_DockspaceId) == nullptr)
+		{
+			ImGui::DockBuilderAddNode(m_DockspaceId, ImGuiDockNodeFlags_DockSpace);
+			ImGui::DockBuilderSetNodeSize(m_DockspaceId, available);
+
+			ImGuiID top = m_DockspaceId;
+			ImGuiID bottom = 0;
+			ImGui::DockBuilderSplitNode(top, ImGuiDir_Down, 0.5f, &bottom, &top);
+
+			ImGuiID topLeft = top;
+			ImGuiID topMiddle = 0;
+			ImGuiID topRight = 0;
+			ImGui::DockBuilderSplitNode(topLeft, ImGuiDir_Right, 0.333f, &topRight, &topLeft);
+			ImGui::DockBuilderSplitNode(topLeft, ImGuiDir_Right, 0.5f, &topMiddle, &topLeft);
+
+			ImGuiID bottomLeft = bottom;
+			ImGuiID bottomMiddle = 0;
+			ImGuiID bottomRight = 0;
+			ImGui::DockBuilderSplitNode(bottomLeft, ImGuiDir_Right, 0.333f, &bottomRight, &bottomLeft);
+			ImGui::DockBuilderSplitNode(bottomLeft, ImGuiDir_Right, 0.5f, &bottomMiddle, &bottomLeft);
+
+			m_DockIds = {topLeft, topMiddle, topRight, bottomLeft, bottomMiddle, bottomRight};
+			ImGui::DockBuilderFinish(m_DockspaceId);
+		}
+		m_RebuildDockLayout = false;
+		if (m_DockIds[0] == 0)
+			m_DockIds.fill(m_DockspaceId);
+		ImGui::DockSpace(m_DockspaceId, available, ImGuiDockNodeFlags_None);
+	}
+
+	void ArrheniusPlotPanel::RenderDockspaceHost()
+	{
+		if (m_PlotWindows.empty())
+			return;
+		ImGui::SetNextWindowSize(ImVec2(1200.0f, 760.0f), ImGuiCond_FirstUseEver);
+		const bool contentVisible = ImGui::Begin("Arrhenius Plot Dock###arrhenius_plot_dock", nullptr, ImGuiWindowFlags_HorizontalScrollbar);
+		m_DockspaceId = ImGui::GetID("##arrhenius_dockspace");
+		if (contentVisible)
+			RenderDockspace();
+		else
+			ImGui::DockSpace(m_DockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_KeepAliveOnly);
+		ImGui::End();
 	}
 
 	void ArrheniusPlotPanel::RenderSelector(ProjectHandle projectHandle, const JFMProject &snapshot)
@@ -501,7 +521,15 @@ namespace SST::Prototypes::JFM
 
 		bool open = window.open;
 		const std::string title = window.title + "###arrhenius_plot_window_" + std::to_string(window.id);
-		if (window.needsInitialPlacement)
+		if (window.needsDock && m_DockspaceId != 0)
+		{
+			const std::size_t slot = static_cast<std::size_t>(std::clamp(window.dockSlot, 0, static_cast<int>(m_DockIds.size()) - 1));
+			const ImGuiID target = m_DockIds[slot] != 0 ? m_DockIds[slot] : m_DockspaceId;
+			ImGui::SetNextWindowDockID(target, ImGuiCond_Always);
+			window.needsDock = false;
+			window.needsInitialPlacement = false;
+		}
+		else if (window.needsInitialPlacement)
 		{
 			const ImGuiViewport *viewport = ImGui::GetMainViewport();
 			const float width = std::max(420.0f, viewport->WorkSize.x / 3.0f - 10.0f);
@@ -521,6 +549,24 @@ namespace SST::Prototypes::JFM
 		window.open = open;
 		m_ActivePlotId = window.id;
 
+		auto addFitToSeries = [&](std::size_t index) {
+			if (index >= window.series.size())
+				return false;
+			SeriesEntry &series = window.series[index];
+			const JFMArrheniusQuantity activeQuantity = ToQuantity(window.quantity);
+			const std::vector<JFMArrheniusPoint> points = PointsForEntry(projectHandle, snapshot, series, activeQuantity, window.preferFit);
+			if (points.size() < 2)
+				return false;
+			if (auto fit = BuildFit(points, series.lower, series.upper, activeQuantity, window.fitModel, series.fits.size()))
+			{
+				fit->color = series.style.color;
+				fit->lineWeight = std::max(2.0f, series.style.lineWeight + 1.0f);
+				series.fits.push_back(*fit);
+				return true;
+			}
+			return false;
+		};
+
 		if (ImGui::BeginChild(("##arrhenius_controls_" + std::to_string(window.id)).c_str(), ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 1.8f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 		{
 			ImGui::SetNextItemWidth(190.0f);
@@ -532,6 +578,11 @@ namespace SST::Prototypes::JFM
 			ImGui::Checkbox("Prefer fit", &window.preferFit);
 			ImGui::SameLine();
 			ImGui::Checkbox("Auto refit", &window.autoRefit);
+			ImGui::SameLine();
+			ImGui::BeginDisabled(window.series.empty());
+			if (ImGui::Button("Fit active", ImVec2(82.0f, 0.0f)))
+				(void)addFitToSeries(static_cast<std::size_t>(std::clamp(window.activeSeries, 0, std::max(0, static_cast<int>(window.series.size()) - 1))));
+			ImGui::EndDisabled();
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(105.0f);
 			ImGui::Combo("Source", &m_SourceMode, "Series\0Group\0");
@@ -563,21 +614,23 @@ namespace SST::Prototypes::JFM
 				}
 			}
 			ImGui::SameLine();
-			if (ImGui::Button("Add source", ImVec2(92.0f, 0.0f)))
+			if (ImGui::Button("Add source", ImVec2(150.0f, 0.0f)))
 				AddSelectedSource(projectHandle, snapshot, &window);
 		}
 		ImGui::EndChild();
 		const JFMArrheniusQuantity quantity = ToQuantity(window.quantity);
 
-		if (ImGui::BeginTable(("##arrhenius_series_table_" + std::to_string(window.id)).c_str(), 7, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
+		int removeSeries = -1;
+		if (ImGui::BeginTable(("##arrhenius_series_table_" + std::to_string(window.id)).c_str(), 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
+			ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 58.0f);
 			ImGui::TableSetupColumn("Show", ImGuiTableColumnFlags_WidthFixed, 45.0f);
 			ImGui::TableSetupColumn("Source");
 			ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthFixed, 72.0f);
 			ImGui::TableSetupColumn("Style", ImGuiTableColumnFlags_WidthFixed, 115.0f);
-			ImGui::TableSetupColumn("Lower", ImGuiTableColumnFlags_WidthFixed, 118.0f);
-			ImGui::TableSetupColumn("Upper", ImGuiTableColumnFlags_WidthFixed, 118.0f);
-			ImGui::TableSetupColumn("Fit", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+			ImGui::TableSetupColumn("Lower", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+			ImGui::TableSetupColumn("Upper", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+			ImGui::TableSetupColumn("Fit", ImGuiTableColumnFlags_WidthFixed, 110.0f);
 			ImGui::TableHeadersRow();
 
 			for (std::size_t index = 0; index < window.series.size(); ++index)
@@ -595,21 +648,24 @@ namespace SST::Prototypes::JFM
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
 				ImGui::PushID(static_cast<int>(index));
-				ImGui::Checkbox("##show", &series.style.visible);
+				if (ImGui::RadioButton("##active", window.activeSeries == static_cast<int>(index)))
+					window.activeSeries = static_cast<int>(index);
 				ImGui::TableSetColumnIndex(1);
+				ImGui::Checkbox("##show", &series.style.visible);
+				ImGui::TableSetColumnIndex(2);
 				if (ImGui::Selectable(series.title.c_str(), window.activeSeries == static_cast<int>(index)))
 					window.activeSeries = static_cast<int>(index);
-				ImGui::TableSetColumnIndex(2);
-				ImGui::ColorEdit4("##color", series.style.color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
 				ImGui::TableSetColumnIndex(3);
+				ImGui::ColorEdit4("##color", series.style.color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+				ImGui::TableSetColumnIndex(4);
 				ImGui::SetNextItemWidth(-1.0f);
 				ImGui::Combo("##style", &series.style.drawMode, DrawModeLabels, IM_ARRAYSIZE(DrawModeLabels));
-				ImGui::TableSetColumnIndex(4);
-				ImGui::SetNextItemWidth(88.0f);
-				rangeChanged |= !points.empty() && ImGui::InputInt("##lower", &series.lower, 1, 5);
 				ImGui::TableSetColumnIndex(5);
-				ImGui::SetNextItemWidth(88.0f);
-				rangeChanged |= !points.empty() && ImGui::InputInt("##upper", &series.upper, 1, 5);
+				ImGui::SetNextItemWidth(-1.0f);
+				rangeChanged |= !points.empty() && ImGui::DragInt("##lower", &series.lower, 0.05f, 0, std::max(0, static_cast<int>(points.size()) - 1), "%d", ImGuiSliderFlags_AlwaysClamp);
+				ImGui::TableSetColumnIndex(6);
+				ImGui::SetNextItemWidth(-1.0f);
+				rangeChanged |= !points.empty() && ImGui::DragInt("##upper", &series.upper, 0.05f, 0, std::max(0, static_cast<int>(points.size()) - 1), "%d", ImGuiSliderFlags_AlwaysClamp);
 				if (!points.empty())
 				{
 					series.lower = std::clamp(series.lower, 0, static_cast<int>(points.size()) - 1);
@@ -617,14 +673,17 @@ namespace SST::Prototypes::JFM
 				}
 				if (series.upper < series.lower)
 					series.upper = series.lower;
-				ImGui::TableSetColumnIndex(6);
+				ImGui::TableSetColumnIndex(7);
 				ImGui::BeginDisabled(points.size() < 2);
 				if (ImGui::Button("Add"))
 				{
-					if (auto fit = BuildFit(points, series.lower, series.upper, quantity, window.fitModel, series.fits.size()))
-						series.fits.push_back(*fit);
+					window.activeSeries = static_cast<int>(index);
+					(void)addFitToSeries(index);
 				}
 				ImGui::EndDisabled();
+				ImGui::SameLine();
+				if (ImGui::SmallButton("x"))
+					removeSeries = static_cast<int>(index);
 
 				if (rangeChanged && window.autoRefit)
 				{
@@ -643,6 +702,14 @@ namespace SST::Prototypes::JFM
 				ImGui::PopID();
 			}
 			ImGui::EndTable();
+		}
+		if (removeSeries >= 0 && removeSeries < static_cast<int>(window.series.size()))
+		{
+			window.series.erase(window.series.begin() + removeSeries);
+			if (window.series.empty())
+				window.open = false;
+			else
+				window.activeSeries = std::clamp(window.activeSeries, 0, static_cast<int>(window.series.size()) - 1);
 		}
 
 		if (ImPlot::BeginPlot(("##arrhenius_plot_" + std::to_string(window.id)).c_str(), ImVec2(-1.0f, 360.0f)))
@@ -732,10 +799,12 @@ namespace SST::Prototypes::JFM
 				double upperX = points[static_cast<std::size_t>(series.upper)].x;
 				bool lowerHeld = false;
 				bool upperHeld = false;
-				const ImVec4 rangeColor(1.0f, 0.55f, 0.0f, 1.0f);
+				const bool activeRange = window.activeSeries == static_cast<int>(seriesIndex);
+				const ImVec4 rangeColor(1.0f, 0.55f, 0.0f, activeRange ? 1.0f : 0.35f);
+				const float rangeWeight = activeRange ? 2.2f : 1.1f;
 				const int dragBase = static_cast<int>((window.id % 100000) * 100 + seriesIndex * 2);
-				const bool lowerChanged = ImPlot::DragLineX(dragBase + 1, &lowerX, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &lowerHeld);
-				const bool upperChanged = ImPlot::DragLineX(dragBase + 2, &upperX, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &upperHeld);
+				const bool lowerChanged = ImPlot::DragLineX(dragBase + 1, &lowerX, rangeColor, rangeWeight, ImPlotDragToolFlags_None, nullptr, nullptr, &lowerHeld);
+				const bool upperChanged = ImPlot::DragLineX(dragBase + 2, &upperX, rangeColor, rangeWeight, ImPlotDragToolFlags_None, nullptr, nullptr, &upperHeld);
 				if (lowerChanged || upperChanged)
 				{
 					if (lowerChanged)
@@ -755,6 +824,8 @@ namespace SST::Prototypes::JFM
 
 				for (FitLine &fit : series.fits)
 				{
+					if (!fit.visible)
+						continue;
 					if (window.autoRefit)
 						(void)Refit(fit, points, quantity);
 					const int lower = std::clamp(fit.lower, 0, static_cast<int>(points.size()) - 1);
@@ -762,9 +833,17 @@ namespace SST::Prototypes::JFM
 					const double xx[2] = {points[static_cast<std::size_t>(lower)].x, points[static_cast<std::size_t>(upper)].x};
 					const double yy[2] = {fit.intercept + fit.slope * xx[0], fit.intercept + fit.slope * xx[1]};
 					ImPlotSpec fitSpec;
-					fitSpec.LineColor = ToVec4(series.style.color);
-					fitSpec.LineWeight = std::max(2.0f, series.style.lineWeight + 1.0f);
-					ImPlot::PlotLine((series.title + " " + fit.name + "##arrhenius_fit_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex) + "_" + fit.name).c_str(), xx, yy, 2, fitSpec);
+					fitSpec.LineColor = ToVec4(fit.color);
+					fitSpec.LineWeight = fit.lineWeight;
+					const std::string fitLabel = series.title + " " + fit.name + "##arrhenius_fit_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex) + "_" + fit.name;
+					ImPlot::PlotLine(fitLabel.c_str(), xx, yy, 2, fitSpec);
+					if (ImPlot::BeginLegendPopup(fitLabel.c_str()))
+					{
+						ImGui::Checkbox("Show", &fit.visible);
+						ImGui::ColorEdit4("Color", fit.color.data(), ImGuiColorEditFlags_AlphaBar);
+						ImGui::SliderFloat("Line", &fit.lineWeight, 0.5f, 8.0f, "%.1f");
+						ImPlot::EndLegendPopup();
+					}
 				}
 
 				if (ImPlot::BeginLegendPopup(label.c_str()))
@@ -812,24 +891,24 @@ namespace SST::Prototypes::JFM
 					ImGui::TableSetColumnIndex(3);
 					ImGui::Text("%d-%d", fit.lower, fit.upper);
 					ImGui::TableSetColumnIndex(4);
-					ImGui::Text("%.8g", fit.slope);
+					TextValue(fit.slope, fit.hasSlopeStd, fit.slopeStd);
 					ImGui::TableSetColumnIndex(5);
-					ImGui::Text("%.8g", fit.intercept);
+					TextValue(fit.intercept, fit.hasInterceptStd, fit.interceptStd);
 					ImGui::TableSetColumnIndex(6);
 					if (fit.hasEa)
-						ImGui::Text("%.8g", fit.eaEv);
+						TextValue(fit.eaEv, fit.hasEaStd, fit.eaStd);
 					ImGui::TableSetColumnIndex(7);
 					if (fit.hasEg)
-						ImGui::Text("%.8g", fit.egEv);
+						TextValue(fit.egEv, fit.hasEgStd, fit.egStd);
 					ImGui::TableSetColumnIndex(8);
 					if (fit.hasJ00)
-						ImGui::Text("%.8g", fit.j00);
+						TextValue(fit.j00, fit.hasJ00Std, fit.j00Std);
 					ImGui::TableSetColumnIndex(9);
 					if (fit.hasI00)
-						ImGui::Text("%.8g", fit.i00);
+						TextValue(fit.i00, fit.hasI00Std, fit.i00Std);
 					ImGui::TableSetColumnIndex(10);
 					if (fit.hasTStar)
-						ImGui::Text("%.8g", fit.tStar);
+						TextValue(fit.tStar, fit.hasTStarStd, fit.tStarStd);
 					ImGui::TableSetColumnIndex(11);
 					ImGui::PushID(static_cast<int>(seriesIndex * 1000 + fitIndex));
 					if (ImGui::Button("Remove"))
@@ -877,7 +956,7 @@ namespace SST::Prototypes::JFM
 				{
 					ImGui::TableSetupColumn("Plot");
 					ImGui::TableSetupColumn("Series", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-					ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+					ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 145.0f);
 					ImGui::TableHeadersRow();
 					for (PlotWindow &window : m_PlotWindows)
 					{
@@ -892,6 +971,9 @@ namespace SST::Prototypes::JFM
 							window.open = true;
 							m_ActivePlotId = window.id;
 						}
+						ImGui::SameLine();
+						if (ImGui::Button(("Remove##arrhenius_remove_" + std::to_string(window.id)).c_str()))
+							window.open = false;
 					}
 					ImGui::EndTable();
 				}
@@ -900,6 +982,7 @@ namespace SST::Prototypes::JFM
 			SetVisible(visible);
 		}
 
+		RenderDockspaceHost();
 		for (PlotWindow &window : m_PlotWindows)
 			RenderPlotWindow(projectHandle, snapshot, window);
 		m_PlotWindows.erase(std::remove_if(m_PlotWindows.begin(), m_PlotWindows.end(), [](const PlotWindow &window) {

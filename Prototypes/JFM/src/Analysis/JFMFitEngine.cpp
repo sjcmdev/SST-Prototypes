@@ -424,7 +424,10 @@ namespace SST::Prototypes::JFM
 		return Evaluate(*model, voltage, temperatureK, values);
 	}
 
-	Result<JFMFitComputation> RunJFMSimplexFit(const JFMCharacteristicRecord &characteristic, const JFMFitMonteCarloSettings &settings)
+	Result<JFMFitComputation> RunJFMSimplexFit(
+		const JFMCharacteristicRecord &characteristic,
+		const JFMFitMonteCarloSettings &settings,
+		bool useTunedStart)
 	{
 		if (characteristic.data == nullptr || characteristic.data->voltage.empty())
 			return MakeError("Characteristic data is unavailable.");
@@ -436,12 +439,14 @@ namespace SST::Prototypes::JFM
 		if (model == nullptr)
 			return MakeError("Unsupported model: " + characteristic.info.prefit->modelId);
 
-		ParameterArray start = ParametersFrom(characteristic.info.prefit->parameters);
-		ApplyTunedMetadata(start, characteristic.info.metadata);
+		const ParameterArray prefitStart = ParametersFrom(characteristic.info.prefit->parameters);
+		ParameterArray tuned = prefitStart;
+		ApplyTunedMetadata(tuned, characteristic.info.metadata);
+		const ParameterArray start = useTunedStart ? tuned : prefitStart;
 		const FitData data = BuildFitData(characteristic, *characteristic.info.prefit, nullptr, settings.monteCarloNoisePercent);
 		if (data.voltage.size() < model->parameters.size() + 2)
 			return MakeError("Fit range contains too few points.");
-		const SolverOutput solved = Solve(*model, data, *characteristic.info.temperatureK, start, start, MonteCarloParameters(*model, settings), settings, settings.fitMaxIterations);
+		const SolverOutput solved = Solve(*model, data, *characteristic.info.temperatureK, start, tuned, MonteCarloParameters(*model, settings), settings, settings.fitMaxIterations);
 
 		JFMFitComputation output;
 		output.state.modelId = std::string(model->id);

@@ -113,7 +113,7 @@ namespace SST::Prototypes::JFM
 				return *i0->standardError / i0->value;
 			break;
 		case JFMArrheniusQuantity::ALnI0:
-			if (a != nullptr && i0 != nullptr && i0->value > 0.0)
+			if (a != nullptr && i0 != nullptr && i0->value > 0.0 && (a->standardError || i0->standardError))
 			{
 				const double lnI0 = std::log(i0->value);
 				const double da = a->standardError.value_or(0.0);
@@ -123,6 +123,84 @@ namespace SST::Prototypes::JFM
 			break;
 		}
 		return std::nullopt;
+	}
+
+	inline std::optional<double> JFMArrheniusMonteCarloUncertainty(
+		JFMArrheniusQuantity quantity,
+		const JFMMonteCarloResult &result)
+	{
+		const auto parameterIndex = [&](std::string_view name) -> std::optional<std::size_t> {
+			const auto found = std::find(result.parameterNames.begin(), result.parameterNames.end(), name);
+			if (found == result.parameterNames.end())
+				return std::nullopt;
+			return static_cast<std::size_t>(std::distance(result.parameterNames.begin(), found));
+		};
+		const auto aIndex = parameterIndex("A");
+		const auto i0Index = parameterIndex("I0");
+		const char *directName = nullptr;
+		switch (quantity)
+		{
+		case JFMArrheniusQuantity::A: directName = "A"; break;
+		case JFMArrheniusQuantity::Rs: directName = "Rs"; break;
+		case JFMArrheniusQuantity::Rsh: directName = "Rsh"; break;
+		case JFMArrheniusQuantity::Alpha: directName = "alpha"; break;
+		case JFMArrheniusQuantity::Rsh2: directName = "Rsh2"; break;
+		default: break;
+		}
+		const std::optional<std::size_t> directIndex = directName == nullptr ? std::nullopt : parameterIndex(directName);
+
+		std::vector<double> values;
+		values.reserve(result.samples.size());
+		for (const JFMMonteCarloSample &sample : result.samples)
+		{
+			if (!sample.converged)
+				continue;
+			const auto sampleParameter = [&](std::optional<std::size_t> index) -> std::optional<double> {
+				if (!index || *index >= sample.parameters.size() || !std::isfinite(sample.parameters[*index]))
+					return std::nullopt;
+				return sample.parameters[*index];
+			};
+			const auto a = sampleParameter(aIndex);
+			const auto i0 = sampleParameter(i0Index);
+			std::optional<double> value;
+			switch (quantity)
+			{
+			case JFMArrheniusQuantity::A:
+			case JFMArrheniusQuantity::Rs:
+			case JFMArrheniusQuantity::Rsh:
+			case JFMArrheniusQuantity::Alpha:
+			case JFMArrheniusQuantity::Rsh2:
+				value = sampleParameter(directIndex);
+				break;
+			case JFMArrheniusQuantity::InvA:
+				if (a && *a != 0.0)
+					value = 1.0 / *a;
+				break;
+			case JFMArrheniusQuantity::LnI0:
+				if (i0 && *i0 > 0.0)
+					value = std::log(*i0);
+				break;
+			case JFMArrheniusQuantity::ALnI0:
+				if (a && i0 && *i0 > 0.0)
+					value = *a * std::log(*i0);
+				break;
+			}
+			if (value && std::isfinite(*value))
+				values.push_back(*value);
+		}
+		if (values.size() < 2)
+			return std::nullopt;
+		double mean = 0.0;
+		for (double value : values)
+			mean += value;
+		mean /= static_cast<double>(values.size());
+		double variance = 0.0;
+		for (double value : values)
+		{
+			const double delta = value - mean;
+			variance += delta * delta;
+		}
+		return std::sqrt(variance / static_cast<double>(values.size() - 1));
 	}
 
 	inline std::optional<double> JFMArrheniusValue(JFMArrheniusQuantity quantity, const JFMCharacteristicInfo &info, bool preferFit = true)

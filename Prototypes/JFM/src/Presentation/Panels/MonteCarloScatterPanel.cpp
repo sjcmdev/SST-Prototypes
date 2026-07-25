@@ -239,8 +239,10 @@ namespace SST::Prototypes::JFM
 			const std::optional<int> y = ParameterIndex(*result, pair.y);
 			if (x && y)
 			{
-				const bool open = placement < 2;
-				AddPlot({project, info.id}, *x, *y, placement++, pairIndex++ == 0 ? 0 : 1, open);
+				const bool primary = pair.x == "A" && pair.y == "I0";
+				const int dockSlot = primary || pairIndex == 0 ? 0 : 1;
+				AddPlot({project, info.id}, *x, *y, placement++, dockSlot, true);
+				++pairIndex;
 			}
 		}
 	}
@@ -452,13 +454,23 @@ namespace SST::Prototypes::JFM
 			arguments.push_back(std::to_string(plot.options.yMinimum));
 			arguments.push_back(std::to_string(plot.options.yMaximum));
 		}
-		const std::array<Path, 2> pythonCandidates = {Path("python"), Platform::ResolvePreferredPythonExecutable()};
-		std::optional<Platform::ProcessRunResult> process;
-		for (const Path &python : pythonCandidates)
+		struct PythonCandidate
 		{
+			Path executable;
+			std::vector<std::string> prefixArguments;
+		};
+		const std::array<PythonCandidate, 3> pythonCandidates = {{
+			{Path("python"), {}},
+			{Path("py"), {"-3"}},
+			{Platform::ResolvePreferredPythonExecutable(), {}}}};
+		std::optional<Platform::ProcessRunResult> process;
+		for (const PythonCandidate &python : pythonCandidates)
+		{
+			std::vector<std::string> candidateArguments = python.prefixArguments;
+			candidateArguments.insert(candidateArguments.end(), arguments.begin(), arguments.end());
 			auto candidate = Platform::RunProcess(Platform::ProcessRunOptions{
-				python,
-				arguments,
+				python.executable,
+				candidateArguments,
 				Path::FromResolved(FileSystem::CurrentPath()),
 				std::chrono::seconds(30)});
 			if (candidate && candidate->exitCode == 0)

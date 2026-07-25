@@ -33,11 +33,28 @@ namespace SST::Prototypes::JFM
 			double j00 = 0.0;
 			double i00 = 0.0;
 			double tStar = 0.0;
+			double slopeStd = 0.0;
+			double interceptStd = 0.0;
+			double eaStd = 0.0;
+			double egStd = 0.0;
+			double j00Std = 0.0;
+			double i00Std = 0.0;
+			double tStarStd = 0.0;
+			std::array<float, 4> color{0.90f, 0.42f, 0.18f, 1.0f};
+			float lineWeight = 2.5f;
+			bool visible = true;
 			bool hasEa = false;
 			bool hasEg = false;
 			bool hasJ00 = false;
 			bool hasI00 = false;
 			bool hasTStar = false;
+			bool hasSlopeStd = false;
+			bool hasInterceptStd = false;
+			bool hasEaStd = false;
+			bool hasEgStd = false;
+			bool hasJ00Std = false;
+			bool hasI00Std = false;
+			bool hasTStarStd = false;
 		};
 
 	private:
@@ -73,6 +90,8 @@ namespace SST::Prototypes::JFM
 			bool open = true;
 			bool needsInitialPlacement = false;
 			int initialPlacement = 0;
+			bool needsDock = false;
+			int dockSlot = -1;
 			int activeSeries = 0;
 			std::vector<SeriesEntry> series;
 		};
@@ -82,6 +101,8 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::vector<JFMCharacteristicRecord> RecordsForEntry(ProjectHandle projectHandle, const JFMProject &snapshot, const SeriesEntry &entry) const;
 		[[nodiscard]] std::vector<JFMArrheniusPoint> PointsForEntry(ProjectHandle projectHandle, const JFMProject &snapshot, const SeriesEntry &entry, JFMArrheniusQuantity quantity, bool preferFit) const;
 		void RenderSelector(ProjectHandle projectHandle, const JFMProject &snapshot);
+		void RenderDockspaceHost();
+		void RenderDockspace();
 		void RenderPlotWindow(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow &window);
 		void AddSelectedSource(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow *target);
 		void AddAllPlots(ProjectHandle projectHandle, const JFMProject &snapshot);
@@ -95,6 +116,9 @@ namespace SST::Prototypes::JFM
 		bool m_PreferFit = true;
 		std::uint64_t m_NextPlotId = 1;
 		std::uint64_t m_ActivePlotId = 0;
+		unsigned int m_DockspaceId = 0;
+		std::array<unsigned int, 6> m_DockIds{};
+		bool m_RebuildDockLayout = true;
 		std::vector<PlotWindow> m_PlotWindows;
 	};
 } // namespace SST::Prototypes::JFM
