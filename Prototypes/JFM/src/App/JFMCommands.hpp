@@ -44,6 +44,8 @@ namespace SST::Prototypes::JFM
 	inline constexpr const char *JFMResetFitRangeCommandId = "jfm.prefit.reset_range";
 	inline constexpr const char *JFMExportArrheniusTsvCommandId = "jfm.export.arrhenius_tsv";
 	inline constexpr const char *JFMExportCharacteristicsFitTsvCommandId = "jfm.export.characteristics_fit_tsv";
+	inline constexpr const char *JFMOpenProjectBundleCommandId = "jfm.project.open_bundle";
+	inline constexpr const char *JFMSaveProjectBundleAsCommandId = "jfm.project.save_bundle_as";
 
 	struct JFMProjectEditRequest
 	{

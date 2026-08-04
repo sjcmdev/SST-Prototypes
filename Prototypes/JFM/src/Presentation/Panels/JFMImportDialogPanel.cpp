@@ -64,6 +64,15 @@ namespace SST::Prototypes::JFM
 			return ImColor::HSV(static_cast<float>(std::fmod(index * 0.173, 1.0)), 0.74f, 0.95f).Value;
 		}
 
+		bool HoverVerticalDragLine(double value)
+		{
+			const float x = ImPlot::PlotToPixels(value, 0.0).x;
+			const ImVec2 mouse = ImGui::GetMousePos();
+			const ImVec2 plotPos = ImPlot::GetPlotPos();
+			const ImVec2 plotSize = ImPlot::GetPlotSize();
+			return std::abs(mouse.x - x) <= 8.0f && mouse.y >= plotPos.y && mouse.y <= plotPos.y + plotSize.y;
+		}
+
 		void ApplyPreviewScale(int scale, std::vector<double> &x, std::vector<double> &y)
 		{
 			if (scale == 0)
@@ -1103,9 +1112,12 @@ namespace SST::Prototypes::JFM
 
 		bool lowerHeld = false;
 		bool upperHeld = false;
+		bool lowerHovered = false;
+		bool upperHovered = false;
 		const ImVec4 rangeColor{0.96f, 0.60f, 0.16f, 1.0f};
-		const bool lowerChanged = ImPlot::DragLineX(3101, &m_RangeLower, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &lowerHeld);
-		const bool upperChanged = ImPlot::DragLineX(3102, &m_RangeUpper, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &upperHeld);
+		const bool lowerChanged = ImPlot::DragLineX(3101, &m_RangeLower, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, &lowerHovered, &lowerHeld);
+		const bool upperChanged = ImPlot::DragLineX(3102, &m_RangeUpper, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, &upperHovered, &upperHeld);
+		const bool rangeCursor = lowerHovered || upperHovered || lowerHeld || upperHeld || HoverVerticalDragLine(m_RangeLower) || HoverVerticalDragLine(m_RangeUpper);
 		const bool changed = lowerChanged || upperChanged;
 		const bool held = lowerHeld || upperHeld;
 		if (changed)
@@ -1133,9 +1145,19 @@ namespace SST::Prototypes::JFM
 					context.Set("upper_voltage", m_RangeUpper);
 					(void)registry->Execute(CommandID{JFMSetFitRangeCommandId}, std::move(context));
 				}
+				if (m_EventBus != nullptr && m_Settings != nullptr)
+				{
+					const JFMUserSettings settings = m_Settings->GetSnapshot();
+					if (settings.autoPrefitOnRangeChange)
+						m_EventBus->Queue(PrefitRequested{project, {active}});
+					if (settings.autoFitOnRangeChange)
+						m_EventBus->Queue(FitRequested{project, {active}});
+				}
 			}
 		}
 		ImPlot::EndPlot();
+		if (rangeCursor)
+			ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
 		if (m_RangeUndoGroupOpen && !held && (m_RangeHeldLastFrame || changed))
 			finishRangeUndoGroup();

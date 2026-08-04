@@ -22,7 +22,7 @@ namespace SST::Prototypes::JFM
 		store.SetPrefitCurveDefaults(false, {0.1f, 0.2f, 0.3f, 1.0f}, 3.5f, true, 5.0f);
 		store.SetFitCurveDefaults(false, {0.4f, 0.5f, 0.6f, 1.0f}, 4.5f, true);
 		store.SetTunedCurveDefaults(true, {0.7f, 0.8f, 0.9f, 1.0f}, 5.5f, true);
-		store.SetAutoPrefitFitOnRangeChange(true);
+		store.SetAutoRangeAnalysis(true, false);
 		JFMFitMonteCarloSettings solverSettings = store.GetSnapshot().fitMonteCarlo;
 		solverSettings.monteCarloSamples = 2048;
 		solverSettings.monteCarloNoisePercent = 2.5;
@@ -58,7 +58,9 @@ namespace SST::Prototypes::JFM
 		EXPECT_FLOAT_EQ(settings.tunedCurveColor[1], 0.8f);
 		EXPECT_FLOAT_EQ(settings.tunedCurveLineWeight, 5.5f);
 		EXPECT_TRUE(settings.tunedCurvesFitRangeOnly);
-		EXPECT_TRUE(settings.autoPrefitFitOnRangeChange);
+		EXPECT_TRUE(settings.autoPrefitOnRangeChange);
+		EXPECT_FALSE(settings.autoFitOnRangeChange);
+		EXPECT_FALSE(settings.autoPrefitFitOnRangeChange);
 		EXPECT_FLOAT_EQ(settings.hoveredCurveLineWeight, 5.0f);
 		EXPECT_EQ(settings.defaultColorPresetName, "Green/Yellow");
 		EXPECT_EQ(settings.fitMonteCarlo.monteCarloSamples, 2048);

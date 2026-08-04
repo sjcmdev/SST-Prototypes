@@ -8,9 +8,9 @@ ui:
   settings_auto_save_on_preview: true
 window:
   x: 0
-  y: 23
-  width: 3440
-  height: 1369
+  y: 34
+  width: 2880
+  height: 1694
   maximized: true
 appearance:
   clear_color: [0.1, 0.1, 0.12, 1]

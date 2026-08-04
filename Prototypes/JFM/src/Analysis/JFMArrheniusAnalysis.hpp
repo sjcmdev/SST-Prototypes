@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -24,6 +25,13 @@ namespace SST::Prototypes::JFM
 		Rsh2
 	};
 
+	enum class JFMArrheniusParameterSource
+	{
+		Prefit,
+		Fit,
+		Tuned
+	};
+
 	struct JFMArrheniusPoint
 	{
 		std::string name;
@@ -32,6 +40,10 @@ namespace SST::Prototypes::JFM
 		double y = 0.0;
 		std::optional<double> uncertainty;
 		std::string source;
+		std::optional<double> a;
+		std::optional<double> aStd;
+		std::optional<double> i0;
+		std::optional<double> i0Std;
 	};
 
 	inline constexpr const char *JFMArrheniusQuantityName(JFMArrheniusQuantity quantity)
@@ -82,6 +94,31 @@ namespace SST::Prototypes::JFM
 	{
 		const JFMParameterEstimate *estimate = JFMFindParameter(info, name, preferFit);
 		return estimate == nullptr ? std::nullopt : std::optional<double>{estimate->value};
+	}
+
+	inline std::optional<double> JFMTunedParameterValue(const JFMCharacteristicInfo &info, const std::string &name)
+	{
+		const auto found = info.metadata.find("tuned." + name);
+		if (found != info.metadata.end())
+		{
+			try
+			{
+				const double value = std::stod(found->second);
+				if (std::isfinite(value))
+					return value;
+			}
+			catch (const std::exception &)
+			{
+			}
+		}
+		return JFMParameterValue(info, name, true);
+	}
+
+	inline std::optional<double> JFMParameterValue(const JFMCharacteristicInfo &info, const std::string &name, JFMArrheniusParameterSource source)
+	{
+		if (source == JFMArrheniusParameterSource::Tuned)
+			return JFMTunedParameterValue(info, name);
+		return JFMParameterValue(info, name, source == JFMArrheniusParameterSource::Fit);
 	}
 
 	inline std::optional<double> JFMArrheniusUncertainty(
@@ -226,6 +263,33 @@ namespace SST::Prototypes::JFM
 		case JFMArrheniusQuantity::Rsh: return JFMParameterValue(info, "Rsh", preferFit);
 		case JFMArrheniusQuantity::Alpha: return JFMParameterValue(info, "alpha", preferFit);
 		case JFMArrheniusQuantity::Rsh2: return JFMParameterValue(info, "Rsh2", preferFit);
+		}
+		return std::nullopt;
+	}
+
+	inline std::optional<double> JFMArrheniusValue(JFMArrheniusQuantity quantity, const JFMCharacteristicInfo &info, JFMArrheniusParameterSource source)
+	{
+		const auto a = JFMParameterValue(info, "A", source);
+		const auto i0 = JFMParameterValue(info, "I0", source);
+		switch (quantity)
+		{
+		case JFMArrheniusQuantity::A: return a;
+		case JFMArrheniusQuantity::InvA:
+			if (a && *a != 0.0)
+				return 1.0 / *a;
+			break;
+		case JFMArrheniusQuantity::ALnI0:
+			if (a && i0 && *i0 > 0.0)
+				return *a * std::log(*i0);
+			break;
+		case JFMArrheniusQuantity::LnI0:
+			if (i0 && *i0 > 0.0)
+				return std::log(*i0);
+			break;
+		case JFMArrheniusQuantity::Rs: return JFMParameterValue(info, "Rs", source);
+		case JFMArrheniusQuantity::Rsh: return JFMParameterValue(info, "Rsh", source);
+		case JFMArrheniusQuantity::Alpha: return JFMParameterValue(info, "alpha", source);
+		case JFMArrheniusQuantity::Rsh2: return JFMParameterValue(info, "Rsh2", source);
 		}
 		return std::nullopt;
 	}

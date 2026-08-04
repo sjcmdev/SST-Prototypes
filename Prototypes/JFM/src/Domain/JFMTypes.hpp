@@ -3,6 +3,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -186,6 +187,65 @@ namespace SST::Prototypes::JFM
 		std::vector<double> noisyCurrent;
 	};
 
+	struct JFMMonteCarloBundleRecord
+	{
+		CharacteristicId characteristic = InvalidCharacteristicId;
+		JFMMonteCarloResult result;
+	};
+
+	struct JFMArrheniusLayoutStyle
+	{
+		std::array<float, 4> color{0.26f, 0.47f, 0.86f, 1.0f};
+		float pointSize = 5.0f;
+		float lineWeight = 1.5f;
+		int drawMode = 2;
+		int marker = 0;
+		bool visible = true;
+	};
+
+	struct JFMArrheniusFitLayout
+	{
+		std::string name;
+		std::string modelName;
+		int model = 0;
+		int lower = 0;
+		int upper = 0;
+		std::array<float, 4> color{0.90f, 0.42f, 0.18f, 1.0f};
+		float lineWeight = 2.5f;
+		bool visible = true;
+	};
+
+	struct JFMArrheniusSeriesLayout
+	{
+		int sourceMode = 0;
+		std::string sourceId;
+		std::string title;
+		int lower = 0;
+		int upper = 0;
+		JFMArrheniusLayoutStyle style;
+		JFMArrheniusLayoutStyle tunedStyle{{1.0f, 0.52f, 0.10f, 1.0f}, 5.0f, 1.5f, 2, 0, false};
+		std::vector<JFMArrheniusFitLayout> fits;
+	};
+
+	struct JFMArrheniusPlotLayout
+	{
+		std::uint64_t id = 0;
+		std::string title;
+		int quantity = 3;
+		int fitModel = 0;
+		bool preferFit = true;
+		bool autoRefit = true;
+		bool open = true;
+		int dockSlot = -1;
+		int activeSeries = 0;
+		std::vector<JFMArrheniusSeriesLayout> series;
+	};
+
+	struct JFMArrheniusLayoutDocument
+	{
+		std::vector<JFMArrheniusPlotLayout> plots;
+	};
+
 	enum class JFMImportPlacement
 	{
 		NewSeries,
@@ -317,5 +377,14 @@ namespace SST::Prototypes::JFM
 		std::vector<JFMDerivedAnalysis> derivedAnalyses;
 		std::vector<JFMScriptInfo> scripts;
 		std::vector<JFMGroupingDefinition> groupings;
+	};
+
+	struct JFMProjectBundleSnapshot
+	{
+		JFMProject project;
+		std::vector<JFMCharacteristicRecord> characteristics;
+		std::vector<JFMMonteCarloBundleRecord> monteCarloResults;
+		std::optional<JFMArrheniusLayoutDocument> arrheniusLayout;
+		std::uint64_t revision = 0;
 	};
 } // namespace SST::Prototypes::JFM

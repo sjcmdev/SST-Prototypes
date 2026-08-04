@@ -144,6 +144,51 @@ namespace SST::Prototypes::JFM
 		return m_Projects.back().handle;
 	}
 
+	ProjectHandle JFMWorkspaceStore::AttachProjectBundle(JFMProjectBundleSnapshot snapshot, std::optional<Path> path, bool activate)
+	{
+		std::scoped_lock lock(m_Mutex);
+		if (path && !path->Empty())
+		{
+			const std::filesystem::path requested = normalizedPath(*path);
+			for (ProjectDocument &existing : m_Projects)
+			{
+				if (existing.path && normalizedPath(*existing.path) == requested)
+				{
+					if (activate)
+						m_ActiveProject = existing.handle;
+					return existing.handle;
+				}
+			}
+		}
+
+		ProjectDocument document;
+		document.handle = m_NextProjectHandle++;
+		document.project = std::move(snapshot.project);
+		document.project.schemaVersion = JFMProjectSchemaVersion;
+		document.path = std::move(path);
+		document.status = "Project bundle loaded.";
+		document.revision = m_NextRevision++;
+		document.savedRevision = document.revision;
+		document.arrheniusLayout = std::move(snapshot.arrheniusLayout);
+		for (JFMCharacteristicRecord &record : snapshot.characteristics)
+		{
+			if (record.info.id == InvalidCharacteristicId)
+				continue;
+			document.characteristicData[record.info.id] = std::move(record.data);
+		}
+		for (JFMMonteCarloBundleRecord &record : snapshot.monteCarloResults)
+		{
+			if (record.characteristic != InvalidCharacteristicId)
+				document.monteCarloResults[record.characteristic] = CreateRef<const JFMMonteCarloResult>(std::move(record.result));
+		}
+		updateNextCharacteristicIdLocked(document);
+		ensureSelectionLocked(document);
+		m_Projects.push_back(std::move(document));
+		if (activate || m_ActiveProject == InvalidProjectHandle)
+			m_ActiveProject = m_Projects.back().handle;
+		return m_Projects.back().handle;
+	}
+
 	std::optional<ProjectHandle> JFMWorkspaceStore::FindProjectByPath(const Path &path) const
 	{
 		if (path.Empty())
@@ -240,6 +285,34 @@ namespace SST::Prototypes::JFM
 			value.revision};
 	}
 
+	std::optional<JFMProjectBundleSnapshot> JFMWorkspaceStore::CaptureProjectBundle(ProjectHandle handle) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return std::nullopt;
+		const ProjectDocument &value = document->get();
+		JFMProjectBundleSnapshot snapshot;
+		snapshot.project = value.project;
+		snapshot.revision = value.revision;
+		snapshot.arrheniusLayout = value.arrheniusLayout;
+		snapshot.characteristics.reserve(value.project.characteristics.size());
+		for (const JFMCharacteristicInfo &info : value.project.characteristics)
+		{
+			const auto data = value.characteristicData.find(info.id);
+			snapshot.characteristics.push_back(JFMCharacteristicRecord{
+				info,
+				data == value.characteristicData.end() ? Ref<const JFMCharacteristicData>{} : data->second});
+		}
+		snapshot.monteCarloResults.reserve(value.monteCarloResults.size());
+		for (const auto &[id, result] : value.monteCarloResults)
+		{
+			if (result != nullptr)
+				snapshot.monteCarloResults.push_back(JFMMonteCarloBundleRecord{id, *result});
+		}
+		return snapshot;
+	}
+
 	bool JFMWorkspaceStore::RestoreProjectState(ProjectHandle handle, JFMProjectStateSnapshot snapshot, bool activate)
 	{
 		std::scoped_lock lock(m_Mutex);
@@ -276,6 +349,21 @@ namespace SST::Prototypes::JFM
 		if (activate && !value.hidden)
 			m_ActiveProject = handle;
 		return true;
+	}
+
+	std::optional<JFMArrheniusLayoutDocument> JFMWorkspaceStore::GetArrheniusLayout(ProjectHandle handle) const
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		return document ? document->get().arrheniusLayout : std::nullopt;
+	}
+
+	void JFMWorkspaceStore::SetArrheniusLayout(ProjectHandle handle, std::optional<JFMArrheniusLayoutDocument> layout)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (document)
+			document->get().arrheniusLayout = std::move(layout);
 	}
 
 	std::optional<JFMCharacteristic> JFMWorkspaceStore::GetSelectedCharacteristic() const
@@ -1636,6 +1724,7 @@ namespace SST::Prototypes::JFM
 		document.fitGenerations.clear();
 		document.monteCarloResults.clear();
 		document.monteCarloGenerations.clear();
+		document.arrheniusLayout.reset();
 		document.nextCharacteristicId = 1;
 		document.path.reset();
 		document.lastImportWarnings.clear();
@@ -1659,6 +1748,7 @@ namespace SST::Prototypes::JFM
 		document.fitGenerations.clear();
 		document.monteCarloResults.clear();
 		document.monteCarloGenerations.clear();
+		document.arrheniusLayout.reset();
 		updateNextCharacteristicIdLocked(document);
 		document.path = std::move(path);
 		document.selectedCharacteristicIds.clear();

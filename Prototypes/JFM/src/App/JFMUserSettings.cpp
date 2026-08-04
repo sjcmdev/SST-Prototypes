@@ -159,6 +159,8 @@ namespace SST::Prototypes::JFM
 			m_Settings.tunedCurveLineWeight = root["tuned_curve_line_weight"] ? std::clamp(root["tuned_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.tunedCurveLineWeight;
 			m_Settings.tunedCurvesFitRangeOnly = root["tuned_curves_fit_range_only"] ? root["tuned_curves_fit_range_only"].as<bool>() : m_Settings.tunedCurvesFitRangeOnly;
 			m_Settings.autoPrefitFitOnRangeChange = root["auto_prefit_fit_on_range_change"] ? root["auto_prefit_fit_on_range_change"].as<bool>() : m_Settings.autoPrefitFitOnRangeChange;
+			m_Settings.autoPrefitOnRangeChange = root["auto_prefit_on_range_change"] ? root["auto_prefit_on_range_change"].as<bool>() : m_Settings.autoPrefitFitOnRangeChange;
+			m_Settings.autoFitOnRangeChange = root["auto_fit_on_range_change"] ? root["auto_fit_on_range_change"].as<bool>() : m_Settings.autoPrefitFitOnRangeChange;
 			m_Settings.hoveredCurveLineWeight = root["hovered_curve_line_weight"] ? std::clamp(root["hovered_curve_line_weight"].as<float>(), 0.5f, 10.0f) : m_Settings.hoveredCurveLineWeight;
 			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
 			if (const YAML::Node fit = root["fit_monte_carlo"]; fit && fit.IsMap())
@@ -274,6 +276,8 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "tuned_curve_line_weight" << YAML::Value << snapshot.tunedCurveLineWeight;
 		out << YAML::Key << "tuned_curves_fit_range_only" << YAML::Value << snapshot.tunedCurvesFitRangeOnly;
 		out << YAML::Key << "auto_prefit_fit_on_range_change" << YAML::Value << snapshot.autoPrefitFitOnRangeChange;
+		out << YAML::Key << "auto_prefit_on_range_change" << YAML::Value << snapshot.autoPrefitOnRangeChange;
+		out << YAML::Key << "auto_fit_on_range_change" << YAML::Value << snapshot.autoFitOnRangeChange;
 		out << YAML::Key << "hovered_curve_line_weight" << YAML::Value << snapshot.hoveredCurveLineWeight;
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
 		out << YAML::Key << "fit_monte_carlo" << YAML::Value << YAML::BeginMap;
@@ -420,6 +424,19 @@ namespace SST::Prototypes::JFM
 		{
 			std::scoped_lock lock(m_Mutex);
 			m_Settings.autoPrefitFitOnRangeChange = enabled;
+			m_Settings.autoPrefitOnRangeChange = enabled;
+			m_Settings.autoFitOnRangeChange = enabled;
+		}
+		Save();
+	}
+
+	void JFMUserSettingsStore::SetAutoRangeAnalysis(bool prefit, bool fit)
+	{
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.autoPrefitOnRangeChange = prefit;
+			m_Settings.autoFitOnRangeChange = fit;
+			m_Settings.autoPrefitFitOnRangeChange = prefit && fit;
 		}
 		Save();
 	}

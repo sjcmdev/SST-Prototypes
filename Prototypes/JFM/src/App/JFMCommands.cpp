@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <filesystem>
 #include <sstream>
 #include <set>
@@ -26,6 +27,8 @@ namespace SST::Prototypes::JFM
 	const CommandID OpenProjectCommand{"jfm.project.open"};
 	const CommandID SaveProjectCommand{"jfm.project.save"};
 	const CommandID SaveProjectAsCommand{"jfm.project.save_as"};
+	const CommandID OpenProjectBundleCommand{JFMOpenProjectBundleCommandId};
+	const CommandID SaveProjectBundleAsCommand{JFMSaveProjectBundleAsCommandId};
 	const CommandID OpenNewProjectWindowCommand{"jfm.project.open_new_window"};
 	const CommandID ImportFilesCommand{"jfm.import.files"};
 	const CommandID ImportDirectoryCommand{"jfm.import.directory"};
@@ -38,6 +41,7 @@ namespace SST::Prototypes::JFM
 	const CommandID ExportCharacteristicsFitTsvCommand{JFMExportCharacteristicsFitTsvCommandId};
 
 	constexpr NativeFileDialogFilter JFMProjectFilter{"JFM Project", "jfm.yaml,yaml"};
+	constexpr NativeFileDialogFilter JFMProjectBundleFilter{"JFM Project Bundle", "jfm"};
 	constexpr NativeFileDialogFilter JFMDataFilter{"JFM Data", "dat,iv,txt,csv"};
 	constexpr NativeFileDialogFilter TsvFilter{"TSV", "tsv"};
 	StructuredError makeCommandError(std::string message, std::string details);
@@ -81,6 +85,7 @@ namespace SST::Prototypes::JFM
 	}
 
 	void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, ProjectHandle project, const Path &path);
+	void queueBundleSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, ProjectHandle project, const Path &path);
 
 	StructuredError makeCommandError(std::string message, std::string details)
 	{
@@ -102,6 +107,14 @@ namespace SST::Prototypes::JFM
 		return Path::FromResolved(path.Native().string() + ".jfm.yaml");
 	}
 
+	Path ensureProjectBundleExtension(Path path)
+	{
+		std::string text = path.String();
+		if (text.size() >= 4 && text.substr(text.size() - 4) == ".jfm")
+			return path;
+		return Path::FromResolved(path.Native().string() + ".jfm");
+	}
+
 	Path ensureExtension(Path path, const char *extension)
 	{
 		const std::string text = path.String();
@@ -115,6 +128,15 @@ namespace SST::Prototypes::JFM
 	{
 		std::error_code error;
 		return std::filesystem::is_directory(path.Native(), error);
+	}
+
+	bool isProjectBundlePath(const Path &path)
+	{
+		std::string extension = path.extension().String();
+		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character) {
+			return static_cast<char>(std::tolower(character));
+		});
+		return extension == ".jfm";
 	}
 
 	std::string safeFileName(std::string name)
@@ -167,12 +189,29 @@ namespace SST::Prototypes::JFM
 		return OpenFileDialog(JFMProjectFilter, settings != nullptr ? settings->GetDefaultProjectsDirectory() : Path{});
 	}
 
+	std::optional<Path> chooseProjectBundleOpenPath(const Ref<JFMUserSettingsStore> &settings)
+	{
+		std::vector<Path> paths = PickFoldersDialog(false, settings != nullptr ? settings->GetDefaultProjectsDirectory() : Path{});
+		if (paths.empty())
+			return std::nullopt;
+		return paths.front();
+	}
+
 	std::optional<Path> chooseProjectSavePath(const Ref<JFMUserSettingsStore> &settings)
 	{
 		std::optional<Path> path = SaveFileDialog(JFMProjectFilter, "project.jfm.yaml", settings != nullptr ? settings->GetDefaultProjectsDirectory() : Path{});
 		if (!path)
 			return std::nullopt;
 		return ensureProjectExtension(*path);
+	}
+
+	std::optional<Path> chooseProjectBundleSavePath(const Ref<JFMUserSettingsStore> &settings, const std::string &projectName)
+	{
+		const std::string defaultName = safeFileName(projectName.empty() ? "project" : projectName) + ".jfm";
+		std::optional<Path> path = SaveFileDialog(JFMProjectBundleFilter, defaultName.c_str(), settings != nullptr ? settings->GetDefaultProjectsDirectory() : Path{});
+		if (!path)
+			return std::nullopt;
+		return ensureProjectBundleExtension(*path);
 	}
 
 	std::optional<Path> chooseRawTsvSavePath(const std::string &defaultName)
@@ -468,12 +507,36 @@ namespace SST::Prototypes::JFM
 			else
 				path = chooseProjectOpenPath(settings);
 			if (path)
-				eventBus->Queue(ProjectLoadRequested{*path});
+			{
+				if (isProjectBundlePath(*path))
+					eventBus->Queue(ProjectBundleLoadRequested{*path});
+				else
+					eventBus->Queue(ProjectLoadRequested{*path});
+			}
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
 		{
 			return Result<void>{makeCommandError("Open project failed.", error.what())};
+		}
+	}
+
+	Result<void> handleOpenProjectBundle(Ref<EventBus> eventBus, Ref<JFMUserSettingsStore> settings, CommandContext &context)
+	{
+		try
+		{
+			std::optional<Path> path;
+			if (Path *contextPath = context.TryGet<Path>("path"))
+				path = *contextPath;
+			else
+				path = chooseProjectBundleOpenPath(settings);
+			if (path)
+				eventBus->Queue(ProjectBundleLoadRequested{*path});
+			return Result<void>{};
+		}
+		catch (const std::exception &error)
+		{
+			return Result<void>{makeCommandError("Open project bundle failed.", error.what())};
 		}
 	}
 
@@ -486,7 +549,12 @@ namespace SST::Prototypes::JFM
 			if (!path)
 				path = chooseProjectSavePath(settings);
 			if (path)
-				queueSave(*eventBus, workspace, project, *path);
+			{
+				if (isProjectBundlePath(*path))
+					queueBundleSave(*eventBus, workspace, project, *path);
+				else
+					queueSave(*eventBus, workspace, project, *path);
+			}
 			return Result<void>{};
 		}
 		catch (const std::exception &error)
@@ -508,6 +576,22 @@ namespace SST::Prototypes::JFM
 		catch (const std::exception &error)
 		{
 			return Result<void>{makeCommandError("Save project as failed.", error.what())};
+		}
+	}
+
+	Result<void> handleSaveProjectBundleAs(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> workspace, Ref<JFMUserSettingsStore> settings, CommandContext &)
+	{
+		try
+		{
+			const ProjectHandle project = workspace->GetActiveProjectHandle();
+			std::optional<Path> path = chooseProjectBundleSavePath(settings, workspace->GetProjectSnapshot(project).name);
+			if (path)
+				queueBundleSave(*eventBus, workspace, project, *path);
+			return Result<void>{};
+		}
+		catch (const std::exception &error)
+		{
+			return Result<void>{makeCommandError("Save project bundle failed.", error.what())};
 		}
 	}
 
@@ -716,6 +800,22 @@ namespace SST::Prototypes::JFM
 		eventBus.Queue(ProjectSaveRequested{
 			path,
 			workspace->GetProjectSnapshot(project),
+			project,
+			InvalidJFMOperationId,
+			workspace->GetProjectRevision(project)});
+	}
+
+	void queueBundleSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, ProjectHandle project, const Path &path)
+	{
+		auto snapshot = workspace->CaptureProjectBundle(project);
+		if (!snapshot)
+		{
+			workspace->SetStatusMessage(project, "Project bundle save failed: active project is unavailable.");
+			return;
+		}
+		eventBus.Queue(ProjectBundleSaveRequested{
+			path,
+			std::move(*snapshot),
 			project,
 			InvalidJFMOperationId,
 			workspace->GetProjectRevision(project)});
@@ -1192,6 +1292,11 @@ namespace SST::Prototypes::JFM
 
 		registerCommand(
 			registry,
+			CommandMeta{OpenProjectBundleCommand, "Open Project Bundle...", "JFM", "Open a full JFM project bundle.", {}, CommandFlags::AsyncCapable},
+			std::bind(handleOpenProjectBundle, eventBus, settings, std::placeholders::_1));
+
+		registerCommand(
+			registry,
 			CommandMeta{SaveProjectCommand, "Save Project", "JFM", "Save the current JFM project.", {}, CommandFlags::AsyncCapable},
 			std::bind(handleSaveProject, eventBus, workspace, settings, std::placeholders::_1));
 
@@ -1199,6 +1304,11 @@ namespace SST::Prototypes::JFM
 			registry,
 			CommandMeta{SaveProjectAsCommand, "Save Project As...", "JFM", "Save the current JFM project to a new file.", {}, CommandFlags::AsyncCapable},
 			std::bind(handleSaveProjectAs, eventBus, workspace, settings, std::placeholders::_1));
+
+		registerCommand(
+			registry,
+			CommandMeta{SaveProjectBundleAsCommand, "Save Project Bundle As...", "JFM", "Save the full JFM project bundle.", {}, CommandFlags::AsyncCapable},
+			std::bind(handleSaveProjectBundleAs, eventBus, workspace, settings, std::placeholders::_1));
 
 		registerCommand(
 			registry,

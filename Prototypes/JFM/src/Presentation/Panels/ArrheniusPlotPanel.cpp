@@ -2,11 +2,21 @@
 
 #include "Presentation/Panels/ArrheniusPlotPanel.hpp"
 
+#include "Core/Platform/PlatformPythonRuntime.hpp"
+#include "Core/Platform/ProcessRunner.hpp"
+
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <map>
 #include <optional>
 #include <set>
+#include <sstream>
 #include <string>
 
 #include <imgui.h>
@@ -54,6 +64,15 @@ namespace SST::Prototypes::JFM
 			}
 		}
 
+		bool HoverVerticalDragLine(double value)
+		{
+			const float x = ImPlot::PlotToPixels(value, 0.0).x;
+			const ImVec2 mouse = ImGui::GetMousePos();
+			const ImVec2 plotPos = ImPlot::GetPlotPos();
+			const ImVec2 plotSize = ImPlot::GetPlotSize();
+			return std::abs(mouse.x - x) <= 8.0f && mouse.y >= plotPos.y && mouse.y <= plotPos.y + plotSize.y;
+		}
+
 		std::array<float, 4> DefaultColor(std::size_t index)
 		{
 			static constexpr std::array<std::array<float, 4>, 8> colors{{
@@ -65,6 +84,17 @@ namespace SST::Prototypes::JFM
 				{0.88f, 0.67f, 0.16f, 1.0f},
 				{0.20f, 0.68f, 0.75f, 1.0f},
 				{0.80f, 0.80f, 0.80f, 1.0f},
+			}};
+			return colors[index % colors.size()];
+		}
+
+		std::array<float, 4> TunedColor(std::size_t index)
+		{
+			static constexpr std::array<std::array<float, 4>, 4> colors{{
+				{1.00f, 0.52f, 0.10f, 1.0f},
+				{0.95f, 0.72f, 0.18f, 1.0f},
+				{0.80f, 0.40f, 0.85f, 1.0f},
+				{0.20f, 0.86f, 0.76f, 1.0f},
 			}};
 			return colors[index % colors.size()];
 		}
@@ -86,6 +116,184 @@ namespace SST::Prototypes::JFM
 				: static_cast<int>(std::distance(points.begin(), found));
 		}
 
+		std::string QuantityToken(JFMArrheniusQuantity quantity)
+		{
+			switch (quantity)
+			{
+			case JFMArrheniusQuantity::A: return "A";
+			case JFMArrheniusQuantity::InvA: return "InvA";
+			case JFMArrheniusQuantity::ALnI0: return "ALnI0";
+			case JFMArrheniusQuantity::LnI0: return "LnI0";
+			case JFMArrheniusQuantity::Rs: return "Rs";
+			case JFMArrheniusQuantity::Rsh: return "Rsh";
+			case JFMArrheniusQuantity::Alpha: return "Alpha";
+			case JFMArrheniusQuantity::Rsh2: return "Rsh2";
+			}
+			return "Linear";
+		}
+
+		std::string FitModeFor(JFMArrheniusQuantity quantity, int model)
+		{
+			if (quantity == JFMArrheniusQuantity::A || quantity == JFMArrheniusQuantity::InvA)
+				return std::clamp(model, 0, static_cast<int>(IM_ARRAYSIZE(FitModelLabels)) - 1) == 0 ? "te_ir" : "te_scr";
+			if (quantity == JFMArrheniusQuantity::ALnI0 || quantity == JFMArrheniusQuantity::LnI0)
+				return "ea_j00";
+			return "linear";
+		}
+
+		Path ResolveArrheniusFitScript()
+		{
+			const std::array<Path, 4> candidates = {
+				Path("python") / "jfm_arrhenius" / "fit_arrhenius.py",
+				Path("Prototypes") / "JFM" / "python" / "jfm_arrhenius" / "fit_arrhenius.py",
+				Path("install") / "app" / "python" / "jfm_arrhenius" / "fit_arrhenius.py",
+				[] {
+					const auto executable = Platform::CurrentExecutablePath();
+					if (!executable)
+						return Path{};
+					return executable->parent_path() / "python" / "jfm_arrhenius" / "fit_arrhenius.py";
+				}()};
+			for (const Path &candidate : candidates)
+				if (!candidate.Empty() && FileSystem::Exists(candidate.Native()))
+					return candidate;
+			return {};
+		}
+
+		bool WriteArrheniusFitInput(
+			const Path &path,
+			const std::vector<JFMArrheniusPoint> &points,
+			int lower,
+			int upper,
+			JFMArrheniusQuantity quantity,
+			int model)
+		{
+			std::ofstream out(path.Native());
+			if (!out)
+				return false;
+			out << std::setprecision(17);
+			out << "mode\t" << FitModeFor(quantity, model) << "\n";
+			out << "quantity\t" << QuantityToken(quantity) << "\n";
+			out << "name\tT\tx\ty\tsigma_y\tA\tA_std\tI0\tI0_std\n";
+			for (int index = lower; index <= upper; ++index)
+			{
+				const JFMArrheniusPoint &point = points[static_cast<std::size_t>(index)];
+				out << point.name << '\t'
+					<< point.temperatureK << '\t'
+					<< point.x << '\t'
+					<< point.y << '\t'
+					<< point.uncertainty.value_or(0.0) << '\t'
+					<< point.a.value_or(0.0) << '\t'
+					<< point.aStd.value_or(0.0) << '\t'
+					<< point.i0.value_or(0.0) << '\t'
+					<< point.i0Std.value_or(0.0) << '\n';
+			}
+			return true;
+		}
+
+		std::vector<double> ParseDoubleList(const std::string &text)
+		{
+			std::vector<double> values;
+			std::stringstream stream(text);
+			std::string token;
+			while (std::getline(stream, token, ','))
+			{
+				try
+				{
+					values.push_back(std::stod(token));
+				}
+				catch (const std::exception &)
+				{
+				}
+			}
+			return values;
+		}
+
+		double ReadDouble(const std::map<std::string, std::string> &values, const char *key, bool *has = nullptr)
+		{
+			const auto found = values.find(key);
+			if (found == values.end() || found->second.empty())
+			{
+				if (has != nullptr)
+					*has = false;
+				return 0.0;
+			}
+			try
+			{
+				const double value = std::stod(found->second);
+				const bool ok = std::isfinite(value);
+				if (has != nullptr)
+					*has = ok;
+				return ok ? value : 0.0;
+			}
+			catch (const std::exception &)
+			{
+				if (has != nullptr)
+					*has = false;
+				return 0.0;
+			}
+		}
+
+		std::optional<std::map<std::string, std::string>> ReadArrheniusFitOutput(const Path &path)
+		{
+			std::ifstream in(path.Native());
+			if (!in)
+				return std::nullopt;
+			std::map<std::string, std::string> values;
+			std::string line;
+			while (std::getline(in, line))
+			{
+				const std::size_t tab = line.find('\t');
+				if (tab == std::string::npos)
+					continue;
+				values[line.substr(0, tab)] = line.substr(tab + 1);
+			}
+			if (values["ok"] != "1")
+				return std::nullopt;
+			return values;
+		}
+
+		std::optional<std::map<std::string, std::string>> RunArrheniusFitScript(
+			const std::vector<JFMArrheniusPoint> &points,
+			int lower,
+			int upper,
+			JFMArrheniusQuantity quantity,
+			int model)
+		{
+			const Path script = ResolveArrheniusFitScript();
+			if (script.Empty())
+				return std::nullopt;
+			std::error_code error;
+			const auto directory = FileSystem::TempDirectoryPath(error) / "jfm-arrhenius";
+			if (error)
+				return std::nullopt;
+			std::filesystem::create_directories(directory, error);
+			if (error)
+				return std::nullopt;
+			const auto stamp = std::chrono::steady_clock::now().time_since_epoch().count();
+			const Path input = Path::FromResolved(directory / ("fit-" + std::to_string(stamp) + ".tsv"));
+			const Path output = Path::FromResolved(directory / ("fit-" + std::to_string(stamp) + ".out"));
+			if (!WriteArrheniusFitInput(input, points, lower, upper, quantity, model))
+				return std::nullopt;
+			const std::array<Platform::ProcessRunOptions, 3> options = {{
+				{Path("python"), {script.String(), input.String(), output.String()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)},
+				{Path("py"), {"-3", script.String(), input.String(), output.String()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)},
+				{Platform::ResolvePreferredPythonExecutable(), {script.String(), input.String(), output.String()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)}}};
+			for (const Platform::ProcessRunOptions &option : options)
+			{
+				const auto result = Platform::RunProcess(option);
+				if (result && result->exitCode == 0)
+				{
+					auto parsed = ReadArrheniusFitOutput(output);
+					std::filesystem::remove(input.Native(), error);
+					std::filesystem::remove(output.Native(), error);
+					return parsed;
+				}
+			}
+			std::filesystem::remove(input.Native(), error);
+			std::filesystem::remove(output.Native(), error);
+			return std::nullopt;
+		}
+
 		std::optional<ArrheniusPlotPanel::FitLine> BuildFit(
 			const std::vector<JFMArrheniusPoint> &points,
 			int lower,
@@ -102,72 +310,36 @@ namespace SST::Prototypes::JFM
 			if (count < 2)
 				return std::nullopt;
 
-			double sx = 0.0;
-			double sy = 0.0;
-			double sxx = 0.0;
-			double sxy = 0.0;
-			for (int index = lower; index <= upper; ++index)
-			{
-				sx += points[index].x;
-				sy += points[index].y;
-				sxx += points[index].x * points[index].x;
-				sxy += points[index].x * points[index].y;
-			}
-			const double denominator = count * sxx - sx * sx;
-			if (denominator == 0.0)
+			const auto values = RunArrheniusFitScript(points, lower, upper, quantity, model);
+			if (!values)
 				return std::nullopt;
 
 			ArrheniusPlotPanel::FitLine fit;
 			fit.model = std::clamp(model, 0, static_cast<int>(IM_ARRAYSIZE(FitModelLabels)) - 1);
 			fit.lower = lower;
 			fit.upper = upper;
-			fit.name = std::string(FitModelLabels[fit.model]) + " " + std::to_string(fitIndex + 1);
-			fit.slope = (count * sxy - sx * sy) / denominator;
-			fit.intercept = (sy - fit.slope * sx) / count;
-			if (count > 2)
-			{
-				double residualSum = 0.0;
-				for (int index = lower; index <= upper; ++index)
-				{
-					const double residual = points[index].y - (fit.intercept + fit.slope * points[index].x);
-					residualSum += residual * residual;
-				}
-				const double variance = residualSum / static_cast<double>(count - 2);
-				fit.slopeStd = std::sqrt(std::max(0.0, variance * static_cast<double>(count) / denominator));
-				fit.interceptStd = std::sqrt(std::max(0.0, variance * sxx / denominator));
-				fit.hasSlopeStd = std::isfinite(fit.slopeStd);
-				fit.hasInterceptStd = std::isfinite(fit.interceptStd);
-			}
-			constexpr double kEvPerK = 8.617333262e-5;
-			if (quantity == JFMArrheniusQuantity::ALnI0 || quantity == JFMArrheniusQuantity::LnI0)
-			{
-				fit.eaEv = -fit.slope * kEvPerK * 1000.0;
-				fit.egEv = 2.0 * fit.eaEv;
-				fit.hasEa = std::isfinite(fit.eaEv);
-				fit.hasEg = std::isfinite(fit.egEv);
-				fit.eaStd = fit.slopeStd * kEvPerK * 1000.0;
-				fit.egStd = 2.0 * fit.eaStd;
-				fit.hasEaStd = fit.hasSlopeStd && std::isfinite(fit.eaStd);
-				fit.hasEgStd = fit.hasEaStd && std::isfinite(fit.egStd);
-			}
-			if (quantity == JFMArrheniusQuantity::ALnI0)
-			{
-				fit.j00 = std::exp(fit.intercept);
-				fit.hasJ00 = std::isfinite(fit.j00);
-				fit.j00Std = std::abs(fit.j00) * fit.interceptStd;
-				fit.hasJ00Std = fit.hasJ00 && fit.hasInterceptStd && std::isfinite(fit.j00Std);
-			}
-			if (quantity == JFMArrheniusQuantity::InvA)
-			{
-				fit.i00 = std::exp(fit.intercept);
-				fit.tStar = fit.slope;
-				fit.hasI00 = std::isfinite(fit.i00);
-				fit.hasTStar = std::isfinite(fit.tStar);
-				fit.i00Std = std::abs(fit.i00) * fit.interceptStd;
-				fit.tStarStd = fit.slopeStd;
-				fit.hasI00Std = fit.hasI00 && fit.hasInterceptStd && std::isfinite(fit.i00Std);
-				fit.hasTStarStd = fit.hasSlopeStd && std::isfinite(fit.tStarStd);
-			}
+			const auto mode = values->find("mode");
+			fit.modelName = mode != values->end() ? mode->second : FitModeFor(quantity, model);
+			fit.name = fit.modelName + " " + std::to_string(fitIndex + 1);
+			bool hasValue = false;
+			fit.slope = ReadDouble(*values, "slope", &hasValue);
+			fit.slopeStd = ReadDouble(*values, "slope_std", &fit.hasSlopeStd);
+			fit.intercept = ReadDouble(*values, "intercept", &hasValue);
+			fit.interceptStd = ReadDouble(*values, "intercept_std", &fit.hasInterceptStd);
+			fit.eaEv = ReadDouble(*values, "E_a", &fit.hasEa);
+			fit.eaStd = ReadDouble(*values, "E_a_std", &fit.hasEaStd);
+			fit.j00 = ReadDouble(*values, "J_00", &fit.hasJ00);
+			fit.j00Std = ReadDouble(*values, "J_00_std", &fit.hasJ00Std);
+			fit.e00 = ReadDouble(*values, "E_00", &fit.hasE00);
+			fit.e00Std = ReadDouble(*values, "E_00_std", &fit.hasE00Std);
+			fit.eStar = ReadDouble(*values, "E_star", &fit.hasEStar);
+			fit.eStarStd = ReadDouble(*values, "E_star_std", &fit.hasEStarStd);
+			fit.tStar = ReadDouble(*values, "T_star", &fit.hasTStar);
+			fit.tStarStd = ReadDouble(*values, "T_star_std", &fit.hasTStarStd);
+			if (const auto fitX = values->find("fit_x"); fitX != values->end())
+				fit.fitX = ParseDoubleList(fitX->second);
+			if (const auto fitY = values->find("fit_y"); fitY != values->end())
+				fit.fitY = ParseDoubleList(fitY->second);
 			return fit;
 		}
 
@@ -189,12 +361,41 @@ namespace SST::Prototypes::JFM
 			return false;
 		}
 
+		std::string ValueText(double value, bool hasStd, double std)
+		{
+			std::ostringstream out;
+			if (hasStd)
+				out << std::setprecision(8) << value << " +/- " << std::setprecision(3) << std;
+			else
+				out << std::setprecision(8) << value;
+			return out.str();
+		}
+
 		void TextValue(double value, bool hasStd, double std)
 		{
-			if (hasStd)
-				ImGui::Text("%.8g +/- %.3g", value, std);
-			else
-				ImGui::Text("%.8g", value);
+			const std::string text = ValueText(value, hasStd, std);
+			ImGui::TextUnformatted(text.c_str());
+		}
+
+		template <std::size_t Size>
+		void GrowColumn(std::array<float, Size> &widths, std::size_t column, const std::string &text)
+		{
+			if (column >= widths.size())
+				return;
+			const float padding = ImGui::GetStyle().CellPadding.x * 2.0f + 28.0f;
+			widths[column] = std::max(widths[column], ImGui::CalcTextSize(text.c_str()).x + padding);
+		}
+
+		template <std::size_t Size>
+		void ApplyColumnWidths(const std::array<float, Size> &widths)
+		{
+			for (std::size_t index = 0; index < widths.size(); ++index)
+				ImGui::TableSetColumnWidth(static_cast<int>(index), widths[index]);
+		}
+
+		float TableHeightForRows(std::size_t rows)
+		{
+			return ImGui::GetFrameHeightWithSpacing() * static_cast<float>(std::max<std::size_t>(1, rows) + 1) + ImGui::GetStyle().CellPadding.y * 2.0f;
 		}
 	}
 
@@ -259,29 +460,45 @@ namespace SST::Prototypes::JFM
 		const JFMProject &snapshot,
 		const SeriesEntry &entry,
 		JFMArrheniusQuantity quantity,
-		bool preferFit) const
+		bool preferFit,
+		bool useTuned) const
 	{
+		const JFMArrheniusParameterSource parameterSource = useTuned
+			? JFMArrheniusParameterSource::Tuned
+			: preferFit ? JFMArrheniusParameterSource::Fit : JFMArrheniusParameterSource::Prefit;
 		std::vector<JFMCharacteristicRecord> records = RecordsForEntry(projectHandle, snapshot, entry);
 		std::vector<JFMArrheniusPoint> points;
 		for (const JFMCharacteristicRecord &record : records)
 		{
 			if (!record.info.temperatureK || *record.info.temperatureK <= 0.0)
 				continue;
-			const auto value = JFMArrheniusValue(quantity, record.info, preferFit);
+			const auto value = JFMArrheniusValue(quantity, record.info, parameterSource);
 			if (!value || !std::isfinite(*value))
 				continue;
 
-			std::string source;
-			(void)JFMFindParameter(record.info, quantity == JFMArrheniusQuantity::LnI0 ? "I0" : "A", preferFit, &source);
+			std::string source = useTuned ? "tuned" : "";
+			if (!useTuned)
+				(void)JFMFindParameter(record.info, quantity == JFMArrheniusQuantity::LnI0 ? "I0" : "A", preferFit, &source);
 			std::optional<double> uncertainty;
-			if (m_Store != nullptr)
+			if (!useTuned && m_Store != nullptr)
 			{
 				const Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult({projectHandle, record.info.id});
 				if (result != nullptr)
 					uncertainty = JFMArrheniusMonteCarloUncertainty(quantity, *result);
 			}
-			if (!uncertainty)
+			if (!useTuned && !uncertainty)
 				uncertainty = JFMArrheniusUncertainty(quantity, record.info, preferFit);
+
+			auto parameter = [&](const char *name) -> std::pair<std::optional<double>, std::optional<double>> {
+				if (useTuned)
+					return {JFMTunedParameterValue(record.info, name), std::nullopt};
+				const JFMParameterEstimate *estimate = JFMFindParameter(record.info, name, preferFit);
+				if (estimate == nullptr)
+					return {std::nullopt, std::nullopt};
+				return {estimate->value, estimate->standardError};
+			};
+			const auto [a, aStd] = parameter("A");
+			const auto [i0, i0Std] = parameter("I0");
 
 			const double temperature = *record.info.temperatureK;
 			points.push_back(JFMArrheniusPoint{
@@ -290,7 +507,11 @@ namespace SST::Prototypes::JFM
 				JFMArrheniusUsesInvTemperature(quantity) ? 1000.0 / temperature : temperature,
 				*value,
 				uncertainty,
-				source});
+				source,
+				a,
+				aStd,
+				i0,
+				i0Std});
 		}
 		std::sort(points.begin(), points.end(), [](const JFMArrheniusPoint &lhs, const JFMArrheniusPoint &rhs) {
 			return lhs.x < rhs.x;
@@ -327,6 +548,8 @@ namespace SST::Prototypes::JFM
 			if (duplicate != target->series.end())
 				return;
 			entry.style.color = DefaultColor(target->series.size());
+			entry.tunedStyle.color = TunedColor(target->series.size());
+			entry.tunedStyle.visible = m_UseTuned;
 			target->series.push_back(std::move(entry));
 			target->activeSeries = static_cast<int>(target->series.size()) - 1;
 			m_ActivePlotId = target->id;
@@ -339,6 +562,9 @@ namespace SST::Prototypes::JFM
 		window.fitModel = m_FitModel;
 		window.preferFit = m_PreferFit;
 		window.title = entry.title + " - " + QuantityLabels[std::clamp(m_Quantity, 0, 7)];
+		entry.style.color = DefaultColor(0);
+		entry.tunedStyle.color = TunedColor(0);
+		entry.tunedStyle.visible = m_UseTuned;
 		window.series.push_back(std::move(entry));
 		window.needsDock = true;
 		window.dockSlot = 0;
@@ -371,9 +597,12 @@ namespace SST::Prototypes::JFM
 			window.title = QuantityLabels[quantityIndex];
 			for (SeriesEntry entry : entries)
 			{
-				if (PointsForEntry(projectHandle, snapshot, entry, ToQuantity(quantityIndex), window.preferFit).empty())
+				if (PointsForEntry(projectHandle, snapshot, entry, ToQuantity(quantityIndex), window.preferFit, false).empty()
+					&& PointsForEntry(projectHandle, snapshot, entry, ToQuantity(quantityIndex), window.preferFit, true).empty())
 					continue;
 				entry.style.color = DefaultColor(window.series.size());
+				entry.tunedStyle.color = TunedColor(window.series.size());
+				entry.tunedStyle.visible = m_UseTuned;
 				window.series.push_back(std::move(entry));
 			}
 			if (!window.series.empty())
@@ -387,6 +616,114 @@ namespace SST::Prototypes::JFM
 				m_PlotWindows.push_back(std::move(window));
 			}
 		}
+	}
+
+	JFMArrheniusLayoutDocument ArrheniusPlotPanel::CaptureLayoutDocument() const
+	{
+		JFMArrheniusLayoutDocument document;
+		document.plots.reserve(m_PlotWindows.size());
+		for (const PlotWindow &window : m_PlotWindows)
+		{
+			JFMArrheniusPlotLayout plot;
+			plot.id = window.id;
+			plot.title = window.title;
+			plot.quantity = window.quantity;
+			plot.fitModel = window.fitModel;
+			plot.preferFit = window.preferFit;
+			plot.autoRefit = window.autoRefit;
+			plot.open = window.open;
+			plot.dockSlot = window.dockSlot;
+			plot.activeSeries = window.activeSeries;
+			plot.series.reserve(window.series.size());
+			for (const SeriesEntry &series : window.series)
+			{
+				JFMArrheniusSeriesLayout entry;
+				entry.sourceMode = series.sourceMode;
+				entry.sourceId = series.sourceId;
+				entry.title = series.title;
+				entry.lower = series.lower;
+				entry.upper = series.upper;
+				entry.style = JFMArrheniusLayoutStyle{series.style.color, series.style.pointSize, series.style.lineWeight, series.style.drawMode, series.style.marker, series.style.visible};
+				entry.tunedStyle = JFMArrheniusLayoutStyle{series.tunedStyle.color, series.tunedStyle.pointSize, series.tunedStyle.lineWeight, series.tunedStyle.drawMode, series.tunedStyle.marker, series.tunedStyle.visible};
+				entry.fits.reserve(series.fits.size());
+				for (const FitLine &fit : series.fits)
+				{
+					JFMArrheniusFitLayout fitLayout;
+					fitLayout.name = fit.name;
+					fitLayout.modelName = fit.modelName;
+					fitLayout.model = fit.model;
+					fitLayout.lower = fit.lower;
+					fitLayout.upper = fit.upper;
+					fitLayout.color = fit.color;
+					fitLayout.lineWeight = fit.lineWeight;
+					fitLayout.visible = fit.visible;
+					entry.fits.push_back(std::move(fitLayout));
+				}
+				plot.series.push_back(std::move(entry));
+			}
+			document.plots.push_back(std::move(plot));
+		}
+		return document;
+	}
+
+	void ArrheniusPlotPanel::RestoreLayoutDocument(const JFMArrheniusLayoutDocument &layout)
+	{
+		m_PlotWindows.clear();
+		m_NextPlotId = 1;
+		m_ActivePlotId = 0;
+		for (const JFMArrheniusPlotLayout &plotLayout : layout.plots)
+		{
+			PlotWindow window;
+			window.id = plotLayout.id == 0 ? m_NextPlotId++ : plotLayout.id;
+			window.title = plotLayout.title.empty()
+				? std::string{QuantityLabels[std::clamp(plotLayout.quantity, 0, static_cast<int>(IM_ARRAYSIZE(QuantityLabels)) - 1)]}
+				: plotLayout.title;
+			window.quantity = plotLayout.quantity;
+			window.fitModel = plotLayout.fitModel;
+			window.preferFit = plotLayout.preferFit;
+			window.autoRefit = plotLayout.autoRefit;
+			window.open = plotLayout.open;
+			window.dockSlot = plotLayout.dockSlot;
+			window.activeSeries = plotLayout.activeSeries;
+			window.needsDock = window.open;
+			for (const JFMArrheniusSeriesLayout &seriesLayout : plotLayout.series)
+			{
+				SeriesEntry series;
+				series.sourceMode = seriesLayout.sourceMode;
+				series.sourceId = seriesLayout.sourceId;
+				series.title = seriesLayout.title;
+				series.lower = seriesLayout.lower;
+				series.upper = seriesLayout.upper;
+				series.style = SeriesStyle{seriesLayout.style.color, seriesLayout.style.pointSize, seriesLayout.style.lineWeight, seriesLayout.style.drawMode, seriesLayout.style.marker, seriesLayout.style.visible};
+				series.tunedStyle = SeriesStyle{seriesLayout.tunedStyle.color, seriesLayout.tunedStyle.pointSize, seriesLayout.tunedStyle.lineWeight, seriesLayout.tunedStyle.drawMode, seriesLayout.tunedStyle.marker, seriesLayout.tunedStyle.visible};
+				for (const JFMArrheniusFitLayout &fitLayout : seriesLayout.fits)
+				{
+					FitLine fit;
+					fit.name = fitLayout.name;
+					fit.modelName = fitLayout.modelName;
+					fit.model = fitLayout.model;
+					fit.lower = fitLayout.lower;
+					fit.upper = fitLayout.upper;
+					fit.color = fitLayout.color;
+					fit.lineWeight = fitLayout.lineWeight;
+					fit.visible = fitLayout.visible;
+					series.fits.push_back(std::move(fit));
+				}
+				window.series.push_back(std::move(series));
+			}
+			window.activeSeries = std::clamp(window.activeSeries, 0, std::max(0, static_cast<int>(window.series.size()) - 1));
+			m_NextPlotId = std::max(m_NextPlotId, window.id + 1);
+			if (window.open)
+				m_ActivePlotId = window.id;
+			m_PlotWindows.push_back(std::move(window));
+		}
+		m_RebuildDockLayout = true;
+	}
+
+	void ArrheniusPlotPanel::PersistLayout(ProjectHandle projectHandle) const
+	{
+		if (m_Store != nullptr && projectHandle != InvalidProjectHandle)
+			m_Store->SetArrheniusLayout(projectHandle, CaptureLayoutDocument());
 	}
 
 	void ArrheniusPlotPanel::RenderDockspace()
@@ -480,12 +817,22 @@ namespace SST::Prototypes::JFM
 		ImGui::Combo("Fit", &m_FitModel, FitModelLabels, IM_ARRAYSIZE(FitModelLabels));
 		ImGui::SameLine();
 		ImGui::Checkbox("Prefer fit", &m_PreferFit);
+		ImGui::SameLine();
+		ImGui::Checkbox("Tuned", &m_UseTuned);
 
 		if (ImGui::Button("Add Plot", ImVec2(92.0f, 0.0f)))
 			AddSelectedSource(projectHandle, snapshot, nullptr);
 		ImGui::SameLine();
 		if (ImGui::Button("Plot all", ImVec2(92.0f, 0.0f)))
 			AddAllPlots(projectHandle, snapshot);
+		ImGui::SameLine();
+		if (ImGui::Button("Plot tuned", ImVec2(96.0f, 0.0f)))
+		{
+			const bool previous = m_UseTuned;
+			m_UseTuned = true;
+			AddAllPlots(projectHandle, snapshot);
+			m_UseTuned = previous;
+		}
 		ImGui::SameLine();
 
 		PlotWindow *active = nullptr;
@@ -554,7 +901,7 @@ namespace SST::Prototypes::JFM
 				return false;
 			SeriesEntry &series = window.series[index];
 			const JFMArrheniusQuantity activeQuantity = ToQuantity(window.quantity);
-			const std::vector<JFMArrheniusPoint> points = PointsForEntry(projectHandle, snapshot, series, activeQuantity, window.preferFit);
+			const std::vector<JFMArrheniusPoint> points = PointsForEntry(projectHandle, snapshot, series, activeQuantity, window.preferFit, false);
 			if (points.size() < 2)
 				return false;
 			if (auto fit = BuildFit(points, series.lower, series.upper, activeQuantity, window.fitModel, series.fits.size()))
@@ -576,6 +923,15 @@ namespace SST::Prototypes::JFM
 			ImGui::Combo("Fit", &window.fitModel, FitModelLabels, IM_ARRAYSIZE(FitModelLabels));
 			ImGui::SameLine();
 			ImGui::Checkbox("Prefer fit", &window.preferFit);
+			ImGui::SameLine();
+			bool showTuned = !window.series.empty() && std::all_of(window.series.begin(), window.series.end(), [](const SeriesEntry &series) {
+				return series.tunedStyle.visible;
+			});
+			if (ImGui::Checkbox("Show tuned", &showTuned))
+			{
+				for (SeriesEntry &series : window.series)
+					series.tunedStyle.visible = showTuned;
+			}
 			ImGui::SameLine();
 			ImGui::Checkbox("Auto refit", &window.autoRefit);
 			ImGui::SameLine();
@@ -616,110 +972,120 @@ namespace SST::Prototypes::JFM
 			ImGui::SameLine();
 			if (ImGui::Button("Add source", ImVec2(150.0f, 0.0f)))
 				AddSelectedSource(projectHandle, snapshot, &window);
+			ImGui::SameLine();
+			if (ImGui::Button("Fit columns", ImVec2(110.0f, 0.0f)))
+				window.fitColumnsNextFrame = true;
 		}
 		ImGui::EndChild();
 		const JFMArrheniusQuantity quantity = ToQuantity(window.quantity);
+		const bool fitColumns = window.fitColumnsNextFrame;
 
 		int removeSeries = -1;
-		if (ImGui::BeginTable(("##arrhenius_series_table_" + std::to_string(window.id)).c_str(), 8, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
-		{
-			ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 58.0f);
-			ImGui::TableSetupColumn("Show", ImGuiTableColumnFlags_WidthFixed, 45.0f);
-			ImGui::TableSetupColumn("Source");
-			ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthFixed, 72.0f);
-			ImGui::TableSetupColumn("Style", ImGuiTableColumnFlags_WidthFixed, 115.0f);
-			ImGui::TableSetupColumn("Lower", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-			ImGui::TableSetupColumn("Upper", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-			ImGui::TableSetupColumn("Fit", ImGuiTableColumnFlags_WidthFixed, 110.0f);
-			ImGui::TableHeadersRow();
-
-			for (std::size_t index = 0; index < window.series.size(); ++index)
+		auto renderSeriesTable = [&]() {
+			std::array<float, 9> seriesWidths{64.0f, 58.0f, 70.0f, 160.0f, 78.0f, 145.0f, 165.0f, 165.0f, 95.0f};
+			if (fitColumns)
 			{
-				SeriesEntry &series = window.series[index];
-				const std::vector<JFMArrheniusPoint> points = PointsForEntry(projectHandle, snapshot, series, quantity, window.preferFit);
-				if (!points.empty())
-				{
-					series.lower = std::clamp(series.lower, 0, static_cast<int>(points.size()) - 1);
-					if (series.upper <= series.lower || series.upper >= static_cast<int>(points.size()))
-						series.upper = static_cast<int>(points.size()) - 1;
-				}
-
-				bool rangeChanged = false;
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::PushID(static_cast<int>(index));
-				if (ImGui::RadioButton("##active", window.activeSeries == static_cast<int>(index)))
-					window.activeSeries = static_cast<int>(index);
-				ImGui::TableSetColumnIndex(1);
-				ImGui::Checkbox("##show", &series.style.visible);
-				ImGui::TableSetColumnIndex(2);
-				if (ImGui::Selectable(series.title.c_str(), window.activeSeries == static_cast<int>(index)))
-					window.activeSeries = static_cast<int>(index);
-				ImGui::TableSetColumnIndex(3);
-				ImGui::ColorEdit4("##color", series.style.color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
-				ImGui::TableSetColumnIndex(4);
-				ImGui::SetNextItemWidth(-1.0f);
-				ImGui::Combo("##style", &series.style.drawMode, DrawModeLabels, IM_ARRAYSIZE(DrawModeLabels));
-				ImGui::TableSetColumnIndex(5);
-				ImGui::SetNextItemWidth(-1.0f);
-				rangeChanged |= !points.empty() && ImGui::DragInt("##lower", &series.lower, 0.05f, 0, std::max(0, static_cast<int>(points.size()) - 1), "%d", ImGuiSliderFlags_AlwaysClamp);
-				ImGui::TableSetColumnIndex(6);
-				ImGui::SetNextItemWidth(-1.0f);
-				rangeChanged |= !points.empty() && ImGui::DragInt("##upper", &series.upper, 0.05f, 0, std::max(0, static_cast<int>(points.size()) - 1), "%d", ImGuiSliderFlags_AlwaysClamp);
-				if (!points.empty())
-				{
-					series.lower = std::clamp(series.lower, 0, static_cast<int>(points.size()) - 1);
-					series.upper = std::clamp(series.upper, 0, static_cast<int>(points.size()) - 1);
-				}
-				if (series.upper < series.lower)
-					series.upper = series.lower;
-				ImGui::TableSetColumnIndex(7);
-				ImGui::BeginDisabled(points.size() < 2);
-				if (ImGui::Button("Add"))
-				{
-					window.activeSeries = static_cast<int>(index);
-					(void)addFitToSeries(index);
-				}
-				ImGui::EndDisabled();
-				ImGui::SameLine();
-				if (ImGui::SmallButton("x"))
-					removeSeries = static_cast<int>(index);
-
-				if (rangeChanged && window.autoRefit)
-				{
-					for (FitLine &fit : series.fits)
-					{
-						fit.lower = series.lower;
-						fit.upper = series.upper;
-						(void)Refit(fit, points, quantity);
-					}
-				}
-				else if (window.autoRefit)
-				{
-					for (FitLine &fit : series.fits)
-						(void)Refit(fit, points, quantity);
-				}
-				ImGui::PopID();
+				for (const SeriesEntry &series : window.series)
+					GrowColumn(seriesWidths, 3, series.title);
 			}
-			ImGui::EndTable();
-		}
-		if (removeSeries >= 0 && removeSeries < static_cast<int>(window.series.size()))
-		{
-			window.series.erase(window.series.begin() + removeSeries);
-			if (window.series.empty())
-				window.open = false;
-			else
-				window.activeSeries = std::clamp(window.activeSeries, 0, static_cast<int>(window.series.size()) - 1);
-		}
+			if (ImGui::BeginTable(("##arrhenius_series_table_" + std::to_string(window.id)).c_str(), 9, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollX, ImVec2(-1.0f, TableHeightForRows(window.series.size()))))
+			{
+				ImGui::TableSetupColumn("Active", ImGuiTableColumnFlags_WidthFixed, 58.0f);
+				ImGui::TableSetupColumn("Show", ImGuiTableColumnFlags_WidthFixed, 45.0f);
+				ImGui::TableSetupColumn("Tuned", ImGuiTableColumnFlags_WidthFixed, 58.0f);
+				ImGui::TableSetupColumn("Source");
+				ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthFixed, 72.0f);
+				ImGui::TableSetupColumn("Style", ImGuiTableColumnFlags_WidthFixed, 115.0f);
+				ImGui::TableSetupColumn("Lower", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+				ImGui::TableSetupColumn("Upper", ImGuiTableColumnFlags_WidthFixed, 150.0f);
+				ImGui::TableSetupColumn("Fit", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+				if (fitColumns)
+					ApplyColumnWidths(seriesWidths);
+				ImGui::TableHeadersRow();
 
+				for (std::size_t index = 0; index < window.series.size(); ++index)
+				{
+					SeriesEntry &series = window.series[index];
+					const std::vector<JFMArrheniusPoint> points = PointsForEntry(projectHandle, snapshot, series, quantity, window.preferFit, false);
+					if (!points.empty())
+					{
+						series.lower = std::clamp(series.lower, 0, static_cast<int>(points.size()) - 1);
+						if (series.upper <= series.lower || series.upper >= static_cast<int>(points.size()))
+							series.upper = static_cast<int>(points.size()) - 1;
+					}
+
+					bool rangeChanged = false;
+					ImGui::TableNextRow();
+					ImGui::TableSetColumnIndex(0);
+					ImGui::PushID(static_cast<int>(index));
+					if (ImGui::RadioButton("##active", window.activeSeries == static_cast<int>(index)))
+						window.activeSeries = static_cast<int>(index);
+					ImGui::TableSetColumnIndex(1);
+					ImGui::Checkbox("##show", &series.style.visible);
+					ImGui::TableSetColumnIndex(2);
+					ImGui::Checkbox("##tuned", &series.tunedStyle.visible);
+					ImGui::TableSetColumnIndex(3);
+					if (ImGui::Selectable(series.title.c_str(), window.activeSeries == static_cast<int>(index)))
+						window.activeSeries = static_cast<int>(index);
+					ImGui::TableSetColumnIndex(4);
+					ImGui::ColorEdit4("##color", series.style.color.data(), ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
+					ImGui::TableSetColumnIndex(5);
+					ImGui::SetNextItemWidth(-1.0f);
+					ImGui::Combo("##style", &series.style.drawMode, DrawModeLabels, IM_ARRAYSIZE(DrawModeLabels));
+					ImGui::TableSetColumnIndex(6);
+					ImGui::SetNextItemWidth(-1.0f);
+					rangeChanged |= !points.empty() && ImGui::DragInt("##lower", &series.lower, 0.05f, 0, std::max(0, static_cast<int>(points.size()) - 1), "%d", ImGuiSliderFlags_AlwaysClamp);
+					ImGui::TableSetColumnIndex(7);
+					ImGui::SetNextItemWidth(-1.0f);
+					rangeChanged |= !points.empty() && ImGui::DragInt("##upper", &series.upper, 0.05f, 0, std::max(0, static_cast<int>(points.size()) - 1), "%d", ImGuiSliderFlags_AlwaysClamp);
+					if (!points.empty())
+					{
+						series.lower = std::clamp(series.lower, 0, static_cast<int>(points.size()) - 1);
+						series.upper = std::clamp(series.upper, 0, static_cast<int>(points.size()) - 1);
+					}
+					if (series.upper < series.lower)
+						series.upper = series.lower;
+					ImGui::TableSetColumnIndex(8);
+					ImGui::BeginDisabled(points.size() < 2);
+					if (ImGui::Button("Add"))
+					{
+						window.activeSeries = static_cast<int>(index);
+						(void)addFitToSeries(index);
+					}
+					ImGui::EndDisabled();
+					ImGui::SameLine();
+					if (ImGui::SmallButton("x"))
+						removeSeries = static_cast<int>(index);
+
+					if (rangeChanged && window.autoRefit)
+					{
+						for (FitLine &fit : series.fits)
+						{
+							fit.lower = series.lower;
+							fit.upper = series.upper;
+							(void)Refit(fit, points, quantity);
+						}
+					}
+					else if (window.autoRefit)
+					{
+						for (FitLine &fit : series.fits)
+							(void)Refit(fit, points, quantity);
+					}
+					ImGui::PopID();
+				}
+				ImGui::EndTable();
+			}
+		};
+		renderSeriesTable();
 		if (ImPlot::BeginPlot(("##arrhenius_plot_" + std::to_string(window.id)).c_str(), ImVec2(-1.0f, 360.0f)))
 		{
 			ImPlot::SetupAxes(JFMArrheniusUsesInvTemperature(quantity) ? "1000/T" : "T (K)", JFMArrheniusQuantityName(quantity));
+			bool rangeCursor = false;
 
 			for (std::size_t seriesIndex = 0; seriesIndex < window.series.size(); ++seriesIndex)
 			{
 				SeriesEntry &series = window.series[seriesIndex];
-				const std::vector<JFMArrheniusPoint> points = PointsForEntry(projectHandle, snapshot, series, quantity, window.preferFit);
+				const std::vector<JFMArrheniusPoint> points = PointsForEntry(projectHandle, snapshot, series, quantity, window.preferFit, false);
 				if (points.empty())
 					continue;
 
@@ -751,6 +1117,26 @@ namespace SST::Prototypes::JFM
 				}
 
 				const std::string label = series.title + "##arrhenius_data_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex);
+				auto plotPoints = [&](const std::string &plotLabel, const std::vector<double> &x, const std::vector<double> &y, SeriesStyle &style) {
+					ImPlotSpec spec;
+					spec.LineColor = ToVec4(style.color);
+					spec.MarkerFillColor = ToVec4(style.color);
+					spec.MarkerLineColor = ToVec4(style.color);
+					spec.Marker = ToMarker(style.marker);
+					spec.MarkerSize = style.pointSize;
+					spec.LineWeight = style.lineWeight;
+					if (style.drawMode == 0)
+						ImPlot::PlotScatter(plotLabel.c_str(), x.data(), y.data(), static_cast<int>(x.size()), spec);
+					else if (style.drawMode == 1)
+						ImPlot::PlotLine(plotLabel.c_str(), x.data(), y.data(), static_cast<int>(x.size()), spec);
+					else
+					{
+						ImPlot::PlotScatter(plotLabel.c_str(), x.data(), y.data(), static_cast<int>(x.size()), spec);
+						ImPlotSpec lineSpec = spec;
+						lineSpec.Flags = ImPlotItemFlags_NoLegend;
+						ImPlot::PlotLine(("##line_" + plotLabel).c_str(), x.data(), y.data(), static_cast<int>(x.size()), lineSpec);
+					}
+				};
 				if (series.style.visible && !excludedX.empty())
 				{
 					ImPlotSpec excludedSpec;
@@ -766,13 +1152,6 @@ namespace SST::Prototypes::JFM
 
 				if (series.style.visible && !includedX.empty())
 				{
-					ImPlotSpec spec;
-					spec.LineColor = ToVec4(series.style.color);
-					spec.MarkerFillColor = ToVec4(series.style.color);
-					spec.MarkerLineColor = ToVec4(series.style.color);
-					spec.Marker = ToMarker(series.style.marker);
-					spec.MarkerSize = series.style.pointSize;
-					spec.LineWeight = series.style.lineWeight;
 					if (hasUncertainty)
 					{
 						ImPlotSpec errorSpec;
@@ -782,16 +1161,32 @@ namespace SST::Prototypes::JFM
 						errorSpec.Flags = ImPlotItemFlags_NoLegend;
 						ImPlot::PlotErrorBars(("##arrhenius_err_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex)).c_str(), includedX.data(), includedY.data(), includedErr.data(), static_cast<int>(includedX.size()), errorSpec);
 					}
-					if (series.style.drawMode == 0)
-						ImPlot::PlotScatter(label.c_str(), includedX.data(), includedY.data(), static_cast<int>(includedX.size()), spec);
-					else if (series.style.drawMode == 1)
-						ImPlot::PlotLine(label.c_str(), includedX.data(), includedY.data(), static_cast<int>(includedX.size()), spec);
-					else
+					plotPoints(label, includedX, includedY, series.style);
+				}
+
+				const std::vector<JFMArrheniusPoint> tunedPoints = series.tunedStyle.visible ? PointsForEntry(projectHandle, snapshot, series, quantity, window.preferFit, true) : std::vector<JFMArrheniusPoint>{};
+				if (!tunedPoints.empty())
+				{
+					std::vector<double> tunedX;
+					std::vector<double> tunedY;
+					tunedX.reserve(tunedPoints.size());
+					tunedY.reserve(tunedPoints.size());
+					for (const JFMArrheniusPoint &point : tunedPoints)
 					{
-						ImPlot::PlotScatter(label.c_str(), includedX.data(), includedY.data(), static_cast<int>(includedX.size()), spec);
-						ImPlotSpec lineSpec = spec;
-						lineSpec.Flags = ImPlotItemFlags_NoLegend;
-						ImPlot::PlotLine(("##arrhenius_line_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex)).c_str(), includedX.data(), includedY.data(), static_cast<int>(includedX.size()), lineSpec);
+						tunedX.push_back(point.x);
+						tunedY.push_back(point.y);
+					}
+					const std::string tunedLabel = series.title + " tuned##arrhenius_tuned_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex);
+					plotPoints(tunedLabel, tunedX, tunedY, series.tunedStyle);
+					if (ImPlot::BeginLegendPopup(tunedLabel.c_str()))
+					{
+						ImGui::Checkbox("Show", &series.tunedStyle.visible);
+						ImGui::ColorEdit4("Color", series.tunedStyle.color.data(), ImGuiColorEditFlags_AlphaBar);
+						ImGui::SliderFloat("Point size", &series.tunedStyle.pointSize, 1.0f, 12.0f, "%.1f");
+						ImGui::SliderFloat("Line", &series.tunedStyle.lineWeight, 0.5f, 6.0f, "%.1f");
+						ImGui::Combo("Type", &series.tunedStyle.drawMode, DrawModeLabels, IM_ARRAYSIZE(DrawModeLabels));
+						ImGui::Combo("Marker", &series.tunedStyle.marker, MarkerLabels, IM_ARRAYSIZE(MarkerLabels));
+						ImPlot::EndLegendPopup();
 					}
 				}
 
@@ -799,12 +1194,15 @@ namespace SST::Prototypes::JFM
 				double upperX = points[static_cast<std::size_t>(series.upper)].x;
 				bool lowerHeld = false;
 				bool upperHeld = false;
+				bool lowerHovered = false;
+				bool upperHovered = false;
 				const bool activeRange = window.activeSeries == static_cast<int>(seriesIndex);
 				const ImVec4 rangeColor(1.0f, 0.55f, 0.0f, activeRange ? 1.0f : 0.35f);
 				const float rangeWeight = activeRange ? 2.2f : 1.1f;
 				const int dragBase = static_cast<int>((window.id % 100000) * 100 + seriesIndex * 2);
-				const bool lowerChanged = ImPlot::DragLineX(dragBase + 1, &lowerX, rangeColor, rangeWeight, ImPlotDragToolFlags_None, nullptr, nullptr, &lowerHeld);
-				const bool upperChanged = ImPlot::DragLineX(dragBase + 2, &upperX, rangeColor, rangeWeight, ImPlotDragToolFlags_None, nullptr, nullptr, &upperHeld);
+				const bool lowerChanged = ImPlot::DragLineX(dragBase + 1, &lowerX, rangeColor, rangeWeight, ImPlotDragToolFlags_None, nullptr, &lowerHovered, &lowerHeld);
+				const bool upperChanged = ImPlot::DragLineX(dragBase + 2, &upperX, rangeColor, rangeWeight, ImPlotDragToolFlags_None, nullptr, &upperHovered, &upperHeld);
+				rangeCursor |= lowerHovered || upperHovered || lowerHeld || upperHeld || HoverVerticalDragLine(lowerX) || HoverVerticalDragLine(upperX);
 				if (lowerChanged || upperChanged)
 				{
 					if (lowerChanged)
@@ -826,7 +1224,7 @@ namespace SST::Prototypes::JFM
 				{
 					if (!fit.visible)
 						continue;
-					if (window.autoRefit)
+					if (window.autoRefit || fit.fitX.empty())
 						(void)Refit(fit, points, quantity);
 					const int lower = std::clamp(fit.lower, 0, static_cast<int>(points.size()) - 1);
 					const int upper = std::clamp(fit.upper, lower, static_cast<int>(points.size()) - 1);
@@ -836,7 +1234,10 @@ namespace SST::Prototypes::JFM
 					fitSpec.LineColor = ToVec4(fit.color);
 					fitSpec.LineWeight = fit.lineWeight;
 					const std::string fitLabel = series.title + " " + fit.name + "##arrhenius_fit_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex) + "_" + fit.name;
-					ImPlot::PlotLine(fitLabel.c_str(), xx, yy, 2, fitSpec);
+					if (fit.fitX.size() == fit.fitY.size() && fit.fitX.size() >= 2)
+						ImPlot::PlotLine(fitLabel.c_str(), fit.fitX.data(), fit.fitY.data(), static_cast<int>(fit.fitX.size()), fitSpec);
+					else
+						ImPlot::PlotLine(fitLabel.c_str(), xx, yy, 2, fitSpec);
 					if (ImPlot::BeginLegendPopup(fitLabel.c_str()))
 					{
 						ImGui::Checkbox("Show", &fit.visible);
@@ -858,22 +1259,63 @@ namespace SST::Prototypes::JFM
 				}
 			}
 			ImPlot::EndPlot();
+			if (rangeCursor)
+				ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 		}
 
-		if (ImGui::BeginTable(("##arrhenius_fit_table_" + std::to_string(window.id)).c_str(), 12, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
+
+		if (removeSeries >= 0 && removeSeries < static_cast<int>(window.series.size()))
 		{
-			ImGui::TableSetupColumn("Series");
-			ImGui::TableSetupColumn("Fit");
-			ImGui::TableSetupColumn("Model");
-			ImGui::TableSetupColumn("Range");
-			ImGui::TableSetupColumn("Slope");
-			ImGui::TableSetupColumn("Intercept");
-			ImGui::TableSetupColumn("E_A [eV]");
-			ImGui::TableSetupColumn("E_g [eV]");
-			ImGui::TableSetupColumn("J_00");
-			ImGui::TableSetupColumn("I_00");
-			ImGui::TableSetupColumn("T*");
-			ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+			window.series.erase(window.series.begin() + removeSeries);
+			if (window.series.empty())
+				window.open = false;
+			else
+				window.activeSeries = std::clamp(window.activeSeries, 0, static_cast<int>(window.series.size()) - 1);
+		}
+
+		constexpr const char *FitHeaders[] = {"Series", "Fit", "Model", "Range", "Slope", "Intercept", "E_A [eV]", "E_g [eV]", "E_00 [eV]", "E* [eV]", "J_00", "I_00", "T*", "Action"};
+		std::array<float, 14> fitWidths{};
+		for (std::size_t index = 0; index < fitWidths.size(); ++index)
+			GrowColumn(fitWidths, index, FitHeaders[index]);
+		if (fitColumns)
+		{
+			for (const SeriesEntry &series : window.series)
+			{
+				for (const FitLine &fit : series.fits)
+				{
+					GrowColumn(fitWidths, 0, series.title);
+					GrowColumn(fitWidths, 1, fit.name);
+					GrowColumn(fitWidths, 2, fit.modelName.empty() ? FitModelLabels[std::clamp(fit.model, 0, static_cast<int>(IM_ARRAYSIZE(FitModelLabels)) - 1)] : fit.modelName);
+					GrowColumn(fitWidths, 3, std::to_string(fit.lower) + "-" + std::to_string(fit.upper));
+					GrowColumn(fitWidths, 4, ValueText(fit.slope, fit.hasSlopeStd, fit.slopeStd));
+					GrowColumn(fitWidths, 5, ValueText(fit.intercept, fit.hasInterceptStd, fit.interceptStd));
+					if (fit.hasEa)
+						GrowColumn(fitWidths, 6, ValueText(fit.eaEv, fit.hasEaStd, fit.eaStd));
+					if (fit.hasEg)
+						GrowColumn(fitWidths, 7, ValueText(fit.egEv, fit.hasEgStd, fit.egStd));
+					if (fit.hasE00)
+						GrowColumn(fitWidths, 8, ValueText(fit.e00, fit.hasE00Std, fit.e00Std));
+					if (fit.hasEStar)
+						GrowColumn(fitWidths, 9, ValueText(fit.eStar, fit.hasEStarStd, fit.eStarStd));
+					if (fit.hasJ00)
+						GrowColumn(fitWidths, 10, ValueText(fit.j00, fit.hasJ00Std, fit.j00Std));
+					if (fit.hasI00)
+						GrowColumn(fitWidths, 11, ValueText(fit.i00, fit.hasI00Std, fit.i00Std));
+					if (fit.hasTStar)
+						GrowColumn(fitWidths, 12, ValueText(fit.tStar, fit.hasTStarStd, fit.tStarStd));
+					GrowColumn(fitWidths, 13, "Remove");
+				}
+			}
+		}
+		std::size_t fitRows = 0;
+		for (const SeriesEntry &series : window.series)
+			fitRows += series.fits.size();
+		if (ImGui::BeginTable(("##arrhenius_fit_table_" + std::to_string(window.id)).c_str(), 14, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Resizable | ImGuiTableFlags_ScrollX, ImVec2(-1.0f, TableHeightForRows(fitRows))))
+		{
+			for (const char *header : FitHeaders)
+				ImGui::TableSetupColumn(header);
+			if (fitColumns)
+				ApplyColumnWidths(fitWidths);
 			ImGui::TableHeadersRow();
 			for (std::size_t seriesIndex = 0; seriesIndex < window.series.size(); ++seriesIndex)
 			{
@@ -887,7 +1329,7 @@ namespace SST::Prototypes::JFM
 					ImGui::TableSetColumnIndex(1);
 					ImGui::TextUnformatted(fit.name.c_str());
 					ImGui::TableSetColumnIndex(2);
-					ImGui::TextUnformatted(FitModelLabels[std::clamp(fit.model, 0, static_cast<int>(IM_ARRAYSIZE(FitModelLabels)) - 1)]);
+					ImGui::TextUnformatted(fit.modelName.empty() ? FitModelLabels[std::clamp(fit.model, 0, static_cast<int>(IM_ARRAYSIZE(FitModelLabels)) - 1)] : fit.modelName.c_str());
 					ImGui::TableSetColumnIndex(3);
 					ImGui::Text("%d-%d", fit.lower, fit.upper);
 					ImGui::TableSetColumnIndex(4);
@@ -901,15 +1343,21 @@ namespace SST::Prototypes::JFM
 					if (fit.hasEg)
 						TextValue(fit.egEv, fit.hasEgStd, fit.egStd);
 					ImGui::TableSetColumnIndex(8);
+					if (fit.hasE00)
+						TextValue(fit.e00, fit.hasE00Std, fit.e00Std);
+					ImGui::TableSetColumnIndex(9);
+					if (fit.hasEStar)
+						TextValue(fit.eStar, fit.hasEStarStd, fit.eStarStd);
+					ImGui::TableSetColumnIndex(10);
 					if (fit.hasJ00)
 						TextValue(fit.j00, fit.hasJ00Std, fit.j00Std);
-					ImGui::TableSetColumnIndex(9);
+					ImGui::TableSetColumnIndex(11);
 					if (fit.hasI00)
 						TextValue(fit.i00, fit.hasI00Std, fit.i00Std);
-					ImGui::TableSetColumnIndex(10);
+					ImGui::TableSetColumnIndex(12);
 					if (fit.hasTStar)
 						TextValue(fit.tStar, fit.hasTStarStd, fit.tStarStd);
-					ImGui::TableSetColumnIndex(11);
+					ImGui::TableSetColumnIndex(13);
 					ImGui::PushID(static_cast<int>(seriesIndex * 1000 + fitIndex));
 					if (ImGui::Button("Remove"))
 					{
@@ -924,6 +1372,7 @@ namespace SST::Prototypes::JFM
 			ImGui::EndTable();
 		}
 
+		window.fitColumnsNextFrame = false;
 		ImGui::End();
 	}
 
@@ -942,6 +1391,19 @@ namespace SST::Prototypes::JFM
 		}
 
 		const ProjectHandle projectHandle = m_Store->GetActiveProjectHandle();
+		if (projectHandle != m_LayoutProject)
+		{
+			m_PlotWindows.clear();
+			m_NextPlotId = 1;
+			m_ActivePlotId = 0;
+			m_RebuildDockLayout = true;
+			if (projectHandle != InvalidProjectHandle)
+			{
+				if (auto layout = m_Store->GetArrheniusLayout(projectHandle))
+					RestoreLayoutDocument(*layout);
+			}
+			m_LayoutProject = projectHandle;
+		}
 		const JFMProject snapshot = m_Store->GetProjectSnapshot(projectHandle);
 		if (IsVisible())
 		{
@@ -988,5 +1450,6 @@ namespace SST::Prototypes::JFM
 		m_PlotWindows.erase(std::remove_if(m_PlotWindows.begin(), m_PlotWindows.end(), [](const PlotWindow &window) {
 			return !window.open;
 		}), m_PlotWindows.end());
+		PersistLayout(projectHandle);
 	}
 } // namespace SST::Prototypes::JFM

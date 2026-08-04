@@ -45,6 +45,7 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] ProjectHandle CreateProject(std::string name = "Untitled JFM Project");
 		[[nodiscard]] ProjectHandle CreateTransientProject(std::string name = "Transient JFM Project");
 		[[nodiscard]] ProjectHandle AttachProject(JFMProject project, std::optional<Path> path, bool activate = true);
+		[[nodiscard]] ProjectHandle AttachProjectBundle(JFMProjectBundleSnapshot snapshot, std::optional<Path> path, bool activate = true);
 		[[nodiscard]] std::optional<ProjectHandle> FindProjectByPath(const Path &path) const;
 
 		[[nodiscard]] JFMProject GetProjectSnapshot() const;
@@ -58,7 +59,10 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] bool IsDirty(ProjectHandle handle) const;
 		[[nodiscard]] std::uint64_t GetProjectRevision(ProjectHandle handle) const;
 		[[nodiscard]] std::optional<JFMProjectStateSnapshot> CaptureProjectState(ProjectHandle handle) const;
+		[[nodiscard]] std::optional<JFMProjectBundleSnapshot> CaptureProjectBundle(ProjectHandle handle) const;
 		bool RestoreProjectState(ProjectHandle handle, JFMProjectStateSnapshot snapshot, bool activate = true);
+		[[nodiscard]] std::optional<JFMArrheniusLayoutDocument> GetArrheniusLayout(ProjectHandle handle) const;
+		void SetArrheniusLayout(ProjectHandle handle, std::optional<JFMArrheniusLayoutDocument> layout);
 
 		[[nodiscard]] std::optional<JFMCharacteristic> GetSelectedCharacteristic() const;
 		[[nodiscard]] std::vector<JFMCharacteristic> GetSelectedCharacteristics() const;
@@ -193,6 +197,7 @@ namespace SST::Prototypes::JFM
 			std::unordered_map<CharacteristicId, std::uint64_t> fitGenerations;
 			std::unordered_map<CharacteristicId, Ref<const JFMMonteCarloResult>> monteCarloResults;
 			std::unordered_map<CharacteristicId, std::uint64_t> monteCarloGenerations;
+			std::optional<JFMArrheniusLayoutDocument> arrheniusLayout;
 			std::optional<Path> path;
 			std::string selectedSeriesId;
 			std::string selectedGroupId;

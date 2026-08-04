@@ -69,6 +69,7 @@ namespace SST::Prototypes::JFM
 			PlotScale scale = PlotScale::Linear;
 			bool showLegend = false;
 			bool autoFit = true;
+			bool showOnlyActive = false;
 			float fitPadding = 0.08f;
 			bool renaming = false;
 			bool curvesWindowVisible = true;
@@ -100,7 +101,8 @@ namespace SST::Prototypes::JFM
 		void PushPlotUndo(std::vector<PlotArea> before, std::string description);
 		bool HandleUndoShortcuts();
 		void SelectCurveInWorkspace(const PlotArea &area, const PlotCurveGroup &group, CharacteristicId id);
-		void RenderRangeDragLines(PlotArea &area, const std::unordered_map<CharacteristicId, JFMCharacteristicRecord> &records);
+		void SelectAdjacentCurveInWorkspace(const PlotArea &area, CharacteristicId active, int direction);
+		bool RenderRangeDragLines(PlotArea &area, const std::unordered_map<CharacteristicId, JFMCharacteristicRecord> &records);
 
 		Ref<JFMWorkspaceStore> m_Store;
 		Ref<JFMUserSettingsStore> m_Settings;

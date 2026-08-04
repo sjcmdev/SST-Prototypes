@@ -72,7 +72,7 @@ namespace SST::Prototypes::JFM
 		context.SetSource("Last Projects");
 		context.Set("path", path);
 		if (ImGui::MenuItem(path.filename().String().c_str()))
-			execute(services, "jfm.project.open", "Last Projects", std::move(context));
+			execute(services, path.extension().String() == ".jfm" ? JFMOpenProjectBundleCommandId : "jfm.project.open", "Last Projects", std::move(context));
 	}
 
 	void RenderJFMMenu(
@@ -87,6 +87,7 @@ namespace SST::Prototypes::JFM
 			commandMenuItem(services, "New Project", "Ctrl+N", "jfm.project.new");
 			commandMenuItem(services, "Open New Project Window", nullptr, "jfm.project.open_new_window");
 			commandMenuItem(services, "Open Project...", "Ctrl+O", "jfm.project.open");
+			commandMenuItem(services, "Open Project Bundle...", nullptr, JFMOpenProjectBundleCommandId);
 			if (ImGui::BeginMenu("Last Projects"))
 			{
 				const std::vector<Path> recent = settings != nullptr ? settings->GetRecentProjects() : std::vector<Path>{};
@@ -99,6 +100,7 @@ namespace SST::Prototypes::JFM
 			ImGui::Separator();
 			commandMenuItem(services, "Save Project", "Ctrl+S", "jfm.project.save");
 			commandMenuItem(services, "Save Project As...", "Ctrl+Shift+S", "jfm.project.save_as");
+			commandMenuItem(services, "Save Project Bundle As...", nullptr, JFMSaveProjectBundleAsCommandId);
 			ImGui::Separator();
 			if (ImGui::BeginMenu("Import"))
 			{

@@ -464,9 +464,12 @@ namespace SST::Prototypes::JFM
 				m_Settings->SetTunedCurveDefaults(settings.showTunedCurves, settings.tunedCurveColor, settings.tunedCurveLineWeight, settings.tunedCurvesFitRangeOnly);
 		}
 
-		bool autoPrefitFit = settings.autoPrefitFitOnRangeChange;
-		if (ImGui::Checkbox("Auto prefit + fit after range change", &autoPrefitFit))
-			m_Settings->SetAutoPrefitFitOnRangeChange(autoPrefitFit);
+		bool autoPrefit = settings.autoPrefitOnRangeChange;
+		bool autoFit = settings.autoFitOnRangeChange;
+		const bool autoPrefitChanged = ImGui::Checkbox("Auto prefit after range change", &autoPrefit);
+		const bool autoFitChanged = ImGui::Checkbox("Auto fit after range change", &autoFit);
+		if (autoPrefitChanged || autoFitChanged)
+			m_Settings->SetAutoRangeAnalysis(autoPrefit, autoFit);
 
 		bool changed = false;
 		ImGui::SetNextItemWidth(160.0f);
@@ -572,8 +575,14 @@ namespace SST::Prototypes::JFM
 			context.Set("lower_voltage", voltage[m_LowerIndex]);
 			context.Set("upper_voltage", voltage[m_UpperIndex]);
 			Execute(JFMSetFitRangeCommandId, std::move(context));
-			if (m_EventBus != nullptr && m_Settings != nullptr && m_Settings->GetSnapshot().autoPrefitFitOnRangeChange)
-				m_EventBus->Queue(FitRequested{project, ids});
+			if (m_EventBus != nullptr && m_Settings != nullptr)
+			{
+				const JFMUserSettings settings = m_Settings->GetSnapshot();
+				if (settings.autoPrefitOnRangeChange)
+					m_EventBus->Queue(PrefitRequested{project, ids});
+				if (settings.autoFitOnRangeChange)
+					m_EventBus->Queue(FitRequested{project, ids});
+			}
 		}
 
 		if (m_RangeUndoGroupOpen && !held && (m_RangeHeldLastFrame || changed))
@@ -587,8 +596,14 @@ namespace SST::Prototypes::JFM
 			context.Set("project", project);
 			context.Set("characteristic_ids", ids);
 			Execute(JFMResetFitRangeCommandId, std::move(context));
-			if (m_EventBus != nullptr && m_Settings != nullptr && m_Settings->GetSnapshot().autoPrefitFitOnRangeChange)
-				m_EventBus->Queue(FitRequested{project, ids});
+			if (m_EventBus != nullptr && m_Settings != nullptr)
+			{
+				const JFMUserSettings settings = m_Settings->GetSnapshot();
+				if (settings.autoPrefitOnRangeChange)
+					m_EventBus->Queue(PrefitRequested{project, ids});
+				if (settings.autoFitOnRangeChange)
+					m_EventBus->Queue(FitRequested{project, ids});
+			}
 		}
 	}
 

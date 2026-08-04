@@ -23,6 +23,7 @@ namespace SST::Prototypes::JFM
 		struct FitLine
 		{
 			std::string name;
+			std::string modelName;
 			int model = 0;
 			int lower = 0;
 			int upper = 0;
@@ -32,6 +33,8 @@ namespace SST::Prototypes::JFM
 			double egEv = 0.0;
 			double j00 = 0.0;
 			double i00 = 0.0;
+			double e00 = 0.0;
+			double eStar = 0.0;
 			double tStar = 0.0;
 			double slopeStd = 0.0;
 			double interceptStd = 0.0;
@@ -39,7 +42,11 @@ namespace SST::Prototypes::JFM
 			double egStd = 0.0;
 			double j00Std = 0.0;
 			double i00Std = 0.0;
+			double e00Std = 0.0;
+			double eStarStd = 0.0;
 			double tStarStd = 0.0;
+			std::vector<double> fitX;
+			std::vector<double> fitY;
 			std::array<float, 4> color{0.90f, 0.42f, 0.18f, 1.0f};
 			float lineWeight = 2.5f;
 			bool visible = true;
@@ -47,6 +54,8 @@ namespace SST::Prototypes::JFM
 			bool hasEg = false;
 			bool hasJ00 = false;
 			bool hasI00 = false;
+			bool hasE00 = false;
+			bool hasEStar = false;
 			bool hasTStar = false;
 			bool hasSlopeStd = false;
 			bool hasInterceptStd = false;
@@ -54,6 +63,8 @@ namespace SST::Prototypes::JFM
 			bool hasEgStd = false;
 			bool hasJ00Std = false;
 			bool hasI00Std = false;
+			bool hasE00Std = false;
+			bool hasEStarStd = false;
 			bool hasTStarStd = false;
 		};
 
@@ -76,6 +87,7 @@ namespace SST::Prototypes::JFM
 			int lower = 0;
 			int upper = 0;
 			SeriesStyle style;
+			SeriesStyle tunedStyle{{1.0f, 0.52f, 0.10f, 1.0f}, 5.0f, 1.5f, 2, 0, false};
 			std::vector<FitLine> fits;
 		};
 
@@ -93,19 +105,23 @@ namespace SST::Prototypes::JFM
 			bool needsDock = false;
 			int dockSlot = -1;
 			int activeSeries = 0;
+			bool fitColumnsNextFrame = false;
 			std::vector<SeriesEntry> series;
 		};
 
 		[[nodiscard]] std::vector<JFMCharacteristicRecord> RecordsForSeries(ProjectHandle project, const JFMSeries &series) const;
 		[[nodiscard]] std::vector<JFMCharacteristicRecord> RecordsForGroup(ProjectHandle projectHandle, const JFMProject &snapshot, const JFMGroup &group) const;
 		[[nodiscard]] std::vector<JFMCharacteristicRecord> RecordsForEntry(ProjectHandle projectHandle, const JFMProject &snapshot, const SeriesEntry &entry) const;
-		[[nodiscard]] std::vector<JFMArrheniusPoint> PointsForEntry(ProjectHandle projectHandle, const JFMProject &snapshot, const SeriesEntry &entry, JFMArrheniusQuantity quantity, bool preferFit) const;
+		[[nodiscard]] std::vector<JFMArrheniusPoint> PointsForEntry(ProjectHandle projectHandle, const JFMProject &snapshot, const SeriesEntry &entry, JFMArrheniusQuantity quantity, bool preferFit, bool useTuned) const;
 		void RenderSelector(ProjectHandle projectHandle, const JFMProject &snapshot);
 		void RenderDockspaceHost();
 		void RenderDockspace();
 		void RenderPlotWindow(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow &window);
 		void AddSelectedSource(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow *target);
 		void AddAllPlots(ProjectHandle projectHandle, const JFMProject &snapshot);
+		[[nodiscard]] JFMArrheniusLayoutDocument CaptureLayoutDocument() const;
+		void RestoreLayoutDocument(const JFMArrheniusLayoutDocument &layout);
+		void PersistLayout(ProjectHandle projectHandle) const;
 
 		Ref<JFMWorkspaceStore> m_Store;
 		int m_SourceMode = 0;
@@ -114,11 +130,13 @@ namespace SST::Prototypes::JFM
 		int m_Quantity = 3;
 		int m_FitModel = 0;
 		bool m_PreferFit = true;
+		bool m_UseTuned = false;
 		std::uint64_t m_NextPlotId = 1;
 		std::uint64_t m_ActivePlotId = 0;
 		unsigned int m_DockspaceId = 0;
 		std::array<unsigned int, 6> m_DockIds{};
 		bool m_RebuildDockLayout = true;
+		ProjectHandle m_LayoutProject = InvalidProjectHandle;
 		std::vector<PlotWindow> m_PlotWindows;
 	};
 } // namespace SST::Prototypes::JFM

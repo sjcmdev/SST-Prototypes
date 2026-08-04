@@ -1,11 +1,82 @@
-default_import_directory: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\High-Ga\ivd_KS
+default_import_directory: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
 default_projects_directory: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\JFM-projects
 default_scripts_directory: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\python\jfm_import
 default_plot_semilog: true
 default_plot_auto_fit: true
 default_plot_show_legend: false
 default_plot_fit_padding: 0.08
+show_prefit_curves: true
+prefit_curve_color: [0.2, 0.85, 0.36, 1]
+prefit_curve_line_weight: 2
+prefit_curves_fit_range_only: true
+show_fit_curves: true
+fit_curve_color: [0.12, 0.58, 1, 1]
+fit_curve_line_weight: 3.9
+fit_curves_fit_range_only: true
+show_tuned_curves: false
+tuned_curve_color: [0.8901476, 0.060000002, 1, 1]
+tuned_curve_line_weight: 1
+tuned_curves_fit_range_only: true
+auto_prefit_fit_on_range_change: true
+auto_prefit_on_range_change: true
+auto_fit_on_range_change: true
+hovered_curve_line_weight: 3.5
 auto_plot_after_import: false
+fit_monte_carlo:
+  fit_max_iterations: 300
+  fit_reduced_chi2_tolerance: 1
+  mc_samples: 3000
+  mc_max_iterations: 50
+  auto_calibrate_gpu_simplex_iterations: true
+  simplex_calibration_runs: 100
+  simplex_calibration_extra_iterations: 50
+  mc_noise_percent: 0.5
+  mc_start_perturbation_percent: 3
+  mc_seed: 3190758099
+  prefer_gpu: true
+  save_samples: false
+  saved_sample_limit: 0
+  scatter_zoom_out: 0.2
+  show_sigma_classes: [true, true, true]
+  show_sigma_ellipses: [false, false, false]
+  sigma_colors:
+    - [1, 0.12, 0.08, 1]
+    - [1, 0.9019608, 0.05882353, 1]
+    - [0, 1, 0.9098039, 1]
+  default_parameter_pairs:
+    - [A, I0]
+    - [Rs, Rsh]
+    - [Rsh, Rsh2]
+    - [alpha, Rsh2]
+  parameters:
+    I0:
+      minimum: 9.735618859798816e-10
+      maximum: 2.4339047149497036e-08
+      free: true
+    A:
+      minimum: 1.0295310860651916
+      maximum: 2.029531086065192
+      free: true
+    Rsh2:
+      minimum: 1459.1016346941087
+      maximum: 36477.54086735271
+      free: true
+    Rs:
+      minimum: 1.5309961430036374
+      maximum: 38.27490357509093
+      free: true
+    Rsh:
+      minimum: 1545.8295110994384
+      maximum: 38645.737777485956
+      free: true
+    alpha:
+      minimum: 0.6201060281036603
+      maximum: 1.6201060281036603
+      free: true
+    I_ph:
+      minimum: 0
+      maximum: 7.422457293918637e-07
+      free: true
 default_color_preset: Yello/Red
 color_presets:
   - name: Cyan/Pink

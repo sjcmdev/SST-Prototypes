@@ -160,6 +160,21 @@ namespace SST::Prototypes::JFM
 		EXPECT_NEAR(*aLnI0, 0.0, 1.0e-12);
 	}
 
+	TEST(JFMFitEngineTests, ArrheniusCanReadTunedParameters)
+	{
+		JFMCharacteristicRecord record = MakeRecord("SD-0");
+		record.info.metadata["tuned.A"] = "2.5";
+		record.info.metadata["tuned.I0"] = "1e-8";
+
+		const auto a = JFMArrheniusValue(JFMArrheniusQuantity::A, record.info, JFMArrheniusParameterSource::Tuned);
+		const auto lnI0 = JFMArrheniusValue(JFMArrheniusQuantity::LnI0, record.info, JFMArrheniusParameterSource::Tuned);
+
+		ASSERT_TRUE(a);
+		ASSERT_TRUE(lnI0);
+		EXPECT_DOUBLE_EQ(*a, 2.5);
+		EXPECT_NEAR(*lnI0, std::log(1.0e-8), 1.0e-12);
+	}
+
 	TEST(JFMFitEngineTests, CpuSimplexDoesNotClampPrefitStartOutsideConfiguredBounds)
 	{
 		JFMCharacteristicRecord record = MakeRecord("SD-RsRsh-alpha-Rsh2");

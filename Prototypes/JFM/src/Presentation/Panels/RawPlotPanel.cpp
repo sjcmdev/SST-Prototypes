@@ -70,6 +70,15 @@ namespace SST::Prototypes::JFM
 			return {color[0], color[1], color[2], color[3]};
 		}
 
+		bool hoverVerticalDragLine(double value)
+		{
+			const float x = ImPlot::PlotToPixels(value, 0.0).x;
+			const ImVec2 mouse = ImGui::GetMousePos();
+			const ImVec2 plotPos = ImPlot::GetPlotPos();
+			const ImVec2 plotSize = ImPlot::GetPlotSize();
+			return std::abs(mouse.x - x) <= 8.0f && mouse.y >= plotPos.y && mouse.y <= plotPos.y + plotSize.y;
+		}
+
 		std::optional<double> metadataDouble(const JFMCharacteristicInfo &info, const std::string &key)
 		{
 			const auto found = info.metadata.find(key);
@@ -560,10 +569,36 @@ namespace SST::Prototypes::JFM
 		m_Store->SetSelectedCharacteristics(area.project, std::move(selected), id, seriesIdForCharacteristic(project, id));
 	}
 
-	void RawPlotPanel::RenderRangeDragLines(PlotArea &area, const std::unordered_map<CharacteristicId, JFMCharacteristicRecord> &records)
+	void RawPlotPanel::SelectAdjacentCurveInWorkspace(const PlotArea &area, CharacteristicId active, int direction)
+	{
+		if (m_Store == nullptr || direction == 0)
+			return;
+		std::vector<CharacteristicId> ids;
+		for (const PlotCurveGroup &group : area.groups)
+		{
+			if (!group.visible)
+				continue;
+			for (CharacteristicId id : group.characteristicIds)
+			{
+				if (!containsId(group.hiddenCharacteristicIds, id))
+					ids.push_back(id);
+			}
+		}
+		if (ids.empty())
+			return;
+		auto current = std::find(ids.begin(), ids.end(), active);
+		std::ptrdiff_t index = current == ids.end()
+			? (direction < 0 ? static_cast<std::ptrdiff_t>(ids.size() - 1) : 0)
+			: std::clamp<std::ptrdiff_t>(std::distance(ids.begin(), current) + direction, 0, static_cast<std::ptrdiff_t>(ids.size() - 1));
+		const CharacteristicId next = ids[static_cast<std::size_t>(index)];
+		const JFMProject project = m_Store->GetProjectSnapshot(area.project);
+		m_Store->SetSelectedCharacteristics(area.project, {next}, next, seriesIdForCharacteristic(project, next));
+	}
+
+	bool RawPlotPanel::RenderRangeDragLines(PlotArea &area, const std::unordered_map<CharacteristicId, JFMCharacteristicRecord> &records)
 	{
 		if (m_Store == nullptr)
-			return;
+			return false;
 		const auto snapshot = m_Store->CaptureProjectState(area.project);
 		const CharacteristicId active = snapshot ? snapshot->selectedCharacteristicId : InvalidCharacteristicId;
 		if (active == InvalidCharacteristicId || !records.contains(active))
@@ -571,11 +606,11 @@ namespace SST::Prototypes::JFM
 			FinishRangeUndoGroup(area);
 			area.rangeCharacteristic = InvalidCharacteristicId;
 			area.rangeInitialized = false;
-			return;
+			return false;
 		}
 		const auto activeRecord = records.find(active);
 		if (activeRecord == records.end() || activeRecord->second.data == nullptr || activeRecord->second.data->voltage.empty())
-			return;
+			return false;
 
 		const std::vector<double> &voltage = activeRecord->second.data->voltage;
 		double minimumVoltage = std::numeric_limits<double>::infinity();
@@ -588,7 +623,7 @@ namespace SST::Prototypes::JFM
 			maximumVoltage = std::max(maximumVoltage, value);
 		}
 		if (!std::isfinite(minimumVoltage) || !std::isfinite(maximumVoltage) || minimumVoltage >= maximumVoltage)
-			return;
+			return false;
 
 		if (area.rangeCharacteristic != active)
 		{
@@ -616,9 +651,12 @@ namespace SST::Prototypes::JFM
 
 		bool lowerHeld = false;
 		bool upperHeld = false;
+		bool lowerHovered = false;
+		bool upperHovered = false;
 		const ImVec4 rangeColor{0.96f, 0.60f, 0.16f, 1.0f};
-		const bool lowerChanged = ImPlot::DragLineX(static_cast<int>(area.id * 10 + 1), &area.rangeLower, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &lowerHeld);
-		const bool upperChanged = ImPlot::DragLineX(static_cast<int>(area.id * 10 + 2), &area.rangeUpper, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, nullptr, &upperHeld);
+		const bool lowerChanged = ImPlot::DragLineX(static_cast<int>(area.id * 10 + 1), &area.rangeLower, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, &lowerHovered, &lowerHeld);
+		const bool upperChanged = ImPlot::DragLineX(static_cast<int>(area.id * 10 + 2), &area.rangeUpper, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, &upperHovered, &upperHeld);
+		const bool wantsResizeCursor = lowerHovered || upperHovered || lowerHeld || upperHeld || hoverVerticalDragLine(area.rangeLower) || hoverVerticalDragLine(area.rangeUpper);
 		const bool changed = lowerChanged || upperChanged;
 		const bool held = lowerHeld || upperHeld;
 		if (changed)
@@ -643,13 +681,20 @@ namespace SST::Prototypes::JFM
 				context.Set("lower_voltage", area.rangeLower);
 				context.Set("upper_voltage", area.rangeUpper);
 				Execute(JFMSetFitRangeCommandId, std::move(context));
-				if (m_EventBus != nullptr && m_Settings != nullptr && m_Settings->GetSnapshot().autoPrefitFitOnRangeChange)
-					m_EventBus->Queue(FitRequested{area.project, {active}});
+				if (m_EventBus != nullptr && m_Settings != nullptr)
+				{
+					const JFMUserSettings settings = m_Settings->GetSnapshot();
+					if (settings.autoPrefitOnRangeChange)
+						m_EventBus->Queue(PrefitRequested{area.project, {active}});
+					if (settings.autoFitOnRangeChange)
+						m_EventBus->Queue(FitRequested{area.project, {active}});
+				}
 			}
 		}
 		if (area.rangeUndoGroupOpen && !held && (area.rangeHeldLastFrame || changed))
 			FinishRangeUndoGroup(area);
 		area.rangeHeldLastFrame = held;
+		return wantsResizeCursor;
 	}
 
 	void RawPlotPanel::Render()
@@ -842,6 +887,14 @@ namespace SST::Prototypes::JFM
 			area.hoveredCharacteristicId = InvalidCharacteristicId;
 			const auto areaSelection = m_Store->CaptureProjectState(area.project);
 			const std::vector<CharacteristicId> areaSelectedIds = areaSelection ? areaSelection->selectedCharacteristicIds : std::vector<CharacteristicId>{};
+			const CharacteristicId areaActiveId = areaSelection ? areaSelection->selectedCharacteristicId : InvalidCharacteristicId;
+			if (area.showOnlyActive && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive())
+			{
+				if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false))
+					SelectAdjacentCurveInWorkspace(area, areaActiveId, 1);
+				else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false))
+					SelectAdjacentCurveInWorkspace(area, areaActiveId, -1);
+			}
 			const std::string curvesTitle = area.title + " Curves###jfm_raw_plot_curves_" + std::to_string(area.id);
 			if (area.curvesWindowVisible)
 			{
@@ -849,6 +902,13 @@ namespace SST::Prototypes::JFM
 				{
 					if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 						(void)HandleUndoShortcuts();
+					if (area.showOnlyActive && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive())
+					{
+						if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false))
+							SelectAdjacentCurveInWorkspace(area, areaActiveId, 1);
+						else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false))
+							SelectAdjacentCurveInWorkspace(area, areaActiveId, -1);
+					}
 					for (std::size_t groupIndex = 0; groupIndex < area.groups.size();)
 					{
 						PlotCurveGroup &group = area.groups[groupIndex];
@@ -880,6 +940,14 @@ namespace SST::Prototypes::JFM
 							ImGui::ColorEdit4("Start", group.gradientStart.data(), ImGuiColorEditFlags_NoInputs);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("End", group.gradientEnd.data(), ImGuiColorEditFlags_NoInputs);
+							ImGui::SameLine();
+							ImGui::Checkbox("Show only active", &area.showOnlyActive);
+							ImGui::SameLine();
+							if (ImGui::ArrowButton("##active_up", ImGuiDir_Up))
+								SelectAdjacentCurveInWorkspace(area, areaActiveId, -1);
+							ImGui::SameLine();
+							if (ImGui::ArrowButton("##active_down", ImGuiDir_Down))
+								SelectAdjacentCurveInWorkspace(area, areaActiveId, 1);
 							ImGui::SetNextItemWidth(250.0f);
 							if (ImGui::BeginCombo("Preset", "Color preset"))
 							{
@@ -1031,6 +1099,8 @@ namespace SST::Prototypes::JFM
 						continue;
 					for (CharacteristicId id : group.characteristicIds)
 					{
+						if (area.showOnlyActive && id != areaActiveId)
+							continue;
 						if (containsId(group.hiddenCharacteristicIds, id))
 							continue;
 						const auto characteristic = records.find(id);
@@ -1078,6 +1148,8 @@ namespace SST::Prototypes::JFM
 						continue;
 					for (CharacteristicId id : group.characteristicIds)
 					{
+						if (area.showOnlyActive && id != areaActiveId)
+							continue;
 						if (containsId(group.hiddenCharacteristicIds, id))
 							continue;
 						const auto characteristic = records.find(id);
@@ -1217,8 +1289,10 @@ namespace SST::Prototypes::JFM
 						}
 					}
 				}
-				RenderRangeDragLines(area, records);
+				const bool rangeCursor = RenderRangeDragLines(area, records);
 				ImPlot::EndPlot();
+				if (rangeCursor)
+					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 			}
 			if (area.project == m_Store->GetActiveProjectHandle() && ImGui::BeginDragDropTarget())
 			{

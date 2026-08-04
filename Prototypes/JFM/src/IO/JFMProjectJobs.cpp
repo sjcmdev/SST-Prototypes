@@ -6,6 +6,7 @@
 #include "Core/JobSystem/JobContext.hpp"
 #include "Events/JFMEvents.hpp"
 #include "IO/JFMPythonImportBridge.hpp"
+#include "IO/JFMProjectBundleSerializer.hpp"
 #include "IO/JFMProjectYamlSerializer.hpp"
 
 #include <algorithm>
@@ -173,6 +174,82 @@ namespace SST::Prototypes::JFM
 		context.SetProgress(2.0f, 2.0f);
 		if (m_EventBus != nullptr)
 			m_EventBus->Queue(ProjectLoadCompleted{m_Path, project.Value(), m_Operation});
+	}
+
+	SaveProjectBundleJob::SaveProjectBundleJob(
+		Ref<EventBus> eventBus,
+		Path path,
+		JFMProjectBundleSnapshot snapshot,
+		ProjectHandle project,
+		JFMOperationId operation,
+		std::uint64_t revision)
+		: m_EventBus(std::move(eventBus)),
+		  m_Path(std::move(path)),
+		  m_Snapshot(std::move(snapshot)),
+		  m_Project(project),
+		  m_Operation(operation),
+		  m_Revision(revision)
+	{
+	}
+
+	std::string SaveProjectBundleJob::GetName() const
+	{
+		return "Save JFM Project Bundle";
+	}
+
+	std::string SaveProjectBundleJob::GetType() const
+	{
+		return "jfm.project.bundle.save";
+	}
+
+	void SaveProjectBundleJob::Execute(JobContext &context)
+	{
+		context.SetStage("Save bundle");
+		context.SetProgress(0.0f, 1.0f);
+		auto saved = JFMProjectBundleSerializer::Save(m_Path, m_Snapshot);
+		if (!saved)
+		{
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(ProjectBundleSaveFailed{m_Path, saved.Error().technicalDetails, m_Project, m_Operation});
+			return;
+		}
+		context.SetProgress(1.0f, 1.0f);
+		if (m_EventBus != nullptr)
+			m_EventBus->Queue(ProjectBundleSaveCompleted{m_Path, m_Project, m_Operation, m_Revision, std::move(saved).Value().warnings});
+	}
+
+	LoadProjectBundleJob::LoadProjectBundleJob(Ref<EventBus> eventBus, Path path, JFMOperationId operation)
+		: m_EventBus(std::move(eventBus)), m_Path(std::move(path)), m_Operation(operation)
+	{
+	}
+
+	std::string LoadProjectBundleJob::GetName() const
+	{
+		return "Load JFM Project Bundle";
+	}
+
+	std::string LoadProjectBundleJob::GetType() const
+	{
+		return "jfm.project.bundle.load";
+	}
+
+	void LoadProjectBundleJob::Execute(JobContext &context)
+	{
+		context.SetStage("Load bundle");
+		context.SetProgress(0.0f, 1.0f);
+		auto loaded = JFMProjectBundleSerializer::Load(m_Path);
+		if (!loaded)
+		{
+			if (m_EventBus != nullptr)
+				m_EventBus->Queue(ProjectBundleLoadFailed{m_Path, loaded.Error().technicalDetails, m_Operation});
+			return;
+		}
+		context.SetProgress(1.0f, 1.0f);
+		if (m_EventBus != nullptr)
+		{
+			JFMProjectBundleLoadResult result = std::move(loaded).Value();
+			m_EventBus->Queue(ProjectBundleLoadCompleted{m_Path, std::move(result.snapshot), std::move(result.warnings), m_Operation});
+		}
 	}
 
 	MaterializeProjectDataJob::MaterializeProjectDataJob(

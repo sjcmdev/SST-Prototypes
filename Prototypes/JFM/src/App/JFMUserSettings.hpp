@@ -83,6 +83,8 @@ namespace SST::Prototypes::JFM
 		float tunedCurveLineWeight = 2.0f;
 		bool tunedCurvesFitRangeOnly = false;
 		bool autoPrefitFitOnRangeChange = false;
+		bool autoPrefitOnRangeChange = false;
+		bool autoFitOnRangeChange = false;
 		float hoveredCurveLineWeight = 3.5f;
 		bool autoPlotAfterImport = true;
 		JFMFitMonteCarloSettings fitMonteCarlo;
@@ -111,6 +113,7 @@ namespace SST::Prototypes::JFM
 		void SetFitCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, bool fitRangeOnly);
 		void SetTunedCurveDefaults(bool show, std::array<float, 4> color, float lineWeight, bool fitRangeOnly);
 		void SetAutoPrefitFitOnRangeChange(bool enabled);
+		void SetAutoRangeAnalysis(bool prefit, bool fit);
 		void SetAutoPlotAfterImport(bool enabled);
 		void SetFitMonteCarloSettings(JFMFitMonteCarloSettings settings);
 		void SetColorPresets(std::vector<JFMColorPreset> presets);

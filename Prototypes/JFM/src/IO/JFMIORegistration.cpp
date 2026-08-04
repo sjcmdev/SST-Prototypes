@@ -497,6 +497,17 @@ namespace SST::Prototypes::JFM
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
 	}
 
+	void HandleProjectBundleSaveRequested(const Ref<JFMIOState> &state, const ProjectBundleSaveRequested &event)
+	{
+		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
+		if (state->store != nullptr)
+			state->store->SetStatusMessage(project, "Saving project bundle: " + event.path.String());
+
+		auto job = CreateRef<SaveProjectBundleJob>(state->eventBus, event.path, event.snapshot, project, operation, event.revision);
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
+	}
+
 	void HandleProjectSaveCompleted(const Ref<JFMIOState> &state, const ProjectSaveCompleted &event)
 	{
 		if (state->store == nullptr)
@@ -516,11 +527,33 @@ namespace SST::Prototypes::JFM
 		DS_LOG_WARN("JFM project save failed [{}]: {}", event.path.String(), event.error);
 	}
 
+	void HandleProjectBundleSaveCompleted(const Ref<JFMIOState> &state, const ProjectBundleSaveCompleted &event)
+	{
+		if (state->store == nullptr)
+			return;
+		state->store->MarkProjectSaved(event.project, event.path, event.revision);
+		const std::string suffix = event.warnings.empty() ? std::string{} : " with warnings";
+		state->store->SetStatusMessage(event.project, "Project bundle saved" + suffix + ": " + event.path.String());
+		if (state->settings != nullptr)
+			state->settings->AddRecentProject(event.path);
+	}
+
+	void HandleProjectBundleSaveFailed(const Ref<JFMIOState> &state, const ProjectBundleSaveFailed &event)
+	{
+		if (state->store != nullptr)
+			state->store->SetStatusMessage(event.project, "Project bundle save failed: " + event.error);
+		NotifyFailure(state, NotificationCategory::Project, "JFM bundle save failed", event.error);
+		DS_LOG_WARN("JFM project bundle save failed [{}]: {}", event.path.String(), event.error);
+	}
+
 	void RegisterProjectSaveHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
 	{
 		ioLayer.RegisterHandler<ProjectSaveRequested>(std::bind_front(&HandleProjectSaveRequested, state));
 		ioLayer.RegisterHandler<ProjectSaveCompleted>(std::bind_front(&HandleProjectSaveCompleted, state));
 		ioLayer.RegisterHandler<ProjectSaveFailed>(std::bind_front(&HandleProjectSaveFailed, state));
+		ioLayer.RegisterHandler<ProjectBundleSaveRequested>(std::bind_front(&HandleProjectBundleSaveRequested, state));
+		ioLayer.RegisterHandler<ProjectBundleSaveCompleted>(std::bind_front(&HandleProjectBundleSaveCompleted, state));
+		ioLayer.RegisterHandler<ProjectBundleSaveFailed>(std::bind_front(&HandleProjectBundleSaveFailed, state));
 	}
 
 	void HandleProjectLoadRequested(const Ref<JFMIOState> &state, const ProjectLoadRequested &event)
@@ -541,6 +574,24 @@ namespace SST::Prototypes::JFM
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
 	}
 
+	void HandleProjectBundleLoadRequested(const Ref<JFMIOState> &state, const ProjectBundleLoadRequested &event)
+	{
+		if (state->store != nullptr)
+		{
+			if (const auto existing = state->store->FindProjectByPath(event.path))
+			{
+				(void)state->store->SetActiveProject(*existing);
+				state->store->SetStatusMessage(*existing, "Project bundle already open.");
+				return;
+			}
+			state->store->SetStatusMessage("Loading project bundle: " + event.path.String());
+		}
+
+		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
+		auto job = CreateRef<LoadProjectBundleJob>(state->eventBus, event.path, operation);
+		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
+	}
+
 	void HandleProjectLoadCompleted(const Ref<JFMIOState> &state, const ProjectLoadCompleted &event)
 	{
 		ProjectHandle project = InvalidProjectHandle;
@@ -558,12 +609,37 @@ namespace SST::Prototypes::JFM
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
 	}
 
+	void HandleProjectBundleLoadCompleted(const Ref<JFMIOState> &state, const ProjectBundleLoadCompleted &event)
+	{
+		ProjectHandle project = InvalidProjectHandle;
+		if (state->store != nullptr)
+		{
+			JFMProjectBundleSnapshot snapshot = event.snapshot;
+			project = state->store->AttachProjectBundle(std::move(snapshot), event.path);
+			if (state->settings != nullptr)
+				state->store->EnsureDefaultScripts(state->settings->GetDefaultScriptsDirectory());
+			state->store->SetLastImportWarnings(project, event.warnings);
+			const std::string suffix = event.warnings.empty() ? std::string{} : " with warnings";
+			state->store->SetStatusMessage(project, "Project bundle loaded" + suffix + ".");
+		}
+		if (state->settings != nullptr)
+			state->settings->AddRecentProject(event.path);
+	}
+
 	void HandleProjectLoadFailed(const Ref<JFMIOState> &state, const ProjectLoadFailed &event)
 	{
 		if (state->store != nullptr)
 			state->store->SetStatusMessage("Project load failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Project, "JFM load failed", event.error);
 		DS_LOG_WARN("JFM project load failed [{}]: {}", event.path.String(), event.error);
+	}
+
+	void HandleProjectBundleLoadFailed(const Ref<JFMIOState> &state, const ProjectBundleLoadFailed &event)
+	{
+		if (state->store != nullptr)
+			state->store->SetStatusMessage("Project bundle load failed: " + event.error);
+		NotifyFailure(state, NotificationCategory::Project, "JFM bundle load failed", event.error);
+		DS_LOG_WARN("JFM project bundle load failed [{}]: {}", event.path.String(), event.error);
 	}
 
 	void HandleProjectDataMaterializationCompleted(const Ref<JFMIOState> &state, const ProjectDataMaterializationCompleted &event)
@@ -590,6 +666,9 @@ namespace SST::Prototypes::JFM
 		ioLayer.RegisterHandler<ProjectLoadRequested>(std::bind_front(&HandleProjectLoadRequested, state));
 		ioLayer.RegisterHandler<ProjectLoadCompleted>(std::bind_front(&HandleProjectLoadCompleted, state));
 		ioLayer.RegisterHandler<ProjectLoadFailed>(std::bind_front(&HandleProjectLoadFailed, state));
+		ioLayer.RegisterHandler<ProjectBundleLoadRequested>(std::bind_front(&HandleProjectBundleLoadRequested, state));
+		ioLayer.RegisterHandler<ProjectBundleLoadCompleted>(std::bind_front(&HandleProjectBundleLoadCompleted, state));
+		ioLayer.RegisterHandler<ProjectBundleLoadFailed>(std::bind_front(&HandleProjectBundleLoadFailed, state));
 		ioLayer.RegisterHandler<ProjectDataMaterializationCompleted>(std::bind_front(&HandleProjectDataMaterializationCompleted, state));
 	}
 

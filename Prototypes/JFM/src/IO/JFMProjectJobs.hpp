@@ -47,6 +47,45 @@ namespace SST::Prototypes::JFM
 		JFMOperationId m_Operation = InvalidJFMOperationId;
 	};
 
+	class SaveProjectBundleJob final : public IJob
+	{
+	public:
+		SaveProjectBundleJob(
+			Ref<EventBus> eventBus,
+			Path path,
+			JFMProjectBundleSnapshot snapshot,
+			ProjectHandle project = InvalidProjectHandle,
+			JFMOperationId operation = InvalidJFMOperationId,
+			std::uint64_t revision = 0);
+
+		[[nodiscard]] std::string GetName() const override;
+		[[nodiscard]] std::string GetType() const override;
+		void Execute(JobContext &context) override;
+
+	private:
+		Ref<EventBus> m_EventBus;
+		Path m_Path;
+		JFMProjectBundleSnapshot m_Snapshot;
+		ProjectHandle m_Project = InvalidProjectHandle;
+		JFMOperationId m_Operation = InvalidJFMOperationId;
+		std::uint64_t m_Revision = 0;
+	};
+
+	class LoadProjectBundleJob final : public IJob
+	{
+	public:
+		LoadProjectBundleJob(Ref<EventBus> eventBus, Path path, JFMOperationId operation = InvalidJFMOperationId);
+
+		[[nodiscard]] std::string GetName() const override;
+		[[nodiscard]] std::string GetType() const override;
+		void Execute(JobContext &context) override;
+
+	private:
+		Ref<EventBus> m_EventBus;
+		Path m_Path;
+		JFMOperationId m_Operation = InvalidJFMOperationId;
+	};
+
 	class MaterializeProjectDataJob final : public IJob
 	{
 	public:

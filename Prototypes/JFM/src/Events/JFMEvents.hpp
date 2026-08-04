@@ -66,6 +66,72 @@ namespace SST::Prototypes::JFM
 		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
+	struct ProjectBundleSaveRequested final : public BusEvent
+	{
+		ProjectBundleSaveRequested() = default;
+		ProjectBundleSaveRequested(
+			Path requestedPath,
+			JFMProjectBundleSnapshot requestedSnapshot,
+			ProjectHandle requestedProject = InvalidProjectHandle,
+			JFMOperationId requestedOperation = InvalidJFMOperationId,
+			std::uint64_t requestedRevision = 0)
+			: path(std::move(requestedPath)),
+			  snapshot(std::move(requestedSnapshot)),
+			  project(requestedProject),
+			  operation(requestedOperation),
+			  revision(requestedRevision)
+		{
+		}
+
+		Path path;
+		JFMProjectBundleSnapshot snapshot;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
+		std::uint64_t revision = 0;
+	};
+
+	struct ProjectBundleSaveCompleted final : public BusEvent
+	{
+		ProjectBundleSaveCompleted() = default;
+		ProjectBundleSaveCompleted(
+			Path savedPath,
+			ProjectHandle savedProject = InvalidProjectHandle,
+			JFMOperationId completedOperation = InvalidJFMOperationId,
+			std::uint64_t savedRevision = 0,
+			std::vector<std::string> saveWarnings = {})
+			: path(std::move(savedPath)),
+			  project(savedProject),
+			  operation(completedOperation),
+			  revision(savedRevision),
+			  warnings(std::move(saveWarnings))
+		{
+		}
+
+		Path path;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
+		std::uint64_t revision = 0;
+		std::vector<std::string> warnings;
+	};
+
+	struct ProjectBundleSaveFailed final : public BusEvent
+	{
+		ProjectBundleSaveFailed() = default;
+		ProjectBundleSaveFailed(
+			Path failedPath,
+			std::string failure,
+			ProjectHandle failedProject = InvalidProjectHandle,
+			JFMOperationId failedOperation = InvalidJFMOperationId)
+			: path(std::move(failedPath)), error(std::move(failure)), project(failedProject), operation(failedOperation)
+		{
+		}
+
+		Path path;
+		std::string error;
+		ProjectHandle project = InvalidProjectHandle;
+		JFMOperationId operation = InvalidJFMOperationId;
+	};
+
 	struct ProjectLoadRequested final : public BusEvent
 	{
 		ProjectLoadRequested() = default;
@@ -95,6 +161,45 @@ namespace SST::Prototypes::JFM
 	{
 		ProjectLoadFailed() = default;
 		ProjectLoadFailed(Path failedPath, std::string failure, JFMOperationId failedOperation = InvalidJFMOperationId)
+			: path(std::move(failedPath)), error(std::move(failure)), operation(failedOperation)
+		{
+		}
+
+		Path path;
+		std::string error;
+		JFMOperationId operation = InvalidJFMOperationId;
+	};
+
+	struct ProjectBundleLoadRequested final : public BusEvent
+	{
+		ProjectBundleLoadRequested() = default;
+		explicit ProjectBundleLoadRequested(Path requestedPath, JFMOperationId requestedOperation = InvalidJFMOperationId)
+			: path(std::move(requestedPath)), operation(requestedOperation)
+		{
+		}
+
+		Path path;
+		JFMOperationId operation = InvalidJFMOperationId;
+	};
+
+	struct ProjectBundleLoadCompleted final : public BusEvent
+	{
+		ProjectBundleLoadCompleted() = default;
+		ProjectBundleLoadCompleted(Path loadedPath, JFMProjectBundleSnapshot loadedSnapshot, std::vector<std::string> loadWarnings = {}, JFMOperationId completedOperation = InvalidJFMOperationId)
+			: path(std::move(loadedPath)), snapshot(std::move(loadedSnapshot)), warnings(std::move(loadWarnings)), operation(completedOperation)
+		{
+		}
+
+		Path path;
+		JFMProjectBundleSnapshot snapshot;
+		std::vector<std::string> warnings;
+		JFMOperationId operation = InvalidJFMOperationId;
+	};
+
+	struct ProjectBundleLoadFailed final : public BusEvent
+	{
+		ProjectBundleLoadFailed() = default;
+		ProjectBundleLoadFailed(Path failedPath, std::string failure, JFMOperationId failedOperation = InvalidJFMOperationId)
 			: path(std::move(failedPath)), error(std::move(failure)), operation(failedOperation)
 		{
 		}
