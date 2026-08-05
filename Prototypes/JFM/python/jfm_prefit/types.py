@@ -214,9 +214,21 @@ class ResidualOptions:
     local_window_min: int = 5
     local_window_max: int = 21
     edge_fraction: float = 0.15
-    local_rms_threshold: float = 1.5
+    # Real HZB instrument noise near range boundaries (small-current
+    # quantization) routinely produces normalized residuals of several
+    # sigma even at the human-curated range/parameters -- 1.5x the
+    # interior's own error scale flagged the *correct* answer as invalid
+    # on 3/16 ground-truth characteristics before this was raised.
+    local_rms_threshold: float = 2.5
     local_bias_threshold: float = 0.75
     max_same_sign_run_fraction: float = 0.20
+    # A single-diode ideality factor never legitimately leaves this range;
+    # without it a degenerate fit (e.g. Rs in the millions of ohms
+    # compensating an absurd A) can still show flat residuals over a
+    # narrow window and pass every other check (§7 "parametry leżą
+    # wewnątrz fizycznych ograniczeń").
+    min_ideality_factor: float = 0.5
+    max_ideality_factor: float = 5.0
 
 
 @dataclass(slots=True, frozen=True)

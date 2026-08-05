@@ -152,6 +152,86 @@ namespace SST::Prototypes::JFM
 				return makePrefitError("Python adapter returned mismatched prefit curve arrays.");
 			return output;
 		}
+
+		Result<JFMPrefitBridgeResult> runAutoWithPython(const Path &pythonRoot, const JFMCharacteristicRecord &characteristic)
+		{
+			if (!characteristic.data || characteristic.data->voltage.empty())
+				return makePrefitError("Raw characteristic arrays are unavailable.");
+			if (!characteristic.info.temperatureK)
+				return makePrefitError("Characteristic temperature is missing.");
+			if (!ConfigureJFMPythonPaths(pythonRoot))
+				return makePrefitError("Could not configure Python paths for " + pythonRoot.String());
+
+			const bool useDensity = !characteristic.data->currentDensity.empty();
+			const std::vector<double> &current = useDensity ? characteristic.data->currentDensity : characteristic.data->current;
+			if (current.size() != characteristic.data->voltage.size())
+				return makePrefitError("Voltage and current arrays have different lengths.");
+
+			nb::dict options;
+			nb::object adapterResult = nb::module_::import_("jfm_prefit.cpp_adapter")
+				.attr("auto_prefit_characteristic")(
+					makeDoubleList(characteristic.data->voltage),
+					makeDoubleList(current),
+					nb::float_(*characteristic.info.temperatureK),
+					nb::str(useDensity ? "A/cm2" : "A"),
+					options);
+			if (!nb::isinstance<nb::dict>(adapterResult))
+				return makePrefitError("Python adapter returned a non-dict result.");
+			const nb::dict result = nb::borrow<nb::dict>(adapterResult);
+
+			const nb::object selectedObject = dictItem(result, "selected");
+			if (!nb::isinstance<nb::dict>(selectedObject))
+			{
+				const std::string reason = pyString(dictItem(result, "selection_reason"));
+				return makePrefitError(reason.empty() ? "Automatic selection found no valid model/range." : reason);
+			}
+			const nb::dict selected = nb::borrow<nb::dict>(selectedObject);
+
+			JFMPrefitBridgeResult output;
+			output.state.modelId = pyString(dictItem(selected, "model_id"));
+			output.state.autoModelSelection = true;
+			output.state.warnings = stringList(dictItem(result, "warnings"));
+			output.curve.voltage = doubleList(dictItem(result, "voltage"));
+			output.curve.current = doubleList(dictItem(result, "prefit_current"));
+
+			const nb::object rangeObject = dictItem(selected, "fit_range");
+			if (!nb::isinstance<nb::dict>(rangeObject))
+				return makePrefitError("Python adapter returned no fit_range map.");
+			const nb::dict range = nb::borrow<nb::dict>(rangeObject);
+			const auto lo = nb::cast<std::size_t>(dictItem(range, "lo"));
+			const auto hi = nb::cast<std::size_t>(dictItem(range, "hi"));
+			output.state.fitRange.lowerIndex = lo;
+			output.state.fitRange.upperIndex = hi;
+			output.state.fitRange.lowerVoltage = (lo < output.curve.voltage.size()) ? output.curve.voltage[lo] : 0.0;
+			output.state.fitRange.upperVoltage = (hi > 0 && hi - 1 < output.curve.voltage.size()) ? output.curve.voltage[hi - 1] : 0.0;
+			output.state.fitRange.reason = pyString(dictItem(range, "reason"));
+
+			const nb::object parametersObject = dictItem(selected, "parameters");
+			if (!nb::isinstance<nb::dict>(parametersObject))
+				return makePrefitError("Python adapter returned no parameters map.");
+			for (const auto &[nameHandle, estimateHandle] : nb::borrow<nb::dict>(parametersObject))
+			{
+				if (!nb::isinstance<nb::dict>(estimateHandle))
+					continue;
+				const nb::dict estimateDict = nb::borrow<nb::dict>(estimateHandle);
+				JFMParameterEstimate estimate;
+				estimate.value = nb::cast<double>(dictItem(estimateDict, "value"));
+				const nb::object standardError = dictItem(estimateDict, "stderr");
+				if (!standardError.is_none())
+					estimate.standardError = nb::cast<double>(standardError);
+				estimate.source = pyString(dictItem(estimateDict, "source"));
+				output.state.parameters[pyString(nameHandle)] = std::move(estimate);
+			}
+			if (output.curve.voltage.size() != output.curve.current.size())
+				return makePrefitError("Python adapter returned mismatched prefit curve arrays.");
+			return output;
+		}
+
+		std::mutex &prefitPythonMutex()
+		{
+			static std::mutex mutex;
+			return mutex;
+		}
 #endif
 	}
 
@@ -163,8 +243,7 @@ namespace SST::Prototypes::JFM
 	Result<JFMPrefitBridgeResult> JFMPythonPrefitBridge::Run(const JFMCharacteristicRecord &characteristic) const
 	{
 #if DS_PYTHON_CAPI_AVAILABLE
-		static std::mutex pythonMutex;
-		std::scoped_lock lock(pythonMutex);
+		std::scoped_lock lock(prefitPythonMutex());
 		if (m_PythonRoot.Empty() || !FileSystem::Exists(m_PythonRoot.Native()))
 			return makePrefitError("Python root was not found: " + m_PythonRoot.String());
 		if (!PythonInterpreter::IsRuntimeInitialized())
@@ -174,6 +253,34 @@ namespace SST::Prototypes::JFM
 		try
 		{
 			return runWithPython(m_PythonRoot, characteristic);
+		}
+		catch (const nb::python_error &error)
+		{
+			return makePrefitError(error.what());
+		}
+		catch (const std::exception &error)
+		{
+			return makePrefitError(error.what());
+		}
+#else
+		(void)characteristic;
+		return makePrefitError("Embedded Python is unavailable in this build.");
+#endif
+	}
+
+	Result<JFMPrefitBridgeResult> JFMPythonPrefitBridge::RunAuto(const JFMCharacteristicRecord &characteristic) const
+	{
+#if DS_PYTHON_CAPI_AVAILABLE
+		std::scoped_lock lock(prefitPythonMutex());
+		if (m_PythonRoot.Empty() || !FileSystem::Exists(m_PythonRoot.Native()))
+			return makePrefitError("Python root was not found: " + m_PythonRoot.String());
+		if (!PythonInterpreter::IsRuntimeInitialized())
+			return makePrefitError("Embedded Python runtime is not initialized.");
+		if (!PyGILState_Check())
+			return makePrefitError("Python GIL is not held by the current prefit job.");
+		try
+		{
+			return runAutoWithPython(m_PythonRoot, characteristic);
 		}
 		catch (const nb::python_error &error)
 		{

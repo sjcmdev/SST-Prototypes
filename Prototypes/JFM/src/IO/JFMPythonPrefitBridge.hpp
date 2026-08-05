@@ -19,6 +19,11 @@ namespace SST::Prototypes::JFM
 
 		[[nodiscard]] Result<JFMPrefitBridgeResult> Run(const JFMCharacteristicRecord &characteristic) const;
 
+		// Hierarchical branch/model/range search (docs/model-detection.md):
+		// the model_id in `characteristic` is ignored, the Python search picks
+		// its own and reports it back in the result's modelId.
+		[[nodiscard]] Result<JFMPrefitBridgeResult> RunAuto(const JFMCharacteristicRecord &characteristic) const;
+
 	private:
 		Path m_PythonRoot;
 	};

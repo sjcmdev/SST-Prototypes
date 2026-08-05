@@ -1143,9 +1143,10 @@ namespace SST::Prototypes::JFM
 			if (!info)
 				continue;
 			JFMPrefitState &state = info->get().prefit.emplace(info->get().prefit.value_or(JFMPrefitState{}));
-			if (state.modelId == modelId)
+			if (state.modelId == modelId && !state.autoModelSelection)
 				continue;
 			state.modelId = modelId;
+			state.autoModelSelection = false;
 			state.status = "queued";
 			state.warnings.clear();
 			++document->get().prefitGenerations[id];
@@ -1176,10 +1177,11 @@ namespace SST::Prototypes::JFM
 		if (!info)
 			return false;
 		JFMPrefitState &state = info->get().prefit.emplace(info->get().prefit.value_or(JFMPrefitState{}));
-		if (state.manualLowerVoltage == lowerVoltage && state.manualUpperVoltage == upperVoltage)
+		if (state.manualLowerVoltage == lowerVoltage && state.manualUpperVoltage == upperVoltage && !state.autoModelSelection)
 			return false;
 		state.manualLowerVoltage = lowerVoltage;
 		state.manualUpperVoltage = upperVoltage;
+		state.autoModelSelection = false;
 		state.status = "queued";
 		state.warnings.clear();
 		++document->get().prefitGenerations[id];
@@ -1216,6 +1218,46 @@ namespace SST::Prototypes::JFM
 		++document->get().monteCarloGenerations[id];
 		bumpRevisionLocked(document->get());
 		return true;
+	}
+
+	bool JFMWorkspaceStore::SetAutoModelSelection(ProjectHandle handle, const std::vector<CharacteristicId> &ids, bool enabled)
+	{
+		std::scoped_lock lock(m_Mutex);
+		auto document = findDocumentLocked(handle);
+		if (!document)
+			return false;
+		bool changed = false;
+		for (CharacteristicId id : ids)
+		{
+			auto info = findInfoLocked(document->get(), id);
+			if (!info)
+				continue;
+			JFMPrefitState &state = info->get().prefit.emplace(info->get().prefit.value_or(JFMPrefitState{}));
+			if (state.autoModelSelection == enabled)
+				continue;
+			state.autoModelSelection = enabled;
+			if (enabled)
+			{
+				// The search picks its own range (docs/model-detection.md) --
+				// a leftover manual override would otherwise pin it to a window
+				// the search never gets to reconsider.
+				state.manualLowerVoltage.reset();
+				state.manualUpperVoltage.reset();
+			}
+			state.status = "queued";
+			state.warnings.clear();
+			++document->get().prefitGenerations[id];
+			info->get().fit.reset();
+			info->get().monteCarlo.reset();
+			document->get().fitCurves.erase(id);
+			document->get().monteCarloResults.erase(id);
+			++document->get().fitGenerations[id];
+			++document->get().monteCarloGenerations[id];
+			changed = true;
+		}
+		if (changed)
+			bumpRevisionLocked(document->get());
+		return changed;
 	}
 
 	std::uint64_t JFMWorkspaceStore::BeginPrefit(JFMCharacteristicRef ref)
@@ -1262,10 +1304,16 @@ namespace SST::Prototypes::JFM
 		if (!info)
 			return false;
 		const JFMPrefitState current = info->get().prefit.value_or(JFMPrefitState{});
-		if (current.modelId != result.modelId)
+		// In auto mode the whole point is that the returned modelId can differ
+		// from whatever modelId was last persisted (that's the branch/model
+		// search's pick, not a stale echo) -- generation match above is what
+		// proves freshness there; the modelId-equality check only makes sense
+		// for the fixed-model manual path.
+		if (!current.autoModelSelection && current.modelId != result.modelId)
 			return false;
 		result.manualLowerVoltage = current.manualLowerVoltage;
 		result.manualUpperVoltage = current.manualUpperVoltage;
+		result.autoModelSelection = current.autoModelSelection;
 		result.status = "completed";
 		info->get().prefit = std::move(result);
 		document->get().prefitCurves[ref.characteristic] = CreateRef<const JFMPrefitCurve>(std::move(curve));

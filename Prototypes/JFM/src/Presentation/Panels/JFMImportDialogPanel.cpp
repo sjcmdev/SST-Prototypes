@@ -654,6 +654,19 @@ namespace SST::Prototypes::JFM
 			}
 			ImGui::EndDisabled();
 			ImGui::SameLine();
+			if (ImGui::Button("Auto-detect model"))
+			{
+				finishRangeUndoGroup();
+				if (auto registry = m_CommandRegistry.lock())
+				{
+					CommandContext context;
+					context.Set("project", analysisProject);
+					context.Set("characteristic_ids", selectedIds);
+					(void)registry->Execute(CommandID{JFMAutoDetectPrefitCommandId}, std::move(context));
+				}
+				m_RangeInitialized = false;
+			}
+			ImGui::SameLine();
 			ImGui::Checkbox("Auto fit", &m_AnalysisAutoFit);
 			ImGui::SameLine();
 			ImGui::SetNextItemWidth(120.0f);

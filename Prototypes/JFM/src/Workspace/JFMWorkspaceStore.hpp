@@ -127,6 +127,7 @@ namespace SST::Prototypes::JFM
 		bool SetPrefitModel(ProjectHandle handle, const std::vector<CharacteristicId> &ids, const std::string &modelId);
 		bool SetManualFitRange(ProjectHandle handle, CharacteristicId id, double lowerVoltage, double upperVoltage);
 		bool ResetFitRange(ProjectHandle handle, CharacteristicId id);
+		bool SetAutoModelSelection(ProjectHandle handle, const std::vector<CharacteristicId> &ids, bool enabled);
 		[[nodiscard]] std::uint64_t BeginPrefit(JFMCharacteristicRef ref);
 		[[nodiscard]] bool IsPrefitGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const;
 		bool ApplyPrefitResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMPrefitState result, JFMPrefitCurve curve);

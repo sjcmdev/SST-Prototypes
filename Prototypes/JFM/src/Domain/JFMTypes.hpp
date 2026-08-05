@@ -125,6 +125,11 @@ namespace SST::Prototypes::JFM
 		JFMFitRange fitRange;
 		std::unordered_map<std::string, JFMParameterEstimate> parameters;
 		std::vector<std::string> warnings;
+		// When true, JFMPrefitJob runs the Python hierarchical branch/model/range
+		// search (auto_prefit_characteristic) instead of prefitting the fixed
+		// modelId above (docs/model-detection.md §12.3). Sticky across re-fits
+		// until an explicit manual model/range edit turns it back off.
+		bool autoModelSelection = false;
 	};
 
 	struct JFMPrefitCurve

@@ -87,7 +87,8 @@ namespace SST::Prototypes::JFM
 					if (m_Store == nullptr || !m_Store->IsPrefitGenerationCurrent(item.ref, item.generation))
 						continue;
 
-					auto result = bridge.Run(item.characteristic);
+					const bool useAuto = item.characteristic.info.prefit && item.characteristic.info.prefit->autoModelSelection;
+					auto result = useAuto ? bridge.RunAuto(item.characteristic) : bridge.Run(item.characteristic);
 					if (m_EventBus == nullptr)
 						continue;
 					if (result)

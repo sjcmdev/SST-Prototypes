@@ -1232,6 +1232,33 @@ namespace SST::Prototypes::JFM
 
 		registerEditCommand(
 			registry,
+			CommandMeta{CommandID{JFMAutoDetectPrefitCommandId}, "Auto-detect Prefit Model", "JFM", "Automatically pick the branch, model, and fit range for selected characteristics.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
+			workspace,
+			[workspace, eventBus](CommandContext &commandContext) {
+				const ProjectHandle project = projectFromContext(workspace, commandContext);
+				std::vector<CharacteristicId> ids = workspace->GetSelectedCharacteristicIds();
+				if (auto *value = commandContext.TryGet<std::vector<CharacteristicId>>("characteristic_ids"))
+					ids = *value;
+				else if (auto *idValue = commandContext.TryGet<CharacteristicId>("characteristic_id"))
+					ids = {*idValue};
+				ids.erase(std::remove(ids.begin(), ids.end(), InvalidCharacteristicId), ids.end());
+				std::sort(ids.begin(), ids.end());
+				ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+				return JFMProjectEditRequest{
+					project,
+					"Auto-detect prefit model",
+					[ids](JFMWorkspaceStore &store, ProjectHandle handle) {
+						(void)store.SetAutoModelSelection(handle, ids, true);
+						return Result<void>{};
+					},
+					[eventBus, project, ids]() {
+						if (eventBus != nullptr && !ids.empty())
+							eventBus->Queue(PrefitRequested{project, ids});
+					}};
+			});
+
+		registerEditCommand(
+			registry,
 			CommandMeta{CommandID{JFMImportApplyCommandId}, "Apply Imported Data", "JFM", "Apply one completed import as an undoable project edit.", {}, CommandFlags::Undoable | CommandFlags::HiddenFromPalette},
 			workspace,
 			[workspace, eventBus](CommandContext &commandContext) {

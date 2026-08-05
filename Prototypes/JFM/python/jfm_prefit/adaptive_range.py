@@ -118,9 +118,12 @@ def fit_and_diagnose(
 
     parameters = {name: context.estimates[name] for name in spec.parameter_names}
     values = {name: estimate.value for name, estimate in parameters.items()}
-    parameters_finite = all(
+    parameters_plausible = all(
         math.isfinite(value) and (name not in _POSITIVE_PARAMETERS or value > 0.0)
         for name, value in values.items()
+    ) and (
+        "A" not in values
+        or options.residual.min_ideality_factor <= values["A"] <= options.residual.max_ideality_factor
     )
 
     residuals = compute_normalized_residuals(
@@ -137,7 +140,7 @@ def fit_and_diagnose(
 
     is_valid = (
         refine_ok
-        and parameters_finite
+        and parameters_plausible
         and problem == ResidualProblem.NONE
         and regions.max_same_sign_run_fraction <= options.residual.max_same_sign_run_fraction
     )
@@ -292,7 +295,8 @@ def optimize_range_for_model(
     leftover window (see docs/model-detection.md §9) whose local diagnosis
     no longer reflects which term is missing."""
     initial = detect_fit_range(sample, options.range_options).fit_range
-    lo, hi = initial.lo, initial.hi
+    lo0, hi0 = initial.lo, initial.hi
+    lo, hi = lo0, hi0
 
     result = fit_and_diagnose(
         sample, model_id, RangeWindow(lo, hi, initial.reason), initial_parameters, options
@@ -316,6 +320,20 @@ def optimize_range_for_model(
         else:
             break
         parameters = _parameter_values(result) or parameters
+
+    if not result.is_valid:
+        # The diagnosed side alone bisected down to a window that's either
+        # residual-clean-but-physically-degenerate or never validates at
+        # all -- real data doesn't always show the clean single-edge
+        # signature §8.1 assumes. Before giving up, try trimming the other
+        # boundary from the original bracket; if that finds a wider valid
+        # window, prefer it over the invalid/degenerate one above.
+        for side in ("hi", "lo"):
+            alt_lo, alt_hi, alt_result = _search_bound(
+                sample, model_id, lo0, hi0, side, initial_parameters, options
+            )
+            if alt_result.is_valid and (alt_hi - alt_lo) > (hi - lo):
+                lo, hi, result = alt_lo, alt_hi, alt_result
 
     best = locally_expand_range(
         sample, model_id, RangeWindow(lo, hi, result.fit_range.reason), result, options

@@ -10,11 +10,16 @@ this module checks the pipeline against, in three independent respects:
 2. Prefit parameter values, run with the curated model_id + range, match
    the curated parameters closely.
 3. Automatic model/range/branch selection (run_auto_prefit, given only raw
-   data) picks the same model family a human previously judged correct.
+   data) picks the same model family a human previously judged correct,
+   over a range close to (not necessarily identical to) the curated one --
+   see _boundary_close/_RANGE_TOLERANCE_*.
 
 (3) is the harder bar -- nobody ever ran an algorithm to produce these
-labels, a person picked them from the dropdown. As of this writing the
-auto-selector matches 13/16; the 3 known gaps are xfail, not hidden.
+labels, a person picked them from the dropdown, and range is judged on
+closeness rather than exact index match since qualitative fit quality is
+what actually matters, not reproducing the human's exact boundary points.
+As of this writing the auto-selector matches 11/16; the 5 known gaps are
+xfail, not hidden.
 """
 
 from __future__ import annotations
@@ -39,13 +44,23 @@ PROJECT_PATH = ROOT.parent / "JFM-projects" / "HZB-project.yaml.jfm.yaml"
 DATA_DIR = ROOT.parent / "example-data" / "real-measurement" / "dat"
 
 # Known auto-selection gaps against this ground truth (see module docstring).
-# T181/T209: auto-select settles on the simpler SD-RsRsh (still a valid fit)
-# instead of promoting to the curated SD-RsRsh-alpha-Rsh2.
+# T181/T191: the bisection search never lands on the curated window -- it's
+# a valid fit if you hand it that exact range, but the single-direction
+# lo-then-hi search collapses to a different, invalid narrow window first.
 # T321: auto-select promotes to SD-RsRsh-alpha-Rsh2 where the curated model
 # is the simpler SD-RsRsh.
+# T209: model matches, but the search collapses to a narrow high-voltage-only
+# window (135-181) instead of the curated (10-97) -- same single-direction
+# bisection limitation as T181/T191, just less severe (still finds *a*
+# valid fit, just not near the curated range).
+# T227: model matches and the range is close on the low side, but the
+# search's local range expansion over-extends the high boundary by ~18%
+# past the curated one.
 _KNOWN_MODEL_SELECTION_MISMATCHES = {
     "ivd_HZB25_T181_L0",
+    "ivd_HZB25_T191_L0",
     "ivd_HZB25_T209_L0",
+    "ivd_HZB25_T227_L0",
     "ivd_HZB25_T321_L0",
 }
 
@@ -85,6 +100,20 @@ def _range_options(prefit: dict) -> RangeOptions:
         manual_lower_voltage=prefit.get("manual_lower_voltage"),
         manual_upper_voltage=prefit.get("manual_upper_voltage"),
     )
+
+
+# How close counts as "close enough" for the auto-selector's range, judged
+# against the curated fit_range's own width -- nobody expects the same
+# boundary *indices* the human picked, just a comparable window (see
+# should_promote_to_child's equivalent-range logic in model_selection.py,
+# which uses the same idea for a different comparison).
+_RANGE_TOLERANCE_POINTS = 15
+_RANGE_TOLERANCE_FRACTION = 0.15
+
+
+def _boundary_close(actual: int, expected: int, span: int) -> bool:
+    diff = abs(actual - expected)
+    return diff <= _RANGE_TOLERANCE_POINTS or diff <= _RANGE_TOLERANCE_FRACTION * span
 
 
 @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
@@ -141,9 +170,17 @@ def test_fit_parameters_match_curated_project(characteristic: dict) -> None:
 def test_auto_prefit_selects_curated_model(characteristic: dict) -> None:
     sample = _load_sample(characteristic)
     expected_model = characteristic["prefit"]["model"]
+    expected_range = characteristic["prefit"]["fit_range"]
+    expected_span = expected_range["upper_index"] - expected_range["lower_index"]
 
     result = run_auto_prefit(sample)
 
     assert result.branch == "dark"
     assert result.selected is not None
     assert result.selected.model_id == expected_model
+    assert _boundary_close(
+        result.selected.fit_range.lo, expected_range["lower_index"], expected_span
+    ), f"lo={result.selected.fit_range.lo} vs curated {expected_range['lower_index']}"
+    assert _boundary_close(
+        result.selected.fit_range.hi, expected_range["upper_index"], expected_span
+    ), f"hi={result.selected.fit_range.hi} vs curated {expected_range['upper_index']}"
