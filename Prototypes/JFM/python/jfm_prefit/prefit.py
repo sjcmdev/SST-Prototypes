@@ -5,7 +5,12 @@ from dataclasses import replace
 from .adaptive_range import optimize_range_for_model
 from .blocks import estimate_photocurrent
 from .model_registry import BLOCK_REGISTRY, MODEL_REGISTRY
-from .model_selection import choose_better_candidate, select_child_model, should_promote_to_child
+from .model_selection import (
+    choose_better_candidate,
+    fallback_next_model,
+    select_child_model,
+    should_promote_to_child,
+)
 from .photo_detection import detect_photo_branch
 from .range_detection import detect_fit_range
 from .refinement import refine_parameters
@@ -62,6 +67,8 @@ def run_auto_prefit(
             best = choose_better_candidate(best, candidate, options.adaptive_range)
 
         next_model = select_child_model(current_model, structural_problem)
+        if next_model is None and not candidate.is_valid:
+            next_model = fallback_next_model(current_model)
         if next_model is None:
             break
 
@@ -75,7 +82,15 @@ def run_auto_prefit(
         )
         tested.append(child_candidate)
 
-        if should_promote_to_child(candidate, child_candidate, options.selection):
+        if not candidate.is_valid:
+            # Nothing valid yet to protect -- keep climbing the hierarchy
+            # unconditionally. should_promote_to_child()'s "must earn the
+            # extra parameter" rule only makes sense once there's a working
+            # simpler baseline to compare against.
+            current_model = next_model
+            if child_candidate.is_valid:
+                best = choose_better_candidate(best, child_candidate, options.adaptive_range)
+        elif should_promote_to_child(candidate, child_candidate, options.selection):
             current_model = next_model
             if child_candidate.is_valid:
                 best = choose_better_candidate(best, child_candidate, options.adaptive_range)

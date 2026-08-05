@@ -1,0 +1,2762 @@
+schema_version: 5
+project:
+  id: jfm-project
+  name: Untitled JFM Project
+  metadata:
+    prototype: JFM
+characteristics:
+  - id: 1
+    name: ivd_HZB25_T181_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T181_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 181
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T181_L0
+      file_name: ivd_HZB25_T181_L0.dat
+      stem_0: ivd
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      file_stem: ivd_HZB25_T181_L0
+      folder: dat
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T181_L0.dat
+      parent_folder: real-measurement
+      parser: dat
+      parent_folder_5: SST-Prototypes
+      temperature_K: 181.0
+      T: 181.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T181
+      stem_3: L0
+      folder_0: dat
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: 0.08
+      manual_upper_voltage: 0.910156424184796
+      fit_range:
+        lower_index: 9
+        upper_index: 93
+        lower_voltage: 0.08
+        upper_voltage: 0.91
+        reason: manual
+      parameters:
+        I0:
+          value: 1.7595680086617225e-18
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.6813807408523123
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh2:
+          value: 19316.879606491937
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 145.4313489845316
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 29596.715997526077
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 2.318525505765071
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        - semilog_fit_failed
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 9
+        upper_index: 93
+        lower_voltage: 0.08
+        upper_voltage: 0.91
+        reason: manual
+      parameters:
+        Rsh2:
+          value: 19316.879606491937
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.6813807408523123
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 1.7595680086617225e-18
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 145.4313489845316
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 29596.715997526077
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 2.318525505765071
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 9.143473913184849e-05
+      reduced_chi_squared: 1.1722402452801089e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 2
+    name: ivd_HZB25_T191_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T191_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 191
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T191_L0
+      stem_0: ivd
+      file_name: ivd_HZB25_T191_L0.dat
+      file_stem: ivd_HZB25_T191_L0
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder: dat
+      parent_folder: real-measurement
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T191_L0.dat
+      parent_folder_5: SST-Prototypes
+      parser: dat
+      temperature_K: 191.0
+      T: 191.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T191
+      folder_0: dat
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: 0.08
+      manual_upper_voltage: 0.9337313440693222
+      fit_range:
+        lower_index: 9
+        upper_index: 95
+        lower_voltage: 0.08
+        upper_voltage: 0.93
+        reason: manual
+      parameters:
+        Rsh2:
+          value: 18405.55026030095
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.6614113490653821
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        I0:
+          value: 1.6030255680689234e-17
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 72.37259804850346
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 28308.189989122497
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 2.3730868609356692
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        - semilog_fit_failed
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 9
+        upper_index: 95
+        lower_voltage: 0.08
+        upper_voltage: 0.93
+        reason: manual
+      parameters:
+        Rsh2:
+          value: 18405.55026030095
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.6614113490653821
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 1.6030255680689234e-17
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 72.37259804850346
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 28308.189989122497
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 2.3730868609356692
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0001569560049468789
+      reduced_chi_squared: 1.9619500618359864e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 3
+    name: ivd_HZB25_T201_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T201_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 201
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T201_L0
+      file_name: ivd_HZB25_T201_L0.dat
+      stem_0: ivd
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      file_stem: ivd_HZB25_T201_L0
+      folder: dat
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T201_L0.dat
+      parent_folder: real-measurement
+      parser: dat
+      parent_folder_5: SST-Prototypes
+      temperature_K: 201.0
+      T: 201.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T201
+      stem_3: L0
+      folder_0: dat
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: 0.09
+      manual_upper_voltage: 0.938790490279174
+      fit_range:
+        lower_index: 10
+        upper_index: 95
+        lower_voltage: 0.09
+        upper_voltage: 0.93
+        reason: manual
+      parameters:
+        I0:
+          value: 3.274337429735961e-16
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.7019875183100115
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh2:
+          value: 17378.299650263158
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 37.88532639906068
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 25642.31973465786
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 2.3750959030310255
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        - semilog_fit_failed
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 10
+        upper_index: 95
+        lower_voltage: 0.09
+        upper_voltage: 0.93
+        reason: manual
+      parameters:
+        Rsh2:
+          value: 17378.299650263158
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.7019875183100115
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 3.274337429735961e-16
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 37.88532639906068
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 25642.31973465786
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 2.3750959030310255
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0001891915796456217
+      reduced_chi_squared: 2.394830122096477e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 4
+    name: ivd_HZB25_T209_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T209_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 209
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T209_L0
+      stem_0: ivd
+      file_name: ivd_HZB25_T209_L0.dat
+      file_stem: ivd_HZB25_T209_L0
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder: dat
+      parent_folder: real-measurement
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T209_L0.dat
+      parent_folder_5: SST-Prototypes
+      parser: dat
+      temperature_K: 209.0
+      T: 209.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T209
+      folder_0: dat
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: 0.09
+      manual_upper_voltage: 0.9530824467105021
+      fit_range:
+        lower_index: 10
+        upper_index: 97
+        lower_voltage: 0.09
+        upper_voltage: 0.95
+        reason: manual
+      parameters:
+        Rsh2:
+          value: 16798.274221969976
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.7159118634734645
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        I0:
+          value: 2.302336784094368e-15
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 25.187962794122974
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 25028.685829801285
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 2.359482420286947
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        - semilog_fit_failed
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 10
+        upper_index: 97
+        lower_voltage: 0.09
+        upper_voltage: 0.95
+        reason: manual
+      parameters:
+        Rsh2:
+          value: 16798.274221969976
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.7159118634734645
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 2.302336784094368e-15
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 25.187962794122974
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 25028.685829801285
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 2.359482420286947
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.00022999970539681278
+      reduced_chi_squared: 2.839502535763121e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 5
+    name: ivd_HZB25_T217_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T217_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 217
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T217_L0
+      file_name: ivd_HZB25_T217_L0.dat
+      stem_0: ivd
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      file_stem: ivd_HZB25_T217_L0
+      folder: dat
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T217_L0.dat
+      parent_folder: real-measurement
+      parser: dat
+      parent_folder_5: SST-Prototypes
+      temperature_K: 217.0
+      T: 217.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T217
+      stem_3: L0
+      folder_0: dat
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: 0.09
+      manual_upper_voltage: 0.9984393521679076
+      fit_range:
+        lower_index: 10
+        upper_index: 101
+        lower_voltage: 0.09
+        upper_voltage: 0.99
+        reason: manual
+      parameters:
+        I0:
+          value: 1.1830425272723761e-14
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.7160934831673886
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh2:
+          value: 16644.821287564067
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 18.118643678425578
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 23659.232692102792
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 2.2787247964232797
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 10
+        upper_index: 101
+        lower_voltage: 0.09
+        upper_voltage: 0.99
+        reason: manual
+      parameters:
+        Rsh2:
+          value: 16644.821287564067
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.7160934831673886
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 1.1830425272723761e-14
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 18.118643678425578
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 23659.232692102792
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 2.2787247964232797
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.00038463862830804863
+      reduced_chi_squared: 4.525160333035866e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 6
+    name: ivd_HZB25_T227_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T227_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 227
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T227_L0
+      stem_0: ivd
+      file_name: ivd_HZB25_T227_L0.dat
+      file_stem: ivd_HZB25_T227_L0
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder: dat
+      parent_folder: real-measurement
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T227_L0.dat
+      parent_folder_5: SST-Prototypes
+      parser: dat
+      temperature_K: 227.0
+      T: 227.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T227
+      folder_0: dat
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: 0.09
+      manual_upper_voltage: 0.9976716865563124
+      fit_range:
+        lower_index: 10
+        upper_index: 101
+        lower_voltage: 0.09
+        upper_voltage: 0.99
+        reason: manual
+      parameters:
+        I0:
+          value: 1.017450368102358e-13
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.737196218630554
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh2:
+          value: 16437.082069818673
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 12.713794178952044
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 22289.061144123916
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 2.1837649126587055
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 10
+        upper_index: 101
+        lower_voltage: 0.09
+        upper_voltage: 0.99
+        reason: manual
+      parameters:
+        Rsh2:
+          value: 16437.082069818673
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.737196218630554
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 1.017450368102358e-13
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 12.713794178952044
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 22289.061144123916
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 2.1837649126587055
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0003408481842249674
+      reduced_chi_squared: 4.009978637940793e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 7
+    name: ivd_HZB25_T237_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T237_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 237
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T237_L0
+      file_name: ivd_HZB25_T237_L0.dat
+      stem_0: ivd
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      file_stem: ivd_HZB25_T237_L0
+      folder: dat
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T237_L0.dat
+      parent_folder: real-measurement
+      parser: dat
+      parent_folder_5: SST-Prototypes
+      temperature_K: 237.0
+      T: 237.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T237
+      stem_3: L0
+      folder_0: dat
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 11
+        upper_index: 116
+        lower_voltage: 0.1
+        upper_voltage: 1.14
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 16640.174549471678
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.7428244424682173
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        I0:
+          value: 5.994641545954121e-13
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 9.876677305722446
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 21445.57609849757
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 2.0096301322026457
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 11
+        upper_index: 116
+        lower_voltage: 0.1
+        upper_voltage: 1.14
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 16640.174549471678
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.7428244424682173
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 5.994641545954121e-13
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 9.876677305722446
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 21445.57609849757
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 2.0096301322026457
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0009791193594487347
+      reduced_chi_squared: 9.89009453988621e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 8
+    name: ivd_HZB25_T247_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T247_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 247
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T247_L0
+      stem_0: ivd
+      file_name: ivd_HZB25_T247_L0.dat
+      file_stem: ivd_HZB25_T247_L0
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder: dat
+      parent_folder: real-measurement
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T247_L0.dat
+      parent_folder_5: SST-Prototypes
+      parser: dat
+      temperature_K: 247.0
+      T: 247.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T247
+      folder_0: dat
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 11
+        upper_index: 109
+        lower_voltage: 0.1
+        upper_voltage: 1.07
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 16981.692941103825
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.7364738382141096
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        I0:
+          value: 2.718889891896209e-12
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 8.394726775963273
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 21665.056117218453
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 1.7425785639352334
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 11
+        upper_index: 109
+        lower_voltage: 0.1
+        upper_voltage: 1.07
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 16981.692941103825
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.7364738382141096
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 2.718889891896209e-12
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 8.394726775963273
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 21665.056117218453
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 1.7425785639352334
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0010518677582856658
+      reduced_chi_squared: 1.1433345198757236e-05
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 9
+    name: ivd_HZB25_T257_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T257_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 257
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T257_L0
+      file_name: ivd_HZB25_T257_L0.dat
+      stem_0: ivd
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      file_stem: ivd_HZB25_T257_L0
+      folder: dat
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T257_L0.dat
+      parent_folder: real-measurement
+      parser: dat
+      parent_folder_5: SST-Prototypes
+      temperature_K: 257.0
+      T: 257.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T257
+      stem_3: L0
+      folder_0: dat
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 11
+        upper_index: 104
+        lower_voltage: 0.1
+        upper_voltage: 1.02
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 16795.308326085047
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.693252355937913
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        I0:
+          value: 7.523507438533807e-12
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 7.864997899614744
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 19447.455372032924
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 1.723920713055028
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 11
+        upper_index: 104
+        lower_voltage: 0.1
+        upper_voltage: 1.02
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 16795.308326085047
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.693252355937913
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 7.523507438533807e-12
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 7.864997899614744
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 19447.455372032924
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 1.723920713055028
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0010702941544605104
+      reduced_chi_squared: 1.2302231660465637e-05
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 10
+    name: ivd_HZB25_T267_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T267_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 267
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T267_L0
+      stem_0: ivd
+      file_name: ivd_HZB25_T267_L0.dat
+      file_stem: ivd_HZB25_T267_L0
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder: dat
+      parent_folder: real-measurement
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T267_L0.dat
+      parent_folder_5: SST-Prototypes
+      parser: dat
+      temperature_K: 267.0
+      T: 267.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T267
+      folder_0: dat
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 11
+        upper_index: 101
+        lower_voltage: 0.1
+        upper_voltage: 0.99
+        reason: automatic
+      parameters:
+        I0:
+          value: 1.998414228336091e-11
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.6502547548385385
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh2:
+          value: 16133.255439761706
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 7.627137968909315
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 19003.862486230042
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 1.5965550850927694
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 11
+        upper_index: 101
+        lower_voltage: 0.1
+        upper_voltage: 0.99
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 16133.255439761706
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.6502547548385385
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 1.998414228336091e-11
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 7.627137968909315
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 19003.862486230042
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 1.5965550850927694
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0010495394634348447
+      reduced_chi_squared: 1.2494517421843389e-05
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 11
+    name: ivd_HZB25_T277_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T277_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 277
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T277_L0
+      file_name: ivd_HZB25_T277_L0.dat
+      stem_0: ivd
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      file_stem: ivd_HZB25_T277_L0
+      folder: dat
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T277_L0.dat
+      parent_folder: real-measurement
+      parser: dat
+      parent_folder_5: SST-Prototypes
+      temperature_K: 277.0
+      T: 277.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T277
+      stem_3: L0
+      folder_0: dat
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 12
+        upper_index: 98
+        lower_voltage: 0.11
+        upper_voltage: 0.96
+        reason: automatic
+      parameters:
+        I0:
+          value: 5.6509850947883394e-11
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.6190501028480746
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh2:
+          value: 12519.299370396546
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 7.5144130139095795
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 28681.46004958292
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 1.3053164557655228
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 12
+        upper_index: 98
+        lower_voltage: 0.11
+        upper_voltage: 0.96
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 12519.299370396546
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.6190501028480746
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 5.6509850947883394e-11
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 7.5144130139095795
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 28681.46004958292
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 1.3053164557655228
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0009735099451767869
+      reduced_chi_squared: 1.2168874314709837e-05
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 12
+    name: ivd_HZB25_T286_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T286_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 286
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T286_L0
+      stem_0: ivd
+      file_name: ivd_HZB25_T286_L0.dat
+      file_stem: ivd_HZB25_T286_L0
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder: dat
+      parent_folder: real-measurement
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T286_L0.dat
+      parent_folder_5: SST-Prototypes
+      parser: dat
+      temperature_K: 286.0
+      T: 286.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T286
+      folder_0: dat
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 12
+        upper_index: 95
+        lower_voltage: 0.11
+        upper_voltage: 0.93
+        reason: automatic
+      parameters:
+        I0:
+          value: 1.4666233510824074e-10
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.5905516082015259
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh2:
+          value: 12482.426489757807
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 7.4797102648043206
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 24464.88048801986
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 1.2838921472431584
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 12
+        upper_index: 95
+        lower_voltage: 0.11
+        upper_voltage: 0.93
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 12482.426489757807
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.5905516082015259
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 1.4666233510824074e-10
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 7.4797102648043206
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 24464.88048801986
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 1.2838921472431584
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0008147716633350043
+      reduced_chi_squared: 1.0581450173181873e-05
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 13
+    name: ivd_HZB25_T296_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T296_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 296
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T296_L0
+      file_name: ivd_HZB25_T296_L0.dat
+      stem_0: ivd
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      file_stem: ivd_HZB25_T296_L0
+      folder: dat
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T296_L0.dat
+      parent_folder: real-measurement
+      parser: dat
+      parent_folder_5: SST-Prototypes
+      temperature_K: 296.0
+      T: 296.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T296
+      stem_3: L0
+      folder_0: dat
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 12
+        upper_index: 93
+        lower_voltage: 0.11
+        upper_voltage: 0.91
+        reason: automatic
+      parameters:
+        I0:
+          value: 4.2586626916263843e-10
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.5648620314088877
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh2:
+          value: 7873.780997994095
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 7.483229658822935
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 11179019373.248165
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 1.1437630930058447
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 12
+        upper_index: 93
+        lower_voltage: 0.11
+        upper_voltage: 0.91
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 7873.780997994095
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.5648620314088877
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 4.2586626916263843e-10
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 7.483229658822935
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 11179019373.248165
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 1.1437630930058447
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0007907710860596237
+      reduced_chi_squared: 1.0543614480794983e-05
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 14
+    name: ivd_HZB25_T306_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T306_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 306
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T306_L0
+      stem_0: ivd
+      file_name: ivd_HZB25_T306_L0.dat
+      file_stem: ivd_HZB25_T306_L0
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder: dat
+      parent_folder: real-measurement
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T306_L0.dat
+      parent_folder_5: SST-Prototypes
+      parser: dat
+      temperature_K: 306.0
+      T: 306.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T306
+      folder_0: dat
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 12
+        upper_index: 90
+        lower_voltage: 0.11
+        upper_voltage: 0.88
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 7295.508173470543
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        A:
+          value: 1.5425692294008746
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        I0:
+          value: 1.2871321171392236e-09
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 7.663732911739134
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 1484271572.6909668
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        alpha:
+          value: 1.1201060281036603
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh-alpha-Rsh2
+      status: completed
+      fit_range:
+        lower_index: 12
+        upper_index: 90
+        lower_voltage: 0.11
+        upper_voltage: 0.88
+        reason: automatic
+      parameters:
+        Rsh2:
+          value: 7295.508173470543
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        A:
+          value: 1.5425692294008746
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 1.2871321171392236e-09
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 7.663732911739134
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 1484271572.6909668
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        alpha:
+          value: 1.1201060281036603
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0006519935448067656
+      reduced_chi_squared: 9.055465900093967e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 15
+    name: ivd_HZB25_T321_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T321_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 321
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T321_L0
+      file_name: ivd_HZB25_T321_L0.dat
+      stem_0: ivd
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      file_stem: ivd_HZB25_T321_L0
+      folder: dat
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T321_L0.dat
+      parent_folder: real-measurement
+      parser: dat
+      parent_folder_5: SST-Prototypes
+      temperature_K: 321.0
+      T: 321.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T321
+      stem_3: L0
+      folder_0: dat
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh
+      status: completed
+      manual_lower_voltage: 0.16947756951438997
+      manual_upper_voltage: 0.85
+      fit_range:
+        lower_index: 18
+        upper_index: 87
+        lower_voltage: 0.17
+        upper_voltage: 0.85
+        reason: manual
+      parameters:
+        A:
+          value: 1.5174131490029787
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        I0:
+          value: 4.419396001206044e-09
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 7.726156060202061
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 7595.135585763988
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh
+      status: completed
+      fit_range:
+        lower_index: 18
+        upper_index: 87
+        lower_voltage: 0.17
+        upper_voltage: 0.85
+        reason: manual
+      parameters:
+        A:
+          value: 1.5174131490029787
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 4.419396001206044e-09
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 7.726156060202061
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 7595.135585763988
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.0004933770990325713
+      reduced_chi_squared: 7.590416908193406e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+  - id: 16
+    name: ivd_HZB25_T330_L0
+    measurement: IV
+    source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T330_L0.dat
+    source_record_key: 0
+    parser: dat
+    import:
+      parser: dat
+      name_pattern: "{stem}"
+      short_name_pattern: ""
+      variable_delimiter: _
+      delimiter: ""
+      decimal_separator: auto
+      temperature_extraction: auto
+      custom_script_path: ""
+      variables:
+        []
+    temperature_K: 330
+    temperature_source: filename
+    metadata:
+      stem: ivd_HZB25_T330_L0
+      stem_0: ivd
+      file_name: ivd_HZB25_T330_L0.dat
+      file_stem: ivd_HZB25_T330_L0
+      folder_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat
+      parent_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      folder: dat
+      parent_folder: real-measurement
+      source_path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement\dat\ivd_HZB25_T330_L0.dat
+      parent_folder_5: SST-Prototypes
+      parser: dat
+      temperature_K: 330.0
+      T: 330.0
+      temperature_source: filename
+      parent_folder_1: real-measurement
+      parent_path_1: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data\real-measurement
+      parent_folder_2: example-data
+      parent_path_2: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\example-data
+      parent_folder_3: JFM
+      parent_path_3: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM
+      parent_folder_4: Prototypes
+      parent_path_4: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes
+      parent_path_5: D:\SJCM\01_SemiconductorStudio\SST-Prototypes
+      stem_1: HZB25
+      stem_2: T330
+      folder_0: dat
+      stem_3: L0
+    columns:
+      - name: col_0
+        unit: ""
+        role: voltage
+      - name: col_1
+        unit: ""
+        role: value
+      - name: col_2
+        unit: ""
+        role: value
+    sweep:
+      direction: increasing
+      v_start: -0.01
+      v_stop: 2.99
+      n_points: 301
+    qc:
+      non_monotonic_sweep: false
+      missing_temperature: false
+      warnings:
+        []
+    prefit:
+      model: SD-RsRsh
+      status: completed
+      manual_lower_voltage: ~
+      manual_upper_voltage: ~
+      fit_range:
+        lower_index: 13
+        upper_index: 85
+        lower_voltage: 0.12
+        upper_voltage: 0.83
+        reason: automatic
+      parameters:
+        A:
+          value: 1.4982776147330497
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        I0:
+          value: 9.609973877346841e-09
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rs:
+          value: 7.728195183760085
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+        Rsh:
+          value: 6862.028569848878
+          standard_error: ~
+          source: nonlinear_refinement
+          warnings:
+            []
+      warnings:
+        []
+    fit:
+      model: SD-RsRsh
+      status: completed
+      fit_range:
+        lower_index: 13
+        upper_index: 85
+        lower_voltage: 0.12
+        upper_voltage: 0.83
+        reason: automatic
+      parameters:
+        A:
+          value: 1.4982776147330497
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        I0:
+          value: 9.609973877346841e-09
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rs:
+          value: 7.728195183760085
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+        Rsh:
+          value: 6862.028569848878
+          standard_error: ~
+          source: simplex_cpu
+          warnings:
+            []
+      chi_squared: 0.00047973880636697054
+      reduced_chi_squared: 7.054982446573096e-06
+      iterations: 1
+      converged: true
+      backend: cpu-simplex
+      warnings:
+        []
+    raw_data: external_only
+    raw_point_count: 301
+groups:
+  []
+series:
+  - id: series-default
+    name: Series 1
+    group_id: ""
+    metadata:
+      {}
+    characteristics:
+      []
+  - id: series-3
+    name: dat
+    group_id: ""
+    metadata:
+      {}
+    characteristics:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+      - 6
+      - 7
+      - 8
+      - 9
+      - 10
+      - 11
+      - 12
+      - 13
+      - 14
+      - 15
+      - 16
+fit_runs:
+  []
+monte_carlo_runs:
+  []
+derived_analyses:
+  []
+scripts:
+  - id: script-1
+    name: dat_parser.py
+    path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\python\jfm_import\dat_parser.py
+    enabled: true
+    reload_count: 0
+  - id: script-2
+    name: scaps_iv_parser.py
+    path: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\JFM\python\jfm_import\scaps_iv_parser.py
+    enabled: true
+    reload_count: 0
+groupings:
+  []

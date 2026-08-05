@@ -99,11 +99,30 @@ def compute_region_scores(
     )
 
 
+def global_residual_scale(error: np.ndarray) -> float:
+    """Typical local error magnitude across the whole fit range (median of
+    the per-point windowed RMS `error`), floored at 1.0. Region error/bias
+    scores are judged *relative to this*, not against an absolute constant
+    -- the assumed NoiseModel sigma is just a modeling convention (e.g.
+    sigma_rel=0.01) and real measurement noise is often larger than it, so
+    an absolute threshold false-flags genuinely good fits whenever real
+    noise exceeds the assumed sigma. The floor at 1.0 keeps this a no-op
+    when the assumed sigma already matches (or overestimates) the real
+    noise -- i.e. it only ever *raises* the effective threshold to match
+    reality, never tightens it below the original calibrated-sigma case."""
+    if error.size == 0:
+        return 1.0
+    return max(float(np.median(error)), 1.0)
+
+
 def classify_residual_problem(
-    regions: RegionScores, options: ResidualOptions
+    regions: RegionScores, global_scale: float, options: ResidualOptions
 ) -> ResidualProblem:
+    error_threshold = options.local_rms_threshold * global_scale
+    bias_threshold = options.local_bias_threshold * global_scale
+
     def _bad(error: float, bias: float) -> bool:
-        return error > options.local_rms_threshold or abs(bias) > options.local_bias_threshold
+        return error > error_threshold or abs(bias) > bias_threshold
 
     low_bad = _bad(regions.low_error, regions.low_bias)
     high_bad = _bad(regions.high_error, regions.high_bias)

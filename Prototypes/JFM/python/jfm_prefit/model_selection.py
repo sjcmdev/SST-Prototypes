@@ -29,6 +29,25 @@ def select_child_model(current_model_id: str, residual_problem: ResidualProblem)
     return table.get(current_model_id, {}).get(side)
 
 
+def fallback_next_model(current_model_id: str) -> str | None:
+    """Canonical next step in the hierarchy (add Rs/Rsh, then go nonlinear
+    shunt), used when the residual diagnosis doesn't clearly point at an
+    edge (NONE/INTERIOR) but the current model still never validated
+    anywhere. Real measurement noise routinely fails to produce the clean
+    edge-only residual signatures §9.2 assumes -- without this fallback the
+    search dead-ends on real data even though a more complex model in the
+    same branch would fit fine (see docs/model-detection.md investigation
+    notes: SD-Rsh/SD-RsRsh candidates that are invalid but classify as
+    NONE/INTERIOR previously had no escalation path at all)."""
+    spec = MODEL_REGISTRY[current_model_id]
+    suffix = "-I_ph" if spec.has_i_ph else ""
+    if not spec.adds_rs or not spec.adds_rsh:
+        return f"SD-RsRsh{suffix}"
+    if not spec.is_nonlinear_shunt:
+        return f"SD-RsRsh-alpha-Rsh2{suffix}"
+    return None
+
+
 def _aicc(candidate: CandidateSummary) -> float:
     n = candidate.point_count
     k = candidate.parameter_count

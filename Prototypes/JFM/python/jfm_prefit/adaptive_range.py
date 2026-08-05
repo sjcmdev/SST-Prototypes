@@ -14,6 +14,7 @@ from .residual_diagnostics import (
     compute_local_error_profile,
     compute_normalized_residuals,
     compute_region_scores,
+    global_residual_scale,
     window_size,
 )
 from .types import (
@@ -128,7 +129,7 @@ def fit_and_diagnose(
     window = window_size(point_count, options.residual)
     error, bias = compute_local_error_profile(residuals, window)
     regions = compute_region_scores(residuals, error, bias, window, options.residual)
-    problem = classify_residual_problem(regions, options.residual)
+    problem = classify_residual_problem(regions, global_residual_scale(error), options.residual)
 
     dof = max(1, point_count - len(spec.parameter_names))
     chi_squared = float(np.sum(residuals**2))
