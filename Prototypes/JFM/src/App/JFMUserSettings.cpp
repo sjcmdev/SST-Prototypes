@@ -220,6 +220,12 @@ namespace SST::Prototypes::JFM
 					ideality->second.maximum = 5.0;
 				}
 			}
+			if (const YAML::Node autoPrefit = root["auto_prefit"]; autoPrefit && autoPrefit.IsMap())
+			{
+				m_Settings.autoPrefit.residualWindowFraction = std::clamp(ReadOr<double>(autoPrefit, "residual_window_fraction", m_Settings.autoPrefit.residualWindowFraction), 0.001, 1.0);
+				m_Settings.autoPrefit.residualWindowMinPoints = std::max(3, ReadOr<int>(autoPrefit, "residual_window_min_points", m_Settings.autoPrefit.residualWindowMinPoints));
+				m_Settings.autoPrefit.residualWindowMaxPoints = std::max(m_Settings.autoPrefit.residualWindowMinPoints, ReadOr<int>(autoPrefit, "residual_window_max_points", m_Settings.autoPrefit.residualWindowMaxPoints));
+			}
 			m_Settings.defaultColorPresetName = root["default_color_preset"] ? root["default_color_preset"].as<std::string>() : m_Settings.defaultColorPresetName;
 			if (const YAML::Node presets = root["color_presets"])
 			{
@@ -317,6 +323,11 @@ namespace SST::Prototypes::JFM
 			out << YAML::EndMap;
 		}
 		out << YAML::EndMap << YAML::EndMap;
+		out << YAML::Key << "auto_prefit" << YAML::Value << YAML::BeginMap;
+		out << YAML::Key << "residual_window_fraction" << YAML::Value << snapshot.autoPrefit.residualWindowFraction;
+		out << YAML::Key << "residual_window_min_points" << YAML::Value << snapshot.autoPrefit.residualWindowMinPoints;
+		out << YAML::Key << "residual_window_max_points" << YAML::Value << snapshot.autoPrefit.residualWindowMaxPoints;
+		out << YAML::EndMap;
 		out << YAML::Key << "default_color_preset" << YAML::Value << snapshot.defaultColorPresetName;
 		out << YAML::Key << "color_presets" << YAML::Value << YAML::BeginSeq;
 		for (const JFMColorPreset &preset : snapshot.colorPresets)
@@ -478,6 +489,18 @@ namespace SST::Prototypes::JFM
 		{
 			std::scoped_lock lock(m_Mutex);
 			m_Settings.fitMonteCarlo = std::move(settings);
+		}
+		Save();
+	}
+
+	void JFMUserSettingsStore::SetAutoPrefitSettings(JFMAutoPrefitSettings settings)
+	{
+		settings.residualWindowFraction = std::clamp(settings.residualWindowFraction, 0.001, 1.0);
+		settings.residualWindowMinPoints = std::max(3, settings.residualWindowMinPoints);
+		settings.residualWindowMaxPoints = std::max(settings.residualWindowMinPoints, settings.residualWindowMaxPoints);
+		{
+			std::scoped_lock lock(m_Mutex);
+			m_Settings.autoPrefit = settings;
 		}
 		Save();
 	}

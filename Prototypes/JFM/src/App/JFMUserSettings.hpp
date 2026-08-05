@@ -33,6 +33,17 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] bool operator==(const JFMMonteCarloParameterPair &) const = default;
 	};
 
+	struct JFMAutoPrefitSettings
+	{
+		// Width of the moving window used by the auto model/range selection's
+		// residual statistics and weights (docs/model-detection.md §6.2):
+		// window_size = odd(clamp(round(residualWindowFraction * pointCount),
+		// residualWindowMinPoints, residualWindowMaxPoints)).
+		double residualWindowFraction = 0.05;
+		int residualWindowMinPoints = 5;
+		int residualWindowMaxPoints = 21;
+	};
+
 	struct JFMFitMonteCarloSettings
 	{
 		int fitMaxIterations = 2500;
@@ -88,6 +99,7 @@ namespace SST::Prototypes::JFM
 		float hoveredCurveLineWeight = 3.5f;
 		bool autoPlotAfterImport = true;
 		JFMFitMonteCarloSettings fitMonteCarlo;
+		JFMAutoPrefitSettings autoPrefit;
 		std::vector<Path> recentProjects;
 	};
 
@@ -116,6 +128,7 @@ namespace SST::Prototypes::JFM
 		void SetAutoRangeAnalysis(bool prefit, bool fit);
 		void SetAutoPlotAfterImport(bool enabled);
 		void SetFitMonteCarloSettings(JFMFitMonteCarloSettings settings);
+		void SetAutoPrefitSettings(JFMAutoPrefitSettings settings);
 		void SetColorPresets(std::vector<JFMColorPreset> presets);
 		void SetDefaultColorPreset(std::string presetName);
 		void AddRecentProject(Path path);

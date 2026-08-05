@@ -126,6 +126,18 @@ namespace SST::Prototypes::JFM
 		changed |= ImGui::InputInt("Simplex calibration margin", &solver.simplexCalibrationExtraIterations, 10, 50);
 		if (changed)
 			m_Settings->SetFitMonteCarloSettings(std::move(solver));
+
+		ImGui::SeparatorText("JFM Auto Prefit");
+		JFMAutoPrefitSettings autoPrefit = settings.autoPrefit;
+		bool autoPrefitChanged = false;
+		ImGui::SetNextItemWidth(130.0f);
+		autoPrefitChanged |= ImGui::InputDouble("Residual window fraction", &autoPrefit.residualWindowFraction, 0.01, 0.05, "%.3f");
+		ImGui::SetNextItemWidth(130.0f);
+		autoPrefitChanged |= ImGui::InputInt("Residual window min points", &autoPrefit.residualWindowMinPoints, 1, 5);
+		ImGui::SetNextItemWidth(130.0f);
+		autoPrefitChanged |= ImGui::InputInt("Residual window max points", &autoPrefit.residualWindowMaxPoints, 1, 5);
+		if (autoPrefitChanged)
+			m_Settings->SetAutoPrefitSettings(autoPrefit);
 	}
 
 	void JFMSettingsPanel::renderColorPresets(JFMUserSettings settings)

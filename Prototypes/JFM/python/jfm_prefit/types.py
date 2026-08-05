@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Literal
 
 import numpy as np
 
 CharacteristicType = Literal["dark", "light"]
+PhotoBranchMode = Literal["auto", "force_dark", "force_light"]
+
+
+class ResidualProblem(str, Enum):
+    NONE = "none"
+    LOW_EDGE = "low_edge"
+    HIGH_EDGE = "high_edge"
+    BOTH_EDGES = "both_edges"
+    INTERIOR = "interior"
 
 
 @dataclass(slots=True, frozen=True)
@@ -166,3 +176,114 @@ class PrefitContext:
     estimates: dict[str, ParameterEstimate] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     diagnostics: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True, frozen=True)
+class PhotoDetectionOptions:
+    z_threshold: float = 5.0
+    flatness_max: float = 0.35
+    sign_coherence_min: float = 0.80
+    expected_current_sign: int = -1
+    min_points: int = 7
+    max_fraction: float = 0.20
+    voltage_window_thermal_factor: float = 6.0
+    voltage_window_range_fraction: float = 0.05
+    sigma_floor: float = 1.0e-30
+
+
+@dataclass(slots=True, frozen=True)
+class PhotoDetectionResult:
+    is_light: bool
+    initial_i_ph: float
+    z_score: float
+    flatness: float
+    sign_coherence: float
+    confidence: Literal["low", "high"]
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(slots=True, frozen=True)
+class ResidualOptions:
+    """Config for the moving-window residual analysis used by auto model/range
+    selection (§6 of docs/model-detection.md). `local_window_*` control the
+    width of the statistics/weights window (exposed in the JFM Numeric
+    settings UI and serialized in jfm_user_settings.yaml, see
+    JFMAutoPrefitSettings on the C++ side)."""
+
+    local_window_fraction: float = 0.05
+    local_window_min: int = 5
+    local_window_max: int = 21
+    edge_fraction: float = 0.15
+    local_rms_threshold: float = 1.5
+    local_bias_threshold: float = 0.75
+    max_same_sign_run_fraction: float = 0.20
+
+
+@dataclass(slots=True, frozen=True)
+class RegionScores:
+    low_error: float
+    high_error: float
+    interior_error: float
+    low_bias: float
+    high_bias: float
+    interior_bias: float
+    max_same_sign_run_fraction: float
+
+
+@dataclass(slots=True, frozen=True)
+class AdaptiveRangeOptions:
+    """`jitter_radius_points` controls the bisection-search jitter (§8.3).
+    `local_expansion_points` controls how many extra points the final
+    locally_expand_range() step (§8.4) is allowed to try on each side."""
+
+    jitter_radius_points: int = 3
+    local_expansion_points: int = 3
+    max_iterations: int = 20
+    min_fit_points: int = 8
+    equivalent_range_points: int = 2
+    equivalent_range_fraction: float = 0.02
+
+
+@dataclass(slots=True, frozen=True)
+class ModelSelectionOptions:
+    min_range_gain_points: int = 3
+    min_range_gain_fraction: float = 0.03
+    minimum_aicc_improvement: float = 6.0
+
+
+@dataclass(slots=True, frozen=True)
+class AutoPrefitOptions:
+    range_options: RangeOptions = field(default_factory=RangeOptions)
+    noise_model: NoiseModel = field(default_factory=NoiseModel)
+    resistance_options: ResistanceOptions = field(default_factory=ResistanceOptions)
+    photo_detection: PhotoDetectionOptions = field(default_factory=PhotoDetectionOptions)
+    residual: ResidualOptions = field(default_factory=ResidualOptions)
+    adaptive_range: AdaptiveRangeOptions = field(default_factory=AdaptiveRangeOptions)
+    selection: ModelSelectionOptions = field(default_factory=ModelSelectionOptions)
+    photo_branch_mode: PhotoBranchMode = "auto"
+
+
+@dataclass(slots=True, frozen=True)
+class CandidateSummary:
+    model_id: str
+    fit_range: RangeWindow
+    point_count: int
+    coverage_fraction: float
+    parameter_count: int
+    chi_squared: float
+    reduced_chi2: float
+    is_valid: bool
+    residual_problem: ResidualProblem
+    regions: RegionScores
+    parameters: dict[str, ParameterEstimate]
+    warnings: tuple[str, ...] = ()
+
+
+@dataclass(slots=True, frozen=True)
+class AutoPrefitResult:
+    branch: CharacteristicType
+    photo_detection: PhotoDetectionResult
+    selected: CandidateSummary | None
+    tested_candidates: tuple[CandidateSummary, ...]
+    selection_reason: str
+    warnings: tuple[str, ...] = ()

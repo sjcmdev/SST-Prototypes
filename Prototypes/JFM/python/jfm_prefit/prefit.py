@@ -1,19 +1,106 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import math
 
-import numpy as np
-from scipy.optimize import least_squares
-
+from .adaptive_range import optimize_range_for_model
 from .blocks import estimate_photocurrent
-from .model_registry import BLOCK_REGISTRY, MODEL_REGISTRY, ModelSpec
+from .model_registry import BLOCK_REGISTRY, MODEL_REGISTRY
+from .model_selection import choose_better_candidate, select_child_model, should_promote_to_child
+from .photo_detection import detect_photo_branch
 from .range_detection import detect_fit_range
-from .types import ParameterEstimate, PrefitContext, PrefitOptions, PrefitResult, Sample
+from .refinement import refine_parameters
+from .types import (
+    AutoPrefitOptions,
+    AutoPrefitResult,
+    ParameterEstimate,
+    PrefitContext,
+    PrefitOptions,
+    PrefitResult,
+    Sample,
+)
 
 
 class PrefitError(RuntimeError):
     pass
+
+
+def run_auto_prefit(
+    sample: Sample, options: AutoPrefitOptions | None = None
+) -> AutoPrefitResult:
+    """Automatic branch/model/range selection (docs/model-detection.md §11).
+
+    Every candidate fit in the search is a fast, pure-Python prefit + scipy
+    refinement (see adaptive_range.fit_and_diagnose) -- the C++ Simplex/GPU
+    fit engine is never invoked here. Callers run that once, afterwards, on
+    the returned `selected.model_id` + `selected.fit_range`.
+    """
+    options = options or AutoPrefitOptions()
+
+    photo = detect_photo_branch(sample, options.photo_detection)
+    if options.photo_branch_mode == "force_dark":
+        branch = "dark"
+    elif options.photo_branch_mode == "force_light":
+        branch = "light"
+    else:
+        branch = "light" if photo.is_light else "dark"
+
+    branch_sample = replace(sample, characteristic_type=branch)
+    current_model: str | None = "SD-0-I_ph" if branch == "light" else "SD-0"
+    initial_parameters: dict[str, float] = {}
+    if branch == "light":
+        initial_parameters["I_ph"] = photo.initial_i_ph
+
+    tested: list = []
+    best = None
+
+    while current_model is not None:
+        candidate, structural_problem = optimize_range_for_model(
+            branch_sample, current_model, initial_parameters, options
+        )
+        tested.append(candidate)
+        if candidate.is_valid:
+            best = choose_better_candidate(best, candidate, options.adaptive_range)
+
+        next_model = select_child_model(current_model, structural_problem)
+        if next_model is None:
+            break
+
+        child_parameters = {
+            name: estimate.value for name, estimate in candidate.parameters.items()
+        }
+        if branch == "light":
+            child_parameters.setdefault("I_ph", photo.initial_i_ph)
+        child_candidate, _ = optimize_range_for_model(
+            branch_sample, next_model, child_parameters, options
+        )
+        tested.append(child_candidate)
+
+        if should_promote_to_child(candidate, child_candidate, options.selection):
+            current_model = next_model
+            if child_candidate.is_valid:
+                best = choose_better_candidate(best, child_candidate, options.adaptive_range)
+        else:
+            break
+
+    if best is not None:
+        reason = (
+            f"Selected {branch} branch (confidence={photo.confidence}); "
+            f"model {best.model_id} covers {best.point_count} points "
+            f"({best.coverage_fraction:.0%}), reduced chi2={best.reduced_chi2:.4g}."
+        )
+    else:
+        reason = (
+            f"Selected {branch} branch (confidence={photo.confidence}); "
+            "no candidate model/range met the validity criteria."
+        )
+
+    return AutoPrefitResult(
+        branch=branch,
+        photo_detection=photo,
+        selected=best,
+        tested_candidates=tuple(tested),
+        selection_reason=reason,
+    )
 
 
 def run_prefit(
@@ -46,7 +133,7 @@ def run_prefit(
     missing = [name for name in spec.parameter_names if name not in context.estimates]
     if missing:
         raise PrefitError(f"model {model_id!r} did not estimate {missing}")
-    _refine_parameters(
+    refine_parameters(
         context, sample, spec, fit_range.fit_range.lo, fit_range.fit_range.hi
     )
     warnings = tuple(dict.fromkeys((*fit_range.warnings, *context.warnings)))
@@ -57,70 +144,3 @@ def run_prefit(
         warnings,
         dict(context.diagnostics),
     )
-
-
-def _refine_parameters(
-    context: PrefitContext,
-    sample: Sample,
-    spec: ModelSpec,
-    lo: int,
-    hi: int,
-) -> None:
-    if context.options.refinement_passes <= 0:
-        return
-
-    names = tuple(name for name in spec.parameter_names if name in context.estimates)
-    positive = {"I0", "A", "Rs", "Rsh", "Rsh2"}
-    initial_values = {
-        name: (
-            max(context.estimates[name].value, 1.0e-300)
-            if name in positive
-            else context.estimates[name].value
-        )
-        for name in names
-    }
-    x0 = np.asarray(
-        [
-            math.log(initial_values[name]) if name in positive else initial_values[name]
-            for name in names
-        ],
-        dtype=float,
-    )
-    voltage = sample.voltage[lo:hi]
-    current = sample.current[lo:hi]
-    sigma = context.options.noise_model.sigma(current)
-
-    def unpack(values: np.ndarray) -> dict[str, float]:
-        return {
-            name: (
-                float(math.exp(values[index]))
-                if name in positive
-                else float(values[index])
-            )
-            for index, name in enumerate(names)
-        }
-
-    def residual(values: np.ndarray) -> np.ndarray:
-        predicted = spec.current(
-            voltage,
-            sample.temperature_k,
-            unpack(values),
-            spec.characteristic_type == "dark",
-        )
-        return (predicted - current) / sigma
-
-    try:
-        result = least_squares(residual, x0, max_nfev=4000)
-    except (ValueError, RuntimeError, OverflowError, FloatingPointError):
-        context.warnings.append("nonlinear_refinement_failed")
-        return
-    if not result.success:
-        context.warnings.append("nonlinear_refinement_failed")
-        return
-
-    refined = unpack(result.x)
-    for name in names:
-        context.estimates[name] = ParameterEstimate(
-            refined[name], None, "nonlinear_refinement"
-        )
-    context.diagnostics["nonlinear_refinement_cost"] = float(result.cost)
