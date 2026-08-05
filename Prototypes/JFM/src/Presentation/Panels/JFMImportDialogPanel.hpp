@@ -151,6 +151,7 @@ namespace SST::Prototypes::JFM
 		JFMOperationId m_NextImportOperation = 1;
 		JFMOperationId m_ImportOperation = InvalidJFMOperationId;
 		ProjectHandle m_StagingProject = InvalidProjectHandle;
+		ProjectHandle m_AutoDetectAppliedFor = InvalidProjectHandle;
 		CharacteristicId m_RangeCharacteristic = InvalidCharacteristicId;
 		double m_RangeLower = 0.0;
 		double m_RangeUpper = 0.0;

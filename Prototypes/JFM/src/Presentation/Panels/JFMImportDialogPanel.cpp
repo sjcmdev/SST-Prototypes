@@ -507,6 +507,31 @@ namespace SST::Prototypes::JFM
 			if (m_AnalysisOnlySeriesId.empty() || series.id == m_AnalysisOnlySeriesId)
 				visibleIds.insert(visibleIds.end(), series.characteristicIds.begin(), series.characteristicIds.end());
 		}
+		if (!fitMode && m_AutoDetectAppliedFor != analysisProject)
+		{
+			// First look at "Data range & prefit" for this staged batch --
+			// auto-detect any characteristic nobody has touched yet instead of
+			// leaving it on the hardcoded default model until someone notices
+			// and clicks "Auto-detect model" by hand.
+			m_AutoDetectAppliedFor = analysisProject;
+			std::vector<CharacteristicId> freshIds;
+			for (CharacteristicId id : allIds)
+			{
+				const auto state = m_Store->GetPrefitState({analysisProject, id});
+				if (!state || state->status == "not_started")
+					freshIds.push_back(id);
+			}
+			if (!freshIds.empty())
+			{
+				if (auto registry = m_CommandRegistry.lock())
+				{
+					CommandContext context;
+					context.Set("project", analysisProject);
+					context.Set("characteristic_ids", freshIds);
+					(void)registry->Execute(CommandID{JFMAutoDetectPrefitCommandId}, std::move(context));
+				}
+			}
+		}
 		if (!m_AnalysisOnlySeriesId.empty() && visibleIds.empty())
 		{
 			m_AnalysisOnlySeriesId.clear();
