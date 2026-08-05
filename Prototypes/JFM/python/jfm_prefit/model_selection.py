@@ -58,12 +58,50 @@ def _aicc(candidate: CandidateSummary) -> float:
     return aic + (2 * k * (k + 1)) / denominator
 
 
+# I0 is excluded: it's degenerate with A by construction (the same curve
+# region is described equally well by many (I0, A) pairs), so it routinely
+# swings by orders of magnitude between two otherwise-good fits even when
+# every other parameter barely moves. It's not a usable identifiability
+# signal -- Rs/Rsh/A are.
+_IDENTIFIABILITY_EXEMPT_PARAMETERS = {"I0"}
+
+
+def _shared_parameters_identifiable(
+    parent: CandidateSummary, child: CandidateSummary, options: ModelSelectionOptions
+) -> bool:
+    """§9.3 point 4: the new parameter(s) must be identifiable. If a
+    parameter the child shares with the parent swings by more than
+    `max_shared_parameter_ratio` once the child's extra term is added, the
+    fit is absorbing that shared parameter into the new one rather than
+    needing both -- e.g. Rsh blowing up from ~1e4 to ~1e8 when alpha/Rsh2
+    are added means Rsh2 alone is doing the work and Rsh is no longer
+    meaningfully constrained. Empirically (see HZB ground truth): a
+    legitimately-wider child window can shift Rs/Rsh by ~2-3 orders of
+    magnitude on its own; a genuine non-identifiability break is ~4+ orders
+    of magnitude beyond that, hence the wide default gap."""
+    for name, parent_estimate in parent.parameters.items():
+        if name in _IDENTIFIABILITY_EXEMPT_PARAMETERS:
+            continue
+        child_estimate = child.parameters.get(name)
+        if child_estimate is None:
+            continue
+        parent_value, child_value = parent_estimate.value, child_estimate.value
+        if parent_value == 0.0 or child_value == 0.0:
+            continue
+        ratio = max(abs(child_value / parent_value), abs(parent_value / child_value))
+        if ratio > options.max_shared_parameter_ratio:
+            return False
+    return True
+
+
 def should_promote_to_child(
     parent: CandidateSummary, child: CandidateSummary, options: ModelSelectionOptions
 ) -> bool:
     """§9.3: a child model must earn its extra parameter -- lower chi2 alone
     is not enough."""
     if not child.is_valid:
+        return False
+    if not _shared_parameters_identifiable(parent, child, options):
         return False
 
     range_gain_points = child.point_count - parent.point_count

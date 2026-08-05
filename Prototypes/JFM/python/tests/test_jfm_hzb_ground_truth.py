@@ -18,7 +18,7 @@ this module checks the pipeline against, in three independent respects:
 labels, a person picked them from the dropdown, and range is judged on
 closeness rather than exact index match since qualitative fit quality is
 what actually matters, not reproducing the human's exact boundary points.
-As of this writing the auto-selector matches 11/16; the 5 known gaps are
+As of this writing the auto-selector matches 13/16; the 3 known gaps are
 xfail, not hidden.
 """
 
@@ -47,21 +47,15 @@ DATA_DIR = ROOT.parent / "example-data" / "real-measurement" / "dat"
 # T181/T191: the bisection search never lands on the curated window -- it's
 # a valid fit if you hand it that exact range, but the single-direction
 # lo-then-hi search collapses to a different, invalid narrow window first.
-# T321: auto-select promotes to SD-RsRsh-alpha-Rsh2 where the curated model
-# is the simpler SD-RsRsh.
-# T209: model matches, but the search collapses to a narrow high-voltage-only
-# window (135-181) instead of the curated (10-97) -- same single-direction
-# bisection limitation as T181/T191, just less severe (still finds *a*
-# valid fit, just not near the curated range).
+# (optimize_range_for_model's opposite-boundary fallback recovers this for
+# T209, which had the same shape of problem, but not for these two.)
 # T227: model matches and the range is close on the low side, but the
 # search's local range expansion over-extends the high boundary by ~18%
 # past the curated one.
 _KNOWN_MODEL_SELECTION_MISMATCHES = {
     "ivd_HZB25_T181_L0",
     "ivd_HZB25_T191_L0",
-    "ivd_HZB25_T209_L0",
     "ivd_HZB25_T227_L0",
-    "ivd_HZB25_T321_L0",
 }
 
 

@@ -261,6 +261,13 @@ class ModelSelectionOptions:
     min_range_gain_points: int = 3
     min_range_gain_fraction: float = 0.03
     minimum_aicc_improvement: float = 6.0
+    # §9.3 point 4: a child's extra parameter must be identifiable, not just
+    # earn a chi2/range win. If adding it lets a parameter the child shares
+    # with the parent swing by more than this ratio, the fit is absorbing
+    # the parent's parameter into the new one instead of genuinely needing
+    # both -- non-identifiable, so the promotion is refused regardless of
+    # what the other criteria say.
+    max_shared_parameter_ratio: float = 1000.0
 
 
 @dataclass(slots=True, frozen=True)

@@ -321,19 +321,21 @@ def optimize_range_for_model(
             break
         parameters = _parameter_values(result) or parameters
 
-    if not result.is_valid:
-        # The diagnosed side alone bisected down to a window that's either
-        # residual-clean-but-physically-degenerate or never validates at
-        # all -- real data doesn't always show the clean single-edge
-        # signature §8.1 assumes. Before giving up, try trimming the other
-        # boundary from the original bracket; if that finds a wider valid
-        # window, prefer it over the invalid/degenerate one above.
-        for side in ("hi", "lo"):
-            alt_lo, alt_hi, alt_result = _search_bound(
-                sample, model_id, lo0, hi0, side, initial_parameters, options
-            )
-            if alt_result.is_valid and (alt_hi - alt_lo) > (hi - lo):
-                lo, hi, result = alt_lo, alt_hi, alt_result
+    # The diagnosed side alone can walk off in the wrong direction: it's
+    # allowed to keep trimming the correctly-diagnosed side (say, LOW_EDGE)
+    # all the way down to whatever tiny, uninformative leftover window
+    # happens to validate there, even when a much wider valid window exists
+    # on the *other* boundary (real data doesn't always show the clean
+    # single-edge signature §8.1 assumes). Always check the alternative
+    # boundary from the original bracket and keep it if it's wider and
+    # still valid -- this also recovers the case where the primary path
+    # never validates at all.
+    for side in ("hi", "lo"):
+        alt_lo, alt_hi, alt_result = _search_bound(
+            sample, model_id, lo0, hi0, side, initial_parameters, options
+        )
+        if alt_result.is_valid and (not result.is_valid or (alt_hi - alt_lo) > (hi - lo)):
+            lo, hi, result = alt_lo, alt_hi, alt_result
 
     best = locally_expand_range(
         sample, model_id, RangeWindow(lo, hi, result.fit_range.reason), result, options
