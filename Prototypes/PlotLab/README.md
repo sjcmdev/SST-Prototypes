@@ -67,10 +67,17 @@ A failed export preserves the old destination and removes its temporary file.
 - Core adds an optional close guard, used for unsaved documents and active exports.
   This window/document layer is the starting point for CapLab; no framework was added.
 
-Publication font is currently **DejaVu Sans 8 pt**, SVG outlines, PDF embedded
-TrueType. Missing fonts fail explicitly. Preview uses the Core shell font, so text
-metrics/layout are not a pixel-identical matplotlib reproduction. Exact 0.5 mm
-layout parity has not been measured. No annotations, style editor, analysis, Python
+Graph text defaults to **DejaVu Sans 8 pt**. Each graph offers bundled DejaVu
+Sans/Serif/Sans Mono, a size in pt, and **Load font (.ttf/.otf)**. Preview and export
+resolve the same file; SVG uses outlines and PDF embeds/subsets the chosen font.
+The bundle includes `LICENSE_DEJAVU`. Font changes participate in Core undo and
+project v3 persistence; v1/v2 projects open with defaults. Custom fonts persist as
+absolute paths, so moving a project requires keeping that font available.
+Missing/corrupt/mismatched fonts show a diagnostic and block rendering/export.
+Preview converts pt to logical pixels at 96 DPI with ImGui display scaling.
+Live ImPlot layout and matplotlib remain separate; 0.5 mm UI/export layout parity
+is not claimed. See `experiments/README.md` for the native/Cairo comparison.
+No annotations, style editor, analysis, Python
 console, bulk paste or JPEG in PL3. No portable runtime packaging, autosave/recovery,
 non-Windows/Release validation, or million-point interactive performance gate here.
 The engine remains responsible for its existing formula worker/lifecycle policy.

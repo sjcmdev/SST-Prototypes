@@ -1,0 +1,296 @@
+{
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "13th Gen Intel(R) Core(TM) i7-13700KF",
+    "python": "3.13.2 (main, Feb 12 2025, 14:49:53) [MSC v.1942 64 bit (AMD64)]",
+    "matplotlib": "3.11.2",
+    "pycairo": "1.28.0",
+    "cairo": "1.18.4",
+    "build": "Python headless; C++ build not involved",
+    "cairo_python_path": "C:/Users/Franek/AppData/Local/uv/cache/archive-v0/4ZbeAbEsw3XYK74kw6gts",
+    "cairo_dll_dir": "D:/Aplications/Inscape/install/bin"
+  },
+  "fixtures": [
+    {
+      "name": "linear-gap",
+      "font": "DejaVu Sans",
+      "semantics": {
+        "ranges": [
+          0.0,
+          5.0,
+          -1.0,
+          11.0
+        ],
+        "x_ticks": [
+          0,
+          2,
+          4
+        ],
+        "y_ticks": [
+          0,
+          5,
+          10
+        ],
+        "series": 1,
+        "artist_lines": 1,
+        "font_pt": 8.0,
+        "series_sha256": [
+          "da178d863cbdcfecef9e6ec3b183167fd83d4b44ffcdc88d2db3ce96acea8e0a"
+        ],
+        "error_sha256": []
+      },
+      "position_error_mm": {
+        "axes": 0.0,
+        "x_label": 0.76872482638889,
+        "y_label": 0.8038372395833377,
+        "legend": 0.5317022569444347,
+        "x_tick_0": 0.2370225694444441,
+        "x_tick_1": 0.2370225694444441,
+        "x_tick_2": 0.22875434027777786,
+        "y_tick_0": 0.22732118055555617,
+        "y_tick_1": 0.24936979166666795,
+        "y_tick_2": 0.18890147569444515
+      },
+      "max_position_error_mm": 0.8038372395833377,
+      "within_0_5_mm": false,
+      "files": [
+        {
+          "backend": "native",
+          "format": "svg",
+          "median_ms": 19.60340002551675,
+          "bytes": 19444,
+          "font_names": [],
+          "embedded_or_outlined": true,
+          "font_matches": null,
+          "raster_images": 0
+        },
+        {
+          "backend": "native",
+          "format": "pdf",
+          "median_ms": 50.42650003451854,
+          "bytes": 10232,
+          "font_names": [
+            "CXKRXC+DejaVuSans"
+          ],
+          "embedded_or_outlined": true,
+          "font_matches": true,
+          "raster_images": 0
+        },
+        {
+          "backend": "cairo",
+          "format": "svg",
+          "median_ms": 13.309600064530969,
+          "bytes": 37431,
+          "font_names": [],
+          "embedded_or_outlined": true,
+          "font_matches": null,
+          "raster_images": 0
+        },
+        {
+          "backend": "cairo",
+          "format": "pdf",
+          "median_ms": 14.350399957038462,
+          "bytes": 17489,
+          "font_names": [
+            "NOYNMK+ArialMT"
+          ],
+          "embedded_or_outlined": true,
+          "font_matches": false,
+          "raster_images": 0
+        }
+      ]
+    },
+    {
+      "name": "error-two-series",
+      "font": "DejaVu Serif",
+      "semantics": {
+        "ranges": [
+          0.0,
+          5.0,
+          -1.0,
+          11.0
+        ],
+        "x_ticks": [
+          0,
+          2,
+          4
+        ],
+        "y_ticks": [
+          0,
+          5,
+          10
+        ],
+        "series": 2,
+        "artist_lines": 6,
+        "font_pt": 10.0,
+        "series_sha256": [
+          "da178d863cbdcfecef9e6ec3b183167fd83d4b44ffcdc88d2db3ce96acea8e0a",
+          "2082b2a2638b8739558c4575559d6c38b956cbbba17b46b562d6d7017025af1c",
+          "fd45391279f464060b55754283e7350e212ec3a88060fa4851e8e719cbcf894a",
+          "e61377f0cf0587789b874d5acf996ed035084a837696de93a6b8e60ba0e838db",
+          "d8975ddedfb1ab137f125dff9118ba468de1be58dc5a2cded7ef3e7fca7aaa60",
+          "aee6a27cf2abc74d23f1cb825208366f6de3bfc565639c308a2daf615436ef2a"
+        ],
+        "error_sha256": [
+          "652effe34bec5c5034012d6ed94a4e9c63660369a51cfe5622452de5a921c7ad",
+          "8c39805c731226511c755ce6e8998fcc45fbc36ca4e85f1e80489d58b0dae555"
+        ]
+      },
+      "position_error_mm": {
+        "axes": 0.0,
+        "x_label": 0.7776958550347217,
+        "y_label": 1.5507752821180532,
+        "legend": 1.6898193359375,
+        "x_tick_0": 0.2080837673611109,
+        "x_tick_1": 0.2080837673611109,
+        "x_tick_2": 0.19774848090277786,
+        "y_tick_0": 0.10776258680555273,
+        "y_tick_1": 0.135323350694442,
+        "y_tick_2": 0.41251573350694315
+      },
+      "max_position_error_mm": 1.6898193359375,
+      "within_0_5_mm": false,
+      "files": [
+        {
+          "backend": "native",
+          "format": "svg",
+          "median_ms": 24.094499996863306,
+          "bytes": 29320,
+          "font_names": [],
+          "embedded_or_outlined": true,
+          "font_matches": null,
+          "raster_images": 0
+        },
+        {
+          "backend": "native",
+          "format": "pdf",
+          "median_ms": 41.768499999307096,
+          "bytes": 12726,
+          "font_names": [
+            "HEWYXZ+DejaVuSerif"
+          ],
+          "embedded_or_outlined": true,
+          "font_matches": true,
+          "raster_images": 0
+        },
+        {
+          "backend": "cairo",
+          "format": "svg",
+          "median_ms": 17.052699928171933,
+          "bytes": 54843,
+          "font_names": [],
+          "embedded_or_outlined": true,
+          "font_matches": null,
+          "raster_images": 0
+        },
+        {
+          "backend": "cairo",
+          "format": "pdf",
+          "median_ms": 18.143200082704425,
+          "bytes": 19845,
+          "font_names": [
+            "MZGIGO+ArialMT"
+          ],
+          "embedded_or_outlined": true,
+          "font_matches": false,
+          "raster_images": 0
+        }
+      ]
+    },
+    {
+      "name": "log",
+      "font": "DejaVu Sans Mono",
+      "semantics": {
+        "ranges": [
+          0.1,
+          100.0,
+          0.1,
+          100.0
+        ],
+        "x_ticks": [
+          0.1,
+          1.0,
+          10.0,
+          100.0
+        ],
+        "y_ticks": [
+          0.1,
+          1.0,
+          10.0,
+          100.0
+        ],
+        "series": 1,
+        "artist_lines": 1,
+        "font_pt": 8.0,
+        "series_sha256": [
+          "d090bddc816a6aedfb6ab3b64905b8e3e6e4f144cb96ba34f499b55d13e9b358"
+        ],
+        "error_sha256": []
+      },
+      "position_error_mm": {
+        "axes": 0.0,
+        "x_label": 1.9902730034722182,
+        "y_label": 1.8090334201388956,
+        "legend": 1.9688858506944342,
+        "x_tick_0": 0.5518216145833357,
+        "x_tick_1": 0.2370225694444441,
+        "x_tick_2": 0.2370225694444441,
+        "x_tick_3": 0.2370225694444441,
+        "y_tick_0": 1.1036432291666678,
+        "y_tick_1": 0.24936979166666795,
+        "y_tick_2": 0.11851128472222427,
+        "y_tick_3": 0.12523611111111244
+      },
+      "max_position_error_mm": 1.9902730034722182,
+      "within_0_5_mm": false,
+      "files": [
+        {
+          "backend": "native",
+          "format": "svg",
+          "median_ms": 21.263299975544214,
+          "bytes": 20706,
+          "font_names": [],
+          "embedded_or_outlined": true,
+          "font_matches": null,
+          "raster_images": 0
+        },
+        {
+          "backend": "native",
+          "format": "pdf",
+          "median_ms": 38.517699926160276,
+          "bytes": 9385,
+          "font_names": [
+            "GSVDPF+DejaVuSansMono"
+          ],
+          "embedded_or_outlined": true,
+          "font_matches": true,
+          "raster_images": 0
+        },
+        {
+          "backend": "cairo",
+          "format": "svg",
+          "median_ms": 15.154100023210049,
+          "bytes": 35914,
+          "font_names": [],
+          "embedded_or_outlined": true,
+          "font_matches": null,
+          "raster_images": 0
+        },
+        {
+          "backend": "cairo",
+          "format": "pdf",
+          "median_ms": 16.131100011989474,
+          "bytes": 16234,
+          "font_names": [
+            "PJKINP+ArialMT"
+          ],
+          "embedded_or_outlined": true,
+          "font_matches": false,
+          "raster_images": 0
+        }
+      ]
+    }
+  ],
+  "draw_list": "Skipped: texture atlas glyphs and triangulated geometry require a new serializer; no cheap publication capture.",
+  "limits": "Positions compare native matplotlib and Cairo vector text metrics, not live ImPlot. No claim of UI/export 0.5 mm parity."
+}

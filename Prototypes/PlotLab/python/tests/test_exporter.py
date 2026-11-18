@@ -115,3 +115,36 @@ def test_failed_replace_keeps_old_file_and_cleans_temp(snapshot, tmp_path, monke
     with pytest.raises(PermissionError): export_graph(snapshot,target,"pdf")
     assert target.read_bytes()==b"old"
     assert list(tmp_path.iterdir())==[target]
+
+@pytest.mark.parametrize("family,name", [("DejaVu Serif", "DejaVuSerif"), ("DejaVu Sans Mono", "DejaVuSansMono")])
+@pytest.mark.parametrize("format", ["pdf", "svg"])
+def test_selected_font_is_embedded_or_outlined(snapshot, tmp_path, family, name, format):
+    from sst_plotlab.exporter import resolve_font
+    snapshot.update(font_family=family, font_file=resolve_font(family)[0], font_pt=11)
+    target = tmp_path / f"chosen.{format}"
+    export_graph(snapshot, target, format)
+    assert name.encode() in target.read_bytes()
+    fig = build_figure(snapshot)
+    assert fig.axes[0].xaxis.label.get_fontsize() == 11
+    assert fig.axes[0].xaxis.label.get_fontproperties().get_file() == snapshot["font_file"]
+
+@pytest.mark.parametrize("invalid", ["missing", "corrupt", "mismatch"])
+def test_custom_font_error_preserves_output(snapshot, tmp_path, invalid):
+    from sst_plotlab.exporter import resolve_font
+    font = tmp_path / "custom.otf"
+    if invalid == "corrupt": font.write_bytes(b"not a font")
+    if invalid == "mismatch": font = __import__("pathlib").Path(resolve_font("DejaVu Serif")[0])
+    snapshot["font_file"] = str(font)
+    target = tmp_path / "previous.pdf"; target.write_bytes(b"previous")
+    with pytest.raises((ValueError, RuntimeError, FileNotFoundError)):
+        export_graph(snapshot, target, "pdf")
+    assert target.read_bytes() == b"previous"
+
+def test_custom_font_filename_is_resolved_without_family(tmp_path):
+    from sst_plotlab.exporter import resolve_font
+    import shutil
+    source, _ = resolve_font("DejaVu Serif")
+    custom = tmp_path / "wlasny font.ttf"; shutil.copyfile(source, custom)
+    path, family = resolve_font("", str(custom))
+    assert family == "DejaVu Serif"
+    assert path == str(custom.resolve())

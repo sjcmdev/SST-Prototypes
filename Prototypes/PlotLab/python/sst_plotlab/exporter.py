@@ -8,8 +8,30 @@ import matplotlib as mpl
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties, findfont
+from matplotlib.ft2font import FT2Font
 from matplotlib.ticker import FixedLocator, FixedFormatter
 import numpy as np
+
+
+def resolve_font(family, filename=""):
+    """Resolve once for both ImGui and export; never substitute a missing font."""
+    bundled = {"DejaVu Sans": "DejaVuSans.ttf", "DejaVu Serif": "DejaVuSerif.ttf",
+               "DejaVu Sans Mono": "DejaVuSansMono.ttf"}
+    if filename:
+        path = Path(filename).expanduser().resolve(strict=True)
+        if path.suffix.lower() not in (".ttf", ".otf"):
+            raise ValueError("Choose a .ttf or .otf font")
+    elif family in bundled:
+        root = Path(__file__).resolve().parents[2]
+        # Source tree and installed app use the identical bundled font files.
+        directory = root / "install/app/assets/fonts"
+        path = directory / bundled[family]
+    else:
+        path = Path(findfont(FontProperties(family=family), fallback_to_default=False))
+    face = FT2Font(str(path))  # Validate before passing untrusted font bytes to ImGui.
+    if filename and family and face.family_name != family:
+        raise ValueError(f"Font family mismatch: expected {family}, got {face.family_name}")
+    return str(path), face.family_name
 
 
 def build_figure(snapshot, dpi=300):
@@ -19,9 +41,8 @@ def build_figure(snapshot, dpi=300):
     limits = snapshot["ranges"]
     if len(limits) != 4 or not all(math.isfinite(v) for v in limits) or limits[0] >= limits[1] or limits[2] >= limits[3]:
         raise ValueError("Invalid snapshot ranges")
-    font = FontProperties(family=snapshot["font_family"], size=snapshot["font_pt"])
-    # A missing publication font is an error, not a silent substitution.
-    findfont(font, fallback_to_default=False)
+    font_path, family = resolve_font(snapshot["font_family"], snapshot.get("font_file", ""))
+    font = FontProperties(family=family, fname=font_path, size=snapshot["font_pt"])
     fig = Figure(figsize=(width / 25.4, height / 25.4), dpi=dpi)
     FigureCanvasAgg(fig)
     ax = fig.add_axes((0.22, 0.22, 0.72, 0.72))

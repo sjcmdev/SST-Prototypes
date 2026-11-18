@@ -1,4 +1,4 @@
-﻿#include "PlotLabWorkspace.hpp"
+#include "PlotLabWorkspace.hpp"
 #include "Core/App/Application.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cmath>
 #include <cstdlib>
+#include <cstdio>
 #include <imgui.h>
 #include <limits>
 #include <misc/cpp/imgui_stdlib.h>
@@ -164,6 +165,9 @@ namespace SST::Prototypes::PlotLab
             ++frames;
             if (frames == 3)
             {
+                if (state->views.size() != 3 || std::any_of(state->views.begin(), state->views.end(),
+                    [](const auto &entry) { return !entry.second.viewport; }))
+                    throw std::runtime_error("Smoke: graph font preview did not render");
                 auto &doc = *state->document;
                 for (const auto &[id, o] : doc.project->objects())
                     if (o->data.index() == 3)
@@ -505,6 +509,56 @@ namespace SST::Prototypes::PlotLab
             state->graphs.erase(id);
         if (expanded)
         {
+            auto graphObject = p.object(id);
+            auto &fontSettings = std::get<pl::Graph>(graphObject.data);
+            bool fontChanged = false;
+            if (ImGui::BeginCombo("Font family", fontSettings.fontFamily.c_str()))
+            {
+                for (const char *family : {"DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono"})
+                    if (ImGui::Selectable(family, fontSettings.fontFamily == family && fontSettings.fontFile.empty()))
+                    {
+                        fontSettings.fontFamily = family;
+                        fontSettings.fontFile.clear();
+                        fontChanged = true;
+                    }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Load font (.ttf/.otf)..."))
+                Attempt([&] {
+                    if (auto file = OpenFileDialog({"Font", "ttf,otf"})) {
+                        auto resolved = ResolveFont("", file->Utf8(), state->pythonRoot);
+                        fontSettings.fontFile = resolved.first;
+                        fontSettings.fontFamily = resolved.second;
+                        fontChanged = true;
+                    }
+                });
+            fontChanged |= ImGui::InputDouble("Graph font (pt)", &fontSettings.fontSizePt, 1, 2, "%.1f");
+            if (fontChanged)
+                Attempt([&] { doc.Execute(p.change("Graph font", {graphObject})); });
+            const auto &chosen = std::get<pl::Graph>(p.object(id).data);
+            ImFont *graphFont = nullptr;
+            try {
+                const auto key = chosen.fontFamily + "\n" + chosen.fontFile;
+                auto &cached = graphFonts[key];
+                auto *atlas = ImGui::GetIO().Fonts;
+                const auto tag = "PlotLab:" + std::to_string(std::hash<std::string>{}(key));
+                if (!cached || !atlas->Fonts.contains(cached) || cached->GetDebugName() != tag) {
+                    auto resolved = ResolveFont(chosen.fontFamily, chosen.fontFile, state->pythonRoot);
+                    ImFontConfig config;
+                    config.Flags |= ImFontFlags_NoLoadError;
+                    std::snprintf(config.Name, sizeof(config.Name), "%s", tag.c_str());
+                    cached = atlas->AddFontFromFileTTF(resolved.first.c_str(), 0, &config);
+                    if (!cached) throw std::runtime_error("Cannot load graph font: " + resolved.first);
+                }
+                graphFont = cached;
+                fontErrors.erase(id);
+            } catch (const std::exception &e) { fontErrors[id] = e.what(); }
+            if (!graphFont) {
+                ImGui::TextWrapped("Graph font unavailable: %s", fontErrors[id].c_str());
+                ImGui::End();
+                return;
+            }
             const auto layer = p.children(id).at(0);
             auto spec = std::get<pl::Layer>(p.object(layer).data).spec;
             if (ImGui::Button("Fit"))
@@ -618,7 +672,10 @@ namespace SST::Prototypes::PlotLab
             }
             if (!view.fitted)
                 spec.autoFit = plot::AutoFit::Once;
+            // pt to logical pixels at 96 DPI; ImGui applies the display DPI scale.
+            ImGui::PushFont(graphFont, static_cast<float>(chosen.fontSizePt * 96.0 / 72.0));
             plot::RenderPlot("##graph", spec, entries.data(), entries.size(), view, {}, ImVec2(-1, -1));
+            ImGui::PopFont();
             for (std::size_t i = 0; i < entryPlots.size(); ++i)
                 if (entries[i].kind != plot::SeriesKind::ErrorBars || entries[i].style.legend)
                     if (view.visibility.contains(entries[i].id))
@@ -897,8 +954,8 @@ namespace SST::Prototypes::PlotLab
             ImGui::InputDouble("Height (mm)", &height);
             ImGui::InputInt("DPI", &dpi);
             ImGui::Combo("Format", &format, "SVG\0PDF\0PNG\0");
-            ImGui::TextUnformatted("Exports current ranges, ticks and visible series. Recompute must be clean.\nFont: "
-                                   "DejaVu Sans 8 pt; SVG outlines, PDF embedded TrueType.");
+            ImGui::TextUnformatted("Exports current ranges, ticks and visible series. Recompute must be clean.\n"
+                                   "Uses graph font settings; SVG outlines, PDF embedded TrueType.");
             ImGui::BeginDisabled(state->exporting != 0);
             if (ImGui::Button("Export"))
                 Attempt(
@@ -939,3 +996,4 @@ namespace SST::Prototypes::PlotLab
         }
     }
 } // namespace SST::Prototypes::PlotLab
+

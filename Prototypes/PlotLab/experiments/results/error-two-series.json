@@ -1,0 +1,169 @@
+{
+  "width_mm": 80,
+  "height_mm": 60,
+  "font_family": "DejaVu Serif",
+  "font_pt": 10,
+  "ranges": [
+    0,
+    5,
+    -1,
+    11
+  ],
+  "legend": {
+    "visible": true,
+    "outside": false
+  },
+  "x_axis": {
+    "label": "Voltage (V)",
+    "log": false,
+    "grid": true,
+    "ticks": [
+      {
+        "value": 0,
+        "label": "0",
+        "major": true
+      },
+      {
+        "value": 2,
+        "label": "2",
+        "major": true
+      },
+      {
+        "value": 4,
+        "label": "4",
+        "major": true
+      }
+    ]
+  },
+  "y_axis": {
+    "label": "Current (mA)",
+    "log": false,
+    "grid": true,
+    "ticks": [
+      {
+        "value": 0,
+        "label": "0",
+        "major": true
+      },
+      {
+        "value": 5,
+        "label": "5",
+        "major": true
+      },
+      {
+        "value": 10,
+        "label": "10",
+        "major": true
+      }
+    ]
+  },
+  "series": [
+    {
+      "label": "Signal",
+      "x": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "y": [
+        0,
+        2,
+        null,
+        6,
+        8,
+        10
+      ],
+      "y_error": [
+        0.1,
+        0.2,
+        null,
+        0.4,
+        0.5,
+        0.6
+      ],
+      "kind": 2,
+      "style": {
+        "color": [
+          0.1,
+          0.3,
+          0.7,
+          1
+        ],
+        "fill": [
+          0.1,
+          0.3,
+          0.7,
+          1
+        ],
+        "outline": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "marker": 1,
+        "line_pt": 1,
+        "marker_pt": 2,
+        "cap_pt": 4,
+        "legend": true
+      }
+    },
+    {
+      "label": "Reference",
+      "x": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "y": [
+        1,
+        3,
+        5,
+        7,
+        9,
+        11
+      ],
+      "y_error": [
+        0.1,
+        0.2,
+        null,
+        0.4,
+        0.5,
+        0.6
+      ],
+      "kind": 0,
+      "style": {
+        "color": [
+          0.8,
+          0.2,
+          0.1,
+          1
+        ],
+        "fill": [
+          0.1,
+          0.3,
+          0.7,
+          1
+        ],
+        "outline": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "marker": 1,
+        "line_pt": 1,
+        "marker_pt": 2,
+        "cap_pt": 4,
+        "legend": true
+      }
+    }
+  ],
+  "font_file": "D:\\SJCM\\01_SemiconductorStudio\\SST-Prototypes\\Prototypes\\PlotLab\\install\\app\\assets\\fonts\\DejaVuSerif.ttf"
+}

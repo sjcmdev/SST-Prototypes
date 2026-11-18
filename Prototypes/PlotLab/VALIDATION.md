@@ -87,3 +87,41 @@ every native dialog/gesture, 0.5 mm visual layout parity and interactive million
 performance. Preview uses Core's shell font while publication uses DejaVu Sans 8 pt.
 No JPEG, analysis, console, annotations, style editor, bulk paste or autosave was added.
 No git commands or commits were made.
+
+
+## PL4 fonts and export experiment - 2026-11-18
+
+Debug x64 built in repository `build/` (SST-Prototypes and SST-Libraries), no TEMP
+fallback. Every build/test used the shared build-lock.sh; MSBuild -nr:false -m:1.
+PlotLab and JFM tests ran from the SST-Prototypes root. No git commands/commits.
+
+| Suite | This job |
+|---|---:|
+| PlotLab GTest | 8/8 |
+| PlotLab pytest | 22/22 |
+| JFM GTest | 59/59 |
+| JFM pytest | 96 passed, 3 xfailed (946 numerical warnings) |
+| PlotLab-Engine GTest | 46/46 |
+
+GTest covers graph font JSON/project serialization, v1/v2 defaults, immutable
+snapshot/JSON fields, undo/redo, invalid pt and the embedded Python resolver.
+Pytest checks chosen DejaVu Serif/Mono in PDF FontName and SVG glyph names,
+custom file resolution, missing/corrupt/mismatched fonts and preservation of an
+existing export on failure. Bundled DejaVu license is included.
+
+The first app smoke found a missing nanobind string caster include; fixed and
+covered in the embedded resolver test. Final smoke returned 0 and asserted all
+three graph viewports rendered: bundled Sans, custom-file Serif and Sans Mono,
+including 10 pt, wide worksheet, dirty-close guard and undo.
+
+Results, reproduction command, all 12 vector artifacts and source snapshots:
+[experiments/README.md](experiments/README.md),
+[raw metrics](experiments/results/report.json).
+XML/log evidence is in `experiments/validation/`. The experiment is Python
+headless, not a C++ Release timing claim. Native matplotlib remains production.
+Cairo's font substitution and 0.804-1.990 mm position differences fail the gate.
+Graphify updated successfully after the source changes.
+
+Not checked: live UI/export 0.5 mm parity, standalone ImPlot draw-list serializer,
+C++ Release/Dist or other operating systems. Custom fonts remain external paths;
+project format v3 does not package their bytes. No Segoe assets were removed.

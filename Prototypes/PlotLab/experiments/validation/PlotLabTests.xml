@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="8" failures="0" disabled="0" errors="0" time="0.538" timestamp="2026-11-18T14:31:51.080" name="AllTests">
+  <testsuite name="PlotLabApp" tests="7" failures="0" disabled="0" skipped="0" errors="0" time="0.538" timestamp="2026-11-18T14:31:51.080">
+    <testcase name="CoreCommandUndoRedoKeepsObjectAndRowIds" file="D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\PlotLab\tests\PlotLabTests.cpp" line="42" status="run" result="completed" time="0.002" timestamp="2026-11-18T14:31:51.080" classname="PlotLabApp" />
+    <testcase name="ExplorerAndConfirmedDependentsUndoAtomically" file="D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\PlotLab\tests\PlotLabTests.cpp" line="64" status="run" result="completed" time="0.036" timestamp="2026-11-18T14:31:51.083" classname="PlotLabApp" />
+    <testcase name="DerivedResultsStayOutsideCoreHistoryAndSelectionBridgesToBus" file="D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\PlotLab\tests\PlotLabTests.cpp" line="84" status="run" result="completed" time="0.031" timestamp="2026-11-18T14:31:51.119" classname="PlotLabApp" />
+    <testcase name="SnapshotOwnsExactVisibleDataRangesTicksAndStyles" file="D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\PlotLab\tests\PlotLabTests.cpp" line="110" status="run" result="completed" time="0.001" timestamp="2026-11-18T14:31:51.150" classname="PlotLabApp" />
+    <testcase name="FileRoundtripAndFailedOpenPreserveDocument" file="D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\PlotLab\tests\PlotLabTests.cpp" line="136" status="run" result="completed" time="0.028" timestamp="2026-11-18T14:31:51.152" classname="PlotLabApp" />
+    <testcase name="EmbeddedExporterUsesCppSnapshotForAllFormats" file="D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\PlotLab\tests\PlotLabTests.cpp" line="165" status="run" result="completed" time="0.431" timestamp="2026-11-18T14:31:51.181" classname="PlotLabApp" />
+    <testcase name="GraphFontRoundTripSnapshotUndoAndLegacy" file="D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\PlotLab\tests\PlotLabTests.cpp" line="198" status="run" result="completed" time="0.006" timestamp="2026-11-18T14:31:51.612" classname="PlotLabApp" />
+  </testsuite>
+  <testsuite name="PlotLabCells" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-18T14:31:51.618">
+    <testcase name="NumericEditingRejectsPartialInput" file="D:\SJCM\01_SemiconductorStudio\SST-Prototypes\Prototypes\PlotLab\tests\PlotLabTests.cpp" line="189" status="run" result="completed" time="0." timestamp="2026-11-18T14:31:51.618" classname="PlotLabCells" />
+  </testsuite>
+</testsuites>

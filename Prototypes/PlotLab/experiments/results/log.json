@@ -1,0 +1,115 @@
+{
+  "width_mm": 80,
+  "height_mm": 60,
+  "font_family": "DejaVu Sans Mono",
+  "font_pt": 8,
+  "ranges": [
+    0.1,
+    100,
+    0.1,
+    100
+  ],
+  "legend": {
+    "visible": true,
+    "outside": false
+  },
+  "x_axis": {
+    "label": "Voltage (V)",
+    "log": true,
+    "grid": true,
+    "ticks": [
+      {
+        "value": 0.1,
+        "label": "0.1",
+        "major": true
+      },
+      {
+        "value": 1,
+        "label": "1",
+        "major": true
+      },
+      {
+        "value": 10,
+        "label": "10",
+        "major": true
+      },
+      {
+        "value": 100,
+        "label": "100",
+        "major": true
+      }
+    ]
+  },
+  "y_axis": {
+    "label": "Current (mA)",
+    "log": true,
+    "grid": true,
+    "ticks": [
+      {
+        "value": 0.1,
+        "label": "0.1",
+        "major": true
+      },
+      {
+        "value": 1,
+        "label": "1",
+        "major": true
+      },
+      {
+        "value": 10,
+        "label": "10",
+        "major": true
+      },
+      {
+        "value": 100,
+        "label": "100",
+        "major": true
+      }
+    ]
+  },
+  "series": [
+    {
+      "label": "Signal",
+      "x": [
+        0.1,
+        1,
+        10,
+        100
+      ],
+      "y": [
+        0.2,
+        2,
+        20,
+        80
+      ],
+      "y_error": [],
+      "kind": 2,
+      "style": {
+        "color": [
+          0.1,
+          0.3,
+          0.7,
+          1
+        ],
+        "fill": [
+          0.1,
+          0.3,
+          0.7,
+          1
+        ],
+        "outline": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "marker": 1,
+        "line_pt": 1,
+        "marker_pt": 2,
+        "cap_pt": 4,
+        "legend": true
+      }
+    }
+  ],
+  "font_file": "D:\\SJCM\\01_SemiconductorStudio\\SST-Prototypes\\Prototypes\\PlotLab\\install\\app\\assets\\fonts\\DejaVuSansMono.ttf"
+}

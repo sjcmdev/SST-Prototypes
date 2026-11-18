@@ -5,10 +5,56 @@
 #include <stdexcept>
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
 #endif
 namespace SST::Prototypes::PlotLab
 {
     using Json = nlohmann::json;
+#if DS_PYTHON_CAPI_AVAILABLE
+    namespace nb = nanobind;
+    static void PreparePython(const std::filesystem::path &pythonRoot)
+    {
+            auto sys = nb::module_::import_("sys");
+            auto paths = nb::borrow<nb::list>(sys.attr("path"));
+            auto append = [&](const std::filesystem::path &p)
+            {
+                const auto raw = p.u8string();
+                const auto text = nb::str(reinterpret_cast<const char *>(raw.c_str()));
+                if (!nb::cast<bool>(paths.attr("__contains__")(text)))
+                    paths.append(text);
+            };
+            append(pythonRoot);
+            // Use the repository environment during development; app-local runtime remains Core-owned.
+            auto parent = pythonRoot;
+            for (int depth = 0; depth < 8 && parent.has_parent_path(); ++depth)
+            {
+                auto site = parent / ".venv" / "Lib" / "site-packages";
+                if (std::filesystem::is_directory(site))
+                    append(site);
+                auto next = parent.parent_path();
+                if (next == parent)
+                    break;
+                parent = next;
+            }
+    }
+#endif
+    std::pair<std::string, std::string> ResolveFont(const std::string &family, const std::string &file,
+                                                  const std::filesystem::path &pythonRoot)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        PythonGilAcquireScope gil;
+        if (!gil.IsActive()) throw std::runtime_error("Embedded Python is unavailable");
+        try {
+            PreparePython(pythonRoot);
+            auto result = nb::module_::import_("sst_plotlab.exporter").attr("resolve_font")(family.c_str(), file.c_str());
+            return {nb::cast<std::string>(result[0]), nb::cast<std::string>(result[1])};
+        } catch (const nb::python_error &e) { throw std::runtime_error(e.what()); }
+#else
+        (void)family; (void)file; (void)pythonRoot;
+        throw std::runtime_error("Rebuild with embedded Python to resolve graph fonts");
+#endif
+    }
+
     std::string SnapshotJson(const sst::plotlab::GraphSnapshot &s)
     {
         auto axis = [](const auto &spec, const auto &ticks)
@@ -47,6 +93,7 @@ namespace SST::Prototypes::PlotLab
                     {"width_mm", s.widthMm},
                     {"height_mm", s.heightMm},
                     {"font_family", s.fontFamily},
+                    {"font_file", s.fontFile},
                     {"font_pt", s.fontSizePt},
                     {"ranges", {s.ranges.minX, s.ranges.maxX, s.ranges.minY, s.ranges.maxY}},
                     {"x_axis", axis(s.spec.x, s.xTicks)},
@@ -65,28 +112,7 @@ namespace SST::Prototypes::PlotLab
         namespace nb = nanobind;
         try
         {
-            auto sys = nb::module_::import_("sys");
-            auto paths = nb::borrow<nb::list>(sys.attr("path"));
-            auto append = [&](const std::filesystem::path &p)
-            {
-                const auto raw = p.u8string();
-                const auto text = nb::str(reinterpret_cast<const char *>(raw.c_str()));
-                if (!nb::cast<bool>(paths.attr("__contains__")(text)))
-                    paths.append(text);
-            };
-            append(pythonRoot);
-            // Use the repository environment during development; app-local runtime remains Core-owned.
-            auto parent = pythonRoot;
-            for (int depth = 0; depth < 8 && parent.has_parent_path(); ++depth)
-            {
-                auto site = parent / ".venv" / "Lib" / "site-packages";
-                if (std::filesystem::is_directory(site))
-                    append(site);
-                auto next = parent.parent_path();
-                if (next == parent)
-                    break;
-                parent = next;
-            }
+            PreparePython(pythonRoot);
             const auto raw = destination.u8string();
             const auto text = SnapshotJson(snapshot);
             auto data = nb::module_::import_("json").attr("loads")(nb::str(text.c_str()));

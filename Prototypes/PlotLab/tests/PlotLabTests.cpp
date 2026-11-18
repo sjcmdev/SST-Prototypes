@@ -166,6 +166,12 @@ TEST_F(PlotLabApp, EmbeddedExporterUsesCppSnapshotForAllFormats)
 {
     PythonInterpreter interpreter;
     ASSERT_TRUE(interpreter.Start());
+    for (const auto *family : {"DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono"}) {
+        const auto font = ResolveFont(family, "", SST_PLOTLAB_PYTHON_ROOT);
+        EXPECT_EQ(font.second, family);
+        EXPECT_TRUE(std::filesystem::is_regular_file(font.first));
+    }
+    EXPECT_THROW(ResolveFont("DejaVu Sans", "missing-custom.otf", SST_PLOTLAB_PYTHON_ROOT), std::runtime_error);
     plot::PlotViewState view;
     view.viewport = plot::Bounds{0, 4, 0, 8};
     view.xTicks = {{0, "0", true}, {2, "2", true}, {4, "4", true}};
@@ -187,4 +193,37 @@ TEST(PlotLabCells, NumericEditingRejectsPartialInput)
     EXPECT_TRUE(std::isnan(ParseNumericCell("nan")));
     EXPECT_THROW(ParseNumericCell("12abc"), std::invalid_argument);
     EXPECT_THROW(ParseNumericCell("1,5"), std::invalid_argument);
+}
+
+TEST_F(PlotLabApp, GraphFontRoundTripSnapshotUndoAndLegacy)
+{
+    auto o = doc.project->object(graph);
+    auto &g = std::get<pl::Graph>(o.data);
+    g.fontFamily = "Custom Family"; g.fontFile = "C:/fonts/custom.otf"; g.fontSizePt = 11.5;
+    doc.Execute(doc.project->change("Graph font", {o}));
+    const auto text = doc.project->toJson();
+    auto loaded = pl::Project::fromJson(text);
+    const auto &restored = std::get<pl::Graph>(loaded.object(graph).data);
+    EXPECT_EQ(restored.fontFamily, g.fontFamily); EXPECT_EQ(restored.fontFile, g.fontFile);
+    EXPECT_DOUBLE_EQ(restored.fontSizePt, 11.5);
+    plot::PlotViewState view; view.viewport = plot::Bounds{1, 3, 2, 6};
+    auto snapshot = pl::snapshotGraph(loaded, graph, view);
+    auto json = nlohmann::json::parse(SnapshotJson(*snapshot));
+    EXPECT_EQ(json["font_family"], g.fontFamily); EXPECT_EQ(json["font_file"], g.fontFile);
+    EXPECT_EQ(json["font_pt"], 11.5);
+    ASSERT_TRUE(undo->Undo());
+    EXPECT_EQ(std::get<pl::Graph>(doc.project->object(graph).data).fontFamily, "DejaVu Sans");
+    ASSERT_TRUE(undo->Redo());
+    for (int version : {1, 2}) {
+        auto legacy = nlohmann::json::parse(text); legacy["version"] = version;
+        for (auto &entry : legacy["objects"]) if (entry["type"] == 4) {
+            entry.erase("fontFamily"); entry.erase("fontFile"); entry.erase("fontSizePt");
+        }
+        auto old = pl::Project::fromJson(legacy.dump());
+        const auto &font = std::get<pl::Graph>(old.object(graph).data);
+        EXPECT_EQ(font.fontFamily, "DejaVu Sans"); EXPECT_TRUE(font.fontFile.empty());
+        EXPECT_DOUBLE_EQ(font.fontSizePt, 8);
+    }
+    std::get<pl::Graph>(o.data).fontSizePt = 0;
+    EXPECT_THROW(doc.Execute(doc.project->change("Invalid font", {o})), std::runtime_error);
 }

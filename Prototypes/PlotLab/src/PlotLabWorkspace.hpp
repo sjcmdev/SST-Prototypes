@@ -5,6 +5,7 @@
 #include "PlotLabDocument.hpp"
 #include "PlotLabExport.hpp"
 #include <set>
+#include <imgui.h>
 
 namespace SST::Prototypes::PlotLab
 {
@@ -72,6 +73,8 @@ namespace SST::Prototypes::PlotLab
         pl::ImportOptions importOptions;
         std::optional<pl::Table> preview;
         std::map<pl::Id, int> columnPages;
+        std::map<std::string, ImFont *> graphFonts;
+        std::map<pl::Id, std::string> fontErrors;
         double width = 80, height = 60;
         int dpi = 300;
         void Tree(pl::Id);

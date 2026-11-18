@@ -121,6 +121,16 @@ namespace SST
             const auto sheet = doc->project->children(book).front();
             const auto cols = doc->project->children(sheet);
             doc->AddGraph(doc->project->root(), sheet, cols[0], cols[1]);
+            for (const char *family : {"DejaVu Serif", "DejaVu Sans Mono"}) {
+                const auto graph = doc->AddGraph(doc->project->root(), sheet, cols[0], cols[1]);
+                auto object = doc->project->object(graph);
+                auto &settings = std::get<pl::Graph>(object.data);
+                settings.fontFamily = family;
+                settings.fontSizePt = 10;
+                if (settings.fontFamily == "DejaVu Serif")
+                    settings.fontFile = Path::FromResolved(root.parent_path() / "install/app/assets/fonts/DejaVuSerif.ttf").Utf8();
+                doc->Execute(doc->project->change("Smoke font", {object}));
+            }
             doc->undo->MarkClean();
             state->RefreshWindows();
         }
