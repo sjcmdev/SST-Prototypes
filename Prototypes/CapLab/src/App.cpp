@@ -33,7 +33,9 @@ void SetupApplication(Application &application) {
             ImGui::EndMenu();
         }
     });
-    editor.RegisterPanel<CapLabPrototypePanel>(state, registry);
+    for (auto view : {CapLabPrototypePanel::View::Project, CapLabPrototypePanel::View::Plot,
+                      CapLabPrototypePanel::View::Analysis, CapLabPrototypePanel::View::Import})
+        editor.RegisterPanel<CapLabPrototypePanel>(state, registry, view);
     application.InsertLayerBefore(LayerId::ImGui, std::move(workflow));
 }
 }

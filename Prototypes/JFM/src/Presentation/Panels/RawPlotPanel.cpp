@@ -27,7 +27,7 @@ namespace SST::Prototypes::JFM
 	{
 		const std::vector<double> &selectYValues(const JFMCharacteristicData &data)
 		{
-			return data.currentDensity.empty() ? data.current : data.currentDensity;
+			return data.current.empty() ? data.currentDensity : data.current;
 		}
 
 
@@ -309,7 +309,11 @@ namespace SST::Prototypes::JFM
 			area.groups.emplace_back(std::move(group));
 			ApplyColorRange(area.groups.back());
 		}
-		m_PlotAreas.emplace_back(std::move(area));
+        if (m_PlotAreas.size() == 1 && m_PlotAreas.front().groups.empty()) {
+            area.id = m_PlotAreas.front().id;
+            area.title = m_PlotAreas.front().title;
+            m_PlotAreas.front() = std::move(area);
+        } else m_PlotAreas.emplace_back(std::move(area));
 	}
 
 	void RawPlotPanel::PlotIds(std::vector<CharacteristicId> ids, std::string title, ProjectHandle project)
@@ -1015,7 +1019,7 @@ namespace SST::Prototypes::JFM
 			const bool plotFont = BeginJFMPlotFrame(*area.document);
 			if (plotFont && ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, plotHeight), plotFlags))
 			{
-				ImPlot::SetupAxes("Voltage", "Current");
+				ImPlot::SetupAxes("Voltage (V)", "Current (A)");
 				if (area.showLegend)
 					ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
 				if (area.scale == PlotScale::SemiLog)
@@ -1192,7 +1196,7 @@ namespace SST::Prototypes::JFM
 				}
 				const bool rangeCursor = RenderRangeDragLines(area, records);
 				sst::ui::plot::PlotSpec figureSpec;
-				figureSpec.x.label = "Voltage"; figureSpec.y.label = "Current";
+				figureSpec.x.label = "Voltage (V)"; figureSpec.y.label = "Current (A)";
 				figureSpec.y.scale = area.scale == PlotScale::SemiLog ? sst::ui::plot::AxisScale::Log10 : sst::ui::plot::AxisScale::Linear;
 				figureSpec.legend = {area.showLegend, true, false};
 				EndJFMPlot(*area.document, figureSpec);

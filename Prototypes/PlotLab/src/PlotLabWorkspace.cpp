@@ -116,8 +116,10 @@ namespace SST::Prototypes::PlotLab
             if (o->data.index() == 2 || o->data.index() == 4)
                 Show(id);
     }
-    void Session::File(FileAction action)
+    void Session::File(FileAction action, Path path)
     {
+        if (openJob) throw std::runtime_error("A file is already opening.");
+        pendingPath = std::move(path);
         pending = action;
         if (!document->Dirty())
             CompleteFile();
@@ -127,14 +129,18 @@ namespace SST::Prototypes::PlotLab
         const auto action = pending;
         if (action == FileAction::Open)
         {
-            auto source = OpenFileDialog({"PlotLab project", "plotlab"});
+            auto source = pendingPath.Empty() ? OpenFileDialog({"PlotLab project / data", "plotlab,csv,txt,dat"}) : std::optional<Path>{pendingPath};
             if (!source)
             {
                 pending = FileAction::None;
                 return;
             }
-            document->Open(source->Native());
-            RefreshWindows();
+            openingBase = document->project;
+            openingRevision = document->project->revision();
+            opening = CreateRef<OpenJob>(*source);
+            openJob = jobs->Submit(opening);
+            if (!openJob) { opening.reset(); throw std::runtime_error("Could not submit open job."); }
+            status = "Opening " + source->Utf8();
         }
         else if (action == FileAction::New)
         {
@@ -151,6 +157,25 @@ namespace SST::Prototypes::PlotLab
     void WorkspaceLayer::OnUpdate(float)
     {
         state->document->project->pollRecompute();
+        if (state->openJob) {
+            const auto job = state->jobs->GetJob(state->openJob);
+            if (job && job->status != JobStatus::Queued && job->status != JobStatus::Running) {
+                try {
+                    if (job->status != JobStatus::Completed) throw std::runtime_error(job->errorMessage);
+                    if (state->opening->project) {
+                        if (state->document->project != state->openingBase || state->document->project->revision() != state->openingRevision)
+                            throw std::runtime_error("Project changed while opening; save edits and retry.");
+                        state->document->Open(state->opening->project, state->opening->path.Native());
+                    } else {
+                        auto &doc = *state->document;
+                        doc.Execute(pl::importTable(*doc.project, doc.project->root(),
+                            Path(state->opening->path.Native().stem()).Utf8(), *state->opening->table));
+                    }
+                    state->RefreshWindows(); state->status = "Ready.";
+                } catch (const std::exception &e) { state->status = e.what(); }
+                state->opening.reset(); state->openingBase.reset(); state->openJob = 0;
+            }
+        }
         if (state->exporting)
         {
             auto job = state->jobs->GetJob(state->exporting);

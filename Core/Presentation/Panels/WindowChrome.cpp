@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 #include "Presentation/Panels/WindowWorkspace.hpp"
 #include <imgui.h>
+#include "IconsFontAwesome6.h"
 #include <imgui_internal.h>
 #include <nlohmann/json.hpp>
 
@@ -8,7 +9,7 @@ namespace SST
 {
     namespace
     {
-        bool chromeButton(ImGuiWindow *window, const char *label, const ImRect &rect, bool enabled)
+        bool chromeButton(ImGuiWindow *window, const char *label, const ImRect &rect, bool enabled, const char *tooltip)
         {
             bool hovered = false, held = false;
             const auto id = window->GetID(label);
@@ -21,6 +22,7 @@ namespace SST
             draw->AddText(ImVec2(rect.Min.x + (rect.GetWidth() - size.x) / 2, rect.Min.y + (rect.GetHeight() - size.y) / 2),
                 ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled), label);
             ImGui::PopClipRect();
+            if (hovered) ImGui::SetTooltip("%s", tooltip);
             return pressed;
         }
     }
@@ -75,7 +77,7 @@ namespace SST
                 *settings = saved; settings->ID = id; settings->WantApply = true;
             }
         bool open = true;
-        const bool content = ImGui::Begin(name.c_str(), m_Capabilities.closable ? &open : nullptr, flags);
+        const bool content = ImGui::Begin(name.c_str(), nullptr, flags);
         auto *window = ImGui::GetCurrentWindow();
         if (!open) Request({WindowAction::Close});
         if (workspace && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) workspace->SetActive(m_Id);
@@ -115,9 +117,16 @@ namespace SST
             if (window->DockNode && ImGui::DockNodeBeginAmendTabBar(window->DockNode))
             {
                 ImGui::PushID(static_cast<int>(m_Id));
-                if (m_Capabilities.minimizable && ImGui::TabItemButton("-", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) Request({WindowAction::Minimize});
-                if (m_Capabilities.maximizable && ImGui::TabItemButton("+", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) Request({WindowAction::Maximize});
-                if (m_Capabilities.pinnable && ImGui::TabItemButton("P", ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) Request({WindowAction::Pin});
+                auto button = [&](const char *icon, const char *tooltip, WindowAction action, bool enabled) {
+                    if (!enabled) return;
+                    if (ImGui::TabItemButton(icon, ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) Request({action});
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tooltip);
+                };
+                button(ICON_FA_WINDOW_MINIMIZE, "Minimize", WindowAction::Minimize, m_Capabilities.minimizable);
+                button(maximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE, maximized ? "Restore" : "Maximize",
+                    WindowAction::Maximize, m_Capabilities.maximizable && !locked && !m_State.pinned);
+                button(ICON_FA_THUMBTACK, "Pin", WindowAction::Pin, m_Capabilities.pinnable && !locked);
+                button(ICON_FA_XMARK, "Close", WindowAction::Close, m_Capabilities.closable);
                 ImGui::PopID();
                 ImGui::DockNodeEndAmendTabBar();
             }
@@ -125,14 +134,15 @@ namespace SST
             {
                 auto bar = window->TitleBarRect();
                 const float size = bar.GetHeight();
-                float right = bar.Max.x - (m_Capabilities.closable ? size : 0);
-                for (auto [label, action, enabled] : {
-                    std::tuple{"P", WindowAction::Pin, m_Capabilities.pinnable && !locked},
-                    std::tuple{maximized ? "=" : "+", WindowAction::Maximize, m_Capabilities.maximizable && !locked && !m_State.pinned},
-                    std::tuple{"-", WindowAction::Minimize, m_Capabilities.minimizable}})
+                float right = bar.Max.x;
+                for (auto [label, action, enabled, tooltip] : {
+                    std::tuple{ICON_FA_XMARK, WindowAction::Close, m_Capabilities.closable, "Close"},
+                    std::tuple{ICON_FA_THUMBTACK, WindowAction::Pin, m_Capabilities.pinnable && !locked, "Pin"},
+                    std::tuple{maximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE, WindowAction::Maximize, m_Capabilities.maximizable && !locked && !m_State.pinned, maximized ? "Restore" : "Maximize"},
+                    std::tuple{ICON_FA_WINDOW_MINIMIZE, WindowAction::Minimize, m_Capabilities.minimizable, "Minimize"}})
                 {
                     const ImRect rect(ImVec2(right - size, bar.Min.y), ImVec2(right, bar.Max.y));
-                    if (chromeButton(window, label, rect, enabled)) Request({action});
+                    if (chromeButton(window, label, rect, enabled, tooltip)) Request({action});
                     right -= size;
                 }
             }

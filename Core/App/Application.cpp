@@ -467,8 +467,8 @@ namespace SST
 			if (!result) throw std::runtime_error(result.Error().technicalDetails);
 			DS_LOG_INFO("Screenshot written: {}", m_Runtime.specification.screenshotPath.Utf8());
 			m_Runtime.specification.screenshotPath = {};
-			if (m_Runtime.specification.exitAfterScreenshot)
-				EmitEvent(WindowCloseEvent{});
+            if (m_Runtime.specification.exitAfterScreenshot)
+                m_Runtime.lifecycle.SetRunning(false);
 		}
 
 		m_Graphics.window->SwapBuffers();

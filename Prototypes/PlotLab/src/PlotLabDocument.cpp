@@ -1,4 +1,7 @@
 ﻿#include "PlotLabDocument.hpp"
+#include "Core/IO/TextFileIO.hpp"
+#include "Core/JobSystem/JobContext.hpp"
+#include <cctype>
 #include <algorithm>
 #include <charconv>
 #include <limits>
@@ -19,6 +22,19 @@ namespace SST::Prototypes::PlotLab
                     "plotlab.operation"};
         }
     } // namespace
+    void OpenJob::Execute(JobContext &context)
+    {
+        context.ThrowIfCancellationRequested();
+        auto extension = path.Native().extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return std::tolower(c); });
+        if (extension == ".plotlab") project = CreateRef<pl::Project>(pl::Project::load(path.Native()));
+        else if (extension == ".csv" || extension == ".txt" || extension == ".dat") {
+            std::string text, error;
+            if (!TextFileIO::Load(path, text, error)) throw std::runtime_error(error);
+            table = pl::CsvImporter{}.read(text);
+            table->source["path"] = path.Utf8();
+        } else throw std::invalid_argument("Expected .plotlab, .csv, .txt or .dat");
+    }
     double ParseNumericCell(const std::string &text)
     {
         if (text.empty())
@@ -120,6 +136,10 @@ namespace SST::Prototypes::PlotLab
     void Document::Open(const std::filesystem::path &source)
     {
         auto next = CreateRef<pl::Project>(pl::Project::load(source));
+        Open(std::move(next), source);
+    }
+    void Document::Open(Ref<pl::Project> next, const std::filesystem::path &source)
+    {
         Replace(std::move(next));
         path = source;
     }

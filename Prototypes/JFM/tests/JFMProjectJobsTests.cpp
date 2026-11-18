@@ -23,6 +23,10 @@
 #include "IO/JFMImportPaths.hpp"
 #include "IO/JFMPrefitJob.hpp"
 #include "IO/JFMProjectJobs.hpp"
+#include "IO/JFMProjectYamlSerializer.hpp"
+#include "IO/JFMIORegistration.hpp"
+#include "Core/IO/IOLayer.hpp"
+#include "Workspace/JFMWorkspaceStore.hpp"
 #include "IO/JFMPythonBindings.hpp"
 #include "IO/JFMPythonImportBridge.hpp"
 #include "IO/JFMPythonPrefitBridge.hpp"
@@ -480,6 +484,59 @@ namespace SST::Prototypes::JFM
 		(void)subscription;
 #endif
 	}
+
+    TEST(JFMProjectJobsTests, SelectedHzbCharacteristicHasVisibleSemilogPoints)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        const Path root = Path::FromResolved(FileSystem::CurrentPath());
+        auto runtime = EnsurePythonRuntimeForBridgeTests();
+        ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+        std::string text, error;
+        ASSERT_TRUE(TextFileIO::Load(root / Path("Prototypes/JFM/JFM-projects/HZB-project.yaml.jfm.yaml"), text, error)) << error;
+        const auto loaded = JFMProjectYamlSerializer::Deserialize(text);
+        ASSERT_TRUE(loaded);
+        auto store = CreateRef<JFMWorkspaceStore>();
+        auto handle = store->AttachProject(loaded.Value(), Path("HZB.jfm.yaml"));
+        auto bus = CreateRef<EventBus>();
+        IOLayer io(bus);
+        RegisterJFMIOHandlers(io, {bus, store, {}, {}, {}, ResolveJFMPythonRoot(ApplicationConfig{}, root)});
+        std::optional<PlotRequested> plotted;
+        auto subscription = bus->Subscribe<PlotRequested>([&](const auto &event) { plotted = event; });
+        MaterializeProjectDataJob job(bus, loaded.Value(), ResolveJFMPythonRoot(ApplicationConfig{}, root), handle);
+        auto context = MakeTestJobContext();
+        const auto gil = PythonInterpreter::AcquireRuntimeGil();
+        job.Execute(context);
+        PythonInterpreter::ReleaseRuntimeGil(gil);
+        bus->ProcessQueue();
+        bus->ProcessQueue();
+        ASSERT_TRUE(plotted);
+        EXPECT_EQ(plotted->project, handle);
+        ASSERT_EQ(plotted->groups.size(), 1);
+        EXPECT_EQ(plotted->groups.front().ids, (std::vector<CharacteristicId>{1}));
+        EXPECT_FALSE(store->IsDirty(handle));
+        const auto selected = store->GetSelectedCharacteristic();
+        ASSERT_TRUE(selected);
+        EXPECT_EQ(selected->info.name, "ivd_HZB25_T181_L0");
+        JFMPlotDocument doc;
+        const auto &data = selected->data;
+        doc.BeginFrame();
+        auto id = doc.SetSeries({"HZB###selected", {data.voltage.data(), data.current.data(), data.current.size()}}, true);
+        sst::ui::plot::PlotSpec spec; spec.y.scale = sst::ui::plot::AxisScale::Log10;
+        doc.EndFrame(spec);
+        const auto series = doc.project.series(id);
+        ASSERT_GT(series.data.count, 100);
+        double minY = 1, maxY = 0;
+        for (std::size_t i = 0; i < series.data.count; ++i) {
+            ASSERT_TRUE(std::isfinite(series.data.y[i]));
+            ASSERT_GT(series.data.y[i], 0);
+            minY = (std::min)(minY, series.data.y[i]); maxY = (std::max)(maxY, series.data.y[i]);
+        }
+        EXPECT_GE(minY / 1.32, 1e-12); EXPECT_LE(maxY * 1.32, 1e-1);
+        EXPECT_LT(minY, maxY);
+        doc.view.viewport = sst::ui::plot::Bounds{-0.1, 3.1, minY / 1.32, maxY * 1.32};
+        ASSERT_EQ(doc.Snapshot()->series.size(), 1);
+#endif
+    }
 
 	TEST(JFMProjectJobsTests, MaterializationUsesSourceRecordKeyAndFullImportOptions)
 	{

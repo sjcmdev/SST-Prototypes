@@ -7,6 +7,26 @@
 
 namespace SST::Prototypes::JFM
 {
+    TEST(JFMWorkspaceStoreTests, OpeningReplacesPristineStartupAndKeepsPathClean)
+    {
+        JFMWorkspaceStore store;
+        store.EnsureDefaultScripts(Path("scripts"));
+        EXPECT_FALSE(store.IsDirty(store.GetActiveProjectHandle()));
+        auto project = store.GetProjectSnapshot();
+        project.characteristics.push_back(JFMCharacteristicInfo{1, "HZB"});
+        const Path path("HZB.jfm.yaml");
+        const auto handle = store.AttachProject(project, path);
+        store.EnsureDefaultScripts(Path("scripts"));
+        ASSERT_EQ(store.GetProjects().size(), 1);
+        EXPECT_EQ(store.GetProjectSnapshot().name, "HZB.jfm.yaml");
+        EXPECT_FALSE(store.IsDirty(handle));
+        EXPECT_EQ(store.FindProjectByPath(path), handle);
+        store.CreateProject("Work in progress");
+        store.AddSeries("Keep me");
+        store.AttachProject(project, Path("second.jfm.yaml"));
+        EXPECT_EQ(store.GetProjects().size(), 3);
+    }
+
 	TEST(JFMWorkspaceStoreTests, CreatesDefaultProject)
 	{
 		JFMWorkspaceStore store;

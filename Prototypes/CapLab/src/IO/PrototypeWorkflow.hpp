@@ -36,6 +36,7 @@ namespace SST::Prototypes::CapLab
     class CapLabWorkflow final : public Layer
     {
     public:
+        Json pendingCandidate;
         explicit CapLabWorkflow(Ref<JobSystem> jobs, Ref<EventBus> bus = {}, Ref<UndoStack> undo = {})
             : Layer("CapLabWorkflow"), jobs(std::move(jobs)), bus(std::move(bus)), undo(std::move(undo))
         { templates.add(std::make_shared<CFTemplate>()); importers.add(labImporter); }

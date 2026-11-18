@@ -345,7 +345,13 @@ namespace SST
 		}
 
 		m_Windows->RenderMenu();
-		ImGui::EndMainMenuBar();
+        const float menuBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
+        ImGui::EndMainMenuBar();
+        // ImGui applies menu work-area reservations on the following frame.
+        auto *viewport = ImGui::GetMainViewport();
+        const float reserved = std::max(0.0f, menuBottom - viewport->WorkPos.y);
+        viewport->WorkPos.y += reserved;
+        viewport->WorkSize.y = std::max(1.0f, viewport->WorkSize.y - reserved);
 	}
 
 	void EditorLayer::renderCommandPalettePopup()

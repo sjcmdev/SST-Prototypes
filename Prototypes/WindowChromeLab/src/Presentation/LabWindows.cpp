@@ -18,7 +18,7 @@ namespace SST::Prototypes::WindowChromeLab
         if (m_Kind == Kind::Tools)
         {
             ImGui::Text("Revealed window: %llu", static_cast<unsigned long long>(m_Selection->selected));
-            ImGui::TextWrapped("Right-click a title or dock tab for actions. P pins, + maximizes, - minimizes. Ctrl+Tab switches windows. Use Window for arrangements and named workspaces.");
+            ImGui::TextWrapped("Right-click a title or dock tab for actions. Title buttons pin, maximize and minimize. Ctrl+Tab switches windows. Use Window for arrangements and named workspaces.");
             return;
         }
         if (m_Kind == Kind::Plot)

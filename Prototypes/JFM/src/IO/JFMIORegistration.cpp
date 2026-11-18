@@ -657,8 +657,8 @@ namespace SST::Prototypes::JFM
 		ids.reserve(event.characteristics.size());
 		for (const JFMCharacteristicRecord &characteristic : event.characteristics)
 			ids.push_back(characteristic.info.id);
-		if (!ids.empty())
-			state->eventBus->Queue(PrefitRequested{event.project, std::move(ids)});
+        if (!ids.empty())
+            state->eventBus->Queue(PlotRequested{event.project, {}, {{"selection", "Selection", {ids.front()}, {}, {}}}});
 	}
 
 	void RegisterProjectLoadHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)

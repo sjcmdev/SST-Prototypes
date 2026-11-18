@@ -175,6 +175,8 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMIORegistration.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMFitJobs.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportPaths.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportPaths.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonImportBridge.hpp",

@@ -3,7 +3,7 @@
 #include <imgui.h>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
 namespace SST::Prototypes::CapLab {
-void CapLabPrototypePanel::RenderContent() {
+void CapLabPrototypePanel::RenderImport() {
     auto &doc = state->document;
     ImGui::Text("%s%s", doc.path.Empty() ? "Untitled" : doc.path.Utf8().c_str(), doc.dirty ? " (unsaved)" : "");
     bool comma = state->decimal == ',';
@@ -68,8 +68,9 @@ void CapLabPrototypePanel::RenderContent() {
                     unit == "F" ? std::vector<std::string>{"F","nF","pF"} : unit == "S" ? std::vector<std::string>{"S","mS","uS"} :
                     unit == "V" ? std::vector<std::string>{"V","mV"} : unit == "Ohm" ? std::vector<std::string>{"Ohm","kOhm"} : std::vector<std::string>{"K"};
                 if (unitChoice[i] >= static_cast<int>(choices.size())) unitChoice[i]=0;
-                if (ImGui::BeginCombo("Input unit",choices[unitChoice[i]].c_str())) {
-                    for (std::size_t u=0;u<choices.size();++u) if (ImGui::Selectable(choices[u].c_str(),unitChoice[i] == static_cast<int>(u))) unitChoice[i]=static_cast<int>(u);
+                auto unitLabel = [](const std::string &value) { return value == "Ohm" ? "Ω" : value == "kOhm" ? "kΩ" : value.c_str(); };
+                if (ImGui::BeginCombo("Input unit",unitLabel(choices[unitChoice[i]]))) {
+                    for (std::size_t u=0;u<choices.size();++u) if (ImGui::Selectable(unitLabel(choices[u]),unitChoice[i] == static_cast<int>(u))) unitChoice[i]=static_cast<int>(u);
                     ImGui::EndCombo();
                 }
                 options["mapping"][fields[i].first] = mapping[i]-1;
@@ -130,7 +131,7 @@ void CapLabPrototypePanel::RenderContent() {
         } else {
         ImGui::SeparatorText("Import preview: lab Cp/Rp (SI)");
         ImGui::TextWrapped("%s", preview.at("source").get<std::string>().c_str());
-        ImGui::TextUnformatted("Columns: f [Hz], Cp [F], Rp [Ohm]; additional columns kept as source data.");
+        ImGui::TextUnformatted("Columns: f [Hz], Cp [F], Rp [Ω]; additional columns kept as source data.");
         ImGui::Text("Header T: %s K; filename suggestion: %s K", preview.at("temperature_K").dump().c_str(),
             preview.at("suggested_temperature_K").dump().c_str());
         ImGui::TextUnformatted("Confirm temperature below; filename is only a suggestion.");
@@ -142,7 +143,7 @@ void CapLabPrototypePanel::RenderContent() {
         const auto columns = preview.at("columns").get<std::vector<std::vector<double>>>();
         ImGui::Text("%zu points; %zu columns", columns[0].size(), columns.size());
         if (ImGui::BeginTable("preview", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY, ImVec2(0, 150))) {
-            for (auto name : {"Source row", "f (Hz)", "Cp (F)", "Rp (Ohm)"}) ImGui::TableSetupColumn(name);
+            for (auto name : {"Source row", "f (Hz)", "Cp (F)", "Rp (Ω)"}) ImGui::TableSetupColumn(name);
             ImGui::TableHeadersRow();
             ImGuiListClipper clipper; clipper.Begin(static_cast<int>(columns[0].size()));
             while (clipper.Step()) for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; ++row) {
@@ -156,17 +157,26 @@ void CapLabPrototypePanel::RenderContent() {
         ImGui::SameLine(); if (ImGui::Button("Discard preview")) state->preview.reset();
     }
     }
+}
+void CapLabPrototypePanel::RenderTree() {
+    auto &doc = state->document;
+    ImGui::TextWrapped("%s", doc.path.Empty() ? "Untitled" : doc.path.filename().Utf8().c_str());
+    if (ImGui::Button("Save project")) (void)commands->Execute(CommandID{"project.save"});
     for (const auto &sample : doc.project.samples) {
         ImGui::PushID(static_cast<int>(sample.id));
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
         if (ImGui::TreeNode(sample.name.c_str())) {
             for (const auto &sweep : doc.project.sweeps) if (sweep.sample_id == sample.id)
-                ImGui::Text("Cp/Rp: %zu points; T=%s K", std::get<pl::Worksheet>(doc.project.engine->object(sweep.id).data).rows.size(), Nullable(sweep.temperature_K).dump().c_str());
-            double areaMm2 = sample.area_m2.value_or(0)*1e6;
-            if (ImGui::InputDouble("Sample area (mm2)",&areaMm2,0,0,"%.9g",ImGuiInputTextFlags_EnterReturnsTrue)) {
+                ImGui::TextWrapped("Cp (F) / Rp (Ω): %zu points; T=%s K", std::get<pl::Worksheet>(doc.project.engine->object(sweep.id).data).rows.size(), Nullable(sweep.temperature_K).dump().c_str());
+            auto &areaMm2 = areaDraft.try_emplace(sample.id, sample.area_m2.value_or(0)*1e6).first->second;
+            ImGui::SetNextItemWidth(80);
+            ImGui::InputDouble("Sample area (mm2)",&areaMm2,0,0,"%.9g");
+            if (ImGui::IsItemDeactivatedAfterEdit()) {
                 CommandContext c; c.Set("sample_id",sample.id); c.Set("area_m2",areaMm2*1e-6);
                 (void)commands->Execute(CommandID{"caplab.area"},std::move(c));
                 ImGui::TreePop(); ImGui::PopID(); return;
             }
+            if (!ImGui::IsItemActive()) areaMm2 = sample.area_m2.value_or(0)*1e6;
             for (const auto &m : doc.project.measurements) if (m.at("sample_id") == sample.id)
                 ImGui::Text("%s / %s: %zu points; T=%s K",m.at("metadata").at("kind").get<std::string>().c_str(),
                     m.at("metadata").at("variant").get<std::string>().c_str(),
@@ -189,24 +199,31 @@ void CapLabPrototypePanel::RenderContent() {
             (void)commands->Execute(CommandID{"caplab.measurement"},std::move(c)); return;
         }
     }
-    RenderWalter();
-    RenderIS();
-    RenderAS();
-    RenderAnalysis();
+}
+void CapLabPrototypePanel::RenderPlot() {
+    auto &doc = state->document;
     if (doc.project.graph) {
         const auto &p = *doc.project.engine;
         const auto layer = p.children(doc.project.graph).at(0);
         std::vector<sst::ui::plot::SeriesEntryView> series;
         for (auto id : p.children(layer)) series.push_back(p.series(id));
         sst::ui::plot::RenderPlot("##cf", std::get<pl::Layer>(p.object(layer).data).spec,
-            series.data(), series.size(), state->view, {}, ImVec2(-1, 260));
+            series.data(), series.size(), state->view, {}, ImVec2(-1, std::max(200.0f, ImGui::GetContentRegionAvail().y - 40)));
         if (state->view.picked && state->view.picked->series==0) {
             for (const auto &a : doc.project.analyses) if (a.at("type")=="AS" && a.at("status")=="valid" &&
                 a.at("graphs").at(1)==doc.project.graph && state->view.picked->point<a.at("candidates").size())
-                {pendingCandidate=a.at("candidates").at(state->view.picked->point); pendingCandidate["analysis_id"]=a.at("id");}
+                {state->pendingCandidate=a.at("candidates").at(state->view.picked->point); state->pendingCandidate["analysis_id"]=a.at("id");}
             state->view.picked.reset();
         }
         if (ImGui::Button("Export CSV / XLSX / PNG...")) (void)commands->Execute(CommandID{"caplab.export"});
+    }
+}
+void CapLabPrototypePanel::RenderContent() {
+    switch (view) {
+    case View::Project: RenderTree(); break;
+    case View::Plot: RenderPlot(); break;
+    case View::Analysis: RenderWalter(); RenderIS(); RenderAS(); RenderAnalysis(); break;
+    case View::Import: RenderImport(); break;
     }
     ImGui::TextWrapped("%s", state->status.c_str());
     if (const auto job = state->jobs->GetJob(state->activeJob)) {
@@ -333,7 +350,7 @@ void CapLabPrototypePanel::RenderAS() {
         (void)commands->Execute(CommandID{"caplab.defect"},std::move(context));
     };
     if (ImGui::BeginCombo("AS sample",std::to_string(sample).c_str())) {
-        for (const auto &s : p.samples) if (ImGui::Selectable(s.name.c_str(),sample==s.id)) {sample=s.id; selectedDefect=0; pendingCandidate=nullptr;}
+        for (const auto &s : p.samples) if (ImGui::Selectable(s.name.c_str(),sample==s.id)) {sample=s.id; selectedDefect=0; state->pendingCandidate=nullptr;}
         ImGui::EndCombo();
     }
     ImGui::InputText("Defect name",name,sizeof(name));
@@ -347,7 +364,8 @@ void CapLabPrototypePanel::RenderAS() {
             if (ImGui::Selectable((std::to_string(m.id)+" / "+Nullable(m.temperature_K).dump()+" K").c_str(),measurement==m.id)) measurement=m.id;
         ImGui::EndCombo();
     }
-    ImGui::Checkbox("Savitzky-Golay (sample index; derivative uses ln f)",&smoothing);
+    ImGui::Checkbox("Savitzky-Golay smoothing",&smoothing);
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sample index; derivative uses ln f.");
     if (smoothing) {ImGui::InputInt("Smoothing window (odd)",&window); ImGui::InputInt("Smoothing degree",&degree);}
     if (ImGui::Button("Calculate AS derivative / candidates")) {
         state->analysisOptions={{"type","AS"},{"measurement_id",measurement},
@@ -369,10 +387,10 @@ void CapLabPrototypePanel::RenderAS() {
             edit({{"action","add"},{"defect_id",selectedDefect},{"point",{{"measurement_id",nullptr},{"row_id",nullptr},
                 {"temperature_K",manualT},{"frequency_Hz",manualF},{"provenance",provenance}}}}); return;
         }
-        if (!pendingCandidate.is_null()) {
-            ImGui::Text("Candidate: T=%s K, f=%s Hz",pendingCandidate.at("temperature_K").dump().c_str(),pendingCandidate.at("frequency_Hz").dump().c_str());
+        if (!state->pendingCandidate.is_null()) {
+            ImGui::Text("Candidate: T=%s K, f=%s Hz",state->pendingCandidate.at("temperature_K").dump().c_str(),state->pendingCandidate.at("frequency_Hz").dump().c_str());
             if (ImGui::Button("Assign candidate to active defect")) {
-                edit({{"action","add"},{"defect_id",selectedDefect},{"point",pendingCandidate}}); pendingCandidate=nullptr; return;
+                edit({{"action","add"},{"defect_id",selectedDefect},{"point",state->pendingCandidate}}); state->pendingCandidate=nullptr; return;
             }
         }
         // Edits replace the document; return immediately to avoid invalidating iterators.
@@ -404,7 +422,7 @@ void CapLabPrototypePanel::RenderAS() {
         if (ImGui::TreeNode((a.at("model").get<std::string>()+" / "+a.at("status").get<std::string>()).c_str())) {
             if (a.at("type")=="AS") for (const auto &c : a.at("candidates")) {
                 ImGui::PushID(static_cast<int>(c.at("row_id").get<pl::Id>()));
-                if (a.at("status")=="valid" && ImGui::Selectable((c.at("temperature_K").dump()+" K / "+c.at("frequency_Hz").dump()+" Hz").c_str())) {pendingCandidate=c; pendingCandidate["analysis_id"]=a.at("id");}
+                if (a.at("status")=="valid" && ImGui::Selectable((c.at("temperature_K").dump()+" K / "+c.at("frequency_Hz").dump()+" Hz").c_str())) {state->pendingCandidate=c; state->pendingCandidate["analysis_id"]=a.at("id");}
                 ImGui::PopID();
             }
             if (a.contains("fits")) for (const auto &fit : a.at("fits"))

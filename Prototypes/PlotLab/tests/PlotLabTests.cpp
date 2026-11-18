@@ -1,5 +1,6 @@
 ﻿#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "PlotLabDocument.hpp"
+#include "Core/JobSystem/JobContext.hpp"
 #include "PlotLabExport.hpp"
 #include "Core/Platform/PlatformFontDiscovery.hpp"
 #include <cmath>
@@ -317,4 +318,26 @@ TEST_F(PlotLabApp, UnicodePathCsvAndProjectRoundtrip)
     EXPECT_EQ(doc.project->id(), projectId);
     EXPECT_EQ(doc.project->object(importedBook).name, Path::FromResolved(name).Utf8());
     EXPECT_EQ(std::get<pl::Worksheet>(doc.project->object(importedSheet).data).source.at("path"), filename);
+}
+
+TEST(PlotLabOpenJob, ImportsDemoCsvAndRejectsUnsupportedFiles)
+{
+    JobContext context([](float,float){}, [](const std::string &){}, [](const std::string &){},
+        [](JobLogLevel,const std::string &){}, [] { return false; });
+    OpenJob csv(Path("Prototypes/PlotLab/examples/demo.csv"));
+    csv.Execute(context);
+    ASSERT_TRUE(csv.table);
+    ASSERT_EQ(csv.table->columns.size(), 4);
+    EXPECT_EQ(csv.table->names.front(), "X");
+    auto p = CreateRef<pl::Project>("Imported");
+    pl::importTable(*p, p->root(), "demo", *csv.table).apply(*p);
+    const auto path = std::filesystem::temp_directory_path() / "plotlab-open-ui1.plotlab";
+    p->save(path);
+    OpenJob project{Path(path)};
+    project.Execute(context);
+    ASSERT_TRUE(project.project);
+    EXPECT_EQ(project.project->id(), p->id());
+    std::filesystem::remove(path);
+    OpenJob unsupported(Path("invalid.bin"));
+    EXPECT_THROW(unsupported.Execute(context), std::invalid_argument);
 }

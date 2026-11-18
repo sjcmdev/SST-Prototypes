@@ -40,7 +40,7 @@ namespace SST::Prototypes::JFM
         for (std::size_t i = 0; i < entry.data.count; ++i)
         {
             const auto value = absoluteCurrent ? std::abs(entry.data.y[i]) : entry.data.y[i];
-            if (absoluteCurrent && value <= 0) continue; // Preserve JFM's historical abs(I) convention.
+            if (!std::isfinite(entry.data.x[i]) || !std::isfinite(value) || (absoluteCurrent && value <= 0)) continue; // Preserve JFM's historical abs(I) convention.
             x.push_back(entry.data.x[i]); y.push_back(value);
             if (entry.data.yError) error.push_back(entry.data.yError[i]);
         }

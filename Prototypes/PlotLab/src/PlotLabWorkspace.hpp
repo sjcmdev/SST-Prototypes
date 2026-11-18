@@ -33,7 +33,12 @@ namespace SST::Prototypes::PlotLab
         JobId exporting = 0;
         bool allowClose = false;
         bool Save(bool saveAs = false);
-        void File(FileAction);
+        void File(FileAction, Path path = {});
+        Path pendingPath;
+        Ref<OpenJob> opening;
+        JobId openJob = 0;
+        Ref<pl::Project> openingBase;
+        std::uint64_t openingRevision = 0;
         void CompleteFile();
         void Show(pl::Id);
         void RefreshWindows();

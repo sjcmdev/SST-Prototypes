@@ -3,11 +3,24 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include <sst/plotlab/Extensions.hpp>
+#include "Core/JobSystem/JobSystemTypes.hpp"
+#include "Core/Utils/Path.hpp"
 
 namespace SST::Prototypes::PlotLab
 {
     namespace pl = sst::plotlab;
     namespace plot = sst::ui::plot;
+    class OpenJob final : public IJob
+    {
+    public:
+        explicit OpenJob(Path path) : path(std::move(path)) {}
+        std::string GetName() const override { return "Open PlotLab file"; }
+        std::string GetType() const override { return "plotlab.open"; }
+        void Execute(JobContext &) override;
+        Path path;
+        Ref<pl::Project> project;
+        std::optional<pl::Table> table;
+    };
     double ParseNumericCell(const std::string &);
     struct ModelChanged : BusEvent
     {
@@ -44,6 +57,7 @@ namespace SST::Prototypes::PlotLab
         void Execute(pl::Operation);
         void New();
         void Open(const std::filesystem::path &);
+        void Open(Ref<pl::Project>, const std::filesystem::path &);
         void Save(const std::filesystem::path &);
         bool Dirty() const
         {

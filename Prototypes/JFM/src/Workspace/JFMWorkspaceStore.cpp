@@ -128,6 +128,13 @@ namespace SST::Prototypes::JFM
 			}
 		}
 
+        // A pristine startup document is a placeholder, not a second open project.
+        if (m_Projects.size() == 1 && !m_Projects.front().path &&
+            m_Projects.front().project.characteristics.empty() &&
+            m_Projects.front().revision == m_Projects.front().savedRevision)
+            m_Projects.clear();
+        if (path && (project.name.empty() || project.name == "Untitled JFM Project"))
+            project.name = path->filename().Utf8();
 		ProjectDocument document;
 		document.handle = m_NextProjectHandle++;
 		document.project = std::move(project);
@@ -1707,16 +1714,19 @@ namespace SST::Prototypes::JFM
 		return script;
 	}
 
-	void JFMWorkspaceStore::EnsureDefaultScripts(Path scriptsDirectory)
-	{
-		if (scriptsDirectory.Empty())
-			return;
-		const Path paths[] = {
-			scriptsDirectory / Path("dat_parser.py"),
-			scriptsDirectory / Path("scaps_iv_parser.py")};
-		for (const Path &path : paths)
-			(void)AddScript(path);
-	}
+    void JFMWorkspaceStore::EnsureDefaultScripts(Path scriptsDirectory)
+    {
+        if (scriptsDirectory.Empty()) return;
+        const auto handle = GetActiveProjectHandle();
+        const bool clean = !IsDirty(handle);
+        for (const char *name : {"dat_parser.py", "scaps_iv_parser.py"})
+            (void)AddScript(handle, scriptsDirectory / Path(name));
+        if (clean) {
+            std::scoped_lock lock(m_Mutex);
+            auto document = findDocumentLocked(handle);
+            if (document) document->get().savedRevision = document->get().revision;
+        }
+    }
 
 	bool JFMWorkspaceStore::RemoveScript(const std::string &scriptId)
 	{

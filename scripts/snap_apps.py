@@ -117,7 +117,7 @@ def inspect_png(path):
                 "size_bytes": path.stat().st_size, "pixel_variance": variance}
 
 
-def prepare_gallery_layout(sandbox):
+def prepare_gallery_layout(sandbox, *, fresh=False):
     """Keep copied workspace panels inside the main framebuffer, with tools collapsed."""
     import yaml
     config = sandbox / "install/app/config"
@@ -128,6 +128,8 @@ def prepare_gallery_layout(sandbox):
     layout = config / "layouts/imgui.ini"
     previous = layout.read_text(encoding="utf-8-sig") if layout.is_file() else ""
     workspace = next((line[5:] for line in previous.splitlines() if line.startswith("Data=")), None)
+    if fresh:
+        workspace = None
     if workspace:
         envelope = json.loads(workspace)
         state = json.loads(envelope["state"])
@@ -152,7 +154,7 @@ def capture(app, target, configuration, output, open_path, frames):
     if (executable.parent / "python").is_dir():
         shutil.copytree(executable.parent / "python", sandbox / "python", dirs_exist_ok=True)
     if app != "JFM":
-        prepare_gallery_layout(sandbox)
+        prepare_gallery_layout(sandbox, fresh=app == "CapLab")
     # Running an executable beside copied config would resolve its original config.
     # CWD takes precedence in Core, so this portable install isolates all writes.
     shot = output / f"{app}.png"

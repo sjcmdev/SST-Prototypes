@@ -47,3 +47,12 @@ def test_embedded_runner_exposes_shared_plotlab_package():
     import json
     paths = json.loads(embedded_environment()["SST_ROOT_PYTHON_PATHS"])
     assert str(ROOT / "Prototypes/PlotLab/python") in paths
+
+
+def test_fresh_gallery_layout_exercises_product_defaults(tmp_path):
+    layout = tmp_path / "install/app/config/layouts/imgui.ini"
+    layout.parent.mkdir(parents=True)
+    layout.write_text('[SSTWindows][Workspace]\nData={"state":"old workspace"}\n')
+    prepare_gallery_layout(tmp_path, fresh=True)
+    assert "Data=" not in layout.read_text()
+    assert "Collapsed=1" in layout.read_text()

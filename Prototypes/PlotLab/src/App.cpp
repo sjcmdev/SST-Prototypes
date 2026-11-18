@@ -16,15 +16,16 @@ namespace SST
         struct FileRequested : BusEvent
         {
             FileAction action = FileAction::New;
+            Path path;
         };
         class FileCommand final : public ICommand
         {
           public:
-            FileCommand(Ref<EventBus> bus, FileAction action) : bus(std::move(bus)), action(action) {}
+            FileCommand(Ref<EventBus> bus, FileAction action, Path path = {}) : bus(std::move(bus)), action(action), path(std::move(path)) {}
             Result<void> Execute(CommandContext &) override
             {
                 FileRequested request;
-                request.action = action;
+                request.action = action; request.path = path;
                 bus->Queue(request);
                 return {};
             }
@@ -36,6 +37,7 @@ namespace SST
           private:
             Ref<EventBus> bus;
             FileAction action;
+            Path path;
         };
     } // namespace
     void SetupApplication(Application &application)
@@ -62,7 +64,7 @@ namespace SST
         application.GetIOLayer().RegisterHandler<CoreEvents::ProjectSaveRequested>([state, safe](const auto &)
                                                                                    { safe([&] { state->Save(); }); });
         application.GetIOLayer().RegisterHandler<FileRequested>([state, safe](const auto &e)
-                                                                { safe([&] { state->File(e.action); }); });
+                                                                { safe([&] { state->File(e.action, e.path); }); });
         application.SetCloseGuard(
             [state]
             {
@@ -78,6 +80,12 @@ namespace SST
             });
         auto registry = runtime.commandRegistry.lock();
         auto bus = runtime.eventBus.lock();
+        auto open = registry->Register({CommandID{"app.open"}, "Open project / data", "PlotLab"},
+            [bus](CommandContext &context) -> Unique<ICommand> {
+                const auto *path = context.TryGet<Path>("path");
+                return CreateUnique<FileCommand>(bus, FileAction::Open, path ? *path : Path{});
+            });
+        if (!open) throw std::runtime_error(open.Error().technicalDetails);
         for (const auto &[id, label, action, key] :
              {std::tuple{"plotlab.new", "New project", FileAction::New, KeyCode::N},
               std::tuple{"plotlab.open", "Open project", FileAction::Open, KeyCode::O}})
