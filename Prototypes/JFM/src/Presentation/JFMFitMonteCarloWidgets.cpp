@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/JFMFitMonteCarloWidgets.hpp"
+#include "Presentation/JFMPlotWidgets.hpp"
 
 #include "Analysis/JFMFitEngine.hpp"
 #include "Analysis/JFMMonteCarloStatistics.hpp"
@@ -184,7 +185,7 @@ namespace SST::Prototypes::JFM
 		return changed;
 	}
 
-	bool RenderJFMCovariancePlot(const JFMMonteCarloResult &result, JFMMonteCarloScatterPlotOptions &options, const char *id, float height)
+	bool RenderJFMCovariancePlot(const JFMMonteCarloResult &result, JFMMonteCarloScatterPlotOptions &options, const char *id, float height, JFMPlotDocument &document)
 	{
 		bool changed = false;
 		if (result.parameterNames.size() < 2 || result.samples.size() < 3)
@@ -259,70 +260,31 @@ namespace SST::Prototypes::JFM
 			return changed;
 		}
 
-		std::array<std::vector<double>, 3> x;
-		std::array<std::vector<double>, 3> y;
-		bool hasVisiblePoint = false;
-		double minimumX = 0.0;
-		double maximumX = 0.0;
-		double minimumY = 0.0;
-		double maximumY = 0.0;
-		for (const JFMMonteCarloScatterPoint &point : statistics->points)
-		{
-			const std::size_t displayClass = std::min<std::size_t>(point.sigmaClass, x.size() - 1);
-			x[displayClass].push_back(point.x);
-			y[displayClass].push_back(point.y);
-			if (!hasVisiblePoint)
-			{
-				minimumX = maximumX = point.x;
-				minimumY = maximumY = point.y;
-				hasVisiblePoint = true;
-			}
-			else
-			{
-				minimumX = std::min(minimumX, point.x);
-				maximumX = std::max(maximumX, point.x);
-				minimumY = std::min(minimumY, point.y);
-				maximumY = std::max(maximumY, point.y);
-			}
-		}
-		if (!hasVisiblePoint)
-		{
-			ImGui::TextDisabled("No visible sigma samples");
-			ImGui::PopID();
-			return changed;
-		}
-
-		if (ImPlot::BeginPlot("##Covariance", ImVec2(-1.0f, height), ImPlotFlags_NoTitle))
+        JFMPlotExportControls(document);
+        const bool plotFont = BeginJFMPlotFrame(document);
+        const auto bounds = PopulateJFMMonteCarloPlot(document, *statistics, options,
+            result.parameterNames[options.xParameter], result.parameterNames[options.yParameter]);
+		if (plotFont && ImPlot::BeginPlot("##Covariance", ImVec2(-1.0f, height), ImPlotFlags_NoTitle))
 		{
 			ImPlot::SetupAxes(result.parameterNames[options.xParameter].c_str(), result.parameterNames[options.yParameter].c_str());
-			if (options.autoFit)
-			{
-				const double spanX = std::max(maximumX - minimumX, std::max(std::abs(maximumX), 1.0) * 1.0e-9);
-				const double spanY = std::max(maximumY - minimumY, std::max(std::abs(maximumY), 1.0) * 1.0e-9);
-				ImPlot::SetupAxisLimits(ImAxis_X1, minimumX - spanX * options.zoomOut, maximumX + spanX * options.zoomOut, ImGuiCond_Always);
-				ImPlot::SetupAxisLimits(ImAxis_Y1, minimumY - spanY * options.zoomOut, maximumY + spanY * options.zoomOut, ImGuiCond_Always);
-			}
-			for (int sigmaClass = static_cast<int>(x.size()) - 1; sigmaClass >= 0; --sigmaClass)
-			{
-				if (!options.showSigmaClasses[sigmaClass] || x[sigmaClass].empty())
-					continue;
-				ImPlotSpec points;
-				points.Marker = sst::ui::plot::ImPlotMarkerFor(sst::ui::plot::MarkerForIndex(options.marker));
-				points.MarkerSize = 3.0f;
-				points.LineColor = ImVec4(
-					options.sigmaColors[sigmaClass][0], options.sigmaColors[sigmaClass][1],
-					options.sigmaColors[sigmaClass][2], options.sigmaColors[sigmaClass][3]);
-				points.MarkerFillColor = points.LineColor;
-				sst::ui::plot::RenderSeries({classLabels[sigmaClass], {x[sigmaClass].data(), y[sigmaClass].data(), static_cast<std::size_t>(x[sigmaClass].size())}, sst::ui::plot::SeriesKind::Scatter, sst::ui::plot::FromImPlotStyle(points)});
-			}
+            if (options.autoFit)
+                ImPlot::SetupAxesLimits(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, ImGuiCond_Always);
+            for (const auto &[plotId, label] : document.rendered) {
+                auto entry = document.project.series(plotId); entry.id = label;
+                sst::ui::plot::RenderSeries(entry);
+            }
 			const ImPlotRect limits = ImPlot::GetPlotLimits();
 			options.xMinimum = limits.X.Min;
 			options.xMaximum = limits.X.Max;
 			options.yMinimum = limits.Y.Min;
 			options.yMaximum = limits.Y.Max;
 			options.hasAxisLimits = true;
-			ImPlot::EndPlot();
+			sst::ui::plot::PlotSpec figureSpec;
+			figureSpec.x.label = result.parameterNames[options.xParameter];
+			figureSpec.y.label = result.parameterNames[options.yParameter];
+			EndJFMPlot(document, figureSpec);
 		}
+		if (plotFont) ImGui::PopFont();
 		ImGui::PopID();
 		return changed;
 	}

@@ -1,5 +1,6 @@
 #pragma once
 #include <sst/ui/Plot/RangeSelector.hpp>
+#include "Presentation/JFMPlotDocument.hpp"
 
 #include "App/JFMUserSettings.hpp"
 #include "Core/Commands/CommandContext.hpp"
@@ -7,7 +8,7 @@
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Events/JFMEvents.hpp"
-#include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 #include <array>
@@ -30,7 +31,7 @@ namespace SST::Prototypes::JFM
 		SemiLog
 	};
 
-	class RawPlotPanel final : public IPanel, public EventReceiver
+	class RawPlotPanel final : public EditorWindow, public EventReceiver
 	{
 	public:
 		explicit RawPlotPanel(
@@ -42,8 +43,8 @@ namespace SST::Prototypes::JFM
 			std::string title = "Raw Plot",
 			bool visibleByDefault = true);
 
-		[[nodiscard]] Ref<IPanel> Clone() const override;
-		void Render() override;
+		[[nodiscard]] WindowDuplicate Duplicate() const override;
+		void RenderContent() override;
 
 	private:
 		struct PlotCurveGroup
@@ -63,6 +64,7 @@ namespace SST::Prototypes::JFM
 
 		struct PlotArea
 		{
+			Ref<JFMPlotDocument> document = CreateRef<JFMPlotDocument>();
 			std::uint64_t id = 0;
 			ProjectHandle project = InvalidProjectHandle;
 			std::string title;

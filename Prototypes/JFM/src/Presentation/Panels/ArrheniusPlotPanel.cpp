@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ArrheniusPlotPanel.hpp"
+#include "Presentation/JFMPlotWidgets.hpp"
 
 #include "Core/Platform/PlatformPythonRuntime.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
@@ -316,7 +317,9 @@ namespace SST::Prototypes::JFM
 				const auto color = fit.color;
 				const float lineWeight = fit.lineWeight;
 				const bool visible = fit.visible;
+				const auto plotKey = fit.plotKey;
 				fit = *updated;
+				fit.plotKey = plotKey;
 				fit.name = name;
 				fit.color = color;
 				fit.lineWeight = lineWeight;
@@ -1046,7 +1049,9 @@ namespace SST::Prototypes::JFM
 			}
 		};
 		renderSeriesTable();
-		if (ImPlot::BeginPlot(("##arrhenius_plot_" + std::to_string(window.id)).c_str(), ImVec2(-1.0f, 360.0f)))
+		JFMPlotExportControls(*window.document);
+		const bool plotFont = BeginJFMPlotFrame(*window.document);
+		if (plotFont && ImPlot::BeginPlot(("##arrhenius_plot_" + std::to_string(window.id)).c_str(), ImVec2(-1.0f, 360.0f)))
 		{
 			ImPlot::SetupAxes(JFMArrheniusUsesInvTemperature(quantity) ? "1000/T" : "T (K)", JFMArrheniusQuantityName(quantity));
 			bool rangeCursor = false;
@@ -1085,7 +1090,8 @@ namespace SST::Prototypes::JFM
 					}
 				}
 
-				const std::string label = series.title + "##arrhenius_data_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex);
+				const std::string sourceKey = std::to_string(series.sourceMode) + "_" + series.sourceId;
+				const std::string label = series.title + "###arrhenius_data_" + sourceKey;
 				auto plotPoints = [&](const std::string &plotLabel, const std::vector<double> &x, const std::vector<double> &y, SeriesStyle &style) {
 					ImPlotSpec spec;
 					spec.LineColor = ToVec4(style.color);
@@ -1095,12 +1101,12 @@ namespace SST::Prototypes::JFM
 					spec.MarkerSize = style.pointSize;
 					spec.LineWeight = style.lineWeight;
 					const auto kind = style.drawMode == 1 ? sst::ui::plot::SeriesKind::Line : sst::ui::plot::SeriesKind::Scatter;
-					sst::ui::plot::RenderSeries({plotLabel, {x.data(), y.data(), x.size()}, kind, sst::ui::plot::FromImPlotStyle(spec)});
+					AddJFMPlotSeries(*window.document, {plotLabel, {x.data(), y.data(), x.size()}, kind, sst::ui::plot::FromImPlotStyle(spec)});
 					if (style.drawMode != 0 && style.drawMode != 1)
 					{
 						// Preserve JFM's overlay ID and draw order for existing legends and markers.
 						spec.Flags = ImPlotItemFlags_NoLegend;
-						sst::ui::plot::RenderSeries({"##line_" + plotLabel, {x.data(), y.data(), x.size()}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(spec)});
+						AddJFMPlotSeries(*window.document, {"##line_" + plotLabel.substr(plotLabel.find("###") + 3), {x.data(), y.data(), x.size()}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(spec)});
 					}
 				};
 				if (series.style.visible && !excludedX.empty())
@@ -1113,7 +1119,7 @@ namespace SST::Prototypes::JFM
 					excludedSpec.MarkerSize = std::max(2.0f, series.style.pointSize - 1.0f);
 					excludedSpec.LineWeight = 0.0f;
 					excludedSpec.Flags = ImPlotItemFlags_NoLegend;
-					sst::ui::plot::RenderSeries({("##excluded_" + label).c_str(), {excludedX.data(), excludedY.data(), static_cast<std::size_t>(excludedX.size())}, sst::ui::plot::SeriesKind::Scatter, sst::ui::plot::FromImPlotStyle(excludedSpec)});
+					AddJFMPlotSeries(*window.document, {("##excluded_" + sourceKey).c_str(), {excludedX.data(), excludedY.data(), static_cast<std::size_t>(excludedX.size())}, sst::ui::plot::SeriesKind::Scatter, sst::ui::plot::FromImPlotStyle(excludedSpec)});
 				}
 
 				if (series.style.visible && !includedX.empty())
@@ -1125,7 +1131,7 @@ namespace SST::Prototypes::JFM
 						errorSpec.Size = 10.0f;
 						errorSpec.LineWeight = 2.4f;
 						errorSpec.Flags = ImPlotItemFlags_NoLegend;
-						sst::ui::plot::RenderSeries({("##arrhenius_err_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex)).c_str(), {includedX.data(), includedY.data(), static_cast<std::size_t>(includedX.size()), includedErr.data()}, sst::ui::plot::SeriesKind::ErrorBars, sst::ui::plot::FromImPlotStyle(errorSpec)});
+						AddJFMPlotSeries(*window.document, {("##arrhenius_err_" + sourceKey).c_str(), {includedX.data(), includedY.data(), static_cast<std::size_t>(includedX.size()), includedErr.data()}, sst::ui::plot::SeriesKind::ErrorBars, sst::ui::plot::FromImPlotStyle(errorSpec)});
 					}
 					plotPoints(label, includedX, includedY, series.style);
 				}
@@ -1142,7 +1148,7 @@ namespace SST::Prototypes::JFM
 						tunedX.push_back(point.x);
 						tunedY.push_back(point.y);
 					}
-					const std::string tunedLabel = series.title + " tuned##arrhenius_tuned_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex);
+					const std::string tunedLabel = series.title + " tuned###arrhenius_tuned_" + sourceKey;
 					plotPoints(tunedLabel, tunedX, tunedY, series.tunedStyle);
 					if (ImPlot::BeginLegendPopup(tunedLabel.c_str()))
 					{
@@ -1200,11 +1206,12 @@ namespace SST::Prototypes::JFM
 					ImPlotSpec fitSpec;
 					fitSpec.LineColor = ToVec4(fit.color);
 					fitSpec.LineWeight = fit.lineWeight;
-					const std::string fitLabel = series.title + " " + fit.name + "##arrhenius_fit_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex) + "_" + fit.name;
+					if (!fit.plotKey) fit.plotKey = window.document->project.reserveId();
+					const std::string fitLabel = series.title + " " + fit.name + "###arrhenius_fit_" + std::to_string(fit.plotKey);
 					if (fit.fitX.size() == fit.fitY.size() && fit.fitX.size() >= 2)
-						sst::ui::plot::RenderSeries({fitLabel.c_str(), {fit.fitX.data(), fit.fitY.data(), static_cast<std::size_t>(fit.fitX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
+						AddJFMPlotSeries(*window.document, {fitLabel.c_str(), {fit.fitX.data(), fit.fitY.data(), static_cast<std::size_t>(fit.fitX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
 					else
-						sst::ui::plot::RenderSeries({fitLabel.c_str(), {xx, yy, static_cast<std::size_t>(2)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
+						AddJFMPlotSeries(*window.document, {fitLabel.c_str(), {xx, yy, static_cast<std::size_t>(2)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
 					if (ImPlot::BeginLegendPopup(fitLabel.c_str()))
 					{
 						ImGui::Checkbox("Show", &fit.visible);
@@ -1225,7 +1232,10 @@ namespace SST::Prototypes::JFM
 					ImPlot::EndLegendPopup();
 				}
 			}
-			ImPlot::EndPlot();
+			sst::ui::plot::PlotSpec figureSpec;
+			figureSpec.x.label = JFMArrheniusUsesInvTemperature(quantity) ? "1000/T" : "T (K)";
+			figureSpec.y.label = JFMArrheniusQuantityName(quantity);
+			EndJFMPlot(*window.document, figureSpec);
 			if (rangeCursor)
 				ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 		}
@@ -1233,6 +1243,7 @@ namespace SST::Prototypes::JFM
 		{
 			for (auto &series : window.series) (void)series.rangeInteraction.Finish();
 		}
+		if (plotFont) ImGui::PopFont();
 
 		if (removeSeries >= 0 && removeSeries < static_cast<int>(window.series.size()))
 		{
@@ -1348,17 +1359,12 @@ namespace SST::Prototypes::JFM
 
 	void ArrheniusPlotPanel::Render()
 	{
-		if (m_Store == nullptr)
-		{
-			if (!IsVisible())
-				return;
-			bool visible = IsVisible();
-			if (ImGui::Begin(GetTitle().c_str(), &visible))
-				ImGui::TextDisabled("Workspace unavailable");
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
+        if (m_Store == nullptr) {
+            if (!IsVisible()) return;
+            bool visible = IsVisible();
+            if (ImGui::Begin(GetTitle().c_str(), &visible)) ImGui::TextDisabled("Workspace unavailable");
+            ImGui::End(); SetVisible(visible); return;
+        }
 
 		const ProjectHandle projectHandle = m_Store->GetActiveProjectHandle();
 		if (projectHandle != m_LayoutProject)
@@ -1375,11 +1381,9 @@ namespace SST::Prototypes::JFM
 			m_LayoutProject = projectHandle;
 		}
 		const JFMProject snapshot = m_Store->GetProjectSnapshot(projectHandle);
-		if (IsVisible())
-		{
-			bool visible = IsVisible();
-			if (ImGui::Begin(GetTitle().c_str(), &visible, ImGuiWindowFlags_HorizontalScrollbar))
-			{
+        if (IsVisible()) {
+            bool visible = IsVisible();
+            if (ImGui::Begin(GetTitle().c_str(), &visible, ImGuiWindowFlags_HorizontalScrollbar)) {
 				RenderSelector(projectHandle, snapshot);
 				ImGui::Separator();
 				if (m_PlotWindows.empty())
@@ -1409,10 +1413,9 @@ namespace SST::Prototypes::JFM
 					}
 					ImGui::EndTable();
 				}
-			}
-			ImGui::End();
-			SetVisible(visible);
-		}
+            }
+            ImGui::End(); SetVisible(visible);
+        }
 
 		RenderDockspaceHost();
 		for (PlotWindow &window : m_PlotWindows)

@@ -1,15 +1,13 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/MonteCarloScatterPanel.hpp"
+#include "IO/JFMPlotExport.hpp"
 
 #include "Analysis/JFMMonteCarloStatistics.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
-#include "Core/Platform/PlatformPythonRuntime.hpp"
-#include "Core/Platform/ProcessRunner.hpp"
 
 #include <algorithm>
 #include <array>
-#include <chrono>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
@@ -47,19 +45,7 @@ namespace SST::Prototypes::JFM
 			return Path::FromResolved(path.Native().string() + suffix);
 		}
 
-		std::string ColorHex(const std::array<float, 4> &color)
-		{
-			auto channel = [](float value) {
-				return std::clamp(static_cast<int>(std::round(std::clamp(value, 0.0f, 1.0f) * 255.0f)), 0, 255);
-			};
-			std::ostringstream text;
-			text << '#'
-				<< std::uppercase << std::hex << std::setfill('0') << std::setw(2) << channel(color[0])
-				<< std::setw(2) << channel(color[1])
-				<< std::setw(2) << channel(color[2])
-				<< std::setw(2) << channel(color[3]);
-			return text.str();
-		}
+
 
 		std::vector<JFMMonteCarloParameterPair> DefaultPairsForResult(
 			const JFMFitMonteCarloSettings &settings,
@@ -93,35 +79,9 @@ namespace SST::Prototypes::JFM
 			return static_cast<int>(std::distance(result.parameterNames.begin(), found));
 		}
 
-		std::string CompactProcessError(std::string text)
-		{
-			text.erase(std::remove(text.begin(), text.end(), '\r'), text.end());
-			for (char &character : text)
-				if (character == '\n' || character == '\t')
-					character = ' ';
-			constexpr std::size_t maxLength = 220;
-			if (text.size() > maxLength)
-				text = text.substr(0, maxLength) + "...";
-			return text;
-		}
 
-		Path ResolveScatterPlotScript()
-		{
-			const std::array<Path, 4> candidates = {
-				Path("python") / "plot_mc_scatter.py",
-				Path("Prototypes") / "JFM" / "python" / "plot_mc_scatter.py",
-				Path("install") / "app" / "python" / "plot_mc_scatter.py",
-				[] {
-					const auto executable = Platform::CurrentExecutablePath();
-					if (!executable)
-						return Path{};
-					return executable->parent_path() / "python" / "plot_mc_scatter.py";
-				}()};
-			for (const Path &candidate : candidates)
-				if (!candidate.Empty() && FileSystem::Exists(candidate.Native()))
-					return candidate;
-			return {};
-		}
+
+
 	}
 
 	MonteCarloScatterPanel::MonteCarloScatterPanel(
@@ -130,7 +90,7 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> eventBus,
 		std::string title,
 		bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault),
+		: EditorWindow("jfm.mc_scatter", std::move(title), visibleByDefault, {.duplicable = true}),
 		  m_Store(std::move(store)),
 		  m_Settings(std::move(settings)),
 		  m_EventBus(std::move(eventBus))
@@ -149,9 +109,9 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
-	Ref<IPanel> MonteCarloScatterPanel::Clone() const
+	WindowDuplicate MonteCarloScatterPanel::Duplicate() const
 	{
-		return CreateRef<MonteCarloScatterPanel>(m_Store, m_Settings, m_EventBus, GetTitle(), IsVisible());
+		return {CreateRef<MonteCarloScatterPanel>(m_Store, m_Settings, m_EventBus, GetTitle(), IsVisible()), {}};
 	}
 
 	void MonteCarloScatterPanel::AddGroup(std::string title)
@@ -416,83 +376,19 @@ namespace SST::Prototypes::JFM
 				return false;
 			outputPath = EnsureExtension(*outputPath, ".png");
 		}
-		std::error_code error;
-		const Path dataDirectory = Path::FromResolved(FileSystem::TempDirectoryPath(error) / "jfm-mc-scatter");
-		if (error)
-		{
-			m_LastSavePlotError = "temporary directory failed";
-			return false;
-		}
-		const Path dataPath = dataDirectory.Join(name + "__" + pair + ".tsv");
-		if (!ExportPlotToFile(plot, false, dataPath))
-		{
-			m_LastSavePlotError = "temporary TSV export failed";
-			return false;
-		}
-		const Path script = ResolveScatterPlotScript();
-		if (script.Empty())
-		{
-			m_LastSavePlotError = "plot_mc_scatter.py not found";
-			return false;
-		}
-		std::vector<std::string> arguments = {
-			script.String(),
-			"--input", dataPath.String(),
-			"--output", outputPath->String(),
-			"--title", PlotWindowTitle(plot, *result),
-			"--xlabel", result->parameterNames[xParameter],
-			"--ylabel", result->parameterNames[yParameter],
-			"--color1", ColorHex(plot.options.sigmaColors[0]),
-			"--color2", ColorHex(plot.options.sigmaColors[1]),
-			"--color3", ColorHex(plot.options.sigmaColors[2])};
-		if (plot.options.hasAxisLimits)
-		{
-			arguments.push_back("--xlim");
-			arguments.push_back(std::to_string(plot.options.xMinimum));
-			arguments.push_back(std::to_string(plot.options.xMaximum));
-			arguments.push_back("--ylim");
-			arguments.push_back(std::to_string(plot.options.yMinimum));
-			arguments.push_back(std::to_string(plot.options.yMaximum));
-		}
-		struct PythonCandidate
-		{
-			Path executable;
-			std::vector<std::string> prefixArguments;
-		};
-		const std::array<PythonCandidate, 3> pythonCandidates = {{
-			{Path("python"), {}},
-			{Path("py"), {"-3"}},
-			{Platform::ResolvePreferredPythonExecutable(), {}}}};
-		std::optional<Platform::ProcessRunResult> process;
-		for (const PythonCandidate &python : pythonCandidates)
-		{
-			std::vector<std::string> candidateArguments = python.prefixArguments;
-			candidateArguments.insert(candidateArguments.end(), arguments.begin(), arguments.end());
-			auto candidate = Platform::RunProcess(Platform::ProcessRunOptions{
-				python.executable,
-				candidateArguments,
-				Path::FromResolved(FileSystem::CurrentPath()),
-				std::chrono::seconds(30)});
-			if (candidate && candidate->exitCode == 0)
-			{
-				process = *candidate;
-				break;
-			}
-			if (!candidate)
-				m_LastSavePlotError = "python process failed: " + candidate.error().technicalDetails;
-			else
-			{
-				const std::string details = candidate->standardError.empty() ? candidate->standardOutput : candidate->standardError;
-				m_LastSavePlotError = "python exit " + std::to_string(candidate->exitCode) + ": " + CompactProcessError(details);
-			}
-		}
-		if (!process)
-			return false;
-		if (!FileSystem::Exists(outputPath->Native()))
-		{
-			m_LastSavePlotError = "PNG was not created";
-			return false;
-		}
+        try {
+            if (!plot.document->view.viewport) {
+                auto statistics = CalculateJFMMonteCarloScatterStatistics(*result, xParameter, yParameter);
+                if (!statistics) throw std::runtime_error("Too few converged samples");
+                auto bounds = PopulateJFMMonteCarloPlot(*plot.document, *statistics, plot.options,
+                    result->parameterNames[xParameter], result->parameterNames[yParameter]);
+                if (plot.options.hasAxisLimits)
+                    bounds = {plot.options.xMinimum,plot.options.xMaximum,plot.options.yMinimum,plot.options.yMaximum};
+                plot.document->view.viewport = bounds;
+            }
+            auto exported = ExportJFMPlot(*plot.document->Snapshot(), outputPath->Utf8(), "png", 300);
+            if (!exported.at("ok").get<bool>()) { m_LastSavePlotError = exported.at("error").at("message"); return false; }
+        } catch (const std::exception &e) { m_LastSavePlotError = e.what(); return false; }
 		return true;
 	}
 
@@ -519,7 +415,7 @@ namespace SST::Prototypes::JFM
 				++total;
 				saved += SavePlotImage(plot, directory.Join(name + "__" + pair + ".png")) ? 1 : 0;
 			}
-		SetStatus("MC plots saved", saved, total);
+		SetStatus("MC plots queued", saved, total);
 		return saved == total && total > 0;
 	}
 
@@ -671,7 +567,7 @@ namespace SST::Prototypes::JFM
 		if (ImGui::Button("Save Plot"))
 		{
 			const bool saved = SavePlotImage(plot);
-			SetStatus("Plot image saved", saved ? 1 : 0, 1);
+			SetStatus("Plot image queued", saved ? 1 : 0, 1);
 			if (!saved && !LastSavePlotError().empty())
 				m_Status += " - " + LastSavePlotError();
 		}
@@ -682,26 +578,15 @@ namespace SST::Prototypes::JFM
 			plot.remove = true;
 		}
 		const float height = std::max(360.0f, ImGui::GetContentRegionAvail().y - 8.0f);
-		(void)RenderJFMCovariancePlot(*result, plot.options, "plot", height);
+		(void)RenderJFMCovariancePlot(*result, plot.options, "plot", height, *plot.document);
 		ImGui::End();
 	}
 
-	void MonteCarloScatterPanel::Render()
+	void MonteCarloScatterPanel::RenderContent()
 	{
-		if (!IsVisible())
-			return;
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible, ImGuiWindowFlags_HorizontalScrollbar))
-		{
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
 		if (m_Store == nullptr)
 		{
 			ImGui::TextDisabled("Workspace unavailable");
-			ImGui::End();
-			SetVisible(visible);
 			return;
 		}
 
@@ -854,8 +739,6 @@ namespace SST::Prototypes::JFM
 		ImGui::EndChild();
 		RenderDockspace();
 
-		ImGui::End();
-		SetVisible(visible);
 
 		for (PlotGroup &group : m_Groups)
 			for (PlotState &plot : group.plots)

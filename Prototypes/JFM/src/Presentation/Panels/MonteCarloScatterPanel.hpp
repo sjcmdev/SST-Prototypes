@@ -1,11 +1,12 @@
 #pragma once
+#include "Presentation/JFMPlotDocument.hpp"
 
 #include "App/JFMUserSettings.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Events/JFMEvents.hpp"
 #include "Presentation/JFMFitMonteCarloWidgets.hpp"
-#include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 #include <cstdint>
@@ -15,7 +16,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	class MonteCarloScatterPanel final : public IPanel, public EventReceiver
+	class MonteCarloScatterPanel final : public EditorWindow, public EventReceiver
 	{
 	public:
 		MonteCarloScatterPanel(
@@ -25,12 +26,13 @@ namespace SST::Prototypes::JFM
 			std::string title = "MC Scatter",
 			bool visibleByDefault = false);
 
-		[[nodiscard]] Ref<IPanel> Clone() const override;
-		void Render() override;
+		[[nodiscard]] WindowDuplicate Duplicate() const override;
+		void RenderContent() override;
 
 	private:
 		struct PlotState
 		{
+			Ref<JFMPlotDocument> document = CreateRef<JFMPlotDocument>();
 			std::uint64_t id = 0;
 			JFMCharacteristicRef ref;
 			JFMMonteCarloScatterPlotOptions options;

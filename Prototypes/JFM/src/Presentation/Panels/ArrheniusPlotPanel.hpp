@@ -1,5 +1,6 @@
 #pragma once
 #include <sst/ui/Plot/RangeSelector.hpp>
+#include "Presentation/JFMPlotDocument.hpp"
 
 #include "Analysis/JFMArrheniusAnalysis.hpp"
 #include "Core/Utils/Memory.hpp"
@@ -23,6 +24,7 @@ namespace SST::Prototypes::JFM
 
 		struct FitLine
 		{
+			std::uint64_t plotKey = 0;
 			std::string name;
 			std::string modelName;
 			int model = 0;
@@ -95,6 +97,7 @@ namespace SST::Prototypes::JFM
 
 		struct PlotWindow
 		{
+			Ref<JFMPlotDocument> document = CreateRef<JFMPlotDocument>();
 			std::uint64_t id = 0;
 			std::string title;
 			int quantity = 3;

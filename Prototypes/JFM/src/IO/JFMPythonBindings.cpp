@@ -4,6 +4,7 @@
 
 #include "Core/Logging/Logger.hpp"
 #include "Domain/JFMTypes.hpp"
+#include "IO/JFMPlotExport.hpp"
 #include "ScientificRuntime/Python/PythonApi.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 
@@ -24,6 +25,18 @@ NB_MODULE(sst_jfm, module)
 {
 	using namespace SST::Prototypes::JFM;
 	module.attr("schema_version") = JFMProjectSchemaVersion;
+    module.def("plot", [](nb::dict request) {
+        auto json = nb::module_::import_("json");
+        nlohmann::json result;
+        try {
+            const auto input = nlohmann::json::parse(nb::cast<std::string>(json.attr("dumps")(request)));
+            nb::gil_scoped_release release;
+            result = RunJFMPlotRequest(input);
+        } catch (const std::exception &e) {
+            result = {{"ok", false}, {"error", {{"code", "jfm.plot.validation"}, {"message", e.what()}}}};
+        }
+        return json.attr("loads")(nb::str(result.dump().c_str()));
+    });
 
 	nb::class_<JFMColumn>(module, "JFMColumn")
 		.def(nb::init<>())

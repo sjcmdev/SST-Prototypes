@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/RawPlotPanel.hpp"
+#include "Presentation/JFMPlotWidgets.hpp"
 
 #include "Analysis/JFMFitEngine.hpp"
 #include "App/JFMCommands.hpp"
@@ -29,22 +30,6 @@ namespace SST::Prototypes::JFM
 			return data.currentDensity.empty() ? data.current : data.currentDensity;
 		}
 
-		std::vector<double> absolutePositive(const std::vector<double> &values, const std::vector<double> &x, std::vector<double> &filteredX)
-		{
-			const std::size_t count = std::min(values.size(), x.size());
-			std::vector<double> filteredY;
-			filteredX.reserve(count);
-			filteredY.reserve(count);
-			for (std::size_t index = 0; index < count; ++index)
-			{
-				const double value = std::abs(values[index]);
-				if (value <= 0.0)
-					continue;
-				filteredX.emplace_back(x[index]);
-				filteredY.emplace_back(value);
-			}
-			return filteredY;
-		}
 
 		ImVec4 colorFor(const JFMCharacteristicInfo &info)
 		{
@@ -250,7 +235,7 @@ namespace SST::Prototypes::JFM
 		WeakRef<UndoStack> undoStack,
 		std::string title,
 		bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault),
+		: EditorWindow("jfm.raw_plots", std::move(title), visibleByDefault, {.duplicable = true}),
 		  m_Store(std::move(store)),
 		  m_Settings(std::move(settings)),
 		  m_EventBus(std::move(eventBus)),
@@ -266,9 +251,9 @@ namespace SST::Prototypes::JFM
 		m_PlotAreas.emplace_back(CreatePlotArea());
 	}
 
-	Ref<IPanel> RawPlotPanel::Clone() const
+	WindowDuplicate RawPlotPanel::Duplicate() const
 	{
-		return CreateRef<RawPlotPanel>(m_Store, m_Settings, m_EventBus, m_CommandRegistry, m_UndoStack, GetTitle(), IsVisible());
+		return {CreateRef<RawPlotPanel>(m_Store, m_Settings, m_EventBus, m_CommandRegistry, m_UndoStack, GetTitle(), IsVisible()), {}};
 	}
 
 	RawPlotPanel::PlotArea RawPlotPanel::CreatePlotArea(ProjectHandle project)
@@ -664,30 +649,11 @@ namespace SST::Prototypes::JFM
 		return wantsResizeCursor;
 	}
 
-	void RawPlotPanel::Render()
+	void RawPlotPanel::RenderContent()
 	{
-		if (!IsVisible())
-		{
-			for (PlotArea &area : m_PlotAreas)
-				FinishRangeUndoGroup(area);
-			return;
-		}
-
-		bool visible = IsVisible();
-		const std::string managerTitle = GetTitle() + " Manager###jfm_raw_plot_manager";
-		if (!ImGui::Begin(managerTitle.c_str(), &visible))
-		{
-			for (PlotArea &area : m_PlotAreas) FinishRangeUndoGroup(area);
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
-
 		if (m_Store == nullptr)
 		{
 			ImGui::TextDisabled("Workspace unavailable");
-			ImGui::End();
-			SetVisible(visible);
 			return;
 		}
 		if (ImGui::Button("+ Empty Plot"))
@@ -702,10 +668,6 @@ namespace SST::Prototypes::JFM
 		if (ImGui::Button("Plot Group"))
 			PlotSelectedGroup();
 		ImGui::TextDisabled("Plot windows: %d", static_cast<int>(m_PlotAreas.size()));
-		ImGui::End();
-		SetVisible(visible);
-		if (!visible)
-			return;
 
 		if (m_PlotAreas.empty())
 			m_PlotAreas.emplace_back(CreatePlotArea());
@@ -1049,7 +1011,9 @@ namespace SST::Prototypes::JFM
 			const std::string plotId = "##jfm_raw_plot_" + std::to_string(area.id);
 			const float plotHeight = std::max(420.0f, ImGui::GetContentRegionAvail().y);
 			const ImPlotFlags plotFlags = area.showLegend ? ImPlotFlags_None : ImPlotFlags_NoLegend;
-			if (ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, plotHeight), plotFlags))
+			JFMPlotExportControls(*area.document);
+			const bool plotFont = BeginJFMPlotFrame(*area.document);
+			if (plotFont && ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, plotHeight), plotFlags))
 			{
 				ImPlot::SetupAxes("Voltage", "Current");
 				if (area.showLegend)
@@ -1139,15 +1103,7 @@ namespace SST::Prototypes::JFM
 							rawSpec.LineWeight = plotSettings.hoveredCurveLineWeight;
 						const std::string curveLabel = group.title + " / " + shortName(characteristic->second.info)
 							+ "###curve_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
-						if (area.scale == PlotScale::Linear)
-							sst::ui::plot::RenderSeries({curveLabel.c_str(), {x.data(), rawY.data(), static_cast<std::size_t>(count)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(rawSpec)});
-						else
-						{
-							std::vector<double> filteredX;
-							std::vector<double> filteredY = absolutePositive(rawY, x, filteredX);
-							if (!filteredX.empty())
-								sst::ui::plot::RenderSeries({curveLabel.c_str(), {filteredX.data(), filteredY.data(), static_cast<std::size_t>(filteredX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(rawSpec)});
-						}
+						AddJFMPlotSeries(*area.document, {curveLabel.c_str(), {x.data(), rawY.data(), static_cast<std::size_t>(count)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(rawSpec)}, area.scale == PlotScale::SemiLog);
 						const auto curve = m_Store->GetPrefitCurve({area.project, id});
 						if (plotSettings.showPrefitCurves && curve)
 						{
@@ -1172,15 +1128,7 @@ namespace SST::Prototypes::JFM
 								prefitSpec.LineWeight = area.hoveredCharacteristicId == id ? plotSettings.hoveredCurveLineWeight : plotSettings.prefitCurveLineWeight;
 								prefitSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string prefitLabel = "##jfm_raw_prefit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
-								if (area.scale == PlotScale::Linear)
-									sst::ui::plot::RenderSeries({prefitLabel.c_str(), {prefitX->data(), prefitY->data(), static_cast<std::size_t>(curveCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)});
-								else
-								{
-									std::vector<double> filteredX;
-									std::vector<double> filteredY = absolutePositive(*prefitY, *prefitX, filteredX);
-									if (!filteredX.empty())
-										sst::ui::plot::RenderSeries({prefitLabel.c_str(), {filteredX.data(), filteredY.data(), static_cast<std::size_t>(filteredX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)});
-								}
+								AddJFMPlotSeries(*area.document, {prefitLabel.c_str(), {prefitX->data(), prefitY->data(), static_cast<std::size_t>(curveCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)}, area.scale == PlotScale::SemiLog);
 							}
 						}
 						const auto fitCurve = m_Store->GetFitCurve({area.project, id});
@@ -1204,15 +1152,7 @@ namespace SST::Prototypes::JFM
 								fitSpec.LineWeight = area.hoveredCharacteristicId == id ? plotSettings.hoveredCurveLineWeight : plotSettings.fitCurveLineWeight;
 								fitSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string fitLabel = "##jfm_raw_fit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
-								if (area.scale == PlotScale::Linear)
-									sst::ui::plot::RenderSeries({fitLabel.c_str(), {fitX->data(), fitY->data(), static_cast<std::size_t>(fitCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
-								else
-								{
-									std::vector<double> filteredX;
-									std::vector<double> filteredY = absolutePositive(*fitY, *fitX, filteredX);
-									if (!filteredX.empty())
-										sst::ui::plot::RenderSeries({fitLabel.c_str(), {filteredX.data(), filteredY.data(), static_cast<std::size_t>(filteredX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
-								}
+								AddJFMPlotSeries(*area.document, {fitLabel.c_str(), {fitX->data(), fitY->data(), static_cast<std::size_t>(fitCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)}, area.scale == PlotScale::SemiLog);
 							}
 						}
 						if (plotSettings.showTunedCurves && characteristic->second.info.temperatureK && (characteristic->second.info.fit || characteristic->second.info.prefit))
@@ -1245,26 +1185,23 @@ namespace SST::Prototypes::JFM
 								tunedSpec.LineWeight = area.hoveredCharacteristicId == id ? plotSettings.hoveredCurveLineWeight : plotSettings.tunedCurveLineWeight;
 								tunedSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string tunedLabel = "##jfm_raw_tuned_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
-								if (area.scale == PlotScale::Linear)
-									sst::ui::plot::RenderSeries({tunedLabel.c_str(), {tunedX.data(), tunedY.data(), static_cast<std::size_t>(tunedCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(tunedSpec)});
-								else
-								{
-									std::vector<double> filteredX;
-									std::vector<double> filteredY = absolutePositive(tunedY, tunedX, filteredX);
-									if (!filteredX.empty())
-										sst::ui::plot::RenderSeries({tunedLabel.c_str(), {filteredX.data(), filteredY.data(), static_cast<std::size_t>(filteredX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(tunedSpec)});
-								}
+								AddJFMPlotSeries(*area.document, {tunedLabel.c_str(), {tunedX.data(), tunedY.data(), static_cast<std::size_t>(tunedCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(tunedSpec)}, area.scale == PlotScale::SemiLog);
 							}
 						}
 					}
 				}
 				const bool rangeCursor = RenderRangeDragLines(area, records);
-				ImPlot::EndPlot();
+				sst::ui::plot::PlotSpec figureSpec;
+				figureSpec.x.label = "Voltage"; figureSpec.y.label = "Current";
+				figureSpec.y.scale = area.scale == PlotScale::SemiLog ? sst::ui::plot::AxisScale::Log10 : sst::ui::plot::AxisScale::Linear;
+				figureSpec.legend = {area.showLegend, true, false};
+				EndJFMPlot(*area.document, figureSpec);
 				if (rangeCursor)
 					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 			}
 			else
 				FinishRangeUndoGroup(area);
+			if (plotFont) ImGui::PopFont();
 			if (area.project == m_Store->GetActiveProjectHandle() && ImGui::BeginDragDropTarget())
 			{
 				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("JFM_CHARACTERISTIC_ID"))

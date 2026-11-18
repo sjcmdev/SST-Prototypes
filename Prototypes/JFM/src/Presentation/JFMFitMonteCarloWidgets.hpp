@@ -1,4 +1,5 @@
 #pragma once
+#include "Presentation/JFMPlotDocument.hpp"
 
 #include "App/JFMUserSettings.hpp"
 #include "Domain/JFMTypes.hpp"
@@ -40,5 +41,5 @@ namespace SST::Prototypes::JFM
 		const JFMMonteCarloResult &result,
 		JFMMonteCarloScatterPlotOptions &options,
 		const char *id,
-		float height = 520.0f);
+		float height, JFMPlotDocument &document);
 } // namespace SST::Prototypes::JFM

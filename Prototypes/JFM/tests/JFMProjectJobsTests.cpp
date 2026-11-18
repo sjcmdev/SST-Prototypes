@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <future>
+#include <thread>
+#include <chrono>
 #include "Core/IO/TextFileIO.hpp"
 #ifdef _WIN32
 #include <Windows.h>
@@ -14,6 +16,8 @@
 #include "Core/Utils/Memory.hpp"
 #include "Events/JFMEvents.hpp"
 #include "IO/JFMExportRawTsvJob.hpp"
+#include "IO/JFMPlotExport.hpp"
+#include "Presentation/JFMPlotDocument.hpp"
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMImportPreviewJob.hpp"
 #include "IO/JFMImportPaths.hpp"
@@ -24,6 +28,7 @@
 #include "IO/JFMPythonPrefitBridge.hpp"
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 #include "ScientificRuntime/Python/PythonInterpreter.hpp"
+#include "ScientificRuntime/Python/PythonGilScope.hpp"
 
 namespace SST::Prototypes::JFM
 {
@@ -515,4 +520,76 @@ namespace SST::Prototypes::JFM
 		(void)subscription;
 #endif
 	}
+
+    TEST(JFMProjectJobsTests, EnginePlotExportsAllPublicationFormatsThroughNanobind)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        auto runtime = EnsurePythonRuntimeForBridgeTests();
+        ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+        JFMPlotDocument doc;
+        const double x[] = {0,1,2}, y[] = {1,2,3};
+        doc.BeginFrame();
+        doc.SetSeries({"Measurement###raw", {x,y,3}});
+        doc.SetSeries({"Fit###fit", {x,y,3}});
+        doc.EndFrame({});
+        for (const char *format : {"svg", "pdf", "png"}) {
+            auto destination = FileSystem::TempDirectoryPath() / (std::string("sst-jfm-j2.") + format);
+            nlohmann::json request = {{"operation","export"},{"project",nlohmann::json::parse(doc.project.toJson())},
+                {"graph_id",doc.graph},{"ranges",{-1,3,0,4}},{"width_mm",80},{"height_mm",60},
+                {"dpi",150},{"format",format},{"path",destination.generic_string()}};
+            nlohmann::json result;
+            {
+            PythonGilAcquireScope scriptGuard; // Reproduce the PythonScriptJob guard around the binding.
+            ASSERT_TRUE(scriptGuard.IsActive());
+            const auto gil = PythonInterpreter::AcquireRuntimeGil();
+            auto *json = PyImport_ImportModule("json");
+            auto *module = PyImport_ImportModule("sst_jfm");
+            ASSERT_NE(json, nullptr); ASSERT_NE(module, nullptr);
+            auto *input = PyObject_CallMethod(json, "loads", "s", request.dump().c_str());
+            auto *output = PyObject_CallMethod(module, "plot", "O", input);
+            if (!output) PyErr_Print();
+            ASSERT_NE(output, nullptr);
+            auto *encoded = PyObject_CallMethod(json, "dumps", "O", output);
+            result = nlohmann::json::parse(PyUnicode_AsUTF8(encoded));
+            Py_DECREF(encoded); Py_DECREF(output); Py_DECREF(input); Py_DECREF(module); Py_DECREF(json);
+            PythonInterpreter::ReleaseRuntimeGil(gil);
+            }
+            ASSERT_EQ(result.at("ok"), true) << result.dump();
+            const auto id = result.at("job_id");
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+            do {
+                result = RunJFMPlotRequest({{"operation","status"},{"job_id",id}});
+                if (result.at("status") != "queued" && result.at("status") != "running") break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            } while (std::chrono::steady_clock::now() < deadline);
+            ASSERT_EQ(result.at("ok"), true) << result.dump();
+            ASSERT_EQ(result.at("status"), "completed") << result.dump();
+            EXPECT_GT(std::filesystem::file_size(destination), 500);
+            std::filesystem::remove(destination);
+        }
+#else
+        FAIL() << "Embedded Python is required for publication exports";
+#endif
+    }
+
+    TEST(JFMProjectJobsTests, HzbProjectOpensWithoutRewritingTheSource)
+    {
+        const Path path("Prototypes/JFM/JFM-projects/HZB-project.yaml.jfm.yaml");
+        std::string original, after, error;
+        ASSERT_TRUE(TextFileIO::Load(path, original, error)) << error;
+        auto bus = CreateRef<EventBus>();
+        std::optional<JFMProject> loaded;
+        auto subscription = bus->Subscribe<ProjectLoadCompleted>([&](const ProjectLoadCompleted &e) { loaded = e.project; });
+        auto context = MakeTestJobContext();
+        LoadProjectJob job(bus, path);
+        job.Execute(context); bus->ProcessQueue();
+        ASSERT_TRUE(loaded.has_value());
+        EXPECT_GT(loaded->characteristics.size(), 10);
+        EXPECT_EQ(loaded->characteristics.front().name, "ivd_HZB25_T181_L0");
+        EXPECT_TRUE(loaded->characteristics.front().prefit.has_value());
+        EXPECT_TRUE(loaded->characteristics.front().fit.has_value());
+        ASSERT_TRUE(TextFileIO::Load(path, after, error)) << error;
+        EXPECT_EQ(original, after);
+    }
 } // namespace SST::Prototypes::JFM
+
