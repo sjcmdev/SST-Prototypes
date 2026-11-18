@@ -35,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from jfm_import.dat_parser import parse_dat
+from jfm_prefit.current_models import evaluate_current
 from jfm_prefit.prefit import run_auto_prefit, run_prefit
 from jfm_prefit.preprocessing import prepare_sample
 from jfm_prefit.range_detection import detect_fit_range
@@ -129,6 +130,28 @@ def test_range_detection_matches_curated_project(characteristic: dict) -> None:
     assert fit_range.reason == expected["reason"]
 
 
+# A shunt this large carries a negligible current, so the data cannot pin its
+# value down (e.g. 1.1e10 vs 2.0e10 Ohm give the same curve to ~3e-9 max|I|):
+# check a lower bound and the resulting curve instead of the number itself.
+_UNIDENTIFIABLE_RSH_OHM = 1.0e9
+_CURVE_REL_TOL = 1.0e-6
+
+
+def _assert_parameters_match(sample, model_id: str, actual: dict, expected: dict) -> None:
+    for name, ref in expected.items():
+        value = actual[name].value
+        if name == "Rsh" and ref["value"] >= _UNIDENTIFIABLE_RSH_OHM:
+            assert value >= _UNIDENTIFIABLE_RSH_OHM
+            continue
+        assert value == pytest.approx(ref["value"], rel=1.0e-3, abs=1.0e-25)
+    fitted = evaluate_current(sample.voltage, sample.temperature_k, model_id, {n: p.value for n, p in actual.items()})
+    curated = evaluate_current(sample.voltage, sample.temperature_k, model_id, {n: r["value"] for n, r in expected.items()})
+    # The model may overflow far outside the fit window; compare where both are finite.
+    finite = np.isfinite(fitted) & np.isfinite(curated)
+    assert finite.sum() >= len(curated) // 2
+    assert np.max(np.abs(fitted - curated)[finite]) <= _CURVE_REL_TOL * np.max(np.abs(curated[finite]))
+
+
 @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
 @pytest.mark.parametrize("characteristic", _params())
 def test_prefit_parameters_match_curated_project(characteristic: dict) -> None:
@@ -136,10 +159,7 @@ def test_prefit_parameters_match_curated_project(characteristic: dict) -> None:
     prefit = characteristic["prefit"]
     options = PrefitOptions(range_options=_range_options(prefit))
     result = run_prefit(sample, prefit["model"], options)
-    for name, expected in prefit["parameters"].items():
-        assert result.parameters[name].value == pytest.approx(
-            expected["value"], rel=1.0e-3, abs=1.0e-25
-        )
+    _assert_parameters_match(sample, prefit["model"], result.parameters, prefit["parameters"])
 
 
 @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
@@ -157,10 +177,7 @@ def test_fit_parameters_match_curated_project(characteristic: dict) -> None:
     fit = characteristic["fit"]
     options = PrefitOptions(range_options=_range_options(prefit))
     result = run_prefit(sample, prefit["model"], options)
-    for name, expected in fit["parameters"].items():
-        assert result.parameters[name].value == pytest.approx(
-            expected["value"], rel=1.0e-3, abs=1.0e-25
-        )
+    _assert_parameters_match(sample, prefit["model"], result.parameters, fit["parameters"])
 
 
 @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
