@@ -28,6 +28,14 @@ def project_from_preview(preview, temperature=None):
 def execute(project, request):
     """Headless Core command/job operation; JSON values in/out, typed error envelope.
 
+    operation=walter: settings select measurement_id or measurement_ids, optional
+    cv_fit_id / arrhenius_fit_id, model (default Walter1996-linear-field),
+    zeta_s_1_K_2 or explicit compat B_s_1/emission_source, V_b_V/E_F_eV,
+    parameter_source for manual inputs, x_d source/policy and ranges with units.
+    operation=integrate_saved_walter: settings={sample_id, optional
+    integration_range_eV}; replays the frozen historical slice, not the GUI.
+    Both commit through the same Core analysis command/job/Undo as the GUI.
+
     operation: edit_circuit (edit: create/replace/delete), simulate or fit
     (settings: measurement_id, circuit_id, optional confirmed temperature_K/bias_V).
     fit settings add parameters [{element, field, unit, free, min, max}],

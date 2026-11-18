@@ -32,7 +32,35 @@ namespace SST::Prototypes::CapLab
         {
             auto p = Parse(input);
             Json measurement;
-            if (analysisOptions.at("type")=="Arrhenius") {
+            if (analysisOptions.at("type")=="WalterSaved") {
+                bool found=false;
+                for (const auto &h : p.historical) if (h.at("sample_id")==analysisOptions.at("sample_id")) {
+                    if (found) throw std::runtime_error("Ambiguous historical Walter record");
+                    analysisOptions["historical"]=h; found=true;
+                }
+                if (!found) throw std::runtime_error("Missing historical Walter record");
+            } else if (analysisOptions.at("type")=="Walter") {
+                analysisOptions["measurements"]=Json::array();
+                const auto ids=analysisOptions.contains("measurement_ids") ? analysisOptions.at("measurement_ids") : Json::array({analysisOptions.at("measurement_id")});
+                std::set<pl::Id> seen;
+                for (const auto &id : ids) {
+                    const auto mid=id.get<pl::Id>();
+                    if (!seen.insert(mid).second) throw std::runtime_error("Duplicate Walter measurement");
+                    analysisOptions["measurements"].push_back(AnalysisMeasurement(p,mid));
+                }
+                if (ids.empty()) throw std::runtime_error("Select Walter measurements");
+                measurement=analysisOptions.at("measurements").at(0);
+                analysisOptions["source_analyses"]=Json::array();
+                for (const auto *key : {"cv_fit_id","arrhenius_fit_id","dlcp_fit_id"}) if (analysisOptions.contains(key)) {
+                    bool found=false;
+                    for (const auto &a : p.analyses) if (a.at("id")==analysisOptions.at(key)) {
+                        if (a.at("status")!="valid" || a.at("type")!=(std::string(key)=="cv_fit_id" ? "CV" : std::string(key)=="dlcp_fit_id" ? "DLCPPolynomial" : "Arrhenius"))
+                            throw std::runtime_error("Stale/invalid Walter source analysis");
+                        analysisOptions["source_analyses"].push_back(a); found=true;
+                    }
+                    if (!found) throw std::runtime_error("Missing Walter source analysis");
+                }
+            } else if (analysisOptions.at("type")=="Arrhenius") {
                 bool found=false;
                 for (const auto &d : p.defects) if (d.at("id")==analysisOptions.at("defect_id")) { analysisOptions["defect"]=d; found=true; }
                 if (!found) throw std::runtime_error("Missing defect.");
@@ -52,6 +80,17 @@ namespace SST::Prototypes::CapLab
                     }
             } else measurement=AnalysisMeasurement(p,analysisOptions.at("measurement_id").get<pl::Id>());
             Json xd;
+            if (analysisOptions.at("type")=="Walter" && analysisOptions.value("xd_source",std::string("CV"))=="CV" &&
+                !analysisOptions.contains("xd_measurement_id") && analysisOptions.contains("cv_fit_id"))
+                for (const auto &a : analysisOptions.at("source_analyses")) if (a.at("type")=="CV") {
+                    analysisOptions["xd_measurement_id"]=a.at("inputs").at(0).at("id");
+                    if (!analysisOptions.contains("material")) {
+                        analysisOptions["material"]="project"; analysisOptions["project_material"]=a.at("material");
+                    }
+                }
+            if (analysisOptions.at("type")=="Walter" && analysisOptions.value("xd_source",std::string("CV"))=="DLCP" && analysisOptions.contains("dlcp_fit_id"))
+                for (const auto &a : analysisOptions.at("source_analyses")) if (a.at("type")=="DLCPPolynomial")
+                    analysisOptions["xd_measurement_id"]=a.at("inputs").at(0).at("id");
             if (analysisOptions.contains("xd_measurement_id")) xd = AnalysisMeasurement(p,analysisOptions.at("xd_measurement_id").get<pl::Id>());
             Json result;
             if (analysisOptions.at("type")=="Circuit") {

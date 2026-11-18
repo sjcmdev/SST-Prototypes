@@ -11,6 +11,7 @@ public:
     void RenderAnalysis();
     void RenderAS();
     void RenderIS();
+    void RenderWalter();
 private:
     sst::ui::plot::PlotViewState fitView;
     Json isParameters=Json::array();

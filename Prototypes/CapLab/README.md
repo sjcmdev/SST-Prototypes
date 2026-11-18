@@ -1,4 +1,4 @@
-# CapLab - M6 IS circuit fitting
+# CapLab - M7 Walter spectra
 
 Core owns commands, EventBus, Undo, jobs, progress, diagnostics and embedded
 Python. PlotLab-Engine owns tables, row/object IDs and graphs. No dependencies
@@ -297,3 +297,76 @@ Final normal Debug build (with project references) succeeded in repository
 build/. One Computer Use launch request was rejected: "Computer Use was not
 approved to use caplab". Start/exit remains unverified; VISUAL QA NOT RUN.
 See VALIDATION.md for the acceptance table and evidence.
+
+## M7 — Walter 1996 and ProPho-compat
+
+The Walter section selects same-sample AS series, an optional CV fit and an
+optional omega-T2 Arrhenius fit. The default is Walter1996-linear-field,
+Walter et al. (1996), equation 25; ProPho-compat uses its separate square-root
+factor and an explicit constant B. B is never inferred from a historical fit
+or multiplied by T squared. Every model change creates a separate analysis.
+The sourced physical kernels and the two quadratures live in SST-Physics
+`walter.hpp`; Python only selects inputs and differentiates C/area against
+ln(2*pi*f) after the frequency/row mask (PCF semantics).
+
+Select x_d from CV at AS bias (default), measured DLCP at V=0, or a positive
+manual width with a description. Existing block/linear/nearest policies are
+reused and saved with measurement, fit, T/f/bias and warning provenance.
+A selected CV fit supplies its source measurement/material when those are
+not overridden. Known measurement bias takes precedence; conflicting
+confirmations block analysis. Missing material, Fermi energy or emission
+parameters block dependent work. Manual physical inputs require a source.
+
+The panel offers T/f/E filters, an integration interval and overlaid spectra
+through the shared PlotLab-Engine graph/snapshot exporter. Results preserve
+row IDs, model, constants, source fit snapshots, parameters and quality.
+Invalid-domain cells retain null and a reason; they remain visible in the
+result details, and missing plot cells break the line. Negative spectra are
+preserved. Default integration sorts E, interpolates interval boundaries and
+never joins across invalid samples. Compat uses minus trapezoids in supplied
+order with sample-only interval selection; it does not interpolate boundaries.
+A compat interval with invalid samples has an unavailable integral. Default
+partial integrals report gaps and the count of valid segments.
+
+Analyses use caplab.analyze -> Core job -> caplab.accept_analysis/Core Undo.
+Cancellation, stale revisions, source edits/removal and round-trip persistence
+use the existing workflow. JSON headless operations use the real nanobind
+binding and exactly the same command/job path:
+
+```python
+from caplab import execute
+result = execute(project, {"operation": "walter", "settings": {
+    "measurement_ids": [measurement_id],
+    "model": "Walter1996-linear-field",
+    "V_b_V": 0.8, "E_F_eV": 0.15, "zeta_s_1_K_2": 8e7,
+    "parameter_source": "independent reference",
+    "xd_source": "manual", "xd_manual_m": 2e-6,
+    "xd_description": "reference width", "integration_range_eV": [0.1, 0.4],
+}})
+assert result["ok"], result["error"]
+project = result["project"]
+```
+
+Optional cv_fit_id / arrhenius_fit_id / dlcp_fit_id select valid same-sample fits; default
+Arrhenius emission must be omega-T2. Compat requires B_s_1 and emission_source.
+Filters are temperature_range_K, frequency_range_Hz, energy_range_eV;
+excluded_row_ids refer to the original stable rows. Source controls are
+xd_source, xd_policy, xd_measurement_id, as_bias_V, material/project_material.
+Returned errors use walter_failed / cancelled / invalid_request. operation_id
+supports cancellation from another Python thread as in M6.
+
+For imported historical records use operation=integrate_saved_walter with
+settings={sample_id, optional integration_range_eV}. It replays the frozen
+walter.dist_for_integration slice and records its original selection/range.
+Owner decision §8 limits W1–W3 compatibility to these saved integrals; full
+historical spectrum reconstruction remains unsupported. Source file and slice
+hashes, sample counts, intervals, independent PFS expectations and tolerances
+are frozen in tests/fixtures/m7/sources.json. M8 CSV/XLSX workflow is separate.
+
+CM7 numerical acceptance: CapLab 33 GTest / 155 pytest; PlotLab 10 / 22;
+JFM 71 / 96 plus 3 xfail; SST-LibrariesTests 107 GTest. Debug builds use
+SST-Prototypes/build/ and SST-Libraries/build/, all under build-lock.
+W1-W3 relative differences are 7.95e-12 / 9.37e-12 / 9.31e-11 (limit 1e-4).
+One post-build Computer Use launch was rejected: "Computer Use was not approved
+to use caplab". Start/exit remains unverified; VISUAL QA NOT RUN.
+See VALIDATION.md for exact values, commands, logs, scope and remaining gaps.

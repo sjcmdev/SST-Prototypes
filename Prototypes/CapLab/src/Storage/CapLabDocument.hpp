@@ -220,9 +220,45 @@ namespace SST::Prototypes::CapLab
             const std::string status=a.at("status");
             if (status!="valid" && status!="conditional" && status!="invalid" && status!="stale" && status!="missing_input")
                 throw std::runtime_error("Invalid analysis status.");
-            if (a.at("kernel_version")!=1 || (a.at("type")!="CV" && a.at("type")!="DLCPPolynomial" && a.at("type")!="AS" && a.at("type")!="Arrhenius" && a.at("type")!="Circuit") ||
-                !a.at("inputs").is_array() || (a.at("inputs").empty() && a.at("type")!="Arrhenius") || !a.at("settings").is_object())
+            if (a.at("kernel_version")!=1 || (a.at("type")!="CV" && a.at("type")!="DLCPPolynomial" && a.at("type")!="AS" && a.at("type")!="Arrhenius" && a.at("type")!="Circuit" && a.at("type")!="Walter" && a.at("type")!="WalterSaved") ||
+                !a.at("inputs").is_array() || (a.at("inputs").empty() && a.at("type")!="Arrhenius" && a.at("type")!="WalterSaved") || !a.at("settings").is_object())
                 throw std::runtime_error("Invalid analysis contract.");
+            if (a.at("type")=="Walter" || a.at("type")=="WalterSaved") {
+                if (!samples.contains(a.at("sample_id").get<pl::Id>()) ||
+                    (a.at("model")!="Walter1996-linear-field" && a.at("model")!="ProPho-compat") ||
+                    !a.at("spectra").is_array() || a.at("spectra").empty()) throw std::runtime_error("Invalid Walter result");
+                if (a.at("type")=="Walter") {
+                    if (!Optional(a.at("V_b_V")) || !Optional(a.at(a.at("model")=="ProPho-compat" ? "B_s_1" : "zeta_s_1_K_2")) ||
+                        !a.at("E_F_eV").is_number() || !std::isfinite(a.at("E_F_eV").get<double>()) || !a.at("source_analyses").is_array()) throw std::runtime_error("Invalid Walter parameters/sources");
+                    for (const auto &source : a.at("source_analyses"))
+                        if (!source.at("id").is_number_unsigned() || (source.at("type")!="CV" && source.at("type")!="Arrhenius" && source.at("type")!="DLCPPolynomial") || source.at("status")!="valid") throw std::runtime_error("Invalid Walter source snapshot");
+                } else if (a.at("compatibility")!="saved-spectrum-integral-only" || a.at("historical").at("sample_id")!=a.at("sample_id")) throw std::runtime_error("Invalid historical Walter scope");
+                for (const auto &s : a.at("spectra")) {
+                    const auto n=s.at("energy_eV").size();
+                    if (n<2 || s.at("density_cm3_eV").size()!=n || s.at("quality").size()!=n) throw std::runtime_error("Unequal Walter arrays");
+                    for (std::size_t i=0;i<n;++i) {
+                        if (!s.at("energy_eV").at(i).is_number() || !std::isfinite(s.at("energy_eV").at(i).get<double>())) throw std::runtime_error("Invalid Walter energy");
+                        const auto &v=s.at("density_cm3_eV").at(i);
+                        if (!s.at("quality").at(i).is_string() || s.at("quality").at(i).get<std::string>().empty()) throw std::runtime_error("Missing Walter quality reason");
+                        if ((!v.is_null() && (!v.is_number() || !std::isfinite(v.get<double>()))) || (v.is_null() && s.at("quality").at(i)=="valid")) throw std::runtime_error("Invalid Walter quality/value");
+                    }
+                    const auto &integral=s.at("integral");
+                    const auto &range=integral.at("range_eV");
+                    if (!range.is_array() || range.size()!=2 || !range.at(0).is_number() || !range.at(1).is_number() ||
+                        !std::isfinite(range.at(0).get<double>()) || !std::isfinite(range.at(1).get<double>()) || range.at(0)>=range.at(1) ||
+                        (integral.at("semantics")!="ProPho-minus-trapz" && integral.at("semantics")!="ascending-clipped-trapezoids")) throw std::runtime_error("Invalid Walter integration metadata");
+                    const auto &v=integral.at("density_cm3");
+                    if (!v.is_null() && (!v.is_number() || !std::isfinite(v.get<double>()))) throw std::runtime_error("Invalid Walter integral");
+                    if (a.at("type")=="Walter") {
+                        const auto &xd=s.at("x_d");
+                        if (xd.at("value_m").is_null()) throw std::runtime_error("Missing Walter width");
+                        Optional(xd.at("value_m"));
+                        if ((xd.at("source")!="CV" && xd.at("source")!="DLCP" && xd.at("source")!="manual") ||
+                            (xd.at("policy")!="block" && xd.at("policy")!="linear" && xd.at("policy")!="nearest")) throw std::runtime_error("Invalid Walter width source/policy");
+                        if (s.at("row_ids").size()!=n || s.at("frequency_Hz").size()!=n || s.at("D_c_F_m2").size()!=n || s.at("field_factor_V_m_C").size()!=n) throw std::runtime_error("Unequal Walter provenance arrays");
+                    }
+                }
+            }
             if (a.at("type")=="Circuit") {
                 const auto n=a.at("frequency_Hz").size();
                 if (!samples.contains(a.at("sample_id").get<pl::Id>()) || n==0 || n>1201 || a.at("row_ids").size()!=n ||

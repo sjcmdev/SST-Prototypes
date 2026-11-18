@@ -519,3 +519,136 @@ Otwarte pytanie zamknięte: czy udostępnić CapLab w Computer Use do wymaganego
 start/exit i odbioru GUI fitu? Rekomendacja: tak. Runtime pozostaje jedynym
 blockerem odbioru M6; M7/M8 i aktualizacja głównego graphify-out są poza
 ścieżkami/zakresem tej zmiany.
+
+## CM7 — Walter spectra (2026-11-18)
+
+Zakres: §6 M7 oraz §4.4; wiążące decyzje §8 mają pierwszeństwo.
+Dwa modele: Walter1996-linear-field (domyślny, eq.25) i ProPho-compat
+(pierwiastek / 2*Vb^1.5, PCF). Fizyczne kernele i całkowanie są w
+SST-Libraries/SST-Physics/include/sst/physics/walter.hpp. Cytowania:
+Walter et al., J. Appl. Phys. 80, 4411–4420 (1996), eq.20/25,
+https://paperzz.com/doc/9224551/kirchartz1_walter96jap;
+ProPho Code Findings, WaltCalc calc_A / omega_to_E / calculate_concentration;
+PFS Walter oraz SST-CapLab Spec §4.4/§8.
+
+Python przelicza C/area, maskuje f/row IDs przed gradientem po ln(omega),
+omega=2*pi*f. Domyślny prefaktor to zeta [s^-1 K^-2] razy T²; compat B [s^-1]
+jest stałe dla wybranych temperatur, z jawnym źródłem i bez automatycznego
+wyprowadzania z historycznego fitu. Zapis obejmuje stałe SI, model/version,
+rewizję, pełne snapshoty wejść/fitów, T/f/bias, source/policy/description x_d,
+energię [eV], density [cm^-3 eV^-1], gradient [F/m2], factor [V/(m C)],
+quality, interval/semantics/integral [cm^-3].
+
+Wybór x_d współdzieli helper z CV/DLCP: CV przy bias AS, profil DLCP lub fit
+raw DLCP przy V=0, albo manual. Block/linear/nearest pozostają jawne i zapisane;
+linear nie ekstrapoluje. Wybrany fit CV dostarcza Vb/EF i domyślny pomiar oraz
+materiał dla width. Wybrany omega-T2 Arrhenius dostarcza zeta. Braki parametrów,
+niezgodna próbka, stare/missing fity i konflikt potwierdzonego bias są błędami.
+Wynik bez ważnej dziedziny zachowuje null/reason zamiast pozornej liczby;
+ujemne widma pozostają ujemne. Default całkuje rosnące E z interpolacją granic
+bez łączenia nieważnych przerw. Compat wykonuje -trapz po przekazanej kolejności,
+po wyborze punktów w przedziale, bez interpolacji. Nieważny compat wycinek
+nie zwraca pozornej całki; default raportuje luki/liczbę ważnych segmentów.
+
+Panel na W1 EditorWindow: T/f/E, model, serie, fit CV/defektu, x_d, prefaktor,
+zakres całki, nakładane widma i szczegóły invalid points. Ten sam PlotLab-Engine
+zachowuje null jako przerwę linii i obsługuje istniejący snapshot PNG export.
+Nowe publiczne operacje caplab.execute(operation=walter / integrate_saved_walter)
+używają rzeczywistego nanobind i tego samego Core command -> cancellable job ->
+main-thread acceptance / Undo. Integracja saved wybiera rekord przez trwały
+sample_id (istniejący model ma jeden historyczny rekord na importowaną próbkę);
+nie wprowadzono osobnej migracji ID. Zmiana/usunięcie wejścia lub fitu daje
+stale/missing_input; późny worker nie nadpisuje nowej rewizji.
+
+Naprawa lokalnego root cause headless: ReadAnalysis bierze standardowy GIL scope
+nanobind zamiast ponownie blokować mutex zewnętrznego Core PythonGilAcquireScope.
+Headless caller zwalnia GIL na czas joba, lecz może nadal trzymać ten mutex.
+Pozostawienie poprzedniego wywołania powodowało deadlock Python-backed jobów.
+Core, JFM i inne aplikacje nie zostały zmienione przez CM7.
+
+Oczekiwania testów pochodzą z literalnych równań i stałych SI z §4.4/PCF oraz
+PFS W1–W3; nie pochodzą z kernela testowanego. W1–W3 używają wyłącznie
+zamrożonych walter.dist_for_integration, osobno od nowych synthetic spectra.
+Manifest m7/sources.json zapisuje hashe źródeł i wycinków, liczbę punktów,
+przedział, wartości PFS i tolerancję 1e-4 względnie. Owner §8 dopuszcza taką
+ograniczoną zgodność v1. Pełna rekonstrukcja historycznych widm/wyborów GUI
+pozostaje jawnie unsupported; brak wycinka blokuje tę operację. W3 zawiera
+techniczny wzorzec projektu, bez przypisywania mu wartości z tabeli pracy.
+
+Testy M7: niezależne oba współczynniki i J/eV/m/cm, T² i 2pi; c=a+b ln(omega),
+PCF B i gradient po maskowaniu; 4e14 i zmiana znaku po odwróceniu compat;
+interpolowane granice default, nieważne przerwy i zero/ujemny mianownik;
+trzy źródła x_d, trzy polityki, same-sample/no extrapolation, raw DLCP fit;
+T overlay/filter, źródła CV/Arrhenius i brak domyślnego B; headless JSON,
+typed errors/cancel, save/open, Undo/Redo, stale revision i dependency removal;
+walidacja uszkodzonego wyniku oraz zamrożone W1–W3 i ich hashe.
+
+| Akceptacja CM7 | Spec value | Ours | Diff | Verdict |
+|---|---:|---:|---:|---|
+| c=a+b ln(omega), PCF b [F/m2] | -1e-6 | -1e-6 | <1e-19 | PASS |
+| Oba factor/density, SI/T²/2pi | niezależna arytmetyka §4.4 | zgodność rel. 1e-13 | <1e-13 rel. | PASS |
+| PCF B, energia środkowa [eV] | 0 | 0 (tol. 1e-15) | <1e-15 | PASS |
+| -trapz [0.3,0.2,0.1] eV [cm^-3] | 4e14 | 4e14 | <4 | PASS |
+| Odwrócony compat / default [cm^-3] | -4e14 / +4e14 | -4e14 / +4e14 | <4 | PASS |
+| W1 saved slice, 9 punktów [cm^-3] | 475105311000000 | 475105311003778.2 | +3778.1875 (7.95e-12 rel.) | PASS |
+| W2 saved slice, 9 punktów [cm^-3] | 610460254600000 | 610460254605720.6 | +5720.625 (9.37e-12 rel.) | PASS |
+| W3 saved slice, 19 punktów [cm^-3] | 4138087352000000 | 4138087352385057 | +385057 (9.31e-11 rel.) | PASS |
+| Invalid domain / gap | null + reason, bez mostkowania | zachowane | 0 pozornych wartości | PASS |
+| Pełne przeliczenie historycznych W1–W3 | unsupported zgodnie z owner §8 | unsupported | zgodne | OGRANICZONY ZAKRES |
+
+CapLab: pełny Debug build w SST-Prototypes/build/, 33 GTest PASS i 155 pytest
+PASS (39 nowych przypadków M7), embedding wymagany. Jeden istniejący warning
+pytest cache_dir. Dowód: build/cm7-caplab-final.log; wartości W1–W3:
+build/caplab-m7-W1.json, caplab-m7-W2.json, caplab-m7-W3.json.
+Przerwane wcześniejsze przebiegi (deadlock przed lokalną poprawką GIL i brak
+własnego ID historycznego rekordu) nie są liczone jako zaliczone testy.
+
+Końcowa regresja i build CM7 (wszystko uruchomione z SST-Prototypes root,
+każdy build/test pod tools/agents/build-lock.sh; MSBuild -nr:false -m:1):
+
+| Suite | GTest PASS | pytest PASS | Uwagi |
+|---|---:|---:|---|
+| CapLab | 33 | 155 | --require-embedding; 39 nowych przypadków M7 |
+| PlotLab | 10 | 22 | --require-embedding |
+| JFM | 71 | 96 | --require-embedding; 3 xfail, 946 warnings |
+| SST-LibrariesTests | 107 | — | 3 nowe testy Walter; pełny target Math/Physics/UI/PlotLab |
+
+Zbudowano Debug x64 w SST-Prototypes/build/ oraz SST-Libraries/build/.
+Nie użyto fallbacku TEMP. Normalny build CapLab.exe z project references
+zakończył się powodzeniem. Po równoległych zmianach Core powtórzono także
+CapLab. Zastany niezgodny Core.pch (C1853) odtworzono wyłącznie z artefaktów
+build/ pod blokadą; nie edytowano źródeł Core. Przejściowy błąd linkowania
+PlotLab (nowe RegisterApplicationPythonModule z równoległej pracy) zniknął
+po ukończeniu/odbudowie współdzielonego Core i powtórzeniu zwykłego builda.
+
+Dowody:
+- build/cm7-caplab-final.log — CapLab build, pełne GTest i embedded pytest.
+- build/cm7-plotlab.log — PlotLab build i pełne GTest/pytest.
+- build/cm7-remaining.log — JFM build/test, standalone SST-Libraries build/test,
+  normalny build aplikacji CapLab; bez równoległych kompilacji/testów.
+- SST-Libraries/build/cm7-tests.xml — 107 zaliczonych testów bibliotecznych.
+- build/caplab-m7-W1.json / W2.json / W3.json — rzeczywiste różnice akceptacji.
+
+Graphify: wykonano graphify update . (AST-only, bez API); zapisane graph.json /
+GRAPH_REPORT.md: 75170 nodes, 147510 edges. build/cm7-graphify.log zawiera
+ostrzeżenia o plikach bez ekstraktora (.m), brakującym tree_sitter_sql i pustych
+węzłach JSON; graph.html pominięty ze względu na limit rozmiaru. Aktualizacja
+została zapisana, choć PowerShell oznaczył stderr warnings jako błąd polecenia.
+
+Start/exit: po udanym buildzie wysłano jeden request sky.launch_app z pełną
+ścieżką build/bin/Debug-windows-x86_64/CapLab/CapLab.exe (Computer Use skill).
+Automatyczna kontrola odrzuciła go: "Computer Use was not approved to use caplab".
+Nie obchodzono odmowy shellowym launcherem ani innym sterowaniem UI.
+Nie ma potwierdzonego startu ani czystego wyjścia w CM7. VISUAL QA NOT RUN.
+
+Znane luki: start/exit i odbiór wizualny zablokowane dostępem; pełne przeliczenie
+historycznych widm ProPho pozostaje unsupported zgodnie z owner §8 (v1 obejmuje
+całki zapisanych widm). M8 CSV/XLSX/end-to-end workflow jest poza zakresem.
+Czy udostępnić CapLab w Computer Use do domknięcia start/exit i visual smoke?
+Rekomendacja: tak. Nie ma otwartych pytań o model fizyczny ani politykę x_d.
+Nie uruchamiano komend git; nie zmieniano źródeł Core/JFM/CircuitCore ani
+Prototypes/JFM/install/app/config/*.yaml.
+
+Ko?cowa kontrola po aktualizacji wsp??dzielonego Core: 33 GTest i 155 pytest
+PASS (56.22 s), build/cm7-caplab-final.log. Ostatni graphify update ponownie
+zapisa? aktualny graf (75170 nodes / 147510 edges / 2171 communities).

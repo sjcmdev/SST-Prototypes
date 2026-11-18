@@ -7,12 +7,14 @@
 #include <sst/physics/capacitance.hpp>
 #include <sst/physics/arrhenius.hpp>
 #include <sst/physics/materials.hpp>
+#include <sst/physics/walter.hpp>
 #include <sst/math/linear_fit.hpp>
 #include <fstream>
 #include <mutex>
 #include <unordered_map>
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #include "Core/ScientificRuntime/Python/PythonGilScope.hpp"
+#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
@@ -80,11 +82,26 @@ NB_MODULE(sst_caplab, module)
             {"linear_covariance",l.degreesOfFreedom ? Json(l.covariance) : Json(nullptr)},
             {"dof",l.degreesOfFreedom},{"sum_squared_residuals",l.chiSquared},{"inverse_temperature_K",x},{"log_rate",y}}.dump();
     });
+    module.def("walter_point", [](double omega, double t, double prefactor, double vb, double ef, double xd, double d, bool compat) {
+        try {
+            const auto p=sst::physics::walterPoint(omega,t,prefactor,vb,ef,xd,d,compat ? sst::physics::WalterModel::ProPhoCompat : sst::physics::WalterModel::LinearField1996);
+            return Json{{"energy_eV",p.energy_eV},{"field_factor_V_m_C",p.factor},{"density_cm3_eV",p.density_cm3_eV},{"quality","valid"}}.dump();
+        } catch (const std::domain_error &e) {
+            const double energy=sst::physics::k_B_over_q*t*(std::log(prefactor)+(compat ? 0 : 2*std::log(t))-std::log(omega));
+            return Json{{"energy_eV",energy},{"field_factor_V_m_C",nullptr},{"density_cm3_eV",nullptr},{"quality",e.what()}}.dump();
+        }
+    });
+    module.def("walter_integral", [](const std::vector<double> &e, const std::vector<std::optional<double>> &n, double lo, double hi, bool compat) {
+        std::vector<double> values; for (const auto &v : n) values.push_back(v.value_or(std::numeric_limits<double>::quiet_NaN()));
+        const auto r=sst::physics::integrateWalter(e,values,lo,hi,compat);
+        return Json{{"density_cm3",Nullable(r.density_cm3)},{"segments",r.segments},{"gaps",r.gaps},
+            {"range_eV",{lo,hi}},{"semantics",compat ? "ProPho-minus-trapz" : "ascending-clipped-trapezoids"}}.dump();
+    });
     module.def("compat_sigma", &sst::physics::proPhoCaptureCrossSection);
     module.def("area_inverse_square", &sst::physics::areaInverseCapacitanceSquared);
     module.def("capacitance_from_inverse_square", &sst::physics::capacitanceFromAreaInverseSquare);
     module.def("constants", [] { return Json{{"q_C",sst::physics::q},{"eps0_F_m",sst::physics::eps0},
-        {"kappa_eV_K",sst::physics::k_B_over_q},{"source","CODATA 2022 / SI; SST-Physics constants.hpp"}}.dump(); });
+        {"kappa_eV_K",sst::physics::k_B_over_q},{"k_B_J_K",sst::physics::k_B},{"source","CODATA 2022 / SI; SST-Physics constants.hpp"}}.dump(); });
     module.def("width", &sst::physics::depletionWidth);
     module.def("cv_density", &sst::physics::cvDensity);
     module.def("dlcp_density", &sst::physics::dlcpDensity);
@@ -142,6 +159,7 @@ NB_MODULE(sst_caplab, module)
             auto commands=CreateRef<SST::CommandRegistry>();
             CapLabWorkflow state(jobs,bus,undo); state.document.project=Parse(project);
             RegisterCommands(commands,bus,state);
+            const auto analysisCount=state.document.project.analyses.size();
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target);});
             if (operation=="edit_circuit") {
                 SST::CommandContext context; context.Set("edit",r.at("edit"));
@@ -154,9 +172,9 @@ NB_MODULE(sst_caplab, module)
                 state.analysisRevision=state.document.revision;
                 const auto result=commands->Execute(SST::CommandID{"caplab.accept_analysis"});
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
-            } else if (operation=="simulate" || operation=="fit") {
+            } else if (operation=="simulate" || operation=="fit" || operation=="walter" || operation=="integrate_saved_walter") {
                 if (r.value("cancel",false) && !jobs->PauseAllJobs()) throw std::runtime_error("Cannot pause job queue");
-                state.analysisOptions=r.at("settings"); state.analysisOptions["type"]="Circuit";
+                state.analysisOptions=r.at("settings"); state.analysisOptions["type"]=operation=="walter" ? "Walter" : operation=="integrate_saved_walter" ? "WalterSaved" : "Circuit";
                 state.analysisOptions["fit"]=operation=="fit";
                 const auto result=commands->Execute(SST::CommandID{"caplab.analyze"});
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
@@ -175,9 +193,9 @@ NB_MODULE(sst_caplab, module)
                 }
                 state.OnUpdate(0);
                 const auto job=jobs->GetJob(id);
-                if (!job || job->status!=SST::JobStatus::Completed || (!state.analysisDraft && state.document.project.analyses.empty()))
+                if (!job || job->status!=SST::JobStatus::Completed || (!state.analysisDraft && state.document.project.analyses.size()!=analysisCount+1))
                     return Json{{"ok",false},{"project",Json::parse(project)},
-                        {"error",{{"code",job && job->status==SST::JobStatus::Cancelled ? "cancelled" : operation=="fit" ? "fit_failed" : "simulation_failed"},{"message",state.status}}}}.dump();
+                        {"error",{{"code",job && job->status==SST::JobStatus::Cancelled ? "cancelled" : operation=="fit" ? "fit_failed" : (operation=="walter" || operation=="integrate_saved_walter") ? "walter_failed" : "simulation_failed"},{"message",state.status}}}}.dump();
             } else throw std::runtime_error("Unknown CapLab operation");
             response["draft"]=state.analysisDraft ? Json{{"base_project",Json::parse(project)},
                 {"project",Json::parse(Serialize(*state.analysisDraft))}} : Json(nullptr);
@@ -205,8 +223,9 @@ namespace SST::Prototypes::CapLab
     Json ReadAnalysis(const Json &measurement, const Json &options, const Json &xd, JobContext &context)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
-        PythonGilAcquireScope gil;
-        if (!gil.IsActive()) throw std::runtime_error("Embedded Python unavailable.");
+        if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python unavailable.");
+        // Headless callers may hold Core's outer scope mutex while releasing the GIL.
+        nanobind::gil_scoped_acquire gil;
         namespace nb = nanobind;
         try {
             auto paths = nb::module_::import_("sys").attr("path");

@@ -175,6 +175,34 @@ namespace SST::Prototypes::CapLab
         EXPECT_NE(workflow.status.find("Stale revision"),std::string::npos);
 
 
+        // M7: same Core job/Undo path, dependency propagation and stale-result rejection.
+        workflow.document.project=Parse(savedInputs);
+        CommandContext m7area; m7area.Set("sample_id",sampleId); m7area.Set("area_m2",5.5e-6);
+        ASSERT_TRUE(commands->Execute(CommandID{"caplab.area"},std::move(m7area)));
+        const auto beforeWalter=Serialize(workflow.document.project);
+        workflow.analysisOptions={{"type","Walter"},{"measurement_ids",{mid}},{"V_b_V",1.},{"E_F_eV",0.},
+            {"zeta_s_1_K_2",1e8},{"parameter_source","independent M7 test"},{"xd_source","manual"},
+            {"xd_manual_m",1e-6},{"xd_description","test fixture"},{"input_revision",workflow.document.revision}};
+        auto runWalter=[&] {
+            workflow.jobs=CreateRef<JobSystem>(nullptr,1);
+            EXPECT_TRUE(commands->Execute(CommandID{"caplab.analyze"})); bus->ProcessQueue();
+            workflow.jobs->Shutdown(); workflow.OnUpdate(0);
+        };
+        runWalter();
+        ASSERT_EQ(workflow.document.project.analyses.size(),3) << workflow.status;
+        EXPECT_EQ(workflow.document.project.analyses.back().at("model"),"Walter1996-linear-field");
+        const auto afterWalter=Serialize(workflow.document.project);
+        EXPECT_EQ(Serialize(Parse(afterWalter)),afterWalter);
+        ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(workflow.document.project),beforeWalter);
+        ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(workflow.document.project),afterWalter);
+        workflow.jobs=CreateRef<JobSystem>(nullptr,1);
+        ASSERT_TRUE(commands->Execute(CommandID{"caplab.analyze"})); bus->ProcessQueue(); workflow.Changed();
+        workflow.jobs->Shutdown(); workflow.OnUpdate(0);
+        EXPECT_EQ(workflow.document.project.analyses.size(),3);
+        EXPECT_NE(workflow.status.find("Stale revision"),std::string::npos);
+        workflow.document.project.sweeps.clear(); RefreshAnalyses(workflow.document.project);
+        EXPECT_EQ(workflow.document.project.analyses.back().at("status"),"missing_input");
+
 #else
         EXPECT_FALSE(PythonInterpreter::IsEmbeddingAvailable());
         std::cout << "Embedded Python unavailable in this build; roundtrip not executed.\n";

@@ -106,6 +106,9 @@ def curve(name, x, y, fit=False):
 def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=lambda v: None):
     if cancelled():
         raise RuntimeError('Analysis cancelled')
+    if options['type'] in ('Walter', 'WalterSaved'):
+        from .walter import analyze_walter
+        return analyze_walter(m, options, xd_measurement, cancelled, progress)
     if options['type'] in ('AS', 'Arrhenius'):
         from .admittance import analyze_as
         return analyze_as(m, options, cancelled, progress)
@@ -231,6 +234,15 @@ def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=l
     else:
         raise ValueError('Unknown M3 analysis type')
     progress(.9)
+    result['x_d'] = resolve_width(m, options, xd_measurement, epsilon, result)
+    if cancelled():
+        raise RuntimeError('Analysis cancelled')
+    progress(1.)
+    return result
+
+
+def resolve_width(m, options, xd_measurement, epsilon, result):
+    inputs = result['inputs']
     source, policy = options.get('xd_source'), options.get('xd_policy', 'block')
     xd = dict(source=source, policy=policy, value_m=None, measurement_id=None, temperature_K=None, frequency_Hz=None, bias_V=None)
     if source == 'manual':
@@ -242,7 +254,7 @@ def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=l
         sm = xd_measurement or m
         if sm.get('sample_id') != m.get('sample_id'):
             raise ValueError('x_d source must belong to the same sample')
-        if sm is not m and sm != m:
+        if sm is not m and sm != m and sm not in inputs:
             inputs.append(sm)
         sa = positive(sm.get('area_m2'), 'x_d source area')
         if source == 'CV':
@@ -253,6 +265,11 @@ def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=l
                 raise ValueError('Explicit AS bias required for CV x_d')
         elif sm['kind'] == 'DLCPProfile':
             v, w, target = column(sm, 'V'), column(sm, 'W'), 0.
+        elif sm['kind'] == 'DLCPRaw' and options.get('dlcp_fit'):
+            fit = options['dlcp_fit']
+            if fit['inputs'][0]['id'] != sm['id'] or fit['status'] != 'valid':
+                raise ValueError('Invalid DLCP width fit source')
+            v = [g['bias_V'] for g in fit['groups']]; w = [g['x_e_m'] for g in fit['groups']]; target = 0.
         elif sm is m and options['type'] == 'DLCPPolynomial':
             v = [g['bias_V'] for g in result['groups']]; w = [g['x_e_m'] for g in result['groups']]; target = 0.
         else:
@@ -263,11 +280,7 @@ def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=l
             result['diagnostics'].append(warning)
     else:
         raise ValueError('Select x_d source')
-    result['x_d'] = xd
-    if cancelled():
-        raise RuntimeError('Analysis cancelled')
-    progress(1.)
-    return result
+    return xd
 
 
 def analyze_json(measurement_json, options_json, xd_json, cancelled, progress):

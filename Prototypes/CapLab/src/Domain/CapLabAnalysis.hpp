@@ -16,6 +16,9 @@ inline Json AnalysisMeasurement(const Project &p, pl::Id id) {
         Json data{{"id",id},{"sample_id",m.sample_id},{"kind","FrequencySweep"},{"variant","Cp_Rp"},
             {"temperature_K",Nullable(m.temperature_K)},{"names",{"f","C","Rp"}},{"units",{"Hz","F","Ohm"}},
             {"columns",Json::array()},{"row_ids",std::get<pl::Worksheet>(p.engine->object(id).data).rows}};
+        for (const auto &sample : p.samples) if (sample.id==m.sample_id) {
+            data["area_m2"]=Nullable(sample.area_m2); data["sample_metadata"]=sample.metadata;
+        }
         data["source_rows"]=Json::parse(std::get<pl::Worksheet>(p.engine->object(id).data).source.at("source_rows"));
         for (auto cid : {m.frequency,m.capacitance,m.resistance}) data["columns"].push_back(std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(cid).data).values));
         return data;
@@ -82,6 +85,18 @@ inline void RefreshAnalyses(Project &p) {
             for (const auto &d : p.defects) if (d.at("id")==a.at("defect").at("id")) { found=true; stale |= d!=a.at("defect"); }
             missing |= !found;
         }
+        if (a.contains("source_analyses")) for (const auto &source : a.at("source_analyses")) {
+            bool found=false;
+            for (const auto &current : p.analyses) if (current.at("id")==source.at("id")) {
+                found=true; stale |= current!=source || current.at("status")!="valid";
+            }
+            missing |= !found;
+        }
+        if (a.contains("historical")) {
+            bool found=false;
+            for (const auto &h : p.historical) if (h.at("sample_id")==a.at("historical").at("sample_id")) {found=true; stale |= h!=a.at("historical");}
+            missing |= !found;
+        }
         a["status"] = missing ? "missing_input" : stale ? "stale" : a.at("computed_status").get<std::string>();
     }
 }
@@ -110,7 +125,7 @@ inline pl::Id AnalysisPlot(Project &p, pl::Id workbook, const Json &spec) {
 }
 inline void AppendAnalysis(Project &p, Json result) {
     result["id"] = p.engine->reserveId();
-    if (result.contains("x_d")) result["x_d"]["fit_id"] = result.at("type")=="DLCPPolynomial" && result.at("x_d").at("measurement_id")==result.at("inputs").at(0).at("id") ? result.at("id") : Json(nullptr);
+    if (result.contains("x_d") && result.at("type")!="Walter") result["x_d"]["fit_id"] = result.at("type")=="DLCPPolynomial" && result.at("x_d").at("measurement_id")==result.at("inputs").at(0).at("id") ? result.at("id") : Json(nullptr);
     result["graphs"] = Json::array();
     const auto sample=result.contains("sample_id") ? result.at("sample_id").get<pl::Id>() : result.at("inputs").at(0).at("sample_id").get<pl::Id>();
     for (const auto &plot : result.at("plots")) result["graphs"].push_back(AnalysisPlot(p,sample,plot));
