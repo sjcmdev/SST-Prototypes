@@ -6,12 +6,13 @@
 
 namespace SST::Prototypes::__PROTOTYPE_NAME__
 {
+    static constexpr double MinVoltage = 0.1, MaxVoltage = 5, MinTemperature = 50, MaxTemperature = 900;
 	__PROTOTYPE_NAME__PrototypePanel::__PROTOTYPE_NAME__PrototypePanel(
-		Ref<PrototypeResultStore> store,
+		PrototypeWorkflow *store,
 		std::string title,
 		bool visibleByDefault)
 		: IPanel(std::move(title), visibleByDefault),
-		  m_Store(std::move(store))
+		  m_Store(store)
 	{
 	}
 
@@ -34,35 +35,24 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
 		}
 		SetVisible(visible);
 
-		ImGui::TextUnformatted("Domain backend");
-		ImGui::Separator();
 
-		float voltage = static_cast<float>(m_Input.voltage);
-		float temperature = static_cast<float>(m_Input.temperatureKelvin);
-		bool changed = ImGui::SliderFloat("Voltage", &voltage, 0.1F, 5.0F)
-			|| ImGui::SliderFloat("Temperature K", &temperature, 50.0F, 900.0F);
-
-		if (changed)
-		{
-			m_Input.voltage = voltage;
-			m_Input.temperatureKelvin = temperature;
-			if (m_Store != nullptr)
-				m_Store->Save(PrototypeBackend::Evaluate(m_Input));
-		}
-
-		if (m_Store != nullptr)
-		{
-			if (const auto &result = m_Store->LastResult())
-			{
-				ImGui::Text("Carrier density: %.3e", result->carrierDensity);
-				ImGui::Text("Mobility: %.3f", result->mobility);
-				ImGui::Text("Conductivity: %.6f", result->conductivity);
-			}
-		}
-		else
-		{
-			ImGui::TextDisabled("Storage unavailable.");
-		}
+        auto &doc = m_Store->document;
+        ImGui::Text("Path: %s", doc.path.Empty() ? "Untitled" : doc.path.Utf8().c_str());
+        ImGui::Text("Revision: %llu%s", static_cast<unsigned long long>(doc.revision), doc.dirty ? " (unsaved)" : "");
+        auto input = doc.input;
+        bool changed = ImGui::SliderScalar("Voltage", ImGuiDataType_Double, &input.voltage,
+            &MinVoltage, &MaxVoltage);
+        changed |= ImGui::SliderScalar("Temperature K", ImGuiDataType_Double, &input.temperatureKelvin,
+            &MinTemperature, &MaxTemperature);
+        if (changed) doc.Edit(input);
+        ImGui::Text(m_Store->scientificNotation ? "Conductivity (last evaluation): %.6e" : "Conductivity (last evaluation): %.6f", doc.result.conductivity);
+        ImGui::TextWrapped("%s", m_Store->status.c_str());
+        if (const auto job = m_Store->jobs->GetJob(m_Store->activeJob))
+        {
+            ImGui::TextUnformatted(job->currentStage.c_str());
+            ImGui::ProgressBar(job->totalWork > 0 ? job->completedWork / job->totalWork : 0);
+            if (ImGui::Button("Cancel")) (void)m_Store->jobs->RequestCancel(job->id);
+        }
 
 		ImGui::End();
 	}

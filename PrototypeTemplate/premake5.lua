@@ -128,3 +128,34 @@ project "__PROTOTYPE_NAME__Tests"
 
     filter {}
 
+
+-- Keep app/tests on the same embedding and CRT contract as Core.
+for _, target in ipairs { "__PROTOTYPE_NAME__", "__PROTOTYPE_NAME__Tests" } do
+    project(target)
+    filter "configurations:Debug"
+        runtime "Debug"
+    filter "configurations:Release or Dist"
+        runtime "Release"
+    filter {}
+    if _SST_PYTHON_EMBED_AVAILABLE then
+        includedirs { _SST_PYTHON_INCLUDE_DIR, _SST_ROOT .. "/Vendor/nanobind/include" }
+        libdirs { _SST_PYTHON_LIB_DIR }
+        defines { "DS_PYTHON_CAPI_AVAILABLE=1", "Py_NO_LINK_LIB", "NB_STATIC" }
+        links { "nanobind", _SST_PYTHON_LIB_NAME }
+        filter "system:windows"
+            if _SST_PYTHON_DLL_PATH ~= "" then
+                postbuildcommands { '{COPYFILE} "' .. _SST_PYTHON_DLL_PATH .. '" "%{cfg.targetdir}"' }
+            end
+        filter {}
+    else
+        defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
+    end
+end
+project "__PROTOTYPE_NAME__Tests"
+    files {
+        _SST_ROOT .. "/Prototypes/__PROTOTYPE_NAME__/src/IO/PrototypeWorkflow.cpp",
+        _SST_ROOT .. "/Prototypes/__PROTOTYPE_NAME__/src/IO/PrototypePythonBindings.cpp"
+    }
+    defines { 'SST_PROTOTYPE_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/__PROTOTYPE_NAME__/python"' }
+project "__PROTOTYPE_NAME__"
+    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/__PROTOTYPE_NAME__/python" "%{cfg.targetdir}/python"' }

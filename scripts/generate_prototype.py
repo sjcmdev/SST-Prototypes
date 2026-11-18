@@ -63,6 +63,7 @@ def main() -> int:
     replacements = {
         "__PROTOTYPE_NAME__": prototype_name,
         "__PROTOTYPE_NAME_UPPER__": prototype_name.upper(),
+        "__PROTOTYPE_NAME_LOWER__": prototype_name.lower(),
     }
 
     for path in target_dir.rglob("*"):

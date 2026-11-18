@@ -5,7 +5,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Domain/PrototypeBackend.hpp"
 #include "Presentation/Panels/IPanel.hpp"
-#include "Storage/PrototypeResultStore.hpp"
+#include "IO/PrototypeWorkflow.hpp"
 
 namespace SST::Prototypes::__PROTOTYPE_NAME__
 {
@@ -13,7 +13,7 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
 	{
 	public:
 		explicit __PROTOTYPE_NAME__PrototypePanel(
-			Ref<PrototypeResultStore> store,
+			PrototypeWorkflow *store,
 			std::string title = "__PROTOTYPE_NAME__ Prototype",
 			bool visibleByDefault = true);
 
@@ -21,8 +21,7 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
 		void Render() override;
 
 	private:
-		Ref<PrototypeResultStore> m_Store;
-		PrototypeInput m_Input;
+		PrototypeWorkflow *m_Store;
 	};
 } // namespace SST::Prototypes::__PROTOTYPE_NAME__
 

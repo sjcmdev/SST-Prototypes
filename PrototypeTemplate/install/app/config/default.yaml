@@ -5,11 +5,6 @@ log:
   file_path: logs/__PROTOTYPE_NAME__.log
 trace_events: false
 window:
-  x: 1721
-  y: 31
-  width: 1718
-  height: 1360
-  maximized: false
   title: __PROTOTYPE_NAME__
 ui:
   font_scale:
