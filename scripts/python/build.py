@@ -22,6 +22,9 @@ def build_job_count(reserve: int = 2) -> int:
     return max(cpu_count - reserve, 1)
 
 
+from scripts.python.common.paths import select_prototype
+
+
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build project.")
     parser.add_argument("--config", choices=["Debug", "Release", "Dist"], default=None)
@@ -31,6 +34,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rebuild", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--prototype", help="Prototype name; defaults to .sst-prototype.")
     return parser
 
 
@@ -41,7 +45,8 @@ def run_msvc(args: argparse.Namespace) -> int:
         return 1
 
     solution = solution_path("vs2022")
-    if not solution.exists():
+    print_step(f"workspace={solution}")
+    if not solution.exists() and not args.dry_run:
         print(f"[error] Solution not found: {solution}")
         return 1
 
@@ -52,8 +57,8 @@ def run_msvc(args: argparse.Namespace) -> int:
     build_input = solution
     target_name = (args.target or "").strip()
     if target_name:
-        target_project = solution.parent / f"{target_name}.vcxproj"
-        if target_project.exists():
+        target_project = solution.parent / target_name / f"{target_name}.vcxproj"
+        if target_project.exists() or args.dry_run:
             build_input = target_project
 
     command = [
@@ -218,10 +223,11 @@ def run_make(args: argparse.Namespace) -> int:
 
 
 def run(args: argparse.Namespace) -> int:
+    select_prototype(getattr(args, "prototype", None))
     preferences = load_preferences().get("build", {})
     args.config = resolve_preference(preferences, "config", args.config, "Debug")
     args.compiler = resolve_preference(preferences, "compiler", args.compiler, "msvc")
-    args.target = resolve_preference(preferences, "target", args.target, project_name())
+    args.target = args.target or project_name()
 
     print_header("Build")
     print_step(f"config={args.config} compiler={args.compiler} target={args.target}")

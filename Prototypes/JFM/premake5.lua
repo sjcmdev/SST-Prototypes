@@ -35,7 +35,6 @@
         _SST_ROOT .. "/Vendor/implot",
         _SST_ROOT .. "/Vendor/GLFW/include",
         _SST_ROOT .. "/Vendor/GLAD/generated/include",
-        _SST_ROOT .. "/Vendor/nativefiledialog-extended/src/include",
         _SST_ROOT .. "/Vendor/nanobind/include",
         _SST_ROOT .. "/Vendor/nanobind/ext/robin_map/include",
         _SST_ROOT .. "/Vendor/spdlog/include",
@@ -61,7 +60,6 @@
     links {
         "Core",
         "ImPlot",
-        "nfd",
         "yaml-cpp"
     }
 
@@ -166,6 +164,7 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/Workspace/JFMWorkspaceStore.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportPaths.hpp",
@@ -219,6 +218,7 @@ project "JFMTests"
         jfmSolverRoot,
         jfmSolverRoot .. "/gpu",
         _SST_ROOT .. "/Vendor/GoogleTest/googletest/include",
+        _SST_ROOT .. "/Vendor/nativefiledialog-extended/src/include",
         _SST_ROOT .. "/Vendor/nanobind/include",
         _SST_ROOT .. "/Vendor/nanobind/ext/robin_map/include",
         _SST_ROOT .. "/Vendor/spdlog/include",

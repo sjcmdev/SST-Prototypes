@@ -8,22 +8,18 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-ACTIVE_PROTOTYPE_FILE = ROOT / ".sst-prototype"
-GENERATED_VS_DIR = ROOT / "build" / "generated" / "vs2022"
+
+
+sys.path.insert(0, str(ROOT))
+from scripts.python.common.paths import project_name, solution_path, target_executable_path
 
 
 def active_prototype() -> str:
-	if not ACTIVE_PROTOTYPE_FILE.is_file():
-		raise SystemExit("Missing .sst-prototype. Pass a prototype name or create the file.")
-
-	name = ACTIVE_PROTOTYPE_FILE.read_text(encoding="utf-8").strip()
-	if not name:
-		raise SystemExit(".sst-prototype is empty. Pass a prototype name or set the current prototype.")
-	return name
+    return project_name()
 
 
 def prototype_name(argument: str | None) -> str:
-	return argument or active_prototype()
+    return project_name(argument)
 
 
 def msbuild_path() -> str:
@@ -55,10 +51,14 @@ def msbuild_path() -> str:
 	raise SystemExit("MSBuild was not found in PATH or via vswhere.")
 
 
-def build_target(target: str, configuration: str) -> None:
-	target_file = GENERATED_VS_DIR / target / f"{target}.vcxproj"
-	if not target_file.is_file():
+def build_target(target: str, configuration: str, dry_run: bool = False) -> None:
+	target_file = solution_path().parent / target / f"{target}.vcxproj"
+	if not target_file.is_file() and not dry_run:
 		raise SystemExit(f"Missing project file: {target_file}. Run premake first.")
+
+	if dry_run:
+		print(f"{solution_path()} target={target} project={target_file} executable={target_executable_path(target, configuration)}")
+		return
 
 	subprocess.run(
 		[
@@ -76,18 +76,19 @@ def build_parser(description: str) -> argparse.ArgumentParser:
 	parser = argparse.ArgumentParser(description=description)
 	parser.add_argument("prototype", nargs="?", help="Prototype name. Defaults to .sst-prototype.")
 	parser.add_argument("--configuration", default="Debug", choices=["Debug", "Release", "Dist"])
+	parser.add_argument("--dry-run", action="store_true")
 	return parser
 
 
-def run_executable(path: Path) -> int:
+def run_executable(path: Path, dry_run: bool = False) -> int:
+	if dry_run:
+		print(f"run={path} cwd={ROOT}")
+		return 0
 	if not path.is_file():
 		raise SystemExit(f"Missing executable: {path}")
 
 	return subprocess.run([str(path)], cwd=ROOT, check=False).returncode
 
-
-def output_dir(configuration: str) -> Path:
-	return ROOT / "build" / "bin" / f"{configuration}-windows-x86_64"
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from scripts.python.common.cli import print_header, print_step
 from scripts.python.common.exec import run_command
 from scripts.python.common.paths import (
     app_executable_path,
+    select_prototype,
     repo_root,
     tracy_profiler_path,
 )
@@ -43,6 +44,8 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--prototype")
+    parser.add_argument("--generator", choices=["vs2022", "gmake2"], default="vs2022")
     return parser
 
 
@@ -62,6 +65,7 @@ def build_app_command(args: argparse.Namespace, exe_path: Path) -> list[str]:
 
 
 def run(args: argparse.Namespace) -> int:
+    select_prototype(getattr(args, "prototype", None))
     if os.name != "nt":
         print("[error] run_with_tracy is currently supported only on Windows.")
         return 1
@@ -77,7 +81,7 @@ def run(args: argparse.Namespace) -> int:
         preferences, "reset_layout", args.reset_layout, False
     )
     if args.log_file is None:
-        args.log_file = "logs/DefectStudio-tracy.log"
+        args.log_file = "logs/prototype-tracy.log"
 
     print_header("Run With Tracy")
 
@@ -86,7 +90,7 @@ def run(args: argparse.Namespace) -> int:
         print(f"[error] Tracy profiler not found: {profiler_path}")
         return 1
 
-    exe_path = Path(args.exe) if args.exe else app_executable_path(args.config)
+    exe_path = Path(args.exe) if args.exe else app_executable_path(args.config, generator=getattr(args, "generator", "vs2022"))
     if not exe_path.exists() and not args.dry_run:
         print(f"[error] executable not found: {exe_path}")
         return 1
@@ -98,7 +102,7 @@ def run(args: argparse.Namespace) -> int:
     command = build_app_command(args, exe_path)
     print_step(f"launch_app={exe_path}")
     return run_command(
-        command, cwd=repo_root(), dry_run=args.dry_run, verbose=args.verbose
+        command, cwd=exe_path.parent, dry_run=args.dry_run, verbose=args.verbose
     )
 
 

@@ -3,7 +3,7 @@
 #include "Presentation/Panels/MonteCarloScatterPanel.hpp"
 
 #include "Analysis/JFMMonteCarloStatistics.hpp"
-#include "App/NativeFileDialog.hpp"
+#include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/Platform/PlatformPythonRuntime.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 

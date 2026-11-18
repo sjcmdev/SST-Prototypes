@@ -8,10 +8,8 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-import build as build_script
-import generate_projects as generate_script
-import run as run_script
-from scripts.python.common.paths import project_name
+from scripts.python import build as build_script, generate_projects as generate_script, run as run_script
+from scripts.python.common.paths import project_name, select_prototype
 from scripts.python.common.preferences import load_preferences, resolve_preference
 
 
@@ -35,10 +33,12 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--prototype")
     return parser
 
 
 def run(args: argparse.Namespace) -> int:
+    select_prototype(getattr(args, "prototype", None))
     build_preferences = load_preferences().get("build", {})
     run_preferences = load_preferences().get("run", {})
     args.generator = resolve_preference(
@@ -48,9 +48,7 @@ def run(args: argparse.Namespace) -> int:
     args.compiler = resolve_preference(
         build_preferences, "compiler", args.compiler, "msvc"
     )
-    args.target = resolve_preference(
-        build_preferences, "target", args.target, project_name()
-    )
+    args.target = args.target or project_name()
     args.project = resolve_preference(run_preferences, "project", args.project, None)
 
     if args.regenerate:
@@ -79,6 +77,7 @@ def run(args: argparse.Namespace) -> int:
         return code
 
     run_args = argparse.Namespace(
+        generator=args.generator,
         config=args.config,
         project=args.project,
         log_level=args.log_level or "info",

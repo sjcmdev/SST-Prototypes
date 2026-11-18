@@ -176,6 +176,12 @@ namespace SST
 		return m_Path.string();
 	}
 
+	std::string Path::Utf8() const
+	{
+		const std::u8string text = m_Path.u8string();
+		return {text.begin(), text.end()};
+	}
+
 	bool Path::Empty() const
 	{
 		return m_Path.empty();

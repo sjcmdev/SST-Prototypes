@@ -2,7 +2,7 @@
 
 #include "Presentation/Panels/ProjectTreePanel.hpp"
 
-#include "App/NativeFileDialog.hpp"
+#include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Domain/JFMPrefitModels.hpp"
 #include "Events/JFMEvents.hpp"

@@ -16,8 +16,8 @@ PROTOTYPE_NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate an executable prototype from PrototypeTemplate.")
-    parser.add_argument("name", help="Prototype name, for example JFMPrototype")
-    parser.add_argument("--force", action="store_true", help="Overwrite an existing generated prototype")
+    parser.add_argument("name", help="Prototype name. Existing .sst-prototype selection is preserved.")
+    parser.add_argument("--force", action="store_true", help="Deprecated: existing prototypes are never overwritten")
     return parser.parse_args()
 
 
@@ -46,7 +46,7 @@ def main() -> int:
     args = parse_args()
     prototype_name = args.name
 
-    if not PROTOTYPE_NAME_RE.fullmatch(prototype_name):
+    if not PROTOTYPE_NAME_RE.fullmatch(prototype_name) or prototype_name.upper() in {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}:
         print("Prototype name must start with a letter and contain only letters, digits, or underscores.")
         return 2
 
@@ -56,10 +56,8 @@ def main() -> int:
 
     target_dir = PROTOTYPES_DIR / prototype_name
     if target_dir.exists():
-        if not args.force:
-            print(f"Prototype already exists: {target_dir}")
-            return 1
-        shutil.rmtree(target_dir)
+        print(f"Prototype already exists; refusing to delete existing data: {target_dir}")
+        return 1
 
     shutil.copytree(TEMPLATE_DIR, target_dir)
     replacements = {

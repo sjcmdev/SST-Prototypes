@@ -222,6 +222,8 @@ project "Core"
         "Core/Notifications/**.cpp",
         "Core/Platform/Platform*.hpp",
         "Core/Platform/Platform*.cpp",
+        "Core/Platform/NativeFileDialog.hpp",
+        "Core/Platform/NativeFileDialog.cpp",
         "Core/Platform/ProcessRunner.hpp",
         "Core/Platform/ProcessRunner.cpp",
         "Core/Presentation/EditorUiState.hpp",

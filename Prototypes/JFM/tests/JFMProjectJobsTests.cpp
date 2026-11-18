@@ -3,6 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <future>
+#include "Core/IO/TextFileIO.hpp"
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -104,6 +108,51 @@ namespace SST::Prototypes::JFM
 		(void)loadSub;
 		(void)FileSystem::Remove(path.Native());
 	}
+
+#ifdef _WIN32
+    TEST(JFMProjectJobsTests, FailedReplacementPreservesProjectAndDoesNotPublishCompletion)
+    {
+        const Path path = Path::FromResolved(FileSystem::TempDirectoryPath() / L"sst-zapis-\u017c\u00f3\u0142\u0107.jfm.yaml");
+        std::string error, text;
+        ASSERT_TRUE(TextFileIO::Save(path, "old project", error)) << error;
+        HANDLE locked = CreateFileW(path.Native().c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, 0, nullptr);
+        ASSERT_NE(locked, INVALID_HANDLE_VALUE);
+        auto bus = CreateRef<EventBus>();
+        bool completed = false, failed = false;
+        auto completedSub = bus->Subscribe<ProjectSaveCompleted>([&](const auto &) { completed = true; });
+        auto failedSub = bus->Subscribe<ProjectSaveFailed>([&](const auto &event) { failed = !event.error.empty(); });
+        JFMProject project;
+        project.id = "project";
+        project.name = "New project";
+        auto context = MakeTestJobContext();
+        SaveProjectJob job(bus, path, project, 7, 11, 23);
+        job.Execute(context);
+        bus->ProcessQueue();
+        EXPECT_FALSE(completed);
+        EXPECT_TRUE(failed);
+        EXPECT_FALSE(TextFileIO::Save(path, "replacement", error));
+        EXPECT_FALSE(error.empty());
+        EXPECT_TRUE(TextFileIO::Load(path, text, error));
+        EXPECT_EQ(text, "old project");
+        CloseHandle(locked);
+        EXPECT_TRUE(TextFileIO::Save(path, "replacement", error));
+        EXPECT_TRUE(TextFileIO::Load(path, text, error));
+        EXPECT_EQ(text, "replacement");
+        (void)FileSystem::Remove(path.Native());
+    }
+#endif
+
+    TEST(JFMProjectJobsTests, TemporaryFileCreationFailurePreservesExistingFile)
+    {
+        const Path path = Path::FromResolved(FileSystem::TempDirectoryPath() / "sst-save-parent-file");
+        std::string error, text;
+        ASSERT_TRUE(TextFileIO::Save(path, "old contents", error));
+        EXPECT_FALSE(TextFileIO::Save(path / std::filesystem::path("child"), "new", error));
+        EXPECT_FALSE(error.empty());
+        EXPECT_TRUE(TextFileIO::Load(path, text, error));
+        EXPECT_EQ(text, "old contents");
+        (void)FileSystem::Remove(path.Native());
+    }
 
 	TEST(JFMProjectJobsTests, PrefitWorkQueueKeepsOnlyLatestGeneration)
 	{

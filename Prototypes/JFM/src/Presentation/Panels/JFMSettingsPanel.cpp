@@ -2,7 +2,7 @@
 
 #include "Presentation/Panels/JFMSettingsPanel.hpp"
 
-#include "App/NativeFileDialog.hpp"
+#include "Core/Platform/NativeFileDialog.hpp"
 
 #include <cstddef>
 #include <cstdio>

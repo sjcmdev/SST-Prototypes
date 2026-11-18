@@ -61,6 +61,8 @@ namespace SST
 
 		[[nodiscard]] const std::filesystem::path &Native() const;
 		[[nodiscard]] std::string String() const;
+		// UTF-8, never throws: use for messages/logs. String() uses the ANSI code page and throws on unmappable chars.
+		[[nodiscard]] std::string Utf8() const;
 		[[nodiscard]] bool Empty() const;
 
 	private:

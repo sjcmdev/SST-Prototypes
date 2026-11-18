@@ -5,7 +5,7 @@
 #include <optional>
 #include <vector>
 
-namespace SST::Prototypes::JFM
+namespace SST
 {
 	struct NativeFileDialogFilter
 	{
@@ -13,8 +13,9 @@ namespace SST::Prototypes::JFM
 		const char *spec = "";
 	};
 
+	// Cancellation returns an empty result; initialization and dialog errors throw std::runtime_error.
 	std::optional<Path> OpenFileDialog(const NativeFileDialogFilter &filter, const Path &defaultPath = {});
 	std::optional<Path> SaveFileDialog(const NativeFileDialogFilter &filter, const char *defaultName, const Path &defaultPath = {});
 	std::vector<Path> OpenFilesDialog(const NativeFileDialogFilter &filter, const Path &defaultPath = {});
 	std::vector<Path> PickFoldersDialog(bool multiple, const Path &defaultPath = {});
-} // namespace SST::Prototypes::JFM
+} // namespace SST

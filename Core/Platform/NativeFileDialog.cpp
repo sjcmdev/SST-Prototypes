@@ -1,22 +1,27 @@
 #include "Core/dspch.hpp"
 
-#include "App/NativeFileDialog.hpp"
+#include "Core/Platform/NativeFileDialog.hpp"
 
 #include <nfd.h>
 
 #include <string>
 #include <stdexcept>
 #include <utility>
+#include <memory>
 
-namespace SST::Prototypes::JFM
+namespace SST
 {
+	namespace
+	{
+	std::string LastError();
 
 	class NativeFileDialogSession
 	{
 	public:
 		NativeFileDialogSession()
 		{
-			NFD_Init();
+			if (NFD_Init() != NFD_OKAY)
+				throw std::runtime_error(LastError());
 		}
 
 		~NativeFileDialogSession()
@@ -42,21 +47,25 @@ namespace SST::Prototypes::JFM
 			throw std::runtime_error(LastError());
 	}
 
-	std::optional<Path> TakePath(nfdu8char_t *rawPath)
+	Path TakePath(nfdu8char_t *rawPath, bool fromSet = false)
 	{
 		if (rawPath == nullptr)
-			return std::nullopt;
+			throw std::runtime_error("Native file dialog returned an empty path.");
 
-		std::string pathText(rawPath);
-		NFD_FreePathU8(rawPath);
-		return Path::FromResolved(pathText);
+		auto release = [fromSet](nfdu8char_t *value) {
+			if (fromSet) NFD_PathSet_FreePathU8(value);
+			else NFD_FreePathU8(value);
+		};
+		std::unique_ptr<nfdu8char_t, decltype(release)> owner(rawPath, release);
+		return Path::FromResolved(std::filesystem::u8path(rawPath));
 	}
 
 	const nfdu8char_t *DefaultPathOrNull(const Path &path, std::string &storage)
 	{
 		if (path.Empty())
 			return nullptr;
-		storage = path.String();
+		const auto utf8 = path.Native().u8string();
+		storage.assign(utf8.begin(), utf8.end());
 		return storage.c_str();
 	}
 
@@ -64,22 +73,21 @@ namespace SST::Prototypes::JFM
 	{
 		nfdpathsetsize_t count = 0;
 		std::vector<Path> paths;
+		std::unique_ptr<const nfdpathset_t, decltype(&NFD_PathSet_Free)> owner(pathSet, &NFD_PathSet_Free);
 		if (NFD_PathSet_GetCount(pathSet, &count) != NFD_OKAY)
-			return paths;
+			throw std::runtime_error(LastError());
 
 		paths.reserve(static_cast<std::size_t>(count));
 		for (nfdpathsetsize_t index = 0; index < count; ++index)
 		{
 			nfdu8char_t *rawPath = nullptr;
-			if (NFD_PathSet_GetPathU8(pathSet, index, &rawPath) == NFD_OKAY)
-			{
-				if (auto path = TakePath(rawPath))
-					paths.emplace_back(std::move(*path));
-			}
+			if (NFD_PathSet_GetPathU8(pathSet, index, &rawPath) != NFD_OKAY)
+				throw std::runtime_error(LastError());
+			paths.emplace_back(TakePath(rawPath, true));
 		}
 		return paths;
 	}
-	
+	} // namespace
 
 	std::optional<Path> OpenFileDialog(const NativeFileDialogFilter &filter, const Path &defaultPath)
 	{
@@ -119,7 +127,6 @@ namespace SST::Prototypes::JFM
 		ThrowIfDialogFailed(result);
 
 		std::vector<Path> paths = CollectPathSet(pathSet);
-		NFD_PathSet_Free(pathSet);
 		return paths;
 	}
 
@@ -137,7 +144,6 @@ namespace SST::Prototypes::JFM
 			ThrowIfDialogFailed(result);
 
 			std::vector<Path> paths = CollectPathSet(pathSet);
-			NFD_PathSet_Free(pathSet);
 			return paths;
 		}
 
@@ -147,9 +153,6 @@ namespace SST::Prototypes::JFM
 			return {};
 		ThrowIfDialogFailed(result);
 
-		std::optional<Path> path = TakePath(rawPath);
-		if (!path)
-			return {};
-		return {std::move(*path)};
+		return {TakePath(rawPath)};
 	}
-} // namespace SST::Prototypes::JFM
+} // namespace SST

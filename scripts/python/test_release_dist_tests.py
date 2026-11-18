@@ -13,31 +13,14 @@ REPO_ROOT = THIS_FILE.parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from scripts.python.common.paths import repo_root, test_executable_path
+from scripts.python.common.paths import repo_root, test_executable_path, test_target
 
 
 def resolve_test_executable(config: str, compiler: str) -> Path:
-    default_path = test_executable_path(config)
-    if (
-        default_path.exists()
-        or compiler == "msvc"
-        or not sys.platform.startswith("win")
-    ):
-        return default_path
+    return test_executable_path(config, generator=generator_for_compiler(compiler))
 
-    name = "DefectStudioTests.exe"
-    candidate = (
-        repo_root()
-        / "build"
-        / "bin"
-        / f"{config}-windows-x86_64-gmake2"
-        / "DefectStudioTests"
-        / name
-    )
-    if candidate.exists():
-        return candidate
 
-    return default_path
+from scripts.python.common.paths import select_prototype
 
 
 def make_parser() -> argparse.ArgumentParser:
@@ -55,6 +38,7 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--continue-on-error", "-ContinueOnError", action="store_true")
     parser.add_argument("--verbose", "-VerboseBuild", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--prototype", help="Prototype name; defaults to .sst-prototype.")
     return parser
 
 
@@ -112,6 +96,7 @@ def clean_build_artifacts(config: str, dry_run: bool, verbose: bool) -> None:
 
 
 def run(args: argparse.Namespace) -> int:
+    select_prototype(getattr(args, "prototype", None))
     compilers = args.compilers or default_compilers()
     configs = ["Release", "Dist"]
 
@@ -161,7 +146,7 @@ def run(args: argparse.Namespace) -> int:
                 "--config",
                 config,
                 "--target",
-                "DefectStudioTests",
+                test_target(),
             ]
             if args.verbose:
                 build_cmd.append("--verbose")

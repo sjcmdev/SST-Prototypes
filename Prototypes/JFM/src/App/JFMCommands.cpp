@@ -2,7 +2,7 @@
 
 #include "App/JFMCommands.hpp"
 
-#include "App/NativeFileDialog.hpp"
+#include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Input/KeymapResolver.hpp"

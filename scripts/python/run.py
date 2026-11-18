@@ -14,6 +14,9 @@ def default_app_path(config: str) -> Path:
     return app_executable_path(config)
 
 
+from scripts.python.common.paths import select_prototype
+
+
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the already built app.")
     parser.add_argument("--config", choices=["Debug", "Release", "Dist"], default=None)
@@ -32,13 +35,16 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--safe-mode", action="store_true", default=None)
     parser.add_argument("--reset-layout", action="store_true", default=None)
+    parser.add_argument("--generator", choices=["vs2022", "gmake2"], default="vs2022")
     parser.add_argument("--exe", help="Explicit executable path override.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--verbose", action="store_true")
+    parser.add_argument("--prototype", help="Prototype name; defaults to .sst-prototype.")
     return parser
 
 
 def run(args: argparse.Namespace) -> int:
+    select_prototype(getattr(args, "prototype", None))
     preferences = load_preferences().get("run", {})
     args.config = resolve_preference(preferences, "config", args.config, "Debug")
     args.project = resolve_preference(preferences, "project", args.project, None)
@@ -52,7 +58,7 @@ def run(args: argparse.Namespace) -> int:
 
     print_header("Run")
 
-    exe_path = Path(args.exe) if args.exe else default_app_path(args.config)
+    exe_path = Path(args.exe) if args.exe else app_executable_path(args.config, generator=getattr(args, "generator", "vs2022"))
     if not exe_path.exists() and not args.dry_run:
         print(f"[error] executable not found: {exe_path}")
         return 1
@@ -71,7 +77,7 @@ def run(args: argparse.Namespace) -> int:
 
     print_step(f"launch={exe_path}")
     return run_command(
-        command, cwd=repo_root(), dry_run=args.dry_run, verbose=args.verbose
+        command, cwd=exe_path.parent, dry_run=args.dry_run, verbose=args.verbose
     )
 
 

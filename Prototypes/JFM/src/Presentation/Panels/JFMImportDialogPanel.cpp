@@ -4,7 +4,7 @@
 
 #include "Analysis/JFMFitEngine.hpp"
 #include "App/JFMCommands.hpp"
-#include "App/NativeFileDialog.hpp"
+#include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Domain/JFMPrefitModels.hpp"
