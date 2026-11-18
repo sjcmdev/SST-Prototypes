@@ -10,7 +10,7 @@ namespace SST::Prototypes::CapLab
     void DocumentJob::Execute(JobContext &context)
     {
         context.SetProgress(0, 1);
-        context.SetStage(operation == Operation::Preview ? "Reading lab AS (Cp/Rp)" : operation == Operation::Open ? "Opening project" : operation == Operation::Save ? "Saving project" : "Exporting C-f snapshot");
+        context.SetStage(operation == Operation::Preview ? "Reading import data" : operation == Operation::Open ? "Opening project" : operation == Operation::Save ? "Saving project" : "Exporting C-f snapshot");
         context.ThrowIfCancellationRequested();
         std::string error;
         if (operation == Operation::Open || operation == Operation::Preview)
@@ -20,7 +20,7 @@ namespace SST::Prototypes::CapLab
             if (operation == Operation::Open) opened.emplace(Parse(text));
             else
             {
-                pl::ImportOptions options; options.decimal = decimal; options.extra["path"] = path.Utf8();
+                pl::ImportOptions options; options.decimal = decimal; options.extra["path"] = path.Utf8(); options.extra["options"] = importOptions;
                 const auto table = importer->preview(text, options, {
                     [&] { return context.IsCancellationRequested(); },
                     [&](double value) { context.SetProgress(static_cast<float>(value), 1); }});
@@ -63,7 +63,7 @@ namespace SST::Prototypes::CapLab
                 if (operation == Operation::Save) target = document.path;
                 if (target.Empty())
                 {
-                    const NativeFileDialogFilter filter{operation == Operation::Preview ? "Lab AS: f [Hz], Cp [F], Rp [Ohm]" : "CapLab project", operation == Operation::Preview ? "dat,txt,csv" : operation == Operation::Export ? "png" : "json"};
+                    const NativeFileDialogFilter filter{operation == Operation::Preview ? "CapLab measurements / ProPho" : "CapLab project", operation == Operation::Preview ? "dat,txt,csv,cf,cv,json" : operation == Operation::Export ? "png" : "json"};
                     const auto selected = operation == Operation::Save || operation == Operation::Export
                         ? SaveFileDialog(filter,operation == Operation::Save ? "project.caplab.json" : "cf.png") : OpenFileDialog(filter);
                     if (!selected) { status = "Dialog cancelled."; return; }
@@ -71,7 +71,7 @@ namespace SST::Prototypes::CapLab
                 }
             }
             auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save ? Serialize(document.project) : "",target);
-            job->decimal = decimal; job->importer = labImporter;
+            job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
             if (operation == Operation::Export) job->snapshot = pl::snapshotGraph(*document.project.engine,document.project.graph,view);
             pendingRevision = document.revision;
             activeJob = jobs->Submit(job);
@@ -108,9 +108,11 @@ namespace SST::Prototypes::CapLab
             else if (pending->operation == Operation::Preview)
             {
                 preview = std::move(pending->preview); previewRevision = pendingRevision;
+                if (preview->contains("samples")) { status = "Preview ready; inspect samples, units and provenance before confirming."; }
+                else {
                 temperature = Optional(preview->at("temperature_K"));
                 if (!temperature) temperature = Optional(preview->at("suggested_temperature_K"));
-                status = "Preview ready; check units and temperature before confirming.";
+                status = "Preview ready; check units and temperature before confirming."; }
             }
         }
         else status = job->status == JobStatus::Cancelled ? "Cancelled." : job->errorMessage;

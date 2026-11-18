@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "TestProject.hpp"
+#include "Domain/CapLabBundleImport.hpp"
 namespace SST::Prototypes::CapLab {
 TEST(CapLabProject, PFSI2AndRoundtripPreserveAllDataAndIDs) {
     auto p = FixtureProject();
@@ -36,5 +37,41 @@ TEST(CapLabImport, UndoRedoAndRepeatedNamesKeepStableReferences) {
     second.Undo(); first.Undo(); EXPECT_TRUE(p.samples.empty()); EXPECT_EQ(p.graph,0);
     first.Redo(); second.Redo(); Validate(p);
     EXPECT_EQ(p.samples[0].id,sample); EXPECT_EQ(p.sweeps[0].id,sweep); EXPECT_EQ(p.graph,graph);
+}
+}
+
+namespace SST::Prototypes::CapLab {
+inline Json BundleFixture() {
+    auto m = FixturePreview();
+    m["kind"]="FrequencySweep"; m["variant"]="Cp_Rp";
+    m["names"]={"f","C","Rp"}; m["units"]={"Hz","F","Ohm"}; m["frequency_Hz"]=nullptr;
+    return Json{{"source","fixture"},{"profile","lab_as_cp_rp"},{"sha256","fixture"},
+        {"samples",Json::array({{{"name","sample"},{"area_m2",3.7e-6},{"metadata",Json::object()},{"measurements",Json::array({m})}}})},
+        {"historical",Json::array()}};
+}
+TEST(CapLabM2, BundleIsOneUndoEntryAndKeepsIDsAcrossRedo) {
+    Project p; ImportChange base(p,FixturePreview(),100,CFTemplate{});
+    const auto original = Serialize(p);
+    BundleChange first(p,BundleFixture()); const auto once = Serialize(p);
+    BundleChange second(p,BundleFixture()); const auto twice = Serialize(p);
+    EXPECT_EQ(p.samples.size(),3); EXPECT_EQ(p.measurements.size(),2);
+    EXPECT_NE(p.samples[1].id,p.samples[2].id);
+    second.Undo(); EXPECT_EQ(Serialize(p),once);
+    first.Undo(); EXPECT_EQ(Serialize(p),original);
+    base.Undo(); EXPECT_TRUE(p.samples.empty());
+    base.Redo();
+    auto restored=Json::parse(Serialize(p)), baseline=Json::parse(original);
+    EXPECT_GT(restored["engine"]["revision"],baseline["engine"]["revision"]);
+    restored["engine"]["revision"]=baseline["engine"]["revision"];
+    EXPECT_EQ(restored,baseline);
+    first.Redo(); second.Redo(); EXPECT_EQ(Serialize(p),twice);
+}
+TEST(CapLabM2, FailedLastMeasurementLeavesWholeDocumentUnchanged) {
+    auto p = FixtureProject(); const auto before = Serialize(p);
+    auto bundle = BundleFixture();
+    bundle["samples"].push_back(bundle["samples"][0]);
+    bundle["samples"][1]["measurements"][0]["columns"][0][0] = 0;
+    EXPECT_THROW((BundleChange{p,bundle}),std::exception);
+    EXPECT_EQ(Serialize(p),before);
 }
 }

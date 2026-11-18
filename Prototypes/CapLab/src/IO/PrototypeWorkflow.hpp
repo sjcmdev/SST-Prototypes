@@ -26,6 +26,7 @@ namespace SST::Prototypes::CapLab
         std::shared_ptr<const pl::Importer> importer = std::make_shared<LabASImporter>();
         std::optional<Project> opened;
         char decimal = '.';
+        std::string importOptions;
         bool saveCommitted = false;
         std::shared_ptr<const pl::GraphSnapshot> snapshot;
     };
@@ -51,6 +52,7 @@ namespace SST::Prototypes::CapLab
         std::uint64_t previewRevision = 0;
         std::optional<double> temperature;
         char decimal = '.';
+        std::string importOptions;
         sst::ui::plot::PlotViewState view;
     private:
         Ref<DocumentJob> pending;

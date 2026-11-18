@@ -1,0 +1,922 @@
+[
+  {
+    "file": "#132_DL_1e3Hz_360K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\DL\\#132_DL_1e3Hz_360K.dat",
+    "sha256": "2b919cad1694c729cb14a18032049b71d4ad72ac1239f84b118a972a7934ff00"
+  },
+  {
+    "file": "#002_CIGS2014_REL_DL1e5Hz_300K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_IDUB\\#2019_CIGS_2021-02-05\\DL\\#002_CIGS2014_REL_DL1e5Hz_300K.dat",
+    "sha256": "fc6404304c7104b452c25765e9a30f2643a8f71ae54f271c74c53b33f7476051"
+  },
+  {
+    "file": "#1_CF_test_200K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_scaps_ref\\converted_dat_files\\AS\\#1_CF_test_200K.dat",
+    "sha256": "8710160e505f63109600b7dbc7ea67060df827d99855417019181668dda6bf6e"
+  },
+  {
+    "file": "CV_test_230K_DL1e+03Hz_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_scaps_ref\\converted_dat_files\\DL\\CV_test_230K_DL1e+03Hz_REL.dat",
+    "sha256": "21333919e2fd675619533de65453bc77efff7b764d9466ce2328107d4d4c73e1"
+  },
+  {
+    "file": "benchmark_propho.cf",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_scaps_ref\\benchmark_propho.cf",
+    "sha256": "85e66da59fce09290c60aaa20be5c306460c50890cc567c85f53b229bb8bf835"
+  },
+  {
+    "file": "CV_230K_1e3Hz.cv",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_scaps_ref\\CV_230K_1e3Hz.cv",
+    "sha256": "87e7804f8c7f0036ced3c8110658866d28f33cea38ae27f5b49c943fa11b3363"
+  },
+  {
+    "file": "samples_Cd_diffusion.json",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\projects\\samples_Cd_diffusion.json",
+    "sha256": "c56e31f8f29a70d154010406cd82763389c4550cf7dc53f654a41f2d7ae9359e"
+  },
+  {
+    "file": "scaps_ref.json",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\projects\\scaps_ref.json",
+    "sha256": "13a1790258e2fe889ac4bbed91ddaaa7cbcd5c2cc5b747031d192cb08e3ec535"
+  },
+  {
+    "file": "data_Cd/data_Cd.json",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\data_Cd.json",
+    "sha256": "1516d3cf8066f7e22fd9209fa0a94601dd57e17621bba065d92e29accb1d049b"
+  },
+  {
+    "file": "data_Cd/data_Cd_only_dl.json",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\data_Cd_only_dl.json",
+    "sha256": "3df18d5be2e8d6914d9670cfaeb83f1bb456c21c6d1ef65f41f22d6481eda42e"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_100K_7.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_100K_7.dat",
+    "sha256": "9080bd75b1206354dbcba2d7e2e341513720f38abe3c311b91b3fb5750f304c4"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_110K_8.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_110K_8.dat",
+    "sha256": "2533e3d5582efea6dd7f4d808e91024b892bdc902b7b369da22482d66868d393"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_120K_9.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_120K_9.dat",
+    "sha256": "f9df517c67b2e9aef8d4a88e21a8879db3c1a4f506f40314213bbdb8b3acb907"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_130K_10.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_130K_10.dat",
+    "sha256": "2b84c32d6a0e214beb0a19e072bc1f5a79d88d525014e51783c156c0b9658c82"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_140K_11.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_140K_11.dat",
+    "sha256": "c97e96d23d242c973d73023d7537335802833aaa8c8428bf8951b8b99ee72f31"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_150K_12.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_150K_12.dat",
+    "sha256": "c41944d4f1e0b45d195afd1e0268d278ae0051a3858408bbe5adab399bf57c98"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_160K_13.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_160K_13.dat",
+    "sha256": "2ae633b6a7fc04b9ba3a814298b41762def036608b4c97321c4b77499696e17c"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_170K_14.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_170K_14.dat",
+    "sha256": "9bdcc8b46145175200ead1de958902c6f850bbd0b20b470ce38185f1762e7b1a"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_180K_15.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_180K_15.dat",
+    "sha256": "ad100a552848e9dab3131545b9db7d9ed30ddb30b6359e522bd3bda32196d0fd"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_190K_16.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_190K_16.dat",
+    "sha256": "b4b61f28c3549785401c50875da342f9b70635e74838c3e609f573943f9b1e83"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_200K_17.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_200K_17.dat",
+    "sha256": "965998214278c4b82d330e394e7155330c3f3e5cb73cbe2a875b425246b43b5b"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_210K_18.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_210K_18.dat",
+    "sha256": "e69175408c78e5b0740fedb8ff482df3400f7b8e5d4596e6396716016d66e5c9"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_220K_19.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_220K_19.dat",
+    "sha256": "045ea04f00a52af7266a2dd063a21485eec42a0d8bb7b777e44f44aff93aa877"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_230K_20.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_230K_20.dat",
+    "sha256": "f414aa476aaa2f439cca70081d856b034f91a2050a0556a2d5ec962ca2e0dd2e"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_240K_21.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_240K_21.dat",
+    "sha256": "696b50793ba8e5fd792f0eb4d920c0ce703f6970fe60748aeb700475a1ad4114"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_250K_22.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_250K_22.dat",
+    "sha256": "700164a7af1ab3cfe997c0a92bc198e0aabd391d0c6afb128a062e69b2448164"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_260K_23.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_260K_23.dat",
+    "sha256": "af35f497629a9c484dd40a316f8a9ee0d4a93e7bb0d2138941b8b1ca39c438c8"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_270K_24.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_270K_24.dat",
+    "sha256": "5ddbb38ad775804f5728b2f58620cd41ae69070a7245438976574701d09a0a6c"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_280K_25.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_280K_25.dat",
+    "sha256": "3ac00ead1eb104cdaca80bc299fd57942ff8374b06f3807e6a0d75e11ff04523"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_290K_26.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_290K_26.dat",
+    "sha256": "082154431390ac57895c71e96a0c1f3eae6db85329627c8713f4be1b320c57b9"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_300K_27.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_300K_27.dat",
+    "sha256": "fb4f2070d98fde04a758a7f482e81df3e102520fd01d644d35616c3eb09a1ab7"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_30K_0.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_30K_0.dat",
+    "sha256": "5d0e253ed7bf7fe2fb332328079f5e4811d9f47ba5d400beab2c97bce6894398"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_310K_28.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_310K_28.dat",
+    "sha256": "33c725f64cfd99132600144646d678cc81964b537332e96713bf6956d5363bf3"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_320K_29.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_320K_29.dat",
+    "sha256": "7a993884300c9c66a0de33249c8393503f9ba14b137714b711533e9edb48f0cb"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_330K_30.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_330K_30.dat",
+    "sha256": "38e4053959af6d6fc632f65736fef9819f05a6cf66102fb8699c033cda916cde"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_340K_31.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_340K_31.dat",
+    "sha256": "67fc0b5bd59aab5a4b22a1767e4a4f74bacc3cb8c3f3f69b2009cf750530820f"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_350K_32.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_350K_32.dat",
+    "sha256": "c467adf84e8ce7dcf98beefb0d1695872cb8c3a4a29450f7a20852fedd7eddce"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_360K_33.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_360K_33.dat",
+    "sha256": "d19221e99b2deea43d078c7ebcca05424a31ead79d43c81b376aacf3e7433e11"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_370K_34.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_370K_34.dat",
+    "sha256": "2950df288dc4d1ae1a09c61672c4112bc545e2a560dc6c0c98a2643f1dadbe51"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_380K_35.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_380K_35.dat",
+    "sha256": "420a243d416d38e5e2021c62f3a97515c15a33c42653b9c30c24a8ced67ef9e0"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_40K_1.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_40K_1.dat",
+    "sha256": "b4f521955f84edee0e49e26a95923e4f60f0af51b65e7508329615b254e26b8e"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_50K_2.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_50K_2.dat",
+    "sha256": "3618fb9be64a1c306c275a3a06b8b54a87993c027ad7987500f1bc6ff1a03e75"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_60K_3.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_60K_3.dat",
+    "sha256": "297e3e077d795fbea1266b65267524587df8791fcaf700ef58c68074a183f83b"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_70K_4.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_70K_4.dat",
+    "sha256": "00bda14b8a71ecda87d601308602d17bedf39f676dac02e2601ce63520779b3e"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_80K_5.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_80K_5.dat",
+    "sha256": "85dcb80acd3224f1f02b85bb10e3c884cb497883b311db5b1b44ff231fc0b77a"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/AS/cf_90K_6.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\AS\\cf_90K_6.dat",
+    "sha256": "db1b5ea05ab989b6c583ff0067e0559474ddaa1823702b837a993ed03757597b"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e3Hz_300K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e3Hz_300K.dat",
+    "sha256": "4d64cc58046b1714d55497c9580169f493c82b91e6bde8bca1a935fa8d4ce33d"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e3Hz_pm_300K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e3Hz_pm_300K.dat",
+    "sha256": "058d73dc03253df593f1fe4a06b32ef2d20299f3678bdae7c73c096a81ca2a6e"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e4Hz_200K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e4Hz_200K.dat",
+    "sha256": "4f5e3f97dc832924d4e3b9060643afce547f4dca3fcb7afead7f4d2f21c7ca63"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e4Hz_300K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e4Hz_300K.dat",
+    "sha256": "28f09c7c72269026ff158517e8aaaac97d0f65aa604ca50d8d8b972b54e47af0"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e6Hz_200K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e6Hz_200K.dat",
+    "sha256": "ac9e65b640ade49f716856ca81b1ae6c204170bfa38949c124ee7802bb0022e0"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e6Hz_300K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e6Hz_300K.dat",
+    "sha256": "d30ca7a6a052d997614a358ae11f29aa1ff921c46147d5c0259992b5429777e5"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e6Hz_360K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e6Hz_360K.dat",
+    "sha256": "af172731da1b45bb9c5632a80997b4c1d45e494f882ac08fee7a04d0268fa658"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e6Hz__pm_300K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e6Hz__pm_300K.dat",
+    "sha256": "a5e6eea2d3665b97e17a8cbff1fbd5e6cb8c6aee5b92acf352ef031866dc7f6c"
+  },
+  {
+    "file": "data_Cd/#143_Ann200C_3.75mm2/DL/#143_Ann200C_DL_1e6Hz__pm_360K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#143_Ann200C_3.75mm2\\DL\\#143_Ann200C_DL_1e6Hz__pm_360K.dat",
+    "sha256": "a92abdceea3658550050f3bc5cd9560302996dcf3fcb678d0fb008ef8a335d4f"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_100K_7.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_100K_7.dat",
+    "sha256": "b46ce13e84432645850ccf0d3bd5445d3bd5a978da40942bb44e78adb9a479c6"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_110K_8.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_110K_8.dat",
+    "sha256": "1b93ef9ab99a93e607564fc880d8e0d5a7dc58395caab358bfee05974c4a4d31"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_120K_9.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_120K_9.dat",
+    "sha256": "0837de80b5d3f961c34711231ca07473068a995a2bee36b4162e3bcee837ca32"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_130K_10.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_130K_10.dat",
+    "sha256": "97687001da59cdd5e397af8a16ee8dfc02bb5270cdb05c0ca2771d570969e570"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_140K_11.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_140K_11.dat",
+    "sha256": "4b39328ec7018316f8c93581847a0f378b4ab66b35377c11b4491657b6518258"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_150K_12.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_150K_12.dat",
+    "sha256": "70f203ec2de4032bfe73ac4caf0e17c37c8c21386adffa9efff7323ad87cf54b"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_160K_13.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_160K_13.dat",
+    "sha256": "a7cfe7b731d0e24faafb5ae638305f68f0f24e551ad325d6f82f951a9aad9a58"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_170K_14.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_170K_14.dat",
+    "sha256": "1b65bdf4ce06761918c03ee23feb627395f3dc6ce5a47f08983c0404b1591be3"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_180K_15.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_180K_15.dat",
+    "sha256": "d1aa7c6c864c04e1c99c49eb282f2ce783729f61b6b290267d58c820354e698e"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_190K_16.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_190K_16.dat",
+    "sha256": "a6dbfa96fb26db11fa139d155f584d2052c752d223bd7c20c675210426839899"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_200K_17.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_200K_17.dat",
+    "sha256": "e8e69c023fe9257766c6f85352aad90ff53308fa471b5f36299eea53c7bcbfd2"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_210K_18.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_210K_18.dat",
+    "sha256": "06443855b84ff719da738ad8fbde71034cb7db64c4939fdec2e104b7dd35c5b0"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_220K_19.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_220K_19.dat",
+    "sha256": "74ebcce765f846e9f9cae9176a70c0a6fe17487844a2cae51db52db28fcfff69"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_230K_20.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_230K_20.dat",
+    "sha256": "69f17e0334b385bdcf4ff002751ce6aa04afe1246af24419a2931c1320baef16"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_240K_21.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_240K_21.dat",
+    "sha256": "7fb0532b13e9fd3e4159d1fed3767f67ec566f8e19d207dcd162239de7d77705"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_250K_22.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_250K_22.dat",
+    "sha256": "1a8fecdaf31d63af5337a1a2c93713f85b2685cccafef0311282c4443c5b9f5b"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_260K_23.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_260K_23.dat",
+    "sha256": "d89536b38ce8e97b41e930b25e4ab619bc120915a1173e40277c0acc35d2e20d"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_270K_24.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_270K_24.dat",
+    "sha256": "940f06130848fb0ccad7e5a5825e08594f3d6b7dabb8935cb266bf71f2504da5"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_280K_25.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_280K_25.dat",
+    "sha256": "8c7a73d084ffd39163cc53cdf9c239ae4060cc4a92423de2945c1d8c9a6db711"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_290K_26.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_290K_26.dat",
+    "sha256": "5c59c86ababc8543835ff54bf4b7cddc90cb1bcae1bea18aecc029fa66b87857"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_300K_27.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_300K_27.dat",
+    "sha256": "23b7f412b0f0e221faf6834384029bf2f782509f680d92b4ebb097e01f7971d5"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_30K_0.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_30K_0.dat",
+    "sha256": "95530f6863f78e367624a096ce68f53197226bd2dc24799600c6db14142ba8cb"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_310K_28.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_310K_28.dat",
+    "sha256": "07f67fca9e898478a9eb2a1c9d0a3dac44937f4f781522100984c379f2864477"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_320K_29.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_320K_29.dat",
+    "sha256": "c3b2a1a8a66554666ec5da42a9847ec09cb57c6d417603d1068def23b1bd53d5"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_330K_30.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_330K_30.dat",
+    "sha256": "bd8b81120de51c039c0bcbf7aa8859dd0df3ccc47c76972c63287cf3bbdffde9"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_340K_31.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_340K_31.dat",
+    "sha256": "c55541d46482051d9b3cff68cdbe52d7a4e22f78d5aca271aa553320986e0491"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_350K_32.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_350K_32.dat",
+    "sha256": "bb5bd15001ca8f25373ede90e1448975aaff85688b91fc589478938bee0091cb"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_360K_33.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_360K_33.dat",
+    "sha256": "670348196a3be46c5c69b95df197e0c68a31c3b1743a3ddc7e1e772c64d5c386"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_40K_1.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_40K_1.dat",
+    "sha256": "76938898c906072b631c80a4b1ade18839b7049d069eab6629c228c9e6f6abe5"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_50K_2.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_50K_2.dat",
+    "sha256": "7c6274c9651a1882b217a934409ce61e5b1acd45048f566b68757fec76a08958"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_60K_3.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_60K_3.dat",
+    "sha256": "cf3550d7b7a6cd2989ce980b1cb0880b4c3bf3825499e3b2b0183c81d91c7f58"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_70K_4.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_70K_4.dat",
+    "sha256": "a58a93bf6bb2df5c9e373b0cf60ace87b5489a3c3b7838bcfd210cb2673dadb0"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_80K_5.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_80K_5.dat",
+    "sha256": "94618002ade19b703983afd78d26d032d37be212e0738c0c5cd04fb0d01ba2b7"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/AS/cf_90K_6.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\AS\\cf_90K_6.dat",
+    "sha256": "9ee3f3addac9cbe7f71032b77cb5f12a3a99eb3364cd378ca33903b6eb339b81"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/DL/#139_DL_1e3Hz_mp_200K_REL_Umin-1000_10022014.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\DL\\#139_DL_1e3Hz_mp_200K_REL_Umin-1000_10022014.dat",
+    "sha256": "47f6c53056d6dcfa47b6ea1c32bec673a8ee01676b9200cf5ee19e2438262918"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/DL/#139_DL_1e4Hz_mp_199K_REL_Umin-2000mV_10022014.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\DL\\#139_DL_1e4Hz_mp_199K_REL_Umin-2000mV_10022014.dat",
+    "sha256": "fd7dd5c481660c203c4bd7c3bcbf7ae168a1f126ff58109f345f1ef132ac982a"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/DL/#139_DL_1e6Hz_mp_199K_REL_Umin-2000mV_10022014.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\DL\\#139_DL_1e6Hz_mp_199K_REL_Umin-2000mV_10022014.dat",
+    "sha256": "ac93c049ff6c2d05a16a661058c15b821854699a71417be517cc1f5bda961f84"
+  },
+  {
+    "file": "data_Cd/#139_Std_5.5mm2/DL/#139_DL_1e6Hz_mp_330K_REL_Umin-1000mV_10022014.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#139_Std_5.5mm2\\DL\\#139_DL_1e6Hz_mp_330K_REL_Umin-1000mV_10022014.dat",
+    "sha256": "e903324178d5380136608b9e4f8e6af8ec21ad173a7a11a1b92bc9fac8e14076"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_101K_5.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_101K_5.dat",
+    "sha256": "863e3a48686f43b28c6712ee12fd6f5a8cb228832b1c35dba279effaec3125bf"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_111K_6.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_111K_6.dat",
+    "sha256": "7667fb3e6ff0d155276cdd9d910e73f8a35eebb208a9d032e0eb9c0910da7e2d"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_120K_7.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_120K_7.dat",
+    "sha256": "3028b41071b59103e9285b7ea5cba63c62cd10196460720e91e56e73c71a1c70"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_130K_8.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_130K_8.dat",
+    "sha256": "ff0dde148c5861b5a3ab72da209a2df7b1a421f36d4a397618befc248551a9db"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_140K_9.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_140K_9.dat",
+    "sha256": "8ccffcecf52c7308970641862ade703bc3516ee8a66daa58f7a493cfe856503a"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_150K_10.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_150K_10.dat",
+    "sha256": "6bf9094f58111b71b2f9a2d2b3616779443c5a1dd5458104ef7f9c9ee1cdf343"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_160K_11.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_160K_11.dat",
+    "sha256": "3a35ccafd89491ca82d5a0b43bafe6766068187235dcbf74b717cc90c58f6d5b"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_170K_12.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_170K_12.dat",
+    "sha256": "db66803dfb23727be72a038c2c534cf36eab47eb0e821d64f5ebcfc05bed4da4"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_180K_13.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_180K_13.dat",
+    "sha256": "ec16272217f8e61cb6ffb6979b1f04ed0eeb2ea685cd7fc9c151c28a577a621d"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_190K_14.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_190K_14.dat",
+    "sha256": "f706333f3b495c702487f719de3cfff224c79cb6e1946c18fd244b4d6260c4d0"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_200K_15.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_200K_15.dat",
+    "sha256": "5011a4f44b42e302a78db074819ff9652a2df9af9a7535d5c7bcbe58c0db61f7"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_210K_16.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_210K_16.dat",
+    "sha256": "a18b119b54bf2d8c1f615aa2d2ea73e858786a7890aec160f6f1e1b4c58129ed"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_220K_17.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_220K_17.dat",
+    "sha256": "d5e9f2785ae8df7fc49125878479c727fdbde5507c6937445b504dc39c2e6fa8"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_230K_18.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_230K_18.dat",
+    "sha256": "28a0df404ec71404fec79984a70bcbf442f82ad1c07f58e506711710314d0afa"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_241K_19.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_241K_19.dat",
+    "sha256": "b7748314b1709fd3647a043db30e0dacbefe5c6f42ea4e14d15b1f2a0b481d10"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_251K_20.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_251K_20.dat",
+    "sha256": "cc23cc15f958436aba722498b5b27241fc32e28567a6eca298b48ce0bbc951c9"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_261K_21.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_261K_21.dat",
+    "sha256": "87a517a897f2554f805265653e0f0b1039076547f231bf96777c5dcd77846b40"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_271K_22.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_271K_22.dat",
+    "sha256": "c0dd290efa2c0cd596ff477f2bffdfe2cb6fd3d9d62b6b71d676600b5b150e72"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_281K_23.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_281K_23.dat",
+    "sha256": "7d777c6ab374c4e33906ada362464fa350e9d5d2ee9a05479577331d6f546bbd"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_291K_24.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_291K_24.dat",
+    "sha256": "de7bf3a2b3478b18dd354c2455d85a8e003f6a347561655dc3037c7391f15c8c"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_301K_25.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_301K_25.dat",
+    "sha256": "da1de743f0336fb10ded1c85c6beb88ddac9eec778af83da680512ca5786a371"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_310K_26.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_310K_26.dat",
+    "sha256": "9c70b09a7b1f7dff2f1937e0712b7a5c90e2105e17e54108b867efbd0fd23e59"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_320K_27.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_320K_27.dat",
+    "sha256": "67359feb8571e07308f3b3c6e545d8585b1caf2064a1e9bea313ec9731f66f0e"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_330K_28.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_330K_28.dat",
+    "sha256": "85c8ce830505ac495ded83cdd5ba08e80c21c7878dee15a738110af4923bcf27"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_340K_29.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_340K_29.dat",
+    "sha256": "023f0e6b721cdc5fb55bdbad13416f0be8f2a23485dac52a684e950fdc32779c"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_350K_30.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_350K_30.dat",
+    "sha256": "c9b855aae2524a63223b31287c49f578b5f17f8334fd34d8669e413cb58398e6"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_51K_0.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_51K_0.dat",
+    "sha256": "6eb22754b83f0a2cfc593393d700d418e111efc9671746463d62ed6ccbed7ec3"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_61K_1.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_61K_1.dat",
+    "sha256": "2b2399b866471d5914c28eaaec005a4db5c110f5a4528c55ed592625636cfe79"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_71K_2.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_71K_2.dat",
+    "sha256": "00e2504bdb6401cd07697cbdb1f492bd7529cea14c7267c67603ba18272bb809"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_81K_3.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_81K_3.dat",
+    "sha256": "e1cfc8be56ad1607c265ab9358135b43fdb2e9f8ddaee0594b026b7c51fa3614"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/AS/cf_91K_4.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\AS\\cf_91K_4.dat",
+    "sha256": "e93e36973c7b78b023bb9d3ae9f1d659914fe67423dd06570f2a355fbe03e80f"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/DL/002_#138_Ann150C_DL_1e6Hz_60K_09092016.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\DL\\002_#138_Ann150C_DL_1e6Hz_60K_09092016.dat",
+    "sha256": "978fbdd80958f8f1d5abe6e3cef4006ff00058ff73695c5068c1b91dabe85466"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/DL/003_#138_Ann150C_DL_2e3Hz_60K_09092016.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\DL\\003_#138_Ann150C_DL_2e3Hz_60K_09092016.dat",
+    "sha256": "9b7f73e407f0f6d27bd0764b4f588aad3ea2d9970d11f897cd7c13576b36a099"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/DL/004_#138_Ann150C_DL_1e6Hz_170K_09092016.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\DL\\004_#138_Ann150C_DL_1e6Hz_170K_09092016.dat",
+    "sha256": "84e61842fe0551aef94c7a7068b470a85107ecc09887c46ebbc0248f6dbb4e68"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/DL/005_#138_Ann150C_DL_2e3Hz_170K_09092016.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\DL\\005_#138_Ann150C_DL_2e3Hz_170K_09092016.dat",
+    "sha256": "56a7fce316e940a5b29c9b70e55dbd80b9d58a634529e29514e771ccf5cf7b72"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/DL/006_#138_Ann150C_DL_1e6Hz_300K_09092016.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\DL\\006_#138_Ann150C_DL_1e6Hz_300K_09092016.dat",
+    "sha256": "3ad331c4d91fd59ece649e37ca8e100cc98e0ad02ad1544f54d20bc0f8f0711c"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/DL/007_#138_Ann150C_DL_2e3Hz_300K_09092016.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\DL\\007_#138_Ann150C_DL_2e3Hz_300K_09092016.dat",
+    "sha256": "12a671b56f12d8960980122fd5ff54168b67bb6eb074655c9109e8397cf294ed"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/DL/008_#138_Ann150C_DL_1e6Hz_350K_09092016.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\DL\\008_#138_Ann150C_DL_1e6Hz_350K_09092016.dat",
+    "sha256": "1f742cc73d13fcb69b5049ea9c04919a10ae85abf61c63e1b2944ddd857e063a"
+  },
+  {
+    "file": "data_Cd/#138_Ann150C_9mm2/DL/009_#138_Ann150C_DL_2e3Hz_350K_09092016.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#138_Ann150C_9mm2\\DL\\009_#138_Ann150C_DL_2e3Hz_350K_09092016.dat",
+    "sha256": "eed62ec4a99970bcbadec89f88ad96753b4d566205b0fbe3c7404f4f583e595a"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_100K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_100K_REL.dat",
+    "sha256": "c74d8b43f655b49876ca5ed8a6cac71459d3105be0ddcfda5db0798036053454"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_111K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_111K_REL.dat",
+    "sha256": "93249776560bd7997753b952606cdf904e8b0bd7b1e12895642e28a356673536"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_121K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_121K_REL.dat",
+    "sha256": "c31d1b0c9a21a142120ca2bc5117f50faa7532981bf542fadbe42392f0d87cd0"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_131K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_131K_REL.dat",
+    "sha256": "b1a489d232d6808d80822e848b11ad27a21264f940d740f0231ecc3a5533bc20"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_140K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_140K_REL.dat",
+    "sha256": "4650c13660b15b4c5f2d3592a66089006db03df878de743c85c77fcf877d3ad5"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_140K_REL_1.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_140K_REL_1.dat",
+    "sha256": "2cd70077a3d8b57a8802781291c55b50d69d43986594f57faf0aa90e416712d0"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_150K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_150K_REL.dat",
+    "sha256": "a7a9700a70aa03e16374734405199a1762cabda06bcb4a3067882847abb7b75c"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_160K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_160K_REL.dat",
+    "sha256": "0759ba1301a3408030ec86f7fd7e682cdaa80c7648f6623816512a2579519f8f"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_165K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_165K_REL.dat",
+    "sha256": "4607ae7476056050f0590aa7b72da3a3fa2089bd9ceb9cbcaabb0398c78e3d14"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_170K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_170K_REL.dat",
+    "sha256": "8128445c055ff301c51daea181ebf340f8a64152d74ff86605e34f7b23e83ed9"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_180K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_180K_REL.dat",
+    "sha256": "d7d3d253088c5c80a03a8d0f8c7904f2b17eacf0f060881dcbc5041faebfcb12"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_190K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_190K_REL.dat",
+    "sha256": "af05a21aad0cb554298e89534485bdc453169058d57b3a8455c6a69764b4b0b8"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_200K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_200K_REL.dat",
+    "sha256": "0caec05f491c98442dad53a10a3ac059e9be1038c1f1faf1b8c918b2ce3b5f00"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_210K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_210K_REL.dat",
+    "sha256": "8641a63b22bfd7fcd100c08d46efe57deeffad68cfbf21aa93627727cbbeefcd"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_220K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_220K_REL.dat",
+    "sha256": "6cbcc682ea8c5b2c45c8f2eab9d00c911c96d07bbfb7622e3448f947c73198bb"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_230K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_230K_REL.dat",
+    "sha256": "41a2a5ecc4f5b254d328cfc220dccfbfc4b9a4b977efa3cddb47897f1cb5c0a7"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_240K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_240K_REL.dat",
+    "sha256": "d243d4662ab9476334c075fbb7c79a423b23767e8b86d72249b1d0d1626d4a2c"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_250K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_250K_REL.dat",
+    "sha256": "a1c563d6901add03e44f25faf786e96cbcacd80fb6321a9c9b0ac9b0024bf77b"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_260K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_260K_REL.dat",
+    "sha256": "3ca7b3766ae99a085d223649fc61b254098c7f50b48259a488e804c74d040556"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_270K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_270K_REL.dat",
+    "sha256": "400522b34f523c1cf7c895dd8c70835ea3bb851a26f525006f4f1cf3915ad6d4"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_280K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_280K_REL.dat",
+    "sha256": "30f418ed9f5a89f2c8e94aa6a5ec92f99502f0205dccaf1fcd4ae50d63228405"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_290K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_290K_REL.dat",
+    "sha256": "ca4b6d1618053706d03f24254a70b3979851ee60796a5cbbf7d3334d9b8eaeeb"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_295K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_295K_REL.dat",
+    "sha256": "fc7dbe157963a569c78e605ff09cf2e715aa46af5a737f2d53512fcd43a93572"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_300K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_300K_REL.dat",
+    "sha256": "51ece9b5b93429e03ae4f0f10a549492a356170cfa4cc0ecd10477f6c9ef693d"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_310K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_310K_REL.dat",
+    "sha256": "c41747f9fa82583d4d5406e94ec7902bfdce46f7a9adc4870af7009b3571f623"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_320K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_320K_REL.dat",
+    "sha256": "93baa172d4473e958c370ee822f066028fdb096bb3f54c3f5459b809ac11bcee"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_330K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_330K_REL.dat",
+    "sha256": "b0868907b0d493804fd4a3063570cb076b686dfbd5366cc8be5593311e78912f"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_340K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_340K_REL.dat",
+    "sha256": "a75926df7e5d47c71df6f842b89c0e2f939c19a53991215638b52626953ac056"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_350K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_350K_REL.dat",
+    "sha256": "e6e2af21316e1f36b6ab2b4237e7b20fec631af485927f0505a07b197fef4d93"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_360K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_360K_REL.dat",
+    "sha256": "dac1db25b7d796bc8505ee9dc060ef52ea9d54634be400330b5f7b5a6b9a6b16"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_370K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_370K_REL.dat",
+    "sha256": "f065f900a5b331a70b6f51c5d52ab775bf6d2afa518ee346c20a8c789c6de13a"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_380K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_380K_REL.dat",
+    "sha256": "880fe11501d712cbf8a397671ca02a6d0335de38090a8f078223e23b8aea5484"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_81K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_81K_REL.dat",
+    "sha256": "981a9a50c8c1ab2f4f792f38a3e94fb911e4f7132b6f65187bce7eef438811c2"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/AS/#133_AS_91K_REL.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\AS\\#133_AS_91K_REL.dat",
+    "sha256": "5fb4eb2ea77e2e10cf683c542f8f38613e59f87a49d970b8de9afd34f1331cb6"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/DL/#133_DL_1e3Hz_200K_REL_07022014.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\DL\\#133_DL_1e3Hz_200K_REL_07022014.dat",
+    "sha256": "5ea010f29ad8150537a5c6082ca049b1cf4ea909d0b6b854262511d358308485"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/DL/#133_DL_1e5Hz_100K_REL_07022014.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\DL\\#133_DL_1e5Hz_100K_REL_07022014.dat",
+    "sha256": "6377e059d03b601b7bbe7b493ca07aec1766eadf878cc393ca56fd01b9b9879e"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/DL/#133_DL_1e5Hz_mp_300K_REL_10022014.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\DL\\#133_DL_1e5Hz_mp_300K_REL_10022014.dat",
+    "sha256": "df3b41ab98be0ab2fcf821e263c600618ec63d3e360367619a0545366e2de9ed"
+  },
+  {
+    "file": "data_Cd/#133_Ann250C_10.7mm2/DL/#133_DL_1e6Hz_200K_REL_07022014.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#133_Ann250C_10.7mm2\\DL\\#133_DL_1e6Hz_200K_REL_07022014.dat",
+    "sha256": "2a794bf075a472cdcff00de797ebccba6c05ac05b562d16892591808a4f1e846"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_280K_0.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_280K_0.dat",
+    "sha256": "d58909fa646127983450b9c147b4cd14a5329b154cfae3c60913f85643e8b6a2"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_280K_1.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_280K_1.dat",
+    "sha256": "b0dc18e630e8dc002643c99ce62a9ed5ef1634a246fc927278b93e2e46464501"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_280K_2.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_280K_2.dat",
+    "sha256": "1a362a0f9c99d5ff1245ebb9726388fd2c78068154c164ff2351479ea5b2d889"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_310K_0.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_310K_0.dat",
+    "sha256": "65a7b1dc71e3320f33354ad55d218146d4b10910c82f4a7f35e59db349f6ee3f"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_320K_1.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_320K_1.dat",
+    "sha256": "19938aaf942a4ecc334c135a24e97a8b5028cefb2ff42265a815c1489dcd4ecd"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_330K_2.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_330K_2.dat",
+    "sha256": "3e9b52c6f6c4423a85d789ea72cdf0bc3c257c23ad97efd53bfac7aabf61c9b8"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_340K_3.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_340K_3.dat",
+    "sha256": "3d2a0dfdbd863f02f750ec753fe80fb27f2b729660ee5bb56187829e1c914bf0"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_350K_4.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_350K_4.dat",
+    "sha256": "40bda9edb54facdf66f92e54a3dc366888ef8823fd8a8bdda7d54a1540a2789c"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_360K_5.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_360K_5.dat",
+    "sha256": "9cb0f2e670e0f9fcef19d1429e95b8924961db457810948cc3e8dedbf872a6ef"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_370K_6.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_370K_6.dat",
+    "sha256": "61955b2c3570425fe572e3519064789c80f982c4d4dfe9f7f461434800810c9a"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/AS/cf_380K_7.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\AS\\cf_380K_7.dat",
+    "sha256": "9b2b79bead378015167879b41d1d56dc4edd7c05768e14659c66e1c7c3ea686a"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/DL/#132_DL_1e3Hz_360K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\DL\\#132_DL_1e3Hz_360K.dat",
+    "sha256": "2b919cad1694c729cb14a18032049b71d4ad72ac1239f84b118a972a7934ff00"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/DL/#132_DL_1e3Hz_pm_360K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\DL\\#132_DL_1e3Hz_pm_360K.dat",
+    "sha256": "a28302da29f0510b8032d8ca0ac9997f548866f71aaf767466d58c2c41e1f7f1"
+  },
+  {
+    "file": "data_Cd/#132_Ann300C_3.7mm2/DL/#132_DL_1e5Hz_360K.dat",
+    "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\data_Cd\\#132_Ann300C_3.7mm2\\DL\\#132_DL_1e5Hz_360K.dat",
+    "sha256": "fca859b2b23bdb0f4ac370d98eddb4716ca393148ad7711e24c7dde5dbdde5e6"
+  }
+]

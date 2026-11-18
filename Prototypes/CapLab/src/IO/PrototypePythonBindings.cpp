@@ -1,6 +1,6 @@
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
-#include "Domain/CapLabImport.hpp"
+#include "Domain/CapLabBundleImport.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #include "Core/ScientificRuntime/Python/PythonGilScope.hpp"
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -14,7 +14,9 @@ NB_MODULE(sst_caplab, module)
     module.def("project_from_preview", [](const std::string &preview, std::optional<double> temperature)
     {
         Project project;
-        ImportChange change(project, Json::parse(preview), temperature, CFTemplate{});
+        const auto j = Json::parse(preview);
+        if (j.contains("samples")) { BundleChange change(project,j); }
+        else { ImportChange change(project,j,temperature,CFTemplate{}); }
         return Serialize(project);
     });
     module.def("roundtrip", [](const std::string &text) { return Serialize(Parse(text)); });
@@ -32,7 +34,7 @@ namespace SST::Prototypes::CapLab
         registered = true;
 #endif
     }
-    Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context)
+    Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const std::string &options)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
         PythonGilAcquireScope gil;
@@ -48,7 +50,7 @@ namespace SST::Prototypes::CapLab
             if (!nb::cast<bool>(paths.attr("__contains__")(pythonRoot))) paths.attr("insert")(0,pythonRoot);
             const std::function<bool()> cancel = [&] { return context.IsCancellationRequested(); };
             const std::function<void(double)> progress = [&](double v) { context.SetProgress(float(v),1); };
-            const auto result = nb::module_::import_("caplab").attr("preview_json")(text,source.Utf8(),std::string(1,decimal),cancel,progress);
+            const auto result = nb::module_::import_("caplab").attr("preview_json")(text,source.Utf8(),std::string(1,decimal),cancel,progress,options);
             return Json::parse(nb::cast<std::string>(result));
         }
         catch (const nb::python_error &e)
@@ -57,7 +59,7 @@ namespace SST::Prototypes::CapLab
             throw std::runtime_error(e.what());
         }
 #else
-        (void)text; (void)source; (void)decimal; (void)context;
+        (void)text; (void)source; (void)decimal; (void)context; (void)options;
         throw std::runtime_error("Embedded Python is unavailable; rebuild with embedding.");
 #endif
     }

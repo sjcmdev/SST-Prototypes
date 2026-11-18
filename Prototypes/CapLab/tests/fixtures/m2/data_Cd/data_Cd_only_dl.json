@@ -1,0 +1,26 @@
+{
+  "textdata": {
+    "samples": [
+      {
+        "name": "#132",
+        "dl_data_dir": "./data_Cd/#132_Ann300C_3.7mm2/DL"
+      },
+      {
+        "name": "#133",
+        "dl_data_dir": "./data_Cd/#133_Ann250C_10.7mm2/DL"
+      },
+      {
+        "name": "#138",
+        "dl_data_dir": "./data_Cd/#138_Ann150C_9mm2/DL"
+      },
+      {
+        "name": "#139",
+        "dl_data_dir": "./data_Cd/#139_Std_5.5mm2/DL"
+      },
+      {
+        "name": "#143",
+        "dl_data_dir": "./data_Cd/#143_Ann200C_3.75mm2/DL"
+      }
+    ]
+  }
+}
