@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <limits>
 #include <misc/cpp/imgui_stdlib.h>
@@ -365,7 +366,7 @@ namespace SST::Prototypes::PlotLab
         bool open = true;
         ImGui::SetNextWindowPos({ImGui::GetMainViewport()->WorkPos.x + 350, ImGui::GetMainViewport()->WorkPos.y + 10},
                                 ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize({850, 300}, ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize({std::max(900.0f,ImGui::GetMainViewport()->WorkSize.x-370), std::max(600.0f,ImGui::GetMainViewport()->WorkSize.y-60)}, ImGuiCond_FirstUseEver);
         const bool expanded = ImGui::Begin(Title("Worksheet: ", p.object(id), p.id()).c_str(), &open);
         if (!open)
             state->sheets.erase(id);
@@ -407,7 +408,7 @@ namespace SST::Prototypes::PlotLab
             if (ImGui::Button("Recompute"))
                 (void)p.recompute();
             ImGui::TextUnformatted(
-                "Click a column header for metadata/formula. Enter commits cells. Ctrl+click row toggles selection.");
+                "Header: column settings. Double-click a number to edit; Enter commits. Right-click to copy full precision.");
             auto columns = p.children(id);
             if (columns.size() > 64)
             {
@@ -428,14 +429,34 @@ namespace SST::Prototypes::PlotLab
                 const auto first = std::size_t(page) * 64, last = std::min(first + 64, columns.size());
                 columns = std::vector<pl::Id>(columns.begin() + first, columns.begin() + last);
             }
-            const auto rows = std::get<pl::Worksheet>(p.object(id).data).rows;
+            const auto sheetSnapshot = p.objects().at(id);
+            const auto& sheet = std::get<pl::Worksheet>(sheetSnapshot->data);
+            const auto& rows = sheet.rows;
+            if (ImGui::Button("Header rows")) ImGui::OpenPopup("Header rows");
+            if (ImGui::BeginPopup("Header rows")) {
+                for (const auto* header : pl::headerNames) {
+                    bool visible = std::find(sheet.hiddenHeaders.begin(), sheet.hiddenHeaders.end(), header) == sheet.hiddenHeaders.end();
+                    if (ImGui::Checkbox(header, &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","header_visibility"},{"worksheet_id",id},{"header",header},{"visible",visible}}.dump())); });
+                }
+                for (const auto& row : sheet.parameters) {
+                    ImGui::PushID(static_cast<int>(row.id));
+                    bool visible = row.visible;
+                    if (ImGui::Checkbox(row.name.c_str(), &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_visibility"},{"worksheet_id",id},{"parameter_id",row.id},{"visible",visible}}.dump())); });
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("Remove")) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_remove"},{"worksheet_id",id},{"parameter_id",row.id}}.dump())); });
+                    ImGui::PopID();
+                }
+                ImGui::InputText("Parameter name", &parameterName);
+                if (ImGui::Button("Add parameter")) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_add"},{"worksheet_id",id},{"name",parameterName}}.dump())); parameterName.clear(); });
+                ImGui::EndPopup();
+            }
             if (columns.size() > 0 && ImGui::BeginTable("data", static_cast<int>(columns.size() + 1),
                                                         ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollX |
                                                             ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
                                                         {0, 0}))
             {
                 ImGui::TableSetupColumn("Row", ImGuiTableColumnFlags_WidthFixed,
-                                        ImGui::CalcTextSize("000000").x);
+                                        ImGui::CalcTextSize("Sparklines").x);
                 for (auto column : columns)
                 {
                     const auto &o = p.object(column);
@@ -444,7 +465,10 @@ namespace SST::Prototypes::PlotLab
                         std::max(ImGui::CalcTextSize(o.name.c_str()).x,
                                  ImGui::CalcTextSize("-1.2345678901234567e-308").x) + padding);
                 }
-                ImGui::TableSetupScrollFreeze(1, 1);
+                int headerCount = 1;
+                for (const auto* h : pl::headerNames) if (std::find(sheet.hiddenHeaders.begin(),sheet.hiddenHeaders.end(),h)==sheet.hiddenHeaders.end()) ++headerCount;
+                for (const auto& row : sheet.parameters) if(row.visible) ++headerCount;
+                ImGui::TableSetupScrollFreeze(1, headerCount);
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);
                 ImGui::TextUnformatted("Row");
@@ -454,11 +478,14 @@ namespace SST::Prototypes::PlotLab
                     ImGui::PushID(static_cast<int>(c));
                     const auto &o = p.object(columns[c]);
                     const auto &col = std::get<pl::Column>(o.data);
-                    if (ImGui::SmallButton(o.name.c_str()))
+                    if (ImGui::SmallButton((o.name + "(" + pl::roleTag(col.role) + ")").c_str()))
                     {
                         metadata = o.id;
                         name = o.name;
                         units = col.units;
+                        comments = col.comments;
+                        displayMode = static_cast<int>(col.display.mode);
+                        displayDigits = static_cast<int>(col.display.digits);
                         longName = col.longName;
                         role = static_cast<int>(col.role);
                         formula = col.formula ? col.formula->expression : "";
@@ -473,6 +500,43 @@ namespace SST::Prototypes::PlotLab
                     }
                     ImGui::PopID();
                 }
+                auto headerRow = [&](const std::string& label, pl::Id parameter) {
+                    ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
+                    ImGui::TextUnformatted(label.c_str());
+                    for(std::size_t index=0;index<columns.size();++index) {
+                        ImGui::TableSetColumnIndex(static_cast<int>(index+1));
+                        ImGui::PushID(static_cast<int>(index)); ImGui::PushID(std::to_string(parameter).c_str()); ImGui::PushID(label.c_str());
+                        const auto snapshot=p.objects().at(columns[index]);
+                        const auto& col=std::get<pl::Column>(snapshot->data);
+                        if(label=="Sparklines" && !parameter) {
+                            const auto* values=std::get_if<std::vector<double>>(&col.values);
+                            float preview[64]; int count=values?static_cast<int>(std::min<std::size_t>(64,values->size())):0;
+                            double low=0, high=0; bool finite=false;
+                            for(int n=0;n<count;++n) {
+                                const double v=(*values)[count==1?0:std::size_t(n)*(values->size()-1)/(count-1)];
+                                if(std::isfinite(v)) { if(!finite) low=high=v; low=std::min(low,v); high=std::max(high,v); finite=true; }
+                            }
+                            for(int n=0;n<count;++n) {
+                                const double v=(*values)[count==1?0:std::size_t(n)*(values->size()-1)/(count-1)];
+                                preview[n]=std::isfinite(v) && high>low ? static_cast<float>((v/2-low/2)/(high/2-low/2)) : 0.5f;
+                            }
+                            if(finite) ImGui::PlotLines("##spark",preview,count,0,nullptr,0,1,{ImGui::GetContentRegionAvail().x,22});
+                        } else if(label=="F(x)" && !parameter) ImGui::TextUnformatted(col.formula?col.formula->expression.c_str():"");
+                        else {
+                            std::string text = parameter ? (col.parameters.contains(parameter)?col.parameters.at(parameter):"") : label=="Long Name"?col.longName:label=="Units"?col.units:col.comments;
+                            ImGui::SetNextItemWidth(-1);
+                            if(ImGui::InputText("##header",&text,ImGuiInputTextFlags_EnterReturnsTrue)) Attempt([&] {
+                                nlohmann::json request={{"column_id",columns[index]}};
+                                if(parameter) { request["action"]="parameter_value"; request["parameter_id"]=parameter; request["value"]=text; }
+                                else { request["action"]="column_settings"; request[label=="Long Name"?"long_name":label=="Units"?"units":"comments"]=text; }
+                                doc.Execute(p.worksheetEdit(request.dump()));
+                            });
+                        }
+                        ImGui::PopID(); ImGui::PopID(); ImGui::PopID();
+                    }
+                };
+                for(const auto* h:pl::headerNames) if(std::find(sheet.hiddenHeaders.begin(),sheet.hiddenHeaders.end(),h)==sheet.hiddenHeaders.end()) headerRow(h,0);
+                for(const auto& row:sheet.parameters) if(row.visible) headerRow(row.name,row.id);
                 ImGuiListClipper clipper;
                 clipper.Begin(static_cast<int>(rows.size()));
                 while (clipper.Step())
@@ -498,20 +562,21 @@ namespace SST::Prototypes::PlotLab
                             if (col.values.index() == 0)
                             {
                                 auto value = std::get<std::vector<double>>(col.values)[r];
-                                if (col.formula)
-                                    ImGui::Text("%.8g", value);
-                                else
-                                {
-                                    char buffer[64];
-                                    auto [end, error] = std::to_chars(buffer, buffer + sizeof(buffer), value);
-                                    std::string text = error == std::errc{} ? std::string(buffer, end) : "nan";
-                                    if (ImGui::InputText("##cell", &text, ImGuiInputTextFlags_EnterReturnsTrue))
-                                        Attempt(
-                                            [&]
-                                            {
-                                                doc.Execute(p.setCells(columns[c], r,
-                                                                       std::vector<double>{ParseNumericCell(text)}));
-                                            });
+                                const auto rendered=pl::formatValue(value,col.display);
+                                ImGui::Selectable(rendered.c_str(),false,ImGuiSelectableFlags_AllowDoubleClick);
+                                const bool hovered=ImGui::IsItemHovered();
+                                if(hovered && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_C)) ImGui::SetClipboardText(pl::fullPrecision(value).c_str());
+                                if(hovered && ImGui::IsMouseDoubleClicked(0) && !col.formula) { cellText=pl::fullPrecision(value); ImGui::OpenPopup("Edit value"); }
+                                if(ImGui::BeginPopupContextItem()) {
+                                    if(ImGui::MenuItem("Copy full precision")) ImGui::SetClipboardText(pl::fullPrecision(value).c_str());
+                                    ImGui::EndPopup();
+                                }
+                                if(ImGui::BeginPopup("Edit value")) {
+                                    ImGui::TextUnformatted("Stored value (full precision)");
+                                    if(ImGui::InputText("##value",&cellText,ImGuiInputTextFlags_EnterReturnsTrue)) Attempt([&] {
+                                        doc.Execute(p.setCells(columns[c],r,std::vector<double>{ParseNumericCell(cellText)})); ImGui::CloseCurrentPopup();
+                                    });
+                                    ImGui::EndPopup();
                                 }
                             }
                             else
@@ -817,18 +882,21 @@ namespace SST::Prototypes::PlotLab
             ImGui::InputText("Short name", &name);
             ImGui::InputText("Long name", &longName);
             ImGui::InputText("Units", &units);
-            ImGui::Combo("Role", &role, "None\0X\0Y\0Z\0YError\0Label\0");
+            ImGui::InputText("Comments", &comments);
+            ImGui::Combo("Role", &role, "None\0X\0Y\0Z\0yErr\0Label\0xErr\0Disregard\0");
+            ImGui::Combo("Display format", &displayMode, "General\0Decimal places\0Significant digits\0Scientific\0Engineering (SI)\0Text\0Date/time (Unix seconds, UTC)\0Categorical\0");
+            ImGui::SliderInt("Digits", &displayDigits, displayMode==2?1:0, 17);
             if (ImGui::Button("Apply metadata"))
                 Attempt(
                     [&]
                     {
-                        auto o = p.object(metadata);
-                        o.name = name;
-                        auto &c = std::get<pl::Column>(o.data);
-                        c.units = units;
-                        c.longName = longName;
-                        c.role = static_cast<pl::Role>(role);
-                        doc.Execute(p.change("Column metadata", {o}));
+                        static const char* modes[]={"general","decimal","significant","scientific","engineering","text","date_time","categorical"};
+                        auto group=doc.undo->ScopedGroup("Column metadata");
+                        try {
+                            doc.Execute(p.worksheetEdit(nlohmann::json{{"action","column_settings"},{"column_id",metadata},{"long_name",longName},{"units",units},{"comments",comments},{"role",pl::roleTag(static_cast<pl::Role>(role))},{"display",{{"mode",modes[displayMode]},{"digits",displayDigits}}}}.dump()));
+                            if(p.object(metadata).name!=name) doc.Rename(metadata,name);
+                            auto result=group.Commit(); if(!result) throw std::runtime_error(result.Error().technicalDetails);
+                        } catch(...) { (void)group.Cancel(); throw; }
                     });
             ImGui::InputText("Formula", &formula);
             ImGui::TextUnformatted(
@@ -875,6 +943,10 @@ namespace SST::Prototypes::PlotLab
             }
             ColumnPicker("X", p, sheetChoice, xChoice);
             ColumnPicker("Y", p, sheetChoice, yChoice);
+            if (Exists(p,yChoice,3) && std::get<pl::Column>(p.object(yChoice).data).role==pl::Role::Y) {
+                const auto paired=p.pairedX(yChoice);
+                if(paired) { xChoice=paired; ImGui::Text("Nearest X: %s",p.object(paired).name.c_str()); }
+            }
             ColumnPicker("yErr", p, sheetChoice, errorChoice, true);
             if (ImGui::Button("Create / add"))
                 Attempt(

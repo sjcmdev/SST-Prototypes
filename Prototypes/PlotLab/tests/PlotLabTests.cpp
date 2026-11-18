@@ -10,6 +10,7 @@
 
 using namespace SST;
 using namespace SST::Prototypes::PlotLab;
+static PythonInterpreter& TestPython() { static PythonInterpreter interpreter; return interpreter; }
 class PlotLabApp : public testing::Test
 {
   protected:
@@ -168,7 +169,7 @@ TEST_F(PlotLabApp, EmbeddedExporterUsesCppSnapshotForAllFormats)
 {
     const auto directory = Temp("-font-portability");
     struct Cleanup { std::filesystem::path path; ~Cleanup() { std::error_code ec; std::filesystem::remove_all(path, ec); } } cleanup{directory};
-    PythonInterpreter interpreter;
+    auto& interpreter=TestPython();
     ASSERT_TRUE(interpreter.Start());
     for (const auto *family : {"DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono"}) {
         const auto font = ResolveFont(family, "", SST_PLOTLAB_PYTHON_ROOT);
@@ -200,7 +201,7 @@ TEST_F(PlotLabApp, EmbeddedExporterUsesCppSnapshotForAllFormats)
     doc.Save(file);
     nlohmann::json saved;
     { std::ifstream in(file); in >> saved; }
-    EXPECT_EQ(saved["version"], 4);
+    EXPECT_EQ(saved["version"], pl::Project::formatVersion);
     std::filesystem::copy(file, directory / "after/project.plotlab");
     std::filesystem::copy(directory / "before/project.plotlab.fonts", directory / "after/project.plotlab.fonts", std::filesystem::copy_options::recursive);
     auto fallback = pl::Project::load(directory / "after/project.plotlab");
@@ -340,4 +341,109 @@ TEST(PlotLabOpenJob, ImportsDemoCsvAndRejectsUnsupportedFiles)
     std::filesystem::remove(path);
     OpenJob unsupported(Path("invalid.bin"));
     EXPECT_THROW(unsupported.Execute(context), std::invalid_argument);
+}
+
+
+TEST_F(PlotLabApp, WorksheetDesignationsAndNearestXFollowColumnOrder)
+{
+    for(auto role:{pl::Role::None,pl::Role::X,pl::Role::Y,pl::Role::Z,pl::Role::YError,pl::Role::Label,pl::Role::XError,pl::Role::Disregard}) {
+        auto o=doc.project->object(y); std::get<pl::Column>(o.data).role=role;
+        doc.Execute(doc.project->change("Role",{o}));
+        EXPECT_EQ(std::get<pl::Column>(doc.project->object(y).data).role,role);
+        ASSERT_TRUE(undo->Undo());
+    }
+    EXPECT_EQ(doc.project->pairedX(y),x);
+    auto x2=doc.AddColumn(sheet), y2=doc.AddColumn(sheet), y3=doc.AddColumn(sheet);
+    for(auto [id,role]:{std::pair{x2,"X"},std::pair{y2,"Y"},std::pair{y3,"Y"}})
+        doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","column_settings"},{"column_id",id},{"role",role}}.dump()));
+    EXPECT_EQ(doc.project->pairedX(y2),x2); EXPECT_EQ(doc.project->pairedX(y3),x2);
+    auto reordered=doc.project->object(x2); reordered.order=0;
+    doc.Execute(doc.project->change("Reorder",{reordered}));
+    EXPECT_EQ(doc.project->pairedX(y),x2);
+    EXPECT_EQ(doc.project->pairedX(y2),x2);
+    ASSERT_TRUE(undo->Undo());
+    EXPECT_EQ(doc.project->pairedX(y),x);
+    auto first=doc.project->object(x); first.order=100;
+    doc.Execute(doc.project->change("Reorder",{first}));
+    EXPECT_EQ(doc.project->pairedX(y),0);
+    EXPECT_EQ(doc.project->pairedX(y3),x2);
+    auto invalid=doc.project->object(y2); std::get<pl::Column>(invalid.data).role=static_cast<pl::Role>(99);
+    EXPECT_THROW(doc.Execute(doc.project->change("Invalid",{invalid})),std::runtime_error);
+}
+TEST(PlotLabWorksheet, DisplayFormattingNeverChangesStorage)
+{
+    using M=pl::DisplayMode;
+    EXPECT_EQ(pl::formatValue(1.23456,{M::Decimal,2}),"1.23");
+    EXPECT_EQ(pl::formatValue(1.23456,{M::Significant,3}),"1.23");
+    EXPECT_EQ(pl::formatValue(1,{M::Significant,3}),"1.00");
+    EXPECT_EQ(pl::formatValue(1234,{M::Scientific,2}),"1.23e+03");
+    EXPECT_EQ(pl::formatValue(1234,{M::Engineering,2}),"1.23 k");
+    EXPECT_EQ(pl::formatValue(0.00000123,{M::Engineering,2}),"1.23 u");
+    EXPECT_EQ(pl::formatValue(999999,{M::Engineering,2}),"1.00 M");
+    EXPECT_EQ(pl::formatValue(0,{M::Engineering,2}),"0.00");
+    EXPECT_EQ(pl::formatValue(0,{M::DateTime,2}),"1970-01-01 00:00:00 UTC");
+    EXPECT_EQ(pl::formatValue(-1,{M::DateTime,2}),"1969-12-31 23:59:59 UTC");
+    EXPECT_EQ(pl::formatValue(1.25,{M::Text,2}),"1.25");
+    EXPECT_EQ(pl::formatValue(3,{M::Categorical,2}),"3");
+    for(auto mode:{M::General,M::Decimal,M::Significant,M::Scientific,M::Engineering,M::Text,M::DateTime,M::Categorical}) {
+        EXPECT_EQ(pl::formatValue(std::numeric_limits<double>::quiet_NaN(),{mode,3}),"nan");
+        EXPECT_EQ(pl::formatValue(std::numeric_limits<double>::infinity(),{mode,3}),"inf");
+        EXPECT_EQ(pl::formatValue(-std::numeric_limits<double>::infinity(),{mode,3}),"-inf");
+        EXPECT_FALSE(pl::formatValue(1e-300,{mode,3}).empty());
+    }
+    EXPECT_EQ(pl::formatValue(1e-300,{M::Engineering,3}),"1.000e-300");
+    EXPECT_FALSE(pl::formatValue(std::numeric_limits<double>::denorm_min(),{M::Engineering,3}).empty());
+    EXPECT_EQ(ParseNumericCell(pl::fullPrecision(1.2345678901234567)),1.2345678901234567);
+    EXPECT_THROW(pl::formatValue(1,{M::Significant,0}),std::invalid_argument);
+}
+TEST_F(PlotLabApp, WorksheetParametersFormatsRoundtripUndoAndMigration)
+{
+    auto edit=[&](nlohmann::json request){doc.Execute(doc.project->worksheetEdit(request.dump()));};
+    edit({{"action","parameter_add"},{"worksheet_id",sheet},{"name","T"}});
+    const auto parameter=std::get<pl::Worksheet>(doc.project->object(sheet).data).parameters.front().id;
+    edit({{"action","parameter_value"},{"column_id",y},{"parameter_id",parameter},{"value","300 K"}});
+    edit({{"action","parameter_visibility"},{"worksheet_id",sheet},{"parameter_id",parameter},{"visible",false}});
+    edit({{"action","header_visibility"},{"worksheet_id",sheet},{"header","Comments"},{"visible",false}});
+    edit({{"action","column_settings"},{"column_id",y},{"role","Y"},{"long_name","Signal"},{"comments","Measured"},{"display",{{"mode","engineering"},{"digits",3}}}});
+    doc.Execute(doc.project->setCells(y,0,std::vector<double>{1.2345678901234567}));
+    auto copy=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{"action","copy_cell"},{"column_id",y},{"row_index",0}}.dump()));
+    EXPECT_EQ(copy["result"]["text"],"1.2345678901234567");
+    auto render=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{"action","render_cell"},{"column_id",y},{"row_index",0}}.dump()));
+    EXPECT_EQ(render["result"]["text"],"1.235");
+    auto file=Temp("-worksheet.plotlab"); doc.Save(file);
+    auto loaded=pl::Project::load(file); std::filesystem::remove(file);
+    const auto& c=std::get<pl::Column>(loaded.object(y).data);
+    EXPECT_EQ(c.parameters.at(parameter),"300 K"); EXPECT_EQ(c.comments,"Measured"); EXPECT_EQ(c.display.mode,pl::DisplayMode::Engineering);
+    EXPECT_FALSE(std::get<pl::Worksheet>(loaded.object(sheet).data).parameters.front().visible);
+    edit({{"action","parameter_remove"},{"worksheet_id",sheet},{"parameter_id",parameter}});
+    EXPECT_TRUE(std::get<pl::Column>(doc.project->object(y).data).parameters.empty());
+    ASSERT_TRUE(undo->Undo()); EXPECT_EQ(std::get<pl::Column>(doc.project->object(y).data).parameters.at(parameter),"300 K");
+    ASSERT_TRUE(undo->Redo()); EXPECT_TRUE(std::get<pl::Worksheet>(doc.project->object(sheet).data).parameters.empty());
+    for(int version=1;version<=4;++version) {
+        auto old=nlohmann::json::parse(loaded.toJson()); old["version"]=version;
+        for(auto& o:old["objects"]) { o.erase("display"); o.erase("parameters"); o.erase("hiddenHeaders"); }
+        auto migrated=pl::Project::fromJson(old.dump());
+        EXPECT_EQ(std::get<pl::Column>(migrated.object(y).data).display.mode,pl::DisplayMode::General);
+        EXPECT_TRUE(std::get<pl::Worksheet>(migrated.object(sheet).data).parameters.empty());
+        EXPECT_EQ(std::get<pl::Column>(migrated.object(y).data).role,pl::Role::Y);
+    }
+    edit({{"action","parameter_add"},{"worksheet_id",sheet},{"name","bias"}});
+    EXPECT_THROW(edit({{"action","parameter_add"},{"worksheet_id",sheet},{"name","bias"}}),std::invalid_argument);
+    EXPECT_THROW(edit({{"action","parameter_value"},{"column_id",y},{"parameter_id",999999},{"value","bad"}}),std::runtime_error);
+    EXPECT_THROW(edit({{"action","column_settings"},{"column_id",y},{"display",{{"mode","decimal"},{"digits",-1}}}}),std::invalid_argument);
+}
+TEST_F(PlotLabApp, EmbeddedPythonWorksheetCommands)
+{
+#if DS_PYTHON_CAPI_AVAILABLE
+    auto& interpreter=TestPython(); ASSERT_TRUE(interpreter.Start());
+    InstallWorksheetPython();
+    const auto fixture=doc.project->toJson();
+    const auto gil=PythonInterpreter::AcquireRuntimeGil();
+    const auto code=std::string("import json\nfixture = json.loads(")+nlohmann::json(fixture).dump()+")\nexec(open("+nlohmann::json(std::string(SST_PLOTLAB_PYTHON_ROOT)+"/tests/worksheet_headless.py").dump()+", encoding='utf-8').read())\n";
+    const int result=PyRun_SimpleString(code.c_str());
+    PythonInterpreter::ReleaseRuntimeGil(gil);
+    EXPECT_EQ(result,0);
+#else
+    FAIL()<<"Embedded Python required";
+#endif
 }

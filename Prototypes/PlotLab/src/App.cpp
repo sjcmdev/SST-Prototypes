@@ -6,6 +6,8 @@
 #include "Core/dspch.hpp"
 #include "PlotLabWorkspace.hpp"
 #include <imgui.h>
+#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include <fstream>
 
 namespace SST
 {
@@ -48,6 +50,7 @@ namespace SST
         auto root = runtime.paths.installRoot.Native().parent_path() / "python";
         if (!std::filesystem::is_directory(root))
             root = SST_PLOTLAB_PYTHON_ROOT;
+        if(PythonInterpreter::IsRuntimeInitialized()) InstallWorksheetPython(doc.get(),root);
         auto state = CreateRef<Session>(doc, runtime.jobSystem.lock(), root);
         state->selected = doc->project->root();
         auto safe = [state](auto action)
@@ -148,6 +151,25 @@ namespace SST
 } // namespace SST
 int main(int argc, char **argv)
 {
+    for (int i = 1; i + 1 < argc; ++i) {
+        if(std::string_view(argv[i])=="--worksheet-script") {
+#if DS_PYTHON_CAPI_AVAILABLE
+            SST::PythonInterpreter interpreter;
+            if(!interpreter.Start()) return 1;
+            auto pythonRoot=std::filesystem::absolute(argv[0]).parent_path()/"python";
+            if(!std::filesystem::is_directory(pythonRoot)) pythonRoot=SST_PLOTLAB_PYTHON_ROOT;
+            SST::Prototypes::PlotLab::InstallWorksheetPython(nullptr,pythonRoot);
+            std::ifstream in(argv[i+1]); if(!in) return 1;
+            const std::string code(std::istreambuf_iterator<char>(in),{});
+            auto gil=SST::PythonInterpreter::AcquireRuntimeGil();
+            const int result=PyRun_SimpleString(code.c_str());
+            SST::PythonInterpreter::ReleaseRuntimeGil(gil);
+            return result==0?0:1;
+#else
+            return 1;
+#endif
+        }
+    }
     for (int i = 1; i < argc; ++i)
         if (std::string_view(argv[i]) == "--smoke-test")
             SST::smokeTest = true;

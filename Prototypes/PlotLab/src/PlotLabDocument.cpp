@@ -7,6 +7,12 @@
 #include <limits>
 #include <set>
 #include <stdexcept>
+#include <nlohmann/json.hpp>
+#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#if DS_PYTHON_CAPI_AVAILABLE
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+#endif
 namespace SST::Prototypes::PlotLab
 {
     namespace
@@ -301,4 +307,76 @@ namespace SST::Prototypes::PlotLab
         selected.correlation = ++correlation;
         project->select(std::move(selected));
     }
+
+    std::string Document::WorksheetCommand(const std::string& requestJson)
+    {
+        using Json = nlohmann::json;
+        try {
+            const auto request = Json::parse(requestJson);
+            const auto action = request.at("action").get<std::string>();
+            for(const auto* key : {"column_id","worksheet_id","parameter_id"}) if(request.contains(key)) {
+                const auto& id=request.at(key);
+                if(!(id.is_number_unsigned() ? id.get<std::uint64_t>()>0 : id.is_number_integer() && id.get<std::int64_t>()>0))
+                    throw std::invalid_argument("Expected positive integer ID");
+            }
+            Json result = Json::object();
+            if (action == "snapshot") result = Json::parse(project->toJson());
+            else if (action == "load_project") Open(CreateRef<pl::Project>(pl::Project::fromJson(request.at("project").dump())), {});
+            else if (action == "undo" || action == "redo") {
+                auto changed = action == "undo" ? undo->Undo() : undo->Redo();
+                if (!changed) throw std::runtime_error(changed.Error().technicalDetails);
+            } else if (action == "paired_x") result["column_id"] = project->pairedX(request.at("column_id").get<pl::Id>());
+            else if (action == "render_cell" || action == "copy_cell") {
+                const auto& c = std::get<pl::Column>(project->object(request.at("column_id").get<pl::Id>()).data);
+                const auto& index = request.at("row_index");
+                if (!index.is_number_unsigned() && !(index.is_number_integer() && index.get<std::int64_t>() >= 0)) throw std::invalid_argument("Expected nonnegative row_index");
+                const auto row = index.get<std::size_t>();
+                if (const auto* values = std::get_if<std::vector<double>>(&c.values))
+                    result["text"] = action == "copy_cell" ? pl::fullPrecision(values->at(row)) : pl::formatValue(values->at(row), c.display);
+                else result["text"] = std::get<std::vector<std::string>>(c.values).at(row);
+            } else Execute(project->worksheetEdit(requestJson));
+            return Json{{"ok",true},{"result",result}}.dump();
+        } catch (const std::out_of_range& e) {
+            return Json{{"ok",false},{"error",{{"type","not_found"},{"message",e.what()}}}}.dump();
+        } catch (const std::exception& e) {
+            return Json{{"ok",false},{"error",{{"type","validation"},{"message",e.what()}}}}.dump();
+        }
+    }
+    void InstallWorksheetPython(Document* active, const std::filesystem::path& pythonRoot)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        namespace nb = nanobind;
+        if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python is unavailable");
+        nb::gil_scoped_acquire gil;
+        auto sys=nb::module_::import_("sys");
+        auto paths=sys.attr("path");
+        const auto raw=(pythonRoot.empty()?std::filesystem::path(SST_PLOTLAB_PYTHON_ROOT):pythonRoot).u8string();
+        const auto path=nb::str(reinterpret_cast<const char*>(raw.c_str()));
+        if(!nb::cast<bool>(paths.attr("__contains__")(path))) paths.attr("append")(path);
+        auto module = nb::module_::import_("_sst_plotlab");
+        if (active) module.attr("active_document") = nb::cast(active, nb::rv_policy::reference);
+#else
+        (void)active; (void)pythonRoot;
+        throw std::runtime_error("Rebuild with embedded Python");
+#endif
+    }
 } // namespace SST::Prototypes::PlotLab
+
+#if DS_PYTHON_CAPI_AVAILABLE
+NB_MODULE(_sst_plotlab, module)
+{
+    using namespace SST;
+    using namespace SST::Prototypes::PlotLab;
+    nanobind::class_<Document>(module, "WorksheetSession")
+        .def("__init__", [](Document* self) {
+            new (self) Document(CreateRef<CommandRegistry>(), CreateRef<UndoStack>(), CreateRef<EventBus>());
+        })
+        .def("command_json", &Document::WorksheetCommand);
+}
+namespace {
+    const bool worksheetModuleRegistered = [] {
+        if(PyImport_AppendInittab("_sst_plotlab", PyInit__sst_plotlab)!=0) std::terminate();
+        return true;
+    }();
+}
+#endif

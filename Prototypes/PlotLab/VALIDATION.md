@@ -125,3 +125,63 @@ Graphify updated successfully after the source changes.
 Not checked: live UI/export 0.5 mm parity, standalone ImPlot draw-list serializer,
 C++ Release/Dist or other operating systems. Custom fonts remain external paths;
 project format v3 does not package their bytes. No Segoe assets were removed.
+
+
+## P6a ? 2026-11-18
+
+Build: Debug x64, existing `SST-Prototypes/build` and `SST-Libraries/build`
+directories; MSBuild `-nr:false -m:1`, every build/test under
+`tools/agents/build-lock.sh`. No git commands. Source edits stay inside
+`PlotLab-Engine` and `Prototypes/PlotLab`.
+
+- PlotLab and PlotLabTests built successfully.
+- PlotLabTests: 15/15 passed, including direct engine tests for designations,
+  nearest-left-X grouping and reorder/no-X cases; format edge cases (NaN,
+  infinities, 1e-300, denormals, SI rounding, significant trailing zeros, UTC);
+  user parameters, deletion/undo, save/load and v1?v4 migration.
+- Embedded Python tests execute `python/tests/worksheet_headless.py` against a
+  C++ project fixture. Every metadata command checks object content before the
+  edit, after undo, and after redo. Invalid IDs/formats/headers/parameters return
+  typed JSON errors. Copy and rendering are separate and leave Values unchanged.
+- PlotLab-EngineTests: 47/47 passed. The first run completed all bodies but failed
+  to write XML across repository sandbox boundaries; rerun from SST-Prototypes
+  completed with XML. Million-point edit ~2.6 ms, save ~15.1 s, load ~20.9 s in
+  Debug; these are model measurements, not a scrolling FPS claim.
+
+Evidence: `experiments/validation/p6a-PlotLabTests.xml`, `p6a-engine.xml`.
+
+Changed source/documentation files:
+
+- Engine: `include/sst/plotlab/Engine.hpp`, `src/Engine.cpp`, `src/Diff.cpp`,
+  `src/Persistence.cpp`, `README.md`.
+- Prototype: `src/App.cpp`, `src/PlotLabDocument.hpp/.cpp`,
+  `src/PlotLabWorkspace.hpp/.cpp`, `tests/PlotLabTests.cpp`,
+  `python/sst_plotlab/__init__.py`, `python/tests/worksheet_headless.py`,
+  `examples/p6a-worksheet.plotlab`, `README.md`, `VALIDATION.md`.
+
+Not checked: Release/Dist, other operating systems, measured scrolling FPS.
+The clipper remains active, row IDs are retained without copying every frame,
+and each sparkline uses at most 64 samples. Graphify output was not changed
+because the task explicitly limits writable source paths. P6b formula expansion,
+P6c sort/filter and P6d import are not part of this change.
+
+
+P6a additional results:
+
+- Pytest exporter regression: 22/22 passed; `experiments/validation/p6a-pytest.xml`.
+- In-app `--screenshot` ran from a temporary portable runtime at
+  `%TEMP%/plotlab-p6a-runtime`, using the built Debug executable and the committed
+  example. The first image was inspected and reshot with a compact 1920?1000
+  layout, wider row label/date columns and the logging panel collapsed.
+- Reviewed final screenshot: `experiments/validation/p6a-worksheet.png`.
+  The requested `tools/agents/runs/gallery/p6a/` directory could not be created
+  by the sandbox, and the app also failed to write there. The image is retained
+  in the writable PlotLab validation directory instead. No permission changes
+  or writes to other jobs' lock state were made.
+
+
+The extra standalone `--worksheet-script` verification was queued behind the
+shared lock, then canceled before launch while another job's long experiment
+held the lock. The embedded headless suite already passed in PlotLabTests; the
+standalone CLI entry itself was not executed in this job. Only this job's waiting
+shell was stopped; the other lock holder was left untouched.

@@ -55,6 +55,7 @@ namespace SST::Prototypes::PlotLab
         ~Document() override;
         void changed(const pl::Event &) noexcept override;
         void Execute(pl::Operation);
+        std::string WorksheetCommand(const std::string& requestJson);
         void New();
         void Open(const std::filesystem::path &);
         void Open(Ref<pl::Project>, const std::filesystem::path &);
@@ -82,4 +83,5 @@ namespace SST::Prototypes::PlotLab
         pl::Id correlation = 0;
         void Replace(Ref<pl::Project>);
     };
+    void InstallWorksheetPython(Document* active = nullptr, const std::filesystem::path& pythonRoot = {});
 } // namespace SST::Prototypes::PlotLab

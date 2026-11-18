@@ -97,3 +97,43 @@ prompt, undoes the edit back to clean, then exits after eight frames.
 See [VALIDATION.md](VALIDATION.md) for results from this job.
 Matplotlib API references: [Figure.savefig](https://matplotlib.org/stable/api/_as_gen/matplotlib.figure.Figure.savefig.html),
 [physical figure sizes](https://matplotlib.org/stable/gallery/subplots_axes_and_figures/figure_size_units.html).
+
+
+## P6a worksheet headers and formats
+
+Worksheets show Long Name, Units, Comments, read-only F(x), Sparklines and named
+parameter rows. **Header rows** controls visibility and parameter add/remove;
+Enter commits metadata. Column tags open designations and display settings.
+Double-click a numeric cell to edit its full stored value. Right-click ?
+**Copy full precision**, or Ctrl+C over a numeric cell, copies its original value.
+Header rows stay frozen. The data clipper uses a retained row-ID snapshot without
+copying a million IDs every frame; sparklines sample at most 64 points per column.
+
+The embedded package exposes `sst_plotlab.WorksheetSession().command(dict)` and
+`WorksheetSession(active=True)` for the GUI document. Both use the same engine
+Operation ? Core `plotlab.edit` ? UndoStack path. Commands are synchronous model
+edits; no separate worker path is needed. Results are `{ok, result}` or
+`{ok: false, error: {type, message}}` with `validation` / `not_found` error types.
+
+```python
+from sst_plotlab import WorksheetSession
+session = WorksheetSession()
+session.command({"action": "load_project", "project": project_json_object})
+session.command({"action": "column_settings", "column_id": column_id,
+                 "role": "Y", "display": {"mode": "engineering", "digits": 3}})
+session.command({"action": "parameter_add", "worksheet_id": sheet_id, "name": "T"})
+# snapshot returns the project JSON object, including the allocated parameter ID.
+project = session.command({"action": "snapshot"})["result"]
+```
+
+Other metadata actions: `header_visibility` (header, visible), `parameter_remove`
+and `parameter_visibility` (parameter_id, visible), `parameter_value` (column_id,
+parameter_id, value). Worksheet actions take worksheet_id. Queries: `paired_x`
+(column_id), `render_cell` / `copy_cell` (column_id, zero-based row_index).
+`undo` / `redo` use Core history. Date/time values are Unix seconds in UTC.
+
+Run without a window: `PlotLab.exe --worksheet-script script.py`.
+`python/tests/worksheet_headless.py` is the executable assert-based command suite;
+it is also run by `PlotLabTests.EmbeddedPythonWorksheetCommands` with a C++ fixture.
+`examples/p6a-worksheet.plotlab` demonstrates all formats and header rows.
+P6b formula extensions, P6c sort/filter and P6d import remain separate work.

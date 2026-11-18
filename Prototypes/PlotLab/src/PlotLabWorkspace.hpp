@@ -71,7 +71,8 @@ namespace SST::Prototypes::PlotLab
         Ref<Session> state;
         pl::Id rename = 0, remove = 0, metadata = 0, exportGraph = 0;
         pl::Id targetGraph = 0, sheetChoice = 0, xChoice = 0, yChoice = 0, errorChoice = 0;
-        std::string name, units, longName, formula;
+        std::string name, units, longName, formula, comments, parameterName, cellText;
+        int displayMode = 0, displayDigits = 6;
         int role = 0, format = 0;
         bool textColumn = false, graphDialog = false, importDialog = false;
         std::string importText, importName, importPath;
