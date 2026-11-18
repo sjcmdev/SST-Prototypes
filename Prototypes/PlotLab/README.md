@@ -71,8 +71,11 @@ Graph text defaults to **DejaVu Sans 8 pt**. Each graph offers bundled DejaVu
 Sans/Serif/Sans Mono, a size in pt, and **Load font (.ttf/.otf)**. Preview and export
 resolve the same file; SVG uses outlines and PDF embeds/subsets the chosen font.
 The bundle includes `LICENSE_DEJAVU`. Font changes participate in Core undo and
-project v3 persistence; v1/v2 projects open with defaults. Custom fonts persist as
-absolute paths, so moving a project requires keeping that font available.
+project v4 persistence; v1/v2 projects open with defaults and v3 retains its font settings.
+Save copies custom .ttf/.otf files into `<project>.fonts/` beside the project,
+using an FNV-1a 64-bit checksum. Move that directory together with the project.
+Open uses the checksum-verified copy first, then the original path as fallback;
+if neither matches, opening fails with a diagnostic and keeps the current document.
 Missing/corrupt/mismatched fonts show a diagnostic and block rendering/export.
 Preview converts pt to logical pixels at 96 DPI with ImGui display scaling.
 Live ImPlot layout and matplotlib remain separate; 0.5 mm UI/export layout parity

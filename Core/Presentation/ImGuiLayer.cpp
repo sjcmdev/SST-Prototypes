@@ -534,7 +534,7 @@ namespace SST
 		uiState->fontOptions.clear();
 		{
 			EditorFontOption option;
-			auto defaultFont = Platform::DefaultFontOption();
+			auto defaultFont = Platform::DefaultFontOption(assetsFontsDirectory);
 			option.label = std::move(defaultFont.label);
 			option.source = std::move(defaultFont.source);
 			option.path = std::move(defaultFont.path);
@@ -574,7 +574,7 @@ namespace SST
 		if (!selectedPath.empty() && selectedIndex == 0)
 		{
 			uiState->selectedFontPath.clear();
-			uiState->fontStatusMessage = "Saved font was not found; using ImGui default.";
+			uiState->fontStatusMessage = "Saved font was not found; using " + uiState->fontOptions[0].label;
 			DS_LOG_WARN("Saved UI font was not found: {}", selectedPath);
 		}
 		else

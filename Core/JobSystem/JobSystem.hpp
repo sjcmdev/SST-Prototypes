@@ -59,7 +59,7 @@ namespace SST
 		[[nodiscard]] std::vector<JobLogEntry> GetLogs(JobId id) const;
 
 		void RegisterPreExecuteHook(PreExecuteHook hook);
-		void Shutdown();
+		void Shutdown(bool cancelJobs = false);
 
 	private:
 		// Thread pool helpers.

@@ -24,7 +24,7 @@ namespace SST::Platform
 		std::size_t systemFontCount = 0;
 	};
 
-	[[nodiscard]] FontOption DefaultFontOption();
+	[[nodiscard]] FontOption DefaultFontOption(const Path &bundledFontsDirectory);
 	[[nodiscard]] bool FontPathsEqual(std::string_view left, std::string_view right);
 	[[nodiscard]] std::vector<FontOption> GetFontsFromDirectory(const Path &directory, std::string_view source);
 	[[nodiscard]] std::vector<FontOption> GetSystemFonts();

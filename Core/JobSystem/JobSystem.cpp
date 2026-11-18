@@ -347,12 +347,28 @@ namespace SST
 		return it->second.logs;
 	}
 
-	void JobSystem::Shutdown()
+	void JobSystem::Shutdown(bool cancelJobs)
 	{
-		std::call_once(m_ShutdownOnce, [this]() 
+		std::call_once(m_ShutdownOnce, [this, cancelJobs]()
 		{
 			ZoneScoped;
-			m_ShutdownRequested.store(true, std::memory_order_relaxed);
+			{
+				// Both condition-variable predicates must change under their wait mutexes.
+				std::scoped_lock lock(m_ThreadCountMutex, m_DelayedMutex);
+				m_ShutdownRequested.store(true, std::memory_order_relaxed);
+			}
+			if (cancelJobs)
+			{
+				std::lock_guard lock(m_RecordsMutex);
+				for (auto &[id, record] : m_Records)
+				{
+					if (!isFinishedStatus(record.snapshot.status))
+					{
+						record.cancellationRequested->store(true, std::memory_order_relaxed);
+						record.snapshot.cancellationRequested = true;
+					}
+				}
+			}
 			m_ThreadCountCv.notify_all();
 
 			if (m_ThreadCountWorker.joinable())
@@ -368,6 +384,8 @@ namespace SST
 				m_DelayedWorker.join();
 
 			cancelPendingDelayedSubmissions();
+			if (cancelJobs)
+				m_Pool.unpause();
 			m_Pool.wait();
 		});
 	}

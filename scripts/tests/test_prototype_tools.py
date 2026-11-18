@@ -28,6 +28,10 @@ def generate(monkeypatch, name, *flags):
 def test_generate_and_selection(workspace, monkeypatch, name):
     assert generate(monkeypatch, name) == 0
     target = workspace / "Prototypes" / name
+    fonts = target / "install/app/assets/fonts"
+    assert (fonts / "DejaVuSans.ttf").is_file()
+    assert (fonts / "LICENSE_DEJAVU").is_file()
+    assert not (fonts / "segoeui.ttf").exists()
     for path in target.rglob("*"):
         assert "__PROTOTYPE_" not in path.name
         if path.is_file():

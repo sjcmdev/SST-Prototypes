@@ -1,6 +1,6 @@
 ﻿#include "PlotLabExport.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
-#include "Core/ScientificRuntime/Python/PythonGilScope.hpp"
+#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -42,8 +42,8 @@ namespace SST::Prototypes::PlotLab
                                                   const std::filesystem::path &pythonRoot)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
-        PythonGilAcquireScope gil;
-        if (!gil.IsActive()) throw std::runtime_error("Embedded Python is unavailable");
+        if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python is unavailable");
+        nb::gil_scoped_acquire gil;
         try {
             PreparePython(pythonRoot);
             auto result = nb::module_::import_("sst_plotlab.exporter").attr("resolve_font")(family.c_str(), file.c_str());
@@ -106,9 +106,10 @@ namespace SST::Prototypes::PlotLab
                      const std::string &format, double dpi, const std::filesystem::path &pythonRoot)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
-        PythonGilAcquireScope gil;
-        if (!gil.IsActive())
+        if (!PythonInterpreter::IsRuntimeInitialized())
             throw std::runtime_error("Embedded Python is unavailable");
+        // A Python command may wait for this job after releasing the GIL; do not reacquire its Core job mutex.
+        nb::gil_scoped_acquire gil;
         namespace nb = nanobind;
         try
         {

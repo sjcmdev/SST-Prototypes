@@ -3,6 +3,7 @@ from pathlib import Path
 import math
 import os
 import tempfile
+from threading import RLock
 
 import matplotlib as mpl
 from matplotlib.backends.backend_agg import FigureCanvasAgg
@@ -12,6 +13,8 @@ from matplotlib.ft2font import FT2Font
 from matplotlib.ticker import FixedLocator, FixedFormatter
 import numpy as np
 
+
+_export_lock = RLock()  # rc_context touches matplotlib globals while native draws may release the GIL.
 
 def resolve_font(family, filename=""):
     """Resolve once for both ImGui and export; never substitute a missing font."""
@@ -104,7 +107,7 @@ def export_graph(snapshot, destination, format, dpi=300):
         raise ValueError("Supported export formats: SVG, PDF, PNG")
     destination = Path(destination)
     # Context isolates publication settings from any earlier embedded script.
-    with mpl.rc_context({"svg.fonttype": "path", "pdf.fonttype": 42, "text.usetex": False,
+    with _export_lock, mpl.rc_context({"svg.fonttype": "path", "pdf.fonttype": 42, "text.usetex": False,
                          "savefig.bbox": None, "path.simplify": False}):
         fig = build_figure(snapshot, dpi)
         if format == "png":

@@ -503,7 +503,7 @@ namespace SST
 		const Path userOverrideRoot = m_Config.paths.userConfigDirectory.parent_path();
 		m_AssetManager = CreateRef<AssetManager>(defaultAppRoot, userOverrideRoot);
 		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/icon.ico", AssetType::Icon, AssetCriticality::Critical, "1", "app.icon"});
-		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/fonts/segoeui.ttf", AssetType::Font, AssetCriticality::Critical, "1", "ui.font.default"});
+		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/fonts/DejaVuSans.ttf", AssetType::Font, AssetCriticality::Optional, "1", "ui.font.default"});
 		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/fonts/fa-solid-900.ttf", AssetType::Font, AssetCriticality::Optional, "1", "ui.font.icons"});
 
 		AssetValidationReport report;
@@ -722,6 +722,14 @@ namespace SST
 	{
 		if (!m_Runtime.lifecycle.TryBeginShutdown())
 			return;
+
+		// Jobs can hold layer state and Python guards until their execution ends.
+		if (auto coreLayer = m_LayerStack.FindLayerAs<CoreLayer>(LayerId::Core).lock())
+			if (auto jobs = coreLayer->GetJobSystemHandle().lock())
+			{
+				DS_LOG_INFO("Shutdown: cancelling and joining jobs");
+				jobs->Shutdown(true);
+			}
 
 		DS_LOG_INFO("Shutdown: persisting UI settings");
 		persistUiSettings();

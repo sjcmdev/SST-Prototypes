@@ -92,12 +92,19 @@ namespace SST::Platform
 		}
 	} // namespace
 
-	FontOption DefaultFontOption()
+	FontOption DefaultFontOption(const Path &bundledFontsDirectory)
 	{
-		FontOption option;
-		option.label = "Default: ImGui";
-		option.source = "Default";
-		return option;
+#ifdef DS_PLATFORM_WINDOWS
+		for (const auto &directory : GetSystemFontDirectories())
+		{
+			const auto font = directory / "segoeui.ttf";
+			if (FileSystem::Exists(font))
+				return {"Default: Segoe UI", "System", Path::FromResolved(font).Utf8()};
+		}
+#endif
+		const auto fallback = Path::FromResolved(bundledFontsDirectory.Native() / "DejaVuSans.ttf");
+		DS_LOG_WARN("System Segoe UI unavailable; using bundled DejaVu Sans: {}", fallback.Utf8());
+		return {"Default: DejaVu Sans", "Assets", fallback.Utf8()};
 	}
 
 	bool FontPathsEqual(std::string_view left, std::string_view right)

@@ -1,6 +1,7 @@
 ﻿#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "PlotLabDocument.hpp"
 #include "PlotLabExport.hpp"
+#include "Core/Platform/PlatformFontDiscovery.hpp"
 #include <cmath>
 #include <fstream>
 #include <gtest/gtest.h>
@@ -164,6 +165,8 @@ TEST_F(PlotLabApp, FileRoundtripAndFailedOpenPreserveDocument)
 }
 TEST_F(PlotLabApp, EmbeddedExporterUsesCppSnapshotForAllFormats)
 {
+    const auto directory = Temp("-font-portability");
+    struct Cleanup { std::filesystem::path path; ~Cleanup() { std::error_code ec; std::filesystem::remove_all(path, ec); } } cleanup{directory};
     PythonInterpreter interpreter;
     ASSERT_TRUE(interpreter.Start());
     for (const auto *family : {"DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono"}) {
@@ -184,6 +187,50 @@ TEST_F(PlotLabApp, EmbeddedExporterUsesCppSnapshotForAllFormats)
         EXPECT_GT(std::filesystem::file_size(target), 1000);
         std::filesystem::remove(target);
     }
+    std::filesystem::create_directories(directory / "before");
+    std::filesystem::create_directories(directory / "after");
+    const auto original = directory / "custom.ttf";
+    std::filesystem::copy_file(ResolveFont("DejaVu Serif", "", SST_PLOTLAB_PYTHON_ROOT).first, original);
+    auto object = doc.project->object(graph);
+    auto &font = std::get<pl::Graph>(object.data);
+    font.fontFile = original.generic_string(); font.fontFamily = "DejaVu Serif";
+    doc.Execute(doc.project->change("Custom font", {object}));
+    const auto file = directory / "before/project.plotlab";
+    doc.Save(file);
+    nlohmann::json saved;
+    { std::ifstream in(file); in >> saved; }
+    EXPECT_EQ(saved["version"], 4);
+    std::filesystem::copy(file, directory / "after/project.plotlab");
+    std::filesystem::copy(directory / "before/project.plotlab.fonts", directory / "after/project.plotlab.fonts", std::filesystem::copy_options::recursive);
+    auto fallback = pl::Project::load(directory / "after/project.plotlab");
+    const auto embedded = std::filesystem::u8path(std::get<pl::Graph>(fallback.object(graph).data).fontFile);
+    EXPECT_NE(embedded, original);
+    std::filesystem::remove(embedded);
+    auto fallbackOnly = pl::Project::load(directory / "after/project.plotlab");
+    EXPECT_EQ(std::get<pl::Graph>(fallbackOnly.object(graph).data).fontFile, font.fontFile);
+    std::filesystem::copy_file(original, embedded);
+    std::filesystem::remove(original);
+    doc.Open(directory / "after/project.plotlab");
+    EXPECT_EQ(std::filesystem::u8path(std::get<pl::Graph>(doc.project->object(graph).data).fontFile), embedded);
+    { std::ofstream corrupt(embedded, std::ios::binary | std::ios::app); corrupt << "changed"; }
+    EXPECT_THROW(doc.Open(directory / "after/project.plotlab"), std::runtime_error);
+    std::filesystem::remove(embedded);
+    EXPECT_THROW(doc.Open(directory / "after/project.plotlab"), std::runtime_error);
+    std::filesystem::copy_file(directory / "before/project.plotlab.fonts" / embedded.filename(), embedded);
+    doc.Save(directory / "resaved.plotlab");
+    EXPECT_NO_THROW(pl::Project::load(directory / "resaved.plotlab"));
+    plot::PlotViewState customView; customView.viewport = plot::Bounds{1, 3, 2, 6};
+    const auto customSnapshot = pl::snapshotGraph(*doc.project, graph, customView);
+    for (const auto *format : {"svg", "pdf"}) {
+        const auto output = directory / (std::string("export.") + format);
+        ExportGraph(*customSnapshot, output, format, 300, SST_PLOTLAB_PYTHON_ROOT);
+        std::ifstream in(output, std::ios::binary);
+        const std::string bytes(std::istreambuf_iterator<char>(in), {});
+        EXPECT_NE(bytes.find("DejaVuSerif"), std::string::npos);
+    }
+    for (auto &entry : saved["objects"]) if (entry.contains("embeddedFont")) entry["embeddedFont"] = "../outside.ttf";
+    { std::ofstream out(directory / "after/project.plotlab"); out << saved; }
+    EXPECT_THROW(doc.Open(directory / "after/project.plotlab"), std::runtime_error);
 }
 
 TEST(PlotLabCells, NumericEditingRejectsPartialInput)
@@ -214,6 +261,9 @@ TEST_F(PlotLabApp, GraphFontRoundTripSnapshotUndoAndLegacy)
     ASSERT_TRUE(undo->Undo());
     EXPECT_EQ(std::get<pl::Graph>(doc.project->object(graph).data).fontFamily, "DejaVu Sans");
     ASSERT_TRUE(undo->Redo());
+    auto legacyV3 = nlohmann::json::parse(text); legacyV3["version"] = 3;
+    auto v3 = pl::Project::fromJson(legacyV3.dump());
+    EXPECT_EQ(std::get<pl::Graph>(v3.object(graph).data).fontFile, g.fontFile);
     for (int version : {1, 2}) {
         auto legacy = nlohmann::json::parse(text); legacy["version"] = version;
         for (auto &entry : legacy["objects"]) if (entry["type"] == 4) {
@@ -227,3 +277,15 @@ TEST_F(PlotLabApp, GraphFontRoundTripSnapshotUndoAndLegacy)
     std::get<pl::Graph>(o.data).fontSizePt = 0;
     EXPECT_THROW(doc.Execute(doc.project->change("Invalid font", {o})), std::runtime_error);
 }
+
+TEST(PlotLabFonts, CoreDefaultUsesSystemSegoe)
+{
+    const auto directory = Path::FromResolved(std::filesystem::path(SST_PLOTLAB_PYTHON_ROOT).parent_path() / "install/app/assets/fonts");
+    const auto font = Platform::DefaultFontOption(directory);
+    EXPECT_TRUE(std::filesystem::is_regular_file(std::filesystem::u8path(font.path)));
+#ifdef DS_PLATFORM_WINDOWS
+    EXPECT_EQ(std::filesystem::u8path(font.path).filename(), "segoeui.ttf");
+    EXPECT_EQ(font.source, "System");
+#endif
+}
+

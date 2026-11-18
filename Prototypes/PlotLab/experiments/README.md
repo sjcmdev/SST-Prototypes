@@ -40,26 +40,27 @@ serializer and font mapping, so it is not a cheap comparison path.
 
 ## Segoe inventory
 
-Five files currently exist (the owner context mentioned three; no git command
-was used to inspect tracking):
+PL5 removed all five redistributed copies of Segoe UI:
 
-| Location under SST-Prototypes | Current use | DejaVu replacement |
-|---|---|---|
-| `PrototypeTemplate/install/app/assets/fonts/segoeui.ttf` | Discoverable shell asset; no explicit config reference | Possible; shell metrics change |
-| `Prototypes/Smoke/install/app/assets/fonts/segoeui.ttf` | Explicit `ui_settings.yaml` shell font | Possible; update config and smoke-check layout |
-| `Prototypes/JFM/install/app/assets/fonts/segoeui.ttf` | Explicit `ui_settings.yaml` shell font | Possible; update config and check JFM layout |
-| `Prototypes/PlotLab/install/app/assets/fonts/segoeui.ttf` | Discoverable shell asset; graph no longer depends on it | Graph already uses bundled DejaVu; shell asset can be replaced later |
-| `Prototypes/CapLab/install/app/assets/fonts/segoeui.ttf` | Discoverable shell asset; concurrent CapLab work not inspected | Possible; owner of CapLab should verify its layout |
+- `PrototypeTemplate/install/app/assets/fonts/segoeui.ttf`
+- `Prototypes/Smoke/install/app/assets/fonts/segoeui.ttf`
+- `Prototypes/JFM/install/app/assets/fonts/segoeui.ttf`
+- `Prototypes/PlotLab/install/app/assets/fonts/segoeui.ttf`
+- `Prototypes/CapLab/install/app/assets/fonts/segoeui.ttf`
 
-No Segoe file was removed or changed. PL4 bundles three DejaVu faces and their
-complete `LICENSE_DEJAVU`; shell migration is outside this task's allowed paths.
+Core resolves the default UI font from Windows system font directories
+(`%WINDIR%/Fonts/segoeui.ttf`). If absent, it logs a diagnostic and selects
+bundled DejaVu Sans. Each install and the generator's PrototypeTemplate include
+DejaVu Sans plus LICENSE_DEJAVU. Legacy missing saved UI paths select this default;
+JFM install configuration files were not edited.
 
 ## Font portability
 
 Graph font changes use the existing engine operation/Core undo flow. Project
 format v3 stores family, pt and custom file path; v1/v2 default to Sans 8 pt.
 Custom .ttf/.otf files are validated with FreeType before ImGui receives them.
-They remain external files: reopening elsewhere requires the file at that path.
+PL5 v4 saves a checksum-verified copy in `<project>.fonts/` and loads it first.
+Move that directory with the project; v1-v3 remain readable.
 Missing files or family mismatch fail visibly and do not replace an old export.
 SVG outlines do not require the recipient to install a font; PDF embeds/subsets.
 
@@ -87,6 +88,5 @@ are in text and legend. Series and yErr segments have identical checksums.
 This does not measure live UI/export parity: native is the reference, not a
 backend certified to match ImPlot within 0.5 mm.
 
-Open decision: should projects package custom font bytes? Recommend yes in a
-separate publication step after deciding how to handle user font distribution.
-Currently v3 stores a file path; missing files produce diagnostics.
+PL5 implements custom font packaging next to the project, with checksum verification
+and original-path fallback. Custom font redistribution remains subject to its license.
