@@ -154,3 +154,25 @@ TEST(CapLabDefects, CommandsUndoValidationAndPersistentReferences) {
     EXPECT_ANY_THROW(Parse(bad.dump()));
 }
 }
+
+
+namespace SST::Prototypes::CapLab {
+TEST(CapLabWorkflow, UnicodeImportAndProjectRoundtrip) {
+    const auto name=std::filesystem::u8path(u8"Za\u017c\u00f3\u0142\u0107_\u65e5\u672c_\U0001f600");
+    const auto directory=FileSystem::TempDirectoryPath()/"sst-au2-caplab"/name;
+    std::filesystem::create_directories(directory);
+    struct Cleanup { std::filesystem::path path; ~Cleanup() { std::error_code ec; std::filesystem::remove_all(path,ec); } } cleanup{directory};
+    const Path source{directory/(name.native()+std::filesystem::path(".dat").native())};
+    auto preview=FixturePreview(); preview["source"]=source.Utf8();
+    Project project; ImportChange imported(project,preview,100,CFTemplate{});
+    EXPECT_EQ(project.engine->object(project.engine->children(project.engine->root()).front()).name,Path::FromResolved(name).Utf8());
+    const Path target{directory/(name.native()+std::filesystem::path(".caplab").native())};
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    DocumentJob save(Operation::Save,Serialize(project),target); save.Execute(context);
+    ASSERT_TRUE(save.saveCommitted);
+    DocumentJob open(Operation::Open,"",target); open.Execute(context);
+    ASSERT_TRUE(open.opened);
+    EXPECT_EQ(Serialize(*open.opened),Serialize(project));
+    EXPECT_EQ(std::get<pl::Worksheet>(open.opened->engine->object(open.opened->sweeps[0].id).data).source.at("path"),source.Utf8());
+}
+}

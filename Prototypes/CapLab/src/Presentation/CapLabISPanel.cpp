@@ -1,5 +1,6 @@
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include "Domain/CapLabAnalysis.hpp"
+#include <sst/ui/Plot/ImPlotRenderer.hpp>
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderIS() {
     if (!ImGui::CollapsingHeader("IS / CircuitCore schematic")) return;
@@ -67,14 +68,73 @@ void CapLabPrototypePanel::RenderIS() {
                 } else ImGui::Text("Measured bias: %s V",m.at("bias_V").dump().c_str());
                 ImGui::TextUnformatted("Exact measured frequencies; simulation runs in a cancellable Core job.");
                 ImGui::BeginDisabled(state->activeJob!=0);
-                if (ImGui::Button("Simulate IS")) {state->analysisOptions=std::move(settings); (void)commands->Execute(CommandID{"caplab.analyze"});}
+                if (ImGui::Button("Simulate IS")) {state->analysisOptions=settings; (void)commands->Execute(CommandID{"caplab.analyze"});}
+                ImGui::EndDisabled();
+                if (fitCircuit!=selectedCircuit || ImGui::Button("Reset fit parameters from schematic")) {
+                    fitCircuit=selectedCircuit; isParameters=Json::array();
+                    for (const auto &e : selected->at("schematic").at("elements")) {
+                        const int kind=e.at("kind");
+                        std::vector<std::string> fields={"value"};
+                        if (kind==3 || kind==5 || kind==6) fields.push_back("secondary");
+                        if (kind==5 || kind==6) for (const auto &field : {"Cj0","Vbi","m","FC","tau"}) fields.push_back(field);
+                        for (const auto &field : fields) {
+                            const double value=e.at(field);
+                            const std::string unit=field=="value" ? e.at("value_unit").get<std::string>() : field=="secondary" ? "1" : selected->at("schematic").at("parameter_units").at(field).get<std::string>();
+                            isParameters.push_back({{"element",e.at("name")},{"field",field},{"unit",unit},
+                                {"free",field=="value"},{"min",value>0 ? value*.1 : 0.},{"max",value>0 ? value*10 : 1.}});
+                        }
+                    }
+                }
+                for (auto &parameter : isParameters) {
+                    const std::string label=parameter.at("element").get<std::string>()+"."+parameter.at("field").get<std::string>()+" ["+parameter.at("unit").get<std::string>()+"]";
+                    ImGui::PushID(label.c_str());
+                    bool free=parameter.at("free"); double lo=parameter.at("min"), hi=parameter.at("max");
+                    ImGui::Checkbox(label.c_str(),&free); parameter["free"]=free;
+                    ImGui::InputDouble("Lower bound",&lo,0,0,"%.9g"); parameter["min"]=lo;
+                    ImGui::InputDouble("Upper bound",&hi,0,0,"%.9g"); parameter["max"]=hi;
+                    ImGui::PopID();
+                }
+                static double floor=1., fmin=0., fmax=1e12;
+                ImGui::InputDouble("Weighting floor [Ohm]",&floor);
+                ImGui::InputDouble("Fit minimum frequency [Hz]",&fmin);
+                ImGui::InputDouble("Fit maximum frequency [Hz]",&fmax);
+                ImGui::TextUnformatted("Weight = 1/max(|Z|, floor)^2; score is not statistical chi-squared.");
+                ImGui::BeginDisabled(state->activeJob!=0);
+                if (ImGui::Button("Fit IS draft")) {
+                    fitView={};
+                    settings["fit"]=true; settings["parameters"]=isParameters; settings["Z_floor_Ohm"]=floor;
+                    settings["frequency_min_Hz"]=fmin; settings["frequency_max_Hz"]=fmax;
+                    state->analysisOptions=std::move(settings); (void)commands->Execute(CommandID{"caplab.analyze"});
+                }
                 ImGui::EndDisabled();
             }
             if (ImGui::Button("Delete circuit")) {edit({{"action","delete"},{"circuit_id",selectedCircuit}}); selectedCircuit=0; circuitEditor.reset();}
         }
+        if (state->analysisDraft && !state->analysisDraft->analyses.empty()) {
+            auto &draft=*state->analysisDraft;
+            const auto &a=draft.analyses.back();
+            if (a.contains("score")) {
+                ImGui::Text("Draft score %.9g -> %.9g / %s",a.at("initial_score").get<double>(),a.at("score").get<double>(),a.at("stop_status").get<std::string>().c_str());
+                ImGui::TextUnformatted("Covariance unavailable (Nelder-Mead).");
+                for (const auto &v : a.at("parameters")) ImGui::Text("%s.%s: %.9g -> %.9g %s%s",v.at("element").get<std::string>().c_str(),v.at("field").get<std::string>().c_str(),v.at("start").get<double>(),v.at("fitted").get<double>(),v.at("unit").get<std::string>().c_str(),v.at("free").get<bool>() ? "" : " (fixed)");
+                for (const auto &g : a.at("graphs")) {
+                    const auto id=g.get<pl::Id>();
+                    if (ImGui::Button(draft.engine->object(id).name.c_str())) {draft.graph=id; fitView={};}
+                }
+                const auto layer=draft.engine->children(draft.graph).at(0);
+                std::vector<sst::ui::plot::SeriesEntryView> series;
+                for (const auto id : draft.engine->children(layer)) series.push_back(draft.engine->series(id));
+                sst::ui::plot::RenderPlot("##ISdraft",std::get<pl::Layer>(draft.engine->object(layer).data).spec,series.data(),series.size(),fitView,{},ImVec2(-1,260));
+                ImGui::BeginDisabled(state->analysisRevision!=state->document.revision);
+                if (ImGui::Button("Accept fit (Undo)")) (void)commands->Execute(CommandID{"caplab.accept_analysis"});
+                ImGui::EndDisabled();
+                ImGui::SameLine(); if (ImGui::Button("Discard fit draft")) (void)commands->Execute(CommandID{"caplab.cancel"});
+            }
+        }
         for (const auto &a : p.analyses) if (a.at("type")=="Circuit") {
             ImGui::PushID(std::to_string(a.at("id").get<pl::Id>()).c_str());
             ImGui::Text("IS %llu: %s / T=%s K / bias=%s V",a.at("id").get<pl::Id>(),a.at("status").get<std::string>().c_str(),a.at("temperature_K").dump().c_str(),a.at("bias_V").dump().c_str());
+            if (a.contains("score")) ImGui::Text("Score %.9g / %s; covariance unavailable",a.at("score").get<double>(),a.at("stop_status").get<std::string>().c_str());
             for (const auto &g : a.at("graphs")) {
                 const auto id=g.get<pl::Id>();
                 ImGui::PushID(std::to_string(id).c_str());

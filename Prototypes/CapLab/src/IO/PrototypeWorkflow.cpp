@@ -57,7 +57,11 @@ namespace SST::Prototypes::CapLab
             if (analysisOptions.at("type")=="Circuit") {
                 const auto it=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==analysisOptions.at("circuit_id");});
                 if (it==p.circuits.end()) throw std::runtime_error("Missing circuit");
-                result=SimulateIS(measurement,*it,analysisOptions,context);
+                if (analysisOptions.value("fit",false)) {
+                    result=FitIS(measurement,*it,analysisOptions,context);
+                    *it=result.at("circuit");
+                    RefreshAnalyses(p);
+                } else result=SimulateIS(measurement,*it,analysisOptions,context);
             } else result = ReadAnalysis(measurement,analysisOptions,xd,context);
             result["input_revision"] = analysisOptions.at("input_revision");
             AppendAnalysis(p,std::move(result)); opened = std::move(p);
@@ -121,6 +125,7 @@ namespace SST::Prototypes::CapLab
             activeJob = jobs->Submit(job);
             if (!activeJob) throw std::runtime_error("Job submission failed.");
             pending = std::move(job); status.clear();
+            if (operation==Operation::Analyze) analysisDraft.reset();
             if (operation == Operation::Preview) preview.reset();
         }
         catch (const std::exception &error) { status = error.what(); }
@@ -146,7 +151,8 @@ namespace SST::Prototypes::CapLab
             else if (pending->operation == Operation::Analyze)
             {
                 analysisDraft = std::move(pending->opened); analysisRevision = pendingRevision;
-                if (commands) (void)commands->Execute(CommandID{"caplab.accept_analysis"});
+                if (pending->analysisOptions.value("fit",false)) status="Fit draft ready; review and accept or discard.";
+                else if (commands) (void)commands->Execute(CommandID{"caplab.accept_analysis"});
             }
             else if (pending->operation == Operation::Open)
             {

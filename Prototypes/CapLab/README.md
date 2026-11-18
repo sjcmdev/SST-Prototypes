@@ -1,4 +1,4 @@
-# CapLab - M5 CircuitCore-UI and IS simulation
+# CapLab - M6 IS circuit fitting
 
 Core owns commands, EventBus, Undo, jobs, progress, diagnostics and embedded
 Python. PlotLab-Engine owns tables, row/object IDs and graphs. No dependencies
@@ -218,3 +218,82 @@ Simulation outputs use explicit frequency_Hz, temperature_K, bias_V and
 invalid_request and simulation_failed are stable error codes. Completed analyses
 also carry valid/invalid/stale/missing_input and point diagnostics. No GUI or
 source measurement files are needed. Native worker execution releases the GIL.
+
+
+## M6 ? IS circuit fit
+
+The IS panel fits a detached circuit with SST-Math SANelderMead (deterministic
+Nelder-Mead, no annealing). Select each element/field, free/fixed and finite
+bounds; starts come from the current schematic. Unlisted parameters stay fixed.
+Passive R/C/L/CPE/Warburg and existing PN/Schottky SPICE parameters, including
+Cj0/Vbi/m/FC/tau, are supported. Independent voltage/current sources block fit.
+Parameter units match the schematic (`ohm`, `F`, `H`, etc.).
+
+The objective is sum((Re residual)^2+(Im residual)^2)/scale_Ohm^2. Default
+scale_Ohm=max(abs(measured Z), Z_floor_Ohm); a positive floor is explicit.
+Headless callers may instead supply positive sigma_Ohm for every original row.
+The selected frequency interval is inclusive, evaluated on exact measured f,
+T and bias. Invalid initial points block fitting; invalid trial points receive
+infinite objective and are counted, never published as usable simulations.
+This score is not labeled statistical chi-squared. Covariance is unavailable,
+represented by null rather than zero uncertainty.
+
+Fit/stop run through Core commands/jobs. Cancellation is checked between
+frequencies, objective calls and iterations. A finished draft shows parameters,
+score, stop status, model/measurement and complex residual plots through the
+same PlotLab-Engine renderer. **Accept fit (Undo)** applies the circuit and
+analysis together as one Core Undo record; discard/cancel leaves accepted
+parameters untouched. Edits reject stale worker results or stale acceptance.
+The saved result retains starts, fixed/free flags, bounds, fitted values, units,
+weighting/floor/scales, iteration count, stop status, residuals and input snapshots.
+Max-iterations results remain explicit drafts, requiring user acceptance.
+
+The JSON API follows the same command/job path:
+
+```python
+fit = execute(project, {"operation": "fit", "settings": {
+    "measurement_id": measurement_id, "circuit_id": circuit_id,
+    "Z_floor_Ohm": 1.0,
+    "parameters": [
+        {"element": "R0", "field": "value", "unit": "ohm",
+         "free": True, "min": 1.0, "max": 2000.0},
+        {"element": "C1", "field": "value", "unit": "F",
+         "free": False, "min": 1e-6, "max": 1e-3},
+    ],
+}})
+assert fit["ok"], fit["error"]
+# fit["project"] is unchanged. Review fit["draft"]["project"]["analyses"][-1].
+accepted = execute(project, {"operation": "accept_fit", "draft": fit["draft"]})
+assert accepted["ok"], accepted["error"]
+project = accepted["project"]
+```
+
+Optional settings: max_iterations (1..10000, default 500), score_tolerance
+(default 1e-12), frequency_min_Hz/frequency_max_Hz and sigma_Ohm. `cancel: true`
+on the outer fit request requests Core cancellation before queued work starts.
+For a running fit, pass a caller-supplied `operation_id` (at most 128 characters):
+
+```python
+# Fit on the Core main thread; execute releases the GIL while waiting for the job.
+fit = execute(project, {"operation": "fit", "operation_id": "my-fit", "settings": settings})
+```
+
+From another Python thread, while the fit call is running:
+
+```python
+stop = execute({}, {"operation": "cancel", "operation_id": "my-fit"})
+```
+
+`cancel` routes to caplab.cancel/Core JobSystem; it returns `not_running` when
+the ID is absent or the job has already stopped. Other document operations
+require the Core main thread and return invalid_request on a wrong thread.
+GUI jobs support interactive stop. Other typed errors are fit_failed and
+cancelled. Dropping a headless draft discards it without mutation.
+M7 Walter and M8 complete data exports remain outside this milestone.
+
+
+CM6 validation: 33 GTest + 116 pytest; PlotLab 9/22, JFM 67/96 + 3 xfail.
+Final normal Debug build (with project references) succeeded in repository
+build/. One Computer Use launch request was rejected: "Computer Use was not
+approved to use caplab". Start/exit remains unverified; VISUAL QA NOT RUN.
+See VALIDATION.md for the acceptance table and evidence.

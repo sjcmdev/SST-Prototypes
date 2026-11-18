@@ -3,11 +3,14 @@
 #include "Domain/CapLabBundleImport.hpp"
 #include "Domain/CapLabAnalysis.hpp"
 #include "CapLabCommands.hpp"
+#include "Core/Threading/ThreadAffinity.hpp"
 #include <sst/physics/capacitance.hpp>
 #include <sst/physics/arrhenius.hpp>
 #include <sst/physics/materials.hpp>
 #include <sst/math/linear_fit.hpp>
 #include <fstream>
+#include <mutex>
+#include <unordered_map>
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #include "Core/ScientificRuntime/Python/PythonGilScope.hpp"
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -17,6 +20,22 @@
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/vector.h>
 namespace {
+// A caller-supplied operation ID lets another Python thread send the Core cancel command.
+std::mutex runningMutex;
+std::unordered_map<std::string,std::function<bool()>> runningOperations;
+struct RunningOperation {
+    std::string id;
+    explicit RunningOperation(const std::string &id, std::function<bool()> cancel) : id(id) {
+        if (id.empty()) return;
+        if (id.size()>128) {cancel(); throw std::runtime_error("operation_id exceeds 128 characters");}
+        std::lock_guard lock(runningMutex);
+        if (runningOperations.contains(id)) {cancel(); throw std::runtime_error("operation_id already running");}
+        runningOperations.emplace(id,std::move(cancel));
+    }
+    ~RunningOperation() {
+        if (!id.empty()) {std::lock_guard lock(runningMutex); runningOperations.erase(id);}
+    }
+};
 std::filesystem::path MaterialDataPath(const char *name = "caplab-materials.json") {
     const auto exe=SST::Platform::CurrentExecutablePath();
     if (exe) {
@@ -106,31 +125,63 @@ NB_MODULE(sst_caplab, module)
         nanobind::gil_scoped_release release;
         Json response;
         try {
+            const auto r=Json::parse(request); const std::string operation=r.at("operation");
+            if (operation=="cancel") {
+                const std::string id=r.at("operation_id");
+                std::lock_guard lock(runningMutex);
+                const auto it=runningOperations.find(id);
+                if (it==runningOperations.end() || !it->second())
+                    return Json{{"ok",false},{"error",{{"code","not_running"},{"message","No cancellable operation with this operation_id"}}}}.dump();
+                return Json{{"ok",true},{"error",nullptr}}.dump();
+            }
+            if (!SST::Threading::IsMainThread()) throw std::runtime_error("CapLab operations require the Core main thread; cancel may run from another thread");
+            const std::string operationId=r.value("operation_id",std::string{});
+            if (operationId.size()>128) throw std::runtime_error("operation_id exceeds 128 characters");
             auto jobs=CreateRef<SST::JobSystem>(nullptr,1);
             auto bus=CreateRef<SST::EventBus>(); auto undo=CreateRef<SST::UndoStack>();
             auto commands=CreateRef<SST::CommandRegistry>();
             CapLabWorkflow state(jobs,bus,undo); state.document.project=Parse(project);
             RegisterCommands(commands,bus,state);
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target);});
-            const auto r=Json::parse(request); const std::string operation=r.at("operation");
             if (operation=="edit_circuit") {
                 SST::CommandContext context; context.Set("edit",r.at("edit"));
                 const auto result=commands->Execute(SST::CommandID{"caplab.circuit"},std::move(context));
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
-            } else if (operation=="simulate") {
+            } else if (operation=="accept_fit") {
+                const auto &draft=r.at("draft");
+                if (Json::parse(Serialize(state.document.project))!=draft.at("base_project")) throw std::runtime_error("Stale fit draft");
+                state.analysisDraft=Parse(draft.at("project").dump());
+                state.analysisRevision=state.document.revision;
+                const auto result=commands->Execute(SST::CommandID{"caplab.accept_analysis"});
+                if (!result) throw std::runtime_error(result.Error().technicalDetails);
+            } else if (operation=="simulate" || operation=="fit") {
+                if (r.value("cancel",false) && !jobs->PauseAllJobs()) throw std::runtime_error("Cannot pause job queue");
                 state.analysisOptions=r.at("settings"); state.analysisOptions["type"]="Circuit";
+                state.analysisOptions["fit"]=operation=="fit";
                 const auto result=commands->Execute(SST::CommandID{"caplab.analyze"});
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
                 bus->ProcessQueue();
+                if (r.value("cancel",false)) {
+                    (void)commands->Execute(SST::CommandID{"caplab.cancel"});
+                    (void)jobs->ResumeAllJobs();
+                }
                 if (!state.activeJob) throw std::runtime_error(state.status);
                 const auto id=state.activeJob;
-                jobs->Shutdown(); state.OnUpdate(0);
+                {
+                    RunningOperation running(operationId,[&] {
+                        return bool(commands->Execute(SST::CommandID{"caplab.cancel"}));
+                    });
+                    jobs->Shutdown();
+                }
+                state.OnUpdate(0);
                 const auto job=jobs->GetJob(id);
-                if (!job || job->status!=SST::JobStatus::Completed || state.document.project.analyses.empty())
+                if (!job || job->status!=SST::JobStatus::Completed || (!state.analysisDraft && state.document.project.analyses.empty()))
                     return Json{{"ok",false},{"project",Json::parse(project)},
-                        {"error",{{"code","simulation_failed"},{"message",state.status}}}}.dump();
+                        {"error",{{"code",job && job->status==SST::JobStatus::Cancelled ? "cancelled" : operation=="fit" ? "fit_failed" : "simulation_failed"},{"message",state.status}}}}.dump();
             } else throw std::runtime_error("Unknown CapLab operation");
-            response={{"ok",true},{"project",Json::parse(Serialize(state.document.project))},{"error",nullptr}};
+            response["draft"]=state.analysisDraft ? Json{{"base_project",Json::parse(project)},
+                {"project",Json::parse(Serialize(*state.analysisDraft))}} : Json(nullptr);
+            response.update(Json{{"ok",true},{"project",Json::parse(Serialize(state.document.project))},{"error",nullptr}});
         } catch (const std::exception &e) {
             response={{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}};
         }

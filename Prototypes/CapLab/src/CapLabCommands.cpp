@@ -16,6 +16,18 @@ private:
     Ref<EventBus> bus;
     Operation operation;
 };
+class CancelCommand final : public ICommand {
+public:
+    explicit CancelCommand(CapLabWorkflow &state) : state(state) {}
+    Result<void> Execute(CommandContext &) override {
+        if (state.activeJob && !state.jobs->RequestCancel(state.activeJob))
+            return StructuredError{ErrorCategory::Validation,Severity::Error,"Nothing to cancel","The job has already stopped.","Review or discard its draft.","CapLab","caplab.not_running"};
+        state.analysisDraft.reset(); return {};
+    }
+    std::string Description() const override {return "Cancel CapLab operation/discard draft";}
+private:
+    CapLabWorkflow &state;
+};
 class AnalysisChange final : public ICommand {
 public:
     AnalysisChange(CapLabWorkflow &state, bool area) : state(state), area(area) {}
@@ -103,6 +115,9 @@ private:
 }
 void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWorkflow &state) {
     registry->SetUndoStack(state.undo); state.commands = registry;
+    auto cancel=registry->Register({CommandID{"caplab.cancel"},"Cancel / discard draft","CapLab"},
+        [&state](CommandContext &) {return CreateUnique<CancelCommand>(state);});
+    if (!cancel) throw std::runtime_error(cancel.Error().technicalDetails);
     auto circuit=registry->Register({CommandID{"caplab.circuit"},"Edit circuit","CapLab","",{},CommandFlags::Undoable},
         [&state](CommandContext &) {return CreateUnique<DefectChange>(state,true);});
     if (!circuit) throw std::runtime_error(circuit.Error().technicalDetails);

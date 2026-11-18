@@ -407,3 +407,115 @@ Pytania zamkni?te:
   Rekomendacja: tak, dla kompletnego provenance; bie??cy kod/self-checks s? sprawdzone.
 
 Pomini?to M6?M8 zgodnie z zakresem. Ryzyko: testy headless nie zast?puj? odbioru GUI.
+
+## CM6 / M6 — IS circuit fitting (2026-11-18)
+
+Implementacja i odbiór numeryczny M6 gotowe; odbiór runtime zablokowany.
+Zmiany zadania obejmują tylko CapLab. Bez komend git, zmian źródeł Core/JFM,
+JFM/install/app/config/*.yaml, CircuitCore i CircuitCore-UI oraz bibliotek.
+Nie dodano zależności, nowego optimizera ani mechanizmów M7/M8.
+
+Przeczytano SST-CapLab Spec w całości (zakres §6 M6, §4.3 oraz wiążące §8),
+ProPho Functional Spec, README/VALIDATION, raporty c1/cm2/cm5 i W1 WINDOWS.md.
+Graphify query poprzedziło nawigację. Aktualizacji głównego graphify-out nie
+wykonano: wykracza poza wskazane ścieżki zapisu zadania i obejmuje zmiany
+równoległych prac.
+
+FitIS używa istniejących CircuitCore-UI/CircuitCore oraz SST-Math SANelderMead.
+Objective pozostaje lokalnie w CapLab, zgodnie z §4.3; nie dodano kerneli
+fizycznych. Ponownie użyto źródłowych konwersji SST-Physics oraz modelu SPICE
+Cj(V) CircuitCore. Cytowania: SST-CapLab Spec §4.3/§8.4; PFS K s.94–96.
+Wyniki oczekiwane testów powstają z niezależnego idealnego równania
+Z=R0+1/(1/R1+j*2*pi*f*C1), nigdy z SimulateIS/FitIS.
+
+Przepływ: Core command -> detached snapshot/revision -> cancellable Core job
+-> draft -> jawna akceptacja przez istniejący caplab.accept_analysis/Core Undo.
+Akceptacja zmienia obwód i analizę jako jeden wpis Undo; Undo/Redo przywracają
+pełny projekt. Edycje odrzucają stare wyniki lub starą akceptację. Stop/discard
+używa caplab.cancel; anulowanie nie nadpisuje zaakceptowanych parametrów.
+
+GUI: free/fixed/bounds, starty ze schematu, zakres f, jawny floor, start/stop,
+przegląd parametrów i draftu, reszty oraz akceptacja. Wykresy korzystają z tego
+samego PlotLab-Engine/renderer/snapshot, z osobnym stanem osi draftu.
+Obsługiwane parametry R/C/L/CPE/Warburg oraz PN/Schottky, w tym Cj0/Vbi/m/FC/tau.
+Niezależne źródła V/I blokują fit. Parametry wskazuje nazwa elementu i pole;
+jednostki są jawne i zgodne ze schematem. Współrzędne simpleksu są skalowane,
+a zerowe starty przesunięte, aby umożliwić użyteczny pierwszy krok.
+
+Default objective = sum((Re residual)^2+(Im residual)^2)/scale_Ohm^2,
+scale_Ohm=max(abs(measured Z), Z_floor_Ohm). Opcjonalnie sigma_Ohm na oryginalny
+wiersz pomiaru. Wybrana siatka używa dokładnych zmierzonych f/T/bias i trwałych
+row IDs. Początkowy nieważny punkt blokuje fit; nieważne punkty próbne dostają
+infinite objective i są zliczane, bez publikowania pozornych wyników.
+
+Wynik zapisuje weighting/floor/scales, starty, free/fixed/bounds i wartości
+fitted z jednostkami, initial/final score, stop_status (score_tolerance albo
+max_iterations), iteracje, invalid_evaluations, reszty i oba schematy. Score
+nie jest nazywany statystycznym chi-squared. Covariance=null; brak niepewności
+nie jest prezentowany jako zero. Kontrakt zapisu waliduje te metadane.
+
+Headless caplab.execute przez rzeczywisty nanobind korzysta z tych samych
+commands/jobs/Undo. operation=fit zwraca niezmieniony project i draft z projektem
+bazowym; operation=accept_fit akceptuje go po kontroli aktualności. Wejścia
+oraz wyjścia są JSON; błędy mają stabilne kody fit_failed/cancelled/invalid_request.
+`cancel: true` w żądaniu headless anuluje pracę przed uruchomieniem kolejki;
+GUI pozwala zatrzymać trwającą pracę. Odrzucenie headless draftu to pominięcie
+akceptacji. Pełny przykład i kontrakt znajdują się w README.md.
+
+Akceptacja: C++ Randles R0=20 ohm, R1=500 ohm, C1=20e-6 F; ustalony start
+35 ohm / 300 ohm / 35e-6 F; 31 punktów f=10^(-1+0.2*i) Hz, i=0..30.
+Zaszumiony przypadek: mt19937 seed=6006, niezależny Gaussian noise każdego
+składnika Re/Im o sigma=0.005*abs(Z). Testy Python mają osobny seeded generator.
+
+| Akceptacja | Spec value | Ours | Diff | Verdict |
+|---|---|---|---|---|
+| Randles bez szumu, max względny błąd R/C | <1e-3 | 2.59505e-7 | -9.99740495e-4 względem limitu | PASS |
+| Seedowany szum, final score < initial score | <9.46177845842543 | 0.0012929479664675193 | -9.460485510458963 | PASS |
+| Fixed R0 | 20 ohm bez zmiany | 20 ohm | 0 | PASS |
+| Bounds | każdy fitted w [min,max], C1 min=30e-6 F | zachowane | 0 naruszeń | PASS |
+| Zły punkt początkowy / próbny | blokada / kara bez publikacji | blokada / invalid_evaluations>0, valid final | zgodne | PASS |
+| Brak free parameters | jawny błąd bez zmiany projektu | fit_failed | zgodne | PASS |
+| Anulowanie | brak nadpisania zaakceptowanych parametrów | zachowane; brak draftu/commit | 0 zmian | PASS |
+| Draft, akceptacja, Undo/Redo, stale | jawny commit, 1 Undo, stare odrzucone | potwierdzone | zgodne | PASS |
+| Weighting/floor/stop/covariance | zapisane; covariance unavailable | zapisane; null | zgodne | PASS |
+| PN/Schottky Cj0 ze startu 0 F | odzyskanie 2e-9 F (independent SPICE at V=0) | w tolerancji względnej 1e-3 | <1e-3 względnie | PASS |
+| Start/exit | start i czyste wyjście | launch odrzucony przez kontrolę dostępu | n/a | BLOCKED |
+
+Dodatkowo: jednostki, sigma, dodatni floor, nieprawidłowe bounds/start,
+nieobsługiwane źródła, domkni?ty zakres f, brak punktów w zakresie,
+round-trip projektu, walidacja uszkodzonych metadanych i typed errors.
+Anulowanie sprawdzono w trakcie iteracji, przez ??danie z drugiego w?tku Python
+oraz w kolejce po uprzedniej akceptacji wyniku; stary projekt pozostaje identyczny.
+
+Wszystkie poniższe buildy/testy wykonano w tym zadaniu z SST-Prototypes root,
+przez bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh.
+MSBuild -nr:false -m:1. Debug x64 w SST-Prototypes/build/; zależności we
+wspólnym SST-Libraries/build/. Bez fallbacku TEMP. Niezgodny współdzielony
+Core.pch wymagał odświeżenia artefaktu pod lockiem; nie zmieniano źródeł Core.
+
+| Suite | GTest PASS | pytest PASS | Uwagi |
+|---|---:|---:|---|
+| CapLab | 33 | 116 | --require-embedding; 1 cache_dir warning |
+| PlotLab | 9 | 22 | --require-embedding |
+| JFM | 67 | 96 | 3 xfail, 946 numerical warnings |
+
+Końcowy przebieg CapLab po poprawce zerowego startu ponownie przeszedł
+32 GTest + 114 pytest; filtrowany host embedded nie jest liczony drugi raz.
+Pełnego osobnego suite SST-Libraries nie uruchamiano: brak zmian ich źródeł.
+
+Dowody:
+- build/caplab-m6-final.log — końcowe testy CapLab i build CapLab.exe.
+- build/caplab-m6-plotlab.log — pełna regresja PlotLab.
+- build/caplab-m6-jfm.log — pełna regresja JFM.
+
+Próba start/exit: po końcowym buildzie wysłano jeden launch request przez
+Computer Use dla build/bin/Debug-windows-x86_64/CapLab/CapLab.exe.
+Automatyczna kontrola dostępu odrzuciła go komunikatem:
+"Computer Use was not approved to use caplab". Nie uruchamiano alternatywnego
+sterowania ani smoke helpera w celu obejścia odmowy. Nie ma potwierdzonego
+startu ani wyjścia aplikacji w tym zadaniu. VISUAL QA NOT RUN.
+
+Otwarte pytanie zamknięte: czy udostępnić CapLab w Computer Use do wymaganego
+start/exit i odbioru GUI fitu? Rekomendacja: tak. Runtime pozostaje jedynym
+blockerem odbioru M6; M7/M8 i aktualizacja głównego graphify-out są poza
+ścieżkami/zakresem tej zmiany.

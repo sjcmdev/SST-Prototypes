@@ -12,6 +12,9 @@ public:
     void RenderAS();
     void RenderIS();
 private:
+    sst::ui::plot::PlotViewState fitView;
+    Json isParameters=Json::array();
+    pl::Id fitCircuit=0;
     ccui::SchematicEditor circuitEditor;
     pl::Id selectedCircuit=0, circuitMeasurement=0;
     pl::Id selectedDefect=0;

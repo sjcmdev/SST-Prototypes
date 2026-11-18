@@ -28,8 +28,16 @@ def project_from_preview(preview, temperature=None):
 def execute(project, request):
     """Headless Core command/job operation; JSON values in/out, typed error envelope.
 
-    operation: edit_circuit (edit: create/replace/delete) or simulate
+    operation: edit_circuit (edit: create/replace/delete), simulate or fit
     (settings: measurement_id, circuit_id, optional confirmed temperature_K/bias_V).
+    fit settings add parameters [{element, field, unit, free, min, max}],
+    Z_floor_Ohm, optional max_iterations, score_tolerance, frequency_min_Hz,
+    frequency_max_Hz and sigma_Ohm per original measurement row.
+    fit returns draft={base_project, project}; accepted project stays unchanged.
+    accept_fit with that draft commits via Core Undo; stale drafts are rejected.
+    An optional caller-supplied operation_id permits another thread to execute
+    {operation: "cancel", operation_id: id} while execute() runs (GIL released).
+    cancel=True requests cancellation before queued work and preserves the project.
     Known measurement T/bias take precedence over confirmations.
     """
     import json

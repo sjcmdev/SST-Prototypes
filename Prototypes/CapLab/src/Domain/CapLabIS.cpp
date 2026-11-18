@@ -2,6 +2,7 @@
 #include "AnalysisRunner.h"
 #include <sst/physics/impedance.hpp>
 #include <complex>
+#include <sst/math/nelder_mead.hpp>
 
 namespace SST::Prototypes::CapLab {
 void EditCircuit(Project &p, const Json &edit) {
@@ -48,7 +49,7 @@ double Condition(const Json &m, const Json &s, const char *key, bool positive) {
     return v;
 }
 }
-Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &context) {
+Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &context, bool plots) {
     using namespace circuitcore;
     using namespace sst::physics;
     if (m.at("kind")!="FrequencySweep" || m.at("sample_id")!=c.at("sample_id")) throw std::runtime_error("Circuit requires a same-sample FrequencySweep");
@@ -129,7 +130,7 @@ Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &
         append("residual_ImZ_Ohm",measured && model ? std::optional(model->imag()-measured->imag()) : std::nullopt);
         context.SetProgress(float(i+1)/f.size(),1);
     }
-    for (const auto &kind : {"Nyquist","Bode magnitude","Bode phase","C-f","G/omega-f","ReZ residual","ImZ residual"}) {
+    if (plots) for (const auto &kind : {"Nyquist","Bode magnitude","Bode phase","C-f","G/omega-f","ReZ residual","ImZ residual"}) {
         const std::string k=kind;
         Json plot{{"name",k},{"x_label",k=="Nyquist" ? "Re Z [Ohm]" : "f [Hz]"},
             {"y_label",k=="Nyquist" ? "-Im Z [Ohm]" : k=="Bode magnitude" ? "|Z| [Ohm]" : k=="Bode phase" ? "phase [deg]" :
@@ -153,6 +154,135 @@ Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &
         }
         out["plots"].push_back(std::move(plot));
     }
+    context.ThrowIfCancellationRequested(); return out;
+}
+}
+namespace SST::Prototypes::CapLab {
+Json FitIS(const Json &measurement, const Json &circuit, const Json &settings, JobContext &context) {
+    context.ThrowIfCancellationRequested();
+    auto m=measurement;
+    const double floor=settings.at("Z_floor_Ohm");
+    const int limit=settings.value("max_iterations",500);
+    const double tolerance=settings.value("score_tolerance",1e-12);
+    if (!std::isfinite(floor) || floor<=0 || limit<1 || limit>10000 || !std::isfinite(tolerance) || tolerance<0)
+        throw std::runtime_error("Invalid floor, iteration limit or score tolerance");
+    const double lower=settings.value("frequency_min_Hz",0.), upper=settings.value("frequency_max_Hz",std::numeric_limits<double>::max());
+    if (!std::isfinite(lower) || !std::isfinite(upper) || lower<0 || upper<lower) throw std::runtime_error("Invalid frequency range");
+    const auto names=m.at("names").get<std::vector<std::string>>();
+    const auto fi=std::find(names.begin(),names.end(),"f");
+    if (fi==names.end()) throw std::runtime_error("Missing frequency column");
+    const auto frequencies=m.at("columns").at(std::distance(names.begin(),fi));
+    std::set<double> unique;
+    for (const auto &v : frequencies) {
+        const double f=v.get<double>();
+        if (!std::isfinite(f) || f<=0 || !unique.insert(f).second) throw std::runtime_error("Invalid/duplicate IS frequency");
+    }
+    std::vector<double> sigma;
+    if (settings.contains("sigma_Ohm")) {
+        sigma=settings.at("sigma_Ohm").get<std::vector<double>>();
+        if (sigma.size()!=frequencies.size()) throw std::runtime_error("sigma_Ohm must match measurement rows");
+        for (double s : sigma) if (!std::isfinite(s) || s<=0) throw std::runtime_error("Invalid sigma_Ohm");
+    }
+    std::vector<double> selectedSigma;
+    for (auto &col : m["columns"]) col=Json::array();
+    m["row_ids"]=Json::array();
+    for (std::size_t i=0;i<frequencies.size();++i) if (frequencies[i].get<double>()>=lower && frequencies[i].get<double>()<=upper) {
+        for (std::size_t j=0;j<names.size();++j) m["columns"][j].push_back(measurement.at("columns").at(j).at(i));
+        m["row_ids"].push_back(measurement.at("row_ids").at(i));
+        if (!sigma.empty()) selectedSigma.push_back(sigma[i]);
+    }
+    const auto schematic=circuit.at("schematic");
+    const auto document=ReadCircuit(schematic);
+    for (const auto &e : document.elements) if (e.kind==ccui::Kind::V || e.kind==ccui::Kind::I)
+        throw std::runtime_error("IS fit supports R/C/L/CPE/W and SPICE PN/Schottky; independent sources are unsupported");
+    std::vector<sst::math::FitParam> parameters;
+    std::vector<std::size_t> elements;
+    std::vector<std::string> fields;
+    std::vector<double> scales;
+    std::set<std::pair<std::string,std::string>> seen;
+    bool hasFree=false;
+    auto specs=settings.at("parameters");
+    for (auto &spec : specs) {
+        const std::string name=spec.at("element"), field=spec.at("field"), unit=spec.at("unit");
+        const auto it=std::find_if(document.elements.begin(),document.elements.end(),[&](const auto &e) {return e.name==name;});
+        if (it==document.elements.end() || !seen.emplace(name,field).second) throw std::runtime_error("Missing/duplicate parameter");
+        const auto index=std::distance(document.elements.begin(),it);
+        const bool diode=it->kind==ccui::Kind::PN || it->kind==ccui::Kind::Schottky;
+        std::string expected;
+        if (field=="value") expected=ccui::unit(it->kind);
+        else if (field=="secondary" && (diode || it->kind==ccui::Kind::CPE)) expected="1";
+        else if (diode && schematic.at("parameter_units").contains(field)) expected=schematic.at("parameter_units").at(field);
+        else throw std::runtime_error("Unsupported circuit parameter field");
+        if (unit!=expected) throw std::runtime_error("Invalid fit parameter unit");
+        const double start=schematic.at("elements").at(index).at(field), lo=spec.at("min"), hi=spec.at("max");
+        const bool free=spec.at("free");
+        if (!std::isfinite(start) || !std::isfinite(lo) || !std::isfinite(hi) || lo>start || hi<start || lo>hi || (free && lo==hi))
+            throw std::runtime_error("Invalid bounds/start");
+        // Scale F/Ohm separately and shift zero starts so the initial simplex has a useful step.
+        const double scale=start!=0 ? std::abs(start) : std::max(std::abs(lo),std::abs(hi));
+        scales.push_back(scale>0 ? scale : 1.);
+        const double offset=start==0 ? 1. : 0.;
+        parameters.emplace_back(name+"."+field,start/scales.back()+offset,lo/scales.back()+offset,hi/scales.back()+offset,free);
+        elements.push_back(index); fields.push_back(field); hasFree |= free;
+        spec["start"]=start;
+    }
+    if (!hasFree) throw std::runtime_error("No free parameters");
+    auto candidate=[&](const std::vector<double> &values) {
+        auto c=circuit;
+        for (std::size_t i=0;i<values.size();++i) if (parameters[i].free) {
+            const auto &spec=specs.at(i);
+            const double value=(values[i]-(spec.at("start").get<double>()==0 ? 1. : 0.))*scales[i];
+            c["schematic"]["elements"][elements[i]][fields[i]]=std::clamp(value,spec.at("min").get<double>(),spec.at("max").get<double>());
+        }
+        return c;
+    };
+    // SST-CapLab Spec 4.3: modulus-weighted complex residual sum, not statistical chi-squared.
+    std::vector<double> weights;
+    JobContext evaluation({}, {}, {}, {}, [&] {return context.IsCancellationRequested();});
+    const auto initial=SimulateIS(m,circuit,settings,evaluation,false);
+    if (initial.at("status")!="valid") throw std::runtime_error("Invalid initial simulation/measurement: "+initial.at("diagnostics").dump());
+    for (std::size_t i=0;i<initial.at("frequency_Hz").size();++i)
+        weights.push_back(selectedSigma.empty() ? std::max(std::hypot(initial.at("measured_ReZ_Ohm").at(i).get<double>(),initial.at("measured_ImZ_Ohm").at(i).get<double>()),floor) : selectedSigma[i]);
+    auto score=[&](const Json &r) {
+        if (r.at("status")!="valid") return std::numeric_limits<double>::infinity();
+        double sum=0;
+        for (std::size_t i=0;i<weights.size();++i) {
+            const double re=r.at("residual_ReZ_Ohm").at(i).get<double>()/weights[i], im=r.at("residual_ImZ_Ohm").at(i).get<double>()/weights[i];
+            sum+=re*re+im*im;
+        }
+        return sum;
+    };
+    int invalid=0;
+    sst::math::SANelderMead optimizer(parameters,[&](const auto &values) {
+        context.ThrowIfCancellationRequested();
+        try {
+            const double s=score(SimulateIS(m,candidate(values),settings,evaluation,false));
+            if (!std::isfinite(s)) ++invalid;
+            return s;
+        } catch (const JobCancelledException &) {throw;}
+        catch (const std::exception &) {++invalid; return std::numeric_limits<double>::infinity();}
+    });
+    context.SetStage("Fitting IS draft");
+    optimizer.initSimplex();
+    std::string stop="max_iterations";
+    for (int i=0;i<limit;++i) {
+        context.ThrowIfCancellationRequested();
+        if (optimizer.bestChiSquared()<=tolerance) {stop="score_tolerance"; break;}
+        optimizer.step(); context.SetProgress(float(i+1)/limit,1);
+    }
+    if (optimizer.bestChiSquared()<=tolerance) stop="score_tolerance";
+    auto fitted=candidate(optimizer.bestFullParams());
+    auto out=SimulateIS(m,fitted,settings,evaluation);
+    if (out.at("status")!="valid" || !std::isfinite(score(out))) throw std::runtime_error("No valid fitted simulation");
+    out["inputs"]=Json::array({measurement}); out["initial_circuit"]=circuit;
+    out["model"]="CircuitCore-AC-fit"; out["optimizer"]="SST-Math SANelderMead";
+    out["weighting"]=selectedSigma.empty() ? "modulus_floor" : "sigma_Ohm";
+    out["Z_floor_Ohm"]=floor; out["scale_Ohm"]=weights;
+    out["score"]=score(out); out["initial_score"]=score(initial); out["score_kind"]="weighted_complex_residual_sum";
+    out["stop_status"]=stop; out["iterations"]=optimizer.iteration(); out["invalid_evaluations"]=invalid;
+    out["covariance"]=nullptr;
+    for (std::size_t i=0;i<specs.size();++i) specs[i]["fitted"]=fitted.at("schematic").at("elements").at(elements[i]).at(fields[i]);
+    out["parameters"]=specs;
     context.ThrowIfCancellationRequested(); return out;
 }
 }

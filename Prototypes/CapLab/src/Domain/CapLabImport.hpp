@@ -75,7 +75,7 @@ namespace SST::Prototypes::CapLab
             : target(p), oldGraph(p.graph)
         {
             auto table = PreviewTable(preview,temperature);
-            const auto name = Path{table.source.at("path")}.Native().stem().string();
+            const auto name = Path::FromResolved(std::filesystem::u8path(table.source.at("path")).stem()).Utf8();
             data = pl::importTable(*p.engine,p.engine->root(),name,table);
             p.samples.reserve(p.samples.size()+1); p.sweeps.reserve(p.sweeps.size()+1);
             data.apply(*p.engine);

@@ -226,7 +226,42 @@ namespace SST::Prototypes::CapLab
             if (a.at("type")=="Circuit") {
                 const auto n=a.at("frequency_Hz").size();
                 if (!samples.contains(a.at("sample_id").get<pl::Id>()) || n==0 || n>1201 || a.at("row_ids").size()!=n ||
-                    a.at("model")!="CircuitCore-AC" || !a.at("diagnostics").is_array()) throw std::runtime_error("Invalid circuit result");
+                    (a.at("model")!="CircuitCore-AC" && a.at("model")!="CircuitCore-AC-fit") || !a.at("diagnostics").is_array()) throw std::runtime_error("Invalid circuit result");
+                if (a.at("model")=="CircuitCore-AC-fit") {
+                    for (const char *key : {"score","initial_score","Z_floor_Ohm"}) {
+                        const double value=a.at(key).get<double>();
+                        if (!std::isfinite(value) || value<0 || (std::string(key)=="Z_floor_Ohm" && value==0)) throw std::runtime_error("Invalid IS fit score/floor");
+                    }
+                    if ((a.at("weighting")!="modulus_floor" && a.at("weighting")!="sigma_Ohm") ||
+                        (a.at("stop_status")!="score_tolerance" && a.at("stop_status")!="max_iterations") ||
+                        !a.at("covariance").is_null() || !a.at("parameters").is_array() || a.at("parameters").empty() ||
+                        a.at("scale_Ohm").size()!=n || a.at("iterations").get<int>()<0 || a.at("invalid_evaluations").get<int>()<0)
+                        throw std::runtime_error("Invalid IS fit metadata");
+                    for (const auto &value : a.at("scale_Ohm")) if (value.is_null() || !Optional(value)) throw std::runtime_error("Invalid IS weighting scale");
+                    (void)ReadCircuit(a.at("initial_circuit").at("schematic"));
+                    if (a.at("initial_circuit").at("id")!=a.at("circuit").at("id")) throw std::runtime_error("Mismatched IS fit circuit");
+                    std::set<std::pair<std::string,std::string>> parameters;
+                    bool hasFree=false;
+                    for (const auto &v : a.at("parameters")) {
+                        const std::string name=v.at("element"), field=v.at("field");
+                        const bool free=v.at("free"); hasFree |= free;
+                        const double start=v.at("start"), fitted=v.at("fitted"), lo=v.at("min"), hi=v.at("max");
+                        if (!std::isfinite(start) || !std::isfinite(fitted) || !std::isfinite(lo) || !std::isfinite(hi) ||
+                            lo>hi || start<lo || start>hi || fitted<lo || fitted>hi || (free && lo==hi) || (!free && start!=fitted) ||
+                            !parameters.emplace(name,field).second || v.at("unit").get<std::string>().empty()) throw std::runtime_error("Invalid IS fitted parameter");
+                        bool found=false;
+                        for (const auto &e : a.at("circuit").at("schematic").at("elements")) if (e.at("name")==name) {
+                            found=true;
+                            if (e.at(field)!=v.at("fitted")) throw std::runtime_error("IS fitted parameter differs from schematic");
+                            const auto unit=field=="value" ? e.at("value_unit") : field=="secondary" ? e.at("secondary_unit") : a.at("circuit").at("schematic").at("parameter_units").at(field);
+                            if (v.at("unit")!=unit) throw std::runtime_error("Invalid IS fit parameter unit");
+                            for (const auto &initial : a.at("initial_circuit").at("schematic").at("elements"))
+                                if (initial.at("name")==name && initial.at(field)!=v.at("start")) throw std::runtime_error("Invalid IS fit start");
+                        }
+                        if (!found) throw std::runtime_error("Missing IS fitted element");
+                    }
+                    if (!hasFree) throw std::runtime_error("No free IS fit parameters");
+                }
                 Optional(a.at("temperature_K"));
                 if (a.at("temperature_K").is_null() || !std::isfinite(a.at("bias_V").get<double>())) throw std::runtime_error("Invalid IS T/bias");
                 (void)ReadCircuit(a.at("circuit").at("schematic"));

@@ -202,7 +202,7 @@ void CapLabPrototypePanel::RenderContent() {
     if (const auto job = state->jobs->GetJob(state->activeJob)) {
         ImGui::TextUnformatted(job->currentStage.c_str());
         ImGui::ProgressBar(job->totalWork > 0 ? job->completedWork / job->totalWork : 0);
-        if (ImGui::Button("Cancel")) (void)state->jobs->RequestCancel(job->id);
+        if (ImGui::Button("Cancel")) (void)commands->Execute(CommandID{"caplab.cancel"});
     }
 }
 
