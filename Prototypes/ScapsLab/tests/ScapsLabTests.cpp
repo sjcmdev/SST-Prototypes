@@ -1,0 +1,98 @@
+﻿#include <gtest/gtest.h>
+#include "Workflow.hpp"
+#include "Core/IO/TextFileIO.hpp"
+#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include <scaps_core/api.hpp>
+#include <scaps_core/device_project_yaml.hpp>
+#include <thread>
+#include <fstream>
+using namespace SST;
+using namespace SST::ScapsLab;
+namespace {
+Json Execute(Workflow &w,const Json &r) {
+    const auto started=w.Dispatch(r); if(!started.at("ok").get<bool>()) return started;
+    while(w.Busy()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));} return w.response;
+}
+std::filesystem::path Temp(const char *name) {return std::filesystem::temp_directory_path()/name;}
+}
+TEST(ScapsLab,YamlFullMappingRoundtrip) {
+    auto d=ReadProject(SCAPSLAB_PROJECT);
+    d["future_extension"]={{"numeric_string","001"},{"nullable",nullptr},{"list",{1,true,".inf"}}};
+    d["layers"][0]["defects"]=Json::array({{{"label","retained"},{"energy_reference","relative_to_Ei"},{"energy_offset_eV",0.1},{"Nt_m3",1e15},{"sigma_n_m2",1e-19},{"sigma_p_m2",1e-19},{"charge_type","neutral"}}});
+    const auto path=Temp("scapslab-roundtrip.yaml");
+    WriteProject(d,path.string()); EXPECT_EQ(ReadProject(path.string()),d);
+    const auto original=scaps_core::load_device_project_yaml(SCAPSLAB_PROJECT);
+    auto plain=ReadProject(SCAPSLAB_PROJECT); WriteProject(plain,path.string());
+    const auto round=scaps_core::load_device_project_yaml(path);
+    EXPECT_EQ(round.layers[0].material.chi_eV,original.layers[0].material.chi_eV);
+    EXPECT_EQ(round.left_contact.Sn_mps,original.left_contact.Sn_mps);
+    std::filesystem::remove(path);
+}
+TEST(ScapsLab,SolverModesAndContactMapping) {
+    auto d=ReadProject(SCAPSLAB_PROJECT);
+    for(const auto *level:{"0","1","2","3","A"}) {
+        d["mesh"]["adaptivity_level"]=level; EXPECT_EQ(Model(d).mesh.adaptivity_level,level);
+    }
+    for(const auto *mode:{"constant","sqrt_T"}) {
+        d["mobility_temperature_model"]=mode; EXPECT_EQ(scaps_core::mobility_model_name(Model(d).mobility_temperature_model),std::string(mode));
+    }
+    d["mobility_temperature_model"]="caughey_thomas_T"; EXPECT_THROW((void)Model(d),std::exception);
+    d["layers"][0]["material"]["caughey_thomas"]={{"source","synthetic unit-test parameters"},{"T_ref_K",300},{"alpha",1.0},{"beta_min",0.0},{"beta_N",0.0},{"beta_alpha",0.0},
+        {"electron",{{"mu_min_m2_V_s",0.001},{"mu_delta_m2_V_s",0.01},{"N_ref_m3",1e23},{"beta_delta",0.0}}},
+        {"hole",{{"mu_min_m2_V_s",0.001},{"mu_delta_m2_V_s",0.01},{"N_ref_m3",1e23},{"beta_delta",0.0}}}};
+    EXPECT_EQ(Model(d).mobility_temperature_model,scaps_core::MobilityTemperatureModel::CaugheyThomasT);
+    d["contacts"]["left"]["Sn_m_s"]=".inf";d["contacts"]["left"].erase("flat_band");
+    const auto path=Temp("scapslab-all-modes.yaml");WriteProject(d,path.string());EXPECT_EQ(ReadProject(path.string()),d);std::filesystem::remove(path);
+    d["constants_mode"]="typo";EXPECT_THROW((void)Model(d),std::exception);
+}
+TEST(ScapsLab,SameSolveAsHeadlessKernelAndMesh) {
+    const auto p=scaps_core::load_device_project_yaml(SCAPSLAB_PROJECT);
+    const auto device=scaps_core::make_device_from_project(p); auto voltages=scaps_core::make_voltage_list(p.voltage);for(auto &v:voltages)v=-v;
+    const auto pc=scaps_core::physical_constants(p.constants_mode);
+    const auto mesh=scaps_core::prepare_mesh(device,p.mesh,voltages,{p.temperature_K},p.solver,pc);
+    const auto expected=scaps_core::solve_iv(device,mesh,voltages,p.temperature_K,p.solver,pc);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    const auto r=Execute(w,{{"operation","run"}}); ASSERT_TRUE(r.at("ok").get<bool>())<<r.dump();
+    EXPECT_EQ(w.result.at("mesh_x_m").get<std::vector<double>>(),mesh.x_m);
+    ASSERT_EQ(w.result.at("points").size(),expected.size());
+    for(std::size_t i=0;i<expected.size();++i) {
+        const auto &point=w.result.at("points")[i]; const auto &e=expected[i];
+        EXPECT_EQ(point.at("status"),scaps_core::to_string(e.status));
+        EXPECT_EQ(point.at("x_m").get<std::vector<double>>(),e.state.x_m.empty()?mesh.x_m:e.state.x_m);
+        if(e.status==scaps_core::SolverStatus::Converged) {
+            const double current=e.state.Jn_Am2.front()+e.state.Jp_Am2.front();
+            EXPECT_NEAR(point.at("J_A_m2").get<double>(),current,std::abs(current)*1e-10);
+        } else EXPECT_TRUE(point.at("J_A_m2").is_null());
+    }
+}
+TEST(ScapsLab,EditsStableIdsValidationAndCancellation) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    const auto original=w.document;
+    ASSERT_TRUE(Execute(w,{{"operation","layer"},{"action","add"}}).at("ok").get<bool>());
+    const auto id=w.document["layers"][1]["scapslab_id"];
+    ASSERT_TRUE(Execute(w,{{"operation","layer"},{"action","move"},{"layer_id",id},{"index",0}}).at("ok").get<bool>());
+    EXPECT_EQ(w.document["layers"][0]["scapslab_id"],id);
+    ASSERT_TRUE(Execute(w,{{"operation","layer"},{"action","remove"},{"layer_id",id}}).at("ok").get<bool>());
+    EXPECT_EQ(w.document,original);
+    EXPECT_FALSE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",-1}}}}).at("ok").get<bool>()); EXPECT_EQ(w.document,original);
+    ASSERT_TRUE(w.jobs->PauseAllJobs()); ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>()); ASSERT_TRUE(w.jobs->ResumeAllJobs());
+    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_TRUE(w.result.empty());
+    auto bad=original;bad["temperature_K"]=-1;const auto path=Temp("scapslab-protected.yaml");
+    std::string error,text;ASSERT_TRUE(TextFileIO::Save(Path{path},"original",error));EXPECT_THROW(WriteProject(bad,path.string()),std::exception);
+    ASSERT_TRUE(TextFileIO::Load(Path{path},text,error));EXPECT_EQ(text,"original");std::filesystem::remove(path);
+}
+TEST(ScapsLab,EmbeddedPythonRunAndHeadlessCsv) {
+#if DS_PYTHON_CAPI_AVAILABLE
+    RegisterPython(); PythonInterpreter python; ASSERT_TRUE(python.Start());
+    const auto gil=PythonInterpreter::AcquireRuntimeGil();
+    const auto code=std::string("import sys\nsys.path.insert(0, ")+Json(SCAPSLAB_PYTHON).dump()+")\nproject_path="+Json(SCAPSLAB_PROJECT).dump()+"\nheadless_path="+Json(SCAPSLAB_HEADLESS).dump()+"\nexec(compile(open("+Json(SCAPSLAB_PYTHON_TEST).dump()+", encoding='utf-8-sig').read(), 'test_headless.py', 'exec'))\n";
+    const int result=PyRun_SimpleString(code.c_str());
+    PythonInterpreter::ReleaseRuntimeGil(gil); EXPECT_EQ(result,0);
+#else
+    FAIL()<<"Embedded Python is required";
+#endif
+}
+
+

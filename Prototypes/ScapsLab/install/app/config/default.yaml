@@ -1,0 +1,9 @@
+﻿schema_version: 1
+log:
+  level: info
+  to_file: true
+  file_path: logs/ScapsLab.log
+window:
+  title: ScapsLab
+  width: 1280
+  height: 800
