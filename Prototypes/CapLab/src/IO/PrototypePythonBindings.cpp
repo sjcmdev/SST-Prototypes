@@ -161,7 +161,32 @@ NB_MODULE(sst_caplab, module)
             RegisterCommands(commands,bus,state);
             const auto analysisCount=state.document.project.analyses.size();
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target);});
-            if (operation=="edit_circuit") {
+            if (operation=="export" || operation=="save" || operation=="open") {
+                const auto path=Path{r.at("path").get<std::string>()};
+                if (r.contains("graph_id")) state.document.project.graph=r.at("graph_id").get<pl::Id>();
+                Validate(state.document.project);
+                if (operation=="export" && path.Native().extension()==".png") {
+                    const auto b=r.at("ranges").get<std::vector<double>>();
+                    if (b.size()!=4) throw std::runtime_error("PNG requires four resolved preview ranges");
+                    state.view.viewport=sst::ui::plot::Bounds{b[0],b[1],b[2],b[3]};
+                    if (r.contains("visibility")) for (const auto &v : r.at("visibility")) state.view.visibility[state.document.project.engine->series(v.at("plot_id").get<pl::Id>()).id]=v.at("visible").get<bool>();
+                }
+                const auto result=commands->Execute(CommandID{operation=="export" ? "caplab.export" : operation=="save" ? "caplab.save" : "caplab.open"},[&] { CommandContext c; c.Set("path",path); return c; }());
+                if (!result) throw std::runtime_error(result.Error().technicalDetails);
+                bus->ProcessQueue(); const auto id=state.activeJob;
+                jobs->Shutdown(); state.OnUpdate(0);
+                const auto job=jobs->GetJob(id);
+                if (!job || job->status!=JobStatus::Completed)
+                    return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",operation+"_failed"},{"message",state.status}}}}.dump();
+                response["export"]=state.exportResult;
+            } else if (operation=="edit_defect" || operation=="area" || operation=="delete_measurement") {
+                CommandContext context;
+                std::string command="caplab.defect";
+                if (operation=="area") { command="caplab.area"; context.Set("sample_id",r.at("sample_id").get<pl::Id>()); context.Set("area_m2",r.at("area_m2").get<double>()); }
+                else {command=operation=="delete_measurement" ? "caplab.measurement" : "caplab.defect"; context.Set("edit",operation=="delete_measurement" ? Json{{"measurement_id",r.at("measurement_id")}} : r.at("edit"));}
+                const auto result=commands->Execute(CommandID{command},std::move(context));
+                if (!result) throw std::runtime_error(result.Error().technicalDetails);
+            } else if (operation=="edit_circuit") {
                 SST::CommandContext context; context.Set("edit",r.at("edit"));
                 const auto result=commands->Execute(SST::CommandID{"caplab.circuit"},std::move(context));
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
@@ -172,9 +197,9 @@ NB_MODULE(sst_caplab, module)
                 state.analysisRevision=state.document.revision;
                 const auto result=commands->Execute(SST::CommandID{"caplab.accept_analysis"});
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
-            } else if (operation=="simulate" || operation=="fit" || operation=="walter" || operation=="integrate_saved_walter") {
+            } else if (operation=="simulate" || operation=="fit" || operation=="walter" || operation=="integrate_saved_walter" || operation=="analyze") {
                 if (r.value("cancel",false) && !jobs->PauseAllJobs()) throw std::runtime_error("Cannot pause job queue");
-                state.analysisOptions=r.at("settings"); state.analysisOptions["type"]=operation=="walter" ? "Walter" : operation=="integrate_saved_walter" ? "WalterSaved" : "Circuit";
+                state.analysisOptions=r.at("settings"); state.analysisOptions["type"]=operation=="analyze" ? r.at("settings").at("type").get<std::string>() : operation=="walter" ? "Walter" : operation=="integrate_saved_walter" ? "WalterSaved" : "Circuit";
                 state.analysisOptions["fit"]=operation=="fit";
                 const auto result=commands->Execute(SST::CommandID{"caplab.analyze"});
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
@@ -195,7 +220,7 @@ NB_MODULE(sst_caplab, module)
                 const auto job=jobs->GetJob(id);
                 if (!job || job->status!=SST::JobStatus::Completed || (!state.analysisDraft && state.document.project.analyses.size()!=analysisCount+1))
                     return Json{{"ok",false},{"project",Json::parse(project)},
-                        {"error",{{"code",job && job->status==SST::JobStatus::Cancelled ? "cancelled" : operation=="fit" ? "fit_failed" : (operation=="walter" || operation=="integrate_saved_walter") ? "walter_failed" : "simulation_failed"},{"message",state.status}}}}.dump();
+                        {"error",{{"code",job && job->status==SST::JobStatus::Cancelled ? "cancelled" : operation=="analyze" ? "analysis_failed" : operation=="fit" ? "fit_failed" : (operation=="walter" || operation=="integrate_saved_walter") ? "walter_failed" : "simulation_failed"},{"message",state.status}}}}.dump();
             } else throw std::runtime_error("Unknown CapLab operation");
             response["draft"]=state.analysisDraft ? Json{{"base_project",Json::parse(project)},
                 {"project",Json::parse(Serialize(*state.analysisDraft))}} : Json(nullptr);
@@ -218,6 +243,43 @@ namespace SST::Prototypes::CapLab
         if (Py_IsInitialized() || PyImport_AppendInittab("sst_caplab", PyInit_sst_caplab) != 0)
             throw std::runtime_error("Register sst_caplab before starting Python.");
         registered = true;
+#endif
+    }
+    Json ExportData(const Project &project, const Path &path, JobContext &context)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python unavailable for export.");
+        nanobind::gil_scoped_acquire gil;
+        namespace nb=nanobind;
+        try {
+            auto paths=nb::module_::import_("sys").attr("path");
+            const auto executable=Platform::CurrentExecutablePath();
+            if (!executable) throw std::runtime_error("Cannot locate embedded Python package.");
+            const auto local=executable.Value().parent_path().Join("python");
+            const std::string root=FileSystem::Exists(local.Join("caplab").Native()) ? local.Utf8() : SST_PROTOTYPE_PYTHON_ROOT;
+            if (!nb::cast<bool>(paths.attr("__contains__")(root))) paths.attr("insert")(0,root);
+            Json data=Json::parse(Serialize(project)); data.erase("engine"); data["measurement_data"]=Json::array();
+            for (const auto &m : project.measurements) data["measurement_data"].push_back(AnalysisMeasurement(project,m.at("id").get<pl::Id>()));
+            for (const auto &m : project.sweeps) {
+                auto measurement=AnalysisMeasurement(project,m.id);
+                const auto &sheet=std::get<pl::Worksheet>(project.engine->object(m.id).data);
+                measurement["provenance"]=sheet.source;
+                for (const auto cid : project.engine->children(m.id)) if (cid!=m.frequency && cid!=m.capacitance && cid!=m.resistance) {
+                    const auto &object=project.engine->object(cid);
+                    if (const auto *column=std::get_if<pl::Column>(&object.data)) {
+                        measurement["names"].push_back(object.name); measurement["units"].push_back(column->units);
+                        measurement["columns"].push_back(std::get<std::vector<double>>(column->values));
+                    }
+                }
+                data["measurement_data"].push_back(std::move(measurement));
+            }
+            std::function<bool()> cancel=[&] {return context.IsCancellationRequested();};
+            const auto result=nb::module_::import_("caplab.exporter").attr("export_json")(data.dump(),path.Utf8(),cancel);
+            return Json::parse(nb::cast<std::string>(result));
+        } catch (const nb::python_error &e) {context.ThrowIfCancellationRequested(); throw std::runtime_error(e.what());}
+#else
+        (void)project; (void)path; (void)context;
+        throw std::runtime_error("Embedded Python unavailable for export.");
 #endif
     }
     Json ReadAnalysis(const Json &measurement, const Json &options, const Json &xd, JobContext &context)
@@ -247,8 +309,8 @@ namespace SST::Prototypes::CapLab
     Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const std::string &options)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
-        PythonGilAcquireScope gil;
-        if (!gil.IsActive()) throw std::runtime_error("Embedded Python is unavailable; rebuild with embedding.");
+        if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python is unavailable; rebuild with embedding.");
+        nanobind::gil_scoped_acquire gil;
         namespace nb = nanobind;
         try
         {

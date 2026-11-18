@@ -126,6 +126,17 @@ namespace SST::Prototypes::CapLab
         EXPECT_EQ(workflow.document.project.analyses[0]["raw_D_F"].size(),40);
         const auto asText=Serialize(workflow.document.project);
         EXPECT_EQ(Serialize(Parse(asText)),asText);
+        CommandContext removeMeasurement;
+        removeMeasurement.Set("edit",Json{{"measurement_id",workflow.document.project.sweeps[0].id}});
+        ASSERT_TRUE(commands->Execute(CommandID{"caplab.measurement"},std::move(removeMeasurement)));
+        EXPECT_TRUE(workflow.document.project.sweeps.empty());
+        EXPECT_EQ(workflow.document.project.analyses[0]["status"],"missing_input");
+        const auto deletedText=Serialize(workflow.document.project);
+        EXPECT_EQ(Serialize(Parse(deletedText)),deletedText);
+        ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(workflow.document.project),asText);
+        ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(workflow.document.project),deletedText);
+        ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(workflow.document.project),asText);
+
         const auto sampleId=workflow.document.project.samples[0].id;
         auto edit=[&](Json value) {CommandContext c; c.Set("edit",std::move(value)); return commands->Execute(CommandID{"caplab.defect"},std::move(c));};
         ASSERT_TRUE(edit({{"action","create"},{"sample_id",sampleId},{"name","M4 synthetic"}}));

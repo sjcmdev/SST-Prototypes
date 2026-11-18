@@ -52,6 +52,7 @@ namespace SST::Prototypes::CapLab
         JobId activeJob = 0;
         std::string status;
         Json analysisOptions = Json::object();
+        Json exportResult;
         std::optional<Project> analysisDraft;
         std::uint64_t analysisRevision = 0;
         Ref<CommandRegistry> commands;

@@ -140,6 +140,9 @@ namespace SST::Prototypes::CapLab
                 throw std::runtime_error("Invalid historical result.");
             std::set<pl::Id> inputs, references;
             for (const auto &m : p.measurements) if (m.at("sample_id") == sample) inputs.insert(m.at("id").get<pl::Id>());
+            // Historical snapshots may reference removed domain inputs retained by saved plots.
+            for (const auto &[id, object] : p.engine->objects())
+                if (object->parent==sample && std::holds_alternative<pl::Worksheet>(object->data)) inputs.insert(id);
             references = inputs;
             const auto &data = h.at("data");
             auto entities = [&](const Json &items) {

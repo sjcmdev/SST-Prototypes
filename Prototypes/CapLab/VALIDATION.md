@@ -652,3 +652,127 @@ Prototypes/JFM/install/app/config/*.yaml.
 Ko?cowa kontrola po aktualizacji wsp??dzielonego Core: 33 GTest i 155 pytest
 PASS (56.22 s), build/cm7-caplab-final.log. Ostatni graphify update ponownie
 zapisa? aktualny graf (75170 nodes / 147510 edges / 2171 communities).
+
+
+## CM8 / M8 ? v1 workflow, export and Release regression (2026-11-18)
+
+M8 workflow and automated acceptance are implemented. Full milestone acceptance
+remains incomplete because runtime launch and visual smoke were denied access.
+Read the whole CapLab spec (binding owner ?8), PFS, README/VALIDATION, c1/cm2/cm7
+reports and W1 WINDOWS.md. Graphify query preceded navigation. No git commands,
+commits, source Core/JFM/CircuitCore/library edits or JFM YAML edits were issued.
+The only product source changes are in CapLab; graphify artifacts are updated
+under the repository's mandatory AST update rule. No new physics kernel or
+optimizer was needed: M3?M7 kernels, Core commands/jobs/Undo, W1 EditorWindow
+and PlotLab-Engine snapshots/export are reused.
+
+Completed:
+- CSV/XLSX data export through caplab.export -> immutable project -> Core job.
+  Both include original values, explicit units, stable IDs, models, parameters,
+  residuals/covariance, masks and full provenance. CSV uses JSON-pointer/value_json
+  rows. XLSX includes the same lossless Metadata rows and numeric measurement
+  worksheets with unit-bearing headers; row IDs are text to preserve 64-bit IDs.
+  M1 auxiliary columns and original source/hash metadata are retained.
+- XLSX uses standard-library ZIP/XML OOXML inline strings, with no new dependency.
+  Formula-like imported text stays text. Excel row/column/text limits fail with
+  an explicit CSV alternative. CSV/XLSX preserve the old file on errors/cancel;
+  replacement is atomic. PNG continues to use the shared atomic exporter.
+- Native headless execute operations analyze(CV/DLCPPolynomial/AS/Arrhenius),
+  edit_defect, area, delete_measurement, save, open and export. These use the same
+  commands/jobs as the GUI; no alternate calculation path. Requests/results are
+  JSON, references are stable IDs and errors have codes. Headless PNG requires
+  explicit resolved ranges and accepts graph_id plus per-plot visibility.
+- Measurement deletion uses the existing undoable document-change command.
+  Removed inputs remain referenced by their original IDs; dependent results become
+  missing_input. Archived engine curves and historical snapshots are retained.
+  Undo/Redo restores the full project and statuses. Area/point edits propagate
+  stale status; manual T/f Arrhenius correctly remains valid after an area change.
+- Full P1 synthetic workflow: import CV and raw DLCP with AS, fit both, approve
+  defect points, fit Arrhenius, select CV/Arrhenius inputs for Walter, save/open,
+  CSV/XLSX and PNG. Full IS workflow: independent analytic Randles measurement,
+  simulation, fit draft, explicit acceptance, save/open with all inputs/results.
+
+| Acceptance | Spec value | Ours | Diff | Verdict |
+|---|---|---|---|---|
+| P1 | Preserve data/IDs/relations/models/ranges/results after save/open | Full project JSON equality | 0 changed fields | PASS |
+| P2 deletion | Missing inputs retain IDs; no rebinding | AS/Walter missing_input; source IDs retained | 0 rebound references | PASS |
+| P2 Undo/Redo | Restore original/edited document and statuses | Native Core Undo/Redo exact serialized equality | 0 changed fields | PASS |
+| Parameter/point edits | Dependent analyses stale | CV/DLCP/AS/Walter stale after area edit; manual Arrhenius valid; point edit invalidates Arrhenius/Walter | 0 incorrect statuses | PASS |
+| E1 XLSX | Values, units, models, parameters, provenance | Metadata equals lossless CSV; headers Hz/F/Ohm; raw first row 100 Hz / 3e-12 F / 1e6 Ohm | 0 value/metadata differences | PASS |
+| E1 PNG | Same visible series/ranges/styles as snapshot | Worker snapshot equals renderer input; actual figure limits equal supplied limits, visibility by plot ID | 0 snapshot differences | PASS (automated) |
+| Synthetic CV | Vb=0.8 V; N=1e21 m^-3 | Both within relative 1e-6 | <1e-6 relative | PASS |
+| Synthetic IS fit | R0=20 Ohm; R1=500 Ohm; C1=20e-6 F | Every accepted fitted value within relative 1e-3 | <1e-3 relative | PASS |
+| Missing runtime/export dependency, failed save/export | Explicit errors; preserve source/destination/document | Native missing-runtime error; injected PNG dependency error; save/open/export_failed; old files preserved | 0 silent successes | PASS |
+| Release / embedded runtime | Release builds and C++/Python regression | All required suites passed with --require-embedding | 0 failed tests | PASS |
+| Start/exit and visual smoke all modules | Start, clean exit, inspected GUI | Computer Use launch denied before start | Not measured | BLOCKED |
+
+Frozen sources:
+- tests/fixtures/m8/sources.json indexes data_Cd, data_IDUB, data_scaps_ref and
+  synthetic tables, SHA-256 hashes, independent expected-value citations and
+  tolerances. It links prior M1/M2/M7 manifests rather than copying those sources.
+- m8/synthetic.json freezes literal CV values and full independently generated
+  raw DLCP and analytic Randles arrays, expected parameters and equations. Tests
+  compare imported data with these arrays before fitting. No expected quantity
+  is calculated by an SST kernel under test.
+- The full existing PFS I1?I5, D1, C1?C5, A1?A7 and W1?W3 suites ran again.
+  W1/W2/W3 saved-integral relative differences remain 7.95e-12 / 9.37e-12 /
+  9.31e-11 (limit 1e-4). Owner ?8 limits historical Walter compatibility to
+  saved-spectrum integrals; historical full-spectrum reconstruction is unsupported.
+  The inherited A7 project/thesis conflict remains explicit (0.156167136 versus
+  0.170 eV); M8 neither invents missing source points nor changes that result.
+
+Final validation was run from the SST-Prototypes root, each build/test wrapped
+by bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh. MSBuild used
+-nr:false -m:1. Release x64 outputs are in SST-Prototypes/build/; referenced
+library targets were built in SST-Libraries/build/. No TEMP fallback was needed.
+No standalone library suite was run because no library source was changed.
+
+| Suite | C++ PASS | pytest PASS | Other |
+|---|---:|---:|---|
+| CapLab | 34 | 164 | --require-embedding; 1 existing cache_dir warning |
+| PlotLab | 10 | 22 | --require-embedding |
+| JFM | 71 | 96 | --require-embedding; 3 xfail, 946 numerical warnings |
+
+CapLab adds one native missing-runtime test and nine embedded pytest cases.
+The filtered EmbeddedRoundtrip invocation hosting pytest is not counted twice.
+Native integration also checks delete -> missing_input -> Undo/Redo and exact
+project restoration. Tests independently read CSV and XLSX ZIP/XML, including
+raw numeric worksheet values; render real PNGs for every result graph in CV,
+DLCP, AS, Arrhenius, Walter and IS; compare snapshots/visibility and figure limits;
+check cancellation and injected replacement/dependency failures. PNG bytes and
+figure assertions are automated checks, not visual QA. XLSX was not opened in
+Microsoft Excel during this job.
+
+Exact commands:
+```
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py CapLab --app --configuration Release
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py CapLab --require-embedding --configuration Release
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py PlotLab --require-embedding --configuration Release
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py JFM --require-embedding --configuration Release
+```
+
+Evidence:
+- build/cm8-app.log ? successful normal Release CapLab.exe build with references;
+  installed caplab/exporter.py SHA-256 matched source after deployment.
+- build/cm8-caplab-final.log ? final 34 GTest / 164 embedded pytest PASS after
+  the last source/fixture/test edits. Earlier failed assertions/build attempts
+  are superseded by this complete successful run.
+- build/cm8-plotlab.log and build/cm8-jfm.log ? full Release regressions.
+- build/caplab-validation/CapLab/tmp/ ? generated P1 CSV/XLSX and per-graph PNGs.
+- build/caplab-m7-W1.json / W2.json / W3.json ? regenerated independent PFS
+  saved-integral comparisons from the current full CapLab run.
+- build/cm8-graphify.log and cm8-graphify-final.log ? mandatory AST-only update;
+  warnings mention missing SQL extractor, unsupported .m files, zero-node JSON
+  and oversized HTML visualization. Check the final graph-written message;
+  PowerShell treats these stderr warnings as an error even when graph is saved.
+
+Runtime attempt: after the successful Release app build, one Computer Use
+sky.launch_app request targeted
+D:/SJCM/01_SemiconductorStudio/SST-Prototypes/build/bin/Release-windows-x86_64/CapLab/CapLab.exe.
+Automatic access review rejected it: "Computer Use was not approved to use caplab".
+The process was not confirmed started; clean exit could not be checked. No shell
+launcher or alternate UI control bypassed the rejection. VISUAL QA NOT RUN.
+
+Closed question: should CapLab be enabled in Computer Use for start/exit and
+visual smoke of all modules? Recommendation: yes; this is the remaining M8
+runtime acceptance blocker. No new physics/model decision is needed.

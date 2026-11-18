@@ -1,4 +1,4 @@
-# CapLab - M7 Walter spectra
+# CapLab ? M8 v1 workflow and export
 
 Core owns commands, EventBus, Undo, jobs, progress, diagnostics and embedded
 Python. PlotLab-Engine owns tables, row/object IDs and graphs. No dependencies
@@ -91,9 +91,9 @@ Project save/open retains inputs, constants, materials, settings, covariance,
 residuals, profiles, graph IDs and results. The CapLab window uses W1's
 EditorWindow base. Select a result graph to view C-V, A2/C2 with fit, CV/DLCP
 profiles, amplitude fit or residuals. Existing PlotLab snapshot PNG export
-exports the selected graph. Full CSV/XLSX workflows remain M8.
+exports the selected graph. CSV/XLSX project-data export is available (M8).
 
-IS and Walter analysis (M5+) and full CSV/XLSX export (M8) remain outside M4. Frozen source paths/hashes are recorded in
+The following CM3/CM4 notes are historical validation records. Frozen source paths/hashes are recorded in
 `tests/fixtures/m2/sources.json`; PFS I2 remains in
 `tests/fixtures/manifest.json`.
 
@@ -289,7 +289,7 @@ the ID is absent or the job has already stopped. Other document operations
 require the Core main thread and return invalid_request on a wrong thread.
 GUI jobs support interactive stop. Other typed errors are fit_failed and
 cancelled. Dropping a headless draft discards it without mutation.
-M7 Walter and M8 complete data exports remain outside this milestone.
+M7 Walter and M8 data exports are described below.
 
 
 CM6 validation: 33 GTest + 116 pytest; PlotLab 9/22, JFM 67/96 + 3 xfail.
@@ -361,7 +361,7 @@ walter.dist_for_integration slice and records its original selection/range.
 Owner decision §8 limits W1–W3 compatibility to these saved integrals; full
 historical spectrum reconstruction remains unsupported. Source file and slice
 hashes, sample counts, intervals, independent PFS expectations and tolerances
-are frozen in tests/fixtures/m7/sources.json. M8 CSV/XLSX workflow is separate.
+are frozen in tests/fixtures/m7/sources.json. M8 completes the CSV/XLSX workflow below.
 
 CM7 numerical acceptance: CapLab 33 GTest / 155 pytest; PlotLab 10 / 22;
 JFM 71 / 96 plus 3 xfail; SST-LibrariesTests 107 GTest. Debug builds use
@@ -370,3 +370,67 @@ W1-W3 relative differences are 7.95e-12 / 9.37e-12 / 9.31e-11 (limit 1e-4).
 One post-build Computer Use launch was rejected: "Computer Use was not approved
 to use caplab". Start/exit remains unverified; VISUAL QA NOT RUN.
 See VALIDATION.md for exact values, commands, logs, scope and remaining gaps.
+
+
+## M8 ? complete workflow and exports
+
+The existing export command accepts `.csv`, `.xlsx` or `.png` destinations.
+CSV/XLSX export the entire project data, including every measurement, stable IDs,
+units, model/version, settings, parameters, masks, residuals and provenance.
+CSV is a lossless `path,value_json` table using JSON pointers and explicit JSON
+nulls. XLSX has the same Metadata table plus a numeric worksheet per measurement
+with unit-bearing column headers, original source rows and stable row IDs.
+XLSX uses standard-library OOXML inline strings: imported text never becomes an
+Excel formula. Files exceeding Excel's row/column/text limits fail explicitly;
+CSV remains available. Data exports and the shared PlotLab PNG exporter replace
+the destination atomically, preserving the original on failure.
+
+PNG exports only the active graph's visible series with its resolved preview
+ranges, styles, units, legend and dimensions through the existing PlotLab
+snapshot/exporter. Nyquist preserves equal physical axis scales. Missing runtime,
+missing PNG dependencies, unresolved viewport and failed writes are explicit
+errors. CSV/XLSX require embedded Python but no additional packages.
+
+Delete measurement (Undo) removes the domain input and marks dependent results
+missing_input. Saved engine curves and historical references retain their original
+IDs; deletion never reconnects an analysis to a different measurement. Core Undo/
+Redo restores the full document, including statuses. Area and defect point edits
+also refresh downstream results. Release regression covers import ? CV/raw DLCP
+? AS ? approved defect points ? Arrhenius ? Walter ? save/open/export, plus
+measurement ? IS simulation ? fit draft ? accept ? save/open.
+
+Additional JSON operations use the same native commands/jobs as the GUI:
+
+```python
+from caplab import execute
+r = execute(project, {"operation": "analyze", "settings": {
+    "type": "AS", "measurement_id": measurement_id}})
+project = r["project"]
+execute(project, {"operation": "save", "path": "sample.caplab.json"})
+opened = execute(project, {"operation": "open", "path": "sample.caplab.json"})
+execute(project, {"operation": "export", "path": "sample.xlsx"})
+execute(project, {"operation": "export", "path": "plot.png",
+    "graph_id": graph_id, "ranges": [100, 1e6, 0, 1e-9],
+    "visibility": [{"plot_id": plot_id, "visible": True}]})
+```
+
+`analyze` accepts the existing CV, DLCPPolynomial, AS and Arrhenius settings;
+Walter and circuit operations retain their existing API. `edit_defect` takes the
+same `edit` object as the defect command; `area` takes `sample_id,area_m2`;
+`delete_measurement` takes `measurement_id`. Save/open/export return `save_failed/open_failed/export_failed`; analysis errors
+use `analysis_failed`. All return JSON `ok/project/error` envelopes. PNG additionally
+returns the actual exporter snapshot in `export`; its ranges must be supplied
+explicitly for headless use. Selection uses stable graph/plot IDs. PNG export
+changes the active graph selection only if `graph_id` is provided.
+
+Frozen sources and independent tolerances are indexed by
+`tests/fixtures/m8/sources.json`, linking the M1/M2/M7 manifests and the independent
+synthetic SI inputs. No expected result is generated by the kernel under test.
+Release validation commands (run from repository root):
+
+```powershell
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py CapLab --require-embedding --configuration Release
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py CapLab --app --configuration Release
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py PlotLab --require-embedding --configuration Release
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py JFM --require-embedding --configuration Release
+```

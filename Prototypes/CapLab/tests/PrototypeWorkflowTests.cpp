@@ -3,6 +3,8 @@
 #include "Core/IO/TextFileIO.hpp"
 #include "CapLabCommands.hpp"
 #include "TestProject.hpp"
+#include "IO/PrototypePythonBindings.hpp"
+#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 namespace SST::Prototypes::CapLab {
 static Path Temp(const char *name) { return Path{FileSystem::TempDirectoryPath()/name}; }
 TEST(CapLabDocument, OlderSaveAndStaleOpenKeepNewerRevision) {
@@ -174,5 +176,18 @@ TEST(CapLabWorkflow, UnicodeImportAndProjectRoundtrip) {
     ASSERT_TRUE(open.opened);
     EXPECT_EQ(Serialize(*open.opened),Serialize(project));
     EXPECT_EQ(std::get<pl::Worksheet>(open.opened->engine->object(open.opened->sweeps[0].id).data).source.at("path"),source.Utf8());
+}
+}
+
+namespace SST::Prototypes::CapLab {
+TEST(CapLabWorkflow, MissingExportRuntimeIsExplicit) {
+    ASSERT_FALSE(PythonInterpreter::IsRuntimeInitialized());
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    try {
+        (void)ExportData(FixtureProject(),Temp("caplab-no-runtime.csv"),context);
+        FAIL() << "Export without a runtime must fail";
+    } catch (const std::runtime_error &error) {
+        EXPECT_NE(std::string(error.what()).find("Embedded Python unavailable"),std::string::npos);
+    }
 }
 }

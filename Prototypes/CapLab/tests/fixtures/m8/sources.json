@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "files": [
+    {
+      "source_family": "data_Cd",
+      "file": "m2/data_Cd/#139_Std_5.5mm2/DL/#139_DL_1e4Hz_mp_199K_REL_Umin-2000mV_10022014.dat",
+      "sha256": "fd7dd5c481660c203c4bd7c3bcbf7ae168a1f126ff58109f345f1ef132ac982a",
+      "expected_source": "PFS C1 / thesis table 4.2",
+      "tolerance": "published rounding; project relative 1e-6"
+    },
+    {
+      "source_family": "data_IDUB",
+      "file": "m2/#002_CIGS2014_REL_DL1e5Hz_300K.dat",
+      "sha256": "fc6404304c7104b452c25765e9a30f2643a8f71ae54f271c74c53b33f7476051",
+      "expected_source": "PFS D1",
+      "tolerance": "source precision"
+    },
+    {
+      "source_family": "data_scaps_ref",
+      "file": "m2/benchmark_propho.cf",
+      "sha256": "85e66da59fce09290c60aaa20be5c306460c50890cc567c85f53b229bb8bf835",
+      "expected_source": "PFS ?2 SCAPS SI area conversion",
+      "tolerance": "relative 1e-12"
+    },
+    {
+      "source_family": "synthetic",
+      "file": "m8/synthetic.json",
+      "sha256": "ea6256bced4ff0d540ea833735dbc64fb166313e6b97187777de748794cf4932",
+      "expected_source": "Spec ?4.1, ?6 M3/M6 independent SI equations",
+      "tolerance": "CV relative 1e-6; Randles relative 1e-3"
+    }
+  ],
+  "previous_manifests": [
+    "../manifest.json",
+    "../m2/sources.json",
+    "../m7/sources.json"
+  ]
+}

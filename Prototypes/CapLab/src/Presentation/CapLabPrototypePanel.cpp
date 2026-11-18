@@ -180,6 +180,15 @@ void CapLabPrototypePanel::RenderContent() {
         }
         ImGui::PopID();
     }
+    if (ImGui::CollapsingHeader("Delete measurement (Undo)")) {
+        std::vector<pl::Id> ids;
+        for (const auto &m : doc.project.measurements) ids.push_back(m.at("id").get<pl::Id>());
+        for (const auto &m : doc.project.sweeps) ids.push_back(m.id);
+        for (auto id : ids) if (ImGui::Button(("Delete measurement "+std::to_string(id)).c_str())) {
+            CommandContext c; c.Set("edit",Json{{"measurement_id",id}});
+            (void)commands->Execute(CommandID{"caplab.measurement"},std::move(c)); return;
+        }
+    }
     RenderWalter();
     RenderIS();
     RenderAS();
@@ -197,7 +206,7 @@ void CapLabPrototypePanel::RenderContent() {
                 {pendingCandidate=a.at("candidates").at(state->view.picked->point); pendingCandidate["analysis_id"]=a.at("id");}
             state->view.picked.reset();
         }
-        if (ImGui::Button("Export active plot PNG...")) (void)commands->Execute(CommandID{"caplab.export"});
+        if (ImGui::Button("Export CSV / XLSX / PNG...")) (void)commands->Execute(CommandID{"caplab.export"});
     }
     ImGui::TextWrapped("%s", state->status.c_str());
     if (const auto job = state->jobs->GetJob(state->activeJob)) {

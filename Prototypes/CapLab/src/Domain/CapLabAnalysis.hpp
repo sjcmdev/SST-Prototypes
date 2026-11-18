@@ -68,6 +68,14 @@ inline void EditDefect(Project &p, const Json &edit) {
     }
     Validate(p);
 }
+inline void DeleteMeasurement(Project &p, pl::Id id) {
+    const bool found=std::any_of(p.measurements.begin(),p.measurements.end(),[&](const auto &m) {return m.at("id")==id;}) ||
+        std::any_of(p.sweeps.begin(),p.sweeps.end(),[&](const auto &m) {return m.id==id;});
+    if (!found) throw std::runtime_error("Missing measurement.");
+    // Keep engine objects used by saved graphs; remove the domain input without rebinding IDs.
+    p.measurements.erase(std::remove_if(p.measurements.begin(),p.measurements.end(),[&](const auto &m) {return m.at("id")==id;}),p.measurements.end());
+    p.sweeps.erase(std::remove_if(p.sweeps.begin(),p.sweeps.end(),[&](const auto &m) {return m.id==id;}),p.sweeps.end());
+}
 inline void RefreshAnalyses(Project &p) {
     for (auto &a : p.analyses) {
         bool missing = false, stale = false;

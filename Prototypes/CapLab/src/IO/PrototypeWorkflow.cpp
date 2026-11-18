@@ -120,6 +120,11 @@ namespace SST::Prototypes::CapLab
         }
         else
         {
+            const auto format=path.Native().extension().string();
+            if (format==".csv" || format==".xlsx") {
+                preview=ExportData(Parse(input),path,context);
+            } else {
+            if (format!=".png") throw std::runtime_error("Choose CSV, XLSX or PNG export.");
             if (!snapshot) throw std::runtime_error("No current graph snapshot.");
             const auto executable = Platform::CurrentExecutablePath();
             if (!executable) throw std::runtime_error(executable.Error().technicalDetails);
@@ -132,10 +137,12 @@ namespace SST::Prototypes::CapLab
                 const double ratio=(equal.ranges.maxX-equal.ranges.minX)/(equal.ranges.maxY-equal.ranges.minY);
                 if (ratio>equal.widthMm/equal.heightMm) equal.heightMm=equal.widthMm/ratio;
                 else equal.widthMm=equal.heightMm*ratio;
+                preview=Json::parse(PlotLab::SnapshotJson(equal));
                 PlotLab::ExportGraph(equal,path.Native(),"png",300,pythonRoot);
-            } else PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot);
+            } else {preview=Json::parse(PlotLab::SnapshotJson(*snapshot)); PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot); }
+            }
         }
-        if (!saveCommitted) context.ThrowIfCancellationRequested();
+        if (!saveCommitted && operation!=Operation::Export) context.ThrowIfCancellationRequested();
         context.SetProgress(1,1);
     }
     void CapLabWorkflow::Start(Operation operation, Path target)
@@ -149,17 +156,17 @@ namespace SST::Prototypes::CapLab
                 if (operation == Operation::Save) target = document.path;
                 if (target.Empty())
                 {
-                    const NativeFileDialogFilter filter{operation == Operation::Preview ? "CapLab measurements / ProPho" : "CapLab project", operation == Operation::Preview ? "dat,txt,csv,cf,cv,json" : operation == Operation::Export ? "png" : "json"};
+                    const NativeFileDialogFilter filter{operation == Operation::Preview ? "CapLab measurements / ProPho" : operation == Operation::Export ? "CapLab export (choose extension)" : "CapLab project", operation == Operation::Preview ? "dat,txt,csv,cf,cv,json" : operation == Operation::Export ? "csv,xlsx,png" : "json"};
                     const auto selected = operation == Operation::Save || operation == Operation::Export
                         ? SaveFileDialog(filter,operation == Operation::Save ? "project.caplab.json" : "cf.png") : OpenFileDialog(filter);
                     if (!selected) { status = "Dialog cancelled."; return; }
                     target = *selected;
                 }
             }
-            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save || operation == Operation::Analyze ? Serialize(document.project) : "",target);
+            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save || operation == Operation::Analyze || operation == Operation::Export ? Serialize(document.project) : "",target);
             job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
-            if (operation == Operation::Export) job->snapshot = pl::snapshotGraph(*document.project.engine,document.project.graph,view);
+            if (operation == Operation::Export && target.Native().extension()==".png") job->snapshot = pl::snapshotGraph(*document.project.engine,document.project.graph,view);
             pendingRevision = document.revision;
             activeJob = jobs->Submit(job);
             if (!activeJob) throw std::runtime_error("Job submission failed.");
@@ -185,7 +192,7 @@ namespace SST::Prototypes::CapLab
         else if (job->status == JobStatus::Completed)
         {
             status = "Completed.";
-            if (pending->operation == Operation::Export) status = "Exported PNG.";
+            if (pending->operation == Operation::Export) {status = "Exported."; exportResult=pending->preview;}
             else if (document.revision != pendingRevision) status = "Stale revision: result discarded.";
             else if (pending->operation == Operation::Analyze)
             {

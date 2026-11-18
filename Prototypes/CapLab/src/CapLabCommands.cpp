@@ -65,25 +65,25 @@ private:
 };
 class DefectChange final : public ICommand {
 public:
-    DefectChange(CapLabWorkflow &state, bool circuit=false) : state(state), circuit(circuit) {}
+    DefectChange(CapLabWorkflow &state, bool circuit=false, bool measurement=false) : state(state), circuit(circuit), measurement(measurement) {}
     Result<void> Execute(CommandContext &context) override {
         try {
             const auto *edit=context.TryGet<Json>("edit");
             if (!edit) throw std::runtime_error("Missing defect edit.");
             before=state.document.project;
             auto draft=Parse(Serialize(before));
-            if (circuit) EditCircuit(draft,*edit); else EditDefect(draft,*edit); RefreshAnalyses(draft); after=std::move(draft);
+            if (measurement) DeleteMeasurement(draft,edit->at("measurement_id").get<pl::Id>()); else if (circuit) EditCircuit(draft,*edit); else EditDefect(draft,*edit); RefreshAnalyses(draft); after=std::move(draft);
             state.document.project=after; state.Changed(); return {};
         } catch (const std::exception &e) {
-            state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,circuit ? "Circuit edit failed" : "Defect edit failed",e.what(),"Check input and sample.","CapLab",circuit ? "caplab.circuit" : "caplab.defect"};
+            state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,measurement ? "Measurement removal failed" : circuit ? "Circuit edit failed" : "Defect edit failed",e.what(),"Check input and sample.","CapLab",measurement ? "caplab.measurement" : circuit ? "caplab.circuit" : "caplab.defect"};
         }
     }
     Result<void> Undo(CommandContext &) override {state.document.project=before; state.Changed(); return {};}
     Result<void> Redo(CommandContext &) override {state.document.project=after; state.Changed(); return {};}
     bool IsUndoable() const noexcept override {return true;}
-    std::string Description() const override {return circuit ? "Edit circuit" : "Edit defect";}
+    std::string Description() const override {return measurement ? "Delete measurement" : circuit ? "Edit circuit" : "Edit defect";}
 private:
-    CapLabWorkflow &state; bool circuit; Project before,after;
+    CapLabWorkflow &state; bool circuit,measurement; Project before,after;
 };
 class ImportCommand final : public ICommand {
 public:
@@ -118,6 +118,9 @@ void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWo
     auto cancel=registry->Register({CommandID{"caplab.cancel"},"Cancel / discard draft","CapLab"},
         [&state](CommandContext &) {return CreateUnique<CancelCommand>(state);});
     if (!cancel) throw std::runtime_error(cancel.Error().technicalDetails);
+    auto measurement=registry->Register({CommandID{"caplab.measurement"},"Delete measurement","CapLab","",{},CommandFlags::Undoable},
+        [&state](CommandContext &) {return CreateUnique<DefectChange>(state,false,true);});
+    if (!measurement) throw std::runtime_error(measurement.Error().technicalDetails);
     auto circuit=registry->Register({CommandID{"caplab.circuit"},"Edit circuit","CapLab","",{},CommandFlags::Undoable},
         [&state](CommandContext &) {return CreateUnique<DefectChange>(state,true);});
     if (!circuit) throw std::runtime_error(circuit.Error().technicalDetails);
@@ -130,10 +133,11 @@ void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWo
         if (!r) throw std::runtime_error(r.Error().technicalDetails);
     }
     for (const auto &[id, name, operation] : {
+        std::tuple{"caplab.save", "Save CapLab project", Operation::Save},
         std::tuple{"caplab.analyze", "Analyze CapLab data", Operation::Analyze},
         std::tuple{"caplab.preview", "Import measurements", Operation::Preview},
         std::tuple{"caplab.open", "Open CapLab project", Operation::Open},
-        std::tuple{"caplab.export", "Export active plot PNG", Operation::Export}}) {
+        std::tuple{"caplab.export", "Export CSV / XLSX / PNG", Operation::Export}}) {
         auto result = registry->Register({CommandID{id}, name, "CapLab"},
             [bus, operation](CommandContext &) { return CreateUnique<RequestCommand>(bus, operation); });
         if (!result) throw std::runtime_error(result.Error().technicalDetails);
