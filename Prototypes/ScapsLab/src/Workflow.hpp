@@ -12,7 +12,7 @@ scaps_core::DeviceProject Model(const Json &document);
 void WriteProject(const Json &document, const std::string &path);
 class Operation final : public IJob {
 public:
-    Json document, request, output;
+    Json document, request, output, acResults;
     Operation(Json d, Json r) : document(std::move(d)), request(std::move(r)) {}
     std::string GetName() const override { return "ScapsLab " + request.at("operation").get<std::string>(); }
     std::string GetType() const override { return "scapslab.operation"; }
@@ -22,7 +22,7 @@ class Workflow final : public Layer {
 public:
     explicit Workflow(Ref<JobSystem> jobs, Ref<CommandRegistry> registry = {});
     ~Workflow() override;
-    Json document, result = Json::object(), response;
+    Json document, result = Json::object(), acResults = Json::object(), response;
     std::string status = "Ready", path;
     Ref<JobSystem> jobs;
     Ref<CommandRegistry> commands;

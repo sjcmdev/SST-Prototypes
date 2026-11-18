@@ -39,3 +39,21 @@ with tempfile.TemporaryDirectory(prefix='scapslab-headless-') as output:
 assert not session.execute({'operation':'edit','patch':{'temperature_K':-1}})['ok']
 assert not session.execute({'operation':'unknown'})['ok']
 
+
+for kind in ('cv', 'cf'):
+    response = session.execute(dict(operation=kind, start_V=-0.1, stop_V=0.1, step_V=0.1,
+        frequency_Hz=1e4, voltage_V=0.0, start_Hz=10.0, stop_Hz=1e6, points=9, temperature_K=300.0))
+    assert response['ok'], response
+    ac = response['ac_results'][kind]
+    assert ac['points'] and all(p['point_id'].startswith(kind + '-') for p in ac['points'])
+    assert all(p['capacitance_F'] is not None for p in ac['points']), ac
+    with tempfile.TemporaryDirectory(prefix='scapslab-ac-') as output:
+        path = str(Path(output) / 'ac.csv')
+        assert session.execute(dict(operation='export_ac', kind=kind, path=path))['ok']
+        with open(path) as stream:
+            rows = list(csv.DictReader(stream))
+        assert len(rows) == len(ac['points'])
+        for row, point in zip(rows, ac['points']):
+            assert float(row['capacitance_F']) == point['capacitance_F']
+            assert float(row['conductance_S']) == point['conductance_S']
+print('Python AC commands + CSV: C-V and C-f verified', flush=True)

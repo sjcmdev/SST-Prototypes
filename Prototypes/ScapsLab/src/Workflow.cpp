@@ -7,6 +7,9 @@
 #include <chrono>
 #include <cmath>
 #include <set>
+#include <sstream>
+#include <iomanip>
+#include <numbers>
 #include <thread>
 namespace SST::ScapsLab {
 namespace {
@@ -60,7 +63,7 @@ public:
             return {};
         }
         if (w.Busy()) return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","A job is still active","Wait or cancel","ScapsLab","busy"};
-        w.pending=CreateRef<Operation>(w.document,*r); w.response=Json();
+        w.pending=CreateRef<Operation>(w.document,*r); w.pending->acResults=w.acResults; w.response=Json();
         w.active=w.jobs->Submit(w.pending); w.status="Running"; return {};
     }
 };
@@ -133,6 +136,63 @@ void Operation::Execute(JobContext &ctx) {
             } else throw std::invalid_argument("Unknown layer action");
         }
         (void)Model(document);
+    } else if (op=="export_ac") {
+        const auto kind=request.at("kind").get<std::string>();
+        if ((kind!="cv" && kind!="cf") || !acResults.contains(kind)) throw std::invalid_argument("No AC result for kind");
+        std::ostringstream csv; csv << std::setprecision(17);
+        csv << "point_id,voltage_V,frequency_Hz,temperature_K,capacitance_F,conductance_S,G_over_omega_F,inverse_C2_F_minus2,status\n";
+        for (const auto &pt:acResults.at(kind).at("points")) {
+            ctx.ThrowIfCancellationRequested();
+            for(const auto *key:{"point_id","voltage_V","frequency_Hz","temperature_K","capacitance_F","conductance_S","G_over_omega_F","inverse_C2_F_minus2","status"}) {
+                if (std::string(key)!="point_id") csv << ',';
+                const auto &v=pt.at(key); if(v.is_string()) csv << v.get<std::string>(); else if(!v.is_null()) csv << v.dump();
+            }
+            csv << '\n';
+        }
+        ctx.ThrowIfCancellationRequested(); SaveText(Path{request.at("path").get<std::string>()}.Native(),csv.str());
+    } else if (op=="cv" || op=="cf") {
+        const auto p=Model(document); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        const double T=request.at("temperature_K"); Positive(T,"temperature_K");
+        std::vector<double> volts, frequencies;
+        if(op=="cv") {
+            const double start=request.at("start_V"), stop=request.at("stop_V"), step=request.at("step_V"), f=request.at("frequency_Hz");
+            Positive(f,"frequency_Hz");
+            if(!std::isfinite(start) || !std::isfinite(stop) || !std::isfinite(step) || step==0 || (stop-start)*step<0 || std::abs((stop-start)/step)>10000)
+                throw std::invalid_argument("Invalid C-V range (maximum 10001 points)");
+            const double actualStep=std::copysign(std::max(std::abs(step),1e-12),step);
+            if(start!=stop && (start+actualStep==start || stop+actualStep==stop || !std::isfinite(stop+actualStep)))
+                throw std::invalid_argument("C-V step cannot advance the voltage range");
+            volts=start==stop?std::vector<double>{start}:make_voltage_list({start,stop,step}); for(auto &v:volts) v=-v; frequencies={f};
+        } else {
+            const double v=request.at("voltage_V"), first=request.at("start_Hz"), last=request.at("stop_Hz");
+            Positive(first,"start_Hz"); Positive(last,"stop_Hz");
+            const auto &count=request.at("points");
+            if(!std::isfinite(v) || last<first || !count.is_number_integer() || count.get<double>()<2 || count.get<double>()>10001)
+                throw std::invalid_argument("Invalid C-f range (2..10001 points)");
+            volts={-v}; const int n=count.get<int>();
+            for(int i=0;i<n;++i) frequencies.push_back(i==0?first:i==n-1?last:std::exp(std::log(first)+(std::log(last)-std::log(first))*i/(n-1)));
+        }
+        ctx.SetStage("Preparing AC mesh (cancel checked after preparation)");
+        const auto mesh=prepare_mesh(device,p.mesh,volts,{T},p.solver,pc);
+        ctx.ThrowIfCancellationRequested();
+        output={{"kind",op},{"mesh_x_m",mesh.x_m},{"area_m2",device.external.area_m2},{"points",Json::array()},
+            {"voltage_convention","consumer: left minus right; Y = G + j omega C"}};
+        IVPoint dc;
+        const auto total=op=="cv"?volts.size():frequencies.size();
+        auto finite=[](double x)->Json {return std::isfinite(x)?Json(x):Json(nullptr);};
+        for(std::size_t i=0;i<total;++i) {
+            ctx.ThrowIfCancellationRequested(); ctx.SetStage("AC point "+std::to_string(i+1)+" / "+std::to_string(total));
+            if(op=="cv" || i==0) {
+                // shortcut: replay DC prefixes for exact core continuation; use a cancellable core step API when exposed.
+                dc=solve_iv(device,mesh,std::vector<double>(volts.begin(),volts.begin()+(op=="cv"?i+1:1)),T,p.solver,pc).back();
+            }
+            ctx.ThrowIfCancellationRequested();
+            const auto ac=solve_ac_spectrum(device,mesh,dc,{frequencies[op=="cv"?0:i]},1e-3,pc).front();
+            output["points"].push_back({{"point_id",op+"-"+std::to_string(i)},{"voltage_V",-ac.voltage_V},{"frequency_Hz",ac.frequency_Hz},{"temperature_K",T},
+                {"capacitance_F",finite(ac.C_F)},{"conductance_S",finite(ac.G_S)},{"G_over_omega_F",finite(ac.G_S/(2*std::numbers::pi*ac.frequency_Hz))},
+                {"inverse_C2_F_minus2",finite(1/(ac.C_F*ac.C_F))},{"status",to_string(ac.status)},{"conservation_relative",finite(ac.current_conservation_relative)}});
+            ctx.SetProgress(float(i+1),float(total));
+        }
     } else if (op=="run") {
         const auto p=Model(document); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         auto volts=make_voltage_list(p.voltage); for(auto &v:volts) v=-v;
@@ -164,10 +224,10 @@ void Operation::Execute(JobContext &ctx) {
             ctx.SetProgress(float(i+1),float(volts.size()));
         }
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
-    if(op!="save") ctx.ThrowIfCancellationRequested();
+    if(op!="save" && op!="export_ac") ctx.ThrowIfCancellationRequested();
 }
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()) {
-    for(const auto *op:{"load","save","edit","layer","run","inspect","cancel"}) {
+    for(const auto *op:{"load","save","edit","layer","run","cv","cf","export_ac","inspect","cancel"}) {
         const auto registered=commands->Register({CommandID{std::string("scapslab.")+op},std::string("ScapsLab ")+op,"ScapsLab","",{},CommandFlags::AsyncCapable},
             [this](CommandContext &){return CreateUnique<Command>(*this);});
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
@@ -188,10 +248,11 @@ void Workflow::OnUpdate(float) {
     if(snapshot->status==JobStatus::Completed) {
         document=pending->document;
         if(op=="run") result=pending->output;
-        if(op=="edit" || op=="layer" || op=="load") result=Json::object();
+        if(op=="cv" || op=="cf") acResults[op]=pending->output;
+        if(op=="edit" || op=="layer" || op=="load") {result=Json::object();acResults=Json::object();}
         if(op=="load" || op=="save") { path=pending->request.at("path"); dirty=false; }
         if(op=="edit" || op=="layer") dirty=true;
-        status="Completed: "+op; response={{"ok",true},{"document",document},{"result",result},{"error",nullptr}};
+        status="Completed: "+op; response={{"ok",true},{"document",document},{"result",result},{"ac_results",acResults},{"error",nullptr}};
     } else {status=snapshot->errorMessage; response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);}
     active=0; pending.reset();
 }

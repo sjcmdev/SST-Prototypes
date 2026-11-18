@@ -96,3 +96,48 @@ TEST(ScapsLab,EmbeddedPythonRunAndHeadlessCsv) {
 }
 
 
+
+TEST(ScapsLab,ACMatchesCoreAndExports) {
+    using namespace scaps_core;
+    const auto p=load_device_project_yaml(SCAPSLAB_PROJECT);
+    const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+    Workflow w(CreateRef<JobSystem>(nullptr,1)); w.document=ReadProject(SCAPSLAB_PROJECT);
+    for(const auto *kind:{"cv","cf"}) {
+        const Json request={{"operation",kind},{"start_V",-0.2},{"stop_V",0.2},{"step_V",0.2},{"frequency_Hz",1e4},
+            {"voltage_V",0.1},{"start_Hz",10.0},{"stop_Hz",1e5},{"points",5},{"temperature_K",p.temperature_K}};
+        const auto response=Execute(w,request); ASSERT_TRUE(response.at("ok").get<bool>())<<response.dump();
+        const auto &result=w.acResults.at(kind); const auto &points=result.at("points");
+        std::vector<double> volts,frequencies;
+        for(const auto &point:points) {
+            if(std::string(kind)=="cv") volts.push_back(-point.at("voltage_V").get<double>());
+            else frequencies.push_back(point.at("frequency_Hz"));
+        }
+        if(std::string(kind)=="cf") volts={-0.1};
+        const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);
+        const auto expected=std::string(kind)=="cv"?solve_cv(device,mesh,volts,p.temperature_K,1e4,p.solver,pc):solve_cf(device,mesh,-0.1,p.temperature_K,frequencies,p.solver,pc);
+        EXPECT_EQ(result.at("mesh_x_m").get<std::vector<double>>(),mesh.x_m);
+        ASSERT_EQ(points.size(),expected.size());
+        for(std::size_t i=0;i<expected.size();++i) {
+            const auto &e=expected[i]; const auto &actual=points[i];
+            ASSERT_EQ(e.status,SolverStatus::Converged); EXPECT_EQ(actual.at("status"),to_string(e.status));
+            EXPECT_EQ(actual.at("voltage_V"),-e.voltage_V); EXPECT_EQ(actual.at("frequency_Hz"),e.frequency_Hz);
+            EXPECT_NEAR(actual.at("capacitance_F").get<double>(),e.C_F,std::abs(e.C_F)*1e-12);
+            EXPECT_NEAR(actual.at("conductance_S").get<double>(),e.G_S,std::abs(e.G_S)*1e-12);
+        }
+        const auto csv=Temp("scapslab-ac.csv");
+        ASSERT_TRUE(Execute(w,{{"operation","export_ac"},{"kind",kind},{"path",csv.string()}}).at("ok").get<bool>());
+        std::ifstream stream(csv); std::string line; ASSERT_TRUE(bool(std::getline(stream,line)));
+        EXPECT_EQ(line,"point_id,voltage_V,frequency_Hz,temperature_K,capacitance_F,conductance_S,G_over_omega_F,inverse_C2_F_minus2,status");
+        std::size_t rows=0; while(std::getline(stream,line)) ++rows; EXPECT_EQ(rows,points.size()); stream.close(); std::filesystem::remove(csv);
+    }
+    const auto prior=w.acResults;
+    EXPECT_FALSE(Execute(w,{{"operation","cf"},{"temperature_K",300},{"voltage_V",0},{"start_Hz",0},{"stop_Hz",1e6},{"points",10}}).at("ok").get<bool>());
+    EXPECT_FALSE(Execute(w,{{"operation","cv"},{"temperature_K",300},{"start_V",0},{"stop_V",1},{"step_V",-0.1},{"frequency_Hz",1e3}}).at("ok").get<bool>());
+    EXPECT_FALSE(Execute(w,{{"operation","cv"},{"temperature_K",300},{"start_V",1e20},{"stop_V",1e20+1e6},{"step_V",1000.0},{"frequency_Hz",1e3}}).at("ok").get<bool>());
+    EXPECT_FALSE(Execute(w,{{"operation","cf"},{"temperature_K",300},{"voltage_V",0},{"start_Hz",1},{"stop_Hz",1e6},{"points",4294967299LL}}).at("ok").get<bool>());
+    EXPECT_EQ(w.acResults,prior);
+    ASSERT_TRUE(w.jobs->PauseAllJobs()); ASSERT_TRUE(w.Dispatch({{"operation","cf"}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>()); ASSERT_TRUE(w.jobs->ResumeAllJobs());
+    while(w.Busy()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_EQ(w.acResults,prior);
+}

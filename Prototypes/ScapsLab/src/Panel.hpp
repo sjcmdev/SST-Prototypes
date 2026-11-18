@@ -10,7 +10,9 @@ private:
     Workflow *w;
     int view, selected=0, bias=0;
     bool absoluteLog=false, placed=false, gallery=false;
-    char file[1024]{};
+    char file[1024]{}, csvFile[1024]="scapslab-ac.csv";
+    Json acRequest;
+    void AC();
     void Send(const Json &request);
     void Results();
 };
