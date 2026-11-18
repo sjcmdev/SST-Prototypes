@@ -434,6 +434,16 @@ namespace SST::Prototypes::PlotLab
                                                             ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
                                                         {0, 0}))
             {
+                ImGui::TableSetupColumn("Row", ImGuiTableColumnFlags_WidthFixed,
+                                        ImGui::CalcTextSize("000000").x);
+                for (auto column : columns)
+                {
+                    const auto &o = p.object(column);
+                    const float padding = 2 * ImGui::GetStyle().FramePadding.x;
+                    ImGui::TableSetupColumn(o.name.c_str(), ImGuiTableColumnFlags_WidthFixed,
+                        std::max(ImGui::CalcTextSize(o.name.c_str()).x,
+                                 ImGui::CalcTextSize("-1.2345678901234567e-308").x) + padding);
+                }
                 ImGui::TableSetupScrollFreeze(1, 1);
                 ImGui::TableNextRow();
                 ImGui::TableSetColumnIndex(0);

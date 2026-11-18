@@ -238,8 +238,8 @@ namespace SST
 		Ref<EventBus> eventBus = m_EventBus != nullptr ? m_EventBus : application.GetEventBusRef();
 
 		initializeUiState();
-		m_ProgressMonitorPanelId = RegisterPanel<ProgressMonitorWindow>(eventBus, m_ProgressTracker, "Progress Monitor", true);
-		m_TaskMonitorPanelId = RegisterPanel<TaskMonitorWindow>(eventBus, m_JobSystem, "Task Monitor", true);
+		m_ProgressMonitorPanelId = RegisterPanel<ProgressMonitorWindow>(eventBus, m_ProgressTracker, "Progress Monitor", false);
+		m_TaskMonitorPanelId = RegisterPanel<TaskMonitorWindow>(eventBus, m_JobSystem, "Task Monitor", false);
 		m_LoggingPanelId = RegisterPanel<LoggingPanel>(
 			eventBus,
 			m_LogRegistry != nullptr ? m_LogRegistry : application.GetLogRegistry(),
@@ -255,7 +255,7 @@ namespace SST
 			config,
 			m_SettingsTabs,
 			"Settings",
-			true);
+			false);
 
 		m_PanelsInitialized = true;
 	}

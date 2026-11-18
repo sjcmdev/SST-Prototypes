@@ -45,6 +45,15 @@ def dl_options():
     o=options(); o.update(type='DLCPPolynomial', degree=2, xd_source='DLCP'); return o
 
 
+@pytest.mark.parametrize('area', [None, 0])
+@pytest.mark.parametrize('kind', ['CV', 'DLCP'])
+def test_analysis_blocks_missing_or_zero_area(area, kind):
+    m = cv() if kind == 'CV' else raw()
+    m['area_m2'] = area
+    with pytest.raises(ValueError, match='Missing/invalid area_m2'):
+        analyze(m, options() if kind == 'CV' else dl_options())
+
+
 @pytest.mark.parametrize('case', CASES, ids=[c[0] for c in CASES])
 def test_pfs_c1_c5_and_saved_project(case):
     ident, sample, file, t, area, limits, expected, index = case

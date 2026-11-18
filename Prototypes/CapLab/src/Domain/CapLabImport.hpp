@@ -63,7 +63,18 @@ namespace SST::Prototypes::CapLab
             series.kind = sst::ui::plot::SeriesKind::LineScatter;
             series.style.color = {0.12f,0.45f,0.78f,1}; series.style.lineWidthPt = 1;
             series.style.marker = sst::ui::plot::Marker::Circle; series.style.markerSizePt = 4;
-            objects.push_back({p.reserveId(),layer,p.object(p.object(sheet).parent).name,0,series});
+            const auto &source = std::get<pl::Worksheet>(p.object(sheet).data).source;
+            std::string name = p.object(p.object(sheet).parent).name;
+            Json temperature = nullptr;
+            if (source.contains("temperature_K")) temperature = Json::parse(source.at("temperature_K"));
+            if (source.contains("provenance")) {
+                const auto metadata = Json::parse(source.at("provenance"));
+                const auto path = Path::FromResolved(std::filesystem::u8path(metadata.at("source").get<std::string>()).stem());
+                if (!path.Empty()) name = path.Utf8();
+                temperature = metadata.at("temperature_K");
+            }
+            if (!temperature.is_null()) name += ", T = " + temperature.dump() + " K";
+            objects.push_back({p.reserveId(),layer,name,0,series});
             return p.change("C-f graph",std::move(objects));
         }
     };

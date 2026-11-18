@@ -15,6 +15,7 @@ TEST(CapLabPlot, EngineSnapshotHasUnitsAndOwnsData) {
     EXPECT_EQ(snapshot->spec.y.label,"Capacitance (F)");
     EXPECT_EQ(snapshot->spec.x.scale,sst::ui::plot::AxisScale::Log10);
     ASSERT_EQ(snapshot->series.size(),1); EXPECT_EQ(snapshot->series[0].x.size(),40);
+    EXPECT_EQ(snapshot->series[0].label,"cf_100K_7, T = 100.0 K");
     p=Project{};
     EXPECT_DOUBLE_EQ(snapshot->series[0].y[0],8.8601e-10);
 }

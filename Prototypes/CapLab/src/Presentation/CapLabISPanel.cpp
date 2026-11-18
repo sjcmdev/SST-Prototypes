@@ -123,7 +123,11 @@ void CapLabPrototypePanel::RenderIS() {
                 }
                 const auto layer=draft.engine->children(draft.graph).at(0);
                 std::vector<sst::ui::plot::SeriesEntryView> series;
-                for (const auto id : draft.engine->children(layer)) series.push_back(draft.engine->series(id));
+                for (const auto id : draft.engine->children(layer)) {
+                    auto entry = draft.engine->series(id);
+                    entry.id = draft.engine->object(id).name + "###" + entry.id;
+                    series.push_back(std::move(entry));
+                }
                 sst::ui::plot::RenderPlot("##ISdraft",std::get<pl::Layer>(draft.engine->object(layer).data).spec,series.data(),series.size(),fitView,{},ImVec2(-1,260));
                 ImGui::BeginDisabled(state->analysisRevision!=state->document.revision);
                 if (ImGui::Button("Accept fit (Undo)")) (void)commands->Execute(CommandID{"caplab.accept_analysis"});

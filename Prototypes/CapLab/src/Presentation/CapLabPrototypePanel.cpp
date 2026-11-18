@@ -170,13 +170,15 @@ void CapLabPrototypePanel::RenderTree() {
                 ImGui::TextWrapped("Cp (F) / Rp (Ω): %zu points; T=%s K", std::get<pl::Worksheet>(doc.project.engine->object(sweep.id).data).rows.size(), Nullable(sweep.temperature_K).dump().c_str());
             auto &areaMm2 = areaDraft.try_emplace(sample.id, sample.area_m2.value_or(0)*1e6).first->second;
             ImGui::SetNextItemWidth(80);
-            ImGui::InputDouble("Sample area (mm2)",&areaMm2,0,0,"%.9g");
+            ImGui::InputDouble("Sample area (mm2)",&areaMm2,0,0,"%.9g",
+                ImGuiInputTextFlags_DisplayEmptyRefVal);
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 CommandContext c; c.Set("sample_id",sample.id); c.Set("area_m2",areaMm2*1e-6);
                 (void)commands->Execute(CommandID{"caplab.area"},std::move(c));
                 ImGui::TreePop(); ImGui::PopID(); return;
             }
             if (!ImGui::IsItemActive()) areaMm2 = sample.area_m2.value_or(0)*1e6;
+            if (!sample.area_m2) ImGui::TextDisabled("unknown - enter sample area");
             for (const auto &m : doc.project.measurements) if (m.at("sample_id") == sample.id)
                 ImGui::Text("%s / %s: %zu points; T=%s K",m.at("metadata").at("kind").get<std::string>().c_str(),
                     m.at("metadata").at("variant").get<std::string>().c_str(),
@@ -206,7 +208,11 @@ void CapLabPrototypePanel::RenderPlot() {
         const auto &p = *doc.project.engine;
         const auto layer = p.children(doc.project.graph).at(0);
         std::vector<sst::ui::plot::SeriesEntryView> series;
-        for (auto id : p.children(layer)) series.push_back(p.series(id));
+        for (auto id : p.children(layer)) {
+            auto entry = p.series(id);
+            entry.id = p.object(id).name + "###" + entry.id;
+            series.push_back(std::move(entry));
+        }
         sst::ui::plot::RenderPlot("##cf", std::get<pl::Layer>(p.object(layer).data).spec,
             series.data(), series.size(), state->view, {}, ImVec2(-1, std::max(200.0f, ImGui::GetContentRegionAvail().y - 40)));
         if (state->view.picked && state->view.picked->series==0) {

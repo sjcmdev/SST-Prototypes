@@ -77,6 +77,9 @@ namespace SST
 			workspace,
 			application.GetEventBusRef());
 		panelIds.arrhenius = editorLayer.RegisterPanel<ArrheniusPlotPanel>(workspace);
+		// Keep analysis tools available from View without occupying the startup plot dock.
+		for (auto id : {panelIds.details, panelIds.control, panelIds.monteCarloSettings, panelIds.arrhenius})
+			if (auto panel = editorLayer.FindPanel(id).lock()) panel->SetVisible(false);
 		editorLayer.RegisterPanel<JFMImportDialogPanel>(
 			application.GetEventBusRef(),
 			workspace,
