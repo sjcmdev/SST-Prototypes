@@ -1,4 +1,5 @@
 #pragma once
+#include <sst/ui/Plot/RangeSelector.hpp>
 
 #include "Analysis/JFMArrheniusAnalysis.hpp"
 #include "Core/Utils/Memory.hpp"
@@ -89,6 +90,7 @@ namespace SST::Prototypes::JFM
 			SeriesStyle style;
 			SeriesStyle tunedStyle{{1.0f, 0.52f, 0.10f, 1.0f}, 5.0f, 1.5f, 2, 0, false};
 			std::vector<FitLine> fits;
+			sst::ui::plot::RangeSelectorState rangeInteraction;
 		};
 
 		struct PlotWindow

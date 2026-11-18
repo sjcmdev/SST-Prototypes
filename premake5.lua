@@ -350,6 +350,8 @@ project "Core"
     filter {}
 
 
+include (_SST_ROOT .. "/../SST-Libraries/sst_libraries.lua")
+
     group "Prototypes"
 for _, projectScript in ipairs(os.matchfiles("Prototypes/*/premake5.lua")) do
     include(projectScript)

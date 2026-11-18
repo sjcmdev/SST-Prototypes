@@ -22,6 +22,8 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <implot.h>
+#include <sst/ui/Plot/ImPlotRenderer.hpp>
+#include <sst/ui/Theme/ScientificPlotPreset.hpp>
 
 namespace SST::Prototypes::JFM
 {
@@ -49,43 +51,6 @@ namespace SST::Prototypes::JFM
 		ImVec4 ToVec4(const std::array<float, 4> &color)
 		{
 			return {color[0], color[1], color[2], color[3]};
-		}
-
-		ImPlotMarker ToMarker(int marker)
-		{
-			switch (std::clamp(marker, 0, static_cast<int>(IM_ARRAYSIZE(MarkerLabels)) - 1))
-			{
-			case 1: return ImPlotMarker_Square;
-			case 2: return ImPlotMarker_Diamond;
-			case 3: return ImPlotMarker_Cross;
-			case 4: return ImPlotMarker_Plus;
-			case 5: return ImPlotMarker_Asterisk;
-			default: return ImPlotMarker_Circle;
-			}
-		}
-
-		bool HoverVerticalDragLine(double value)
-		{
-			const float x = ImPlot::PlotToPixels(value, 0.0).x;
-			const ImVec2 mouse = ImGui::GetMousePos();
-			const ImVec2 plotPos = ImPlot::GetPlotPos();
-			const ImVec2 plotSize = ImPlot::GetPlotSize();
-			return std::abs(mouse.x - x) <= 8.0f && mouse.y >= plotPos.y && mouse.y <= plotPos.y + plotSize.y;
-		}
-
-		std::array<float, 4> DefaultColor(std::size_t index)
-		{
-			static constexpr std::array<std::array<float, 4>, 8> colors{{
-				{0.26f, 0.47f, 0.86f, 1.0f},
-				{0.90f, 0.42f, 0.18f, 1.0f},
-				{0.24f, 0.66f, 0.38f, 1.0f},
-				{0.83f, 0.30f, 0.30f, 1.0f},
-				{0.60f, 0.39f, 0.83f, 1.0f},
-				{0.88f, 0.67f, 0.16f, 1.0f},
-				{0.20f, 0.68f, 0.75f, 1.0f},
-				{0.80f, 0.80f, 0.80f, 1.0f},
-			}};
-			return colors[index % colors.size()];
 		}
 
 		std::array<float, 4> TunedColor(std::size_t index)
@@ -547,7 +512,7 @@ namespace SST::Prototypes::JFM
 			});
 			if (duplicate != target->series.end())
 				return;
-			entry.style.color = DefaultColor(target->series.size());
+			entry.style.color = sst::ui::plot::ScientificColor(target->series.size());
 			entry.tunedStyle.color = TunedColor(target->series.size());
 			entry.tunedStyle.visible = m_UseTuned;
 			target->series.push_back(std::move(entry));
@@ -562,7 +527,7 @@ namespace SST::Prototypes::JFM
 		window.fitModel = m_FitModel;
 		window.preferFit = m_PreferFit;
 		window.title = entry.title + " - " + QuantityLabels[std::clamp(m_Quantity, 0, 7)];
-		entry.style.color = DefaultColor(0);
+		entry.style.color = sst::ui::plot::ScientificColor(0);
 		entry.tunedStyle.color = TunedColor(0);
 		entry.tunedStyle.visible = m_UseTuned;
 		window.series.push_back(std::move(entry));
@@ -600,7 +565,7 @@ namespace SST::Prototypes::JFM
 				if (PointsForEntry(projectHandle, snapshot, entry, ToQuantity(quantityIndex), window.preferFit, false).empty()
 					&& PointsForEntry(projectHandle, snapshot, entry, ToQuantity(quantityIndex), window.preferFit, true).empty())
 					continue;
-				entry.style.color = DefaultColor(window.series.size());
+				entry.style.color = sst::ui::plot::ScientificColor(window.series.size());
 				entry.tunedStyle.color = TunedColor(window.series.size());
 				entry.tunedStyle.visible = m_UseTuned;
 				window.series.push_back(std::move(entry));
@@ -863,7 +828,10 @@ namespace SST::Prototypes::JFM
 	void ArrheniusPlotPanel::RenderPlotWindow(ProjectHandle projectHandle, const JFMProject &snapshot, PlotWindow &window)
 	{
 		if (!window.open)
+		{
+			for (auto &series : window.series) (void)series.rangeInteraction.Finish();
 			return;
+		}
 		window.fitModel = std::clamp(window.fitModel, 0, static_cast<int>(IM_ARRAYSIZE(FitModelLabels)) - 1);
 
 		bool open = window.open;
@@ -889,6 +857,7 @@ namespace SST::Prototypes::JFM
 		}
 		if (!ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_HorizontalScrollbar))
 		{
+			for (auto &series : window.series) (void)series.rangeInteraction.Finish();
 			ImGui::End();
 			window.open = open;
 			return;
@@ -1122,19 +1091,16 @@ namespace SST::Prototypes::JFM
 					spec.LineColor = ToVec4(style.color);
 					spec.MarkerFillColor = ToVec4(style.color);
 					spec.MarkerLineColor = ToVec4(style.color);
-					spec.Marker = ToMarker(style.marker);
+					spec.Marker = sst::ui::plot::ImPlotMarkerFor(sst::ui::plot::MarkerForIndex(style.marker));
 					spec.MarkerSize = style.pointSize;
 					spec.LineWeight = style.lineWeight;
-					if (style.drawMode == 0)
-						ImPlot::PlotScatter(plotLabel.c_str(), x.data(), y.data(), static_cast<int>(x.size()), spec);
-					else if (style.drawMode == 1)
-						ImPlot::PlotLine(plotLabel.c_str(), x.data(), y.data(), static_cast<int>(x.size()), spec);
-					else
+					const auto kind = style.drawMode == 1 ? sst::ui::plot::SeriesKind::Line : sst::ui::plot::SeriesKind::Scatter;
+					sst::ui::plot::RenderSeries({plotLabel, {x.data(), y.data(), x.size()}, kind, sst::ui::plot::FromImPlotStyle(spec)});
+					if (style.drawMode != 0 && style.drawMode != 1)
 					{
-						ImPlot::PlotScatter(plotLabel.c_str(), x.data(), y.data(), static_cast<int>(x.size()), spec);
-						ImPlotSpec lineSpec = spec;
-						lineSpec.Flags = ImPlotItemFlags_NoLegend;
-						ImPlot::PlotLine(("##line_" + plotLabel).c_str(), x.data(), y.data(), static_cast<int>(x.size()), lineSpec);
+						// Preserve JFM's overlay ID and draw order for existing legends and markers.
+						spec.Flags = ImPlotItemFlags_NoLegend;
+						sst::ui::plot::RenderSeries({"##line_" + plotLabel, {x.data(), y.data(), x.size()}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(spec)});
 					}
 				};
 				if (series.style.visible && !excludedX.empty())
@@ -1143,11 +1109,11 @@ namespace SST::Prototypes::JFM
 					excludedSpec.LineColor = ImVec4(0.42f, 0.42f, 0.42f, 0.65f);
 					excludedSpec.MarkerFillColor = ImVec4(0.42f, 0.42f, 0.42f, 0.65f);
 					excludedSpec.MarkerLineColor = ImVec4(0.42f, 0.42f, 0.42f, 0.65f);
-					excludedSpec.Marker = ToMarker(series.style.marker);
+					excludedSpec.Marker = sst::ui::plot::ImPlotMarkerFor(sst::ui::plot::MarkerForIndex(series.style.marker));
 					excludedSpec.MarkerSize = std::max(2.0f, series.style.pointSize - 1.0f);
 					excludedSpec.LineWeight = 0.0f;
 					excludedSpec.Flags = ImPlotItemFlags_NoLegend;
-					ImPlot::PlotScatter(("##excluded_" + label).c_str(), excludedX.data(), excludedY.data(), static_cast<int>(excludedX.size()), excludedSpec);
+					sst::ui::plot::RenderSeries({("##excluded_" + label).c_str(), {excludedX.data(), excludedY.data(), static_cast<std::size_t>(excludedX.size())}, sst::ui::plot::SeriesKind::Scatter, sst::ui::plot::FromImPlotStyle(excludedSpec)});
 				}
 
 				if (series.style.visible && !includedX.empty())
@@ -1159,7 +1125,7 @@ namespace SST::Prototypes::JFM
 						errorSpec.Size = 10.0f;
 						errorSpec.LineWeight = 2.4f;
 						errorSpec.Flags = ImPlotItemFlags_NoLegend;
-						ImPlot::PlotErrorBars(("##arrhenius_err_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex)).c_str(), includedX.data(), includedY.data(), includedErr.data(), static_cast<int>(includedX.size()), errorSpec);
+						sst::ui::plot::RenderSeries({("##arrhenius_err_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex)).c_str(), {includedX.data(), includedY.data(), static_cast<std::size_t>(includedX.size()), includedErr.data()}, sst::ui::plot::SeriesKind::ErrorBars, sst::ui::plot::FromImPlotStyle(errorSpec)});
 					}
 					plotPoints(label, includedX, includedY, series.style);
 				}
@@ -1192,17 +1158,18 @@ namespace SST::Prototypes::JFM
 
 				double lowerX = points[static_cast<std::size_t>(series.lower)].x;
 				double upperX = points[static_cast<std::size_t>(series.upper)].x;
-				bool lowerHeld = false;
-				bool upperHeld = false;
-				bool lowerHovered = false;
-				bool upperHovered = false;
 				const bool activeRange = window.activeSeries == static_cast<int>(seriesIndex);
-				const ImVec4 rangeColor(1.0f, 0.55f, 0.0f, activeRange ? 1.0f : 0.35f);
-				const float rangeWeight = activeRange ? 2.2f : 1.1f;
+				sst::ui::plot::RangeStyle rangeStyle;
+				rangeStyle.color = {1.0f, 0.55f, 0.0f, activeRange ? 1.0f : 0.35f};
+				rangeStyle.widthPt = activeRange ? 2.2f : 1.1f;
+				// Point indices follow the domain ordering, including descending 1000/T.
+				rangeStyle.orderEndpoints = false;
 				const int dragBase = static_cast<int>((window.id % 100000) * 100 + seriesIndex * 2);
-				const bool lowerChanged = ImPlot::DragLineX(dragBase + 1, &lowerX, rangeColor, rangeWeight, ImPlotDragToolFlags_None, nullptr, &lowerHovered, &lowerHeld);
-				const bool upperChanged = ImPlot::DragLineX(dragBase + 2, &upperX, rangeColor, rangeWeight, ImPlotDragToolFlags_None, nullptr, &upperHovered, &upperHeld);
-				rangeCursor |= lowerHovered || upperHovered || lowerHeld || upperHeld || HoverVerticalDragLine(lowerX) || HoverVerticalDragLine(upperX);
+				const auto interaction = sst::ui::plot::DragRangeX(dragBase + 1, dragBase + 2,
+					lowerX, upperX, series.rangeInteraction, rangeStyle);
+				rangeCursor |= interaction.hovered;
+				const bool lowerChanged = interaction.lowerChanged;
+				const bool upperChanged = interaction.upperChanged;
 				if (lowerChanged || upperChanged)
 				{
 					if (lowerChanged)
@@ -1235,9 +1202,9 @@ namespace SST::Prototypes::JFM
 					fitSpec.LineWeight = fit.lineWeight;
 					const std::string fitLabel = series.title + " " + fit.name + "##arrhenius_fit_" + std::to_string(window.id) + "_" + std::to_string(seriesIndex) + "_" + fit.name;
 					if (fit.fitX.size() == fit.fitY.size() && fit.fitX.size() >= 2)
-						ImPlot::PlotLine(fitLabel.c_str(), fit.fitX.data(), fit.fitY.data(), static_cast<int>(fit.fitX.size()), fitSpec);
+						sst::ui::plot::RenderSeries({fitLabel.c_str(), {fit.fitX.data(), fit.fitY.data(), static_cast<std::size_t>(fit.fitX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
 					else
-						ImPlot::PlotLine(fitLabel.c_str(), xx, yy, 2, fitSpec);
+						sst::ui::plot::RenderSeries({fitLabel.c_str(), {xx, yy, static_cast<std::size_t>(2)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
 					if (ImPlot::BeginLegendPopup(fitLabel.c_str()))
 					{
 						ImGui::Checkbox("Show", &fit.visible);
@@ -1262,7 +1229,10 @@ namespace SST::Prototypes::JFM
 			if (rangeCursor)
 				ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 		}
-
+		else
+		{
+			for (auto &series : window.series) (void)series.rangeInteraction.Finish();
+		}
 
 		if (removeSeries >= 0 && removeSeries < static_cast<int>(window.series.size()))
 		{

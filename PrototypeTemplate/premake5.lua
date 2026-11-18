@@ -21,6 +21,7 @@
         _SST_ROOT .. "/Core",
         _SST_ROOT .. "/Prototypes/__PROTOTYPE_NAME__/src",
         _SST_ROOT .. "/Vendor/ImGui",
+        _SST_ROOT .. "/Vendor/implot",
         _SST_ROOT .. "/Vendor/ImGui/backends",
         _SST_ROOT .. "/Vendor/GLFW/include",
         _SST_ROOT .. "/Vendor/GLAD/generated/include",
@@ -132,6 +133,7 @@ project "__PROTOTYPE_NAME__Tests"
 -- Keep app/tests on the same embedding and CRT contract as Core.
 for _, target in ipairs { "__PROTOTYPE_NAME__", "__PROTOTYPE_NAME__Tests" } do
     project(target)
+    sst_link_ui()
     filter "configurations:Debug"
         runtime "Debug"
     filter "configurations:Release or Dist"

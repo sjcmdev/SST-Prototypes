@@ -1,4 +1,5 @@
 #pragma once
+#include <sst/ui/Plot/RangeSelector.hpp>
 
 #include <array>
 #include <mutex>
@@ -157,7 +158,7 @@ namespace SST::Prototypes::JFM
 		double m_RangeUpper = 0.0;
 		bool m_RangeInitialized = false;
 		bool m_RangeUndoGroupOpen = false;
-		bool m_RangeHeldLastFrame = false;
+		sst::ui::plot::RangeSelectorState m_RangeInteraction;
 		int m_Parser = 0;
 		int m_DecimalSeparator = 0;
 		int m_TemperatureExtraction = 0;

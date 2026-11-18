@@ -8,6 +8,7 @@
 #include <cmath>
 #include <imgui.h>
 #include <implot.h>
+#include <sst/ui/Plot/ImPlotRenderer.hpp>
 #include <unordered_map>
 
 namespace SST::Prototypes::JFM
@@ -36,10 +37,9 @@ namespace SST::Prototypes::JFM
 			count = std::min(count, voltage.size());
 			if (!semiLog)
 			{
-				ImPlot::PlotLine(label, voltage.data(), current, static_cast<int>(count), spec);
+				sst::ui::plot::RenderSeries({label, {voltage.data(), current, count}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(spec)});
 				return;
 			}
-
 			std::vector<double> x;
 			std::vector<double> y;
 			x.reserve(count);
@@ -52,8 +52,7 @@ namespace SST::Prototypes::JFM
 				x.push_back(voltage[index]);
 				y.push_back(value);
 			}
-			if (!x.empty())
-				ImPlot::PlotLine(label, x.data(), y.data(), static_cast<int>(x.size()), spec);
+			sst::ui::plot::RenderSeries({label, {x.data(), y.data(), x.size()}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(spec)});
 		}
 	}
 

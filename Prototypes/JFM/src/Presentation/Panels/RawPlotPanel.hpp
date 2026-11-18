@@ -1,4 +1,5 @@
 #pragma once
+#include <sst/ui/Plot/RangeSelector.hpp>
 
 #include "App/JFMUserSettings.hpp"
 #include "Core/Commands/CommandContext.hpp"
@@ -80,7 +81,7 @@ namespace SST::Prototypes::JFM
 			double rangeUpper = 0.0;
 			bool rangeInitialized = false;
 			bool rangeUndoGroupOpen = false;
-			bool rangeHeldLastFrame = false;
+			sst::ui::plot::RangeSelectorState rangeInteraction;
 			std::array<char, 128> renameBuffer = {};
 		};
 

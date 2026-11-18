@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <imgui.h>
 #include <implot.h>
+#include <sst/ui/Plot/ImPlotRenderer.hpp>
 #include <limits>
 #include <map>
 #include <sstream>
@@ -64,15 +65,6 @@ namespace SST::Prototypes::JFM
 			return ImColor::HSV(static_cast<float>(std::fmod(index * 0.173, 1.0)), 0.74f, 0.95f).Value;
 		}
 
-		bool HoverVerticalDragLine(double value)
-		{
-			const float x = ImPlot::PlotToPixels(value, 0.0).x;
-			const ImVec2 mouse = ImGui::GetMousePos();
-			const ImVec2 plotPos = ImPlot::GetPlotPos();
-			const ImVec2 plotSize = ImPlot::GetPlotSize();
-			return std::abs(mouse.x - x) <= 8.0f && mouse.y >= plotPos.y && mouse.y <= plotPos.y + plotSize.y;
-		}
-
 		void ApplyPreviewScale(int scale, std::vector<double> &x, std::vector<double> &y)
 		{
 			if (scale == 0)
@@ -97,23 +89,6 @@ namespace SST::Prototypes::JFM
 		const std::vector<double> &AnalysisCurrent(const JFMCharacteristicData &data)
 		{
 			return data.currentDensity.empty() ? data.current : data.currentDensity;
-		}
-
-		void IncludePlotBounds(double x, double y, bool &hasBounds, double &minX, double &maxX, double &minY, double &maxY)
-		{
-			if (!std::isfinite(x) || !std::isfinite(y))
-				return;
-			if (!hasBounds)
-			{
-				minX = maxX = x;
-				minY = maxY = y;
-				hasBounds = true;
-				return;
-			}
-			minX = std::min(minX, x);
-			maxX = std::max(maxX, x);
-			minY = std::min(minY, y);
-			maxY = std::max(maxY, y);
 		}
 
 		std::string SeriesIdForCharacteristic(const JFMProject &project, CharacteristicId id)
@@ -989,7 +964,10 @@ namespace SST::Prototypes::JFM
 		const ImVec2 plotSize{-1.0f, std::max(300.0f, ImGui::GetContentRegionAvail().y * 0.62f)};
 		const ImPlotFlags plotFlags = m_AnalysisShowLegend ? ImPlotFlags_None : ImPlotFlags_NoLegend;
 		if (!ImPlot::BeginPlot(showFit ? "##jfm_fit_mc_plot" : "##jfm_data_range_prefit_plot", plotSize, plotFlags))
+		{
+			finishRangeUndoGroup();
 			return;
+		}
 		ImPlot::SetupAxes("Voltage (V)", "Current / current density");
 		if (m_AnalysisShowLegend)
 			ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside | ImPlotLegendFlags_NoButtons);
@@ -1019,7 +997,7 @@ namespace SST::Prototypes::JFM
 					const double value = m_AnalysisScale == 1 ? std::abs(y[point]) : y[point];
 					if (m_AnalysisScale == 1 && value <= 0.0)
 						continue;
-					IncludePlotBounds(x[point], value, hasBounds, minX, maxX, minY, maxY);
+					sst::ui::plot::IncludeBounds(x[point], value, hasBounds, minX, maxX, minY, maxY);
 				}
 			}
 			if (hasBounds)
@@ -1066,14 +1044,14 @@ namespace SST::Prototypes::JFM
 						rawSpec.LineWeight = settings.hoveredCurveLineWeight;
 					const std::string label = record->info.name + "##jfm_analysis_raw_" + std::to_string(ids[index]);
 					if (m_AnalysisScale == 0)
-						ImPlot::PlotLine(label.c_str(), record->data->voltage.data(), current.data(), count, rawSpec);
+						sst::ui::plot::RenderSeries({label.c_str(), {record->data->voltage.data(), current.data(), static_cast<std::size_t>(count)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(rawSpec)});
 					else
 					{
 						std::vector<double> x(record->data->voltage.begin(), record->data->voltage.begin() + count);
 						std::vector<double> y(current.begin(), current.begin() + count);
 						ApplyPreviewScale(m_AnalysisScale, x, y);
 						if (!x.empty())
-							ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), rawSpec);
+							sst::ui::plot::RenderSeries({label.c_str(), {x.data(), y.data(), static_cast<std::size_t>(x.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(rawSpec)});
 					}
 				}
 				const auto curve = m_Store->GetPrefitCurve({project, ids[index]});
@@ -1101,14 +1079,14 @@ namespace SST::Prototypes::JFM
 						prefitSpec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##jfm_analysis_prefit_" + std::to_string(ids[index]);
 						if (m_AnalysisScale == 0)
-							ImPlot::PlotLine(label.c_str(), prefitX->data(), prefitY->data(), curveCount, prefitSpec);
+							sst::ui::plot::RenderSeries({label.c_str(), {prefitX->data(), prefitY->data(), static_cast<std::size_t>(curveCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)});
 						else
 						{
 							std::vector<double> x(prefitX->begin(), prefitX->begin() + curveCount);
 							std::vector<double> y(prefitY->begin(), prefitY->begin() + curveCount);
 							ApplyPreviewScale(m_AnalysisScale, x, y);
 							if (!x.empty())
-								ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), prefitSpec);
+								sst::ui::plot::RenderSeries({label.c_str(), {x.data(), y.data(), static_cast<std::size_t>(x.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)});
 						}
 					}
 				}
@@ -1134,30 +1112,26 @@ namespace SST::Prototypes::JFM
 						fitSpec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##jfm_analysis_fit_" + std::to_string(ids[index]);
 						if (m_AnalysisScale == 0)
-							ImPlot::PlotLine(label.c_str(), fitX->data(), fitY->data(), fitCount, fitSpec);
+							sst::ui::plot::RenderSeries({label.c_str(), {fitX->data(), fitY->data(), static_cast<std::size_t>(fitCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
 						else
 						{
 							std::vector<double> x(fitX->begin(), fitX->begin() + fitCount);
 							std::vector<double> y(fitY->begin(), fitY->begin() + fitCount);
 							ApplyPreviewScale(m_AnalysisScale, x, y);
 							if (!x.empty())
-								ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(x.size()), fitSpec);
+								sst::ui::plot::RenderSeries({label.c_str(), {x.data(), y.data(), static_cast<std::size_t>(x.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
 						}
 					}
 				}
 			}
 		}
 
-		bool lowerHeld = false;
-		bool upperHeld = false;
-		bool lowerHovered = false;
-		bool upperHovered = false;
-		const ImVec4 rangeColor{0.96f, 0.60f, 0.16f, 1.0f};
-		const bool lowerChanged = ImPlot::DragLineX(3101, &m_RangeLower, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, &lowerHovered, &lowerHeld);
-		const bool upperChanged = ImPlot::DragLineX(3102, &m_RangeUpper, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, &upperHovered, &upperHeld);
-		const bool rangeCursor = lowerHovered || upperHovered || lowerHeld || upperHeld || HoverVerticalDragLine(m_RangeLower) || HoverVerticalDragLine(m_RangeUpper);
-		const bool changed = lowerChanged || upperChanged;
-		const bool held = lowerHeld || upperHeld;
+		sst::ui::plot::RangeStyle rangeStyle;
+		rangeStyle.minimum = minimumVoltage;
+		rangeStyle.maximum = maximumVoltage;
+		const auto interaction = sst::ui::plot::DragRangeX(3101, 3102, m_RangeLower, m_RangeUpper, m_RangeInteraction, rangeStyle);
+		const bool rangeCursor = interaction.hovered;
+		const bool changed = interaction.changed;
 		if (changed)
 		{
 			if (!m_RangeUndoGroupOpen)
@@ -1168,10 +1142,6 @@ namespace SST::Prototypes::JFM
 						m_RangeUndoGroupOpen = true;
 				}
 			}
-			m_RangeLower = std::clamp(m_RangeLower, minimumVoltage, maximumVoltage);
-			m_RangeUpper = std::clamp(m_RangeUpper, minimumVoltage, maximumVoltage);
-			if (m_RangeLower > m_RangeUpper)
-				std::swap(m_RangeLower, m_RangeUpper);
 			if (m_RangeLower != m_RangeUpper)
 			{
 				if (auto registry = m_CommandRegistry.lock())
@@ -1197,9 +1167,8 @@ namespace SST::Prototypes::JFM
 		if (rangeCursor)
 			ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
-		if (m_RangeUndoGroupOpen && !held && (m_RangeHeldLastFrame || changed))
+		if (m_RangeUndoGroupOpen && interaction.ended)
 			finishRangeUndoGroup();
-		m_RangeHeldLastFrame = held;
 	}
 
 	void JFMImportDialogPanel::renderParameterTable(ProjectHandle project, CharacteristicId active)
@@ -1345,6 +1314,7 @@ namespace SST::Prototypes::JFM
 
 	void JFMImportDialogPanel::finishRangeUndoGroup(bool cancel)
 	{
+		(void)m_RangeInteraction.Finish();
 		if (!m_RangeUndoGroupOpen)
 			return;
 		if (auto undoStack = m_UndoStack.lock())
@@ -1355,7 +1325,6 @@ namespace SST::Prototypes::JFM
 				(void)undoStack->EndGroup();
 		}
 		m_RangeUndoGroupOpen = false;
-		m_RangeHeldLastFrame = false;
 	}
 
 	void JFMImportDialogPanel::resetStaging()
@@ -1529,7 +1498,7 @@ namespace SST::Prototypes::JFM
 		m_StagedSeries.clear();
 		m_RangeCharacteristic = InvalidCharacteristicId;
 		m_RangeInitialized = false;
-		m_RangeHeldLastFrame = false;
+		(void)m_RangeInteraction.Finish();
 		m_SelectedPreviewFileIndices.clear();
 		std::snprintf(m_NamePattern.data(), m_NamePattern.size(), "%s", "{stem}");
 		std::snprintf(m_VariableDelimiter.data(), m_VariableDelimiter.size(), "%s", "_");
@@ -1756,7 +1725,7 @@ namespace SST::Prototypes::JFM
 					continue;
 				const ImPlotSpec spec(ImPlotProp_LineColor, PreviewColor(index + curveIndex));
 				const std::string label = characteristic.info.name + "##preview_plot_" + std::to_string(index) + "_" + std::to_string(curveIndex);
-				ImPlot::PlotLine(label.c_str(), x.data(), y.data(), static_cast<int>(std::min(x.size(), y.size())), spec);
+				sst::ui::plot::RenderSeries({label.c_str(), {x.data(), y.data(), static_cast<std::size_t>(std::min(x.size(), y.size()))}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(spec)});
 			}
 		}
 		ImPlot::EndPlot();

@@ -14,6 +14,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <imgui.h>
+#include <sst/ui/Widgets/ParameterBoundsRow.hpp>
 
 namespace SST::Prototypes::JFM
 {
@@ -405,19 +406,8 @@ namespace SST::Prototypes::JFM
 				{
 					const std::string name(nameView);
 					JFMParameterSolverSetting &parameter = settings.fitMonteCarlo.parameters[name];
-					ImGui::PushID(name.c_str());
-					ImGui::TableNextRow();
-					ImGui::TableSetColumnIndex(0);
-					ImGui::TextUnformatted(name.c_str());
-					ImGui::TableSetColumnIndex(1);
-					changed |= ImGui::Checkbox("##free", &parameter.monteCarloFree);
-					ImGui::TableSetColumnIndex(2);
-					ImGui::SetNextItemWidth(-1.0f);
-					changed |= ImGui::InputDouble("##min", &parameter.minimum, 0.0, 0.0, "%.6g");
-					ImGui::TableSetColumnIndex(3);
-					ImGui::SetNextItemWidth(-1.0f);
-					changed |= ImGui::InputDouble("##max", &parameter.maximum, 0.0, 0.0, "%.6g");
-					ImGui::PopID();
+					changed |= sst::ui::widgets::ParameterBoundsRow(name.c_str(), name.c_str(),
+						parameter.monteCarloFree, parameter.minimum, parameter.maximum);
 				}
 				ImGui::EndTable();
 				if (changed)

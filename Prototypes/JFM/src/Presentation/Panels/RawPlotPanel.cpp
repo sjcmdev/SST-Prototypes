@@ -18,6 +18,7 @@
 
 #include <imgui.h>
 #include <implot.h>
+#include <sst/ui/Plot/ImPlotRenderer.hpp>
 
 namespace SST::Prototypes::JFM
 {
@@ -68,15 +69,6 @@ namespace SST::Prototypes::JFM
 		ImVec4 toVec4(const std::array<float, 4> &color)
 		{
 			return {color[0], color[1], color[2], color[3]};
-		}
-
-		bool hoverVerticalDragLine(double value)
-		{
-			const float x = ImPlot::PlotToPixels(value, 0.0).x;
-			const ImVec2 mouse = ImGui::GetMousePos();
-			const ImVec2 plotPos = ImPlot::GetPlotPos();
-			const ImVec2 plotSize = ImPlot::GetPlotSize();
-			return std::abs(mouse.x - x) <= 8.0f && mouse.y >= plotPos.y && mouse.y <= plotPos.y + plotSize.y;
 		}
 
 		std::optional<double> metadataDouble(const JFMCharacteristicInfo &info, const std::string &key)
@@ -151,23 +143,6 @@ namespace SST::Prototypes::JFM
 			if (const auto it = metadata.find("short_name"); it != metadata.end() && !it->second.empty())
 				return it->second;
 			return name;
-		}
-
-		void includeBounds(double x, double y, bool &hasBounds, double &minX, double &maxX, double &minY, double &maxY)
-		{
-			if (!std::isfinite(x) || !std::isfinite(y))
-				return;
-			if (!hasBounds)
-			{
-				minX = maxX = x;
-				minY = maxY = y;
-				hasBounds = true;
-				return;
-			}
-			minX = std::min(minX, x);
-			maxX = std::max(maxX, x);
-			minY = std::min(minY, y);
-			maxY = std::max(maxY, y);
 		}
 
 		const JFMColorPreset *findPreset(const JFMUserSettings &settings, const std::string &name)
@@ -484,6 +459,7 @@ namespace SST::Prototypes::JFM
 
 	void RawPlotPanel::FinishRangeUndoGroup(PlotArea &area, bool cancel)
 	{
+		(void)area.rangeInteraction.Finish();
 		if (!area.rangeUndoGroupOpen)
 			return;
 		if (auto undoStack = m_UndoStack.lock())
@@ -494,7 +470,6 @@ namespace SST::Prototypes::JFM
 				(void)undoStack->EndGroup();
 		}
 		area.rangeUndoGroupOpen = false;
-		area.rangeHeldLastFrame = false;
 	}
 
 	void RawPlotPanel::PushPlotUndo(std::vector<PlotArea> before, std::string description)
@@ -649,16 +624,13 @@ namespace SST::Prototypes::JFM
 			area.rangeInitialized = true;
 		}
 
-		bool lowerHeld = false;
-		bool upperHeld = false;
-		bool lowerHovered = false;
-		bool upperHovered = false;
-		const ImVec4 rangeColor{0.96f, 0.60f, 0.16f, 1.0f};
-		const bool lowerChanged = ImPlot::DragLineX(static_cast<int>(area.id * 10 + 1), &area.rangeLower, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, &lowerHovered, &lowerHeld);
-		const bool upperChanged = ImPlot::DragLineX(static_cast<int>(area.id * 10 + 2), &area.rangeUpper, rangeColor, 2.0f, ImPlotDragToolFlags_None, nullptr, &upperHovered, &upperHeld);
-		const bool wantsResizeCursor = lowerHovered || upperHovered || lowerHeld || upperHeld || hoverVerticalDragLine(area.rangeLower) || hoverVerticalDragLine(area.rangeUpper);
-		const bool changed = lowerChanged || upperChanged;
-		const bool held = lowerHeld || upperHeld;
+		sst::ui::plot::RangeStyle rangeStyle;
+		rangeStyle.minimum = minimumVoltage;
+		rangeStyle.maximum = maximumVoltage;
+		const auto interaction = sst::ui::plot::DragRangeX(static_cast<int>(area.id * 10 + 1), static_cast<int>(area.id * 10 + 2),
+			area.rangeLower, area.rangeUpper, area.rangeInteraction, rangeStyle);
+		const bool wantsResizeCursor = interaction.hovered;
+		const bool changed = interaction.changed;
 		if (changed)
 		{
 			if (!area.rangeUndoGroupOpen)
@@ -669,10 +641,6 @@ namespace SST::Prototypes::JFM
 						area.rangeUndoGroupOpen = true;
 				}
 			}
-			area.rangeLower = std::clamp(area.rangeLower, minimumVoltage, maximumVoltage);
-			area.rangeUpper = std::clamp(area.rangeUpper, minimumVoltage, maximumVoltage);
-			if (area.rangeLower > area.rangeUpper)
-				std::swap(area.rangeLower, area.rangeUpper);
 			if (area.rangeLower != area.rangeUpper)
 			{
 				CommandContext context;
@@ -691,9 +659,8 @@ namespace SST::Prototypes::JFM
 				}
 			}
 		}
-		if (area.rangeUndoGroupOpen && !held && (area.rangeHeldLastFrame || changed))
+		if (area.rangeUndoGroupOpen && interaction.ended)
 			FinishRangeUndoGroup(area);
-		area.rangeHeldLastFrame = held;
 		return wantsResizeCursor;
 	}
 
@@ -710,6 +677,7 @@ namespace SST::Prototypes::JFM
 		const std::string managerTitle = GetTitle() + " Manager###jfm_raw_plot_manager";
 		if (!ImGui::Begin(managerTitle.c_str(), &visible))
 		{
+			for (PlotArea &area : m_PlotAreas) FinishRangeUndoGroup(area);
 			ImGui::End();
 			SetVisible(visible);
 			return;
@@ -784,6 +752,7 @@ namespace SST::Prototypes::JFM
 			const std::string windowTitle = area.title + "###jfm_raw_plot_window_" + std::to_string(area.id);
 			if (!ImGui::Begin(windowTitle.c_str(), &plotVisible))
 			{
+				FinishRangeUndoGroup(area);
 				ImGui::End();
 				if (!plotVisible)
 				{
@@ -1114,7 +1083,7 @@ namespace SST::Prototypes::JFM
 							const double y = area.scale == PlotScale::SemiLog ? std::abs(rawY[index]) : rawY[index];
 							if (area.scale == PlotScale::SemiLog && y <= 0.0)
 								continue;
-							includeBounds(x[index], y, hasBounds, minX, maxX, minY, maxY);
+							sst::ui::plot::IncludeBounds(x[index], y, hasBounds, minX, maxX, minY, maxY);
 						}
 					}
 				}
@@ -1171,13 +1140,13 @@ namespace SST::Prototypes::JFM
 						const std::string curveLabel = group.title + " / " + shortName(characteristic->second.info)
 							+ "###curve_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 						if (area.scale == PlotScale::Linear)
-							ImPlot::PlotLine(curveLabel.c_str(), x.data(), rawY.data(), static_cast<int>(count), rawSpec);
+							sst::ui::plot::RenderSeries({curveLabel.c_str(), {x.data(), rawY.data(), static_cast<std::size_t>(count)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(rawSpec)});
 						else
 						{
 							std::vector<double> filteredX;
 							std::vector<double> filteredY = absolutePositive(rawY, x, filteredX);
 							if (!filteredX.empty())
-								ImPlot::PlotLine(curveLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), rawSpec);
+								sst::ui::plot::RenderSeries({curveLabel.c_str(), {filteredX.data(), filteredY.data(), static_cast<std::size_t>(filteredX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(rawSpec)});
 						}
 						const auto curve = m_Store->GetPrefitCurve({area.project, id});
 						if (plotSettings.showPrefitCurves && curve)
@@ -1204,13 +1173,13 @@ namespace SST::Prototypes::JFM
 								prefitSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string prefitLabel = "##jfm_raw_prefit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 								if (area.scale == PlotScale::Linear)
-									ImPlot::PlotLine(prefitLabel.c_str(), prefitX->data(), prefitY->data(), static_cast<int>(curveCount), prefitSpec);
+									sst::ui::plot::RenderSeries({prefitLabel.c_str(), {prefitX->data(), prefitY->data(), static_cast<std::size_t>(curveCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)});
 								else
 								{
 									std::vector<double> filteredX;
 									std::vector<double> filteredY = absolutePositive(*prefitY, *prefitX, filteredX);
 									if (!filteredX.empty())
-										ImPlot::PlotLine(prefitLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), prefitSpec);
+										sst::ui::plot::RenderSeries({prefitLabel.c_str(), {filteredX.data(), filteredY.data(), static_cast<std::size_t>(filteredX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)});
 								}
 							}
 						}
@@ -1236,13 +1205,13 @@ namespace SST::Prototypes::JFM
 								fitSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string fitLabel = "##jfm_raw_fit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 								if (area.scale == PlotScale::Linear)
-									ImPlot::PlotLine(fitLabel.c_str(), fitX->data(), fitY->data(), static_cast<int>(fitCount), fitSpec);
+									sst::ui::plot::RenderSeries({fitLabel.c_str(), {fitX->data(), fitY->data(), static_cast<std::size_t>(fitCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
 								else
 								{
 									std::vector<double> filteredX;
 									std::vector<double> filteredY = absolutePositive(*fitY, *fitX, filteredX);
 									if (!filteredX.empty())
-										ImPlot::PlotLine(fitLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), fitSpec);
+										sst::ui::plot::RenderSeries({fitLabel.c_str(), {filteredX.data(), filteredY.data(), static_cast<std::size_t>(filteredX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(fitSpec)});
 								}
 							}
 						}
@@ -1277,13 +1246,13 @@ namespace SST::Prototypes::JFM
 								tunedSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string tunedLabel = "##jfm_raw_tuned_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 								if (area.scale == PlotScale::Linear)
-									ImPlot::PlotLine(tunedLabel.c_str(), tunedX.data(), tunedY.data(), static_cast<int>(tunedCount), tunedSpec);
+									sst::ui::plot::RenderSeries({tunedLabel.c_str(), {tunedX.data(), tunedY.data(), static_cast<std::size_t>(tunedCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(tunedSpec)});
 								else
 								{
 									std::vector<double> filteredX;
 									std::vector<double> filteredY = absolutePositive(tunedY, tunedX, filteredX);
 									if (!filteredX.empty())
-										ImPlot::PlotLine(tunedLabel.c_str(), filteredX.data(), filteredY.data(), static_cast<int>(filteredX.size()), tunedSpec);
+										sst::ui::plot::RenderSeries({tunedLabel.c_str(), {filteredX.data(), filteredY.data(), static_cast<std::size_t>(filteredX.size())}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(tunedSpec)});
 								}
 							}
 						}
@@ -1294,6 +1263,8 @@ namespace SST::Prototypes::JFM
 				if (rangeCursor)
 					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 			}
+			else
+				FinishRangeUndoGroup(area);
 			if (area.project == m_Store->GetActiveProjectHandle() && ImGui::BeginDragDropTarget())
 			{
 				if (const ImGuiPayload *payload = ImGui::AcceptDragDropPayload("JFM_CHARACTERISTIC_ID"))

@@ -9,7 +9,9 @@
 #include <cstddef>
 #include <cmath>
 #include <imgui.h>
+#include <sst/ui/Widgets/ParameterBoundsRow.hpp>
 #include <implot.h>
+#include <sst/ui/Plot/ImPlotRenderer.hpp>
 #include <optional>
 
 namespace SST::Prototypes::JFM
@@ -68,19 +70,8 @@ namespace SST::Prototypes::JFM
 			{
 				const std::string name(nameView);
 				JFMParameterSolverSetting &parameter = settings.parameters[name];
-				ImGui::PushID(name.c_str());
-				ImGui::TableNextRow();
-				ImGui::TableSetColumnIndex(0);
-				ImGui::TextUnformatted(name.c_str());
-				ImGui::TableSetColumnIndex(1);
-				changed |= ImGui::Checkbox("##free", &parameter.monteCarloFree);
-				ImGui::TableSetColumnIndex(2);
-				ImGui::SetNextItemWidth(-1.0f);
-				changed |= ImGui::InputDouble("##min", &parameter.minimum, 0.0, 0.0, "%.6g");
-				ImGui::TableSetColumnIndex(3);
-				ImGui::SetNextItemWidth(-1.0f);
-				changed |= ImGui::InputDouble("##max", &parameter.maximum, 0.0, 0.0, "%.6g");
-				ImGui::PopID();
+				changed |= sst::ui::widgets::ParameterBoundsRow(name.c_str(), name.c_str(),
+					parameter.monteCarloFree, parameter.minimum, parameter.maximum);
 			}
 			ImGui::EndTable();
 		}
@@ -111,18 +102,6 @@ namespace SST::Prototypes::JFM
 				|| pairs == std::vector<JFMMonteCarloParameterPair>{{"i0", "a"}, {"RsH", "Rs"}};
 		}
 
-		ImPlotMarker ScatterMarker(int marker)
-		{
-			switch (std::clamp(marker, 0, 5))
-			{
-			case 1: return ImPlotMarker_Square;
-			case 2: return ImPlotMarker_Diamond;
-			case 3: return ImPlotMarker_Cross;
-			case 4: return ImPlotMarker_Plus;
-			case 5: return ImPlotMarker_Asterisk;
-			default: return ImPlotMarker_Circle;
-			}
-		}
 	} // namespace
 
 	bool RenderJFMMonteCarloScatterDefaults(JFMFitMonteCarloSettings &settings, const char *id)
@@ -328,13 +307,13 @@ namespace SST::Prototypes::JFM
 				if (!options.showSigmaClasses[sigmaClass] || x[sigmaClass].empty())
 					continue;
 				ImPlotSpec points;
-				points.Marker = ScatterMarker(options.marker);
+				points.Marker = sst::ui::plot::ImPlotMarkerFor(sst::ui::plot::MarkerForIndex(options.marker));
 				points.MarkerSize = 3.0f;
 				points.LineColor = ImVec4(
 					options.sigmaColors[sigmaClass][0], options.sigmaColors[sigmaClass][1],
 					options.sigmaColors[sigmaClass][2], options.sigmaColors[sigmaClass][3]);
 				points.MarkerFillColor = points.LineColor;
-				ImPlot::PlotScatter(classLabels[sigmaClass], x[sigmaClass].data(), y[sigmaClass].data(), static_cast<int>(x[sigmaClass].size()), points);
+				sst::ui::plot::RenderSeries({classLabels[sigmaClass], {x[sigmaClass].data(), y[sigmaClass].data(), static_cast<std::size_t>(x[sigmaClass].size())}, sst::ui::plot::SeriesKind::Scatter, sst::ui::plot::FromImPlotStyle(points)});
 			}
 			const ImPlotRect limits = ImPlot::GetPlotLimits();
 			options.xMinimum = limits.X.Min;
