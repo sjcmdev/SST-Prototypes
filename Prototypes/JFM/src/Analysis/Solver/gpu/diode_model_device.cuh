@@ -1,7 +1,7 @@
 #pragma once
 
 #include "lambert_w_device.cuh"
-#include "solver/phys_const.hpp"
+#include "jfm_constants.hpp"
 
 __device__ __forceinline__ double gpu_nan()
 {
@@ -40,7 +40,7 @@ __device__ __forceinline__ double evaluateJFMCurrent_d(GpuModelType model, doubl
     const double ideality = params[1];
     if (!(i0 > 0.0) || !(ideality > 0.0) || !(temperature > 0.0))
         return gpu_nan();
-    const double thermal = ideality * PhysConst::k * temperature;
+    const double thermal = ideality * SST::Prototypes::JFM::ModelBoltzmann * temperature;
     double diode = 0.0;
     double internal_voltage = voltage;
     if (gpu_model_has_rs(model))

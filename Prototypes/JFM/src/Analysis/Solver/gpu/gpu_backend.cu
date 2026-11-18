@@ -4,7 +4,7 @@
 
 #include "solver/diode_model.hpp"
 #include "solver/diode_objective.hpp"
-#include "solver/nelder_mead.hpp"
+#include <sst/math/nelder_mead.hpp>
 
 #include <cuda_runtime.h>
 
@@ -803,7 +803,7 @@ const char* stepTypeName(int type)
     }
 }
 
-std::string serializeCpuTrace(const SimplexState& state, const std::vector<int>& stepTypes)
+std::string serializeCpuTrace(const sst::math::SimplexState& state, const std::vector<int>& stepTypes)
 {
     std::ostringstream stream;
     stream << std::scientific << std::setprecision(9);
@@ -1184,11 +1184,11 @@ GpuNumericValidationResult gpuValidateSimplexOneStep()
         measured[i] = evaluateDiodeIV4(voltages[i], trueParams, 300.0);
     }
 
-    std::vector<FitParam> fitParams = {
-        FitParam("I0", startParams[0], minBounds[0], maxBounds[0], true),
-        FitParam("A", startParams[1], minBounds[1], maxBounds[1], true),
-        FitParam("Rs", startParams[2], minBounds[2], maxBounds[2], true),
-        FitParam("Rsh", startParams[3], minBounds[3], maxBounds[3], true),
+    std::vector<sst::math::FitParam> fitParams = {
+        sst::math::FitParam("I0", startParams[0], minBounds[0], maxBounds[0], true),
+        sst::math::FitParam("A", startParams[1], minBounds[1], maxBounds[1], true),
+        sst::math::FitParam("Rs", startParams[2], minBounds[2], maxBounds[2], true),
+        sst::math::FitParam("Rsh", startParams[3], minBounds[3], maxBounds[3], true),
     };
     auto objective = makeDiodeIVObjective(
         fitParams,
@@ -1196,10 +1196,10 @@ GpuNumericValidationResult gpuValidateSimplexOneStep()
         voltages,
         measured,
         sigma);
-    SANelderMead cpuSolver(fitParams, objective, 1.0, 2.0, 0.5, 0.5, 1e-12, false, SAConfig{}, 0, false, std::max(1, pointCount - 4));
+    sst::math::SANelderMead cpuSolver(fitParams, objective, 1.0, 2.0, 0.5, 0.5, 1e-12, false, sst::math::SAConfig{}, 0, false, std::max(1, pointCount - 4));
     cpuSolver.initSimplex();
     cpuSolver.step();
-    const SimplexState& cpuState = cpuSolver.state();
+    const sst::math::SimplexState& cpuState = cpuSolver.state();
 
     GpuParamLayout layout = makeFourParamLayout(startParams, minBounds, maxBounds, pointCount);
     GpuNmConfig config;
@@ -1315,11 +1315,11 @@ GpuNumericValidationResult gpuValidateSimplexFull()
         measured[i] = evaluateDiodeIV4(voltages[i], trueParams, 300.0);
     }
 
-    std::vector<FitParam> fitParams = {
-        FitParam("I0", startParams[0], minBounds[0], maxBounds[0], true),
-        FitParam("A", startParams[1], minBounds[1], maxBounds[1], true),
-        FitParam("Rs", startParams[2], minBounds[2], maxBounds[2], true),
-        FitParam("Rsh", startParams[3], minBounds[3], maxBounds[3], true),
+    std::vector<sst::math::FitParam> fitParams = {
+        sst::math::FitParam("I0", startParams[0], minBounds[0], maxBounds[0], true),
+        sst::math::FitParam("A", startParams[1], minBounds[1], maxBounds[1], true),
+        sst::math::FitParam("Rs", startParams[2], minBounds[2], maxBounds[2], true),
+        sst::math::FitParam("Rsh", startParams[3], minBounds[3], maxBounds[3], true),
     };
     auto objective = makeDiodeIVObjective(
         fitParams,
@@ -1327,9 +1327,9 @@ GpuNumericValidationResult gpuValidateSimplexFull()
         voltages,
         measured,
         sigma);
-    SANelderMead cpuSolver(fitParams, objective, 1.0, 2.0, 0.5, 0.5, 1e-12, false, SAConfig{}, 0, false, std::max(1, pointCount - 4));
+    sst::math::SANelderMead cpuSolver(fitParams, objective, 1.0, 2.0, 0.5, 0.5, 1e-12, false, sst::math::SAConfig{}, 0, false, std::max(1, pointCount - 4));
     cpuSolver.initSimplex();
-    const FitResult cpuResult = cpuSolver.runUntilConvergence(maxIter, 1e-300);
+    const sst::math::FitResult cpuResult = cpuSolver.runUntilConvergence(maxIter, 1e-300);
 
     GpuParamLayout layout = makeFourParamLayout(startParams, minBounds, maxBounds, pointCount);
     GpuNmConfig config;
@@ -1459,11 +1459,11 @@ GpuSimplexParityReport gpuValidateSimplexParityTrace()
         sigma[i] = std::max(std::abs(noiseAmplitude), 1e-30);
     }
 
-    std::vector<FitParam> fitParams = {
-        FitParam("I0", startParams[0], minBounds[0], maxBounds[0], true),
-        FitParam("A", startParams[1], minBounds[1], maxBounds[1], true),
-        FitParam("Rs", startParams[2], minBounds[2], maxBounds[2], true),
-        FitParam("Rsh", startParams[3], minBounds[3], maxBounds[3], true),
+    std::vector<sst::math::FitParam> fitParams = {
+        sst::math::FitParam("I0", startParams[0], minBounds[0], maxBounds[0], true),
+        sst::math::FitParam("A", startParams[1], minBounds[1], maxBounds[1], true),
+        sst::math::FitParam("Rs", startParams[2], minBounds[2], maxBounds[2], true),
+        sst::math::FitParam("Rsh", startParams[3], minBounds[3], maxBounds[3], true),
     };
     auto makeObjective = [&]() {
         return makeDiodeIVObjective(
@@ -1474,9 +1474,9 @@ GpuSimplexParityReport gpuValidateSimplexParityTrace()
             sigma);
     };
 
-    SANelderMead initialSolver(fitParams, makeObjective(), 1.0, 2.0, 0.5, 0.5, 1e-12, false, SAConfig{}, 0, false, std::max(1, pointCount - 4));
+    sst::math::SANelderMead initialSolver(fitParams, makeObjective(), 1.0, 2.0, 0.5, 0.5, 1e-12, false, sst::math::SAConfig{}, 0, false, std::max(1, pointCount - 4));
     initialSolver.initSimplex();
-    const SimplexState& initialState = initialSolver.state();
+    const sst::math::SimplexState& initialState = initialSolver.state();
     const int nFree = static_cast<int>(initialState.vertices.front().size());
     const int nVertices = static_cast<int>(initialState.vertices.size());
     std::vector<double> initialVertices(static_cast<size_t>(nFree) * static_cast<size_t>(nVertices));
@@ -1537,7 +1537,7 @@ GpuSimplexParityReport gpuValidateSimplexParityTrace()
     report.passed = true;
     for (int iterations : iterationsToCheck)
     {
-        SANelderMead cpuSolver(fitParams, makeObjective(), 1.0, 2.0, 0.5, 0.5, 1e-12, false, SAConfig{}, 0, false, std::max(1, pointCount - 4));
+        sst::math::SANelderMead cpuSolver(fitParams, makeObjective(), 1.0, 2.0, 0.5, 0.5, 1e-12, false, sst::math::SAConfig{}, 0, false, std::max(1, pointCount - 4));
         cpuSolver.initSimplex();
         std::vector<int> stepTypes;
         stepTypes.reserve(static_cast<size_t>(iterations));
@@ -1580,7 +1580,7 @@ GpuSimplexParityReport gpuValidateSimplexParityTrace()
             metadataOk = metadataOk && gpuState.step_types[i] == stepTypes[static_cast<size_t>(i)];
 
         bool numericOk = true;
-        const SimplexState& cpuState = cpuSolver.state();
+        const sst::math::SimplexState& cpuState = cpuSolver.state();
         for (int vertex = 0; vertex < nVertices; ++vertex)
         {
             const double chiAbsError = std::abs(gpuState.chi2[vertex] - cpuState.chi2_values[static_cast<size_t>(vertex)]);

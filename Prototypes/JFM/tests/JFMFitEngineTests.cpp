@@ -2,7 +2,7 @@
 
 #include "Analysis/JFMArrheniusAnalysis.hpp"
 #include "Analysis/JFMFitEngine.hpp"
-#include "lambertw/LambertW.hpp"
+#include <sst/math/lambert_w.hpp>
 #include "solver/diode_model.hpp"
 #include "solver/objective.hpp"
 
@@ -63,7 +63,7 @@ namespace SST::Prototypes::JFM
 		constexpr double k = 8.6e-5;
 		const double thermal = Parameters.at("A") * k * temperature;
 		const double argument = Parameters.at("I0") * Parameters.at("Rs") / thermal * std::exp(voltage / thermal);
-		const double diode = utl::LambertW<0>(argument) * thermal / Parameters.at("Rs");
+		const double diode = sst::math::lambertW0(argument) * thermal / Parameters.at("Rs");
 		const double internalVoltage = voltage - diode * Parameters.at("Rs");
 		const double expected4 = diode + internalVoltage / Parameters.at("Rsh");
 		const double expected6 = expected4 + std::pow(internalVoltage, Parameters.at("alpha")) / Parameters.at("Rsh2");
@@ -74,6 +74,33 @@ namespace SST::Prototypes::JFM
 		EXPECT_NEAR(EvaluateJFMCurrent("SD-RsRsh-alpha-Rsh2", voltage, temperature, Parameters), expected6, std::abs(expected6) * 1.0e-12);
 		EXPECT_NEAR(evaluateDiodeIV4(voltage, parameters4, temperature), expected4, std::abs(expected4) * 1.0e-12);
 		EXPECT_NEAR(evaluateDiodeIV6(voltage, parameters6, temperature), expected6, std::abs(expected6) * 1.0e-12);
+	}
+
+	TEST(JFMFitEngineTests, LibraryAdaptersPreserveHistoricalCurrents)
+	{
+		const std::array<const char *, 5> models = {
+			"SD-0", "SD-Rs", "SD-Rsh", "SD-RsRsh", "SD-RsRsh-alpha-Rsh2"};
+		// Historical JFM values at k=8.6e-5, independent of the linked Lambert W backend.
+		const std::array<double, 5> expected = {
+			0.00014864277333134955, 0.0001475139098000304, 0.00014919277333134956,
+			0.0001480636147722108, 0.0001480696582833396};
+		for (std::size_t index = 0; index < models.size(); ++index)
+		{
+			SCOPED_TRACE(models[index]);
+			EXPECT_NEAR(EvaluateJFMCurrent(models[index], 0.55, 300.0, Parameters), expected[index], expected[index] * 1.0e-12);
+			EXPECT_NEAR(EvaluateJFMCurrent(std::string(models[index]) + "-I_ph", 0.55, 300.0, Parameters), expected[index] - 0.03, 3.0e-14);
+		}
+	}
+
+	TEST(JFMFitEngineTests, MigrationPreservesSeparateZeroSeriesBehaviors)
+	{
+		auto parameters = Parameters;
+		parameters["Rs"] = 0.0;
+		for (const char *model : {"SD-Rs", "SD-RsRsh", "SD-RsRsh-alpha-Rsh2"})
+			EXPECT_TRUE(std::isnan(EvaluateJFMCurrent(model, 0.55, 300.0, parameters)));
+		const double array[] = {1.0e-10, 1.5, 0.0, 1.0e6, 2.0, 5.0e7};
+		EXPECT_NEAR(evaluateDiodeIV4(0.55, array, 300.0), 0.00014919277333134956, 1.0e-16);
+		EXPECT_NEAR(evaluateDiodeIV6(0.55, array, 300.0), 0.00014919882333134956, 1.0e-16);
 	}
 
 	TEST(JFMFitEngineTests, ChiSquaredUsesSimplexLogRatioResiduals)
@@ -99,7 +126,7 @@ namespace SST::Prototypes::JFM
 		const double thermal = Parameters.at("A") * 8.6e-5 * temperature;
 		const double noSeries = Parameters.at("I0") * std::exp(voltage / thermal);
 		const double argument = Parameters.at("I0") * Parameters.at("Rs") / thermal * std::exp(voltage / thermal);
-		const double withSeries = utl::LambertW<0>(argument) * thermal / Parameters.at("Rs");
+		const double withSeries = sst::math::lambertW0(argument) * thermal / Parameters.at("Rs");
 
 		EXPECT_NEAR(EvaluateJFMCurrent("SD-0", voltage, temperature, Parameters), noSeries, std::abs(noSeries) * 1.0e-12);
 		EXPECT_NEAR(EvaluateJFMCurrent("SD-Rsh", voltage, temperature, Parameters), noSeries + voltage / Parameters.at("Rsh"), std::abs(noSeries) * 1.0e-12);
