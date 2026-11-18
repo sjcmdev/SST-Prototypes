@@ -2,6 +2,7 @@
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Domain/CapLabBundleImport.hpp"
 #include "Domain/CapLabAnalysis.hpp"
+#include "CapLabCommands.hpp"
 #include <sst/physics/capacitance.hpp>
 #include <sst/physics/arrhenius.hpp>
 #include <sst/physics/materials.hpp>
@@ -99,6 +100,42 @@ NB_MODULE(sst_caplab, module)
         }
         return out.dump();
     }, nanobind::arg("temperature_K") = 300.);
+    module.def("execute", [](const std::string &project, const std::string &request) {
+        using namespace SST;
+        // Same Core command/job/main-thread acceptance path as the panel.
+        nanobind::gil_scoped_release release;
+        Json response;
+        try {
+            auto jobs=CreateRef<SST::JobSystem>(nullptr,1);
+            auto bus=CreateRef<SST::EventBus>(); auto undo=CreateRef<SST::UndoStack>();
+            auto commands=CreateRef<SST::CommandRegistry>();
+            CapLabWorkflow state(jobs,bus,undo); state.document.project=Parse(project);
+            RegisterCommands(commands,bus,state);
+            auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target);});
+            const auto r=Json::parse(request); const std::string operation=r.at("operation");
+            if (operation=="edit_circuit") {
+                SST::CommandContext context; context.Set("edit",r.at("edit"));
+                const auto result=commands->Execute(SST::CommandID{"caplab.circuit"},std::move(context));
+                if (!result) throw std::runtime_error(result.Error().technicalDetails);
+            } else if (operation=="simulate") {
+                state.analysisOptions=r.at("settings"); state.analysisOptions["type"]="Circuit";
+                const auto result=commands->Execute(SST::CommandID{"caplab.analyze"});
+                if (!result) throw std::runtime_error(result.Error().technicalDetails);
+                bus->ProcessQueue();
+                if (!state.activeJob) throw std::runtime_error(state.status);
+                const auto id=state.activeJob;
+                jobs->Shutdown(); state.OnUpdate(0);
+                const auto job=jobs->GetJob(id);
+                if (!job || job->status!=SST::JobStatus::Completed || state.document.project.analyses.empty())
+                    return Json{{"ok",false},{"project",Json::parse(project)},
+                        {"error",{{"code","simulation_failed"},{"message",state.status}}}}.dump();
+            } else throw std::runtime_error("Unknown CapLab operation");
+            response={{"ok",true},{"project",Json::parse(Serialize(state.document.project))},{"error",nullptr}};
+        } catch (const std::exception &e) {
+            response={{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}};
+        }
+        return response.dump();
+    });
     module.def("roundtrip", [](const std::string &text) { return Serialize(Parse(text)); });
 }
 #endif

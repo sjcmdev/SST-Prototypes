@@ -72,6 +72,11 @@ inline void RefreshAnalyses(Project &p) {
             try { stale |= AnalysisMeasurement(p,input.at("id").get<pl::Id>()) != input; }
             catch (const std::exception &) { missing = true; }
         }
+        if (a.contains("circuit")) {
+            bool found=false;
+            for (const auto &c : p.circuits) if (c.at("id")==a.at("circuit").at("id")) { found=true; stale |= c!=a.at("circuit"); }
+            missing |= !found;
+        }
         if (a.contains("defect")) {
             bool found=false;
             for (const auto &d : p.defects) if (d.at("id")==a.at("defect").at("id")) { found=true; stale |= d!=a.at("defect"); }
@@ -84,12 +89,14 @@ inline pl::Id AnalysisPlot(Project &p, pl::Id workbook, const Json &spec) {
     const std::string name = spec.at("name");
     const auto graph = p.engine->reserveId(), layer = p.engine->reserveId();
     pl::Layer l; l.spec.x.label = spec.at("x_label"); l.spec.y.label = spec.at("y_label"); l.spec.autoFit = sst::ui::plot::AutoFit::Once;
+    l.spec.equalAspect=spec.value("equal_aspect",false);
     if (spec.value("log_x",false)) l.spec.x.scale=sst::ui::plot::AxisScale::Log10;
     std::vector<pl::Object> objects{{graph,p.engine->root(),name,0,pl::Graph{}},{layer,graph,name,0,l}};
     for (const auto &curve : spec.at("curves")) {
         auto sheet = p.engine->reserveId(), x = p.engine->reserveId(), y = p.engine->reserveId();
         pl::Worksheet w; for (std::size_t i=0; i<curve.at("x").size(); ++i) w.rows.push_back(p.engine->reserveId());
-        pl::Column cx, cy; cx.values = curve.at("x").get<std::vector<double>>(); cy.values = curve.at("y").get<std::vector<double>>();
+        pl::Column cx, cy; auto values=[](const Json &array) {std::vector<double> out; for (const auto &v : array) out.push_back(v.is_null() ? std::numeric_limits<double>::quiet_NaN() : v.get<double>()); return out;};
+        cx.values=values(curve.at("x")); cy.values=values(curve.at("y"));
         cx.role = pl::Role::X; cy.role = pl::Role::Y;
         pl::Plot plot{sheet,x,y}; plot.kind = sst::ui::plot::SeriesKind::LineScatter;
         if (curve.value("candidates",false)) plot.kind=sst::ui::plot::SeriesKind::Scatter;

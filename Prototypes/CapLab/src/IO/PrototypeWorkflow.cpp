@@ -1,5 +1,6 @@
 #include "Core/dspch.hpp"
 #include "IO/PrototypeWorkflow.hpp"
+#include "Domain/CapLabIS.hpp"
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Core/IO/TextFileIO.hpp"
@@ -52,7 +53,12 @@ namespace SST::Prototypes::CapLab
             } else measurement=AnalysisMeasurement(p,analysisOptions.at("measurement_id").get<pl::Id>());
             Json xd;
             if (analysisOptions.contains("xd_measurement_id")) xd = AnalysisMeasurement(p,analysisOptions.at("xd_measurement_id").get<pl::Id>());
-            auto result = ReadAnalysis(measurement,analysisOptions,xd,context);
+            Json result;
+            if (analysisOptions.at("type")=="Circuit") {
+                const auto it=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==analysisOptions.at("circuit_id");});
+                if (it==p.circuits.end()) throw std::runtime_error("Missing circuit");
+                result=SimulateIS(measurement,*it,analysisOptions,context);
+            } else result = ReadAnalysis(measurement,analysisOptions,xd,context);
             result["input_revision"] = analysisOptions.at("input_revision");
             AppendAnalysis(p,std::move(result)); opened = std::move(p);
         }
@@ -76,7 +82,15 @@ namespace SST::Prototypes::CapLab
             if (!executable) throw std::runtime_error(executable.Error().technicalDetails);
             const auto local = executable.Value().parent_path().Join("python").Native();
             const auto pythonRoot = FileSystem::Exists(local / "sst_plotlab") ? local : std::filesystem::path(SST_PLOTLAB_PYTHON_ROOT);
-            PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot);
+            if (snapshot->spec.equalAspect) {
+                // The existing exporter uses equal fractional plot dimensions.
+                // Match physical dimensions to the resolved data ranges for 1:1 units.
+                auto equal=*snapshot;
+                const double ratio=(equal.ranges.maxX-equal.ranges.minX)/(equal.ranges.maxY-equal.ranges.minY);
+                if (ratio>equal.widthMm/equal.heightMm) equal.heightMm=equal.widthMm/ratio;
+                else equal.widthMm=equal.heightMm*ratio;
+                PlotLab::ExportGraph(equal,path.Native(),"png",300,pythonRoot);
+            } else PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot);
         }
         if (!saveCommitted) context.ThrowIfCancellationRequested();
         context.SetProgress(1,1);

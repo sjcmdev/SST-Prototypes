@@ -180,6 +180,7 @@ void CapLabPrototypePanel::RenderContent() {
         }
         ImGui::PopID();
     }
+    RenderIS();
     RenderAS();
     RenderAnalysis();
     if (doc.project.graph) {

@@ -1,4 +1,4 @@
-# CapLab - M4 AS, defects and Arrhenius
+# CapLab - M5 CircuitCore-UI and IS simulation
 
 Core owns commands, EventBus, Undo, jobs, progress, diagnostics and embedded
 Python. PlotLab-Engine owns tables, row/object IDs and graphs. No dependencies
@@ -146,3 +146,75 @@ Debug application and tests are built in repository build/. Runtime launch was
 rejected by Computer Use: "Computer Use was not approved to use caplab".
 Start/exit is not verified; VISUAL QA NOT RUN. See VALIDATION.md for the full
 acceptance matrix, regression counts and the explicit A7 source conflict.
+
+
+## M5 ? IS simulation
+
+The existing CircuitCore-UI CircuitDocument, SchematicEditor and compileDocument
+are embedded directly from the sibling SST-Experiments/CircuitCore-UI sources.
+The GLFW host, app lifecycle and PlotViews are not embedded. CircuitCore sources
+are compiled into the app/test targets with their matching CRT. No source files
+in CircuitCore or the experiment were changed. W1 EditorWindow remains the host.
+
+Open **IS / CircuitCore schematic**, choose a sample and create a topology (for
+example R0-p(R1,C1)). The reused editor handles placement, wires, ground, port,
+rotation and component parameters. Each document edit uses caplab.circuit and
+Core Undo/Redo. Schematic JSON, terminal IDs, layout, parameters and the circuit's
+stable ID survive project save/open. An unfinished port can be saved; simulation
+requires a valid port. Invalid edits never replace the document.
+
+Choose a same-sample FrequencySweep in ReZ_ImZ, C_G or Cp_Rp form. Simulation
+uses exactly its frequency values and ordering, measured temperature and bias.
+Missing T/bias require explicit confirmation; existing metadata takes precedence.
+The runner applies a temporary unit AC port-voltage source with the measured DC
+bias, then derives Y from the delivered source current and Z=1/Y. The virtual
+source never enters the saved schematic. The DeviceRegistry outlives compilation
+and every solve. Core jobs check cancellation between frequencies; computation
+never runs in panel rendering. Edits during computation reject the old result.
+Main-thread acceptance is one Core Undo entry.
+
+All IS graphs use the same PlotLab-Engine graph/snapshot path as CV/AS: Nyquist
+(Re Z, -Im Z) with equal physical axis scales, Bode magnitude/phase, C-f,
+G/omega-f and both complex residual components. Original Im Z retains its sign.
+The existing PNG exporter receives the same resolved ranges/styles; equal-scale
+exports match physical plot dimensions to those ranges. Bad measurements/model
+points retain null values and diagnostics with stable codes and row IDs.
+Changing a circuit invalidates its results; deleting it gives missing_input
+without rebinding another circuit. Invalid ports, source conflicts and singular
+AC systems have explicit diagnostics.
+
+The existing CircuitCore SPICE junction/diffusion model is reused for PN and
+Schottky diodes: Cj0/(1-V/Vbi)^m, linear continuation above FC*Vbi, plus tau*dI/dV.
+Cj0 [F], Vbi [V], m, FC and tau [s] are editable and persisted. The existing
+IJunctionCapacitance interface remains the hook for a future charge-consistent
+physical model. This milestone adds no circuit optimizer or fitting UI (M6).
+Source: owner decision 8.4; CircuitCore Devices/JunctionCapacitance.h and Diodes.h.
+Y/Z conversions reside in the sourced SST-Physics impedance.hpp header (PFS,
+Capacitance Spectroscopy of Thin-Film Solar Cells, pp.94?96).
+
+Headless Python uses the real nanobind layer and the same Core commands/jobs:
+
+```python
+from caplab import execute
+created = execute(project, {
+    "operation": "edit_circuit",
+    "edit": {"action": "create", "sample_id": sample_id,
+             "name": "Randles", "topology": "R0-p(R1,C1)"},
+})
+assert created["ok"], created["error"]
+project = created["project"]
+result = execute(project, {
+    "operation": "simulate",
+    "settings": {"circuit_id": project["circuits"][-1]["id"],
+                 "measurement_id": measurement_id},
+})
+```
+
+Inputs/outputs are JSON values; project/measurement/circuit/row IDs are stable.
+Use edit action replace with circuit_id and schematic, or delete with circuit_id.
+The schematic keeps CircuitCore-UI version-1 keys and includes parameter units.
+Simulation outputs use explicit frequency_Hz, temperature_K, bias_V and
+*_ReZ_Ohm/*_ImZ_Ohm fields. The envelope has ok and error (null or code/message);
+invalid_request and simulation_failed are stable error codes. Completed analyses
+also carry valid/invalid/stale/missing_input and point diagnostics. No GUI or
+source measurement files are needed. Native worker execution releases the GIL.

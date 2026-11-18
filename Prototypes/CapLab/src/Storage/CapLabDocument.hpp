@@ -4,6 +4,7 @@
 #include <optional>
 #include <set>
 #include <nlohmann/json.hpp>
+#include "Domain/CapLabCircuit.hpp"
 #include <sst/plotlab/Extensions.hpp>
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
@@ -23,7 +24,7 @@ namespace SST::Prototypes::CapLab
         Ref<pl::Project> engine = CreateRef<pl::Project>("CapLab");
         std::vector<Sample> samples;
         std::vector<FrequencySweep> sweeps;
-        Json measurements = Json::array(), historical = Json::array(), imports = Json::array(), analyses = Json::array(), defects = Json::array();
+        Json measurements = Json::array(), historical = Json::array(), imports = Json::array(), analyses = Json::array(), defects = Json::array(), circuits = Json::array();
         pl::Id graph = 0;
     };
     inline Json Nullable(std::optional<double> value) { return value ? Json(*value) : Json(nullptr); }
@@ -202,17 +203,39 @@ namespace SST::Prototypes::CapLab
             }
         }
         for (auto id : pointIds) if (defectIds.contains(id)) throw std::runtime_error("Conflicting defect/point ID.");
+        if (!p.circuits.is_array()) throw std::runtime_error("Expected circuits array");
+        std::set<pl::Id> circuitIds;
+        for (const auto &c : p.circuits) {
+            const auto id=c.at("id").get<pl::Id>();
+            if (!id || !circuitIds.insert(id).second || p.engine->objects().contains(id) || historicalIds.contains(id) ||
+                defectIds.contains(id) || pointIds.contains(id) || !samples.contains(c.at("sample_id").get<pl::Id>()) ||
+                c.at("name").get<std::string>().empty()) throw std::runtime_error("Invalid circuit identity/sample");
+            (void)ReadCircuit(c.at("schematic"));
+        }
         std::set<pl::Id> analysisIds;
         for (const auto &a : p.analyses) {
             const auto id=a.at("id").get<pl::Id>();
-            if (!id || !analysisIds.insert(id).second || p.engine->objects().contains(id) || historicalIds.contains(id) || defectIds.contains(id) || pointIds.contains(id))
+            if (!id || !analysisIds.insert(id).second || p.engine->objects().contains(id) || historicalIds.contains(id) || defectIds.contains(id) || pointIds.contains(id) || circuitIds.contains(id))
                 throw std::runtime_error("Invalid analysis identity.");
             const std::string status=a.at("status");
             if (status!="valid" && status!="conditional" && status!="invalid" && status!="stale" && status!="missing_input")
                 throw std::runtime_error("Invalid analysis status.");
-            if (a.at("kernel_version")!=1 || (a.at("type")!="CV" && a.at("type")!="DLCPPolynomial" && a.at("type")!="AS" && a.at("type")!="Arrhenius") ||
+            if (a.at("kernel_version")!=1 || (a.at("type")!="CV" && a.at("type")!="DLCPPolynomial" && a.at("type")!="AS" && a.at("type")!="Arrhenius" && a.at("type")!="Circuit") ||
                 !a.at("inputs").is_array() || (a.at("inputs").empty() && a.at("type")!="Arrhenius") || !a.at("settings").is_object())
                 throw std::runtime_error("Invalid analysis contract.");
+            if (a.at("type")=="Circuit") {
+                const auto n=a.at("frequency_Hz").size();
+                if (!samples.contains(a.at("sample_id").get<pl::Id>()) || n==0 || n>1201 || a.at("row_ids").size()!=n ||
+                    a.at("model")!="CircuitCore-AC" || !a.at("diagnostics").is_array()) throw std::runtime_error("Invalid circuit result");
+                Optional(a.at("temperature_K"));
+                if (a.at("temperature_K").is_null() || !std::isfinite(a.at("bias_V").get<double>())) throw std::runtime_error("Invalid IS T/bias");
+                (void)ReadCircuit(a.at("circuit").at("schematic"));
+                for (const auto *key : {"measured_ReZ_Ohm","measured_ImZ_Ohm","model_ReZ_Ohm","model_ImZ_Ohm","residual_ReZ_Ohm","residual_ImZ_Ohm"}) {
+                    if (!a.at(key).is_array() || a.at(key).size()!=n) throw std::runtime_error("Unequal circuit columns");
+                    for (const auto &v : a.at(key)) if (!v.is_null() && (!v.is_number() || !std::isfinite(v.get<double>()))) throw std::runtime_error("Invalid IS value");
+                }
+                for (const auto &f : a.at("frequency_Hz")) if (f.is_null() || !f.is_number() || !std::isfinite(f.get<double>()) || f.get<double>()<=0) throw std::runtime_error("Invalid IS frequency");
+            }
             if (a.at("type")=="AS" || a.at("type")=="Arrhenius") {
                 if (!samples.contains(a.at("sample_id").get<pl::Id>())) throw std::runtime_error("Invalid AS sample.");
                 auto finiteArray=[](const Json &values) {
@@ -258,7 +281,7 @@ namespace SST::Prototypes::CapLab
         for (const auto &s : p.samples) samples.push_back({{"id",s.id},{"name",s.name},{"area_m2",Nullable(s.area_m2)},{"metadata",s.metadata}});
         for (const auto &s : p.sweeps) sweeps.push_back({{"id",s.id},{"sample_id",s.sample_id},{"variant","Cp_Rp"},
             {"frequency",s.frequency},{"capacitance",s.capacitance},{"resistance",s.resistance},{"temperature_K",Nullable(s.temperature_K)}});
-        return Json{{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
+        return Json{{"circuits",p.circuits},{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
             {"samples",samples},{"sweeps",sweeps},{"graph",p.graph},{"engine",Json::parse(p.engine->toJson())},{"measurements",p.measurements},{"historical",p.historical},{"imports",p.imports},{"analyses",p.analyses},{"defects",p.defects}}.dump();
     }
     inline Project Parse(const std::string &text)
@@ -281,6 +304,7 @@ namespace SST::Prototypes::CapLab
         p.imports = j.value("imports",Json::array());
         p.analyses = j.value("analyses",Json::array());
         p.defects = j.value("defects",Json::array());
+        p.circuits = j.value("circuits",Json::array());
         Validate(p);
         return p;
     }

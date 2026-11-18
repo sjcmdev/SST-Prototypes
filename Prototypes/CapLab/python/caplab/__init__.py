@@ -23,3 +23,16 @@ def project_from_preview(preview, temperature=None):
     """Exercise the actual embedded C++ model and validation."""
     import sst_caplab
     return json.loads(sst_caplab.project_from_preview(json.dumps(preview), temperature))
+
+
+def execute(project, request):
+    """Headless Core command/job operation; JSON values in/out, typed error envelope.
+
+    operation: edit_circuit (edit: create/replace/delete) or simulate
+    (settings: measurement_id, circuit_id, optional confirmed temperature_K/bias_V).
+    Known measurement T/bias take precedence over confirmations.
+    """
+    import json
+    import sst_caplab
+    return json.loads(sst_caplab.execute(json.dumps(project, allow_nan=False),
+                                         json.dumps(request, allow_nan=False)))

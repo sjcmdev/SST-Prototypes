@@ -1,6 +1,7 @@
 #pragma once
 #include "Presentation/Panels/EditorWindow.hpp"
 #include "CapLabCommands.hpp"
+#include "SchematicEditor.h"
 namespace SST::Prototypes::CapLab {
 class CapLabPrototypePanel final : public EditorWindow {
 public:
@@ -9,7 +10,10 @@ public:
     void RenderContent() override;
     void RenderAnalysis();
     void RenderAS();
+    void RenderIS();
 private:
+    ccui::SchematicEditor circuitEditor;
+    pl::Id selectedCircuit=0, circuitMeasurement=0;
     pl::Id selectedDefect=0;
     Json pendingCandidate;
     CapLabWorkflow *state;

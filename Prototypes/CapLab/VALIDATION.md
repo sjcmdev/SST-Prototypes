@@ -297,3 +297,113 @@ Closed questions:
 
 M5-M8 were not implemented. Runtime/visual acceptance and A7 thesis agreement
 remain the known limitations of this M4 delivery.
+
+
+## CM5 / M5 ? CircuitCore-UI i symulacja IS (2026-11-18)
+
+Implementacja M5 jest gotowa; odbi?r runtime pozostaje zablokowany przez dost?p
+Computer Use. Bez komend git i bez commit?w. Nie zmieniano ?r?de? CircuitCore,
+CircuitCore-UI, Core, JFM ani JFM/install/app/config/*.yaml.
+
+Zakres: CapLab oraz niezb?dne zmiany bibliotek: SST-Physics impedance.hpp,
+PlotLab-Engine persistence, flaga equalAspect we wsp?lnym UI-PlotSpec/rendererze
+i ich istniej?ce testy. Bez nowego optimizera, hosta GLFW ani mechanizm?w M6?M8.
+Model/widget/compileDocument i selfCheck CircuitCore-UI s? kompilowane wprost
+z istniej?cych ?r?de? repozytori?w siostrzanych. Istniej?cy model SPICE Cj(V)
+i IJunctionCapacitance CircuitCore zosta?y ponownie u?yte, nie skopiowane.
+
+Przeczytano ca?? SST-CapLab Spec, PFS, README/VALIDATION, raporty c1/cm2/cm4
+oraz Core/Presentation/WINDOWS.md. W Vault 80_AI/Codex Jobs.md jest wpis d1
+2026-11-18 06:12 z odno?nikiem [[CircuitCore-UI]], ale brak docelowej notatki;
+wyszukiwanie nazw i tre?ci ca?ego Vault nie odnalaz?o raportu. Bie??cy
+runs/d1-report.md dotyczy scaps_core, wi?c nie zast?puje tego ?r?d?a. U?yto
+aktualnego README CircuitCore-UI, kodu modelu/runnera i jego rzeczywistych
+self-checks. Brak notatki pozostaje jawn? luk? dokumentacyjn?.
+
+Przep?yw: Core command -> immutable snapshot/revision -> Core job ->
+main-thread acceptance -> document/Undo -> wsp?lny PlotLab graph/snapshot.
+API caplab.execute przez nanobind wykonuje te same commands/jobs headless;
+wej?cia/wyj?cia s? JSON, b??dy maj? kody, wyniki jawne jednostki i trwa?e ID.
+SchematicEditor nie uruchamia solvera podczas renderowania. Anulowanie jest
+sprawdzane mi?dzy cz?stotliwo?ciami. Edycja w trakcie pracy odrzuca wynik
+starej rewizji; zmiana/usuni?cie schematu daje stale/missing_input.
+
+Oczekiwania pochodz? z r?wna? analitycznych M5 / PFS (Capacitance Spectroscopy
+of Thin-Film Solar Cells, s.94?96) oraz decyzji 8.4. ?aden expected value nie
+jest generowany przez testowany kernel. R=20 Ohm, C=20 uF; Randles R0=20 Ohm,
+R1=500 Ohm, C1=20 uF. Dok?adna, celowo nier?wnomierna i nieuporz?dkowana
+siatka testu C++: [1234.5, .001, 7.25, 94001, 9e7] Hz. T=270 K i bias=-.15 V
+s? zachowane z pomiaru; brakuj?ce warunki wymagaj? jawnego potwierdzenia.
+
+W tabeli numerycznej nasze = maksymalny b??d wzgl?dny, diff = nasze minus limit.
+Wszystkie por?wnania dotycz? punkt?w poza osobliwo?ciami.
+
+| Test | Spec value | Ours | Diff | Verdict |
+|---|---:|---:|---:|---|
+| R: Z=R | <=1e-8 | 0 | -1e-8 | PASS |
+| C: Z=1/(j omega C) | <=1e-8 | 0 | -1e-8 | PASS |
+| Szeregowy RC: Z=R+1/(j omega C) | <=1e-8 | 2.66911e-11 | -9.9733089e-9 | PASS |
+| Randles: Z=R0+1/(1/R1+j omega C1) | <=1e-8 | 3.0608e-15 | -9.9999969392e-9 | PASS |
+| Y -> Z -> Y | <=1e-12 | 2.01946e-16 | -9.99798054e-13 | PASS |
+| Schemat/port/parametry/layout/ID po save/open | identyczne | identyczne | 0 | PASS |
+| Edycja podczas oblicze? | odrzucenie starego wyniku | odrzucony | 0 | PASS |
+| Nieprawid?owy port / singular circuit | diagnostyka | port/conflict/singular_matrix | 0 | PASS |
+| Istniej?ce CircuitCore-UI self-checks | PASS | PASS | 0 | PASS |
+| Responsywno?? GUI | worker, bez blokowania UI | async command/edit potwierdzone headless; GUI nieobejrzane | n/a | RUNTIME NOT VERIFIED |
+| Start/exit aplikacji | uruchomienie i zamkni?cie | launch odrzucony przez Computer Use | n/a | BLOCKED |
+
+Dodatkowo przesz?y: Cp/Rp oraz C/G i rzeczywisty znak Im Z; zero Y, z?y Rp,
+null z kodem przyczyny; b??dne jednostki schematu; wymagane T/bias i SI;
+anulowanie po pierwszym punkcie; rzeczywista osobliwo?? AC wewn?trznej ga??zi LC
+przy rezonansie; konflikty idealnych ?r?de?; nieudana edycja bez zmiany projektu;
+Core Undo/Redo edycji i przyj?cia wyniku; missing_input bez przepinania ID.
+
+Obie diody PN/Schottky: T=250/350 K, bias=-2.4/0/.32/.48 V; testy sprawdzaj?
+reverse depletion, granic? FC, liniowe przed?u?enie i tau*dI/dV. Niezale?ne
+expected Cj to 1e-9, 2e-9, 2.581988897471611e-9, 3.012320380383546e-9 F,
+z tolerancj? absolutn? 1e-15 F po dodaniu analitycznej pojemno?ci dyfuzyjnej.
+Podmiana modelu przez IJunctionCapacitance daje zadane 3e-9 F w prawdziwym
+CircuitCore impedance solve. Wszystkie pi?? parametr?w diody przechodzi JSON
+self-check. Registry ?yje d?u?ej ni? CompiledCircuit i wszystkie solves.
+
+Nyquist/Bode/C-f/G-over-omega i reszty s? obiektami PlotLab-Engine. Testy
+wsp?lnego renderera potwierdzaj? r?wn? fizyczn? skal? osi (bez GUI backendu);
+persistence i snapshot zachowuj? t? w?a?ciwo??. Nie jest to visual QA.
+
+Ko?cowa walidacja, uruchomiona w tym zadaniu z SST-Prototypes root:
+
+| Suite | GTest | pytest | Verdict |
+|---|---:|---:|---|
+| CapLab | 26 | 107 | PASS, real embedded Python required |
+| PlotLab | 8 | 22 | PASS |
+| JFM | 59 | 96 + 3 xfail | PASS |
+| SST-Libraries (pe?ny combined suite) | 103 | ? | PASS |
+
+Filtered embedded host s?u?y do pytest i nie jest liczony ponownie jako GTest.
+CapLab zachowuje istniej?cy pytest cache-provider warning; JFM ma 946 istniej?cych
+ostrze?e? numerycznych. Wszystkie buildy i testy wykonano kolejno przez
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh, MSBuild
+-nr:false -m:1. Debug x64 app/tests: SST-Prototypes/build/; w?asny library
+build/tests: SST-Libraries/build/. Nie by? potrzebny fallback TEMP.
+
+Dowody: build/caplab-m5-final.log (26/107, po ko?cowej walidacji jednostek),
+build/caplab-m5-app.log, build/caplab-m5-plotlab.log, build/caplab-m5-jfm.log;
+SST-Libraries/build/caplab-m5-build.log, caplab-m5-tests.log i caplab-m5-tests.xml.
+Graphify query poprzedzi?o nawigacj?; graphify update . od?wie?y?o graf AST.
+Ostrze?enia graphify dotycz? istniej?cych plik?w danych, .m i brakuj?cego parsera
+SQL; nie instalowano dodatkowych zale?no?ci.
+
+Start/exit: wykonano jedn? pr?b? sky.launch_app dla w?a?nie zbudowanego
+build/bin/Debug-windows-x86_64/CapLab/CapLab.exe. Automatic access review
+odrzuci? akcj?: "Computer Use was not approved to use caplab". Proces nie zosta?
+uruchomiony t? akcj?; nie stosowano alternatywnego sterowania po odmowie.
+Nie potwierdzono czystego zamkni?cia ani responsywno?ci rzeczywistego okna.
+VISUAL QA NOT RUN.
+
+Pytania zamkni?te:
+- Czy udost?pni? CapLab przez Computer Use, aby domkn?? start/exit i GUI smoke?
+  Rekomendacja: tak; to pozosta?y blocker odbioru runtime M5.
+- Czy uzupe?ni? brakuj?c? notatk? CircuitCore-UI z d1 06:12 w Vault?
+  Rekomendacja: tak, dla kompletnego provenance; bie??cy kod/self-checks s? sprawdzone.
+
+Pomini?to M6?M8 zgodnie z zakresem. Ryzyko: testy headless nie zast?puj? odbioru GUI.

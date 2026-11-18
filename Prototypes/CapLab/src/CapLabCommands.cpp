@@ -1,5 +1,6 @@
 #include "Domain/CapLabBundleImport.hpp"
 #include "CapLabCommands.hpp"
+#include "Domain/CapLabIS.hpp"
 namespace SST::Prototypes::CapLab {
 namespace {
 class RequestCommand final : public ICommand {
@@ -52,25 +53,25 @@ private:
 };
 class DefectChange final : public ICommand {
 public:
-    explicit DefectChange(CapLabWorkflow &state) : state(state) {}
+    DefectChange(CapLabWorkflow &state, bool circuit=false) : state(state), circuit(circuit) {}
     Result<void> Execute(CommandContext &context) override {
         try {
             const auto *edit=context.TryGet<Json>("edit");
             if (!edit) throw std::runtime_error("Missing defect edit.");
             before=state.document.project;
             auto draft=Parse(Serialize(before));
-            EditDefect(draft,*edit); RefreshAnalyses(draft); after=std::move(draft);
+            if (circuit) EditCircuit(draft,*edit); else EditDefect(draft,*edit); RefreshAnalyses(draft); after=std::move(draft);
             state.document.project=after; state.Changed(); return {};
         } catch (const std::exception &e) {
-            state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,"Defect edit failed",e.what(),"Check point and sample.","CapLab","caplab.defect"};
+            state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,circuit ? "Circuit edit failed" : "Defect edit failed",e.what(),"Check input and sample.","CapLab",circuit ? "caplab.circuit" : "caplab.defect"};
         }
     }
     Result<void> Undo(CommandContext &) override {state.document.project=before; state.Changed(); return {};}
     Result<void> Redo(CommandContext &) override {state.document.project=after; state.Changed(); return {};}
     bool IsUndoable() const noexcept override {return true;}
-    std::string Description() const override {return "Edit defect";}
+    std::string Description() const override {return circuit ? "Edit circuit" : "Edit defect";}
 private:
-    CapLabWorkflow &state; Project before,after;
+    CapLabWorkflow &state; bool circuit; Project before,after;
 };
 class ImportCommand final : public ICommand {
 public:
@@ -102,6 +103,9 @@ private:
 }
 void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWorkflow &state) {
     registry->SetUndoStack(state.undo); state.commands = registry;
+    auto circuit=registry->Register({CommandID{"caplab.circuit"},"Edit circuit","CapLab","",{},CommandFlags::Undoable},
+        [&state](CommandContext &) {return CreateUnique<DefectChange>(state,true);});
+    if (!circuit) throw std::runtime_error(circuit.Error().technicalDetails);
     auto defect=registry->Register({CommandID{"caplab.defect"},"Edit defect","CapLab","",{},CommandFlags::Undoable},
         [&state](CommandContext &) {return CreateUnique<DefectChange>(state);});
     if (!defect) throw std::runtime_error(defect.Error().technicalDetails);

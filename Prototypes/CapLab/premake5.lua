@@ -173,3 +173,16 @@ project "CapLab"
 
 project "CapLab"
     postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/PlotLab/python/sst_plotlab" "%{cfg.targetdir}/python/sst_plotlab"' }
+
+-- Embed only the reusable CircuitCore-UI model/widget/runner, without its host.
+for _, target in ipairs { "CapLab", "CapLabTests" } do
+    project(target)
+    includedirs { _SST_ROOT .. "/../CircuitCore/include", _SST_ROOT .. "/../CircuitCore/src",
+        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src" }
+    files { _SST_ROOT .. "/../CircuitCore/src/**.cpp",
+        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/CircuitDocument.cpp",
+        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/AnalysisRunner.cpp",
+        _SST_ROOT .. "/Prototypes/CapLab/src/Domain/CapLabIS.cpp" }
+end
+project "CapLab"
+    files { _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/SchematicEditor.cpp" }
