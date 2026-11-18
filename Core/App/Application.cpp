@@ -337,6 +337,15 @@ namespace SST
 			}
 		}
 
+        if constexpr (std::is_same_v<TEvent, WindowCloseEvent>)
+        {
+            if (m_CloseGuard && !m_CloseGuard())
+            {
+                glfwSetWindowShouldClose(m_Graphics.window->GetNativeHandle(), GLFW_FALSE);
+                event.handled = true;
+                return;
+            }
+        }
 		HandleLifecycleEvent(event, m_Runtime.lifecycle);
 
 		if (event.handled)

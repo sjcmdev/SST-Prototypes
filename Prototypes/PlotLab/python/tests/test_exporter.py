@@ -1,0 +1,117 @@
+﻿import copy
+import math
+import re
+import xml.etree.ElementTree as ET
+
+from PIL import Image
+import numpy as np
+import pytest
+from sst_plotlab.exporter import build_figure, export_graph
+
+
+@pytest.fixture
+def snapshot():
+    return dict(width_mm=80, height_mm=60, font_family="DejaVu Sans", font_pt=8,
+                ranges=[1.25, 4.75, -10, 12],
+                x_axis=dict(label="Voltage (V)", log=False, grid=True,
+                            ticks=[dict(value=2, label="two", major=True), dict(value=4, label="four", major=True)]),
+                y_axis=dict(label="Current (mA)", log=False, grid=False,
+                            ticks=[dict(value=0, label="zero", major=True)]),
+                legend=dict(visible=True, outside=False),
+                series=[dict(label="Signal", x=[1, 2, 3, 4, 5], y=[2, 4, None, 8, 10], y_error=[], kind=2,
+                             style=dict(color=[.1, .3, .7, 1], fill=[.1, .3, .7, 1], outline=[0, 0, 0, 1],
+                                        marker=1, line_pt=1.5, marker_pt=3, cap_pt=4, legend=True))])
+
+
+@pytest.mark.parametrize("format", ["pdf", "svg"])
+def test_physical_size(snapshot, tmp_path, format):
+    target = tmp_path / f"figure.{format}"
+    export_graph(snapshot, target, format)
+    expected = [80*72/25.4, 60*72/25.4]
+    if format == "svg":
+        root = ET.parse(target).getroot()
+        size = [float(root.attrib[key].removesuffix("pt")) for key in ("width", "height")]
+    else:
+        box = re.search(rb"/MediaBox\s*\[([^]]+)\]", target.read_bytes())
+        assert box is not None
+        coords = [float(x) for x in box[1].split()]
+        size = [coords[2] - coords[0], coords[3] - coords[1]]
+    assert size == pytest.approx(expected, abs=1e-5)
+
+
+def test_png_rounded_pixels(snapshot, tmp_path):
+    target = tmp_path / "figure.png"
+    export_graph(snapshot, target, "png", 300)
+    with Image.open(target) as image:
+        assert image.size == (945, 709)
+        assert image.info["dpi"] == pytest.approx((300, 300), abs=.01)
+
+
+def test_svg_is_vector_and_font_outlines(snapshot, tmp_path):
+    target = tmp_path / "figure.svg"
+    export_graph(snapshot, target, "svg")
+    root = ET.parse(target).getroot()
+    assert not root.findall(".//{http://www.w3.org/2000/svg}image")
+    assert len(root.findall(".//{http://www.w3.org/2000/svg}path")) > 10
+    assert "DejaVuSans" in target.read_text()
+
+
+def test_ranges_ticks_gaps_and_snapshot_are_preserved(snapshot, tmp_path):
+    before = copy.deepcopy(snapshot)
+    figure = build_figure(snapshot)
+    ax = figure.axes[0]
+    assert ax.get_xlim() == tuple(snapshot["ranges"][:2])
+    assert ax.get_ylim() == tuple(snapshot["ranges"][2:])
+    assert list(ax.get_xticks()) == [2, 4]
+    assert [t.get_text() for t in ax.get_xticklabels()] == ["two", "four"]
+    assert np.isnan(ax.lines[0].get_ydata()[2])
+    assert ax.lines[0].get_linewidth() == 1.5
+    assert ax.lines[0].get_markersize() == 6
+    for format in ("svg", "pdf", "png"):
+        assert export_graph(snapshot, tmp_path/f"out.{format}", format) == tuple(snapshot["ranges"])
+    assert snapshot == before
+
+
+def test_log_keeps_gaps_and_limits(snapshot):
+    snapshot["ranges"] = [.5, 8, 1, 20]
+    snapshot["x_axis"]["log"] = snapshot["y_axis"]["log"] = True
+    snapshot["series"][0]["y"] = [-2, 4, 0, 8, 10]
+    figure = build_figure(snapshot)
+    ax = figure.axes[0]
+    assert ax.get_xscale() == ax.get_yscale() == "log"
+    assert np.isnan(ax.lines[0].get_ydata()[0])
+    assert np.isnan(ax.lines[0].get_ydata()[2])
+    assert ax.get_xlim() == (.5, 8)
+
+
+def test_error_bars(snapshot, tmp_path):
+    snapshot["series"][0]["y_error"] = [.1, .2, None, .3, .5]
+    target = tmp_path/"errors.svg"
+    export_graph(snapshot, target, "svg")
+    assert target.stat().st_size > 1000
+
+
+@pytest.mark.parametrize("invalid", ["font", "width", "dpi", "ranges", "format", "error"])
+def test_invalid_export_preserves_destination(snapshot, tmp_path, invalid):
+    target = tmp_path/"existing.svg"
+    target.write_bytes(b"previous export")
+    dpi, format = 300, "svg"
+    if invalid == "font": snapshot["font_family"] = "SST font that does not exist"
+    if invalid == "width": snapshot["width_mm"] = -1
+    if invalid == "dpi": dpi = 0
+    if invalid == "ranges": snapshot["ranges"] = [2, 1, 0, 1]
+    if invalid == "format": format = "jpeg"
+    if invalid == "error": snapshot["series"][0]["y_error"] = [-1]*5
+    with pytest.raises(ValueError):
+        export_graph(snapshot, target, format, dpi)
+    assert target.read_bytes() == b"previous export"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["existing.svg"]
+
+
+def test_failed_replace_keeps_old_file_and_cleans_temp(snapshot, tmp_path, monkeypatch):
+    target=tmp_path/"figure.pdf"; target.write_bytes(b"old")
+    def fail(*args): raise PermissionError("replacement denied")
+    monkeypatch.setattr("sst_plotlab.exporter.os.replace",fail)
+    with pytest.raises(PermissionError): export_graph(snapshot,target,"pdf")
+    assert target.read_bytes()==b"old"
+    assert list(tmp_path.iterdir())==[target]

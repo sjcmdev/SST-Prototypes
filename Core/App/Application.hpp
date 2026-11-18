@@ -47,6 +47,8 @@ namespace SST
 		int Run();
 		// Request shutdown; safe to call multiple times.
 		void Shutdown();
+        // Return false to defer closing (for example, while asking to save edits).
+        void SetCloseGuard(std::function<bool()> guard) { m_CloseGuard = std::move(guard); }
 		~Application();
 
 		// Queue a platform event for main-thread processing.
@@ -158,6 +160,7 @@ namespace SST
 		Unique<ApplicationEventController> m_EventController;
 		LayerStack m_LayerStack;
 		ApplicationSetup m_ProjectSetup;
+        std::function<bool()> m_CloseGuard;
 		Ref<LogRegistry> m_LogRegistry;
 		
 		Ref<CapabilityService> m_CapabilityService;

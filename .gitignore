@@ -54,3 +54,8 @@ Prototypes/JFM/example-data/**
 # JFM solver integration reference drop
 Prototypes/JFM/solver-to-integrate/**
 Prototypes/JFM/JFM-projects/monte-carlo/**
+
+# Shipped first-launch PlotLab layout.
+!Prototypes/PlotLab/install/app/config/layouts/imgui.ini
+# Local offline dependency preparation.
+.tmp/plotlab-wheels/
