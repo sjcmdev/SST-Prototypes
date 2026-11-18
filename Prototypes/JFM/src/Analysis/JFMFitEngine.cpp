@@ -3,9 +3,9 @@
 #include "Analysis/JFMFitEngine.hpp"
 
 #include "gpu/gpu_backend.hpp"
-#include "lambertw/LambertW.hpp"
-#include "solver/phys_const.hpp"
-#include "solver/nelder_mead.hpp"
+#include "jfm_constants.hpp"
+#include <sst/math/nelder_mead.hpp>
+#include <sst/physics/iv.hpp>
 #include "solver/objective.hpp"
 
 #include <algorithm>
@@ -90,78 +90,38 @@ namespace SST::Prototypes::JFM
 			}
 		}
 
-		double WrightOmega(double value) noexcept
-		{
-			double omega = value > 1.0 ? value - std::log(value) : std::exp(value);
-			for (int iteration = 0; iteration < 5; ++iteration)
-			{
-				if (!(omega > 0.0) || !std::isfinite(omega))
-					return std::numeric_limits<double>::quiet_NaN();
-				const double residual = omega + std::log(omega) - value;
-				omega -= residual * omega / (omega + 1.0);
-			}
-			return omega;
-		}
-
-		double WithPhotocurrent(double current, const ParameterArray &parameters, bool dark) noexcept
-		{
-			return dark ? current : current - parameters[Iph];
-		}
-
-		double ThermalVoltage(double temperature, const ParameterArray &parameters) noexcept
-		{
-			return parameters[A] * PhysConst::k * temperature;
-		}
-
 		double DiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			if (!(parameters[I0] > 0.0) || !(parameters[A] > 0.0) || !(temperature > 0.0))
-				return std::numeric_limits<double>::quiet_NaN();
-			const double current = parameters[I0] * std::exp(std::clamp(voltage / ThermalVoltage(temperature, parameters), -745.0, 700.0));
-			return WithPhotocurrent(current, parameters, dark);
-		}
-
-		double EvaluateSeries(double voltage, double temperature, const ParameterArray &parameters) noexcept
-		{
-			if (!(parameters[I0] > 0.0) || !(parameters[A] > 0.0) || !(parameters[Rs] >= 0.0) || !(temperature > 0.0))
-				return std::numeric_limits<double>::quiet_NaN();
-			const double thermal = parameters[A] * PhysConst::k * temperature;
-			const double x = ((parameters[I0] * parameters[Rs]) / thermal) * std::exp(voltage / thermal);
-			return utl::LambertW<0>(x) * thermal / parameters[Rs];
+			return sst::physics::diodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double SeriesDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			return WithPhotocurrent(EvaluateSeries(voltage, temperature, parameters), parameters, dark);
+			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
+			if (parameters[Rs] == 0.0)
+				return std::numeric_limits<double>::quiet_NaN();
+			return sst::physics::seriesDiodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], parameters[Rs], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double ShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			if (!(parameters[Rsh] > 0.0))
-				return std::numeric_limits<double>::quiet_NaN();
-			const double current = parameters[I0] * std::exp(voltage / (parameters[A] * PhysConst::k * temperature))
-				+ voltage / parameters[Rsh];
-			return WithPhotocurrent(current, parameters, dark);
+			return sst::physics::shuntDiodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double SeriesShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			if (!(parameters[Rsh] > 0.0))
+			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
+			if (parameters[Rs] == 0.0)
 				return std::numeric_limits<double>::quiet_NaN();
-			const double diode = EvaluateSeries(voltage, temperature, parameters);
-			const double current = diode + (voltage - diode * parameters[Rs]) / parameters[Rsh];
-			return WithPhotocurrent(current, parameters, dark);
+			return sst::physics::seriesShuntDiodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double NonlinearShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			if (!(parameters[Rsh] > 0.0) || !(parameters[Alpha] > 0.0) || !(parameters[Rsh2] > 0.0))
+			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
+			if (parameters[Rs] == 0.0)
 				return std::numeric_limits<double>::quiet_NaN();
-			const double diode = EvaluateSeries(voltage, temperature, parameters);
-			const double internalVoltage = voltage - diode * parameters[Rs];
-			const double additionalFactor = std::pow(internalVoltage, parameters[Alpha]) / parameters[Rsh2];
-			const double current = diode + internalVoltage / parameters[Rsh] + additionalFactor;
-			return WithPhotocurrent(current, parameters, dark);
+			return sst::physics::nonlinearShuntDiodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], parameters[Alpha], parameters[Rsh2], dark ? 0.0 : parameters[Iph]);
 		}
 
 		const std::array<ModelSpec, 10> Models = {{
@@ -279,7 +239,7 @@ namespace SST::Prototypes::JFM
 		struct SolverOutput
 		{
 			ParameterArray parameters{};
-			FitResult result;
+			sst::math::FitResult result;
 		};
 
 		SolverOutput Solve(
@@ -292,7 +252,7 @@ namespace SST::Prototypes::JFM
 			const JFMFitMonteCarloSettings &settings,
 			int maxIterations)
 		{
-			std::vector<FitParam> fitParameters;
+			std::vector<sst::math::FitParam> fitParameters;
 			fitParameters.reserve(ParameterCount);
 			int freeCount = 0;
 			for (std::size_t index = 0; index < ParameterCount; ++index)
@@ -329,9 +289,10 @@ namespace SST::Prototypes::JFM
 					[&model, temperature](double voltage, const double *parameters) { return Evaluate(model, voltage, temperature, parameters); });
 			};
 			const double degreesOfFreedom = static_cast<double>(std::max(1, static_cast<int>(data.voltage.size()) - freeCount));
-			SANelderMead solver(std::move(fitParameters), std::move(objective), 1.0, 2.0, 0.5, 0.5, 1.0e-12, false, {}, 0, false, degreesOfFreedom);
+			sst::math::SANelderMead solver(std::move(fitParameters), std::move(objective), 1.0, 2.0, 0.5, 0.5, 1.0e-12, false, {}, 0, false, degreesOfFreedom);
 			solver.initSimplex();
-			output.result = solver.runUntilConvergence(std::max(1, maxIterations), settings.fitReducedChiSquaredTolerance);
+			// JFM's negative tolerance disables early stopping; this objective is nonnegative.
+			output.result = solver.runUntilConvergence(std::max(1, maxIterations), std::max(0.0, settings.fitReducedChiSquaredTolerance));
 			const std::vector<double> full = solver.bestFullParams();
 			std::copy_n(full.begin(), std::min(full.size(), output.parameters.size()), output.parameters.begin());
 			return output;
