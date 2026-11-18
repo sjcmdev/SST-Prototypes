@@ -3,9 +3,11 @@ from __future__ import annotations
 import math
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 
-KB = 8.617333262e-5
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from jfm_constants import K_BOLTZMANN_EV as KB
 
 
 @dataclass

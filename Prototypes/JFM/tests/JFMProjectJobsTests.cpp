@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <sst/physics/constants.hpp>
 
 #include <algorithm>
 #include <cmath>
@@ -391,7 +392,7 @@ namespace SST::Prototypes::JFM
 		{
 			const double voltage = -0.1 + static_cast<double>(index) / static_cast<double>(pointCount - 1);
 			data->voltage.push_back(voltage);
-			data->current.push_back(2.0e-9 * std::expm1(voltage / (1.6 * 8.6e-5 * 300.0)) + voltage / 2.0e4);
+			data->current.push_back(2.0e-9 * std::expm1(voltage / (1.6 * sst::physics::k_B_over_q * 300.0)) + voltage / 2.0e4);
 		}
 		JFMCharacteristicRecord characteristic;
 		characteristic.info.id = 1;

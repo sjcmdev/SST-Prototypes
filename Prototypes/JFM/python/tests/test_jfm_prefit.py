@@ -10,6 +10,7 @@ from scipy.special import lambertw
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from jfm_constants import K_BOLTZMANN_EV
 from jfm_prefit.cpp_adapter import prefit_characteristic
 from jfm_prefit.current_models import evaluate_current
 from jfm_prefit.model_registry import MODEL_REGISTRY
@@ -152,7 +153,7 @@ def test_current_models_match_documented_lambert_w_equations() -> None:
     voltage = np.linspace(0.05, 0.65, 32)
     temperature_k = 300.0
     parameters = {"I0": 2.0e-9, "A": 1.6, "Rs": 1.2, "Rsh": 2.0e4}
-    avt = parameters["A"] * 8.6e-5 * temperature_k
+    avt = parameters["A"] * K_BOLTZMANN_EV * temperature_k
     argument = parameters["I0"] * parameters["Rs"] / avt * np.exp(voltage / avt)
     diode = np.real(lambertw(argument)) * avt / parameters["Rs"]
     internal_voltage = voltage - diode * parameters["Rs"]
@@ -179,7 +180,7 @@ def test_missing_resistance_terms_are_removed() -> None:
     voltage = np.linspace(0.0, 0.3, 8)
     temperature_k = 300.0
     parameters = {"I0": 2.0e-9, "A": 1.6, "Rs": 1.2, "Rsh": 2.0e4}
-    avt = parameters["A"] * 8.6e-5 * temperature_k
+    avt = parameters["A"] * K_BOLTZMANN_EV * temperature_k
     no_series = parameters["I0"] * np.exp(voltage / avt)
     argument = parameters["I0"] * parameters["Rs"] / avt * np.exp(voltage / avt)
     with_series = np.real(lambertw(argument)) * avt / parameters["Rs"]

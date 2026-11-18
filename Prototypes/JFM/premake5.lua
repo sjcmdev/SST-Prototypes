@@ -196,7 +196,6 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMExportRawTsvJob.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMExportRawTsvJob.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Events/JFMEvents.hpp",
-        jfmSolverRoot .. "/jfm_constants.hpp",
         jfmSolverRoot .. "/solver/objective.hpp",
         jfmSolverRoot .. "/solver/objective.cpp",
 		jfmSolverRoot .. "/solver/diode_model.hpp",

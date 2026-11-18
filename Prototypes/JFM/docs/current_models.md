@@ -6,7 +6,7 @@ void FourParameterModel::current(Data &data, const NumericStorm::Fitting::Parame
         JFMAdditionalParameters additionalParams(additionalParameters);
         auto adjusted = adjustFixingConfiguration<4>(params, additionalParams);
         auto [I0, A, Rs, Rsh] = adjusted;
-        const double k = 8.6e-5;
+        const double k = sst::physics::k_B_over_q;
 
         auto func = [&](double &V, double &I, double &I0, double &A, double &Rsh, double &Rs, double T)
         {
@@ -28,7 +28,7 @@ void SixParameterModel::current(Data &data, const NumericStorm::Fitting::Paramet
         JFMAdditionalParameters additionalParams(additionalParameters);
         auto adjusted = adjustFixingConfiguration<6>(params, additionalParams);
         auto [I0, A, Rs, Rsh, alpha, Rsh2] = adjusted; // utils::cast<6>(adjusted);
-        const double k = 8.6e-5;
+        const double k = sst::physics::k_B_over_q;
 
         auto func = [&](double &V, double &I, double &I0, double &A, double &Rsh, double &Rs, double &alpha, double &Rsh2, double T)
         {

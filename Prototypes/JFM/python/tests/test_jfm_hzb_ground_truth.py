@@ -40,6 +40,8 @@ from jfm_prefit.preprocessing import prepare_sample
 from jfm_prefit.range_detection import detect_fit_range
 from jfm_prefit.types import PrefitOptions, RangeOptions
 
+from jfm_constants import K_BOLTZMANN_EV
+
 PROJECT_PATH = ROOT.parent / "JFM-projects" / "HZB-project.yaml.jfm.yaml"
 DATA_DIR = ROOT.parent / "example-data" / "real-measurement" / "dat"
 
@@ -64,7 +66,12 @@ def _load_ground_truth() -> list[dict]:
         return []
     with PROJECT_PATH.open(encoding="utf-8") as handle:
         project = yaml.safe_load(handle)
-    return [ch for ch in project["characteristics"] if ch["name"].startswith("ivd_HZB25")]
+    characteristics = [ch for ch in project["characteristics"] if ch["name"].startswith("ivd_HZB25")]
+    # The saved project used legacy k; preserve A*k*T when comparing with CODATA.
+    for characteristic in characteristics:
+        for stage in ("prefit", "fit"):
+            characteristic[stage]["parameters"]["A"]["value"] *= 8.6e-5 / K_BOLTZMANN_EV
+    return characteristics
 
 
 GROUND_TRUTH = _load_ground_truth()

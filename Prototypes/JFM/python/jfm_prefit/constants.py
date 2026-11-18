@@ -1,4 +1,4 @@
-K_BOLTZMANN_EV = 8.6e-5
+from jfm_constants import K_BOLTZMANN_EV
 
 
 def thermal_voltage(temperature_k: float) -> float:

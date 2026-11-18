@@ -3,7 +3,6 @@
 #include "Analysis/JFMFitEngine.hpp"
 
 #include "gpu/gpu_backend.hpp"
-#include "jfm_constants.hpp"
 #include <sst/math/nelder_mead.hpp>
 #include <sst/physics/iv.hpp>
 #include "solver/objective.hpp"
@@ -92,7 +91,7 @@ namespace SST::Prototypes::JFM
 
 		double DiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			return sst::physics::diodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], dark ? 0.0 : parameters[Iph]);
+			return sst::physics::diodeCurrent(voltage, temperature, parameters[I0], parameters[A], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double SeriesDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
@@ -100,12 +99,12 @@ namespace SST::Prototypes::JFM
 			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
 			if (parameters[Rs] == 0.0)
 				return std::numeric_limits<double>::quiet_NaN();
-			return sst::physics::seriesDiodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], parameters[Rs], dark ? 0.0 : parameters[Iph]);
+			return sst::physics::seriesDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double ShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			return sst::physics::shuntDiodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
+			return sst::physics::shuntDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double SeriesShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
@@ -113,7 +112,7 @@ namespace SST::Prototypes::JFM
 			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
 			if (parameters[Rs] == 0.0)
 				return std::numeric_limits<double>::quiet_NaN();
-			return sst::physics::seriesShuntDiodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
+			return sst::physics::seriesShuntDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double NonlinearShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
@@ -121,7 +120,7 @@ namespace SST::Prototypes::JFM
 			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
 			if (parameters[Rs] == 0.0)
 				return std::numeric_limits<double>::quiet_NaN();
-			return sst::physics::nonlinearShuntDiodeCurrent(voltage, LibraryModelTemperature(temperature), parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], parameters[Alpha], parameters[Rsh2], dark ? 0.0 : parameters[Iph]);
+			return sst::physics::nonlinearShuntDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], parameters[Alpha], parameters[Rsh2], dark ? 0.0 : parameters[Iph]);
 		}
 
 		const std::array<ModelSpec, 10> Models = {{
