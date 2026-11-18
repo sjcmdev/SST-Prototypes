@@ -1,11 +1,16 @@
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include "Domain/CapLabAnalysis.hpp"
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
+#include <cstdlib>
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderIS() {
+    if (const auto gallery = std::getenv("SST_CAPLAB_GALLERY_SECTION"))
+        ImGui::SetNextItemOpen(std::string_view(gallery) == "IS", ImGuiCond_Once);
     if (!ImGui::CollapsingHeader("IS / CircuitCore schematic")) return;
     ImGui::PushID("IS");
     auto &p=state->document.project;
+    if (std::getenv("SST_CAPLAB_GALLERY_SECTION") && !selectedCircuit && !p.circuits.empty())
+        selectedCircuit=p.circuits.front().at("id");
     static char topology[512]="R0-p(R1,C1)", name[128]="Circuit";
     static double confirmedTemperature=300, confirmedBias=0;
     auto edit=[&](Json value) {

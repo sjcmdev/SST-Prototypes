@@ -3,6 +3,7 @@
 #include "Presentation/SelectionLabel.hpp"
 #include <imgui.h>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
+#include <cstdlib>
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderImport() {
     auto &doc = state->document;
@@ -450,6 +451,8 @@ void CapLabPrototypePanel::RenderAS() {
 
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderWalter() {
+    if (const auto gallery = std::getenv("SST_CAPLAB_GALLERY_SECTION"))
+        ImGui::SetNextItemOpen(std::string_view(gallery) == "Walter", ImGuiCond_Once);
     if (!ImGui::CollapsingHeader("Walter spectra / integration")) return;
     ImGui::PushID("Walter");
     auto &p=state->document.project;
