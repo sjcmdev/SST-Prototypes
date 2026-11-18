@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <charconv>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -254,12 +255,44 @@ namespace SST
 				const std::string_view argument = argv[index];
 				if (argument == "--help" || argument == "-h")
 				{
-					std::cout << "Usage: SSTPrototype [--reset-layout] [--trace-events] [--log-level=trace|debug|info|warn|error] [--log-file[=path]]\n";
+					std::cout << "Usage: SSTPrototype [--reset-layout] [--trace-events] [--log-level=trace|debug|info|warn|error] [--log-file[=path]]\n"
+					          << "  --screenshot <path.png> --screenshot-after-frames <N> (default 30)\n"
+					          << "  --exit-after-screenshot --open <project-or-data-path>\n"
+					          << "Screenshots capture only the main framebuffer; detached ImGui viewports are excluded.\n";
 					std::exit(0);
 				}
 
 				if (argument == "--reset-layout")
 					specification.resetLayout = true;
+
+				if (argument == "--exit-after-screenshot")
+					specification.exitAfterScreenshot = true;
+				if (argument == "--screenshot" || argument == "--screenshot-after-frames" || argument == "--open")
+				{
+					if (++index >= argc || argv[index] == nullptr || std::string_view(argv[index]).starts_with("--") || argv[index][0] == '\0')
+						throw std::invalid_argument(std::string(argument) + " requires a value");
+					const std::string_view value = argv[index];
+					if (argument == "--screenshot-after-frames")
+					{
+						unsigned int frames = 0;
+						const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), frames);
+						if (error != std::errc{} || end != value.data() + value.size() || frames == 0)
+							throw std::invalid_argument("--screenshot-after-frames requires a positive integer");
+						specification.screenshotAfterFrames = frames;
+					}
+					else
+					{
+						const auto path = Path::FromResolved(std::filesystem::u8path(value));
+						if (argument == "--open")
+							specification.openPath = path;
+						else
+						{
+							if (path.Native().extension() != ".png")
+								throw std::invalid_argument("--screenshot requires a .png path");
+							specification.screenshotPath = path;
+						}
+					}
+				}
 
 				if (argument == "--trace-events")
 				{

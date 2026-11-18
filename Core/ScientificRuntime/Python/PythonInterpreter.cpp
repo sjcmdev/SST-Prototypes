@@ -5,6 +5,7 @@
 #include "Core/Platform/PlatformPythonRuntime.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "ScientificRuntime/Python/PythonErrors.hpp"
+#include "Core/Utils/FramebufferScreenshot.hpp"
 
 namespace SST
 {
@@ -36,7 +37,10 @@ namespace SST
 
 #if DS_PYTHON_CAPI_AVAILABLE
 		if (!Py_IsInitialized())
+		{
+			ApplicationDetail::RegisterApplicationPythonModule();
 			configureEmbeddedPythonHome();
+		}
 
 		if (!Py_IsInitialized())
 			Py_InitializeEx(0);

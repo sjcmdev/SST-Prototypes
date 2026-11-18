@@ -18,6 +18,7 @@
 #include "Core/Threading/ThreadAffinity.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/RuntimeTuning.hpp"
+#include "Core/Utils/FramebufferScreenshot.hpp"
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/ImGuiLayer.hpp"
 
@@ -307,6 +308,17 @@ namespace SST
 	{
 		DS_ASSERT(m_Graphics.window != nullptr, "Main window was not created");
 
+		auto commands = GetCommandRegistryHandle().lock();
+		ApplicationDetail::RegisterScreenshotCommand(commands, GetJobSystemHandle().lock());
+		if (!m_Runtime.specification.openPath.Empty())
+		{
+			const auto result = ApplicationDetail::OpenStartupFile(*commands, m_Runtime.specification.openPath);
+			if (result)
+				DS_LOG_INFO("Startup --open dispatched: {} path={}", result.Value().id.value, m_Runtime.specification.openPath.Utf8());
+			else
+				DS_LOG_WARN("Startup --open ignored/failed: {} ({})", result.Error().technicalDetails, m_Runtime.specification.openPath.Utf8());
+		}
+
 		ImGuiIO &io = ImGui::GetIO();
 		const ImVec4 clearColor = ImVec4(
 			m_Config.appearance.clearColor[0],
@@ -443,6 +455,21 @@ namespace SST
 			imGuiLayer->Render();
 		}
 		TracyPlot("FPS", frameRate);
+		if (!m_Runtime.specification.screenshotPath.Empty() &&
+		    ++m_Runtime.renderedFrames >= m_Runtime.specification.screenshotAfterFrames)
+		{
+			// ImGui restores the main context after rendering detached viewports.
+			glfwMakeContextCurrent(m_Graphics.window->GetNativeHandle());
+			CommandContext context;
+			context.SetSource("CLI screenshot");
+			context.Set("path", m_Runtime.specification.screenshotPath);
+			const auto result = GetCommandRegistryHandle().lock()->Execute(CommandID{"app.screenshot"}, std::move(context));
+			if (!result) throw std::runtime_error(result.Error().technicalDetails);
+			DS_LOG_INFO("Screenshot written: {}", m_Runtime.specification.screenshotPath.Utf8());
+			m_Runtime.specification.screenshotPath = {};
+			if (m_Runtime.specification.exitAfterScreenshot)
+				EmitEvent(WindowCloseEvent{});
+		}
 
 		m_Graphics.window->SwapBuffers();
 		FrameMark;

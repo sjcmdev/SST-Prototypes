@@ -23,6 +23,10 @@ namespace SST
 		Path logFilePath;
 		bool resetLayout = false;
 		bool traceEvents = false;
+		Path screenshotPath;
+		unsigned int screenshotAfterFrames = 30;
+		bool exitAfterScreenshot = false;
+		Path openPath;
 		std::optional<LogLevel> logLevelOverride;
 		std::optional<bool> logToFileOverride;
 		std::optional<Path> logFilePathOverride;
@@ -36,6 +40,7 @@ namespace SST
 		ApplicationSpecification specification;
 		ApplicationLifecycleState lifecycle;
 		double lastFrameTime = 0.0;
+		unsigned int renderedFrames = 0;
 		
 		inline bool Running(){return lifecycle.IsRunning();}
 		inline bool Created(){return lifecycle.IsCreated();}
