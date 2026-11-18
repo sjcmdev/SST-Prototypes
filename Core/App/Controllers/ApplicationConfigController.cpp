@@ -38,7 +38,7 @@ namespace SST
 			bus.Queue(EditorUiEvents::RuntimeConfigApplied{
 				config.ui,
 				config.appearance,
-				config.layout.imGuiIniPath.empty() ? ConfigManager::GetLayoutPath(config.directory) : Path::FromResolved(config.layout.imGuiIniPath),
+				config.layout.imGuiIniPath.empty() ? ConfigManager::GetLayoutPath(config.directory) : Path::FromResolved(std::filesystem::u8path(config.layout.imGuiIniPath)),
 				persisted});
 		}
 
@@ -124,7 +124,7 @@ namespace SST
 		normalized.window.width = std::max(320, normalized.window.width);
 		normalized.window.height = std::max(240, normalized.window.height);
 		if (normalized.layout.imGuiIniPath.empty() && !normalized.directory.Empty())
-			normalized.layout.imGuiIniPath = ConfigManager::GetLayoutPath(normalized.directory).String();
+			normalized.layout.imGuiIniPath = ConfigManager::GetLayoutPath(normalized.directory).Utf8();
 
 		return normalized;
 	}
@@ -144,7 +144,7 @@ namespace SST
 		appliedConfig = normalizeConfigSnapshot(config);
 		DS_LOG_INFO(
 			"Config apply requested: directory={} window={}x{} maximized={} workers={} reserve_urgent={} font_scale={}",
-			appliedConfig.directory.String(),
+			appliedConfig.directory.Utf8(),
 			appliedConfig.window.width,
 			appliedConfig.window.height,
 			appliedConfig.window.maximized,
@@ -372,6 +372,6 @@ namespace SST
 	{
 		m_Config.appearance = event.appearance;
 		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
-		DS_LOG_INFO("Appearance theme loaded; user config save queued: {}", event.path.String());
+		DS_LOG_INFO("Appearance theme loaded; user config save queued: {}", event.path.Utf8());
 	}
 } // namespace SST

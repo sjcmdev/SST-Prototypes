@@ -31,7 +31,7 @@ namespace SST
 		{
 			ConfigProfileEntry entry;
 			entry.path = path;
-			entry.name = path.Native().stem().string();
+			entry.name = Path::FromResolved(path.Native().stem()).Utf8();
 			m_Entries.push_back(std::move(entry));
 		}
 
@@ -51,9 +51,9 @@ namespace SST
 		const std::string sanitized = SanitizeProfileName(name);
 		auto manager = m_ConfigManager.lock();
 		if (manager == nullptr)
-			return Path::FromResolved(sanitized + ".yaml");
+			return Path::FromResolved(std::filesystem::u8path(sanitized + ".yaml"));
 
-		return manager->GetPaths().profilesDirectory / Path(sanitized + ".yaml");
+		return manager->GetPaths().profilesDirectory / Path(std::filesystem::u8path(sanitized + ".yaml"));
 	}
 
 	bool ConfigProfileStore::Save(std::string_view name, const ApplicationConfig &config, std::string &error)
@@ -89,7 +89,7 @@ namespace SST
 
 		config.directory = manager->GetConfigDirectory();
 		config.paths = ConfigManager::ResolvePortablePaths(manager->GetConfigDirectory());
-		config.layout.imGuiIniPath = ConfigManager::GetLayoutPath(manager->GetConfigDirectory()).String();
+		config.layout.imGuiIniPath = ConfigManager::GetLayoutPath(manager->GetConfigDirectory()).Utf8();
 		return true;
 	}
 
@@ -124,7 +124,7 @@ namespace SST
 		for (const char character : name)
 		{
 			const unsigned char value = static_cast<unsigned char>(character);
-			if (std::isalnum(value) || character == '-' || character == '_')
+			if (value >= 0x80 || std::isalnum(value) || character == '-' || character == '_')
 				result.push_back(character);
 			else if (std::isspace(value))
 				result.push_back('_');

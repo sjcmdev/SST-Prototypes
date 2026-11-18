@@ -289,3 +289,32 @@ TEST(PlotLabFonts, CoreDefaultUsesSystemSegoe)
 #endif
 }
 
+
+
+#include "Core/IO/TextFileIO.hpp"
+TEST_F(PlotLabApp, UnicodePathCsvAndProjectRoundtrip)
+{
+    const auto name = std::filesystem::u8path(u8"Za\u017c\u00f3\u0142\u0107_\u65e5\u672c_\U0001f600");
+    const auto directory = Temp("-unicode") / name;
+    std::filesystem::create_directories(directory);
+    struct Cleanup { std::filesystem::path path; ~Cleanup() { std::error_code ec; std::filesystem::remove_all(path, ec); } } cleanup{directory};
+    const auto csv = directory / (name.native() + std::filesystem::path(".csv").native());
+    const auto file = directory / (name.native() + std::filesystem::path(".plotlab").native());
+    std::string text, error;
+    ASSERT_TRUE(TextFileIO::Save(Path::FromResolved(csv), "X,Y\n1,2\n2,4\n", error)) << error;
+    ASSERT_TRUE(TextFileIO::Load(Path::FromResolved(csv), text, error)) << error;
+    const auto filename = Path::FromResolved(csv).Utf8();
+    pl::CsvImporter importer;
+    ASSERT_TRUE(importer.recognizes(filename, text));
+    pl::ImportOptions options; options.extra["path"] = filename;
+    auto table = importer.read(text, options, {});
+    table.source["path"] = filename;
+    doc.Execute(pl::importTable(*doc.project, doc.project->root(), Path::FromResolved(csv.stem()).Utf8(), table));
+    const auto importedBook = doc.project->children(doc.project->root()).back();
+    const auto importedSheet = doc.project->children(importedBook).front();
+    const auto projectId = doc.project->id();
+    doc.Save(file); doc.New(); doc.Open(file);
+    EXPECT_EQ(doc.project->id(), projectId);
+    EXPECT_EQ(doc.project->object(importedBook).name, Path::FromResolved(name).Utf8());
+    EXPECT_EQ(std::get<pl::Worksheet>(doc.project->object(importedSheet).data).source.at("path"), filename);
+}

@@ -24,8 +24,8 @@ namespace SST::Prototypes::JFM::Detail
 
 	std::string FolderName(const Path &path)
 	{
-		std::string name = path.filename().String();
-		return name.empty() ? path.String() : name;
+		std::string name = path.filename().Utf8();
+		return name.empty() ? path.Utf8() : name;
 	}
 
 	std::vector<std::string> ParentGroupPathForFolder(const Path &root, const Path &folder)
@@ -41,7 +41,7 @@ namespace SST::Prototypes::JFM::Detail
 
 		std::vector<std::string> names{FolderName(root)};
 		for (const std::filesystem::path &part : parent)
-			names.push_back(part.string());
+			names.push_back(Path::FromResolved(part).Utf8());
 		return names;
 	}
 
@@ -58,7 +58,7 @@ namespace SST::Prototypes::JFM::Detail
 			if (entry.is_regular_file(fileError) && IsJFMDataFile(path))
 				paths.emplace_back(path);
 		}
-		std::sort(paths.begin(), paths.end(), [](const Path &left, const Path &right) { return left.String() < right.String(); });
+		std::sort(paths.begin(), paths.end(), [](const Path &left, const Path &right) { return left.Native() < right.Native(); });
 		return paths;
 	}
 
@@ -69,7 +69,7 @@ namespace SST::Prototypes::JFM::Detail
 		{
 			std::vector<Path> paths = DirectDataFilesInDirectory(directory);
 			if (!paths.empty())
-				filesByFolder.emplace(directory.String(), std::move(paths));
+				filesByFolder.emplace(directory.Utf8(), std::move(paths));
 			return filesByFolder;
 		}
 
@@ -82,10 +82,10 @@ namespace SST::Prototypes::JFM::Detail
 			std::error_code fileError;
 			const Path path = Path::FromResolved(entry.path());
 			if (entry.is_regular_file(fileError) && IsJFMDataFile(path))
-				filesByFolder[path.parent_path().String()].emplace_back(path);
+				filesByFolder[path.parent_path().Utf8()].emplace_back(path);
 		}
 		for (auto &[folder, paths] : filesByFolder)
-			std::sort(paths.begin(), paths.end(), [](const Path &left, const Path &right) { return left.String() < right.String(); });
+			std::sort(paths.begin(), paths.end(), [](const Path &left, const Path &right) { return left.Native() < right.Native(); });
 		return filesByFolder;
 	}
 } // namespace SST::Prototypes::JFM::Detail
@@ -94,7 +94,7 @@ namespace SST::Prototypes::JFM
 {
 	bool IsJFMDataFile(const Path &path)
 	{
-		std::string extension = path.extension().String();
+		std::string extension = path.extension().Utf8();
 		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character) {
 			return static_cast<char>(std::tolower(character));
 		});
@@ -117,7 +117,7 @@ namespace SST::Prototypes::JFM
 			{
 				for (auto &[folder, folderFiles] : Detail::DataFilesByFolder(path, scanRecursively))
 				{
-					const Path folderPath = Path::FromResolved(folder);
+					const Path folderPath = Path::FromResolved(std::filesystem::u8path(folder));
 					groups.push_back({
 						std::move(folderFiles),
 						destinationSeries,
@@ -134,7 +134,7 @@ namespace SST::Prototypes::JFM
 
 		if (!files.empty())
 		{
-			std::sort(files.begin(), files.end(), [](const Path &left, const Path &right) { return left.String() < right.String(); });
+			std::sort(files.begin(), files.end(), [](const Path &left, const Path &right) { return left.Native() < right.Native(); });
 			const std::string seriesName = Detail::FolderName(files.front().parent_path());
 			groups.push_back({std::move(files), destinationSeries, {}, seriesName.empty() ? "Series" : seriesName});
 		}
@@ -146,7 +146,7 @@ namespace SST::Prototypes::JFM
 		std::vector<Path> result;
 		for (JFMImportGroup &group : BuildImportGroups(paths, recursive, JFMImportPlacement::NewSeries, {}))
 			result.insert(result.end(), std::make_move_iterator(group.paths.begin()), std::make_move_iterator(group.paths.end()));
-		std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) { return left.String() < right.String(); });
+		std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) { return left.Native() < right.Native(); });
 		result.erase(std::unique(result.begin(), result.end(), [](const Path &left, const Path &right) { return left == right; }), result.end());
 		return result;
 	}

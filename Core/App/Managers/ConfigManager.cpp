@@ -111,7 +111,7 @@ namespace SST
 					continue;
 				}
 
-				std::string fileExtension = entry.path().extension().string();
+				std::string fileExtension = Path::FromResolved(entry.path().extension()).Utf8();
 				std::transform(fileExtension.begin(), fileExtension.end(), fileExtension.begin(), [](unsigned char character) {
 					return static_cast<char>(std::tolower(character));
 				});
@@ -120,7 +120,7 @@ namespace SST
 			}
 
 			std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) {
-				return left.String() < right.String();
+				return left.Native() < right.Native();
 			});
 			return result;
 		}
@@ -146,7 +146,7 @@ namespace SST
 
 		m_Config.directory = m_ConfigDirectory;
 		m_Config.paths = ResolvePortablePaths(m_ConfigDirectory);
-		m_Config.layout.imGuiIniPath = GetLayoutPath(m_ConfigDirectory).String();
+		m_Config.layout.imGuiIniPath = GetLayoutPath(m_ConfigDirectory).Utf8();
 		m_Initialized = true;
 		return true;
 	}
@@ -172,7 +172,7 @@ namespace SST
 		m_Config.directory = m_ConfigDirectory;
 		m_Config.paths = ResolvePortablePaths(m_ConfigDirectory);
 		if (m_Config.layout.imGuiIniPath.empty())
-			m_Config.layout.imGuiIniPath = GetLayoutPath(m_ConfigDirectory).String();
+			m_Config.layout.imGuiIniPath = GetLayoutPath(m_ConfigDirectory).Utf8();
 	}
 
 	void ConfigManager::SetUiConfig(const UIConfig &config)
@@ -191,7 +191,7 @@ namespace SST
 		std::vector<Path> ymlFiles = ConfigPaths::ListFilesByExtension(directory, ".yml");
 		result.insert(result.end(), ymlFiles.begin(), ymlFiles.end());
 		std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) {
-			return left.String() < right.String();
+			return left.Native() < right.Native();
 		});
 		return result;
 	}
@@ -214,7 +214,7 @@ namespace SST
 		ApplicationConfig config;
 		config.directory = ConfigPaths::NormalizeConfigDirectory(configDirectory);
 		config.paths = ResolvePortablePaths(config.directory);
-		config.layout.imGuiIniPath = GetLayoutPath(configDirectory).String();
+		config.layout.imGuiIniPath = GetLayoutPath(configDirectory).Utf8();
 		config.log.level = LogLevel::Info;
 		config.log.toFile = true;
 		config.log.filePath = Path::FromResolved(RuntimeDefaults::LogFilePath);

@@ -20,7 +20,7 @@ namespace SST
 			return;
 
 		Platform::SetPythonHomeEnvironment(pythonHome);
-		DS_LOG_INFO("PythonInterpreter using app-local runtime at {}", pythonHome.String());
+		DS_LOG_INFO("PythonInterpreter using app-local runtime at {}", pythonHome.Utf8());
 	}
 #endif
 

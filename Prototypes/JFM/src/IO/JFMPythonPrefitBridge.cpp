@@ -82,7 +82,7 @@ namespace SST::Prototypes::JFM
 			if (!characteristic.info.temperatureK)
 				return makePrefitError("Characteristic temperature is missing.");
 			if (!ConfigureJFMPythonPaths(pythonRoot))
-				return makePrefitError("Could not configure Python paths for " + pythonRoot.String());
+				return makePrefitError("Could not configure Python paths for " + pythonRoot.Utf8());
 
 			const JFMPrefitState requested = characteristic.info.prefit.value_or(JFMPrefitState{});
 			const bool useDensity = !characteristic.data->currentDensity.empty();
@@ -160,7 +160,7 @@ namespace SST::Prototypes::JFM
 			if (!characteristic.info.temperatureK)
 				return makePrefitError("Characteristic temperature is missing.");
 			if (!ConfigureJFMPythonPaths(pythonRoot))
-				return makePrefitError("Could not configure Python paths for " + pythonRoot.String());
+				return makePrefitError("Could not configure Python paths for " + pythonRoot.Utf8());
 
 			const bool useDensity = !characteristic.data->currentDensity.empty();
 			const std::vector<double> &current = useDensity ? characteristic.data->currentDensity : characteristic.data->current;
@@ -245,7 +245,7 @@ namespace SST::Prototypes::JFM
 #if DS_PYTHON_CAPI_AVAILABLE
 		std::scoped_lock lock(prefitPythonMutex());
 		if (m_PythonRoot.Empty() || !FileSystem::Exists(m_PythonRoot.Native()))
-			return makePrefitError("Python root was not found: " + m_PythonRoot.String());
+			return makePrefitError("Python root was not found: " + m_PythonRoot.Utf8());
 		if (!PythonInterpreter::IsRuntimeInitialized())
 			return makePrefitError("Embedded Python runtime is not initialized.");
 		if (!PyGILState_Check())
@@ -273,7 +273,7 @@ namespace SST::Prototypes::JFM
 #if DS_PYTHON_CAPI_AVAILABLE
 		std::scoped_lock lock(prefitPythonMutex());
 		if (m_PythonRoot.Empty() || !FileSystem::Exists(m_PythonRoot.Native()))
-			return makePrefitError("Python root was not found: " + m_PythonRoot.String());
+			return makePrefitError("Python root was not found: " + m_PythonRoot.Utf8());
 		if (!PythonInterpreter::IsRuntimeInitialized())
 			return makePrefitError("Embedded Python runtime is not initialized.");
 		if (!PyGILState_Check())

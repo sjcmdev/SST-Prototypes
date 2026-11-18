@@ -33,12 +33,12 @@ namespace SST::Prototypes::JFM
 			const YAML::Node value = node[key];
 			if (!value || value.IsNull())
 				return fallback;
-			return ExistingOr(Path::FromResolved(value.as<std::string>()), fallback);
+			return ExistingOr(Path::FromResolved(std::filesystem::u8path(value.as<std::string>())), fallback);
 		}
 
 		void EmitPath(YAML::Emitter &out, const char *key, const Path &path)
 		{
-			out << YAML::Key << key << YAML::Value << path.String();
+			out << YAML::Key << key << YAML::Value << path.Utf8();
 		}
 
 		std::array<float, 4> ReadColor(const YAML::Node &node, std::array<float, 4> fallback)
@@ -245,7 +245,7 @@ namespace SST::Prototypes::JFM
 			if (const YAML::Node recent = root["recent_projects"])
 			{
 				for (const YAML::Node &entry : recent)
-					m_Settings.recentProjects.push_back(Path::FromResolved(entry.as<std::string>()));
+					m_Settings.recentProjects.push_back(Path::FromResolved(std::filesystem::u8path(entry.as<std::string>())));
 			}
 		}
 		catch (const std::exception &exception)
@@ -343,7 +343,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::EndSeq;
 		out << YAML::Key << "recent_projects" << YAML::Value << YAML::BeginSeq;
 		for (const Path &path : snapshot.recentProjects)
-			out << path.String();
+			out << path.Utf8();
 		out << YAML::EndSeq;
 		out << YAML::EndMap;
 

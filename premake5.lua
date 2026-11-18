@@ -14,6 +14,9 @@ end
 
 workspace "SSTPrototypes"
     architecture "x86_64"
+    filter "system:windows"
+        defines { "SPDLOG_WCHAR_FILENAMES" }
+    filter {}
     startproject (readActivePrototypeName())
     location "build/generated/%{_ACTION}"
 

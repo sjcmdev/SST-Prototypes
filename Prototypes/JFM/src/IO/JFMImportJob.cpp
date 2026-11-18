@@ -119,7 +119,7 @@ namespace SST::Prototypes::JFM
 				{
 					groupWarnings.push_back(result.Error().technicalDetails);
 					allWarnings.push_back(result.Error().technicalDetails);
-					reportProgress(context, completedOffset, total, "Skipped " + path.filename().String());
+					reportProgress(context, completedOffset, total, "Skipped " + path.filename().Utf8());
 					continue;
 				}
 

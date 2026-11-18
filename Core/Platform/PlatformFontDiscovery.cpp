@@ -22,13 +22,13 @@ namespace SST::Platform
 
 		bool isSupportedFontFile(const FilePath &path)
 		{
-			const std::string extension = toLowerCopy(path.extension().string());
+			const std::string extension = toLowerCopy(Path::FromResolved(path.extension()).Utf8());
 			return extension == ".ttf" || extension == ".otf";
 		}
 
 		std::string fontLabelFromPath(const FilePath &fontPath, std::string_view source)
 		{
-			const std::string filename = fontPath.filename().string();
+			const std::string filename = Path::FromResolved(fontPath.filename()).Utf8();
 			return std::string(source) + ": " + filename;
 		}
 
@@ -48,7 +48,7 @@ namespace SST::Platform
 			const std::filesystem::recursive_directory_iterator end;
 			if (error)
 			{
-				DS_LOG_WARN("Font scan skipped [{}]: {}", directory.string(), error.message());
+				DS_LOG_WARN("Font scan skipped [{}]: {}", Path::FromResolved(directory).Utf8(), error.message());
 				return;
 			}
 
@@ -56,7 +56,7 @@ namespace SST::Platform
 			{
 				if (error)
 				{
-					DS_LOG_WARN("Font scan warning [{}]: {}", directory.string(), error.message());
+					DS_LOG_WARN("Font scan warning [{}]: {}", Path::FromResolved(directory).Utf8(), error.message());
 					error.clear();
 					continue;
 				}
@@ -72,18 +72,18 @@ namespace SST::Platform
 				if (!isSupportedFontFile(fontPath))
 					continue;
 
-				const std::string normalizedPath = toLowerCopy(fontPath.lexically_normal().string());
+				const std::string normalizedPath = toLowerCopy(Path::FromResolved(fontPath.lexically_normal()).Utf8());
 				if (std::find(seenPaths.begin(), seenPaths.end(), normalizedPath) != seenPaths.end())
 					continue;
 
 				FontOption option;
 				option.label = fontLabelFromPath(fontPath, source);
 				option.source = std::string(source);
-				option.path = FileSystem::Absolute(fontPath, error).lexically_normal().string();
+				option.path = Path::FromResolved(FileSystem::Absolute(fontPath, error).lexically_normal()).Utf8();
 				if (error)
 				{
 					error.clear();
-					option.path = fontPath.lexically_normal().string();
+					option.path = Path::FromResolved(fontPath.lexically_normal()).Utf8();
 				}
 
 				fontOptions.push_back(std::move(option));

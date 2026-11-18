@@ -295,7 +295,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "start_perturbation_percent" << YAML::Value << state.startPerturbationPercent;
 		out << YAML::Key << "seed" << YAML::Value << state.seed;
 		out << YAML::Key << "backend" << YAML::Value << state.backend;
-		out << YAML::Key << "output_path" << YAML::Value << state.outputPath.String();
+		out << YAML::Key << "output_path" << YAML::Value << state.outputPath.Utf8();
 		out << YAML::Key << "total_milliseconds" << YAML::Value << state.totalMilliseconds;
 		out << YAML::Key << "warnings" << YAML::Value << state.warnings;
 		out << YAML::EndMap;
@@ -314,7 +314,7 @@ namespace SST::Prototypes::JFM
 		state.startPerturbationPercent = readOr<double>(node, "start_perturbation_percent", 0.0);
 		state.seed = readOr<std::uint32_t>(node, "seed", 42);
 		state.backend = readOr<std::string>(node, "backend", {});
-		state.outputPath = Path::FromResolved(readOr<std::string>(node, "output_path", {}));
+		state.outputPath = Path::FromResolved(std::filesystem::u8path(readOr<std::string>(node, "output_path", {})));
 		state.totalMilliseconds = readOr<double>(node, "total_milliseconds", 0.0);
 		if (node["warnings"])
 			state.warnings = node["warnings"].as<std::vector<std::string>>();
@@ -339,7 +339,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "id" << YAML::Value << characteristic.id;
 		out << YAML::Key << "name" << YAML::Value << characteristic.name;
 		out << YAML::Key << "measurement" << YAML::Value << characteristic.measurement;
-		out << YAML::Key << "source_path" << YAML::Value << characteristic.sourcePath.String();
+		out << YAML::Key << "source_path" << YAML::Value << characteristic.sourcePath.Utf8();
 		out << YAML::Key << "source_record_key" << YAML::Value << characteristic.sourceRecordKey;
 		out << YAML::Key << "parser" << YAML::Value << characteristic.parser;
 		out << YAML::Key << "import" << YAML::Value;
@@ -395,7 +395,7 @@ namespace SST::Prototypes::JFM
 		characteristic.id = readCharacteristicId(characteristicNode, "id");
 		characteristic.name = readOr<std::string>(characteristicNode, "name", "Characteristic");
 		characteristic.measurement = readOr<std::string>(characteristicNode, "measurement", "IV");
-		characteristic.sourcePath = Path::FromResolved(readOr<std::string>(characteristicNode, "source_path", {}));
+		characteristic.sourcePath = Path::FromResolved(std::filesystem::u8path(readOr<std::string>(characteristicNode, "source_path", {})));
 		characteristic.sourceRecordKey = readOr<std::string>(characteristicNode, "source_record_key", {});
 		characteristic.parser = readOr<std::string>(characteristicNode, "parser", {});
 		characteristic.importOptions = readImportOptions(characteristicNode["import"], characteristic.parser);
@@ -499,7 +499,7 @@ namespace SST::Prototypes::JFM
 				out << YAML::BeginMap;
 				out << YAML::Key << "id" << YAML::Value << script.id;
 				out << YAML::Key << "name" << YAML::Value << script.name;
-				out << YAML::Key << "path" << YAML::Value << script.path.String();
+				out << YAML::Key << "path" << YAML::Value << script.path.Utf8();
 				out << YAML::Key << "enabled" << YAML::Value << script.enabled;
 				out << YAML::Key << "reload_count" << YAML::Value << script.reloadCount;
 				out << YAML::EndMap;
@@ -600,7 +600,7 @@ namespace SST::Prototypes::JFM
 				project.scripts.push_back(JFMScriptInfo{
 					readOr<std::string>(scriptNode, "id", {}),
 					readOr<std::string>(scriptNode, "name", {}),
-					Path::FromResolved(readOr<std::string>(scriptNode, "path", {})),
+					Path::FromResolved(std::filesystem::u8path(readOr<std::string>(scriptNode, "path", {}))),
 					readOr<bool>(scriptNode, "enabled", true),
 					readOr<std::size_t>(scriptNode, "reload_count", 0)});
 			}

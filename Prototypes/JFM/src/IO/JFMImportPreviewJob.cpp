@@ -77,17 +77,17 @@ namespace SST::Prototypes::JFM::Detail
 			if (!std::filesystem::is_directory(root.Native(), error))
 				continue;
 			const std::filesystem::path relative = std::filesystem::relative(item.path.Native(), root.Native(), error);
-			if (error || relative.empty() || relative.string().starts_with(".."))
+			if (error || relative.empty() || *relative.begin() == "..")
 				continue;
-			item.relativePath = relative.string();
-			item.folderKey = item.path.parent_path().String();
+			item.relativePath = Path::FromResolved(relative).Utf8();
+			item.folderKey = item.path.parent_path().Utf8();
 			const std::filesystem::path parent = relative.parent_path();
-			item.folderLabel = parent.empty() ? root.filename().String() : parent.string();
+			item.folderLabel = parent.empty() ? root.filename().Utf8() : Path::FromResolved(parent).Utf8();
 			return;
 		}
-		item.relativePath = item.path.filename().String();
-		item.folderKey = item.path.parent_path().String();
-		item.folderLabel = item.path.parent_path().filename().String();
+		item.relativePath = item.path.filename().Utf8();
+		item.folderKey = item.path.parent_path().Utf8();
+		item.folderLabel = item.path.parent_path().filename().Utf8();
 	}
 } // namespace SST::Prototypes::JFM::Detail
 

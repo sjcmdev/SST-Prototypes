@@ -12,7 +12,7 @@ namespace SST
 	static Path resolvePythonExecutable(const ScriptRunOptions &options)
 	{
 		if (!options.pythonExecutable.empty())
-			return Path(options.pythonExecutable);
+			return Path(std::filesystem::u8path(options.pythonExecutable));
 
 		return Platform::ResolvePreferredPythonExecutable();
 	}
@@ -41,7 +41,7 @@ namespace SST
 		{
 			return MakePythonExecutionError(
 				"Python script file was not found.",
-				"Missing script file: " + scriptPath.String(),
+				"Missing script file: " + scriptPath.Utf8(),
 				"Ensure scripts/python/examples contains the requested script and path casing matches.",
 				"python.script.path_not_found");
 		}
@@ -51,7 +51,7 @@ namespace SST
 		{
 			return MakePythonExecutionError(
 				"Python working directory does not exist.",
-				"Invalid working directory: " + workingDirectory.String(),
+				"Invalid working directory: " + workingDirectory.Utf8(),
 				"Use a valid repository-relative working directory before running scripts.",
 				"python.script.working_directory_not_found");
 		}
@@ -59,7 +59,7 @@ namespace SST
 		const Path pythonExecutable = resolvePythonExecutable(options);
 		Platform::ProcessRunOptions processOptions;
 		processOptions.executable = pythonExecutable;
-		processOptions.arguments.push_back(scriptPath.String());
+		processOptions.arguments.push_back(scriptPath.Utf8());
 		processOptions.arguments.insert(
 			processOptions.arguments.end(),
 			options.arguments.begin(),

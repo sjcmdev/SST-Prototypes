@@ -283,7 +283,7 @@ namespace SST
 		ImGuiLayerDetail::applyAppearanceToImGui(state->appearance);
 		if (m_EventBus != nullptr && !state->layoutPath.empty())
 		{
-			const Path resolvedPath = Path::FromResolved(state->layoutPath);
+			const Path resolvedPath = Path::FromResolved(std::filesystem::u8path(state->layoutPath));
 			m_EventBus->Queue(EditorUiEvents::LayoutLoadRequested{resolvedPath});
 			state->layoutStatusMessage = "Layout load queued: " + state->layoutPath;
 			DS_LOG_INFO("ImGui layout load queued on UI state bind: {}", state->layoutPath);
@@ -476,7 +476,7 @@ namespace SST
 		if (auto uiState = m_UiState.lock())
 		{
 			if (!uiState->layoutPath.empty())
-				layoutPath = Path::FromResolved(uiState->layoutPath);
+				layoutPath = Path::FromResolved(std::filesystem::u8path(uiState->layoutPath));
 		}
 
 		saveLayoutToPath(layoutPath, "Layout save on detach failed");
@@ -507,7 +507,7 @@ namespace SST
 		EditorUiEvents::PersistRequested event{EditorUiEvents::PersistKind::Layout, layoutPath, std::move(contents)};
 		m_EventBus->Publish(event);
 
-		DS_LOG_INFO("ImGui layout persistence requested: {} bytes={}", layoutPath.String(), size);
+		DS_LOG_INFO("ImGui layout persistence requested: {} bytes={}", layoutPath.Utf8(), size);
 	}
 
 	void ImGuiLayer::shutdownImGui()
@@ -653,7 +653,7 @@ namespace SST
 		{
 			font = io.Fonts->AddFontDefault();
 		}
-		else if (!FileSystem::Exists(fontOption.path))
+		else if (!FileSystem::Exists(std::filesystem::u8path(fontOption.path)))
 		{
 			DS_LOG_WARN("UI font path does not exist: {}", fontOption.path);
 		}
@@ -756,15 +756,15 @@ namespace SST
 	void ImGuiLayer::onThemeSaved(const EditorUiEvents::ThemeSaved &event)
 	{
 		if (auto uiState = m_UiState.lock())
-			uiState->appearanceStatusMessage = "Theme saved: " + event.path.String();
-		DS_LOG_INFO("Appearance theme save confirmed: {}", event.path.String());
+			uiState->appearanceStatusMessage = "Theme saved: " + event.path.Utf8();
+		DS_LOG_INFO("Appearance theme save confirmed: {}", event.path.Utf8());
 	}
 
 	void ImGuiLayer::onThemeSaveFailed(const EditorUiEvents::ThemeSaveFailed &event)
 	{
 		if (auto uiState = m_UiState.lock())
 			uiState->appearanceStatusMessage = "Theme save failed: " + event.error;
-		DS_LOG_WARN("Appearance theme save failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("Appearance theme save failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void ImGuiLayer::onThemeLoaded(const EditorUiEvents::ThemeLoaded &event)
@@ -776,16 +776,16 @@ namespace SST
 		if (uiState != nullptr)
 		{
 			uiState->appearance = event.appearance;
-			uiState->appearanceStatusMessage = "Theme loaded: " + event.path.String();
+			uiState->appearanceStatusMessage = "Theme loaded: " + event.path.Utf8();
 		}
-		DS_LOG_INFO("Appearance theme loaded: {}", event.path.String());
+		DS_LOG_INFO("Appearance theme loaded: {}", event.path.Utf8());
 	}
 
 	void ImGuiLayer::onThemeLoadFailed(const EditorUiEvents::ThemeLoadFailed &event)
 	{
 		if (auto uiState = m_UiState.lock())
 			uiState->appearanceStatusMessage = "Theme load failed: " + event.error;
-		DS_LOG_WARN("Appearance theme load failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("Appearance theme load failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void ImGuiLayer::onLayoutSaveRequested(const EditorUiEvents::LayoutSaveRequested &event)
@@ -804,22 +804,22 @@ namespace SST
 		std::string contents = (data != nullptr && size > 0) ? std::string(data, size) : std::string{};
 		m_EventBus->Queue(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Layout, path, std::move(contents)});
 		if (uiState != nullptr)
-			uiState->layoutStatusMessage = "Layout save queued: " + path.String();
-		DS_LOG_INFO("Layout persistence queued from request: {} bytes={}", path.String(), size);
+			uiState->layoutStatusMessage = "Layout save queued: " + path.Utf8();
+		DS_LOG_INFO("Layout persistence queued from request: {} bytes={}", path.Utf8(), size);
 	}
 
 	void ImGuiLayer::onLayoutSaved(const EditorUiEvents::LayoutSaved &event)
 	{
 		if (auto uiState = m_UiState.lock())
-			uiState->layoutStatusMessage = "Layout saved: " + event.path.String();
-		DS_LOG_INFO("Layout save confirmed: {} bytes={}", event.path.String(), event.bytes);
+			uiState->layoutStatusMessage = "Layout saved: " + event.path.Utf8();
+		DS_LOG_INFO("Layout save confirmed: {} bytes={}", event.path.Utf8(), event.bytes);
 	}
 
 	void ImGuiLayer::onLayoutSaveFailed(const EditorUiEvents::LayoutSaveFailed &event)
 	{
 		if (auto uiState = m_UiState.lock())
 			uiState->layoutStatusMessage = "Layout save failed: " + event.error;
-		DS_LOG_WARN("Layout save failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("Layout save failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void ImGuiLayer::onLayoutLoaded(const EditorUiEvents::LayoutLoaded &event)
@@ -830,8 +830,8 @@ namespace SST
 		{
 			ImGui::LoadIniSettingsFromMemory(event.contents.data(), event.contents.size());
 			if (uiState != nullptr)
-				uiState->layoutStatusMessage = "Layout loaded: " + path.String();
-			DS_LOG_INFO("Layout loaded from payload: {} bytes={}", path.String(), event.contents.size());
+				uiState->layoutStatusMessage = "Layout loaded: " + path.Utf8();
+			DS_LOG_INFO("Layout loaded from payload: {} bytes={}", path.Utf8(), event.contents.size());
 		}
 	}
 
@@ -839,7 +839,7 @@ namespace SST
 	{
 		if (auto uiState = m_UiState.lock())
 			uiState->layoutStatusMessage = "Layout load failed: " + event.error;
-		DS_LOG_WARN("Layout load failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("Layout load failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void ImGuiLayer::onLayoutResetRequested(const EditorUiEvents::LayoutResetRequested &event)
@@ -851,7 +851,7 @@ namespace SST
 
 		if (auto uiState = m_UiState.lock())
 			uiState->layoutStatusMessage = "Runtime layout reset.";
-		DS_LOG_INFO("Layout reset requested: {}", path.String());
+		DS_LOG_INFO("Layout reset requested: {}", path.Utf8());
 	}
 
 	void ImGuiLayer::onRuntimeConfigApplied(const EditorUiEvents::RuntimeConfigApplied &event)
@@ -874,7 +874,7 @@ namespace SST
 			event.persisted,
 			fontPathChanged,
 			m_UiConfig.fontScale,
-			m_LayoutPath.Empty() ? "<default>" : m_LayoutPath.String());
+			m_LayoutPath.Empty() ? "<default>" : m_LayoutPath.Utf8());
 	}
 
 	void ImGuiLayer::onNotificationEvent(const NotificationEvent &event)

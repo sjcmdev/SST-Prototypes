@@ -101,27 +101,33 @@ namespace SST::Prototypes::JFM
 
 	Path ensureProjectExtension(Path path)
 	{
-		std::string text = path.String();
+		std::string text = path.Utf8();
 		if (text.size() >= 9 && text.substr(text.size() - 9) == ".jfm.yaml")
 			return path;
-		return Path::FromResolved(path.Native().string() + ".jfm.yaml");
+		auto result = path.Native();
+		result += ".jfm.yaml";
+		return Path::FromResolved(std::move(result));
 	}
 
 	Path ensureProjectBundleExtension(Path path)
 	{
-		std::string text = path.String();
+		std::string text = path.Utf8();
 		if (text.size() >= 4 && text.substr(text.size() - 4) == ".jfm")
 			return path;
-		return Path::FromResolved(path.Native().string() + ".jfm");
+		auto result = path.Native();
+		result += ".jfm";
+		return Path::FromResolved(std::move(result));
 	}
 
 	Path ensureExtension(Path path, const char *extension)
 	{
-		const std::string text = path.String();
+		const std::string text = path.Utf8();
 		const std::string suffix = extension;
 		if (text.size() >= suffix.size() && text.substr(text.size() - suffix.size()) == suffix)
 			return path;
-		return Path::FromResolved(path.Native().string() + suffix);
+		auto result = path.Native();
+		result += suffix;
+		return Path::FromResolved(std::move(result));
 	}
 
 	bool isDirectory(const Path &path)
@@ -132,7 +138,7 @@ namespace SST::Prototypes::JFM
 
 	bool isProjectBundlePath(const Path &path)
 	{
-		std::string extension = path.extension().String();
+		std::string extension = path.extension().Utf8();
 		std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character) {
 			return static_cast<char>(std::tolower(character));
 		});
@@ -174,9 +180,9 @@ namespace SST::Prototypes::JFM
 			temperature << *info.temperatureK;
 		pattern = replaceAll(std::move(pattern), "{name}", info.name);
 		pattern = replaceAll(std::move(pattern), "{id}", std::to_string(info.id));
-		pattern = replaceAll(std::move(pattern), "{stem}", info.sourcePath.Empty() ? info.name : info.sourcePath.Native().stem().string());
-		pattern = replaceAll(std::move(pattern), "{folder}", info.sourcePath.Empty() ? std::string{} : info.sourcePath.parent_path().filename().String());
-		pattern = replaceAll(std::move(pattern), "{parent_folder}", info.sourcePath.Empty() ? std::string{} : info.sourcePath.parent_path().parent_path().filename().String());
+		pattern = replaceAll(std::move(pattern), "{stem}", info.sourcePath.Empty() ? info.name : Path::FromResolved(info.sourcePath.Native().stem()).Utf8());
+		pattern = replaceAll(std::move(pattern), "{folder}", info.sourcePath.Empty() ? std::string{} : info.sourcePath.parent_path().filename().Utf8());
+		pattern = replaceAll(std::move(pattern), "{parent_folder}", info.sourcePath.Empty() ? std::string{} : info.sourcePath.parent_path().parent_path().filename().Utf8());
 		pattern = replaceAll(std::move(pattern), "{T}", temperature.str());
 		pattern = replaceAll(std::move(pattern), "{temperature_K}", temperature.str());
 		for (const auto &[key, value] : info.metadata)

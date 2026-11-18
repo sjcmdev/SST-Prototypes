@@ -279,7 +279,7 @@ namespace SST::Prototypes::JFM
 			node["start_perturbation_percent"] = state.startPerturbationPercent;
 			node["seed"] = state.seed;
 			node["backend"] = state.backend;
-			node["output_path"] = state.outputPath.String();
+			node["output_path"] = state.outputPath.Utf8();
 			node["total_milliseconds"] = state.totalMilliseconds;
 			node["warnings"] = state.warnings;
 			return node;
@@ -298,7 +298,7 @@ namespace SST::Prototypes::JFM
 			state.startPerturbationPercent = ReadOr<double>(node, "start_perturbation_percent", 0.0);
 			state.seed = ReadOr<std::uint32_t>(node, "seed", 42);
 			state.backend = ReadOr<std::string>(node, "backend", {});
-			state.outputPath = Path::FromResolved(ReadOr<std::string>(node, "output_path", {}));
+			state.outputPath = Path::FromResolved(std::filesystem::u8path(ReadOr<std::string>(node, "output_path", {})));
 			state.totalMilliseconds = ReadOr<double>(node, "total_milliseconds", 0.0);
 			if (node["warnings"])
 				state.warnings = node["warnings"].as<std::vector<std::string>>();
@@ -361,7 +361,7 @@ namespace SST::Prototypes::JFM
 			std::istringstream input(text);
 			std::string line;
 			if (!std::getline(input, line))
-				return BundleError("Raw characteristic TSV is empty.", path.String());
+				return BundleError("Raw characteristic TSV is empty.", path.Utf8());
 			if (!line.empty() && line.back() == '\r')
 				line.pop_back();
 			const std::vector<std::string> header = SplitTabs(line);
@@ -374,7 +374,7 @@ namespace SST::Prototypes::JFM
 			const int density = columnIndex("current_density");
 			const int combined = columnIndex("current/current_density");
 			if (voltage < 0 || (current < 0 && density < 0 && combined < 0))
-				return BundleError("Raw characteristic TSV has unsupported columns.", path.String());
+				return BundleError("Raw characteristic TSV has unsupported columns.", path.Utf8());
 
 			auto data = CreateRef<JFMCharacteristicData>();
 			while (std::getline(input, line))
@@ -450,7 +450,7 @@ namespace SST::Prototypes::JFM
 			std::istringstream parameterInput(text);
 			std::string line;
 			if (!std::getline(parameterInput, line))
-				return BundleError("Monte Carlo parameters TSV is empty.", parameterPath.String());
+				return BundleError("Monte Carlo parameters TSV is empty.", parameterPath.Utf8());
 			if (!line.empty() && line.back() == '\r')
 				line.pop_back();
 			const std::vector<std::string> header = SplitTabs(line);

@@ -50,7 +50,7 @@ namespace SST
 					continue;
 				}
 
-				std::string fileExtension = entry.path().extension().string();
+				std::string fileExtension = Path::FromResolved(entry.path().extension()).Utf8();
 				std::transform(fileExtension.begin(), fileExtension.end(), fileExtension.begin(), [](unsigned char character) {
 					return static_cast<char>(std::tolower(character));
 				});
@@ -59,7 +59,7 @@ namespace SST
 			}
 
 			std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) {
-				return left.String() < right.String();
+				return left.Native() < right.Native();
 			});
 			return result;
 		}
@@ -291,7 +291,7 @@ namespace SST
 		std::string error;
 		if (!TextFileIO::Load(event.sourcePath, text, error))
 		{
-			DS_LOG_WARN("Keybindings file not loaded [{}]: {}", event.sourcePath.String(), error);
+			DS_LOG_WARN("Keybindings file not loaded [{}]: {}", event.sourcePath.Utf8(), error);
 			m_EventBus->Queue(AppEvents::Keymap::BindingsLoadFailed{error});
 			return;
 		}

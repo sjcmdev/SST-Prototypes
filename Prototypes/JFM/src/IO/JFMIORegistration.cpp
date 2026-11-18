@@ -392,7 +392,7 @@ namespace SST::Prototypes::JFM
 		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
 		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage(project, "Raw TSV export queued: " + event.path.String());
+			state->store->SetStatusMessage(project, "Raw TSV export queued: " + event.path.Utf8());
 
 		auto job = CreateRef<JFMExportRawTsvJob>(state->eventBus, event.path, event.characteristic, project, operation);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
@@ -401,7 +401,7 @@ namespace SST::Prototypes::JFM
 	void HandleExportRawTsvCompleted(const Ref<JFMIOState> &state, const ExportRawTsvCompleted &event)
 	{
 		if (state->store != nullptr)
-			state->store->SetStatusMessage(event.project, "Raw TSV exported: " + event.path.String());
+			state->store->SetStatusMessage(event.project, "Raw TSV exported: " + event.path.Utf8());
 	}
 
 	void HandleExportRawTsvFailed(const Ref<JFMIOState> &state, const ExportRawTsvFailed &event)
@@ -409,7 +409,7 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 			state->store->SetStatusMessage(event.project, "Raw TSV export failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Export, "JFM export failed", event.error);
-		DS_LOG_WARN("JFM raw TSV export failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("JFM raw TSV export failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void HandleExportRawTsvBatchRequested(const Ref<JFMIOState> &state, const ExportRawTsvBatchRequested &event)
@@ -417,7 +417,7 @@ namespace SST::Prototypes::JFM
 		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
 		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage(project, "Raw TSV batch export queued: " + event.outputDirectory.String());
+			state->store->SetStatusMessage(project, "Raw TSV batch export queued: " + event.outputDirectory.Utf8());
 
 		auto job = CreateRef<JFMExportRawTsvBatchJob>(state->eventBus, event.outputDirectory, event.items, project, operation);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::Normal, JFMIOJobSource});
@@ -437,7 +437,7 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 			state->store->SetStatusMessage(event.project, "Raw TSV batch export failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Export, "JFM export failed", event.error);
-		DS_LOG_WARN("JFM raw TSV batch export failed [{}]: {}", event.outputDirectory.String(), event.error);
+		DS_LOG_WARN("JFM raw TSV batch export failed [{}]: {}", event.outputDirectory.Utf8(), event.error);
 	}
 
 	void HandleExportArrheniusTsvRequested(const Ref<JFMIOState> &state, const ExportArrheniusTsvRequested &event)
@@ -445,7 +445,7 @@ namespace SST::Prototypes::JFM
 		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
 		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage(project, "Arrhenius TSV export queued: " + event.path.String());
+			state->store->SetStatusMessage(project, "Arrhenius TSV export queued: " + event.path.Utf8());
 		state->eventBus->Queue(JobSubmitRequested{CreateRef<JFMExportArrheniusTsvJob>(state->eventBus, event.path, event.characteristics, project, operation), JobPriority::Normal, JFMIOJobSource});
 	}
 
@@ -454,14 +454,14 @@ namespace SST::Prototypes::JFM
 		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
 		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage(project, "Characteristics + fit TSV export queued: " + event.path.String());
+			state->store->SetStatusMessage(project, "Characteristics + fit TSV export queued: " + event.path.Utf8());
 		state->eventBus->Queue(JobSubmitRequested{CreateRef<JFMExportCharacteristicsFitTsvJob>(state->eventBus, event.path, event.characteristics, project, operation), JobPriority::Normal, JFMIOJobSource});
 	}
 
 	void HandleExportAnalysisTsvCompleted(const Ref<JFMIOState> &state, const ExportAnalysisTsvCompleted &event)
 	{
 		if (state->store != nullptr)
-			state->store->SetStatusMessage(event.project, event.kind + " exported: " + event.path.String());
+			state->store->SetStatusMessage(event.project, event.kind + " exported: " + event.path.Utf8());
 	}
 
 	void HandleExportAnalysisTsvFailed(const Ref<JFMIOState> &state, const ExportAnalysisTsvFailed &event)
@@ -469,7 +469,7 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 			state->store->SetStatusMessage(event.project, event.kind + " export failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Export, "JFM export failed", event.error);
-		DS_LOG_WARN("JFM analysis TSV export failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("JFM analysis TSV export failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void RegisterExportHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
@@ -491,7 +491,7 @@ namespace SST::Prototypes::JFM
 		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
 		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage(project, "Saving project: " + event.path.String());
+			state->store->SetStatusMessage(project, "Saving project: " + event.path.Utf8());
 
 		auto job = CreateRef<SaveProjectJob>(state->eventBus, event.path, event.snapshot, project, operation, event.revision);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
@@ -502,7 +502,7 @@ namespace SST::Prototypes::JFM
 		const ProjectHandle project = event.project == InvalidProjectHandle ? state->store->GetActiveProjectHandle() : event.project;
 		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
 		if (state->store != nullptr)
-			state->store->SetStatusMessage(project, "Saving project bundle: " + event.path.String());
+			state->store->SetStatusMessage(project, "Saving project bundle: " + event.path.Utf8());
 
 		auto job = CreateRef<SaveProjectBundleJob>(state->eventBus, event.path, event.snapshot, project, operation, event.revision);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
@@ -514,7 +514,7 @@ namespace SST::Prototypes::JFM
 			return;
 
 		state->store->MarkProjectSaved(event.project, event.path, event.revision);
-		state->store->SetStatusMessage(event.project, "Project saved: " + event.path.String());
+		state->store->SetStatusMessage(event.project, "Project saved: " + event.path.Utf8());
 		if (state->settings != nullptr)
 			state->settings->AddRecentProject(event.path);
 	}
@@ -524,7 +524,7 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 			state->store->SetStatusMessage(event.project, "Project save failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Project, "JFM save failed", event.error);
-		DS_LOG_WARN("JFM project save failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("JFM project save failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void HandleProjectBundleSaveCompleted(const Ref<JFMIOState> &state, const ProjectBundleSaveCompleted &event)
@@ -533,7 +533,7 @@ namespace SST::Prototypes::JFM
 			return;
 		state->store->MarkProjectSaved(event.project, event.path, event.revision);
 		const std::string suffix = event.warnings.empty() ? std::string{} : " with warnings";
-		state->store->SetStatusMessage(event.project, "Project bundle saved" + suffix + ": " + event.path.String());
+		state->store->SetStatusMessage(event.project, "Project bundle saved" + suffix + ": " + event.path.Utf8());
 		if (state->settings != nullptr)
 			state->settings->AddRecentProject(event.path);
 	}
@@ -543,7 +543,7 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 			state->store->SetStatusMessage(event.project, "Project bundle save failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Project, "JFM bundle save failed", event.error);
-		DS_LOG_WARN("JFM project bundle save failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("JFM project bundle save failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void RegisterProjectSaveHandlers(IOLayer &ioLayer, const Ref<JFMIOState> &state)
@@ -566,7 +566,7 @@ namespace SST::Prototypes::JFM
 				state->store->SetStatusMessage(*existing, "Project already open.");
 				return;
 			}
-			state->store->SetStatusMessage("Loading project: " + event.path.String());
+			state->store->SetStatusMessage("Loading project: " + event.path.Utf8());
 		}
 
 		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
@@ -584,7 +584,7 @@ namespace SST::Prototypes::JFM
 				state->store->SetStatusMessage(*existing, "Project bundle already open.");
 				return;
 			}
-			state->store->SetStatusMessage("Loading project bundle: " + event.path.String());
+			state->store->SetStatusMessage("Loading project bundle: " + event.path.Utf8());
 		}
 
 		const JFMOperationId operation = event.operation == InvalidJFMOperationId ? state->nextOperation++ : event.operation;
@@ -631,7 +631,7 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 			state->store->SetStatusMessage("Project load failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Project, "JFM load failed", event.error);
-		DS_LOG_WARN("JFM project load failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("JFM project load failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void HandleProjectBundleLoadFailed(const Ref<JFMIOState> &state, const ProjectBundleLoadFailed &event)
@@ -639,7 +639,7 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 			state->store->SetStatusMessage("Project bundle load failed: " + event.error);
 		NotifyFailure(state, NotificationCategory::Project, "JFM bundle load failed", event.error);
-		DS_LOG_WARN("JFM project bundle load failed [{}]: {}", event.path.String(), event.error);
+		DS_LOG_WARN("JFM project bundle load failed [{}]: {}", event.path.Utf8(), event.error);
 	}
 
 	void HandleProjectDataMaterializationCompleted(const Ref<JFMIOState> &state, const ProjectDataMaterializationCompleted &event)

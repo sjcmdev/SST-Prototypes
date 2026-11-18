@@ -71,8 +71,8 @@ namespace SST::Prototypes::JFM
 		CommandContext context(ContextID{"jfm.menu.recent_projects"});
 		context.SetSource("Last Projects");
 		context.Set("path", path);
-		if (ImGui::MenuItem(path.filename().String().c_str()))
-			execute(services, path.extension().String() == ".jfm" ? JFMOpenProjectBundleCommandId : "jfm.project.open", "Last Projects", std::move(context));
+		if (ImGui::MenuItem(path.filename().Utf8().c_str()))
+			execute(services, path.extension().Utf8() == ".jfm" ? JFMOpenProjectBundleCommandId : "jfm.project.open", "Last Projects", std::move(context));
 	}
 
 	void RenderJFMMenu(

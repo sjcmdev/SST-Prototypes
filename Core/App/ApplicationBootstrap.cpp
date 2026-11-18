@@ -292,7 +292,7 @@ namespace SST
 					specification.logToFileOverride = true;
 					if (!logFileText.empty())
 					{
-						specification.logFilePath = Path::FromResolved(std::string(logFileText));
+						specification.logFilePath = Path::FromResolved(std::filesystem::u8path(logFileText));
 						specification.logFilePathOverride = specification.logFilePath;
 					}
 				}
@@ -345,7 +345,7 @@ namespace SST
 			initializeLogger();
 			timer.Finish(true);
 		}
-		DS_LOG_INFO("Config directory: {}", m_Config.directory.String());
+		DS_LOG_INFO("Config directory: {}", m_Config.directory.Utf8());
 		logStartupSpecification();
 		{
 			ZoneScopedN("Application.CreateFromSpecification.EventInfrastructure");
@@ -423,7 +423,7 @@ namespace SST
 			m_Config.directory = ApplicationDetail::ResolveConfigDirectory(m_Runtime.argv);
 			timer.Finish(true);
 		}
-		DS_LOG_INFO("CreateFromSpecification: resolved config directory={}", m_Config.directory.String());
+		DS_LOG_INFO("CreateFromSpecification: resolved config directory={}", m_Config.directory.Utf8());
 		ApplicationDetail::SetCrashStage("bootstrap configuration");
 		{
 			ZoneScopedN("Application.bootstrapConfiguration");
@@ -531,8 +531,8 @@ namespace SST
 
 		DS_LOG_INFO(
 			"AssetManager initialized: default_root={} user_override_root={} resolved={} issues={}",
-			m_AssetManager->GetDefaultRoot().String(),
-			m_AssetManager->GetUserOverrideRoot().String(),
+			m_AssetManager->GetDefaultRoot().Utf8(),
+			m_AssetManager->GetUserOverrideRoot().Utf8(),
 			report.resolvedAssets.size(),
 			report.issues.size());
 		return assetTimer.Finish(true);
@@ -800,7 +800,7 @@ namespace SST
 			imGuiRuntime.appearance = m_Config.appearance;
 			imGuiRuntime.layoutPath = m_Config.layout.imGuiIniPath.empty()
 				? ConfigManager::GetLayoutPath(m_Config.directory)
-				: Path::FromResolved(m_Config.layout.imGuiIniPath);
+				: Path::FromResolved(std::filesystem::u8path(m_Config.layout.imGuiIniPath));
 			imGuiRuntime.resetLayout = m_Runtime.specification.resetLayout;
 			timer.Finish(true);
 		}
@@ -867,7 +867,7 @@ namespace SST
 			if (m_Runtime.specification.logFilePath.Empty())
 				DS_LOG_INFO("File logging enabled: {}", RuntimeDefaults::LogFilePath);
 			else
-				DS_LOG_INFO("File logging enabled: {}", m_Runtime.specification.logFilePath.String());
+				DS_LOG_INFO("File logging enabled: {}", m_Runtime.specification.logFilePath.Utf8());
 		}
 
 		if (m_Runtime.specification.resetLayout)
@@ -921,13 +921,13 @@ namespace SST
 		if (!m_ConfigManager->Initialize(configError))
 		{
 			timer.Finish(false);
-			DS_LOG_ERROR("Config bootstrap failed [{}]: {}", m_Config.directory.String(), configError);
+			DS_LOG_ERROR("Config bootstrap failed [{}]: {}", m_Config.directory.Utf8(), configError);
 			m_ConfigManager.reset();
 			return false;
 		}
 
 		m_Config = m_ConfigManager->GetConfig();
-		DS_LOG_INFO("Config bootstrap complete: {}", m_ConfigManager->GetConfigDirectory().String());
+		DS_LOG_INFO("Config bootstrap complete: {}", m_ConfigManager->GetConfigDirectory().Utf8());
 		return timer.Finish(true);
 	}
 

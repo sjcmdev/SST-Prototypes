@@ -45,7 +45,7 @@ namespace SST::Prototypes::JFM
 #if defined(DS_PLATFORM_WINDOWS)
 			const Path sitePackages = venvRoot / Path("Lib") / Path("site-packages");
 			if (FileSystem::Exists(sitePackages.Native()))
-				(void)appendStringToSysPath(sitePackages.String());
+				(void)appendStringToSysPath(sitePackages.Utf8());
 #else
 			const Path libRoot = venvRoot / Path("lib");
 			if (!FileSystem::Exists(libRoot.Native()))
@@ -82,7 +82,7 @@ namespace SST::Prototypes::JFM
 #if DS_PYTHON_CAPI_AVAILABLE
 		appendNearbyVenvs(Path::FromResolved(FileSystem::CurrentPath()));
 		appendNearbyVenvs(pythonRoot);
-		return appendStringToSysPath(pythonRoot.String());
+		return appendStringToSysPath(pythonRoot.Utf8());
 #else
 		(void)pythonRoot;
 		return false;

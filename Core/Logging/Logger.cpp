@@ -172,13 +172,17 @@ namespace SST
 			Path logFilePath = options.logFilePath;
 			if (logFilePath.empty())
 				logFilePath = Path("logs") / "SST.log";
-			resolvedLogFilePath = logFilePath.string();
+			resolvedLogFilePath = logFilePath.Utf8();
 
 			try
 			{
 				if (!logFilePath.parent_path().empty())
 					FileSystem::CreateDirectories(logFilePath.parent_path().Native());
-				sinks.push_back(CreateRef<spdlog::sinks::basic_file_sink_mt>(resolvedLogFilePath, false));
+				#ifdef _WIN32
+				sinks.push_back(CreateRef<spdlog::sinks::basic_file_sink_mt>(logFilePath.Native().wstring(), false));
+#else
+				sinks.push_back(CreateRef<spdlog::sinks::basic_file_sink_mt>(logFilePath.Native().string(), false));
+#endif
 			}
 			catch (const std::exception &exception)
 			{

@@ -254,19 +254,19 @@ namespace SST
 		request.entries = m_Entries;
 		request.targetPath = m_ExportPath;
 		m_EventBus->Queue(request);
-		m_LastExportStatus = "Export requested: " + m_ExportPath.String();
+		m_LastExportStatus = "Export requested: " + m_ExportPath.Utf8();
 	}
 
 	void LoggingPanel::onExportCompleted(const AppEvents::Logs::ExportCompleted &event)
 	{
-		if (event.targetPath.String() != m_ExportPath.String())
+		if (event.targetPath != m_ExportPath)
 			return;
-		m_LastExportStatus = "Exported: " + event.targetPath.String();
+		m_LastExportStatus = "Exported: " + event.targetPath.Utf8();
 	}
 
 	void LoggingPanel::onExportFailed(const AppEvents::Logs::ExportFailed &event)
 	{
-		if (event.targetPath.String() != m_ExportPath.String())
+		if (event.targetPath != m_ExportPath)
 			return;
 		m_LastExportStatus = "Export failed: " + event.error;
 	}

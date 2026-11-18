@@ -60,7 +60,7 @@ namespace SST::Prototypes::JFM
 	{
 		ImGui::TextUnformatted(label);
 		ImGui::SameLine(160.0f);
-		ImGui::TextWrapped("%s", path.String().c_str());
+		ImGui::TextWrapped("%s", path.Utf8().c_str());
 		ImGui::SameLine();
 		if (ImGui::Button(("...##" + std::string(label)).c_str()))
 		{

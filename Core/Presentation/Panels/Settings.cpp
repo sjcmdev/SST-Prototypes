@@ -259,14 +259,14 @@ namespace SST
 	void SettingsPanel::refreshDraftBuffers()
 	{
 		copyToBuffer(m_WindowTitleBuffer, m_DraftConfig.window.title);
-		copyToBuffer(m_LogFilePathBuffer, m_DraftConfig.log.filePath.String());
+		copyToBuffer(m_LogFilePathBuffer, m_DraftConfig.log.filePath.Utf8());
 		copyToBuffer(m_FontPathBuffer, m_DraftConfig.ui.fontPath);
 	}
 
 	void SettingsPanel::syncDraftFromBuffers()
 	{
 		m_DraftConfig.window.title = m_WindowTitleBuffer.data();
-		m_DraftConfig.log.filePath = Path::FromResolved(std::string(m_LogFilePathBuffer.data()));
+		m_DraftConfig.log.filePath = Path::FromResolved(std::filesystem::u8path(std::string(m_LogFilePathBuffer.data())));
 		m_DraftConfig.ui.fontPath = m_FontPathBuffer.data();
 	}
 
@@ -583,7 +583,7 @@ namespace SST
 		{
 			uiState->availableLayouts = event.layouts;
 			uiState->layoutStatusMessage = event.layouts.empty()
-				? "No .ini layouts found in " + event.directory.String()
+				? "No .ini layouts found in " + event.directory.Utf8()
 				: "Layouts refreshed: " + std::to_string(event.layouts.size());
 		}
 		m_LayoutListRequested = false;
@@ -1055,14 +1055,14 @@ namespace SST
 			if (ImGui::Button("Save theme YAML"))
 			{
 				uiState->themeSavePath = m_ThemeSavePathBuffer.data();
-				(void)queueEvent(m_EventBus, ThemeSaveRequested{Path::FromResolved(uiState->themeSavePath), uiState->appearance});
+				(void)queueEvent(m_EventBus, ThemeSaveRequested{Path::FromResolved(std::filesystem::u8path(uiState->themeSavePath)), uiState->appearance});
 			}
 
 			ImGui::InputText("Theme load path", m_ThemeLoadPathBuffer.data(), m_ThemeLoadPathBuffer.size());
 			if (ImGui::Button("Load theme YAML"))
 			{
 				uiState->themeLoadPath = m_ThemeLoadPathBuffer.data();
-				(void)queueEvent(m_EventBus, ThemeLoadRequested{Path::FromResolved(uiState->themeLoadPath)});
+				(void)queueEvent(m_EventBus, ThemeLoadRequested{Path::FromResolved(std::filesystem::u8path(uiState->themeLoadPath))});
 			}
 
 			ImGui::Separator();
@@ -1070,19 +1070,19 @@ namespace SST
 			if (ImGui::Button("Save ImGui layout"))
 			{
 				uiState->layoutPath = m_LayoutPathBuffer.data();
-				(void)queueEvent(m_EventBus, LayoutSaveRequested{Path::FromResolved(uiState->layoutPath)});
+				(void)queueEvent(m_EventBus, LayoutSaveRequested{Path::FromResolved(std::filesystem::u8path(uiState->layoutPath))});
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Load ImGui layout"))
 			{
 				uiState->layoutPath = m_LayoutPathBuffer.data();
-				(void)queueEvent(m_EventBus, LayoutLoadRequested{Path::FromResolved(uiState->layoutPath)});
+				(void)queueEvent(m_EventBus, LayoutLoadRequested{Path::FromResolved(std::filesystem::u8path(uiState->layoutPath))});
 			}
 			ImGui::SameLine();
 			if (ImGui::Button("Reset runtime layout"))
 			{
 				uiState->layoutPath = m_LayoutPathBuffer.data();
-				(void)queueEvent(m_EventBus, LayoutResetRequested{Path::FromResolved(uiState->layoutPath)});
+				(void)queueEvent(m_EventBus, LayoutResetRequested{Path::FromResolved(std::filesystem::u8path(uiState->layoutPath))});
 			}
 
 			if (!uiState->layoutStatusMessage.empty())
@@ -1104,13 +1104,13 @@ namespace SST
 		ImGui::TextWrapped("Layout is saved as ImGui .ini data. Requests go through the event bus.");
 		ImGui::TextWrapped("Active layout: %s", uiState->layoutPath.empty() ? "<not configured>" : uiState->layoutPath.c_str());
 		if (ImGui::Button("Save current layout"))
-			(void)queueEvent(m_EventBus, LayoutSaveRequested{Path::FromResolved(uiState->layoutPath)});
+			(void)queueEvent(m_EventBus, LayoutSaveRequested{Path::FromResolved(std::filesystem::u8path(uiState->layoutPath))});
 		ImGui::SameLine();
 		if (ImGui::Button("Load active layout"))
-			(void)queueEvent(m_EventBus, LayoutLoadRequested{Path::FromResolved(uiState->layoutPath)});
+			(void)queueEvent(m_EventBus, LayoutLoadRequested{Path::FromResolved(std::filesystem::u8path(uiState->layoutPath))});
 		ImGui::SameLine();
 		if (ImGui::Button("Reset runtime layout"))
-			(void)queueEvent(m_EventBus, LayoutResetRequested{Path::FromResolved(uiState->layoutPath)});
+			(void)queueEvent(m_EventBus, LayoutResetRequested{Path::FromResolved(std::filesystem::u8path(uiState->layoutPath))});
 
 		if (!uiState->layoutStatusMessage.empty())
 			ImGui::TextWrapped("%s", uiState->layoutStatusMessage.c_str());
@@ -1129,16 +1129,16 @@ namespace SST
 		}
 		if (uiState->availableLayouts.empty())
 		{
-			ImGui::TextDisabled("No .ini layouts in %s", m_DraftConfig.paths.layoutsDirectory.String().c_str());
+			ImGui::TextDisabled("No .ini layouts in %s", m_DraftConfig.paths.layoutsDirectory.Utf8().c_str());
 			return;
 		}
 
 		for (const Path &layoutPath : uiState->availableLayouts)
 		{
-			if (ImGui::Selectable(layoutPath.Native().filename().string().c_str(), uiState->layoutPath == layoutPath.String()))
-				uiState->layoutPath = layoutPath.String();
+			if (ImGui::Selectable(layoutPath.filename().Utf8().c_str(), uiState->layoutPath == layoutPath.Utf8()))
+				uiState->layoutPath = layoutPath.Utf8();
 			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", layoutPath.String().c_str());
+				ImGui::SetTooltip("%s", layoutPath.Utf8().c_str());
 		}
 	}
 
@@ -1430,17 +1430,17 @@ namespace SST
 		ImGui::TextUnformatted("Portable file layout");
 		if (ImGui::BeginTable("PortablePaths", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoSavedSettings))
 		{
-			renderPathRow("Install root", paths.installRoot.String());
-			renderPathRow("App config", paths.appConfigDirectory.String());
-			renderPathRow("User config", paths.userConfigDirectory.String());
-			renderPathRow("Profiles", paths.profilesDirectory.String());
-			renderPathRow("Themes", paths.themesDirectory.String());
-			renderPathRow("Layouts", paths.layoutsDirectory.String());
-			renderPathRow("Exports", paths.exportsDirectory.String());
-			renderPathRow("Assets", paths.assetsDirectory.String());
-			renderPathRow("Fonts", paths.fontsDirectory.String());
-			renderPathRow("default.yaml", (paths.appConfigDirectory / Path("default.yaml")).String());
-			renderPathRow("ui_settings.yaml", (paths.userConfigDirectory / Path("ui_settings.yaml")).String());
+			renderPathRow("Install root", paths.installRoot.Utf8());
+			renderPathRow("App config", paths.appConfigDirectory.Utf8());
+			renderPathRow("User config", paths.userConfigDirectory.Utf8());
+			renderPathRow("Profiles", paths.profilesDirectory.Utf8());
+			renderPathRow("Themes", paths.themesDirectory.Utf8());
+			renderPathRow("Layouts", paths.layoutsDirectory.Utf8());
+			renderPathRow("Exports", paths.exportsDirectory.Utf8());
+			renderPathRow("Assets", paths.assetsDirectory.Utf8());
+			renderPathRow("Fonts", paths.fontsDirectory.Utf8());
+			renderPathRow("default.yaml", (paths.appConfigDirectory / Path("default.yaml")).Utf8());
+			renderPathRow("ui_settings.yaml", (paths.userConfigDirectory / Path("ui_settings.yaml")).Utf8());
 			ImGui::EndTable();
 		}
 	}

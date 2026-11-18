@@ -40,7 +40,7 @@ namespace SST::Prototypes::JFM
 
 		const JFMCharacteristicInfo &info = selected->info;
 		ImGui::Text("Name: %s", info.name.c_str());
-		ImGui::Text("Source: %s", info.sourcePath.String().c_str());
+		ImGui::Text("Source: %s", info.sourcePath.Utf8().c_str());
 		ImGui::Text("Parser: %s", info.parser.c_str());
 		if (info.temperatureK)
 			ImGui::Text("Temperature: %.2f K (%s)", *info.temperatureK, info.temperatureSource.c_str());

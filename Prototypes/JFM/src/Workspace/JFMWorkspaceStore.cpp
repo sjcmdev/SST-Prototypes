@@ -732,7 +732,7 @@ namespace SST::Prototypes::JFM
 			{
 				characteristic.info.name = characteristic.info.sourcePath.Empty()
 					? std::to_string(characteristic.info.id)
-					: characteristic.info.sourcePath.filename().String();
+					: characteristic.info.sourcePath.filename().Utf8();
 			}
 			removeCharacteristicReferencesLocked(document, characteristic.info.id);
 			if (auto existing = findInfoLocked(document, characteristic.info.id))
@@ -1698,7 +1698,7 @@ namespace SST::Prototypes::JFM
 		JFMScriptInfo script;
 		script.id = nextId(document->get(), "script");
 		script.path = std::move(path);
-		script.name = script.path.filename().String();
+		script.name = script.path.filename().Utf8();
 		if (script.name.empty())
 			script.name = script.id;
 		scripts.push_back(script);

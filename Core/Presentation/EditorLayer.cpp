@@ -89,10 +89,10 @@ namespace SST
 		m_UiState->paths = config.paths;
 		m_UiState->appearance = config.appearance;
 		m_UiState->layoutPath = config.layout.imGuiIniPath.empty()
-			? ConfigManager::GetLayoutPath(config.directory).String()
+			? ConfigManager::GetLayoutPath(config.directory).Utf8()
 			: config.layout.imGuiIniPath;
 		if (m_UiState->themeSavePath.empty())
-			m_UiState->themeSavePath = (config.paths.themesDirectory / Path("dark-orange.yaml")).String();
+			m_UiState->themeSavePath = (config.paths.themesDirectory / Path("dark-orange.yaml")).Utf8();
 		if (m_UiState->themeLoadPath.empty())
 			m_UiState->themeLoadPath = m_UiState->themeSavePath;
 	}
@@ -280,9 +280,9 @@ namespace SST
 		m_UiState->paths = config.paths;
 		m_UiState->appearance = config.appearance;
 		m_UiState->layoutPath = config.layout.imGuiIniPath.empty()
-			? ConfigManager::GetLayoutPath(config.directory).String()
+			? ConfigManager::GetLayoutPath(config.directory).Utf8()
 			: config.layout.imGuiIniPath;
-		m_UiState->themeSavePath = (config.paths.themesDirectory / Path("dark-orange.yaml")).String();
+		m_UiState->themeSavePath = (config.paths.themesDirectory / Path("dark-orange.yaml")).Utf8();
 		m_UiState->themeLoadPath = m_UiState->themeSavePath;
 	}
 

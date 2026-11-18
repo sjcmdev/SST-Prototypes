@@ -223,7 +223,7 @@ namespace SST::Prototypes::PlotLab
         if (!TextFileIO::Load(*source, importText, error))
             throw std::runtime_error(error);
         importPath = source->Utf8();
-        importName = source->Native().stem().string();
+        importName = Path::FromResolved(source->Native().stem()).Utf8();
         importOptions = {};
         importDialog = true;
         PreviewImport();

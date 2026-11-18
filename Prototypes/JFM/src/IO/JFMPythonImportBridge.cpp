@@ -36,7 +36,7 @@ namespace SST::Prototypes::JFM
 
 	std::string parserNameForPath(const Path &path)
 	{
-		const std::string extension = path.extension().String();
+		const std::string extension = path.extension().Utf8();
 		if (extension == ".iv" || extension == ".IV")
 			return "scaps_iv";
 		return "dat";
@@ -50,8 +50,8 @@ namespace SST::Prototypes::JFM
 	{
 		return makePythonBridgeError(
 			"Python import failed.",
-			"File: " + path.String()
-				+ "\nPython root: " + pythonRoot.String()
+			"File: " + path.Utf8()
+				+ "\nPython root: " + pythonRoot.Utf8()
 				+ "\nParser: " + parser
 				+ "\nError: " + error);
 	}
@@ -121,7 +121,7 @@ namespace SST::Prototypes::JFM
 		const JFMPythonImportBridge::ProgressCallback &progressCallback)
 	{
 		if (!ConfigureJFMPythonPaths(pythonRoot))
-			return makePythonBridgeError("Python import failed.", "Could not append pythonRoot to sys.path: " + pythonRoot.String());
+			return makePythonBridgeError("Python import failed.", "Could not append pythonRoot to sys.path: " + pythonRoot.Utf8());
 
 		JFMImportBatchResult batch;
 		const std::size_t total = paths.size();
@@ -131,12 +131,12 @@ namespace SST::Prototypes::JFM
 			const Path &path = paths[index];
 			const std::string parser = parserNameForPath(path);
 			if (progressCallback)
-				progressCallback(index, total, "Importing " + path.filename().String());
+				progressCallback(index, total, "Importing " + path.filename().Utf8());
 
 			nb::dict result;
 			try
 			{
-				nb::object adapterResult = importAdapter()(nb::str(path.String().c_str()), importOptions);
+				nb::object adapterResult = importAdapter()(nb::str(path.Utf8().c_str()), importOptions);
 				if (!nb::isinstance<nb::dict>(adapterResult))
 					return makeImportFileError(path, pythonRoot, parser, "Python adapter returned a non-dict result.");
 				result = nb::borrow<nb::dict>(adapterResult);
@@ -216,7 +216,7 @@ namespace SST::Prototypes::JFM
 		{
 			return makePythonBridgeError(
 				"Python import failed.",
-				"Python root was not found: " + m_PythonRoot.String());
+				"Python root was not found: " + m_PythonRoot.Utf8());
 		}
 
 		if (!PythonInterpreter::IsRuntimeInitialized())

@@ -6,7 +6,7 @@ namespace SST::Prototypes::JFM
 {
 	TEST(JFMUserSettingsTests, RoundTripsUserSettingsYaml)
 	{
-		const Path root = Path::FromResolved(FileSystem::TempDirectoryPath() / "sst-jfm-settings-test-root");
+		const Path root = Path::FromResolved(FileSystem::TempDirectoryPath() / "sst-jfm-settings-test-root" / std::filesystem::u8path(u8"Za\u017c\u00f3\u0142\u0107_\u65e5\u672c_\U0001f600"));
 		const Path config = root / Path("config");
 		const Path prototype = root / Path("Prototypes") / Path("JFM");
 		(void)FileSystem::CreateDirectories((prototype / Path("example-data")).Native());

@@ -38,11 +38,13 @@ namespace SST::Prototypes::JFM
 
 		Path EnsureExtension(Path path, const char *extension)
 		{
-			const std::string text = path.String();
+			const std::string text = path.Utf8();
 			const std::string suffix = extension;
 			if (text.size() >= suffix.size() && text.substr(text.size() - suffix.size()) == suffix)
 				return path;
-			return Path::FromResolved(path.Native().string() + suffix);
+			auto result = path.Native();
+			result += suffix;
+			return Path::FromResolved(std::move(result));
 		}
 
 
@@ -560,7 +562,7 @@ namespace SST::Prototypes::JFM
 		{
 			const Path defaultPath = OutputDirectory(plot.ref);
 			const Path defaultFile = defaultPath.Join(PlotDataFileName(plot, *result, false));
-			const std::optional<Path> path = SaveFileDialog(TsvFilter, defaultFile.filename().String().c_str(), defaultPath);
+			const std::optional<Path> path = SaveFileDialog(TsvFilter, defaultFile.filename().Utf8().c_str(), defaultPath);
 			SetStatus("Plot data saved", path && ExportPlotToFile(plot, false, EnsureExtension(*path, ".tsv")) ? 1 : 0, 1);
 		}
 		ImGui::SameLine();

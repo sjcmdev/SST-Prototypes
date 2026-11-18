@@ -29,6 +29,18 @@
 #include "ScientificRuntime/Python/PythonBridgeBuildConfig.hpp"
 #include "ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "ScientificRuntime/Python/PythonGilScope.hpp"
+#include "Core/App/Managers/ConfigManager.hpp"
+#include "Core/App/Managers/ConfigProfileStore.hpp"
+#include "Core/App/Serialization/YamlConfigSerializer.hpp"
+#include "Core/Platform/PlatformFontDiscovery.hpp"
+#include "Core/Logging/Logger.hpp"
+#include "IO/JFMProjectBundleSerializer.hpp"
+#include "IO/JFMPythonRuntime.hpp"
+#include "Vendor/ImGui/imgui.h"
+#if DS_PYTHON_CAPI_AVAILABLE
+#include <nanobind/nanobind.h>
+#include <nanobind/stl/string.h>
+#endif
 
 namespace SST::Prototypes::JFM
 {
@@ -302,7 +314,7 @@ namespace SST::Prototypes::JFM
 	{
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path repoPython = repoRoot / Path("Prototypes") / Path("JFM") / Path("python");
-		ASSERT_TRUE(FileSystem::Exists(repoPython.Native())) << repoPython.String();
+		ASSERT_TRUE(FileSystem::Exists(repoPython.Native())) << repoPython.Utf8();
 
 		ApplicationConfig config;
 		config.paths.installRoot = repoRoot / Path("build") / Path("bin") / Path("Debug-windows-x86_64") / Path("JFM") / Path("install");
@@ -322,8 +334,8 @@ namespace SST::Prototypes::JFM
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
 		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("real-measurement") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
-		ASSERT_TRUE(FileSystem::Exists(pythonRoot.Native())) << pythonRoot.String();
-		ASSERT_TRUE(FileSystem::Exists(dataPath.Native())) << dataPath.String();
+		ASSERT_TRUE(FileSystem::Exists(pythonRoot.Native())) << pythonRoot.Utf8();
+		ASSERT_TRUE(FileSystem::Exists(dataPath.Native())) << dataPath.Utf8();
 
 #if DS_PYTHON_CAPI_AVAILABLE
 		auto runtime = EnsurePythonRuntimeForBridgeTests();
@@ -536,7 +548,7 @@ namespace SST::Prototypes::JFM
             auto destination = FileSystem::TempDirectoryPath() / (std::string("sst-jfm-j2.") + format);
             nlohmann::json request = {{"operation","export"},{"project",nlohmann::json::parse(doc.project.toJson())},
                 {"graph_id",doc.graph},{"ranges",{-1,3,0,4}},{"width_mm",80},{"height_mm",60},
-                {"dpi",150},{"format",format},{"path",destination.generic_string()}};
+                {"dpi",150},{"format",format},{"path",Path::FromResolved(destination).Utf8()}};
             nlohmann::json result;
             {
             PythonGilAcquireScope scriptGuard; // Reproduce the PythonScriptJob guard around the binding.
@@ -593,3 +605,135 @@ namespace SST::Prototypes::JFM
     }
 } // namespace SST::Prototypes::JFM
 
+
+
+
+namespace SST::Prototypes::JFM {
+class UnicodePaths : public testing::Test {
+protected:
+    const std::filesystem::path name = std::filesystem::u8path(u8"Za\u017c\u00f3\u0142\u0107_\u65e5\u672c_\U0001f600");
+    Path root;
+    void SetUp() override {
+        root = Path::FromResolved(FileSystem::TempDirectoryPath() / "sst-au2-jfm" / name);
+        FileSystem::CreateDirectories(root.Native());
+    }
+    void TearDown() override {
+        std::error_code ec;
+        FileSystem::RemoveAll(root.Native(), ec);
+    }
+};
+TEST_F(UnicodePaths, CoreConfigAndLayoutRoundtrip) {
+    const Path configPath = root / "install/app/config";
+    auto manager = CreateRef<ConfigManager>(configPath);
+    std::string error, text;
+    ASSERT_TRUE(manager->Initialize(error)) << error;
+    auto config = manager->GetConfig();
+    config.log.filePath = root / name / "log.txt";
+    config.ui.fontPath = (root / name / "font.ttf").Utf8();
+    ASSERT_TRUE(TextFileIO::Save(Path::FromResolved(std::filesystem::u8path(config.ui.fontPath)), "font", error));
+    YamlConfigSerializer codec;
+    ASSERT_TRUE(codec.SerializeDefaultConfig(config, text, error)) << error;
+    ASSERT_TRUE(TextFileIO::Save(ConfigManager::GetDefaultConfigPath(configPath), text, error)) << error;
+    ConfigManager reopened(configPath);
+    ASSERT_TRUE(reopened.Initialize(error)) << error;
+    EXPECT_EQ(reopened.GetConfig().log.filePath, config.log.filePath);
+    const auto layout = Path::FromResolved(std::filesystem::u8path(reopened.GetConfig().layout.imGuiIniPath));
+    ASSERT_TRUE(TextFileIO::Save(layout, "[Window][Unicode]\nPos=4,5\n", error)) << error;
+    ASSERT_TRUE(TextFileIO::Load(layout, text, error)) << error;
+    EXPECT_EQ(text, "[Window][Unicode]\nPos=4,5\n");
+    EXPECT_EQ(reopened.ListIniFiles(layout.parent_path()), (std::vector<Path>{layout}));
+    ConfigProfileStore profiles(manager);
+    ASSERT_TRUE(profiles.Save(root.filename().Utf8(), config, error)) << error;
+    ASSERT_EQ(profiles.Refresh().size(), 1);
+    EXPECT_EQ(profiles.Entries()[0].name, root.filename().Utf8());
+    ApplicationConfig loaded = config;
+    ASSERT_TRUE(profiles.Load(profiles.Entries()[0].path, loaded, error)) << error;
+    EXPECT_EQ(loaded.log.filePath, config.log.filePath);
+    EXPECT_EQ(loaded.ui.fontPath, config.ui.fontPath);
+}
+TEST_F(UnicodePaths, CoreFontFileAndLogFile) {
+    const auto source = FileSystem::CurrentPath() / "Prototypes/JFM/install/app/assets/fonts/DejaVuSans.ttf";
+    ASSERT_TRUE(FileSystem::Exists(source));
+    const auto font = root / (name.native() + std::filesystem::path(".ttf").native());
+    std::filesystem::copy_file(source, font.Native(), std::filesystem::copy_options::overwrite_existing);
+    const auto fonts = Platform::GetFontsFromDirectory(root, "Regression");
+    ASSERT_EQ(fonts.size(), 1);
+    EXPECT_EQ(fonts[0].path, font.Utf8());
+    auto *context = ImGui::CreateContext();
+    EXPECT_NE(ImGui::GetIO().Fonts->AddFontFromFileTTF(fonts[0].path.c_str(), 16), nullptr);
+    ImGui::DestroyContext(context);
+    LoggerOptions options;
+    options.logToFile = true;
+    options.logFilePath = root / (name.native() + std::filesystem::path(".log").native());
+    Logger::Initialize(options);
+    DS_LOG_INFO("au2-unicode-log-marker");
+    Logger::Flush();
+    Logger::Shutdown();
+    std::string text, error;
+    ASSERT_TRUE(TextFileIO::Load(options.logFilePath, text, error)) << error;
+    EXPECT_NE(text.find("au2-unicode-log-marker"), std::string::npos);
+}
+TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
+    auto bus = CreateRef<EventBus>();
+    JFMProject project;
+    project.id = "unicode-project";
+    project.name = root.filename().Utf8();
+    JFMCharacteristicInfo info;
+    info.id = 1; info.name = "curve";
+    info.sourcePath = root / name / "source.dat";
+    info.monteCarlo = JFMMonteCarloState{};
+    info.monteCarlo->outputPath = root / name / "output";
+    project.characteristics.push_back(info);
+    project.scripts.push_back({"script", "custom", root / name / "custom.py", true, 0});
+    const auto path = root / (name.native() + std::filesystem::path(".jfm.yaml").native());
+    JFMProject loaded;
+    bool completed = false;
+    auto sub = bus->Subscribe<ProjectLoadCompleted>([&](const auto &event) { loaded = event.project; completed = true; });
+    auto ctx = MakeTestJobContext();
+    SaveProjectJob save(bus, path, project); save.Execute(ctx); bus->ProcessQueue();
+    LoadProjectJob load(bus, path); load.Execute(ctx); bus->ProcessQueue();
+    ASSERT_TRUE(completed);
+    ASSERT_EQ(loaded.characteristics.size(), 1);
+    EXPECT_EQ(loaded.characteristics[0].sourcePath, info.sourcePath);
+    EXPECT_EQ(loaded.characteristics[0].monteCarlo->outputPath, info.monteCarlo->outputPath);
+    EXPECT_EQ(loaded.scripts[0].path, project.scripts[0].path);
+    JFMProjectBundleSnapshot snapshot; snapshot.project = project;
+    const auto bundle = root / "bundle.jfm";
+    auto saved = JFMProjectBundleSerializer::Save(bundle, snapshot);
+    ASSERT_TRUE(saved) << saved.Error().technicalDetails;
+    auto opened = JFMProjectBundleSerializer::Load(bundle);
+    ASSERT_TRUE(opened) << opened.Error().technicalDetails;
+    EXPECT_EQ(opened->snapshot.project.characteristics[0].monteCarlo->outputPath, info.monteCarlo->outputPath);
+}
+TEST_F(UnicodePaths, EmbeddedPythonPathAndImport) {
+#if DS_PYTHON_CAPI_AVAILABLE
+    auto runtime = EnsurePythonRuntimeForBridgeTests();
+    ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+    const auto moduleRoot = root / name;
+    std::string error;
+    ASSERT_TRUE(TextFileIO::Save(moduleRoot / "au2_unicode_module.py", "value = 42\n", error)) << error;
+    const auto source = FileSystem::CurrentPath() / "Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat";
+    const auto target = root / (name.native() + std::filesystem::path("_300K.dat").native());
+    std::filesystem::copy_file(source, target.Native(), std::filesystem::copy_options::overwrite_existing);
+    PythonGilAcquireScope gil;
+    ASSERT_TRUE(gil.IsActive());
+    {
+        ASSERT_TRUE(ConfigureJFMPythonPaths(moduleRoot));
+        EXPECT_EQ(nanobind::cast<int>(nanobind::module_::import_("au2_unicode_module").attr("value")), 42);
+        auto info = nanobind::module_::import_("sst_jfm").attr("JFMCharacteristicInfo")();
+        info.attr("source_path") = nanobind::str(target.Utf8().c_str());
+        EXPECT_EQ(nanobind::cast<JFMCharacteristicInfo &>(info).sourcePath, target);
+        EXPECT_EQ(nanobind::cast<std::string>(info.attr("source_path")), target.Utf8());
+        JFMPythonImportBridge bridge(ResolveJFMPythonRoot(ApplicationConfig{}, Path::FromResolved(FileSystem::CurrentPath())));
+        auto result = bridge.ImportFiles({target}, {});
+        EXPECT_TRUE(result) << (result ? "" : result.Error().technicalDetails);
+        if (result) {
+            ASSERT_FALSE(result->characteristics.empty());
+            EXPECT_EQ(result->characteristics[0].info.sourcePath, target);
+        }
+    }
+#else
+    GTEST_SKIP() << "Embedded Python unavailable";
+#endif
+}
+}

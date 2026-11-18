@@ -294,7 +294,7 @@ namespace SST::Prototypes::JFM
 				m_SelectImportTab = false;
 		ImGui::Text("Files: %d", static_cast<int>(m_Request.paths.size()));
 		if (!m_Request.paths.empty())
-			ImGui::TextWrapped("%s", m_Request.paths.front().String().c_str());
+			ImGui::TextWrapped("%s", m_Request.paths.front().Utf8().c_str());
 		ImGui::Text("Previewable files: %d", static_cast<int>(m_PreviewFiles.size()));
 
 		const JFMProject targetProject = m_Store != nullptr ? m_Store->GetProjectSnapshot(m_Request.project) : JFMProject{};
@@ -373,7 +373,7 @@ namespace SST::Prototypes::JFM
 				if (ImGui::Button("..."))
 				{
 					if (auto script = OpenFileDialog(PythonScriptFilter))
-						std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script->String().c_str());
+						std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script->Utf8().c_str());
 				}
 				if (m_Store != nullptr)
 				{
@@ -382,7 +382,7 @@ namespace SST::Prototypes::JFM
 					{
 						ImGui::SameLine();
 						if (ImGui::SmallButton(script.name.c_str()))
-							std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script.path.String().c_str());
+							std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script.path.Utf8().c_str());
 					}
 				}
 			}
@@ -1294,7 +1294,7 @@ namespace SST::Prototypes::JFM
 			const JFMMonteCarloState &state = *record->info.monteCarlo;
 			ImGui::Text("MC: %s, %d/%d converged, %s, %.3f ms", state.status.c_str(), state.acceptedCount, state.sampleCount, state.backend.c_str(), state.totalMilliseconds);
 			if (!state.outputPath.Empty())
-				ImGui::TextWrapped("Output: %s", state.outputPath.String().c_str());
+				ImGui::TextWrapped("Output: %s", state.outputPath.Utf8().c_str());
 			for (const std::string &warning : state.warnings)
 				ImGui::TextWrapped("MC warning: %s", warning.c_str());
 		}
@@ -1567,7 +1567,7 @@ namespace SST::Prototypes::JFM
 		m_PreviewFiles.clear();
 		for (const Path &path : m_AllPreviewFiles)
 		{
-			if (folder.empty() || path.parent_path().String() == folder)
+			if (folder.empty() || path.parent_path().Utf8() == folder)
 				m_PreviewFiles.push_back(path);
 		}
 		if (m_PreviewFileIndex >= static_cast<int>(m_PreviewFiles.size()))
@@ -1644,7 +1644,7 @@ namespace SST::Prototypes::JFM
 	void JFMImportDialogPanel::renderVariablePreviewTable() const
 	{
 		const Path path = selectedPreviewPath();
-		const std::string sampleName = path.Empty() ? std::string{"<none>"} : path.filename().String();
+		const std::string sampleName = path.Empty() ? std::string{"<none>"} : path.filename().Utf8();
 		ImGui::TextDisabled("Sample: %s", sampleName.c_str());
 		const JFMImportPreviewItem *item = previewItem(path);
 		const JFMCharacteristicInfo *info = item != nullptr && !item->characteristics.empty() ? &item->characteristics.front().info : nullptr;
@@ -1757,7 +1757,7 @@ namespace SST::Prototypes::JFM
 			const int itemIndex = static_cast<int>(index);
 			const bool selected = ContainsIndex(m_SelectedPreviewFileIndices, itemIndex);
 			const JFMImportPreviewItem *item = previewItem(m_PreviewFiles[index]);
-			const std::string visibleLabel = item != nullptr && !item->relativePath.empty() ? item->relativePath : m_PreviewFiles[index].filename().String();
+			const std::string visibleLabel = item != nullptr && !item->relativePath.empty() ? item->relativePath : m_PreviewFiles[index].filename().Utf8();
 			const std::string label = visibleLabel + "##preview_file_" + std::to_string(index);
 			if (ImGui::Selectable(label.c_str(), selected))
 			{
@@ -1771,7 +1771,7 @@ namespace SST::Prototypes::JFM
 				m_PreviewFileIndex = itemIndex;
 			}
 			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", m_PreviewFiles[index].String().c_str());
+				ImGui::SetTooltip("%s", m_PreviewFiles[index].Utf8().c_str());
 		}
 		ImGui::EndChild();
 		ImGui::SameLine();

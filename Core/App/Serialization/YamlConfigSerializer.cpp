@@ -12,6 +12,8 @@
 #include <sstream>
 #include <span>
 #include <string_view>
+
+#include "Core/IO/TextFileIO.hpp"
 #include <unordered_map>
 #include <vector>
 
@@ -465,12 +467,12 @@ namespace SST
 			logPath[1] = toFileKey;
 			config.log.toFile = ReadValue(root, logPath, Name(LegacyKey::LogToFile), config.log.toFile);
 			logPath[1] = filePathKey;
-			config.log.filePath = Path::FromResolved(
+			config.log.filePath = Path::FromResolved(std::filesystem::u8path(
 				ReadString(
 					root,
 					logPath,
 					Name(LegacyKey::LogFilePath),
-					config.log.filePath.Empty() ? RuntimeDefaults::LogFilePath : config.log.filePath.String()));
+					config.log.filePath.Empty() ? RuntimeDefaults::LogFilePath : config.log.filePath.Utf8())));
 			config.log.traceEvents = ReadValue(root, {traceEventsKey}, traceEventsKey, config.log.traceEvents);
 
 			Path2 windowPath = {windowSection, xKey};
@@ -638,12 +640,15 @@ namespace SST
 		{
 			try
 			{
-				root = YAML::LoadFile(path.String());
+				std::string text;
+				if (!TextFileIO::Load(path, text, error))
+					return false;
+				root = YAML::Load(text);
 				if (!root || root.IsNull())
 					root = YAML::Node(YAML::NodeType::Map);
 				if (!root.IsMap())
 				{
-					error = "YAML config root must be a mapping: " + path.String();
+					error = "YAML config root must be a mapping: " + path.Utf8();
 					return false;
 				}
 				return true;
@@ -683,7 +688,7 @@ namespace SST
 			std::ofstream stream(path.Native(), std::ios::binary | std::ios::trunc);
 			if (!stream)
 			{
-				error = "Unable to open YAML config for writing: " + path.String();
+				error = "Unable to open YAML config for writing: " + path.Utf8();
 				return false;
 			}
 
@@ -724,9 +729,12 @@ namespace SST
 			if (value.empty())
 				return {};
 
-			const FilePath rawPath{std::string(value)};
+			const FilePath rawPath = std::filesystem::u8path(value);
 			if (!rawPath.is_absolute() || config.paths.installRoot.Empty())
-				return rawPath.generic_string();
+			{
+				const auto text = rawPath.generic_u8string();
+				return {text.begin(), text.end()};
+			}
 
 			const FilePath absolutePath = NormalizePathForConfig(rawPath);
 			const FilePath installRoot = NormalizePathForConfig(config.paths.installRoot.Native());
@@ -734,9 +742,12 @@ namespace SST
 			std::error_code error;
 			const FilePath relativePath = std::filesystem::relative(absolutePath, installRoot, error);
 			if (!error && IsPathInsideBase(relativePath))
-				return relativePath.generic_string();
+			{
+				const auto text = relativePath.generic_u8string();
+				return {text.begin(), text.end()};
+			}
 
-			return absolutePath.string();
+			return Path::FromResolved(absolutePath).Utf8();
 		}
 
 		std::string ResolvePortablePathValue(const ApplicationConfig &config, std::string_view value)
@@ -744,9 +755,9 @@ namespace SST
 			if (value.empty())
 				return {};
 
-			const FilePath rawPath{std::string(value)};
+			const FilePath rawPath = std::filesystem::u8path(value);
 			if (rawPath.is_absolute())
-				return NormalizePathForConfig(rawPath).string();
+				return Path::FromResolved(NormalizePathForConfig(rawPath)).Utf8();
 
 			std::vector<FilePath> bases;
 			if (!config.paths.installRoot.Empty())
@@ -760,10 +771,11 @@ namespace SST
 				const FilePath candidate = FilePath((base / rawPath).lexically_normal());
 				std::error_code error;
 				if (std::filesystem::exists(candidate, error) && !error)
-					return NormalizePathForConfig(candidate).string();
+					return Path::FromResolved(NormalizePathForConfig(candidate)).Utf8();
 			}
 
-			return rawPath.generic_string();
+			const auto text = rawPath.generic_u8string();
+			return {text.begin(), text.end()};
 		}
 
 		void EmitColor(YAML::Emitter &emitter, const std::array<float, 4> &color)
@@ -915,7 +927,7 @@ namespace SST
 			out << YAML::Key << logSection << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << levelKey << YAML::Value << LogLevelToString(config.log.level);
 			out << YAML::Key << toFileKey << YAML::Value << config.log.toFile;
-			out << YAML::Key << filePathKey << YAML::Value << config.log.filePath.String();
+			out << YAML::Key << filePathKey << YAML::Value << config.log.filePath.Utf8();
 			out << YAML::EndMap;
 			out << YAML::Key << traceEventsKey << YAML::Value << config.log.traceEvents;
 
@@ -1039,7 +1051,7 @@ namespace SST
 			out << YAML::Key << logSection << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << levelKey << YAML::Value << LogLevelToString(config.log.level);
 			out << YAML::Key << toFileKey << YAML::Value << config.log.toFile;
-			out << YAML::Key << filePathKey << YAML::Value << config.log.filePath.String();
+			out << YAML::Key << filePathKey << YAML::Value << config.log.filePath.Utf8();
 			out << YAML::EndMap;
 			out << YAML::Key << traceEventsKey << YAML::Value << config.log.traceEvents;
 
@@ -1132,9 +1144,12 @@ namespace SST
 			if (value.empty())
 				return {};
 
-			const FilePath rawPath{std::string(value)};
+			const FilePath rawPath = std::filesystem::u8path(value);
 			if (!rawPath.is_absolute() || config.paths.installRoot.Empty())
-				return rawPath.generic_string();
+			{
+				const auto text = rawPath.generic_u8string();
+				return {text.begin(), text.end()};
+			}
 
 			const FilePath absolutePath = normalizePathForConfig(rawPath);
 			const FilePath installRoot = normalizePathForConfig(config.paths.installRoot.Native());
@@ -1142,9 +1157,12 @@ namespace SST
 			std::error_code error;
 			const FilePath relativePath = std::filesystem::relative(absolutePath, installRoot, error);
 			if (!error && isPathInsideBase(relativePath))
-				return relativePath.generic_string();
+			{
+				const auto text = relativePath.generic_u8string();
+				return {text.begin(), text.end()};
+			}
 
-			return absolutePath.string();
+			return Path::FromResolved(absolutePath).Utf8();
 		}
 
 		void emitColor(YAML::Emitter &emitter, const std::array<float, 4> &color)
@@ -1264,7 +1282,7 @@ namespace SST
 			out << YAML::Key << LogSection << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "level" << YAML::Value << ToString(config.log.level);
 			out << YAML::Key << "to_file" << YAML::Value << config.log.toFile;
-			out << YAML::Key << "file_path" << YAML::Value << config.log.filePath.String();
+			out << YAML::Key << "file_path" << YAML::Value << config.log.filePath.Utf8();
 			out << YAML::EndMap;
 			out << YAML::Key << TraceEventsKey << YAML::Value << config.log.traceEvents;
 
@@ -1339,7 +1357,7 @@ namespace SST
 			out << YAML::Key << LogSection << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "level" << YAML::Value << ToString(config.log.level);
 			out << YAML::Key << "to_file" << YAML::Value << config.log.toFile;
-			out << YAML::Key << "file_path" << YAML::Value << config.log.filePath.String();
+			out << YAML::Key << "file_path" << YAML::Value << config.log.filePath.Utf8();
 			out << YAML::EndMap;
 			out << YAML::Key << TraceEventsKey << YAML::Value << config.log.traceEvents;
 

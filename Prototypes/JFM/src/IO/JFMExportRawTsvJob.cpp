@@ -190,7 +190,7 @@ namespace SST::Prototypes::JFM
 
 			if (!TextFileIO::Save(outputPath, text, error))
 			{
-				warnings.emplace_back(outputPath.String() + ": " + error);
+				warnings.emplace_back(outputPath.Utf8() + ": " + error);
 				context.SetProgress(static_cast<float>(index + 1), static_cast<float>(m_Items.size()));
 				continue;
 			}

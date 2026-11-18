@@ -72,7 +72,7 @@ namespace SST::Platform
 		std::string BuildCommandLine(const Path &executable, const std::vector<std::string> &arguments)
 		{
 			std::ostringstream command;
-			command << QuoteCommandArgument(executable.String());
+			command << QuoteCommandArgument(executable.Utf8());
 			for (const std::string &argument : arguments)
 				command << ' ' << QuoteCommandArgument(argument);
 			return command.str();

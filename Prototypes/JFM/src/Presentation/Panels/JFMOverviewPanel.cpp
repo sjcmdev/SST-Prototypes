@@ -35,7 +35,7 @@ namespace SST::Prototypes::JFM
 		ImGui::Text("Characteristics: %zu", countCharacteristics(project));
 		ImGui::Text("Fit runs: %zu", project.fitRuns.size());
 		ImGui::Text("MC runs: %zu", project.monteCarloRuns.size());
-		ImGui::Text("Project file: %s", projectPath ? projectPath->String().c_str() : "<unsaved>");
+		ImGui::Text("Project file: %s", projectPath ? projectPath->Utf8().c_str() : "<unsaved>");
 		ImGui::Spacing();
 		if (selected)
 		{
@@ -43,7 +43,7 @@ namespace SST::Prototypes::JFM
 			ImGui::Text("Points: %zu", selected->data ? selected->data->voltage.size() : 0);
 			ImGui::Text("Temperature: %s",
 			            selected->info.temperatureK ? std::to_string(*selected->info.temperatureK).c_str() : "<missing>");
-			ImGui::Text("Source: %s", selected->info.sourcePath.String().c_str());
+			ImGui::Text("Source: %s", selected->info.sourcePath.Utf8().c_str());
 		}
 		else
 		{

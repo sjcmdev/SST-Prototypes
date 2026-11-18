@@ -29,7 +29,7 @@ namespace SST::Prototypes::JFM
 		std::string MaterializationCacheKey(const JFMCharacteristicInfo &info)
 		{
 			std::string key;
-			AppendCacheField(key, info.sourcePath.String());
+			AppendCacheField(key, info.sourcePath.Utf8());
 			AppendCacheField(key, info.importOptions.parser);
 			AppendCacheField(key, info.importOptions.namePattern);
 			AppendCacheField(key, info.importOptions.shortNamePattern);
@@ -313,7 +313,7 @@ namespace SST::Prototypes::JFM
 				continue;
 			}
 
-			const std::string sourcePath = info.sourcePath.String();
+			const std::string sourcePath = info.sourcePath.Utf8();
 			const std::string cacheKey = Detail::MaterializationCacheKey(info);
 			auto parsed = parsedByRequest.find(cacheKey);
 			if (parsed == parsedByRequest.end())

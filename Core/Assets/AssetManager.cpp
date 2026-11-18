@@ -109,8 +109,8 @@ namespace SST
 		return makeAssetError(
 			"asset.resolve.not_found",
 			"Asset could not be resolved.",
-			"Logical asset path '" + logicalPath + "' was not found under user override root '" + m_UserOverrideRoot.String()
-				+ "' or default root '" + m_DefaultRoot.String() + "'.",
+			"Logical asset path '" + logicalPath + "' was not found under user override root '" + m_UserOverrideRoot.Utf8()
+				+ "' or default root '" + m_DefaultRoot.Utf8() + "'.",
 			"Install the missing asset or register a non-critical descriptor if this asset is optional.");
 	}
 
@@ -147,7 +147,7 @@ namespace SST
 				"Use a relative logical path such as 'fonts/CascadiaCode.ttf'.");
 		}
 
-		std::filesystem::path path(logicalPath);
+		std::filesystem::path path = std::filesystem::u8path(logicalPath);
 		if (path.is_absolute())
 		{
 			return makeAssetError(

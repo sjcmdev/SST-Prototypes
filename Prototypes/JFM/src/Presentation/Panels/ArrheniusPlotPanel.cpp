@@ -241,9 +241,9 @@ namespace SST::Prototypes::JFM
 			if (!WriteArrheniusFitInput(input, points, lower, upper, quantity, model))
 				return std::nullopt;
 			const std::array<Platform::ProcessRunOptions, 3> options = {{
-				{Path("python"), {script.String(), input.String(), output.String()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)},
-				{Path("py"), {"-3", script.String(), input.String(), output.String()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)},
-				{Platform::ResolvePreferredPythonExecutable(), {script.String(), input.String(), output.String()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)}}};
+				{Path("python"), {script.Utf8(), input.Utf8(), output.Utf8()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)},
+				{Path("py"), {"-3", script.Utf8(), input.Utf8(), output.Utf8()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)},
+				{Platform::ResolvePreferredPythonExecutable(), {script.Utf8(), input.Utf8(), output.Utf8()}, Path::FromResolved(FileSystem::CurrentPath()), std::chrono::seconds(20)}}};
 			for (const Platform::ProcessRunOptions &option : options)
 			{
 				const auto result = Platform::RunProcess(option);
