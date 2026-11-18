@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "project": "Prototypes/JFM/JFM-projects/HZB-project.yaml.jfm.yaml",
+  "project_sha256": "4ff6dc9799a090d8f3e3768c6d0d6d26ae2362e98498ba42b561c5fa56cd07a5",
+  "curves": [
+    {
+      "curve_id": 1,
+      "temperature_K": 181,
+      "long_name": "ivd_HZB25_T181_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T181_L0.dat",
+      "rows": 301,
+      "sha256": "8f30ef52f8e598a5647d5008bc92235006dc7aabf5118079b606386f99f27cdf"
+    },
+    {
+      "curve_id": 2,
+      "temperature_K": 191,
+      "long_name": "ivd_HZB25_T191_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T191_L0.dat",
+      "rows": 301,
+      "sha256": "7bad836714d0e954215775f141683b575454fb3006d26fb35fa42bc085009641"
+    },
+    {
+      "curve_id": 3,
+      "temperature_K": 201,
+      "long_name": "ivd_HZB25_T201_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T201_L0.dat",
+      "rows": 301,
+      "sha256": "0081e84ec34ccd7f9360702b63647a73f88e9e63ffd586cc5e418c1dc34cda18"
+    },
+    {
+      "curve_id": 4,
+      "temperature_K": 209,
+      "long_name": "ivd_HZB25_T209_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T209_L0.dat",
+      "rows": 301,
+      "sha256": "d9721d8e20f62cbd39df99f3a77778c80e0dcdf125ab2eba48ec51257696eb62"
+    },
+    {
+      "curve_id": 5,
+      "temperature_K": 217,
+      "long_name": "ivd_HZB25_T217_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T217_L0.dat",
+      "rows": 301,
+      "sha256": "bdd6b570912ff1dd12e0aacccac4d476101a07120fe2d98d997196b5d07d66c7"
+    },
+    {
+      "curve_id": 6,
+      "temperature_K": 227,
+      "long_name": "ivd_HZB25_T227_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T227_L0.dat",
+      "rows": 301,
+      "sha256": "64667e7adcaac30896ff03fd9ec787eebc932049f62aa2b3a8e13b83d57c66e4"
+    },
+    {
+      "curve_id": 7,
+      "temperature_K": 237,
+      "long_name": "ivd_HZB25_T237_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T237_L0.dat",
+      "rows": 301,
+      "sha256": "542d0b7b7297f8f102b448ba6a9b9a4cf014279fd343b6ebfcafffaf3eb7b4f9"
+    },
+    {
+      "curve_id": 8,
+      "temperature_K": 247,
+      "long_name": "ivd_HZB25_T247_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T247_L0.dat",
+      "rows": 301,
+      "sha256": "c829d364e99eff72dbff8ebc4e3706a90642baad698ccc5f30bad118e36addc5"
+    },
+    {
+      "curve_id": 9,
+      "temperature_K": 257,
+      "long_name": "ivd_HZB25_T257_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T257_L0.dat",
+      "rows": 301,
+      "sha256": "ab8f5830f54b2524b5ef487bc0235c2a7b0dfea0eb9842b22777342a4b4b92ce"
+    },
+    {
+      "curve_id": 10,
+      "temperature_K": 267,
+      "long_name": "ivd_HZB25_T267_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T267_L0.dat",
+      "rows": 301,
+      "sha256": "2eae43b5d772925a6b63e3bc2f675f97256f86ac2d6c623ec1d974c3a096e2d9"
+    },
+    {
+      "curve_id": 11,
+      "temperature_K": 277,
+      "long_name": "ivd_HZB25_T277_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T277_L0.dat",
+      "rows": 301,
+      "sha256": "6bea503036ce2ffc8f75d822246d0d4b081f9a3028ff63e0127e7ea580c08c53"
+    },
+    {
+      "curve_id": 12,
+      "temperature_K": 286,
+      "long_name": "ivd_HZB25_T286_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T286_L0.dat",
+      "rows": 301,
+      "sha256": "6c3edd540f4bef81d85d9f0d1075fd4b4a8d2af1915d65b7678acfbab2c535e2"
+    },
+    {
+      "curve_id": 13,
+      "temperature_K": 296,
+      "long_name": "ivd_HZB25_T296_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T296_L0.dat",
+      "rows": 301,
+      "sha256": "670fcee0d4cd601fdf6948b8a432b79a7b8054ee90764639157e789ee78db4f7"
+    },
+    {
+      "curve_id": 14,
+      "temperature_K": 306,
+      "long_name": "ivd_HZB25_T306_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T306_L0.dat",
+      "rows": 301,
+      "sha256": "c3eb37ee6228ae73997175b6d6bc3d9f3d2fb10d5171230baab3a3db2dff510c"
+    },
+    {
+      "curve_id": 15,
+      "temperature_K": 321,
+      "long_name": "ivd_HZB25_T321_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T321_L0.dat",
+      "rows": 301,
+      "sha256": "7a01ff52829bbf8b6b07b99674b79db4c24a8ab8d7049eec66ab6feae39305e3"
+    },
+    {
+      "curve_id": 16,
+      "temperature_K": 330,
+      "long_name": "ivd_HZB25_T330_L0",
+      "source": "Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T330_L0.dat",
+      "rows": 301,
+      "sha256": "3d2bae6068eb06cc3d729d046417e42d1e073fc1e50ba2b1522166997598aed4"
+    }
+  ],
+  "synthetic": {
+    "cv_mott_schottky.csv": "C=2e-9/sqrt(1.5-V) F",
+    "arrhenius.csv": "rate=1e9*exp(-0.32/(k_B*T)) s^-1; k_B=8.617333262145e-5 eV/K",
+    "custom_ticks.csv": "Arbitrary tick labels"
+  },
+  "derived": {
+    "iv_temperature_second_dataset.csv": "Measured current multiplied by 1.2; template test only"
+  },
+  "units_note": "Project units are empty. Source column 2 is assumed A, column 3 is preserved with unknown units; confirm A against instrument metadata before publication."
+}

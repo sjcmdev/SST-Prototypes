@@ -1,0 +1,1298 @@
+[
+  {
+    "id": "01-log10",
+    "variant": "01-log10",
+    "exports": {
+      "png": {
+        "file": "exports/01-log10.png",
+        "bytes": 34384,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/01-log10.svg",
+        "bytes": 20794
+      },
+      "emf": {
+        "file": "exports/01-log10.emf",
+        "bytes": 36372,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "02-engineering",
+    "variant": "02-engineering",
+    "exports": {
+      "png": {
+        "file": "exports/02-engineering.png",
+        "bytes": 37388,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/02-engineering.svg",
+        "bytes": 9836
+      },
+      "emf": {
+        "file": "exports/02-engineering.emf",
+        "bytes": 26876,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "03-reciprocal",
+    "variant": "03-reciprocal",
+    "exports": {
+      "png": {
+        "file": "exports/03-reciprocal.png",
+        "bytes": 29539,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/03-reciprocal.svg",
+        "bytes": 7751
+      },
+      "emf": {
+        "file": "exports/03-reciprocal.emf",
+        "bytes": 27212,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "04-linked-top",
+    "variant": "04-linked-top",
+    "exports": {
+      "png": {
+        "file": "exports/04-linked-top.png",
+        "bytes": 35874,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/04-linked-top.svg",
+        "bytes": 13975
+      },
+      "emf": {
+        "file": "exports/04-linked-top.emf",
+        "bytes": 42172,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "05-tick-in",
+    "variant": "05-tick-in",
+    "exports": {
+      "png": {
+        "file": "exports/05-tick-in.png",
+        "bytes": 41971,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/05-tick-in.svg",
+        "bytes": 9866
+      },
+      "emf": {
+        "file": "exports/05-tick-in.emf",
+        "bytes": 27116,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "06-tick-out",
+    "variant": "06-tick-out",
+    "exports": {
+      "png": {
+        "file": "exports/06-tick-out.png",
+        "bytes": 41998,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/06-tick-out.svg",
+        "bytes": 9866
+      },
+      "emf": {
+        "file": "exports/06-tick-out.emf",
+        "bytes": 27116,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "07-tick-both",
+    "variant": "07-tick-both",
+    "exports": {
+      "png": {
+        "file": "exports/07-tick-both.png",
+        "bytes": 42150,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/07-tick-both.svg",
+        "bytes": 14376
+      },
+      "emf": {
+        "file": "exports/07-tick-both.emf",
+        "bytes": 29276,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "08-minor-1",
+    "variant": "08-minor-1",
+    "exports": {
+      "png": {
+        "file": "exports/08-minor-1.png",
+        "bytes": 41927,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/08-minor-1.svg",
+        "bytes": 8050
+      },
+      "emf": {
+        "file": "exports/08-minor-1.emf",
+        "bytes": 26252,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "09-minor-4",
+    "variant": "09-minor-4",
+    "exports": {
+      "png": {
+        "file": "exports/09-minor-4.png",
+        "bytes": 41971,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/09-minor-4.svg",
+        "bytes": 9866
+      },
+      "emf": {
+        "file": "exports/09-minor-4.emf",
+        "bytes": 27116,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "10-minor-9",
+    "variant": "10-minor-9",
+    "exports": {
+      "png": {
+        "file": "exports/10-minor-9.png",
+        "bytes": 42002,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/10-minor-9.svg",
+        "bytes": 12890
+      },
+      "emf": {
+        "file": "exports/10-minor-9.emf",
+        "bytes": 28556,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "11-box",
+    "variant": "11-box",
+    "exports": {
+      "png": {
+        "file": "exports/11-box.png",
+        "bytes": 44481,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/11-box.svg",
+        "bytes": 12657
+      },
+      "emf": {
+        "file": "exports/11-box.emf",
+        "bytes": 35172,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "12-L-only",
+    "variant": "12-L-only",
+    "exports": {
+      "png": {
+        "file": "exports/12-L-only.png",
+        "bytes": 41971,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/12-L-only.svg",
+        "bytes": 9866
+      },
+      "emf": {
+        "file": "exports/12-L-only.emf",
+        "bytes": 27116,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "13-zero",
+    "variant": "13-zero",
+    "exports": {
+      "png": {
+        "file": "exports/13-zero.png",
+        "bytes": 30995,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/13-zero.svg",
+        "bytes": 10445
+      },
+      "emf": {
+        "file": "exports/13-zero.emf",
+        "bytes": 25236,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "14-reversed",
+    "variant": "14-reversed",
+    "exports": {
+      "png": {
+        "file": "exports/14-reversed.png",
+        "bytes": 42334,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/14-reversed.svg",
+        "bytes": 9840
+      },
+      "emf": {
+        "file": "exports/14-reversed.emf",
+        "bytes": 27116,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "15-custom-ticks",
+    "variant": "15-custom-ticks",
+    "exports": {
+      "png": {
+        "file": "exports/15-custom-ticks.png",
+        "bytes": 43336,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/15-custom-ticks.svg",
+        "bytes": 8901
+      },
+      "emf": {
+        "file": "exports/15-custom-ticks.emf",
+        "bytes": 26308,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "16-grid",
+    "variant": "16-grid",
+    "exports": {
+      "png": {
+        "file": "exports/16-grid.png",
+        "bytes": 46390,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/16-grid.svg",
+        "bytes": 172914
+      },
+      "emf": {
+        "file": "exports/16-grid.emf",
+        "bytes": 105076,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "17-group-list",
+    "variant": "17-group-list",
+    "exports": {
+      "png": {
+        "file": "exports/17-group-list.png",
+        "bytes": 62161,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/17-group-list.svg",
+        "bytes": 148029
+      },
+      "emf": {
+        "file": "exports/17-group-list.emf",
+        "bytes": 173188,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "17-group-list",
+    "variant": "17-group-list-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/17-group-list-160x120.png",
+        "bytes": 110332,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/17-group-list-160x120.svg",
+        "bytes": 182941
+      },
+      "emf": {
+        "file": "exports/17-group-list-160x120.emf",
+        "bytes": 187108,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "18-group-T",
+    "variant": "18-group-T",
+    "exports": {
+      "png": {
+        "file": "exports/18-group-T.png",
+        "bytes": 45855,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/18-group-T.svg",
+        "bytes": 56672
+      },
+      "emf": {
+        "file": "exports/18-group-T.emf",
+        "bytes": 120632,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "18-group-T",
+    "variant": "18-group-T-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/18-group-T-160x120.png",
+        "bytes": 97033,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/18-group-T-160x120.svg",
+        "bytes": 60852
+      },
+      "emf": {
+        "file": "exports/18-group-T-160x120.emf",
+        "bytes": 120608,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "19-template",
+    "variant": "19-template",
+    "exports": {
+      "png": {
+        "file": "exports/19-template.png",
+        "bytes": 64065,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/19-template.svg",
+        "bytes": 148877
+      },
+      "emf": {
+        "file": "exports/19-template.emf",
+        "bytes": 174956,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "19-template",
+    "variant": "19-template-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/19-template-160x120.png",
+        "bytes": 113353,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/19-template-160x120.svg",
+        "bytes": 184747
+      },
+      "emf": {
+        "file": "exports/19-template-160x120.emf",
+        "bytes": 189252,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "20-grid-2x2",
+    "variant": "20-grid-2x2",
+    "exports": {
+      "png": {
+        "file": "exports/20-grid-2x2.png",
+        "bytes": 46085,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/20-grid-2x2.svg",
+        "bytes": 40324
+      },
+      "emf": {
+        "file": "exports/20-grid-2x2.emf",
+        "bytes": 91128,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "20-grid-2x2",
+    "variant": "20-grid-2x2-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/20-grid-2x2-160x120.png",
+        "bytes": 80501,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/20-grid-2x2-160x120.svg",
+        "bytes": 41580
+      },
+      "emf": {
+        "file": "exports/20-grid-2x2-160x120.emf",
+        "bytes": 91128,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "21-stack",
+    "variant": "21-stack",
+    "exports": {
+      "png": {
+        "file": "exports/21-stack.png",
+        "bytes": 45583,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/21-stack.svg",
+        "bytes": 27655
+      },
+      "emf": {
+        "file": "exports/21-stack.emf",
+        "bytes": 54644,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "21-stack",
+    "variant": "21-stack-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/21-stack-160x120.png",
+        "bytes": 78129,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/21-stack-160x120.svg",
+        "bytes": 28690
+      },
+      "emf": {
+        "file": "exports/21-stack-160x120.emf",
+        "bytes": 54644,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "22-inset",
+    "variant": "22-inset",
+    "exports": {
+      "png": {
+        "file": "exports/22-inset.png",
+        "bytes": 35057,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/22-inset.svg",
+        "bytes": 17217
+      },
+      "emf": {
+        "file": "exports/22-inset.emf",
+        "bytes": 43720,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "22-inset",
+    "variant": "22-inset-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/22-inset-160x120.png",
+        "bytes": 68540,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/22-inset-160x120.svg",
+        "bytes": 17795
+      },
+      "emf": {
+        "file": "exports/22-inset-160x120.emf",
+        "bytes": 43720,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "23-break-one",
+    "variant": "23-break-one",
+    "exports": {
+      "png": {
+        "file": "exports/23-break-one.png",
+        "bytes": 32247,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/23-break-one.svg",
+        "bytes": 10045
+      },
+      "emf": {
+        "file": "exports/23-break-one.emf",
+        "bytes": 26396,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "23-break-one",
+    "variant": "23-break-one-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/23-break-one-160x120.png",
+        "bytes": 63864,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/23-break-one-160x120.svg",
+        "bytes": 10618
+      },
+      "emf": {
+        "file": "exports/23-break-one-160x120.emf",
+        "bytes": 26516,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "24-break-two",
+    "variant": "24-break-two",
+    "exports": {
+      "png": {
+        "file": "exports/24-break-two.png",
+        "bytes": 31715,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/24-break-two.svg",
+        "bytes": 10127
+      },
+      "emf": {
+        "file": "exports/24-break-two.emf",
+        "bytes": 25088,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "24-break-two",
+    "variant": "24-break-two-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/24-break-two-160x120.png",
+        "bytes": 61901,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/24-break-two-160x120.svg",
+        "bytes": 10698
+      },
+      "emf": {
+        "file": "exports/24-break-two-160x120.emf",
+        "bytes": 25208,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "25-twin-Y",
+    "variant": "25-twin-Y",
+    "exports": {
+      "png": {
+        "file": "exports/25-twin-Y.png",
+        "bytes": 54394,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/25-twin-Y.svg",
+        "bytes": 15856
+      },
+      "emf": {
+        "file": "exports/25-twin-Y.emf",
+        "bytes": 46024,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "25-twin-Y",
+    "variant": "25-twin-Y-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/25-twin-Y-160x120.png",
+        "bytes": 90009,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/25-twin-Y-160x120.svg",
+        "bytes": 16238
+      },
+      "emf": {
+        "file": "exports/25-twin-Y-160x120.emf",
+        "bytes": 46024,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "26-rich-text",
+    "variant": "26-rich-text",
+    "exports": {
+      "png": {
+        "file": "exports/26-rich-text.png",
+        "bytes": 58321,
+        "size_px": [
+          1889,
+          1417
+        ],
+        "expected_px": [
+          1890,
+          1417
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/26-rich-text.svg",
+        "bytes": 63628
+      },
+      "emf": {
+        "file": "exports/26-rich-text.emf",
+        "bytes": 101184,
+        "frame_mm": [
+          80.01,
+          59.87
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  },
+  {
+    "id": "26-rich-text",
+    "variant": "26-rich-text-160x120",
+    "exports": {
+      "png": {
+        "file": "exports/26-rich-text-160x120.png",
+        "bytes": 112443,
+        "size_px": [
+          3779,
+          2834
+        ],
+        "expected_px": [
+          3780,
+          2835
+        ],
+        "dpi": [
+          599.9988,
+          599.9988
+        ]
+      },
+      "svg": {
+        "file": "exports/26-rich-text-160x120.svg",
+        "bytes": 70548
+      },
+      "emf": {
+        "file": "exports/26-rich-text-160x120.emf",
+        "bytes": 101256,
+        "frame_mm": [
+          160.02,
+          119.79
+        ],
+        "origin_page_ratio_percent": 114.20413990007138,
+        "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+      }
+    }
+  }
+]

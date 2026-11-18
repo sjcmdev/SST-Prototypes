@@ -1,0 +1,715 @@
+{
+  "schema_version": 1,
+  "id": "26-rich-text",
+  "origin_version": 10.100178,
+  "requested_page_mm": [
+    80,
+    60
+  ],
+  "page_mm": [
+    80.00999999999999,
+    59.986333333333334
+  ],
+  "page_getters": {
+    "width": 1890.0,
+    "height": 1417.0,
+    "resx": 600.0,
+    "resy": 600.0,
+    "kar": 0.0
+  },
+  "page_quantization_reason": "Origin page.width/height are integer printer dots; requested millimetres are rounded to nearest dot.",
+  "exports": {
+    "png": {
+      "file": "exports/26-rich-text.png",
+      "bytes": 58321,
+      "size_px": [
+        1889,
+        1417
+      ],
+      "expected_px": [
+        1890,
+        1417
+      ],
+      "dpi": [
+        599.9988,
+        599.9988
+      ]
+    },
+    "svg": {
+      "file": "exports/26-rich-text.svg",
+      "bytes": 63628
+    },
+    "emf": {
+      "file": "exports/26-rich-text.emf",
+      "bytes": 101184,
+      "frame_mm": [
+        80.01,
+        59.87
+      ],
+      "origin_page_ratio_percent": 114.20413990007138,
+      "size_reason": "Native Origin EMF page-ratio calibration from first export header; residual device-pixel and anisotropic display-DPI rounding retained, no header edits."
+    }
+  },
+  "layers": [
+    {
+      "id": 1,
+      "bounds_percent": {
+        "left": 30.0,
+        "top": 29.99,
+        "width": 60.0,
+        "height": 46.01
+      },
+      "bounds_unit": 1.0,
+      "element_scale_factor": 1.0,
+      "link": 0.0,
+      "axes": {
+        "bottom": {
+          "from": -0.1,
+          "to": 3.4,
+          "type": 1.0,
+          "inc": 1.0,
+          "firstTick": 0.0,
+          "majorTicks": null,
+          "minorTicks": 4.0,
+          "reverse": 0.0,
+          "showAxes": 1.0,
+          "showLabels": 1.0,
+          "showlabel": 1.0,
+          "ticks": 5.0,
+          "ticklength": 3.0,
+          "mticklength": null,
+          "tickthickness": null,
+          "postype": 0.0,
+          "position": 0.0,
+          "label.pt": 8.0,
+          "label.font": 1.0,
+          "label.type": 1.0,
+          "label.numFormat": 1.0,
+          "showGrids": 0.0,
+          "grid.majorType": 1.0,
+          "grid.minorType": 2.0,
+          "grid.majorWidth": 0.5,
+          "grid.minorWidth": 0.3,
+          "grid.majorColor": 20.0,
+          "grid.minorColor": 19.0,
+          "unavailable_getters": {
+            "majorTicks": "Origin getter returned missing/non-finite",
+            "mticklength": "Origin getter returned missing/non-finite",
+            "tickthickness": "Origin getter returned missing/non-finite"
+          },
+          "effective_label_font_pt_from_getters": 8.0,
+          "major_positions": {
+            "value": null,
+            "reason": "No exposed post-layout tick vector getter found in Origin 2024 LabTalk/originpro; no locator reconstruction."
+          },
+          "minor_positions": {
+            "value": null,
+            "reason": "No exposed post-layout minor tick vector getter found."
+          },
+          "rendered_labels": {
+            "value": null,
+            "reason": "Origin SVG uses glyph paths; no per-axis text output getter found. Inspect original PNG/SVG."
+          },
+          "ticklength_unit": "Origin raw units; visual 3-unit probe corresponds to about 3 pt in this installation. Documentation layer.tickL says 0.1 pt; do not assume that conversion.",
+          "link_from_formula": "",
+          "link_to_formula": "",
+          "ticks_by_data": "",
+          "breaks": {
+            "enable": 1.0,
+            "count": 0.0,
+            "items": []
+          }
+        },
+        "top": {
+          "from": -0.1,
+          "to": 3.4,
+          "type": 1.0,
+          "inc": 1.0,
+          "firstTick": 0.0,
+          "majorTicks": null,
+          "minorTicks": 4.0,
+          "reverse": 0.0,
+          "showAxes": 1.0,
+          "showLabels": 1.0,
+          "showlabel": 0.0,
+          "ticks": 5.0,
+          "ticklength": 3.0,
+          "mticklength": null,
+          "tickthickness": null,
+          "postype": 0.0,
+          "position": 0.0,
+          "label.pt": 8.0,
+          "label.font": 1.0,
+          "label.type": 1.0,
+          "label.numFormat": 1.0,
+          "showGrids": 0.0,
+          "grid.majorType": 1.0,
+          "grid.minorType": 2.0,
+          "grid.majorWidth": 0.5,
+          "grid.minorWidth": 0.3,
+          "grid.majorColor": 20.0,
+          "grid.minorColor": 19.0,
+          "unavailable_getters": {
+            "majorTicks": "Origin getter returned missing/non-finite",
+            "mticklength": "Origin getter returned missing/non-finite",
+            "tickthickness": "Origin getter returned missing/non-finite"
+          },
+          "effective_label_font_pt_from_getters": 8.0,
+          "major_positions": {
+            "value": null,
+            "reason": "No exposed post-layout tick vector getter found in Origin 2024 LabTalk/originpro; no locator reconstruction."
+          },
+          "minor_positions": {
+            "value": null,
+            "reason": "No exposed post-layout minor tick vector getter found."
+          },
+          "rendered_labels": {
+            "value": null,
+            "reason": "Origin SVG uses glyph paths; no per-axis text output getter found. Inspect original PNG/SVG."
+          },
+          "ticklength_unit": "Origin raw units; visual 3-unit probe corresponds to about 3 pt in this installation. Documentation layer.tickL says 0.1 pt; do not assume that conversion.",
+          "link_from_formula": "",
+          "link_to_formula": "",
+          "ticks_by_data": "",
+          "breaks": {
+            "enable": 1.0,
+            "count": 0.0,
+            "items": []
+          }
+        },
+        "left": {
+          "from": -0.005,
+          "to": 0.035,
+          "type": 1.0,
+          "inc": 0.01,
+          "firstTick": 0.0,
+          "majorTicks": null,
+          "minorTicks": 1.0,
+          "reverse": 0.0,
+          "showAxes": 1.0,
+          "showLabels": 1.0,
+          "showlabel": 1.0,
+          "ticks": 5.0,
+          "ticklength": 3.0,
+          "mticklength": null,
+          "tickthickness": null,
+          "postype": 0.0,
+          "position": 0.0,
+          "label.pt": 8.0,
+          "label.font": 1.0,
+          "label.type": 1.0,
+          "label.numFormat": 1.0,
+          "showGrids": 0.0,
+          "grid.majorType": 1.0,
+          "grid.minorType": 2.0,
+          "grid.majorWidth": 0.5,
+          "grid.minorWidth": 0.3,
+          "grid.majorColor": 20.0,
+          "grid.minorColor": 19.0,
+          "unavailable_getters": {
+            "majorTicks": "Origin getter returned missing/non-finite",
+            "mticklength": "Origin getter returned missing/non-finite",
+            "tickthickness": "Origin getter returned missing/non-finite"
+          },
+          "effective_label_font_pt_from_getters": 8.0,
+          "major_positions": {
+            "value": null,
+            "reason": "No exposed post-layout tick vector getter found in Origin 2024 LabTalk/originpro; no locator reconstruction."
+          },
+          "minor_positions": {
+            "value": null,
+            "reason": "No exposed post-layout minor tick vector getter found."
+          },
+          "rendered_labels": {
+            "value": null,
+            "reason": "Origin SVG uses glyph paths; no per-axis text output getter found. Inspect original PNG/SVG."
+          },
+          "ticklength_unit": "Origin raw units; visual 3-unit probe corresponds to about 3 pt in this installation. Documentation layer.tickL says 0.1 pt; do not assume that conversion.",
+          "link_from_formula": "",
+          "link_to_formula": "",
+          "ticks_by_data": "",
+          "breaks": {
+            "enable": 1.0,
+            "count": 0.0,
+            "items": []
+          }
+        },
+        "right": {
+          "from": -0.005,
+          "to": 0.035,
+          "type": 1.0,
+          "inc": 0.01,
+          "firstTick": 0.0,
+          "majorTicks": null,
+          "minorTicks": 1.0,
+          "reverse": 0.0,
+          "showAxes": 1.0,
+          "showLabels": 1.0,
+          "showlabel": 0.0,
+          "ticks": 5.0,
+          "ticklength": 3.0,
+          "mticklength": null,
+          "tickthickness": null,
+          "postype": 0.0,
+          "position": 0.0,
+          "label.pt": 8.0,
+          "label.font": 1.0,
+          "label.type": 1.0,
+          "label.numFormat": 1.0,
+          "showGrids": 0.0,
+          "grid.majorType": 1.0,
+          "grid.minorType": 2.0,
+          "grid.majorWidth": 0.5,
+          "grid.minorWidth": 0.3,
+          "grid.majorColor": 20.0,
+          "grid.minorColor": 19.0,
+          "unavailable_getters": {
+            "majorTicks": "Origin getter returned missing/non-finite",
+            "mticklength": "Origin getter returned missing/non-finite",
+            "tickthickness": "Origin getter returned missing/non-finite"
+          },
+          "effective_label_font_pt_from_getters": 8.0,
+          "major_positions": {
+            "value": null,
+            "reason": "No exposed post-layout tick vector getter found in Origin 2024 LabTalk/originpro; no locator reconstruction."
+          },
+          "minor_positions": {
+            "value": null,
+            "reason": "No exposed post-layout minor tick vector getter found."
+          },
+          "rendered_labels": {
+            "value": null,
+            "reason": "Origin SVG uses glyph paths; no per-axis text output getter found. Inspect original PNG/SVG."
+          },
+          "ticklength_unit": "Origin raw units; visual 3-unit probe corresponds to about 3 pt in this installation. Documentation layer.tickL says 0.1 pt; do not assume that conversion.",
+          "link_from_formula": "",
+          "link_to_formula": "",
+          "ticks_by_data": "",
+          "breaks": {
+            "enable": 1.0,
+            "count": 0.0,
+            "items": []
+          }
+        }
+      },
+      "plots": [
+        {
+          "id": 1,
+          "dataset": "[Graph35]1!1",
+          "temperature_K": "181",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 1.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 2,
+          "dataset": "[Graph35]1!2",
+          "temperature_K": "191",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 3,
+          "dataset": "[Graph35]1!3",
+          "temperature_K": "201",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 4,
+          "dataset": "[Graph35]1!4",
+          "temperature_K": "209",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 5,
+          "dataset": "[Graph35]1!5",
+          "temperature_K": "217",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 6,
+          "dataset": "[Graph35]1!6",
+          "temperature_K": "227",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 7,
+          "dataset": "[Graph35]1!7",
+          "temperature_K": "237",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 8,
+          "dataset": "[Graph35]1!8",
+          "temperature_K": "247",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 9,
+          "dataset": "[Graph35]1!9",
+          "temperature_K": "257",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 10,
+          "dataset": "[Graph35]1!10",
+          "temperature_K": "267",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 11,
+          "dataset": "[Graph35]1!11",
+          "temperature_K": "277",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 12,
+          "dataset": "[Graph35]1!12",
+          "temperature_K": "286",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 13,
+          "dataset": "[Graph35]1!13",
+          "temperature_K": "296",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 14,
+          "dataset": "[Graph35]1!14",
+          "temperature_K": "306",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 15,
+          "dataset": "[Graph35]1!15",
+          "temperature_K": "321",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        },
+        {
+          "id": 16,
+          "dataset": "[Graph35]1!16",
+          "temperature_K": "330",
+          "properties": {
+            "color": 1.0,
+            "colorinc": 1.0,
+            "symbol.kind": 0.0,
+            "symbol.kindinc": 0.0,
+            "symbol.size": 9.0,
+            "line.type": 1.0,
+            "line.width": 1.0,
+            "group": 2.0
+          },
+          "color_rgb": {
+            "value": null,
+            "reason": "Encoded color mapping/increment property is not a resolved RGB getter; see SVG strokes."
+          },
+          "color_list": ""
+        }
+      ],
+      "graph_objects": [
+        {
+          "name": "Legend",
+          "type": 0.0,
+          "getters": {
+            "attach": 0.0,
+            "x1": 0.03888888888888896,
+            "y1": 0.055,
+            "x2": 0.0,
+            "y2": 0.0,
+            "fsize": 4.5,
+            "color": 1.0,
+            "width": 680.0
+          }
+        },
+        {
+          "name": "YR",
+          "type": 0.0,
+          "getters": {
+            "attach": 2.0,
+            "x1": 5.500000000000001,
+            "y1": 0.015,
+            "x2": null,
+            "y2": null,
+            "fsize": 9.0,
+            "color": 1.0,
+            "width": 92.0
+          }
+        },
+        {
+          "name": "XT",
+          "type": 0.0,
+          "getters": {
+            "attach": 2.0,
+            "x1": 1.65,
+            "y1": 0.04900000000000001,
+            "x2": null,
+            "y2": null,
+            "fsize": 9.0,
+            "color": 1.0,
+            "width": 379.0
+          }
+        },
+        {
+          "name": "YL",
+          "type": 0.0,
+          "getters": {
+            "attach": 2.0,
+            "x1": -1.5000000000000002,
+            "y1": 0.015,
+            "x2": null,
+            "y2": null,
+            "fsize": 9.0,
+            "color": 1.0,
+            "width": 106.0
+          }
+        },
+        {
+          "name": "XB",
+          "type": 0.0,
+          "getters": {
+            "attach": 2.0,
+            "x1": 1.65,
+            "y1": -0.016200000000000003,
+            "x2": null,
+            "y2": null,
+            "fsize": 9.0,
+            "color": 1.0,
+            "width": 517.0
+          }
+        },
+        {
+          "name": "Text",
+          "type": 0.0,
+          "getters": {
+            "attach": 0.0,
+            "x1": 2.3506172839506174,
+            "y1": 0.031012269938650305,
+            "x2": 0.0,
+            "y2": 0.0,
+            "fsize": 7.0,
+            "color": 1.0,
+            "width": 293.0
+          }
+        }
+      ],
+      "legend": {
+        "source": "\\l(1) %(1,@LL) [%(1,@LU)], T=%(1,@LD1) K\r\n\\l(8) %(8,@LL) [%(8,@LU)], T=%(8,@LD1) K\r\n\\l(16) %(16,@LL) [%(16,@LU)], T=%(16,@LD1) K",
+        "expanded_text": [
+          "\\l(1) ivd_HZB25_T181_L0 [A], T=181 K",
+          "\\l(8) ivd_HZB25_T247_L0 [A], T=247 K",
+          "\\l(16) ivd_HZB25_T330_L0 [A], T=330 K"
+        ],
+        "expanded_text_source": "Origin LabTalk string assignment in active layer; rich-text control codes retained",
+        "font_pt": 4.5
+      }
+    }
+  ]
+}
