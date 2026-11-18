@@ -53,6 +53,9 @@ namespace SST
             if (!bound) throw std::runtime_error("Cannot register prototype shortcut.");
         }
         auto &editor = application.GetEditorLayer();
+        auto windows = editor.GetWindows();
+        state->captureWindowLayout = [windows] { return windows->Save(); };
+        state->restoreWindowLayout = [windows](const std::string &layout) { return bool(windows->Load(layout)); };
         editor.RegisterMenuRenderer("prototype", [registry](EditorServices &)
         {
             if (ImGui::BeginMenu("Document"))

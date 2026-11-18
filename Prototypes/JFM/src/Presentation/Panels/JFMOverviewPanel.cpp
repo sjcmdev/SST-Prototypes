@@ -14,28 +14,17 @@ namespace SST::Prototypes::JFM
 	
 
 	JFMOverviewPanel::JFMOverviewPanel(Ref<JFMWorkspaceStore> store, std::string title, bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault), m_Store(std::move(store))
+		: EditorWindow("jfm.overview", std::move(title), visibleByDefault, {.duplicable = true}), m_Store(std::move(store))
 	{
 	}
 
-	Ref<IPanel> JFMOverviewPanel::Clone() const
+	WindowDuplicate JFMOverviewPanel::Duplicate() const
 	{
-		return CreateRef<JFMOverviewPanel>(*this);
+		return {CreateRef<JFMOverviewPanel>(*this), {}};
 	}
 
-	void JFMOverviewPanel::Render()
+	void JFMOverviewPanel::RenderContent()
 	{
-		if (!IsVisible())
-			return;
-
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible))
-		{
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
-
 		const JFMProject project = m_Store != nullptr ? m_Store->GetProjectSnapshot() : JFMProject{};
 		const auto projectPath = m_Store != nullptr ? m_Store->GetProjectPath() : std::optional<Path>{};
 		const auto selected = m_Store != nullptr ? m_Store->GetSelectedCharacteristicRecord() : std::optional<JFMCharacteristicRecord>{};
@@ -65,7 +54,5 @@ namespace SST::Prototypes::JFM
 		const std::string status = m_Store != nullptr ? m_Store->GetStatusMessage() : std::string{};
 		ImGui::TextWrapped("%s", status.c_str());
 
-		ImGui::End();
-		SetVisible(visible);
 	}
 } // namespace SST::Prototypes::JFM

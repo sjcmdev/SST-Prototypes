@@ -13,31 +13,18 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
 		PrototypeWorkflow *store,
 		std::string title,
 		bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault),
+		: EditorWindow("prototype.document", std::move(title), visibleByDefault, {.duplicable = true}),
 		  m_Store(store)
 	{
 	}
 
-	Ref<IPanel> __PROTOTYPE_NAME__PrototypePanel::Clone() const
+	WindowDuplicate __PROTOTYPE_NAME__PrototypePanel::Duplicate() const
 	{
-		return CreateRef<__PROTOTYPE_NAME__PrototypePanel>(*this);
+		return {CreateRef<__PROTOTYPE_NAME__PrototypePanel>(*this), {}};
 	}
 
-	void __PROTOTYPE_NAME__PrototypePanel::Render()
+	void __PROTOTYPE_NAME__PrototypePanel::RenderContent()
 	{
-		if (!IsVisible())
-			return;
-
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible))
-		{
-			SetVisible(visible);
-			ImGui::End();
-			return;
-		}
-		SetVisible(visible);
-
-
         auto &doc = m_Store->document;
         ImGui::Text("Path: %s", doc.path.Empty() ? "Untitled" : doc.path.Utf8().c_str());
         ImGui::Text("Revision: %llu%s", static_cast<unsigned long long>(doc.revision), doc.dirty ? " (unsaved)" : "");
@@ -68,7 +55,6 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
             if (ImGui::Button("Cancel")) (void)m_Store->jobs->RequestCancel(job->id);
         }
 
-		ImGui::End();
 	}
 } // namespace SST::Prototypes::__PROTOTYPE_NAME__
 

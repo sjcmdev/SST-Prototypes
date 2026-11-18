@@ -20,13 +20,18 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
             if (!TextFileIO::Load(path, text, error))
                 throw std::runtime_error(error);
             input = ParseInput(text);
+            windowLayout = nlohmann::json::parse(text).value("window_layout", std::string{});
         }
         ValidateInput(input);
         result = PrototypeBackend::Evaluate(input);
         context.SetProgress(1, 2);
         context.ThrowIfCancellationRequested();
-        if (operation == Operation::Save && !TextFileIO::Save(path, SerializeInput(input), error))
-            throw std::runtime_error(error);
+        if (operation == Operation::Save)
+        {
+            auto json = nlohmann::json::parse(SerializeInput(input));
+            if (!windowLayout.empty()) json["window_layout"] = windowLayout;
+            if (!TextFileIO::Save(path, json.dump(2), error)) throw std::runtime_error(error);
+        }
         saveCommitted = operation == Operation::Save;
         // Once replacement succeeds the save is committed, even if cancellation arrives now.
         context.SetProgress(2, 2);
@@ -49,6 +54,7 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
                 target = *selected;
             }
             pending = CreateRef<DocumentJob>(operation, document.input, target);
+            if (operation == Operation::Save && captureWindowLayout) pending->windowLayout = captureWindowLayout();
             pendingRevision = document.revision;
             activeJob = jobs->Submit(pending);
             if (activeJob == 0)
@@ -82,6 +88,8 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
             {
                 if (!document.Opened(pending->input, pending->path, pendingRevision))
                     status = "Document changed during open; loaded data was not applied.";
+                else if (!pending->windowLayout.empty() && restoreWindowLayout && !restoreWindowLayout(pending->windowLayout))
+                    status = "Document loaded; window layout could not be restored.";
             }
             else if (document.revision == pendingRevision)
                 document.result = pending->result;

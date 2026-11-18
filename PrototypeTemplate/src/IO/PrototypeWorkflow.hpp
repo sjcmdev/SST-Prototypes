@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Layer.hpp"
+#include <functional>
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/EventSystem/BusEventSystem/Event.hpp"
@@ -23,6 +24,7 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
         PrototypeResult result;
         Path path;
         bool saveCommitted = false;
+        std::string windowLayout;
     };
 
     class PrototypeWorkflow final : public Layer
@@ -36,6 +38,8 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
         JobId activeJob = 0;
         std::string status;
         bool scientificNotation = true;
+        std::function<std::string()> captureWindowLayout;
+        std::function<bool(const std::string &)> restoreWindowLayout;
     private:
         Ref<DocumentJob> pending;
         std::uint64_t pendingRevision = 0;

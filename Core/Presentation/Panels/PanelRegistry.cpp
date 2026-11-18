@@ -3,9 +3,20 @@
 #include "Presentation/Panels/PanelRegistry.hpp"
 
 #include <algorithm>
+#include <limits>
 
 namespace SST
 {
+	PanelId PanelRegistry::AddExisting(Ref<IPanel> panel, PanelId id)
+	{
+		if (!panel || id == std::numeric_limits<PanelId>::max() || (id != 0 && Contains(id)) ||
+            std::any_of(m_Entries.begin(), m_Entries.end(), [&](const Entry &entry) { return entry.panel == panel; })) return 0;
+		if (id == 0) id = m_NextId++;
+		m_NextId = std::max(m_NextId, id + 1);
+		if (auto window = std::dynamic_pointer_cast<EditorWindow>(panel)) window->m_Id = id;
+		m_Entries.push_back({id, std::move(panel)});
+		return id;
+	}
 	WeakRef<IPanel> PanelRegistry::Get(PanelId id)
 	{
 		const auto it = findEntry(id);
@@ -44,17 +55,14 @@ namespace SST
 		if (it == m_Entries.end() || !it->panel)
 			return 0;
 
-		Entry entry;
-		entry.id = m_NextId++;
-		entry.panel = it->panel->Clone();
-		if (!entry.panel)
+		auto panel = it->panel->Clone();
+		if (!panel)
 			return 0;
 
-		if (entry.panel->GetTitle() == it->panel->GetTitle())
-			entry.panel->SetTitle(it->panel->GetTitle() + " copy");
+		if (panel->GetTitle() == it->panel->GetTitle())
+			panel->SetTitle(it->panel->GetTitle() + " copy");
 
-		m_Entries.push_back(std::move(entry));
-		return m_Entries.back().id;
+		return AddExisting(std::move(panel));
 	}
 
 	std::vector<PanelRegistry::PanelId> PanelRegistry::GetIds() const

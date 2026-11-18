@@ -11,6 +11,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Presentation/EditorUiState.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
+#include "Presentation/Panels/WindowWorkspace.hpp"
 #include "Presentation/Panels/SettingsPanel.hpp"
 
 namespace SST
@@ -73,6 +74,12 @@ namespace SST
 		void RenderCorePanelMenuItems();
 		void RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer);
 		void RegisterSettingsTab(SettingsTabExtension extension);
+		[[nodiscard]] Ref<WindowWorkspace> GetWindows() const { return m_Windows; }
+		WindowId RegisterWindow(Ref<EditorWindow> window, WindowId savedId = 0)
+		{
+			initializePanelsIfNeeded();
+			return m_Panels.AddExisting(std::move(window), savedId);
+		}
 
 		void OnDetach() override;
 		void OnEvent(Event &event) override;
@@ -97,6 +104,7 @@ namespace SST
 		};
 
 		PanelRegistry m_Panels;
+		Ref<WindowWorkspace> m_Windows;
 		std::vector<MenuRendererEntry> m_MenuRenderers;
 		std::vector<SettingsTabExtension> m_SettingsTabs;
 		Ref<EditorUiState> m_UiState;

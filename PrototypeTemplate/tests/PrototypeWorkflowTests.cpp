@@ -115,4 +115,16 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
         EXPECT_EQ(workflow.activeJob, 0);
         EXPECT_NEAR(workflow.document.result.conductivity, 4.4860945752, 1e-12);
     }
+    TEST(PrototypeWorkflow, WindowLayoutTravelsWithDocumentJob)
+    {
+        const Path path{FileSystem::TempDirectoryPath() / "window-layout-roundtrip.json"};
+        JobContext context({}, {}, {}, {}, [] { return false; });
+        DocumentJob save(Operation::Save, {2, 350}, path);
+        save.windowLayout = R"({"version":1,"windows":[]})";
+        save.Execute(context);
+        DocumentJob open(Operation::Open, {}, path); open.Execute(context);
+        EXPECT_EQ(open.windowLayout, save.windowLayout);
+        EXPECT_TRUE(FileSystem::Remove(path.Native()));
+    }
+
 }

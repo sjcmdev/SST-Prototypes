@@ -44,7 +44,7 @@ namespace SST
 	} // namespace
 
 	EditorLayer::EditorLayer()
-		: Layer("EditorLayer")
+		: Layer("EditorLayer"), m_Windows(CreateRef<WindowWorkspace>(m_Panels))
 	{
 	}
 
@@ -64,6 +64,11 @@ namespace SST
 		m_KeymapResolver = std::move(keymapResolver);
 		m_ContextManager = std::move(contextManager);
 		m_CommandRegistry = std::move(commandRegistry);
+		if (auto commands = m_CommandRegistry.lock())
+		{
+			const auto result = m_Windows->Bind(commands, m_KeymapResolver.lock());
+			if (!result) DS_LOG_ERROR("Window command registration failed: {}", result.Error().userMessage);
+		}
 		bindEvents();
 	}
 
@@ -175,6 +180,8 @@ namespace SST
 
 	void EditorLayer::OnDetach()
 	{
+		// ImGuiLayer saves after EditorLayer detaches; retain its settings payload until then.
+		m_Windows->FreezeSettings();
 		m_Panels.Clear();
 		m_MenuRenderers.clear();
 		m_SettingsTabs.clear();
@@ -211,11 +218,14 @@ namespace SST
 	void EditorLayer::OnImGuiRender()
 	{
 		initializePanelsIfNeeded();
+		m_Windows->InstallSettingsHandler();
 		renderMenuBar();
 		renderCommandPalettePopup();
 
-		for (auto &entry : m_Panels.Entries())
+		const auto panels = m_Panels.Entries(); // A chrome command can duplicate during rendering.
+		for (const auto &entry : panels)
 			entry.panel->Render();
+		m_Windows->RenderOverlays();
 	}
 
 	void EditorLayer::initializePanelsIfNeeded()
@@ -324,9 +334,6 @@ namespace SST
 
 	void EditorLayer::renderMenuBar()
 	{
-		if (m_MenuRenderers.empty())
-			return;
-
 		if (!ImGui::BeginMainMenuBar())
 			return;
 
@@ -337,6 +344,7 @@ namespace SST
 				entry.renderer(services);
 		}
 
+		m_Windows->RenderMenu();
 		ImGui::EndMainMenuBar();
 	}
 

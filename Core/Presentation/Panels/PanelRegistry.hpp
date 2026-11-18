@@ -7,6 +7,7 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 
 namespace SST
 {
@@ -32,6 +33,7 @@ namespace SST
 		[[nodiscard]] bool Contains(PanelId id) const;
 		[[nodiscard]] bool Remove(PanelId id);
 		[[nodiscard]] PanelId Clone(PanelId sourceId);
+		PanelId AddExisting(Ref<IPanel> panel, PanelId id = 0);
 		[[nodiscard]] std::vector<PanelId> GetIds() const;
 		[[nodiscard]] std::vector<Entry> &Entries();
 		[[nodiscard]] const std::vector<Entry> &Entries() const;
@@ -51,10 +53,6 @@ namespace SST
 	template <typename TPanel, typename... Args>
 	PanelRegistry::PanelId PanelRegistry::Add(Args &&...args)
 	{
-		Entry entry;
-		entry.id = m_NextId++;
-		entry.panel = CreateRef<TPanel>(std::forward<Args>(args)...);
-		m_Entries.push_back(std::move(entry));
-		return m_Entries.back().id;
+		return AddExisting(CreateRef<TPanel>(std::forward<Args>(args)...));
 	}
 } // namespace SST

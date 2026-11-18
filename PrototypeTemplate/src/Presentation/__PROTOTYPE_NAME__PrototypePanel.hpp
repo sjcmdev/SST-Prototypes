@@ -4,12 +4,12 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "Domain/PrototypeBackend.hpp"
-#include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 #include "IO/PrototypeWorkflow.hpp"
 
 namespace SST::Prototypes::__PROTOTYPE_NAME__
 {
-	class __PROTOTYPE_NAME__PrototypePanel final : public IPanel
+	class __PROTOTYPE_NAME__PrototypePanel final : public EditorWindow
 	{
 	public:
 		explicit __PROTOTYPE_NAME__PrototypePanel(
@@ -17,8 +17,9 @@ namespace SST::Prototypes::__PROTOTYPE_NAME__
 			std::string title = "__PROTOTYPE_NAME__ Prototype",
 			bool visibleByDefault = true);
 
-		[[nodiscard]] Ref<IPanel> Clone() const override;
-		void Render() override;
+		[[nodiscard]] WindowDuplicate Duplicate() const override;
+		bool IsDirty() const override { return m_Store->document.dirty; }
+		void RenderContent() override;
 
 	private:
 		PrototypeWorkflow *m_Store;
