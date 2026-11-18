@@ -1,5 +1,6 @@
 #include "Core/dspch.hpp"
 #include "Presentation/CapLabPrototypePanel.hpp"
+#include "Presentation/SelectionLabel.hpp"
 #include <imgui.h>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
 namespace SST::Prototypes::CapLab {
@@ -246,11 +247,11 @@ void CapLabPrototypePanel::RenderAnalysis() {
     if (!ImGui::CollapsingHeader("CV / raw DLCP analysis",ImGuiTreeNodeFlags_DefaultOpen)) return;
     auto &p = state->document.project;
     static pl::Id selected = 0, xdSelected = 0;
-    auto select = [&](const char *label, pl::Id &id) {
-        if (ImGui::BeginCombo(label,std::to_string(id).c_str())) {
+    auto select = [&](const char *label, pl::Id &id, const char *empty = "none — select") {
+        if (ImGui::BeginCombo(label,SelectionLabel(p,id,empty).c_str())) {
             for (const auto &m : p.measurements) {
                 const auto mid=m.at("id").get<pl::Id>();
-                const std::string title=std::to_string(mid)+": "+m.at("metadata").at("source").get<std::string>();
+                const std::string title=SelectionLabel(p,mid)+"##"+std::to_string(mid);
                 if (ImGui::Selectable(title.c_str(),id==mid)) id=mid;
             }
             ImGui::EndCombo();
@@ -302,7 +303,7 @@ void CapLabPrototypePanel::RenderAnalysis() {
             ImGui::InputDouble("Manual x_d (um)",&manual); ImGui::InputText("x_d description",description,sizeof(description));
             options["xd_manual_m"]=manual*1e-6; options["xd_description"]=description;
         } else {
-            select("x_d measurement (0 = current)",xdSelected);
+            select("x_d measurement (0 = current)",xdSelected,"current measurement");
             if (ImGui::Button("Use current measurement for x_d")) xdSelected=0;
             if (xdSelected) options["xd_measurement_id"]=xdSelected;
             if (source==0) { ImGui::InputDouble("AS bias (V)",&bias); options["as_bias_V"]=bias; }
@@ -355,19 +356,19 @@ void CapLabPrototypePanel::RenderAS() {
         CommandContext context; context.Set("edit",std::move(value));
         (void)commands->Execute(CommandID{"caplab.defect"},std::move(context));
     };
-    if (ImGui::BeginCombo("AS sample",std::to_string(sample).c_str())) {
-        for (const auto &s : p.samples) if (ImGui::Selectable(s.name.c_str(),sample==s.id)) {sample=s.id; selectedDefect=0; state->pendingCandidate=nullptr;}
+    if (ImGui::BeginCombo("AS sample",SelectionLabel(p,sample).c_str())) {
+        for (const auto &s : p.samples) if (ImGui::Selectable((SelectionLabel(p,s.id)+"##"+std::to_string(s.id)).c_str(),sample==s.id)) {sample=s.id; selectedDefect=0; state->pendingCandidate=nullptr;}
         ImGui::EndCombo();
     }
     ImGui::InputText("Defect name",name,sizeof(name));
     if (ImGui::Button("Create defect")) {edit({{"action","create"},{"sample_id",sample},{"name",name}}); return;}
-    if (ImGui::BeginCombo("AS measurement",std::to_string(measurement).c_str())) {
+    if (ImGui::BeginCombo("AS measurement",SelectionLabel(p,measurement).c_str())) {
         for (const auto &m : p.measurements) if (m.at("sample_id")==sample && m.at("metadata").at("kind")=="FrequencySweep") {
             const auto id=m.at("id").get<pl::Id>();
-            if (ImGui::Selectable((std::to_string(id)+" / "+m.at("metadata").at("temperature_K").dump()+" K").c_str(),measurement==id)) measurement=id;
+            if (ImGui::Selectable((SelectionLabel(p,id)+"##"+std::to_string(id)).c_str(),measurement==id)) measurement=id;
         }
         for (const auto &m : p.sweeps) if (m.sample_id==sample)
-            if (ImGui::Selectable((std::to_string(m.id)+" / "+Nullable(m.temperature_K).dump()+" K").c_str(),measurement==m.id)) measurement=m.id;
+            if (ImGui::Selectable((SelectionLabel(p,m.id)+"##"+std::to_string(m.id)).c_str(),measurement==m.id)) measurement=m.id;
         ImGui::EndCombo();
     }
     ImGui::Checkbox("Savitzky-Golay smoothing",&smoothing);
@@ -378,9 +379,9 @@ void CapLabPrototypePanel::RenderAS() {
             {"smoothing",smoothing ? Json{{"method","Savitzky-Golay"},{"window",window},{"degree",degree}} : Json{{"method","none"}}}};
         (void)commands->Execute(CommandID{"caplab.analyze"});
     }
-    if (ImGui::BeginCombo("Active defect",std::to_string(selectedDefect).c_str())) {
+    if (ImGui::BeginCombo("Active defect",SelectionLabel(p,selectedDefect,"no defects yet").c_str())) {
         for (const auto &d : p.defects) if (d.at("sample_id")==sample)
-            if (ImGui::Selectable(d.at("name").get<std::string>().c_str(),d.at("id")==selectedDefect)) selectedDefect=d.at("id").get<pl::Id>();
+            if (ImGui::Selectable((SelectionLabel(p,d.at("id").get<pl::Id>())+"##"+std::to_string(d.at("id").get<pl::Id>())).c_str(),d.at("id")==selectedDefect)) selectedDefect=d.at("id").get<pl::Id>();
         ImGui::EndCombo();
     }
     if (selectedDefect) {
