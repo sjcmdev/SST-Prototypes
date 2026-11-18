@@ -1,6 +1,12 @@
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Domain/CapLabBundleImport.hpp"
+#include "Domain/CapLabAnalysis.hpp"
+#include <sst/physics/capacitance.hpp>
+#include <sst/physics/arrhenius.hpp>
+#include <sst/physics/materials.hpp>
+#include <sst/math/linear_fit.hpp>
+#include <fstream>
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #include "Core/ScientificRuntime/Python/PythonGilScope.hpp"
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -8,6 +14,17 @@
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/function.h>
+#include <nanobind/stl/vector.h>
+namespace {
+std::filesystem::path MaterialDataPath(const char *name = "caplab-materials.json") {
+    const auto exe=SST::Platform::CurrentExecutablePath();
+    if (exe) {
+        const auto local=exe.Value().parent_path().Join(name).Native();
+        if (std::filesystem::exists(local)) return local;
+    }
+    return std::filesystem::path(SST_CAPLAB_MATERIALS_JSON).parent_path()/name;
+}
+}
 NB_MODULE(sst_caplab, module)
 {
     using namespace SST::Prototypes::CapLab;
@@ -19,6 +36,69 @@ NB_MODULE(sst_caplab, module)
         else { ImportChange change(project,j,temperature,CFTemplate{}); }
         return Serialize(project);
     });
+    module.def("cv_linear_fit", [](const std::vector<double> &x, const std::vector<double> &y) {
+        const auto f = sst::math::weightedLinearFit(x,y,{},false);
+        if (f.status == sst::math::LinearFitStatus::InvalidInput || f.status == sst::math::LinearFitStatus::RankDeficient)
+            throw std::runtime_error("Invalid/rank deficient CV fit (constant V).");
+        return Json{{"slope",f.slope},{"intercept",f.intercept},{"covariance",f.covariance},
+            {"dof",f.degreesOfFreedom},{"sum_squared_residuals",f.chiSquared}}.dump();
+    });
+    module.def("arrhenius_fit", [](const std::vector<double> &t, const std::vector<double> &rate, bool compat) {
+        using namespace sst::physics;
+        const auto model = compat ? ArrheniusTransform::ProPhoLogFrequency : ArrheniusTransform::EmissionOverTemperatureSquared;
+        const auto f = fitArrhenius(t,rate,{},false,model);
+        const auto &l = f.linearFit;
+        if ((l.status != sst::math::LinearFitStatus::Success && l.status != sst::math::LinearFitStatus::InsufficientDegreesOfFreedom) ||
+            !std::isfinite(f.activationEnergyEv) || !std::isfinite(f.prefactor) || f.prefactor <= 0)
+            throw std::runtime_error("Arrhenius needs at least two distinct temperatures and finite positive rates.");
+        Json x=Json::array(), y=Json::array();
+        for (std::size_t i=0;i<t.size();++i) {
+            const auto v=transformArrhenius(t[i],rate[i],model); x.push_back(v.inverseTemperature); y.push_back(v.logRate);
+        }
+        return Json{{"E_a_eV",f.activationEnergyEv},{"prefactor",f.prefactor},{"slope",l.slope},{"intercept",l.intercept},
+            {"covariance",l.degreesOfFreedom ? Json(f.covariance) : Json(nullptr)},
+            {"linear_covariance",l.degreesOfFreedom ? Json(l.covariance) : Json(nullptr)},
+            {"dof",l.degreesOfFreedom},{"sum_squared_residuals",l.chiSquared},{"inverse_temperature_K",x},{"log_rate",y}}.dump();
+    });
+    module.def("compat_sigma", &sst::physics::proPhoCaptureCrossSection);
+    module.def("area_inverse_square", &sst::physics::areaInverseCapacitanceSquared);
+    module.def("capacitance_from_inverse_square", &sst::physics::capacitanceFromAreaInverseSquare);
+    module.def("constants", [] { return Json{{"q_C",sst::physics::q},{"eps0_F_m",sst::physics::eps0},
+        {"kappa_eV_K",sst::physics::k_B_over_q},{"source","CODATA 2022 / SI; SST-Physics constants.hpp"}}.dump(); });
+    module.def("width", &sst::physics::depletionWidth);
+    module.def("cv_density", &sst::physics::cvDensity);
+    module.def("dlcp_density", &sst::physics::dlcpDensity);
+    module.def("fermi_energy", &sst::physics::bulkFermiEnergy);
+    module.def("measurement", [](const std::string &text, pl::Id id) { return AnalysisMeasurement(Parse(text),id).dump(); });
+    module.def("edit_defect", [](const std::string &text, const std::string &edit) {
+        auto p=Parse(text); EditDefect(p,Json::parse(edit)); RefreshAnalyses(p); return Serialize(p);
+    });
+    module.def("refresh", [](const std::string &text) { auto p=Parse(text); RefreshAnalyses(p); return Serialize(p); });
+    module.def("compat_material", [] {
+        std::ifstream stream(MaterialDataPath("caplab-propho-compat.json"));
+        if (!stream) throw std::runtime_error("Missing sourced material data file.");
+        Json data; stream >> data;
+        const auto &preset=data;
+        sst::physics::positiveCapacitanceInput(preset.at("eps_r").at("value").get<double>());
+        sst::physics::positiveCapacitanceInput(preset.at("N_ref_m3").at("value").get<double>());
+        return preset.dump();
+    });
+    module.def("materials", [](double temperature) {
+        Json out = Json::array();
+        sst::physics::MaterialLibrary library;
+        library.mergeProjectFile(MaterialDataPath());
+        for (const auto &m : library.list()) {
+            if (!m.eps_r) continue;
+            out.push_back({{"name",m.name},{"eps_r",m.eps_r->value},{"eps_source",m.eps_r->source},
+                {"Nc300_cm3",m.Nc300 ? Json(m.Nc300->value) : Json(nullptr)},
+                {"Nv300_cm3",m.Nv300 ? Json(m.Nv300->value) : Json(nullptr)},
+                {"Nc_m3",m.Nc300 ? Json(m.Nc(temperature)*1e6) : Json(nullptr)},
+                {"Nv_m3",m.Nv300 ? Json(m.Nv(temperature)*1e6) : Json(nullptr)},
+                {"Nc_source",m.Nc300 ? Json(m.Nc300->source) : Json(nullptr)},
+                {"Nv_source",m.Nv300 ? Json(m.Nv300->source) : Json(nullptr)}});
+        }
+        return out.dump();
+    }, nanobind::arg("temperature_K") = 300.);
     module.def("roundtrip", [](const std::string &text) { return Serialize(Parse(text)); });
 }
 #endif
@@ -32,6 +112,29 @@ namespace SST::Prototypes::CapLab
         if (Py_IsInitialized() || PyImport_AppendInittab("sst_caplab", PyInit_sst_caplab) != 0)
             throw std::runtime_error("Register sst_caplab before starting Python.");
         registered = true;
+#endif
+    }
+    Json ReadAnalysis(const Json &measurement, const Json &options, const Json &xd, JobContext &context)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        PythonGilAcquireScope gil;
+        if (!gil.IsActive()) throw std::runtime_error("Embedded Python unavailable.");
+        namespace nb = nanobind;
+        try {
+            auto paths = nb::module_::import_("sys").attr("path");
+            const auto executable = Platform::CurrentExecutablePath();
+            if (!executable) throw std::runtime_error("Cannot locate Python runtime.");
+            const auto local = executable.Value().parent_path().Join("python");
+            const std::string root = FileSystem::Exists(local.Join("caplab").Native()) ? local.Utf8() : SST_PROTOTYPE_PYTHON_ROOT;
+            if (!nb::cast<bool>(paths.attr("__contains__")(root))) paths.attr("insert")(0,root);
+            const std::function<bool()> cancel = [&] { return context.IsCancellationRequested(); };
+            const std::function<void(double)> progress = [&](double v) { context.SetProgress(float(v),1); };
+            auto value = nb::module_::import_("caplab.analysis").attr("analyze_json")(measurement.dump(),options.dump(),xd.is_null() ? "" : xd.dump(),cancel,progress);
+            return Json::parse(nb::cast<std::string>(value));
+        } catch (const nb::python_error &e) { context.ThrowIfCancellationRequested(); throw std::runtime_error(e.what()); }
+#else
+        (void)measurement; (void)options; (void)xd; (void)context;
+        throw std::runtime_error("Embedded Python unavailable.");
 #endif
     }
     Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const std::string &options)

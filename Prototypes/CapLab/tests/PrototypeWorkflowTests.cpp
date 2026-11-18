@@ -117,4 +117,40 @@ TEST(CapLabWorkflow, CompletionWaitsForUpdateAndReportsProgress) {
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
 
+
+TEST(CapLabDefects, CommandsUndoValidationAndPersistentReferences) {
+    auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>();
+    auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
+    CapLabWorkflow state(jobs,bus,undo); RegisterCommands(commands,bus,state);
+    state.document.project=FixtureProject();
+    auto &p=state.document.project;
+    auto execute=[&](Json edit) {CommandContext c; c.Set("edit",std::move(edit)); return commands->Execute(CommandID{"caplab.defect"},std::move(c));};
+    const auto sample=p.samples[0].id, mid=p.sweeps[0].id;
+    ASSERT_TRUE(execute({{"action","create"},{"sample_id",sample},{"name","D1"}}));
+    const auto did=p.defects[0].at("id").get<pl::Id>();
+    const auto row=AnalysisMeasurement(p,mid).at("row_ids").at(0);
+    ASSERT_TRUE(execute({{"action","add"},{"defect_id",did},{"point",{{"measurement_id",mid},{"row_id",row},
+        {"temperature_K",1},{"frequency_Hz",1},{"provenance","AS candidate approved"}}}}));
+    EXPECT_EQ(p.defects[0]["points"][0]["temperature_K"],100);
+    EXPECT_EQ(p.defects[0]["points"][0]["frequency_Hz"],100);
+    const auto pid=p.defects[0]["points"][0]["id"];
+    const auto assigned=Serialize(p); EXPECT_EQ(Serialize(Parse(assigned)),assigned);
+    ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(p.defects[0]["points"].empty());
+    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(p),assigned);
+    ASSERT_TRUE(execute({{"action","enable"},{"defect_id",did},{"point_id",pid},{"enabled",false}}));
+    EXPECT_FALSE(p.defects[0]["points"][0]["enabled"].get<bool>());
+    ASSERT_TRUE(execute({{"action","rename"},{"defect_id",did},{"name","renamed"}}));
+    EXPECT_EQ(p.defects[0]["name"],"renamed");
+    const auto valid=Serialize(p);
+    EXPECT_FALSE(execute({{"action","add"},{"defect_id",did},{"point",{{"measurement_id",nullptr},{"row_id",nullptr},
+        {"temperature_K",0},{"frequency_Hz",100},{"provenance","manual"}}}}));
+    EXPECT_EQ(Serialize(p),valid);
+    ASSERT_TRUE(execute({{"action","remove"},{"defect_id",did},{"point_id",pid}}));
+    EXPECT_TRUE(p.defects[0]["points"].empty());
+    ASSERT_TRUE(undo->Undo());
+    ASSERT_TRUE(execute({{"action","delete"},{"defect_id",did}})); EXPECT_TRUE(p.defects.empty());
+    ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(p),valid);
+    auto bad=Json::parse(valid); bad["defects"][0]["points"][0]["row_id"]=999999;
+    EXPECT_ANY_THROW(Parse(bad.dump()));
+}
 }

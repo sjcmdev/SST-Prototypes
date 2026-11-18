@@ -27,6 +27,35 @@ namespace SST::Prototypes::CapLab
                 preview = Json::parse(table.source.at("preview_json"));
             }
         }
+        else if (operation == Operation::Analyze)
+        {
+            auto p = Parse(input);
+            Json measurement;
+            if (analysisOptions.at("type")=="Arrhenius") {
+                bool found=false;
+                for (const auto &d : p.defects) if (d.at("id")==analysisOptions.at("defect_id")) { analysisOptions["defect"]=d; found=true; }
+                if (!found) throw std::runtime_error("Missing defect.");
+                analysisOptions["point_inputs"]=Json::array(); std::set<pl::Id> seen;
+                for (const auto &point : analysisOptions.at("defect").at("points"))
+                    if (point.at("enabled").get<bool>() && !point.at("measurement_id").is_null()) {
+                        const auto id=point.at("measurement_id").get<pl::Id>();
+                        const auto m=AnalysisMeasurement(p,id);
+                        const auto rows=m.at("row_ids").get<std::vector<pl::Id>>();
+                        const auto row=std::find(rows.begin(),rows.end(),point.at("row_id").get<pl::Id>());
+                        const auto names=m.at("names").get<std::vector<std::string>>();
+                        const auto f=std::find(names.begin(),names.end(),"f");
+                        if (row==rows.end() || f==names.end() || m.at("temperature_K")!=point.at("temperature_K") ||
+                            m.at("columns").at(std::distance(names.begin(),f)).at(std::distance(rows.begin(),row))!=point.at("frequency_Hz"))
+                            throw std::runtime_error("Point input changed; reassign the point before fitting.");
+                        if (seen.insert(id).second) analysisOptions["point_inputs"].push_back(m);
+                    }
+            } else measurement=AnalysisMeasurement(p,analysisOptions.at("measurement_id").get<pl::Id>());
+            Json xd;
+            if (analysisOptions.contains("xd_measurement_id")) xd = AnalysisMeasurement(p,analysisOptions.at("xd_measurement_id").get<pl::Id>());
+            auto result = ReadAnalysis(measurement,analysisOptions,xd,context);
+            result["input_revision"] = analysisOptions.at("input_revision");
+            AppendAnalysis(p,std::move(result)); opened = std::move(p);
+        }
         else if (operation == Operation::Save)
         {
             auto project = Parse(input);
@@ -58,7 +87,7 @@ namespace SST::Prototypes::CapLab
         {
             if (activeJob) throw std::runtime_error("Wait for the current job or cancel it.");
             if (operation == Operation::Open && document.dirty) throw std::runtime_error("Save pending changes before opening another project.");
-            if (target.Empty())
+            if (operation != Operation::Analyze && target.Empty())
             {
                 if (operation == Operation::Save) target = document.path;
                 if (target.Empty())
@@ -70,7 +99,8 @@ namespace SST::Prototypes::CapLab
                     target = *selected;
                 }
             }
-            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save ? Serialize(document.project) : "",target);
+            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save || operation == Operation::Analyze ? Serialize(document.project) : "",target);
+            job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
             if (operation == Operation::Export) job->snapshot = pl::snapshotGraph(*document.project.engine,document.project.graph,view);
             pendingRevision = document.revision;
@@ -83,6 +113,7 @@ namespace SST::Prototypes::CapLab
     }
     void CapLabWorkflow::Changed()
     {
+        RefreshAnalyses(document.project);
         document.Changed(); view = {};
         if (bus) { DocumentChanged e; e.project = document.project.engine->id(); e.revision = document.revision; bus->Queue(e); }
     }
@@ -98,6 +129,11 @@ namespace SST::Prototypes::CapLab
             status = "Completed.";
             if (pending->operation == Operation::Export) status = "Exported PNG.";
             else if (document.revision != pendingRevision) status = "Stale revision: result discarded.";
+            else if (pending->operation == Operation::Analyze)
+            {
+                analysisDraft = std::move(pending->opened); analysisRevision = pendingRevision;
+                if (commands) (void)commands->Execute(CommandID{"caplab.accept_analysis"});
+            }
             else if (pending->operation == Operation::Open)
             {
                 if (undo) undo->Clear();

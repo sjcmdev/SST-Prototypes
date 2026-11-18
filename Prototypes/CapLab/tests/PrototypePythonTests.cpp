@@ -35,8 +35,9 @@ namespace SST::Prototypes::CapLab
                 "import json, os, sys\n"
                 "sys.path.extend(json.loads(os.environ['SST_ROOT_PYTHON_PATHS']))\n"
                 "import pytest\n"
-                "assert pytest.main([os.environ['SST_RUN_PYTEST'], '-q', '-p', 'no:cacheprovider']) == 0\n"
-                "sys.stdout.flush(); sys.stderr.flush()\n"), 0);
+                "pytest_result = pytest.main([os.environ['SST_RUN_PYTEST'], '-q', '-p', 'no:cacheprovider'])\n"
+                "sys.stdout.flush(); sys.stderr.flush()\n"
+                "assert pytest_result == 0\n"), 0);
         }
         // Exercise the real command -> EventBus -> Python job -> main-thread commit path.
         auto bus=CreateRef<EventBus>(); auto jobs=CreateRef<JobSystem>(nullptr,1);
@@ -70,8 +71,10 @@ namespace SST::Prototypes::CapLab
         EXPECT_TRUE(FileSystem::Remove(exportJob.path.Native()));
         auto bundleJobs=CreateRef<JobSystem>(nullptr,1);
         auto bundleUndo=CreateRef<UndoStack>(); auto bundleCommands=CreateRef<CommandRegistry>();
-        CapLabWorkflow bundleWorkflow(bundleJobs,bus,bundleUndo);
-        RegisterCommands(bundleCommands,bus,bundleWorkflow);
+        auto bundleBus=CreateRef<EventBus>();
+        CapLabWorkflow bundleWorkflow(bundleJobs,bundleBus,bundleUndo);
+        RegisterCommands(bundleCommands,bundleBus,bundleWorkflow);
+        auto analysisRequest=bundleBus->Subscribe<DocumentRequested>([&](const auto &e) { bundleWorkflow.Start(e.operation,e.target); });
         bundleWorkflow.importOptions = R"({"profile":"propho_dl","temperature_K":360,"frequency_Hz":1000})";
         bundleWorkflow.Start(Operation::Preview,Path{std::filesystem::path(SST_PROTOTYPE_PYTHON_ROOT).parent_path()/"tests/fixtures/m2/#132_DL_1e3Hz_360K.dat"});
         bundleJobs->Shutdown(); bundleWorkflow.OnUpdate(0);
@@ -82,6 +85,95 @@ namespace SST::Prototypes::CapLab
         const auto imported = Serialize(bundleWorkflow.document.project);
         ASSERT_TRUE(bundleUndo->Undo()); EXPECT_TRUE(bundleWorkflow.document.project.samples.empty());
         ASSERT_TRUE(bundleUndo->Redo()); EXPECT_EQ(Serialize(bundleWorkflow.document.project),imported);
+        CommandContext area;
+        area.Set("sample_id",bundleWorkflow.document.project.samples.at(0).id); area.Set("area_m2",3.7e-6);
+        ASSERT_TRUE(bundleCommands->Execute(CommandID{"caplab.area"},std::move(area)));
+        bundleWorkflow.jobs=CreateRef<JobSystem>(nullptr,1);
+        bundleWorkflow.analysisOptions={{"measurement_id",bundleWorkflow.document.project.measurements.at(0).at("id")},
+            {"type","CV"},{"range_V",{0,.25}},{"material","ProPho-compat"},{"xd_source","DLCP"},{"xd_policy","block"}};
+        const auto beforeAnalysis=Serialize(bundleWorkflow.document.project);
+        ASSERT_TRUE(bundleCommands->Execute(CommandID{"caplab.analyze"})); bundleBus->ProcessQueue();
+        bundleWorkflow.jobs->Shutdown(); bundleWorkflow.OnUpdate(0);
+        ASSERT_EQ(bundleWorkflow.document.project.analyses.size(),1) << bundleWorkflow.status;
+        const auto analyzed=Serialize(bundleWorkflow.document.project);
+        EXPECT_EQ(Serialize(Parse(analyzed)),analyzed);
+        EXPECT_EQ(bundleWorkflow.document.project.analyses.at(0).at("status"),"valid");
+        EXPECT_EQ(bundleWorkflow.document.project.analyses.at(0).at("graphs").size(),4);
+        ASSERT_TRUE(bundleUndo->Undo()); EXPECT_EQ(Serialize(bundleWorkflow.document.project),beforeAnalysis);
+        ASSERT_TRUE(bundleUndo->Redo()); EXPECT_EQ(Serialize(bundleWorkflow.document.project),analyzed);
+        CommandContext changedArea;
+        changedArea.Set("sample_id",bundleWorkflow.document.project.samples.at(0).id); changedArea.Set("area_m2",7.4e-6);
+        ASSERT_TRUE(bundleCommands->Execute(CommandID{"caplab.area"},std::move(changedArea)));
+        EXPECT_EQ(bundleWorkflow.document.project.analyses.at(0).at("status"),"stale");
+        ASSERT_TRUE(bundleUndo->Undo()); EXPECT_EQ(bundleWorkflow.document.project.analyses.at(0).at("status"),"valid");
+        bundleWorkflow.jobs=CreateRef<JobSystem>(nullptr,1);
+        ASSERT_TRUE(bundleCommands->Execute(CommandID{"caplab.analyze"})); bundleBus->ProcessQueue();
+        bundleWorkflow.Changed(); // A later edit must win over this worker result.
+        bundleWorkflow.jobs->Shutdown(); bundleWorkflow.OnUpdate(0);
+        EXPECT_EQ(bundleWorkflow.document.project.analyses.size(),1);
+        EXPECT_NE(bundleWorkflow.status.find("Stale revision"),std::string::npos);
+        JobContext cancelled({}, {}, {}, {}, [] {return true;});
+        DocumentJob cancelledAnalysis(Operation::Analyze,analyzed);
+        cancelledAnalysis.analysisOptions=bundleWorkflow.analysisOptions;
+        EXPECT_ANY_THROW(cancelledAnalysis.Execute(cancelled));
+
+        // M4: existing M1 input -> AS job -> approved points -> both Arrhenius models.
+        workflow.jobs=CreateRef<JobSystem>(nullptr,1);
+        workflow.analysisOptions={{"type","AS"},{"measurement_id",workflow.document.project.sweeps[0].id}};
+        ASSERT_TRUE(commands->Execute(CommandID{"caplab.analyze"})); bus->ProcessQueue();
+        workflow.jobs->Shutdown(); workflow.OnUpdate(0);
+        ASSERT_EQ(workflow.document.project.analyses.size(),1) << workflow.status;
+        EXPECT_EQ(workflow.document.project.analyses[0]["raw_D_F"].size(),40);
+        const auto asText=Serialize(workflow.document.project);
+        EXPECT_EQ(Serialize(Parse(asText)),asText);
+        const auto sampleId=workflow.document.project.samples[0].id;
+        auto edit=[&](Json value) {CommandContext c; c.Set("edit",std::move(value)); return commands->Execute(CommandID{"caplab.defect"},std::move(c));};
+        ASSERT_TRUE(edit({{"action","create"},{"sample_id",sampleId},{"name","M4 synthetic"}}));
+        const auto did=workflow.document.project.defects[0]["id"];
+        for (auto point : {std::pair{200.,100.},std::pair{250.,1000.},std::pair{300.,10000.}})
+            ASSERT_TRUE(edit({{"action","add"},{"defect_id",did},{"point",{{"measurement_id",nullptr},{"row_id",nullptr},
+                {"temperature_K",point.first},{"frequency_Hz",point.second},{"provenance","independent manual fixture"}}}}));
+        const auto mid=workflow.document.project.sweeps[0].id;
+        const auto measuredRow=AnalysisMeasurement(workflow.document.project,mid).at("row_ids").at(0);
+        ASSERT_TRUE(edit({{"action","add"},{"defect_id",did},{"point",{{"measurement_id",mid},{"row_id",measuredRow},
+            {"provenance","approved measured point"}}}}));
+        const auto preFit=Serialize(workflow.document.project);
+        workflow.jobs=CreateRef<JobSystem>(nullptr,1);
+        workflow.analysisOptions={{"type","Arrhenius"},{"defect_id",did},{"models",{"omega-T2","ProPho-compat"}}};
+        ASSERT_TRUE(commands->Execute(CommandID{"caplab.analyze"})); bus->ProcessQueue();
+        workflow.jobs->Shutdown(); workflow.OnUpdate(0);
+        ASSERT_EQ(workflow.document.project.analyses.size(),2) << workflow.status;
+        auto fitted=Serialize(workflow.document.project);
+        EXPECT_EQ(Serialize(Parse(fitted)),fitted);
+        EXPECT_EQ(workflow.document.project.analyses[1]["fits"].size(),2);
+        EXPECT_TRUE(workflow.document.project.analyses[1]["fits"][0]["sigma_cm2"].is_null());
+        ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(workflow.document.project),preFit);
+        ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(workflow.document.project),fitted);
+        const auto pid=workflow.document.project.defects[0]["points"][0]["id"];
+        ASSERT_TRUE(edit({{"action","enable"},{"defect_id",did},{"point_id",pid},{"enabled",false}}));
+        EXPECT_EQ(workflow.document.project.analyses[1]["status"],"stale");
+        ASSERT_TRUE(undo->Undo()); EXPECT_EQ(workflow.document.project.analyses[1]["status"],"valid");
+        ASSERT_TRUE(edit({{"action","delete"},{"defect_id",did}}));
+        EXPECT_EQ(workflow.document.project.analyses[1]["status"],"missing_input");
+        ASSERT_TRUE(undo->Undo()); EXPECT_EQ(workflow.document.project.analyses[1]["status"],"valid");
+        const auto savedInputs=Serialize(workflow.document.project);
+        workflow.document.project.sweeps.clear(); RefreshAnalyses(workflow.document.project);
+        EXPECT_EQ(workflow.document.project.analyses[0]["status"],"missing_input");
+        EXPECT_EQ(workflow.document.project.analyses[1]["status"],"missing_input");
+        workflow.document.project=Parse(savedInputs);
+        workflow.document.project.sweeps[0].temperature_K=101; RefreshAnalyses(workflow.document.project);
+        EXPECT_EQ(workflow.document.project.analyses[1]["status"],"stale");
+        JobContext m4context({}, {}, {}, {}, [] {return false;});
+        DocumentJob changedPoint(Operation::Analyze,Serialize(workflow.document.project));
+        changedPoint.analysisOptions=workflow.analysisOptions;
+        EXPECT_ANY_THROW(changedPoint.Execute(m4context));
+        workflow.document.project=Parse(savedInputs);
+        workflow.jobs=CreateRef<JobSystem>(nullptr,1);
+        ASSERT_TRUE(commands->Execute(CommandID{"caplab.analyze"})); bus->ProcessQueue();
+        workflow.Changed(); workflow.jobs->Shutdown(); workflow.OnUpdate(0);
+        EXPECT_EQ(workflow.document.project.analyses.size(),2);
+        EXPECT_NE(workflow.status.find("Stale revision"),std::string::npos);
+
 
 #else
         EXPECT_FALSE(PythonInterpreter::IsEmbeddingAvailable());

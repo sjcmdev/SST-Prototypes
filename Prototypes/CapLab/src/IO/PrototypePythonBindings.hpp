@@ -3,5 +3,6 @@
 #include "Core/JobSystem/JobContext.hpp"
 namespace SST::Prototypes::CapLab {
 void RegisterPrototypePythonModule();
+Json ReadAnalysis(const Json &measurement, const Json &options, const Json &xd, JobContext &context);
 Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const std::string &options = "");
 }

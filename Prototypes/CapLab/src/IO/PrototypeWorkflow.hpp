@@ -5,11 +5,13 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Domain/CapLabImport.hpp"
+#include "Domain/CapLabAnalysis.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
 #include "IO/LabASImporter.hpp"
 #include <sst/plotlab/GraphSnapshot.hpp>
 namespace SST::Prototypes::CapLab
 {
-    enum class Operation { Preview, Open, Save, Export };
+    enum class Operation { Preview, Open, Save, Export, Analyze };
     struct DocumentRequested : BusEvent { Operation operation = Operation::Preview; Path target; };
     struct DocumentChanged : BusEvent { pl::Id project; std::uint64_t revision; };
     class DocumentJob final : public IJob
@@ -23,6 +25,7 @@ namespace SST::Prototypes::CapLab
         std::string input;
         Path path;
         Json preview;
+        Json analysisOptions;
         std::shared_ptr<const pl::Importer> importer = std::make_shared<LabASImporter>();
         std::optional<Project> opened;
         char decimal = '.';
@@ -48,6 +51,10 @@ namespace SST::Prototypes::CapLab
         pl::ImporterRegistry importers;
         JobId activeJob = 0;
         std::string status;
+        Json analysisOptions = Json::object();
+        std::optional<Project> analysisDraft;
+        std::uint64_t analysisRevision = 0;
+        Ref<CommandRegistry> commands;
         std::optional<Json> preview;
         std::uint64_t previewRevision = 0;
         std::optional<double> temperature;

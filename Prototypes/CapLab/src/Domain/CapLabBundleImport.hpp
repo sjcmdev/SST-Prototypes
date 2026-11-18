@@ -63,6 +63,7 @@ namespace SST::Prototypes::CapLab
                     }
                     auto op = draft.engine->change("Import measurement",std::move(objects)); op.apply(*draft.engine);
                     auto meta = m; meta.erase("columns");
+                    meta["normalization_area_m2"] = s.at("area_m2");
                     for (auto key : {"groups","sweep_segments"}) if (meta.contains(key)) for (auto &g : meta[key])
                     {
                         Json ids = Json::array();

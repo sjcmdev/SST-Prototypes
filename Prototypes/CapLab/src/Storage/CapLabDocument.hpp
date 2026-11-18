@@ -23,7 +23,7 @@ namespace SST::Prototypes::CapLab
         Ref<pl::Project> engine = CreateRef<pl::Project>("CapLab");
         std::vector<Sample> samples;
         std::vector<FrequencySweep> sweeps;
-        Json measurements = Json::array(), historical = Json::array(), imports = Json::array();
+        Json measurements = Json::array(), historical = Json::array(), imports = Json::array(), analyses = Json::array(), defects = Json::array();
         pl::Id graph = 0;
     };
     inline Json Nullable(std::optional<double> value) { return value ? Json(*value) : Json(nullptr); }
@@ -174,6 +174,80 @@ namespace SST::Prototypes::CapLab
             };
             check(data);
         }
+        std::set<pl::Id> defectIds, pointIds;
+        for (const auto &d : p.defects) {
+            const auto id=d.at("id").get<pl::Id>();
+            if (!id || !defectIds.insert(id).second || p.engine->objects().contains(id) || historicalIds.contains(id) ||
+                !samples.contains(d.at("sample_id").get<pl::Id>()) || d.at("name").get<std::string>().empty() || !d.at("points").is_array())
+                throw std::runtime_error("Invalid defect.");
+            for (const auto &point : d.at("points")) {
+                const auto pid=point.at("id").get<pl::Id>();
+                if (!pid || !pointIds.insert(pid).second || p.engine->objects().contains(pid) || historicalIds.contains(pid)) throw std::runtime_error("Invalid point ID.");
+                if (point.at("temperature_K").is_null() || point.at("frequency_Hz").is_null()) throw std::runtime_error("Missing point T/f.");
+                Optional(point.at("temperature_K")); Optional(point.at("frequency_Hz"));
+                point.at("enabled").get<bool>();
+                if (point.at("provenance").get<std::string>().empty()) throw std::runtime_error("Missing point provenance.");
+                if (point.at("measurement_id").is_null()) {
+                    if (!point.at("row_id").is_null()) throw std::runtime_error("Orphan point row.");
+                } else {
+                    const auto mid=point.at("measurement_id").get<pl::Id>();
+                    for (const auto &m : p.measurements) if (m.at("id")==mid && m.at("sample_id")!=d.at("sample_id")) throw std::runtime_error("Cross-sample defect point.");
+                    for (const auto &m : p.sweeps) if (m.id==mid && m.sample_id!=d.at("sample_id")) throw std::runtime_error("Cross-sample defect point.");
+                    // Missing measurements remain referenced, never rebound to another row.
+                    if (sweeps.contains(mid)) {
+                        const auto &rows=std::get<pl::Worksheet>(p.engine->object(mid).data).rows;
+                        if (point.at("row_id").is_null() || std::find(rows.begin(),rows.end(),point.at("row_id").get<pl::Id>())==rows.end()) throw std::runtime_error("Invalid defect row.");
+                    }
+                }
+            }
+        }
+        for (auto id : pointIds) if (defectIds.contains(id)) throw std::runtime_error("Conflicting defect/point ID.");
+        std::set<pl::Id> analysisIds;
+        for (const auto &a : p.analyses) {
+            const auto id=a.at("id").get<pl::Id>();
+            if (!id || !analysisIds.insert(id).second || p.engine->objects().contains(id) || historicalIds.contains(id) || defectIds.contains(id) || pointIds.contains(id))
+                throw std::runtime_error("Invalid analysis identity.");
+            const std::string status=a.at("status");
+            if (status!="valid" && status!="conditional" && status!="invalid" && status!="stale" && status!="missing_input")
+                throw std::runtime_error("Invalid analysis status.");
+            if (a.at("kernel_version")!=1 || (a.at("type")!="CV" && a.at("type")!="DLCPPolynomial" && a.at("type")!="AS" && a.at("type")!="Arrhenius") ||
+                !a.at("inputs").is_array() || (a.at("inputs").empty() && a.at("type")!="Arrhenius") || !a.at("settings").is_object())
+                throw std::runtime_error("Invalid analysis contract.");
+            if (a.at("type")=="AS" || a.at("type")=="Arrhenius") {
+                if (!samples.contains(a.at("sample_id").get<pl::Id>())) throw std::runtime_error("Invalid AS sample.");
+                auto finiteArray=[](const Json &values) {
+                    if (!values.is_array()) throw std::runtime_error("Expected AS array.");
+                    for (const auto &value : values) if (!value.is_number() || !std::isfinite(value.get<double>())) throw std::runtime_error("Invalid AS value.");
+                };
+                if (a.at("type")=="AS") {
+                    const auto n=a.at("frequency_Hz").size();
+                    for (const auto *key : {"frequency_Hz","capacitance_F","processed_capacitance_F","D_F","raw_D_F"}) {
+                        finiteArray(a.at(key)); if (a.at(key).size()!=n) throw std::runtime_error("Unequal AS columns.");
+                    }
+                    if (n<2 || a.at("row_ids").size()!=n || !a.at("smoothing").is_object() || !a.at("candidates").is_array()) throw std::runtime_error("Invalid AS preprocessing.");
+                    for (const auto &c : a.at("candidates")) {
+                        if (c.at("frequency_Hz").is_null()) throw std::runtime_error("Missing candidate frequency.");
+                        Optional(c.at("frequency_Hz"));
+                        if (std::find(a.at("row_ids").begin(),a.at("row_ids").end(),c.at("row_id"))==a.at("row_ids").end()) throw std::runtime_error("Invalid candidate row.");
+                    }
+                } else {
+                    if (!a.at("defect").is_object() || !a.at("fits").is_array() || a.at("fits").empty()) throw std::runtime_error("Invalid Arrhenius result.");
+                    for (const auto &fit : a.at("fits")) {
+                        if (fit.at("model")!="omega-T2" && fit.at("model")!="ProPho-compat") throw std::runtime_error("Invalid Arrhenius model.");
+                        if (!std::isfinite(fit.at("E_a_eV").get<double>()) || fit.at("prefactor").is_null()) throw std::runtime_error("Invalid Arrhenius parameter.");
+                        Optional(fit.at("prefactor")); finiteArray(fit.at("residuals"));
+                        if (fit.at("dof").get<int>()==0 && (!fit.at("covariance").is_null() || !fit.at("linear_covariance").is_null())) throw std::runtime_error("Unavailable covariance must be null.");
+                    }
+                }
+            }
+            if (a.at("type")=="CV" || a.at("type")=="DLCPPolynomial") {
+            const auto &xd=a.at("x_d"); Optional(xd.at("value_m"));
+            if (xd.at("source")!="manual" && xd.at("source")!="CV" && xd.at("source")!="DLCP") throw std::runtime_error("Invalid x_d source.");
+            if (xd.at("policy")!="block" && xd.at("policy")!="linear" && xd.at("policy")!="nearest") throw std::runtime_error("Invalid x_d policy.");
+            }
+            for (const auto &g : a.at("graphs"))
+                if (!std::holds_alternative<pl::Graph>(p.engine->object(g.get<pl::Id>()).data)) throw std::runtime_error("Invalid analysis graph.");
+        }
         if (p.graph && !std::holds_alternative<pl::Graph>(p.engine->object(p.graph).data))
             throw std::runtime_error("Invalid graph reference.");
     }
@@ -185,7 +259,7 @@ namespace SST::Prototypes::CapLab
         for (const auto &s : p.sweeps) sweeps.push_back({{"id",s.id},{"sample_id",s.sample_id},{"variant","Cp_Rp"},
             {"frequency",s.frequency},{"capacitance",s.capacitance},{"resistance",s.resistance},{"temperature_K",Nullable(s.temperature_K)}});
         return Json{{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
-            {"samples",samples},{"sweeps",sweeps},{"graph",p.graph},{"engine",Json::parse(p.engine->toJson())},{"measurements",p.measurements},{"historical",p.historical},{"imports",p.imports}}.dump();
+            {"samples",samples},{"sweeps",sweeps},{"graph",p.graph},{"engine",Json::parse(p.engine->toJson())},{"measurements",p.measurements},{"historical",p.historical},{"imports",p.imports},{"analyses",p.analyses},{"defects",p.defects}}.dump();
     }
     inline Project Parse(const std::string &text)
     {
@@ -205,6 +279,8 @@ namespace SST::Prototypes::CapLab
         p.measurements = j.value("measurements",Json::array());
         p.historical = j.value("historical",Json::array());
         p.imports = j.value("imports",Json::array());
+        p.analyses = j.value("analyses",Json::array());
+        p.defects = j.value("defects",Json::array());
         Validate(p);
         return p;
     }

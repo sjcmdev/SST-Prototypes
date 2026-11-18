@@ -28,7 +28,7 @@ void SetupApplication(Application &application) {
         if (ImGui::BeginMenu("CapLab")) {
             for (const auto &[label, id] : {
                 std::pair{"Import lab AS...", "caplab.preview"}, {"Open project...", "caplab.open"},
-                {"Save project", "project.save"}, {"Export C-f PNG...", "caplab.export"}})
+                {"Save project", "project.save"}, {"Export active plot PNG...", "caplab.export"}})
                 if (ImGui::MenuItem(label)) (void)registry->Execute(CommandID{id});
             ImGui::EndMenu();
         }
