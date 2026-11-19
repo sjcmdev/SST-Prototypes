@@ -9,6 +9,7 @@
 #include <fstream>
 #include <future>
 #include <limits>
+#include <string_view>
 #include <nlohmann/json.hpp>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -150,12 +151,14 @@ namespace SST::ApplicationDetail
             return StructuredError{ErrorCategory::Validation, Severity::Error, "File was not opened.",
                 "Expected a project or data path.", "Supply a nonempty path.", "Application", "app.open.invalid_path"};
         // Apps may register app.open; retain existing path-aware project commands.
-        for (const char *id : {"app.open", "caplab.open", "jfm.project.open"})
+        for (const char *id : {"app.open", "caplab.open", "jfm.project.open", "scapslab.load"})
         {
             if (!commands.HasCommand(CommandID{id})) continue;
             CommandContext context;
             context.SetSource("Application --open / Python");
             context.Set("path", path);
+            if (std::string_view(id) == "scapslab.load")
+                context.Set("request", nlohmann::json{{"operation", "load"}, {"path", path.Utf8()}});
             return commands.Execute(CommandID{id}, std::move(context));
         }
         return StructuredError{ErrorCategory::Capability, Severity::Warning,
@@ -173,9 +176,9 @@ static std::string ExecuteApplicationRequest(const char *requestJson)
         {
             const auto request = json::parse(requestJson);
             const auto id = request.at("command_id").get<std::string>();
-            if (id != "app.screenshot" && id != "app.open")
+            if (id != "app.screenshot" && id != "app.open" && id != "app.layout.reset")
                 return json{{"ok", false}, {"error", {{"code", "app.command.unknown"}}}}.dump();
-            const auto path = request.at(id == "app.open" ? "path" : "path_png").get<std::string>();
+            const auto path = id == "app.layout.reset" ? std::string{} : request.at(id == "app.open" ? "path" : "path_png").get<std::string>();
             auto commands = ApplicationDetail::pythonCommands.lock();
             if (!commands || !Threading::IsMainThread())
                 return json{{"ok", false}, {"error", {{"code", id == "app.screenshot" ? "app.screenshot.no_gl_context" : "app.runtime.unavailable"},
@@ -188,12 +191,14 @@ static std::string ExecuteApplicationRequest(const char *requestJson)
                 return json{{"ok", true}, {"command_id", result.Value().id.value}, {"path", path}}.dump();
             }
             CommandContext context;
-            context.Set("path", Path::FromResolved(std::filesystem::u8path(path)));
+            if (id == "app.screenshot") context.Set("path", Path::FromResolved(std::filesystem::u8path(path)));
             context.SetSource("Python");
-            auto result = commands->Execute(CommandID{"app.screenshot"}, std::move(context));
+            auto result = commands->Execute(CommandID{id}, std::move(context));
             if (!result)
                 return json{{"ok", false}, {"error", {{"code", result.Error().code}, {"message", result.Error().technicalDetails}}}}.dump();
-            return json{{"ok", true}, {"command_id", "app.screenshot"}, {"path_png", path}}.dump();
+            json response{{"ok", true}, {"command_id", id}};
+            if (id == "app.screenshot") response["path_png"] = path;
+            return response.dump();
         }
         catch (const std::exception &error)
         {

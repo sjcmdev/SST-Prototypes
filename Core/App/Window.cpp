@@ -232,17 +232,39 @@ namespace SST
 		const bool currentlyMaximized = glfwGetWindowAttrib(m_Handle, GLFW_MAXIMIZED) != 0;
 		if (currentlyMaximized && !config.maximized)
 			glfwRestoreWindow(m_Handle);
-		else if (!currentlyMaximized && config.maximized)
-			glfwMaximizeWindow(m_Handle);
+
 
 		// Apply position and size only during initialization or if explicitly requested
 		if (applyPositionAndSize)
 		{
-			const bool hasExplicitPosition = config.x >= 0 && config.y >= 0;
-			if (hasExplicitPosition)
-				glfwSetWindowPos(m_Handle, config.x, config.y);
-
-			glfwSetWindowSize(m_Handle, std::max(320, config.width), std::max(240, config.height));
+            const bool hasExplicitPosition = config.x != -1 && config.y != -1;
+            int x = config.x, y = config.y;
+            if (!hasExplicitPosition) glfwGetWindowPos(m_Handle, &x, &y);
+            int count = 0; auto monitors = glfwGetMonitors(&count);
+            GLFWmonitor *monitor = glfwGetPrimaryMonitor();
+            int bestOverlap = 0;
+            for (int i = 0; i < count; ++i)
+            {
+                int mx, my, mw, mh; glfwGetMonitorWorkarea(monitors[i], &mx, &my, &mw, &mh);
+                const int overlap = std::max(0, std::min(x + config.width, mx + mw) - std::max(x, mx)) *
+                    std::max(0, std::min(y + config.height, my + mh) - std::max(y, my));
+                if (overlap > bestOverlap) { bestOverlap = overlap; monitor = monitors[i]; }
+            }
+            int width = std::max(320, config.width), height = std::max(240, config.height);
+            if (monitor)
+            {
+                int mx, my, mw, mh, left, top, right, bottom;
+                glfwGetMonitorWorkarea(monitor, &mx, &my, &mw, &mh);
+                glfwGetWindowFrameSize(m_Handle, &left, &top, &right, &bottom);
+                width = std::min(width, std::max(1, mw - left - right));
+                height = std::min(height, std::max(1, mh - top - bottom));
+                x = std::clamp(x, mx + left, mx + mw - right - width);
+                y = std::clamp(y, my + top, my + mh - bottom - height);
+            }
+            // Apply restored geometry first: resizing after maximize overrides Windows' work-area sizing.
+            if (currentlyMaximized) glfwRestoreWindow(m_Handle);
+            glfwSetWindowSize(m_Handle, width, height);
+            glfwSetWindowPos(m_Handle, x, y);
 
 			DS_LOG_INFO(
 				"Window config applied (full): title=\"{}\" size={}x{} position=({}, {}) explicit_position={} maximized={}",
@@ -261,6 +283,7 @@ namespace SST
 				config.title,
 				config.maximized);
 		}
+        if (config.maximized) glfwMaximizeWindow(m_Handle);
 	}
 
 	void Window::CaptureConfig(WindowConfig &config) const

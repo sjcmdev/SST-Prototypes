@@ -7,6 +7,16 @@
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "Core/ScientificRuntime/Python/PythonGilScope.hpp"
+#include "Core/Utils/FramebufferScreenshot.hpp"
+#include "Core/Threading/ThreadAffinity.hpp"
+#include "Presentation/Panels/WindowWorkspace.hpp"
+#include "Presentation/Panels/HostedEditorWindow.hpp"
+
+namespace {
+    const bool applicationModuleRegistered = [] {
+        SST::ApplicationDetail::RegisterApplicationPythonModule(); return true;
+    }();
+}
 
 namespace SST::Prototypes::WindowChromeLab
 {
@@ -14,6 +24,15 @@ namespace SST::Prototypes::WindowChromeLab
     {
 #if DS_PYTHON_CAPI_AVAILABLE
         RegisterPrototypePythonModule();
+        Threading::SetMainThread();
+        PanelRegistry panels;
+        auto workspace = CreateRef<WindowWorkspace>(panels);
+        auto commands = CreateRef<CommandRegistry>();
+        ASSERT_TRUE(workspace->Bind(commands, {}));
+        auto window = CreateRef<HostedEditorWindow>("Headless tool");
+        const auto id = panels.AddExisting(window);
+        auto state = window->GetState(); state.pinned = true; state.visible = false; window->ApplyState(state);
+        ApplicationDetail::RegisterScreenshotCommand(commands, {});
         PythonInterpreter interpreter;
         ASSERT_TRUE(interpreter.Start());
         PythonGilAcquireScope gil;
@@ -25,7 +44,11 @@ namespace SST::Prototypes::WindowChromeLab
         Py_DECREF(root);
         ASSERT_EQ(PyRun_SimpleString(
             "from prototype_example import conductivity\n"
-            "assert abs(conductivity(2.0) - 4.4860945752) < 1e-12\n"), 0);
+            "assert abs(conductivity(2.0) - 4.4860945752) < 1e-12\n"
+            "import json, sst_application\n"
+            "response = json.loads(sst_application.execute(json.dumps({'command_id': 'app.layout.reset'})))\n"
+            "assert response == {'ok': True, 'command_id': 'app.layout.reset'}, response\n"), 0);
+        EXPECT_FALSE(window->GetState().pinned); EXPECT_TRUE(window->IsVisible()); EXPECT_EQ(window->GetId(), id);
         if (std::getenv("SST_RUN_PYTEST"))
             ASSERT_EQ(PyRun_SimpleString(
                 "import json, os, sys\n"

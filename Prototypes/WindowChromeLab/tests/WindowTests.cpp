@@ -4,6 +4,7 @@
 #include "Core/Input/ContextManager.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include <nlohmann/json.hpp>
+#include "Core/Utils/FramebufferScreenshot.hpp"
 
 namespace SST
 {
@@ -39,6 +40,24 @@ namespace SST
         Ref<EditorWindow> get(WindowId id) { return workspace->Find(id); }
         Result<void> act(WindowAction action, WindowId id = 0) { return workspace->Execute({action, id}); }
     };
+    TEST_F(WindowStateTest, AuxiliaryWindowsStartHiddenAndAreNotPersisted)
+    {
+        const auto id = panels.Add<TestWindow>("auxiliary.import", WindowCapabilities{.auxiliary = true});
+        EXPECT_FALSE(get(id)->IsVisible());
+        ASSERT_TRUE(act(WindowAction::Activate, id)); EXPECT_TRUE(get(id)->IsVisible());
+        const auto saved = nlohmann::json::parse(workspace->Save());
+        for (const auto &item : saved["windows"]) EXPECT_NE(item["id"].get<WindowId>(), id);
+        ASSERT_TRUE(act(WindowAction::Close, id)); EXPECT_FALSE(get(id)->IsVisible());
+    }
+    TEST_F(WindowStateTest, ResetLayoutCommandWorksWithoutImGui)
+    {
+        const auto initial = get(a)->GetState();
+        ASSERT_TRUE(act(WindowAction::Maximize, a)); ASSERT_TRUE(act(WindowAction::Pin, b));
+        ASSERT_TRUE(act(WindowAction::Close, a)); ASSERT_TRUE(act(WindowAction::LockLayout));
+        ASSERT_TRUE(commands->Execute(CommandID{"app.layout.reset"}));
+        EXPECT_EQ(get(a)->GetState(), initial); EXPECT_FALSE(get(b)->GetState().pinned); EXPECT_FALSE(workspace->IsLocked());
+        EXPECT_EQ(get(a)->GetId(), a);
+    }
     TEST_F(WindowStateTest, MinimizeMaximizedThenRestorePreservesOriginalGeometryAndDock)
     {
         auto initial = get(a)->GetState(); initial.x = 73; initial.dockId = 42; get(a)->ApplyState(initial);
@@ -195,6 +214,33 @@ namespace SST
         std::string Description() const override { return "Clone engine document"; }
         Ref<int> count;
     };
+    TEST_F(WindowStateTest, StartupOpenAdaptsScapsLoadRequest)
+    {
+        nlohmann::json request;
+        auto count = CreateRef<int>(0);
+        ASSERT_TRUE(commands->Register({CommandID{"scapslab.load"}, "Load ScapsLab project"},
+            [&request, count](CommandContext &context) {
+                if (auto value = context.TryGet<nlohmann::json>("request")) request = *value;
+                return CreateUnique<EngineCommand>(count);
+            }));
+        const Path path("C:/fixtures/device.yaml");
+        auto opened = ApplicationDetail::OpenStartupFile(*commands, path);
+        ASSERT_TRUE(opened); EXPECT_EQ(opened.Value().id.value, "scapslab.load");
+        const nlohmann::json expected{{"operation", "load"}, {"path", path.Utf8()}};
+        EXPECT_EQ(request, expected); EXPECT_EQ(*count, 1);
+    }
+    TEST_F(WindowStateTest, AuxiliaryFollowsSuccessfulOpenAndConfirmCommands)
+    {
+        auto count = CreateRef<int>(0);
+        for (const auto *name : {"import.preview", "import.confirm"})
+            ASSERT_TRUE(commands->Register({CommandID{name}, name}, [count](CommandContext &) { return CreateUnique<EngineCommand>(count); }));
+        const auto id = panels.Add<TestWindow>("import", WindowCapabilities{.auxiliary = true,
+            .openCommand = "import.preview", .closeCommand = "import.confirm"});
+        ASSERT_TRUE(commands->Execute(CommandID{"import.preview"})); EXPECT_TRUE(get(id)->IsVisible());
+        ASSERT_TRUE(act(WindowAction::Minimize, id));
+        ASSERT_TRUE(commands->Execute(CommandID{"import.preview"})); EXPECT_EQ(get(id)->GetState().mode, WindowMode::Normal);
+        ASSERT_TRUE(commands->Execute(CommandID{"import.confirm"})); EXPECT_FALSE(get(id)->IsVisible());
+    }
     class EngineWindow final : public TestWindow
     {
     public:

@@ -14,7 +14,7 @@ namespace SST
             bool hovered = false, held = false;
             const auto id = window->GetID(label);
             ImGui::PushClipRect(rect.Min, rect.Max, false);
-            const bool pressed = enabled && ImGui::ButtonBehavior(rect, id, &hovered, &held);
+            const bool pressed = ImGui::ItemAdd(rect, id) && enabled && ImGui::ButtonBehavior(rect, id, &hovered, &held);
             auto *draw = window->DrawList;
             draw->AddRectFilled(rect.Min, rect.Max, ImGui::GetColorU32(hovered ?
                 (held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered) : ImGuiCol_TitleBgActive));
@@ -35,31 +35,40 @@ namespace SST
     void EditorWindow::Render()
     {
         auto workspace = m_Workspace.lock();
+        if (m_Capabilities.auxiliary && ImGui::GetCurrentContext())
+        {
+            ImGui::ClearWindowSettings(ImGuiName().c_str());
+            ImGui::ClearWindowSettings(GetTitle().c_str());
+        }
         if (!IsVisible() || m_State.mode == WindowMode::Minimized) { OnContentSkipped(); return; }
         auto *viewport = ImGui::GetMainViewport();
         const bool maximized = m_State.mode == WindowMode::Maximized;
         const bool locked = workspace && workspace->IsLocked();
         ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | WindowFlags();
+        if (!(flags & ImGuiWindowFlags_NoScrollbar)) flags |= ImGuiWindowFlags_AlwaysVerticalScrollbar;
+        if (m_Capabilities.auxiliary) flags |= ImGuiWindowFlags_NoSavedSettings;
         if (m_State.pinned || locked || maximized) flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
-        if (m_State.pinned || maximized || (locked && m_State.dockId == 0)) flags |= ImGuiWindowFlags_NoDocking;
+        if (maximized || ((m_State.pinned || locked) && m_State.dockId == 0)) flags |= ImGuiWindowFlags_NoDocking;
         if (!m_Capabilities.dockable) flags |= ImGuiWindowFlags_NoDocking;
         if (IsDirty()) flags |= ImGuiWindowFlags_UnsavedDocument;
         ImGuiWindowClass windowClass;
         if (locked || m_State.pinned)
             windowClass.DockNodeFlagsOverrideSet = int(ImGuiDockNodeFlags_NoDocking) | int(ImGuiDockNodeFlags_NoResize) | int(ImGuiDockNodeFlags_NoUndocking);
-        if (m_State.pinned) windowClass.ViewportFlagsOverrideSet |= ImGuiViewportFlags_TopMost;
         ImGui::SetNextWindowClass(&windowClass);
         if (maximized)
         {
+            // Keep the dock node and its split ratios while this view temporarily floats.
+            if (auto *native = ImGui::FindWindowByName(ImGuiName().c_str()); native && native->DockNode)
+                ImGui::DockContextProcessUndockWindow(GImGui, native, false);
             ImGui::SetNextWindowViewport(viewport->ID);
             ImGui::SetNextWindowDockID(0, ImGuiCond_Always);
             ImGui::SetNextWindowPos(viewport->WorkPos);
             ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, std::max(1.0f, viewport->WorkSize.y - ImGui::GetFrameHeightWithSpacing())));
         }
-        else if (m_ApplyGeometry || m_State.pinned)
+        else if (m_ApplyGeometry)
         {
-            ImGui::SetNextWindowDockID(m_State.pinned ? 0 : m_State.dockId, ImGuiCond_Always);
-            if (m_State.pinned || m_State.dockId == 0)
+            ImGui::SetNextWindowDockID(m_State.dockId, ImGuiCond_Always);
+            if (m_State.dockId == 0)
             {
                 ImGui::SetNextWindowPos(ImVec2(m_State.x, m_State.y));
                 ImGui::SetNextWindowSize(ImVec2(m_State.width, m_State.height));
@@ -69,7 +78,7 @@ namespace SST
             ImGui::SetNextWindowSize(ImVec2(m_State.width, m_State.height), ImGuiCond_FirstUseEver);
         m_ApplyGeometry = false;
         const auto name = ImGuiName();
-        if (!ImGui::FindWindowByName(name.c_str()) && !ImGui::FindWindowSettingsByID(ImHashStr(name.c_str())))
+        if (!m_Capabilities.auxiliary && !ImGui::FindWindowByName(name.c_str()) && !ImGui::FindWindowSettingsByID(ImHashStr(name.c_str())))
             if (const auto *legacy = ImGui::FindWindowSettingsByID(ImHashStr(GetTitle().c_str())))
             {
                 const auto saved = *legacy; // Creating settings may reallocate ImGui's settings storage.
@@ -77,10 +86,8 @@ namespace SST
                 const auto id = settings->ID;
                 *settings = saved; settings->ID = id; settings->WantApply = true;
             }
-        bool open = true;
         const bool content = ImGui::Begin(name.c_str(), nullptr, flags);
         auto *window = ImGui::GetCurrentWindow();
-        if (!open) Request({WindowAction::Close});
         if (workspace && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)) workspace->SetActive(m_Id);
         if (!maximized && !m_State.pinned && !m_ApplyGeometry)
         {
@@ -91,10 +98,12 @@ namespace SST
         const ImRect title = window->DockNode ? window->DC.DockTabItemRect : window->TitleBarRect();
         const bool titleHovered = title.Contains(ImGui::GetMousePos()) &&
             (ImGui::GetHoveredID() == window->TabId || ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows));
-        // Proposal: title/tab gestures are independent of the base state contract.
-        if (titleHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && m_Capabilities.maximizable)
+        // Action buttons must not also trigger the title bar's double-click gesture.
+        const bool titleGestureHovered = titleHovered && (window->DockNode ||
+            ImGui::GetMousePos().x < title.Max.x - 4 * title.GetHeight());
+        if (titleGestureHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && m_Capabilities.maximizable)
             Request({WindowAction::Maximize});
-        if (open && window->DockNode && titleHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && m_Capabilities.closable)
+        if (window->DockNode && titleHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && m_Capabilities.closable)
             Request({WindowAction::Close});
 
         if (workspace)
@@ -135,7 +144,7 @@ namespace SST
                 button(ICON_FA_WINDOW_MINIMIZE, "Minimize", WindowAction::Minimize, m_Capabilities.minimizable);
                 button(maximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE, maximized ? "Restore" : "Maximize",
                     WindowAction::Maximize, m_Capabilities.maximizable && !locked && !m_State.pinned);
-                button(ICON_FA_THUMBTACK, "Pin", WindowAction::Pin, m_Capabilities.pinnable && !locked);
+                button(ICON_FA_THUMBTACK, m_State.pinned ? "Unpin" : "Pin", WindowAction::Pin, m_Capabilities.pinnable && !locked);
                 button(ICON_FA_XMARK, "Close", WindowAction::Close, m_Capabilities.closable);
                 ImGui::PopID();
                 ImGui::DockNodeEndAmendTabBar();
@@ -147,7 +156,7 @@ namespace SST
                 float right = bar.Max.x;
                 for (auto [label, action, enabled, tooltip] : {
                     std::tuple{ICON_FA_XMARK, WindowAction::Close, m_Capabilities.closable, "Close"},
-                    std::tuple{ICON_FA_THUMBTACK, WindowAction::Pin, m_Capabilities.pinnable && !locked, "Pin"},
+                    std::tuple{ICON_FA_THUMBTACK, WindowAction::Pin, m_Capabilities.pinnable && !locked, m_State.pinned ? "Unpin" : "Pin"},
                     std::tuple{maximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE, WindowAction::Maximize, m_Capabilities.maximizable && !locked && !m_State.pinned, maximized ? "Restore" : "Maximize"},
                     std::tuple{ICON_FA_WINDOW_MINIMIZE, WindowAction::Minimize, m_Capabilities.minimizable, "Minimize"}})
                 {
@@ -160,6 +169,7 @@ namespace SST
         }
         else OnContentSkipped();
         ImGui::End();
+        if (maximized) window->DockId = m_State.dockId; // Preserve the native INI reference as well as Core state.
     }
 
     void WindowWorkspace::RenderContextMenu(EditorWindow &window)
@@ -222,6 +232,7 @@ namespace SST
             std::pair{"Tile horizontally", WindowAction::TileHorizontal}, std::pair{"Tile vertically", WindowAction::TileVertical},
             std::pair{"Show minimized", WindowAction::ShowMinimized}})
             if (ImGui::MenuItem(label)) (void)Execute({action});
+        if (ImGui::MenuItem("Reset layout")) (void)Execute({WindowAction::ResetLayout});
         if (ImGui::MenuItem("Lock layout", nullptr, m_Locked)) (void)Execute({WindowAction::LockLayout});
         ImGui::Separator();
         ImGui::InputText("Workspace name", m_WorkspaceName.data(), m_WorkspaceName.size());
@@ -243,7 +254,8 @@ namespace SST
             window->m_Workspace = weak_from_this();
             if (auto *gui = ImGui::FindWindowByName(window->ImGuiName().c_str()))
             {
-                if (window->GetState().pinned && window->IsVisible()) ImGui::BringWindowToDisplayFront(gui);
+                if (window->GetState().pinned && window->IsVisible() && !gui->DockNode && GImGui->OpenPopupStack.empty())
+                    ImGui::BringWindowToDisplayFront(gui);
                 if (window->GetId() == m_Active && m_FocusRequested)
                 { ImGui::FocusWindow(gui); m_FocusRequested = false; }
             }
@@ -321,6 +333,10 @@ namespace SST
         if (!ImGui::GetCurrentContext() || ImGui::FindSettingsHandler("SSTWindows")) return;
         ImGuiSettingsHandler handler;
         handler.TypeName = "SSTWindows"; handler.TypeHash = ImHashStr(handler.TypeName); handler.UserData = this;
+        handler.ClearAllFn = [](ImGuiContext *, ImGuiSettingsHandler *h) {
+            auto &workspace = *static_cast<WindowWorkspace *>(h->UserData);
+            workspace.ResetWindowStates();
+        };
         handler.ReadOpenFn = [](ImGuiContext *, ImGuiSettingsHandler *h, const char *name) -> void * {
             return std::strcmp(name, "Workspace") == 0 ? h->UserData : nullptr;
         };

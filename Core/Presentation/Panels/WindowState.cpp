@@ -4,6 +4,7 @@
 #include "Core/Input/KeymapResolver.hpp"
 #include "IconsFontAwesome6.h"
 #include <nlohmann/json.hpp>
+#include <imgui_internal.h>
 #include <cmath>
 #include <limits>
 
@@ -79,7 +80,7 @@ namespace SST
             bool IsUndoable() const noexcept override
             {
                 return m_Request.action != WindowAction::Reveal && m_Request.action != WindowAction::SaveWorkspace &&
-                    m_Request.action != WindowAction::LoadWorkspace && m_Request.action != WindowAction::Next &&
+                    m_Request.action != WindowAction::LoadWorkspace && m_Request.action != WindowAction::ResetLayout && m_Request.action != WindowAction::Next &&
                     m_Request.action != WindowAction::Previous && m_Request.action != WindowAction::Activate;
             }
         private:
@@ -97,10 +98,10 @@ namespace SST
     }
 
     EditorWindow::EditorWindow(std::string type, std::string shortName, bool visible, WindowCapabilities capabilities)
-        : IPanel(shortName, visible), m_Type(std::move(type)), m_Capabilities(capabilities)
+        : IPanel(shortName, visible && !capabilities.auxiliary), m_Type(std::move(type)), m_Capabilities(capabilities)
     {
         m_State.shortName = m_State.longName = std::move(shortName);
-        m_State.visible = visible;
+        m_State.visible = IsVisible();
     }
     EditorWindow::EditorWindow(const EditorWindow &other)
         : IPanel(other.GetTitle(), other.IsVisible()), m_Type(other.m_Type),
@@ -149,15 +150,29 @@ namespace SST
             window->ApplyState(item.state); window->m_Workspace = weak_from_this();
         }
         m_Locked = snapshot.locked; m_Active = snapshot.active; m_FocusRequested = m_Active != 0;
+        if (ImGui::GetCurrentContext()) ImGui::MarkIniSettingsDirty();
     }
     Result<void> WindowWorkspace::Bind(Ref<CommandRegistry> commands, Ref<KeymapResolver> keymap)
     {
+        if (auto previous = m_Commands.lock(); previous && m_CommandObserver) previous->RemoveObserver(m_CommandObserver);
         m_Commands = commands;
         auto weak = weak_from_this();
+        m_CommandObserver = commands->AddObserver([weak](const CommandExecutionEvent &event) {
+            auto workspace = weak.lock();
+            if (!workspace || event.state != CommandExecutionState::Succeeded) return;
+            for (auto &window : workspace->Windows())
+            {
+                const auto &cap = window->Capabilities();
+                if (!cap.auxiliary) continue;
+                if (cap.openCommand == event.id.value) (void)workspace->Apply({WindowAction::Activate, window->GetId()});
+                if (cap.closeCommand == event.id.value) (void)workspace->Apply({WindowAction::Close, window->GetId()});
+            }
+        });
         for (const auto &[id, name, action] : {
             std::tuple{"window.action", "EditorWindow action", WindowAction::Activate},
             std::tuple{"window.next", "Next window", WindowAction::Next},
-            std::tuple{"window.previous", "Previous window", WindowAction::Previous}})
+            std::tuple{"window.previous", "Previous window", WindowAction::Previous},
+            std::tuple{"app.layout.reset", "Reset layout", WindowAction::ResetLayout}})
         {
             auto result = commands->Register({CommandID{id}, name, "EditorWindow", {}, {},
                     action == WindowAction::Activate ? CommandFlags::HiddenFromPalette : CommandFlags::None},
@@ -180,17 +195,41 @@ namespace SST
         auto commands = m_Commands.lock();
         if (!commands) return invalid("EditorWindow commands are unavailable.");
         CommandContext context; context.Set("window.request", request);
-        auto result = commands->Execute(CommandID{"window.action"}, std::move(context));
+        auto result = commands->Execute(CommandID{request.action == WindowAction::ResetLayout ? "app.layout.reset" : "window.action"}, std::move(context));
         if (!result) { m_Error = result.Error().userMessage; return result.Error(); }
-        m_Error.clear(); return {};
+        m_Error.clear();
+        if (ImGui::GetCurrentContext()) ImGui::MarkIniSettingsDirty();
+        return {};
     }
     void WindowWorkspace::SetAvailableArea(float x, float y, float width, float height)
     {
         m_X = x; m_Y = y; m_Width = std::max(1.0f, width); m_Height = std::max(1.0f, height);
     }
+    void WindowWorkspace::ResetWindowStates()
+    {
+        m_PendingSettings.clear(); m_FrozenSettings.clear();
+        m_Locked = false; m_Active = 0; m_FocusRequested = false;
+        for (auto &window : Windows())
+        {
+            auto state = window->m_DefaultState;
+            if (!state.dockId)
+            {
+                state.width = std::clamp(state.width, 1.f, m_Width); state.height = std::clamp(state.height, 1.f, m_Height);
+                state.x = std::clamp(state.x, m_X, m_X + m_Width - state.width);
+                state.y = std::clamp(state.y, m_Y, m_Y + m_Height - state.height);
+            }
+            window->ApplyState(state);
+        }
+    }
     Result<void> WindowWorkspace::Apply(const WindowRequest &request, Unique<ICommand> *contentCommand)
     {
         const auto action = request.action;
+        if (action == WindowAction::ResetLayout)
+        {
+            ResetWindowStates();
+            if (ImGui::GetCurrentContext()) { ImGui::ClearIniSettings(); ImGui::MarkIniSettingsDirty(); }
+            return {};
+        }
         auto windows = Windows();
         auto window = Find(request.id ? request.id : m_Active);
         if (action == WindowAction::LockLayout) { m_Locked = !m_Locked; return {}; }
@@ -298,7 +337,7 @@ namespace SST
     std::string WindowWorkspace::Save() const
     {
         nlohmann::json result = {{"version", 1}, {"locked", m_Locked}, {"windows", nlohmann::json::array()}};
-        for (const auto &w : Windows()) result["windows"].push_back({{"id", w->GetId()}, {"type", w->GetType()},
+        for (const auto &w : Windows()) if (!w->Capabilities().auxiliary) result["windows"].push_back({{"id", w->GetId()}, {"type", w->GetType()},
             {"state", encode(w->GetState())}, {"view", w->SaveViewState()}});
         return result.dump();
     }
@@ -337,6 +376,7 @@ namespace SST
                 }
                 auto state = decode(item.at("state"));
                 const auto &cap = window->Capabilities();
+                if (cap.auxiliary) state = window->m_DefaultState;
                 if ((!cap.pinnable && state.pinned) || (!cap.minimizable && state.mode == WindowMode::Minimized) ||
                     (!cap.maximizable && state.mode == WindowMode::Maximized) || (!cap.closable && !state.visible) ||
                     (!cap.dockable && state.dockId)) return invalid("Saved state exceeds window capabilities.");

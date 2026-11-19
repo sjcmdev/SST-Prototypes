@@ -5,6 +5,7 @@
 #include "Presentation/Panels/WindowWorkspace.hpp"
 #include "Presentation/Panels/HostedEditorWindow.hpp"
 #include <functional>
+#include <imgui.h>
 #include <map>
 
 namespace SST
@@ -39,7 +40,7 @@ namespace SST
                 else ++it;
         }
         ~HostedWindows() { for (auto &[key, entry] : m_Windows) entry.window->SetVisible(false); }
-        bool Render(const std::string &name, bool &open, int flags, const std::function<void()> &content)
+        bool Render(const std::string &name, bool &open, int flags, const std::function<void()> &content, bool auxiliary = false)
         {
             auto &editor = Application::Get().GetEditorLayer();
             const auto suffix = name.rfind("###");
@@ -47,7 +48,7 @@ namespace SST
             auto &window = entry.window;
             if (!window)
             {
-                auto candidate = CreateRef<HostedEditorWindow>(name, m_PreserveIdentity);
+                auto candidate = CreateRef<HostedEditorWindow>(name, m_PreserveIdentity, auxiliary || (flags & ImGuiWindowFlags_NoSavedSettings));
                 for (auto &saved : editor.GetWindows()->Windows())
                     if (auto hosted = std::dynamic_pointer_cast<HostedEditorWindow>(saved);
                         hosted && !hosted->claimed && hosted->GetType() == candidate->GetType() &&
@@ -59,6 +60,12 @@ namespace SST
                 {
                     window = std::move(candidate);
                     editor.RegisterWindow(window);
+                    window->SetVisible(open);
+                }
+                window->m_Capabilities.auxiliary = auxiliary || (flags & ImGuiWindowFlags_NoSavedSettings);
+                if (window->m_Capabilities.auxiliary)
+                {
+                    window->m_DefaultState.visible = false;
                     window->SetVisible(open);
                 }
                 window->claimed = true;

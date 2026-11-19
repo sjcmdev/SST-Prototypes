@@ -10,9 +10,9 @@ namespace SST
     class HostedEditorWindow final : public EditorWindow
     {
     public:
-        explicit HostedEditorWindow(const std::string &legacyName, bool preserveIdentity = true)
+        explicit HostedEditorWindow(const std::string &legacyName, bool preserveIdentity = true, bool auxiliary = false)
             : EditorWindow("hosted." + legacyName.substr(legacyName.rfind("###") == std::string::npos ? 0 : legacyName.rfind("###")), legacyName.substr(0, legacyName.rfind("###")), true,
-                {.renamable = false}), m_LegacyName(legacyName), m_PreserveIdentity(preserveIdentity) {}
+                {.renamable = false, .auxiliary = auxiliary}), m_LegacyName(legacyName), m_PreserveIdentity(preserveIdentity) {}
         void SetLegacyName(const std::string &name)
         {
             m_LegacyName = name;

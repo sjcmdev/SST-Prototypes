@@ -13,7 +13,11 @@ namespace SST
             std::any_of(m_Entries.begin(), m_Entries.end(), [&](const Entry &entry) { return entry.panel == panel; })) return 0;
 		if (id == 0) id = m_NextId++;
 		m_NextId = std::max(m_NextId, id + 1);
-		if (auto window = std::dynamic_pointer_cast<EditorWindow>(panel)) window->m_Id = id;
+		if (auto window = std::dynamic_pointer_cast<EditorWindow>(panel))
+        {
+            if (window->m_Id == 0) window->m_DefaultState = window->GetState();
+            window->m_Id = id;
+        }
 		m_Entries.push_back({id, std::move(panel)});
 		return id;
 	}

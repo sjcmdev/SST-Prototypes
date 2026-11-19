@@ -17,6 +17,8 @@ protected:
 // application.GetEditorLayer().RegisterPanel<Results>();
 ```
 
+Auxiliary windows declare `{.auxiliary = true}`. They start hidden and are excluded from persisted workspaces. Optional `openCommand` / `closeCommand` IDs follow successful Core command execution (for example, preview / confirm import); failed confirmation keeps the window open. Hosted dialogs use `ImGuiWindowFlags_NoSavedSettings` for the same persistence policy. Other hosted views retain normal layout persistence.
+
 The base supplies Begin/End, title buttons, dock-tab actions and context menu. Declare capabilities in the constructor. Override `RenderContextMenu()` to append app items, `RevealInProject()` to select the backing object, and `IsDirty()` to read document state. Closing hides the view and preserves data; dirty close/bulk close requires confirmation. Document saving belongs to the application.
 
 Window and dock-tab labels start with the window icon, before the short title. Minimize, maximize/restore, pin and close stay at the right edge of the title/tab bar. The icon is display text; `###sst-window-ID` remains the stable ImGui identity. Dock actions share the dock node's ID scope so switching active tabs preserves their IDs.
@@ -31,6 +33,8 @@ Use `editor.GetWindows()->Execute(WindowRequest{WindowAction::Minimize, id})`. C
 
 `Save()` / `Load(json)` work without ImGui and belong in project IO; PrototypeTemplate demonstrates UI-thread capture before a background save and restoration after successful open. Applications own document content. `SaveViewState()` / `LoadViewState()` store view options only; validate before mutation, return false on invalid input, and accept your own saved state for rollback.
 
+On Windows, each executable keeps its layout at `%LOCALAPPDATA%/Semiconductor Studio/<executable-stem>/imgui.ini`; an existing portable layout is copied on first use. Screenshot runs retain their portable layout path, so existing sandboxed captures do not modify the user profile. Core saves changed settings periodically and on shutdown. `app.layout.reset` is shared by Window > Reset layout and `sst_application.execute` (JSON); it also works on a headless workspace. It clears docking and restores the registered window defaults, including visibility and pin/maximize state.
+
 The `SSTWindows` settings handler adds state and named workspaces to the existing layout INI, using Core IO/config persistence. INI owns the dock tree; headless JSON owns window state. Named workspaces contain layout/view options, not document snapshots. Invalid/conflicting IDs, types and state are rejected. View-only copies can be recreated by the factory; project IO must restore engine-backed copies first. Windows missing from an older workspace are retained. Editor detach freezes state for ImGuiLayer's final save.
 
 ## Migration and limits
@@ -39,4 +43,4 @@ PlotLab and JFM application panels use the shared chrome. Static panels implemen
 
 Existing identities remain unchanged for hosted views; duplicated owners receive separate IDs. Static panels with plain legacy names import their INI geometry and dock ID into `###sst-window-ID` on first render. The hosted factory restores workspace entries before owners reattach their content. JFM's standalone `solver-to-integrate/gui.cpp` is outside the application build and retains its own windows.
 
-No ImGui patch. Pin freezes geometry and floats/restores docking; maximize uses the main viewport. Arrangement skips pinned/minimized/closed views. The minimized strip has one row. Short names label titles; long names appear in context menus. Proposal removal points are listed in WindowChromeLab/REPORT.md.
+No ImGui patch. Pin freezes floating geometry and preserves docking; maximize uses the main viewport and retains the docking reference for restore. Arrangement skips pinned/minimized/closed views. The minimized strip has one row. Short names label titles; long names appear in context menus. Proposal removal points are listed in WindowChromeLab/REPORT.md.

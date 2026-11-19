@@ -23,6 +23,8 @@ namespace SST
         bool closable = true, renamable = true, duplicable = false;
         bool minimizable = true, maximizable = true, pinnable = true, dockable = true;
         bool projectItem = false;
+        bool auxiliary = false;
+        std::string openCommand, closeCommand;
     };
     struct WindowState
     {
@@ -39,7 +41,7 @@ namespace SST
         Close, Minimize, Maximize, Restore, Pin, Rename, Duplicate, Float, Dock,
         CloseOthers, CloseType, Reveal, Activate, Next, Previous,
         Cascade, TileHorizontal, TileVertical, ShowMinimized, LockLayout,
-        SaveWorkspace, LoadWorkspace
+        SaveWorkspace, LoadWorkspace, ResetLayout
     };
     struct WindowRequest
     {
@@ -81,11 +83,12 @@ namespace SST
 
     private:
         friend class PanelRegistry;
+        friend class HostedWindows;
         friend class WindowWorkspace;
         WindowId m_Id = 0;
         std::string m_Type;
         WindowCapabilities m_Capabilities;
-        WindowState m_State;
+        WindowState m_State, m_DefaultState;
         WeakRef<WindowWorkspace> m_Workspace;
         bool m_ApplyGeometry = false;
     };

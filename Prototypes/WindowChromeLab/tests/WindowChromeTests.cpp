@@ -4,6 +4,13 @@
 #include "Vendor/ImGui/imgui.h"
 #include "Vendor/ImGui/imgui_internal.h"
 #include <nlohmann/json.hpp>
+#include <cstring>
+#include "Vendor/ImGuiNotify/win32Example/fonts/IconsFontAwesome6.h"
+#include "App/Window.hpp"
+#include "App/Managers/ConfigManager.hpp"
+#define GLFW_INCLUDE_NONE
+#include "Vendor/GLFW/include/GLFW/glfw3.h"
+#include <sst/ui/Widgets/LabelledControls.hpp>
 
 namespace SST
 {
@@ -12,7 +19,17 @@ namespace SST
     public:
         ChromeWindow() : EditorWindow("chrome", "Chrome", true, {.duplicable = true}) {}
         WindowDuplicate Duplicate() const override { return {CreateRef<ChromeWindow>(*this), {}}; }
-        void RenderContent() override { ImGui::TextUnformatted("Content"); }
+        void RenderContent() override {
+            if (ImGui::BeginChild("##content", {0, 0})) ImGui::TextUnformatted("Content");
+            ImGui::EndChild();
+        }
+    };
+    class ScrollWindow final : public EditorWindow
+    {
+    public:
+        ScrollWindow(WindowCapabilities capabilities = {}) : EditorWindow("scroll", "Scroll", true, capabilities) {}
+        float height = 100;
+        void RenderContent() override { ImGui::Dummy({1, height}); }
     };
     class WindowChromeTest : public testing::Test
     {
@@ -27,6 +44,7 @@ namespace SST
             ImGui::CreateContext();
             auto &io = ImGui::GetIO(); io.IniFilename = nullptr; io.DisplaySize = ImVec2(1280, 800);
             io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+            io.ConfigDebugHighlightIdConflicts = true;
             io.Fonts->AddFontDefault(); io.Fonts->Build();
             commands->SetUndoStack(undo); ASSERT_TRUE(workspace->Bind(commands, {}));
             a = panels.Add<ChromeWindow>(); b = panels.Add<ChromeWindow>();
@@ -41,8 +59,16 @@ namespace SST
             const auto entries = panels.Entries();
             for (const auto &entry : entries) entry.panel->Render();
             workspace->RenderOverlays(); ImGui::Render();
+            EXPECT_EQ(GImGui->DebugDrawIdConflictsId, 0u);
         }
         ImGuiWindow *gui(WindowId id) { return ImGui::FindWindowByName(workspace->Find(id)->ImGuiName().c_str()); }
+        void clickChrome(WindowId id, int button)
+        {
+            const auto bar = gui(id)->TitleBarRect();
+            ImGui::GetIO().AddMousePosEvent(bar.Max.x - (button + .5f) * bar.GetHeight(), bar.GetCenter().y); frame();
+            ImGui::GetIO().AddMouseButtonEvent(0, true); frame(); frame(); frame();
+            ImGui::GetIO().AddMouseButtonEvent(0, false); frame(); frame();
+        }
         void dockBoth()
         {
             frame();
@@ -51,6 +77,162 @@ namespace SST
             frame(); frame();
         }
     };
+    TEST_F(WindowChromeTest, RestoreButtonAfterMaximize)
+    {
+        workspace->Find(b)->SetVisible(false); frame(); frame();
+        const auto original = workspace->Find(a)->GetState();
+        ASSERT_TRUE(workspace->Execute({WindowAction::Maximize, a})); frame(); frame();
+        clickChrome(a, 2); EXPECT_EQ(workspace->Find(a)->GetState().mode, WindowMode::Normal);
+        EXPECT_FLOAT_EQ(gui(a)->SizeFull.x, original.width);
+    }
+    TEST_F(WindowChromeTest, UnpinButton)
+    {
+        workspace->Find(b)->SetVisible(false); frame(); frame();
+        ASSERT_TRUE(workspace->Execute({WindowAction::Pin, a})); frame(); frame();
+        clickChrome(a, 1); EXPECT_FALSE(workspace->Find(a)->GetState().pinned);
+    }
+    TEST_F(WindowChromeTest, CloseButtonWithChildContentKeepsSiblingOpen)
+    {
+        auto state = workspace->Find(b)->GetState(); state.x = 950; state.width = 250; workspace->Find(b)->ApplyState(state);
+        frame(); frame(); clickChrome(a, 0);
+        EXPECT_FALSE(workspace->Find(a)->IsVisible()); EXPECT_TRUE(workspace->Find(b)->IsVisible());
+    }
+    TEST_F(WindowChromeTest, MinimizeButtonStillRestoresFromTheStrip)
+    {
+        workspace->Find(b)->SetVisible(false); frame(); frame(); clickChrome(a, 3);
+        ASSERT_EQ(workspace->Find(a)->GetState().mode, WindowMode::Minimized);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Restore, a})); frame();
+        EXPECT_TRUE(workspace->Find(a)->IsVisible()); EXPECT_EQ(workspace->Find(a)->GetState().mode, WindowMode::Normal);
+    }
+    TEST_F(WindowChromeTest, PinKeepsDockAndSiblingVisible)
+    {
+        frame();
+        const auto root = ImGui::GetMainViewport()->ID;
+        ImGuiID top = 0, bottom = 0;
+        ImGui::DockBuilderSplitNode(root, ImGuiDir_Up, .5f, &top, &bottom);
+        ImGui::DockBuilderDockWindow(workspace->Find(a)->ImGuiName().c_str(), top);
+        ImGui::DockBuilderDockWindow(workspace->Find(b)->ImGuiName().c_str(), bottom);
+        ImGui::DockBuilderFinish(root); frame(); frame();
+        const auto dock = gui(a)->DockId;
+        const auto sibling = gui(b)->Rect();
+        ASSERT_TRUE(workspace->Execute({WindowAction::Pin, a})); frame(); frame();
+        EXPECT_EQ(gui(a)->DockId, dock);
+        EXPECT_FALSE(gui(a)->Rect().Overlaps(sibling));
+        EXPECT_TRUE(gui(b)->DockTabIsVisible);
+    }
+    TEST_F(WindowChromeTest, MaximizeRestoreKeepsSplitDockLayout)
+    {
+        frame(); const auto root = ImGui::GetMainViewport()->ID;
+        ImGuiID top = 0, bottom = 0;
+        ImGui::DockBuilderSplitNode(root, ImGuiDir_Up, .5f, &top, &bottom);
+        ImGui::DockBuilderDockWindow(workspace->Find(a)->ImGuiName().c_str(), top);
+        ImGui::DockBuilderDockWindow(workspace->Find(b)->ImGuiName().c_str(), bottom);
+        ImGui::DockBuilderFinish(root); frame(); frame();
+        const auto dock = gui(a)->DockId; const auto sibling = gui(b)->Rect();
+        ASSERT_TRUE(workspace->Execute({WindowAction::Maximize, a})); frame(); frame();
+        const std::string maximizedIni = ImGui::SaveIniSettingsToMemory();
+        workspace->RemoveSettingsHandler(); ImGui::DestroyContext(); ImGui::CreateContext();
+        auto &io = ImGui::GetIO(); io.IniFilename = nullptr; io.DisplaySize = ImVec2(1280, 800);
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable; io.ConfigDebugHighlightIdConflicts = true;
+        io.Fonts->AddFontDefault(); io.Fonts->Build(); workspace->InstallSettingsHandler();
+        ImGui::LoadIniSettingsFromMemory(maximizedIni.c_str()); frame(); frame();
+        ASSERT_TRUE(workspace->Execute({WindowAction::Restore, a})); frame(); frame();
+        EXPECT_EQ(gui(a)->DockId, dock);
+        EXPECT_FLOAT_EQ(gui(b)->Pos.y, sibling.Min.y); EXPECT_FLOAT_EQ(gui(b)->Size.y, sibling.GetHeight());
+    }
+    TEST_F(WindowChromeTest, PopupAbovePinnedWindow)
+    {
+        workspace->Find(b)->SetVisible(false); frame(); frame();
+        ASSERT_TRUE(workspace->Execute({WindowAction::Pin, a})); frame();
+        const auto pos = gui(a)->TitleBarRect().GetCenter();
+        ImGui::GetIO().AddMousePosEvent(pos.x, pos.y); frame();
+
+        ImGui::GetIO().AddMouseButtonEvent(1, true); frame();
+        ImGui::GetIO().AddMouseButtonEvent(1, false); frame(); frame();
+        ASSERT_GT(GImGui->OpenPopupStack.Size, 0);
+        const auto popup = GImGui->OpenPopupStack.back().Window; ASSERT_NE(popup, nullptr);
+        EXPECT_LT(GImGui->Windows.find_index(gui(a)), GImGui->Windows.find_index(popup));
+    }
+    TEST_F(WindowChromeTest, DockedCloseWithChildContentDoesNotCloseSibling)
+    {
+        dockBoth(); frame(); frame(); // Newly added action tabs need their first layout before hit testing.
+        const auto active = gui(a)->DockTabIsVisible ? a : b;
+        const auto sibling = active == a ? b : a;
+        auto* bar = gui(active)->DockNode->TabBar;
+        ImGuiTabItem close;
+        for (auto &tab : bar->Tabs)
+            if ((tab.Flags & ImGuiTabItemFlags_Trailing) && std::strcmp(ImGui::TabBarGetTabName(bar, &tab), ICON_FA_XMARK) == 0) close = tab;
+        ASSERT_NE(close.ID, 0u);
+        const ImVec2 pos(bar->BarRect.Min.x + close.Offset + close.Width / 2, bar->BarRect.GetCenter().y);
+        ImGui::GetIO().AddMousePosEvent(pos.x, pos.y); frame();
+        const auto hovered = GImGui->HoveredId;
+        ImGui::GetIO().AddMouseButtonEvent(0, true); frame(); frame(); frame();
+        ImGui::GetIO().AddMouseButtonEvent(0, false); frame(); frame();
+        EXPECT_FALSE(workspace->Find(active)->IsVisible()) << "close=" << close.ID << " hovered=" << hovered << " width=" << close.Width;
+        EXPECT_TRUE(workspace->Find(sibling)->IsVisible());
+    }
+    TEST_F(WindowChromeTest, ContentWidthDoesNotJumpWhenScrollbarBecomesNecessary)
+    {
+        workspace->Find(a)->SetVisible(false); workspace->Find(b)->SetVisible(false);
+        const auto id = panels.Add<ScrollWindow>(); frame(); frame();
+        const float width = gui(id)->InnerRect.GetWidth();
+        std::static_pointer_cast<ScrollWindow>(workspace->Find(id))->height = 2000;
+        frame(); frame(); EXPECT_FLOAT_EQ(gui(id)->InnerRect.GetWidth(), width);
+    }
+    TEST_F(WindowChromeTest, AuxiliaryDoesNotRetainLegacyNativeIniSettings)
+    {
+        const auto id = panels.Add<ScrollWindow>(WindowCapabilities{.auxiliary = true});
+        const auto name = workspace->Find(id)->ImGuiName();
+        const auto legacy = "[Window][Scroll]\nPos=20,30\nSize=410,300\nCollapsed=0\n\n[Window][" + name + "]\nPos=123,89\nSize=410,300\nCollapsed=0\n\n";
+        ImGui::LoadIniSettingsFromMemory(legacy.c_str()); frame();
+        const auto suffix = "sst-window-" + std::to_string(id);
+        EXPECT_EQ(std::string(ImGui::SaveIniSettingsToMemory()).find(suffix), std::string::npos);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Activate, id})); frame(); frame();
+        EXPECT_TRUE(gui(id)->Flags & ImGuiWindowFlags_NoSavedSettings);
+        const std::string saved = ImGui::SaveIniSettingsToMemory();
+        EXPECT_EQ(saved.find(suffix), std::string::npos);
+        EXPECT_EQ(saved.find("[Window][Scroll]"), std::string::npos);
+    }
+    TEST_F(WindowChromeTest, ResetClearsDockPinMaximizeAndRestoresRegisteredDefaults)
+    {
+        const auto initial = workspace->Find(a)->GetState();
+        frame(); ASSERT_TRUE(workspace->Execute({WindowAction::Maximize, a})); frame();
+        ASSERT_TRUE(workspace->Execute({WindowAction::Pin, b}));
+        ASSERT_TRUE(commands->Execute(CommandID{"app.layout.reset"}));
+        EXPECT_EQ(workspace->Find(a)->GetState(), initial);
+        EXPECT_FALSE(workspace->Find(b)->GetState().pinned);
+        frame(); EXPECT_EQ(gui(a)->DockId, 0u);
+    }
+    TEST_F(WindowChromeTest, ScientificControlUsesOneRowAndPreservesUntouchedValues)
+    {
+        ImGui::NewFrame(); ImGui::SetNextWindowSize({900, 300}); ImGui::Begin("Controls");
+        const float y = ImGui::GetCursorPosY();
+        double value = -1.234567891e-299;
+        EXPECT_FALSE(sst::ui::widgets::LogValue("Density [cm^-3]", &value));
+        EXPECT_DOUBLE_EQ(value, -1.234567891e-299);
+        EXPECT_LE(ImGui::GetCursorPosY() - y, ImGui::GetFrameHeightWithSpacing() + 2 * ImGui::GetStyle().CellPadding.y);
+        ImGui::End(); ImGui::Render();
+    }
+    TEST(NativeWindow, InitialPlacementAndMaximizeRespectMonitorWorkArea)
+    {
+        ASSERT_TRUE(glfwInit());
+        struct Cleanup { ~Cleanup() { glfwTerminate(); } } cleanup;
+        Window window; ASSERT_TRUE(window.Create(640, 480, "Work-area regression", {}));
+        WindowConfig config; config.width = 10000; config.height = 10000; config.x = 0; config.y = 0;
+        auto fits = [&](bool framed) {
+            int x, y, width, height, left = 0, top = 0, right = 0, bottom = 0, count;
+            glfwGetWindowPos(window.GetNativeHandle(), &x, &y); glfwGetWindowSize(window.GetNativeHandle(), &width, &height);
+            if (framed) glfwGetWindowFrameSize(window.GetNativeHandle(), &left, &top, &right, &bottom);
+            auto monitors = glfwGetMonitors(&count);
+            for (int i = 0; i < count; ++i) {
+                int mx, my, mw, mh; glfwGetMonitorWorkarea(monitors[i], &mx, &my, &mw, &mh);
+                if (x - left >= mx && y - top >= my && x + width + right <= mx + mw && y + height + bottom <= my + mh) return true;
+            }
+            return false;
+        };
+        window.ApplyConfig(config, true); glfwPollEvents(); EXPECT_TRUE(fits(true));
+        config.maximized = true; window.ApplyConfig(config, true); glfwPollEvents(); EXPECT_TRUE(fits(false));
+    }
     TEST_F(WindowChromeTest, RendersFloatingMaximizedPinnedAndRestoredGeometry)
     {
         frame(); frame(); const auto original = workspace->Find(a)->GetState();
@@ -85,6 +267,14 @@ namespace SST
         ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Right, true); frame();
         ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Right, false); frame();
         EXPECT_GT(GImGui->OpenPopupStack.Size, 0);
+    }
+    TEST_F(WindowChromeTest, ViewOnlyCommandsAndUndoRequestAutosave)
+    {
+        frame(); GImGui->SettingsDirtyTimer = 0;
+        ASSERT_TRUE(workspace->Execute({WindowAction::Pin, a})); EXPECT_GT(GImGui->SettingsDirtyTimer, 0);
+        GImGui->SettingsDirtyTimer = 0; ASSERT_TRUE(undo->Undo()); EXPECT_GT(GImGui->SettingsDirtyTimer, 0);
+        GImGui->SettingsDirtyTimer = 0;
+        ASSERT_TRUE(workspace->Execute({WindowAction::Close, a})); EXPECT_GT(GImGui->SettingsDirtyTimer, 0);
     }
     TEST_F(WindowChromeTest, LayoutSettingsIncludeWindowStateAndNamedWorkspacesWithoutRecursiveGrowth)
     {

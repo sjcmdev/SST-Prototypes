@@ -44,9 +44,11 @@ namespace SST
 
     private:
         Result<void> WorkspaceOperation(const WindowRequest &request);
+        void ResetWindowStates();
         std::string SettingsPayload() const;
         PanelRegistry &m_Panels;
         WeakRef<CommandRegistry> m_Commands;
+        std::size_t m_CommandObserver = 0;
         bool m_Locked = false;
         WindowId m_Active = 0;
         float m_X = 0, m_Y = 30, m_Width = 1280, m_Height = 690;

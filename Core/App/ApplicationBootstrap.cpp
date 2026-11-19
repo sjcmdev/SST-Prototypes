@@ -31,6 +31,7 @@
 #include "Core/Diagnostics/StructuredError.hpp"
 #include "Core/Input/KeyBindingEvents.hpp"
 #include "IO/IOLayer.hpp"
+#include "IO/TextFileIO.hpp"
 #include "Core/Logging/LogRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Notifications/Notifier.hpp"
@@ -960,6 +961,22 @@ namespace SST
 		}
 
 		m_Config = m_ConfigManager->GetConfig();
+#if defined(_WIN32)
+        // Keep normal app layouts across rebuilds; screenshot clients use isolated portable config.
+        if (m_Runtime.specification.screenshotPath.Empty() && m_Runtime.argv && m_Runtime.argv[0])
+            if (const wchar_t *profile = _wgetenv(L"LOCALAPPDATA"); profile && *profile)
+            {
+                const auto app = std::filesystem::path(m_Runtime.argv[0]).stem();
+                const auto layout = Path::FromResolved(std::filesystem::path(profile) / L"Semiconductor Studio" / app / L"imgui.ini");
+                const Path previous(m_Config.layout.imGuiIniPath);
+                std::string contents, error;
+                if (!FileSystem::Exists(layout.Native()) && FileSystem::Exists(previous.Native()) &&
+                    (!TextFileIO::Load(previous, contents, error) || !TextFileIO::Save(layout, contents, error)))
+                    DS_LOG_WARN("Layout migration failed: {}", error);
+                m_Config.layout.imGuiIniPath = layout.Utf8();
+                m_ConfigManager->SetConfig(m_Config);
+            }
+#endif
 		DS_LOG_INFO("Config bootstrap complete: {}", m_ConfigManager->GetConfigDirectory().Utf8());
 		return timer.Finish(true);
 	}

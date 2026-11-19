@@ -15,6 +15,7 @@
 #undef GLFW_APIENTRY_DEFINED
 #endif
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <implot.h>
 
 #if defined(_MSC_VER)
@@ -127,8 +128,12 @@ namespace SST
 			style.GrabRounding = appearance.grabRounding;
 			style.ScrollbarRounding = appearance.scrollbarRounding;
 			style.TabRounding = appearance.tabRounding;
+			style.WindowBorderSize = 1.0f;
+            style.ChildBorderSize = 1.0f;
+            style.DockingSeparatorSize = 3.0f;
+            style.GrabMinSize = std::max(14.0f, style.GrabMinSize);
 			style.WindowPadding = ImVec2(appearance.windowPaddingX, appearance.windowPaddingY);
-			style.FramePadding = ImVec2(appearance.framePaddingX, appearance.framePaddingY);
+			style.FramePadding = ImVec2(appearance.framePaddingX, std::max(6.0f, appearance.framePaddingY));
 			style.ItemSpacing = ImVec2(appearance.itemSpacingX, appearance.itemSpacingY);
 			style.DisabledAlpha = appearance.stateRules.disabledAlpha;
 
@@ -159,13 +164,13 @@ namespace SST
 			colors[ImGuiCol_WindowBg] = background;
 			colors[ImGuiCol_ChildBg] = background;
 			colors[ImGuiCol_PopupBg] = surface;
-			colors[ImGuiCol_Border] = border;
+			colors[ImGuiCol_Border] = withAlpha(mix(border, white, .18f), 1.f);
 			colors[ImGuiCol_BorderShadow] = withAlpha(black, 0.0f);
 			colors[ImGuiCol_FrameBg] = surface;
 			colors[ImGuiCol_FrameBgHovered] = neutralHover;
 			colors[ImGuiCol_FrameBgActive] = neutralActive;
-			colors[ImGuiCol_TitleBg] = surface;
-			colors[ImGuiCol_TitleBgActive] = raised;
+			colors[ImGuiCol_TitleBg] = mix(surface, white, .08f);
+			colors[ImGuiCol_TitleBgActive] = mix(raised, white, .12f);
 			colors[ImGuiCol_TitleBgCollapsed] = background;
 			colors[ImGuiCol_MenuBarBg] = surface;
 			colors[ImGuiCol_ScrollbarBg] = background;
@@ -181,20 +186,20 @@ namespace SST
 			colors[ImGuiCol_Header] = withAlpha(collapsible, appearance.stateRules.selectedAlpha);
 			colors[ImGuiCol_HeaderHovered] = withAlpha(collapsibleHover, appearance.stateRules.selectedHoverAlpha);
 			colors[ImGuiCol_HeaderActive] = withAlpha(collapsibleActive, appearance.stateRules.selectedActiveAlpha);
-			colors[ImGuiCol_Separator] = border;
+			colors[ImGuiCol_Separator] = withAlpha(mix(border, white, .18f), 1.f);
 			colors[ImGuiCol_SeparatorHovered] = accentHover;
 			colors[ImGuiCol_SeparatorActive] = accentActive;
 			colors[ImGuiCol_ResizeGrip] = withAlpha(accent, 0.22f);
 			colors[ImGuiCol_ResizeGripHovered] = withAlpha(accentHover, 0.45f);
 			colors[ImGuiCol_ResizeGripActive] = withAlpha(accentActive, 0.70f);
-			colors[ImGuiCol_Tab] = surface;
+			colors[ImGuiCol_Tab] = mix(surface, white, .08f);
 			colors[ImGuiCol_TabHovered] = withAlpha(accentHover, 0.48f);
-			colors[ImGuiCol_TabActive] = raised;
+			colors[ImGuiCol_TabActive] = mix(raised, white, .12f);
 			colors[ImGuiCol_TabSelectedOverline] = withAlpha(accent, 0.90f);
 			colors[ImGuiCol_TabUnfocused] = surface;
 			colors[ImGuiCol_TabUnfocusedActive] = raised;
-			colors[ImGuiCol_TabDimmed] = withAlpha(surface, 0.96f);
-			colors[ImGuiCol_TabDimmedSelected] = withAlpha(raised, 0.96f);
+			colors[ImGuiCol_TabDimmed] = mix(surface, white, .04f);
+			colors[ImGuiCol_TabDimmedSelected] = mix(raised, white, .08f);
 			colors[ImGuiCol_TabDimmedSelectedOverline] = withAlpha(accent, 0.55f);
 			colors[ImGuiCol_DockingPreview] = withAlpha(accent, 0.45f);
 			colors[ImGuiCol_DockingEmptyBg] = background;
@@ -320,7 +325,12 @@ namespace SST
 		if (!m_Initialized)
 			return;
 
-		ImGui::Render();
+		if (ImGui::GetIO().WantSaveIniSettings)
+        {
+            saveLayout();
+            ImGui::GetIO().WantSaveIniSettings = false;
+        }
+        ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
 		{
@@ -844,7 +854,7 @@ namespace SST
 
 	void ImGuiLayer::onLayoutResetRequested(const EditorUiEvents::LayoutResetRequested &event)
 	{
-		ImGui::LoadIniSettingsFromMemory("", 0);
+		ImGui::ClearIniSettings();
 		const Path path = resolveRequestedLayoutPath(event.path);
 		if (m_EventBus != nullptr)
 			m_EventBus->Queue(EditorUiEvents::PersistRequested{EditorUiEvents::PersistKind::Layout, path, {}});
