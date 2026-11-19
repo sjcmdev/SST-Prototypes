@@ -5,7 +5,18 @@
 #include <sst/ui/Widgets/LabelledControls.hpp>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
 #include <cstdlib>
+#include <cstdio>
 namespace SST::Prototypes::CapLab {
+namespace {
+std::string WithStandardError(const Json& result, const char* value, const char* error) {
+    if (!result.contains(value) || !result.at(value).is_number()) return "unavailable";
+    char number[64]; std::snprintf(number,sizeof(number),"%.6g",result.at(value).get<double>());
+    std::string text=number;
+    if (!result.contains(error) || !result.at(error).is_number()) return text+" (SE unavailable)";
+    std::snprintf(number,sizeof(number),"%.3g",result.at(error).get<double>());
+    return text+" +/- "+number+" (SE)";
+}
+}
 void CapLabPrototypePanel::RenderImport() {
     auto &doc = state->document;
     ImGui::Text("%s%s", doc.path.Empty() ? "Untitled" : doc.path.Utf8().c_str(), doc.dirty ? " (unsaved)" : "");
@@ -349,8 +360,17 @@ void CapLabPrototypePanel::RenderAnalysis() {
             ImGui::PushID(static_cast<int>(a.at("id").get<pl::Id>()));
             if (ImGui::TreeNode((a.at("model").get<std::string>()+" / "+a.at("status").get<std::string>()).c_str())) {
                 for (const auto &d : a.at("diagnostics")) ImGui::TextWrapped("%s",d.get<std::string>().c_str());
-                if (a.contains("V_b_V")) ImGui::Text("V_b=%s V; N=%s m^-3; E_F=%s eV",a.at("V_b_V").dump().c_str(),a.at("N_m3").dump().c_str(),a.at("E_F_eV").dump().c_str());
-                ImGui::TextWrapped("x_d: %s",a.at("x_d").dump().c_str());
+                if (a.contains("V_b_V")) {
+                    ImGui::TextWrapped("V_b: %s V",WithStandardError(a,"V_b_V","V_b_standard_error_V").c_str());
+                    ImGui::TextWrapped("N: %s m^-3; E_F: %s eV",WithStandardError(a,"N_m3","N_standard_error_m3").c_str(),a.at("E_F_eV").dump().c_str());
+                }
+                if (a.contains("x_d_fit")) ImGui::TextWrapped("CV fit x_d at %s V: %s m",a.at("x_d_fit").at("bias_V").dump().c_str(),WithStandardError(a.at("x_d_fit"),"value_m","standard_error_m").c_str());
+                if (a.contains("groups")) for (const auto& group : a.at("groups")) {
+                    ImGui::TextWrapped("DLCP at %s V: x_e: %s m; N_DL: %s m^-3",group.at("bias_V").dump().c_str(),
+                        WithStandardError(group,"x_e_m","x_e_standard_error_m").c_str(),WithStandardError(group,"N_DL_m3","N_DL_standard_error_m3").c_str());
+                }
+                ImGui::TextWrapped("Selected x_d: %s m",WithStandardError(a.at("x_d"),"value_m","standard_error_m").c_str());
+                ImGui::TextWrapped("SE: residual covariance only; area, material and calibration held fixed. Null SE is unavailable.");
                 if (ImGui::TreeNode("Coefficients / covariance / residuals / provenance")) {
                     auto detail=a; detail.erase("inputs"); ImGui::TextWrapped("%s",detail.dump(2).c_str()); ImGui::TreePop();
                 }
@@ -457,9 +477,12 @@ void CapLabPrototypePanel::RenderAS() {
                 if (a.at("status")=="valid" && ImGui::Selectable((c.at("temperature_K").dump()+" K / "+c.at("frequency_Hz").dump()+" Hz").c_str())) {state->pendingCandidate=c; state->pendingCandidate["analysis_id"]=a.at("id");}
                 ImGui::PopID();
             }
-            if (a.contains("fits")) for (const auto &fit : a.at("fits"))
-                ImGui::TextWrapped("%s: Ea=%s eV; prefactor=%s %s; sigma=%s cm^2; dof=%d",fit.at("model").get<std::string>().c_str(),
-                    fit.at("E_a_eV").dump().c_str(),fit.at("prefactor").dump().c_str(),fit.at("prefactor_unit").get<std::string>().c_str(),fit.at("sigma_cm2").dump().c_str(),fit.at("dof").get<int>());
+            if (a.contains("fits")) for (const auto &fit : a.at("fits")) {
+                ImGui::TextWrapped("%s: Ea: %s eV; dof=%d",fit.at("model").get<std::string>().c_str(),
+                    WithStandardError(fit,"E_a_eV","E_a_standard_error_eV").c_str(),fit.at("dof").get<int>());
+                ImGui::TextWrapped("Prefactor: %s %s",WithStandardError(fit,"prefactor","prefactor_standard_error").c_str(),fit.at("prefactor_unit").get<std::string>().c_str());
+                ImGui::TextWrapped("Capture cross-section sigma: %s cm^2. SE is standard error from residual covariance.",fit.at("sigma_cm2").dump().c_str());
+            }
             for (const auto &d : a.at("diagnostics")) ImGui::TextWrapped("%s",d.get<std::string>().c_str());
             for (const auto &g : a.at("graphs")) {
                 auto id=g.get<pl::Id>();
@@ -477,7 +500,7 @@ namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderWalter() {
     if (const auto gallery = std::getenv("SST_CAPLAB_GALLERY_SECTION"))
         ImGui::SetNextItemOpen(std::string_view(gallery) == "Walter", ImGuiCond_Once);
-    if (!ImGui::CollapsingHeader("Walter spectra / integration")) return;
+    if (!ImGui::CollapsingHeader("Walter apparent DOS / integration")) return;
     ImGui::PushID("Walter");
     auto &p=state->document.project;
     static pl::Id sample=0, cv=0, arrhenius=0, dlcp=0, xdMeasurement=0;
@@ -566,7 +589,8 @@ void CapLabPrototypePanel::RenderWalter() {
     for (const auto &a : p.analyses) if (a.at("type")=="Walter" || a.at("type")=="WalterSaved") {
         ImGui::PushID(a.at("id").dump().c_str());
         if (ImGui::TreeNode((a.at("model").get<std::string>()+" / "+a.at("status").get<std::string>()).c_str())) {
-            for (const auto &s : a.at("spectra")) ImGui::TextWrapped("Integral: %s cm^-3; %s",s.at("integral").at("density_cm3").dump().c_str(),s.at("integral").at("semantics").get<std::string>().c_str());
+            ImGui::TextWrapped("CL-04: apparent DOS under the selected emission and field model.");
+            for (const auto &s : a.at("spectra")) ImGui::TextWrapped("Integrated apparent DOS: %s cm^-3; %s",s.at("integral").at("density_cm3").dump().c_str(),s.at("integral").at("semantics").get<std::string>().c_str());
             for (const auto &g : a.at("graphs")) if (ImGui::Button(("Show spectrum##"+g.dump()).c_str())) {p.graph=g; state->view={}; state->document.Changed();}
             if (ImGui::TreeNode("Parameters / invalid points / provenance")) {auto detail=a; detail.erase("settings"); detail.erase("historical"); ImGui::TextWrapped("%s",detail.dump(2).c_str()); ImGui::TreePop();}
             ImGui::TreePop();

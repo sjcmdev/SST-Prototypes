@@ -7,7 +7,7 @@ import numpy as np
 from scipy.signal import find_peaks, savgol_filter
 import sst_caplab as kernel
 import json
-from .analysis import column, positive, plot, curve
+from .analysis import column, positive, plot, curve, _standard_error
 
 
 def preprocess(m, smoothing=None):
@@ -110,6 +110,10 @@ def analyze_as(m, options, cancelled=lambda: False, progress=lambda v: None):
                 sigma_cm2=None, residuals=(y-predicted).tolist(), point_ids=[p['id'] for p in points],
                 covariance_order=['E_a_eV', 'prefactor'], linear_covariance_order=['intercept', 'slope'],
                 covariance_scaling='relative residual variance; unavailable when dof=0')
+            cov = fit['covariance']
+            fit.update(E_a_standard_error_eV=_standard_error(cov, [1., 0.]),
+                prefactor_standard_error=_standard_error(cov, [0., 1.]),
+                uncertainty_scope='1 standard error from residual covariance; temperature and frequency calibration held fixed')
             if compat:
                 assumptions = dict(Ncv_cm3=2e18, vth_cm_s=1e7, source='PCF ASCalc.calc_defect_params; PFS AS')
                 fit['assumptions'] = assumptions

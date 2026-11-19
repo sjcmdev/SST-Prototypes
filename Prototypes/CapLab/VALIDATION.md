@@ -776,3 +776,53 @@ launcher or alternate UI control bypassed the rejection. VISUAL QA NOT RUN.
 Closed question: should CapLab be enabled in Computer Use for start/exit and
 visual smoke of all modules? Recommendation: yes; this is the remaining M8
 runtime acceptance blocker. No new physics/model decision is needed.
+
+## CLSCI1 science acceptance (2026-11-19)
+
+A7 source investigation is frozen in `python/tests/fixtures/a7_sources.json`,
+with original file SHA-256, JSON pointers and every source point (including duplicates).
+M p.46 Table 4.2, anneal 250 C, reports 0.170 eV and 2.54e-17 cm2.
+D `projects/samples_Cd_diffusion.json`, `/samples/1/defects/0`, contains
+15 points and gives 0.156167135802 eV (standard error 0.006640690648 eV),
+prefactor 4.08159312349e8 Hz (standard error 1.72439124480e8 Hz),
+capture cross-section 1.020398280872e-17 cm2.
+D `projects/samples_Cd_diffusion_WIP.json`, same pointer, contains 12 points
+and gives 0.173038521238 eV (standard error 0.005370141003 eV),
+prefactor 1.01433391191e9 Hz (standard error 3.26980888132e8 Hz),
+capture cross-section 2.535834779773e-17 cm2, which rounds to M's 2.54e-17.
+The final project adds (190 K,31579 Hz) and two copies of (140 K,1579 Hz).
+The WIP set is evidence for the table's cross-section, not proof of the exact
+0.170 eV entry: it rounds to 0.173 eV at that precision. The text of M provides
+no numeric list of selected points (figure 4.3c/d on p.47 is graphical).
+Exact energy agreement remains unresolved; no points or constants were tuned.
+Independent NumPy OLS and the embedded kernel reproduce both project regressions.
+
+Arrhenius adds `E_a_standard_error_eV` and `prefactor_standard_error` (in
+`prefactor_unit`); `sigma_cm2` remains the physical capture cross-section.
+These are square roots of the transformed covariance diagonal. They are
+standard errors, not confidence intervals; two points leave both null.
+
+CV adds `V_b_standard_error_V`, `N_standard_error_m3`, and `x_d_fit`
+(`bias_V`, `value_m`, `standard_error_m`). Full coefficient covariance is
+propagated with J Cov J^T for Vb=-b/m, N=-2/(q epsilon m),
+and fitted width epsilon sqrt(b+mV). The width is evaluated at explicit AS
+bias, or 0 V if absent, only inside the selected fit interval. It does not
+replace the historical `x_d` measured/profile/manual estimator.
+Raw DLCP adds group `x_e_standard_error_m` and `N_DL_standard_error_m3`;
+the latter includes the C0/C1 covariance cross term for N proportional to C0^3/C1.
+Selected/interpolated raw-DLCP `x_d.standard_error_m` propagates the group
+width variances, assuming independent bias groups. Imported DL profiles and
+manual/measured widths lack supplied measurement covariance: their error
+stays null with an explicit unavailable status. Area, permittivity, calibration
+and temperature/frequency uncertainties are held fixed throughout.
+
+`test_science_acceptance.py` checks independent NumPy covariance on the five
+existing noisy lab CV profiles C1-C5, both Arrhenius models, noisy synthetic
+raw DLCP with correlated coefficients, width interpolation, zero dof,
+no extrapolation, and the JSON Core command/job workflow. Existing laboratory
+DL files contain derived profiles, not raw amplitude sweeps or fit covariance;
+raw-DLCP laboratory uncertainty acceptance therefore remains open.
+
+Walter results and plot axes say **apparent DOS** (CL-04); JSON carries the
+interpretation and historical limits. W1-W3 remain saved-slice integral checks.
+Full historical spectra and the parabolic-field variant remain unsupported.

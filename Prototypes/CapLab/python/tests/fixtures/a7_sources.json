@@ -1,0 +1,140 @@
+{
+  "thesis": {
+    "source": "M, page 46, Table 4.2, 250 C anneal; PFS section 6 A7",
+    "energy_eV": 0.17,
+    "capture_cross_section_cm2": 2.54e-17
+  },
+  "sources": [
+    {
+      "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\projects\\samples_Cd_diffusion.json",
+      "sha256": "c56e31f8f29a70d154010406cd82763389c4550cf7dc53f654a41f2d7ae9359e",
+      "json_pointer": "/samples/1/defects/0",
+      "sample": "#133",
+      "name": "def1",
+      "points_T_K_f_Hz": [
+        [
+          260,
+          500000.0
+        ],
+        [
+          250,
+          320000.0
+        ],
+        [
+          240,
+          250000.0
+        ],
+        [
+          230,
+          160000.0
+        ],
+        [
+          220,
+          125000.0
+        ],
+        [
+          210,
+          62500.0
+        ],
+        [
+          200,
+          40000.0
+        ],
+        [
+          190,
+          31579.0
+        ],
+        [
+          180,
+          10000.0
+        ],
+        [
+          170,
+          8000.0
+        ],
+        [
+          165,
+          8000.0
+        ],
+        [
+          150,
+          1579.0
+        ],
+        [
+          160,
+          3158.0
+        ],
+        [
+          140,
+          1579.0
+        ],
+        [
+          140,
+          1579.0
+        ]
+      ],
+      "saved_energy_eV": 0.15616713579901212,
+      "saved_capture_cross_section_cm2": 1.020398280871899e-17
+    },
+    {
+      "source": "D:\\STUDIA\\Semiconductor-Studio\\ProPho\\projects\\samples_Cd_diffusion_WIP.json",
+      "sha256": "d6091905d337202b85105c77e965b6d8582f39cb68d2c193b01c100d202b38b2",
+      "json_pointer": "/samples/1/defects/0",
+      "sample": "#133",
+      "name": "def1",
+      "points_T_K_f_Hz": [
+        [
+          260,
+          500000.0
+        ],
+        [
+          250,
+          320000.0
+        ],
+        [
+          240,
+          250000.0
+        ],
+        [
+          230,
+          160000.0
+        ],
+        [
+          220,
+          125000.0
+        ],
+        [
+          210,
+          62500.0
+        ],
+        [
+          200,
+          40000.0
+        ],
+        [
+          180,
+          10000.0
+        ],
+        [
+          170,
+          8000.0
+        ],
+        [
+          165,
+          8000.0
+        ],
+        [
+          150,
+          1579.0
+        ],
+        [
+          160,
+          3158.0
+        ]
+      ],
+      "saved_energy_eV": 0.17303852123496666,
+      "saved_capture_cross_section_cm2": 2.535834779772805e-17
+    }
+  ],
+  "verdict": "Unresolved exact energy: WIP reproduces the tabulated capture cross-section to its printed precision, but yields 0.173038521 eV, not 0.170 eV. Final project adds (190 K,31579 Hz) and two copies of (140 K,1579 Hz). No point selection was tuned to the expected value."
+}

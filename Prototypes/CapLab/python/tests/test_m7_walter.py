@@ -151,6 +151,7 @@ def test_pfs_frozen_saved_integrals_via_Core(ident,filename,name,expected):
     a=r['project']['analyses'][-1]; actual=a['spectra'][0]['integral']['density_cm3']
     assert actual==pytest.approx(expected,rel=1e-4)
     assert a['compatibility']=='saved-spectrum-integral-only'
+    assert a['quantity']=='apparent DOS' and 'W1-W3' in a['historical_limits']
     assert a['spectra'][0]['saved_selection']==h['data']['walter']['selections']
     assert a['spectra'][0]['measurement_id']==h['data']['walter']['dist_for_integration']['measurement_id']
     assert json.loads(kernel.roundtrip(json.dumps(r['project'])))==r['project']

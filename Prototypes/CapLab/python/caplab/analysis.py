@@ -103,6 +103,15 @@ def curve(name, x, y, fit=False):
     return dict(name=name, x=[a for a, b in pairs], y=[b for a, b in pairs], fit=fit)
 
 
+def _standard_error(covariance, gradient):
+    if covariance is None:
+        return None
+    cov = np.asarray(covariance, dtype=float).reshape(len(gradient), len(gradient))
+    if not np.all(np.isfinite(cov)):
+        return None
+    return math.sqrt(max(0., float(np.asarray(gradient) @ cov @ gradient)))
+
+
 def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=lambda v: None):
     if cancelled():
         raise RuntimeError('Analysis cancelled')
@@ -150,11 +159,23 @@ def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=l
         derivative = np.gradient(yx, vx, edge_order=1)
         profile = [kernel.cv_density(float(d), epsilon, constants['q_C']) if d != 0 else None for d in derivative]
         result.update(f, V_b_V=-intercept/slope, N_m3=density, E_F_eV=None,
+                      V_b_standard_error_V=_standard_error(f['covariance'], [-1/slope, intercept/slope**2]),
+                      N_standard_error_m3=_standard_error(f['covariance'], [0., -density/slope]),
                       selected_row_ids=[r for r, use in zip(row_ids, mask) if use], residuals=residuals.tolist(),
                       profile=dict(W_m=width[mask].tolist(), N_m3=profile,
                           quality=['zero_slope' if n is None else 'nonphysical_density' if n <= 0 else 'valid' for n in profile]),
                       residual_unit='m^4/F^2', coefficient_order=['intercept','slope'],
                       covariance_scaling='relative residual variance; null when dof=0')
+        # This estimate belongs to the regression, not to the selected measured width.
+        target = options.get('as_bias_V', 0.)
+        fit_y = intercept+slope*target
+        fit_width = epsilon*math.sqrt(fit_y) if min(vx) <= target <= max(vx) and fit_y > 0 else None
+        result['x_d_fit'] = dict(bias_V=target, value_m=fit_width,
+            standard_error_m=_standard_error(f['covariance'], [epsilon**2/(2*fit_width),
+                epsilon**2*target/(2*fit_width)]) if fit_width is not None else None,
+            uncertainty_status='residual_covariance' if fit_width is not None and f['dof'] > 0 else 'unavailable',
+            estimator='CV-linear-fit; no extrapolation')
+        result['uncertainty_scope'] = '1 standard error from residual covariance; area, material and calibration held fixed'
         if density <= 0:
             result['diagnostics'].append('Nonphysical CV density sign')
             result['status'] = result['computed_status'] = 'invalid'
@@ -205,15 +226,20 @@ def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=l
                 covariance=cov, covariance_scaling='relative residual variance; null when dof=0',
                 dof=dof, residuals=residual.tolist(), residual_unit='F',
                 row_ids=[row_ids[i] for i in indices], x_e_m=None, N_DL_m3=None, status='valid')
+            g.update(x_e_standard_error_m=None, N_DL_standard_error_m3=None,
+                uncertainty_scope='1 standard error from residual covariance; area, material and calibration held fixed')
             if coef[0] <= 0:
                 g['status'] = 'invalid_C0'
             else:
                 g['x_e_m'] = kernel.width(float(coef[0]), area, epsilon)
+                g['x_e_standard_error_m'] = _standard_error(cov, [-g['x_e_m']/coef[0]]+[0.]*degree)
                 # Numerical zero after a floating-point least-squares solve.
                 if abs(coef[1])*scale <= np.finfo(float).eps*64*max(abs(yy)):
                     g['status'] = 'invalid_C1'
                 else:
                     g['N_DL_m3'] = kernel.dlcp_density(float(coef[0]), float(coef[1]), area, epsilon, constants['q_C'])
+                    g['N_DL_standard_error_m3'] = _standard_error(cov,
+                        [3*g['N_DL_m3']/coef[0], -g['N_DL_m3']/coef[1]]+[0.]*(degree-1))
                     if g['N_DL_m3'] <= 0:
                         g['status'] = 'nonphysical_density'
             results.append(g)
@@ -244,7 +270,9 @@ def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=l
 def resolve_width(m, options, xd_measurement, epsilon, result):
     inputs = result['inputs']
     source, policy = options.get('xd_source'), options.get('xd_policy', 'block')
-    xd = dict(source=source, policy=policy, value_m=None, measurement_id=None, temperature_K=None, frequency_Hz=None, bias_V=None)
+    xd = dict(source=source, policy=policy, value_m=None, standard_error_m=None,
+              uncertainty_status='unavailable: no measurement covariance supplied',
+              measurement_id=None, temperature_K=None, frequency_Hz=None, bias_V=None)
     if source == 'manual':
         xd['value_m'] = positive(options.get('xd_manual_m'), 'manual x_d')
         xd['description'] = options.get('xd_description', '')
@@ -275,6 +303,20 @@ def resolve_width(m, options, xd_measurement, epsilon, result):
         else:
             raise ValueError('Select a measured DLCP profile for x_d')
         xd['value_m'], warning = choose_width(v, w, target, policy)
+        if source == 'DLCP' and sm['kind'] == 'DLCPRaw':
+            groups = (options.get('dlcp_fit') or result)['groups']
+            order = np.argsort(v)
+            vv = np.asarray(v)[order]
+            errors = [groups[i].get('x_e_standard_error_m') for i in order]
+            if target in vv or policy == 'nearest':
+                xd['standard_error_m'] = errors[int(np.argmin(abs(vv-target)))]
+            else:
+                i = int(np.searchsorted(vv, target))
+                if errors[i-1] is not None and errors[i] is not None:
+                    weight = (target-vv[i-1])/(vv[i]-vv[i-1])
+                    xd['standard_error_m'] = math.hypot((1-weight)*errors[i-1], weight*errors[i])
+            xd['uncertainty_status'] = ('residual_covariance; independent bias groups; calibration held fixed'
+                if xd['standard_error_m'] is not None else 'unavailable: no residual degrees of freedom')
         xd.update(measurement_id=sm['id'], temperature_K=sm.get('temperature_K'), frequency_Hz=sm.get('frequency_Hz'), bias_V=target)
         if warning:
             result['diagnostics'].append(warning)

@@ -26,6 +26,9 @@ def analyze_walter(m, options, xd_measurement, cancelled, progress):
     result = dict(type=options['type'], model=model, kernel_version=1, settings=options,
                   constants=json.loads(kernel.constants()), inputs=[], status='valid', computed_status='valid',
                   diagnostics=[], spectra=[], plots=[])
+    result['quantity'] = 'apparent DOS'
+    result['interpretation'] = 'CL-04: apparent DOS under the selected emission and field model; not a unique microscopic defect density'
+    result['historical_limits'] = 'W1-W3 validate saved-slice integrals only; full historical spectra and parabolic-field reconstruction unsupported'
     if saved:
         h = options['historical']
         w = h['data']['walter']
@@ -145,7 +148,7 @@ def analyze_walter(m, options, xd_measurement, cancelled, progress):
         result['computed_status'] = result['status'] = 'invalid'
         result['diagnostics'].append('Invalid domain / unavailable integral; inspect point quality')
     # Null samples stay in the plot: the engine breaks the line at missing cells.
-    result['plots'] = [plot('Walter '+model, 'Energy (eV)', 'N_T (cm^-3 eV^-1)',
+    result['plots'] = [plot('Walter apparent DOS '+model, 'Energy (eV)', 'Apparent DOS (cm^-3 eV^-1)',
         *[dict(name=str(s.get('temperature_K', 'historical'))+' K', x=s['energy_eV'], y=s['density_cm3_eV']) for s in result['spectra']])]
     if cancelled():
         raise RuntimeError('Walter cancelled')

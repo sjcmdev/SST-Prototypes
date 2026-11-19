@@ -7,7 +7,6 @@
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "PlotLabExport.hpp"
-#include <sst/ui/Plot/Axis.hpp>
 namespace SST::Prototypes::CapLab
 {
     void DocumentJob::Execute(JobContext &context)
@@ -150,15 +149,11 @@ namespace SST::Prototypes::CapLab
             if (snapshot->spec.equalAspect) {
                 auto equal=*snapshot;
                 const double ratio=(equal.ranges.maxX-equal.ranges.minX)/(equal.ranges.maxY-equal.ranges.minY);
-                const double paddingX=2*sst::ui::plot::AxisHorizontalPaddingPt*25.4/72;
-                const double paddingY=2*sst::ui::plot::AxisVerticalPaddingPt*25.4/72;
-                if (!std::isfinite(ratio) || ratio<=0 || equal.widthMm<=paddingX || equal.heightMm<=paddingY)
+                if (!std::isfinite(ratio) || ratio<=0 || equal.widthMm<=0 || equal.heightMm<=0)
                     throw std::runtime_error("Export page is too small for equal-scale axes and labels.");
-                // The shared painter has fixed physical margins; grow the plot area to preserve 1:1 units.
-                equal.spec.customAxes=true;
-                if (ratio>(equal.widthMm-paddingX)/(equal.heightMm-paddingY))
-                    equal.widthMm=(equal.heightMm-paddingY)*ratio+paddingX;
-                else equal.heightMm=(equal.widthMm-paddingX)/ratio+paddingY;
+                // The current exporter allocates the same fractional span (0.72) on both axes.
+                if (ratio>equal.widthMm/equal.heightMm) equal.widthMm=equal.heightMm*ratio;
+                else equal.heightMm=equal.widthMm/ratio;
                 preview=Json::parse(PlotLab::SnapshotJson(equal));
                 PlotLab::ExportGraph(equal,path.Native(),"png",300,pythonRoot);
             } else {preview=Json::parse(PlotLab::SnapshotJson(*snapshot)); PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot); }

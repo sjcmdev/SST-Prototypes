@@ -168,7 +168,6 @@ def test_png_snapshot_parity_every_module_and_missing_dependency(tmp_path, monke
                 path=tmp_path/(str(graph)+a["type"]+".png")
                 r=run(project,"export",graph_id=graph,path=str(path),ranges=[1,10,-1,1])
                 if a["type"] == "Circuit" and graph == a["graphs"][0]:
-                    assert seen[-1].get("custom_axes") is True
                     figure = renderer.build_figure(seen[-1])
                     figure.canvas.draw()
                     box = figure.axes[0].get_window_extent()
