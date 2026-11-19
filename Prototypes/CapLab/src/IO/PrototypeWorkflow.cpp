@@ -1,23 +1,35 @@
 #include "Core/dspch.hpp"
 #include "IO/PrototypeWorkflow.hpp"
 #include "Domain/CapLabIS.hpp"
+#include "Domain/CapLabBundleImport.hpp"
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "PlotLabExport.hpp"
+#include <sst/ui/Plot/Axis.hpp>
 namespace SST::Prototypes::CapLab
 {
     void DocumentJob::Execute(JobContext &context)
     {
         context.SetProgress(0, 1);
-        context.SetStage(operation == Operation::Preview ? "Reading import data" : operation == Operation::Open ? "Opening project" : operation == Operation::Save ? "Saving project" : "Exporting C-f snapshot");
+        context.SetStage(operation == Operation::Preview ? "Reading import data" : operation == Operation::Open || operation == Operation::OpenOrImport ? "Opening project / import file" : operation == Operation::Save ? "Saving project" : "Exporting C-f snapshot");
         context.ThrowIfCancellationRequested();
         std::string error;
-        if (operation == Operation::Open || operation == Operation::Preview)
+        if (operation == Operation::Open || operation == Operation::Preview || operation == Operation::OpenOrImport)
         {
             std::string text;
             if (!TextFileIO::Load(path, text, error)) throw std::runtime_error(error);
+            if (operation == Operation::OpenOrImport) {
+                const auto json=Json::parse(text,nullptr,false);
+                operation=json.is_object() && json.contains("schema_version") ? Operation::Open : Operation::Preview;
+                if (operation==Operation::Preview && importOptions.empty()) {
+                    const auto extension=path.Native().extension();
+                    if (extension==".json") importOptions=R"({"profile":"propho_json"})";
+                    else if (extension==".cf") importOptions=R"({"profile":"scaps_cf"})";
+                    else if (extension==".cv") importOptions=R"({"profile":"scaps_cv"})";
+                }
+            }
             if (operation == Operation::Open) opened.emplace(Parse(text));
             else
             {
@@ -26,6 +38,11 @@ namespace SST::Prototypes::CapLab
                     [&] { return context.IsCancellationRequested(); },
                     [&](double value) { context.SetProgress(static_cast<float>(value), 1); }});
                 preview = Json::parse(table.source.at("preview_json"));
+                // Validate before the GUI renders metadata from an untrusted file.
+                if (preview.contains("samples")) {
+                    Project checked; BundleChange validation(checked,preview);
+                } else if (!Optional(preview.at("temperature_K")))
+                    (void)Optional(preview.at("suggested_temperature_K"));
             }
         }
         else if (operation == Operation::Analyze)
@@ -131,12 +148,17 @@ namespace SST::Prototypes::CapLab
             const auto local = executable.Value().parent_path().Join("python").Native();
             const auto pythonRoot = FileSystem::Exists(local / "sst_plotlab") ? local : std::filesystem::path(SST_PLOTLAB_PYTHON_ROOT);
             if (snapshot->spec.equalAspect) {
-                // The existing exporter uses equal fractional plot dimensions.
-                // Match physical dimensions to the resolved data ranges for 1:1 units.
                 auto equal=*snapshot;
                 const double ratio=(equal.ranges.maxX-equal.ranges.minX)/(equal.ranges.maxY-equal.ranges.minY);
-                if (ratio>equal.widthMm/equal.heightMm) equal.heightMm=equal.widthMm/ratio;
-                else equal.widthMm=equal.heightMm*ratio;
+                const double paddingX=2*sst::ui::plot::AxisHorizontalPaddingPt*25.4/72;
+                const double paddingY=2*sst::ui::plot::AxisVerticalPaddingPt*25.4/72;
+                if (!std::isfinite(ratio) || ratio<=0 || equal.widthMm<=paddingX || equal.heightMm<=paddingY)
+                    throw std::runtime_error("Export page is too small for equal-scale axes and labels.");
+                // The shared painter has fixed physical margins; grow the plot area to preserve 1:1 units.
+                equal.spec.customAxes=true;
+                if (ratio>(equal.widthMm-paddingX)/(equal.heightMm-paddingY))
+                    equal.widthMm=(equal.heightMm-paddingY)*ratio+paddingX;
+                else equal.heightMm=(equal.widthMm-paddingX)/ratio+paddingY;
                 preview=Json::parse(PlotLab::SnapshotJson(equal));
                 PlotLab::ExportGraph(equal,path.Native(),"png",300,pythonRoot);
             } else {preview=Json::parse(PlotLab::SnapshotJson(*snapshot)); PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot); }
@@ -150,7 +172,7 @@ namespace SST::Prototypes::CapLab
         try
         {
             if (activeJob) throw std::runtime_error("Wait for the current job or cancel it.");
-            if (operation == Operation::Open && document.dirty) throw std::runtime_error("Save pending changes before opening another project.");
+            if ((operation == Operation::Open || operation == Operation::OpenOrImport) && document.dirty) throw std::runtime_error("Save pending changes before opening another project.");
             if (operation != Operation::Analyze && target.Empty())
             {
                 if (operation == Operation::Save) target = document.path;
@@ -170,11 +192,14 @@ namespace SST::Prototypes::CapLab
             pendingRevision = document.revision;
             activeJob = jobs->Submit(job);
             if (!activeJob) throw std::runtime_error("Job submission failed.");
-            pending = std::move(job); status.clear();
+            pending = std::move(job); status.clear(); failure.reset();
             if (operation==Operation::Analyze) analysisDraft.reset();
             if (operation == Operation::Preview) preview.reset();
         }
-        catch (const std::exception &error) { status = error.what(); }
+        catch (const std::exception &error) {
+            status=error.what();
+            failure=StructuredError{ErrorCategory::Validation,Severity::Error,"Document operation failed",status,"Check the file and import settings.","CapLab","caplab.document"};
+        }
     }
     void CapLabWorkflow::Changed()
     {
@@ -210,6 +235,7 @@ namespace SST::Prototypes::CapLab
             else if (pending->operation == Operation::Preview)
             {
                 preview = std::move(pending->preview); previewRevision = pendingRevision;
+                importOptions=pending->importOptions;
                 if (preview->contains("samples")) { status = "Preview ready; inspect samples, units and provenance before confirming."; }
                 else {
                 temperature = Optional(preview->at("temperature_K"));
@@ -217,7 +243,11 @@ namespace SST::Prototypes::CapLab
                 status = "Preview ready; check units and temperature before confirming."; }
             }
         }
-        else status = job->status == JobStatus::Cancelled ? "Cancelled." : job->errorMessage;
+        else {
+            status = job->status == JobStatus::Cancelled ? "Cancelled." : job->errorMessage;
+            if (job->status!=JobStatus::Cancelled)
+                failure=StructuredError{ErrorCategory::Validation,Severity::Error,"Document operation failed",status,"Check the file and import settings.","CapLab",pending->operation==Operation::Preview ? "caplab.preview" : "caplab.document"};
+        }
         activeJob = 0; pending.reset();
     }
 }

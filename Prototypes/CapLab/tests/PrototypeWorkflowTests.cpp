@@ -55,6 +55,7 @@ TEST(CapLabWorkflow, FailedOpenLeavesDocumentAndUndoUnchanged) {
     w.Start(Operation::Open,path); ASSERT_NE(w.activeJob,0);
     jobs->Shutdown(); w.OnUpdate(0);
     EXPECT_EQ(Serialize(w.document.project),before); EXPECT_FALSE(w.status.empty()); EXPECT_TRUE(w.document.path.Empty());
+    ASSERT_TRUE(w.failure); EXPECT_EQ(w.failure->code,"caplab.document");
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
 TEST(CapLabWorkflow, StaleOpenIsRejectedOnMainThread) {

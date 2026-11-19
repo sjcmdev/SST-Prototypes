@@ -262,7 +262,7 @@ def import_preview(text, source, decimal='.', options=None, cancelled=lambda: Fa
         m['sha256'] = hashlib.sha256(text.encode('utf-8')).hexdigest()
         m['block_index'] = i
         measurements.append(m)
-    return dict(provenance(text, source, profile), decimal=decimal, samples=[dict(name=options.get('sample_name', Path(source).stem or 'Sample'),
+    return dict(provenance(text, source, profile), decimal=decimal, samples=[dict(name=options.get('sample_name', Path(str(source).split(' (Cp/Rp -> C/G)', 1)[0]).stem or 'Sample'),
                 area_m2=positive(options.get('area_m2'), 'area_m2'), metadata={}, measurements=measurements)], historical=[])
 
 

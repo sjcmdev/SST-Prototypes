@@ -226,7 +226,7 @@ TEST(CapLabISFit, IndependentRandlesRecoveryAndSeededNoiseScore) {
         if (!noisy) EXPECT_LT(maximum,1e-3);
         EXPECT_LT(r.at("score").get<double>(),r.at("initial_score").get<double>());
         EXPECT_EQ(r.at("weighting"),"modulus_floor"); EXPECT_EQ(r.at("Z_floor_Ohm"),1.);
-        EXPECT_TRUE(r.at("covariance").is_null()); EXPECT_EQ(r.at("plots").size(),7);
+        EXPECT_TRUE(r.at("covariance").is_array()); EXPECT_EQ(r.at("plots").size(),7);
         EXPECT_EQ(c.dump(),before);
         double independent=0;
         for (std::size_t i=0;i<r.at("frequency_Hz").size();++i) {
@@ -331,5 +331,28 @@ TEST(CapLabISFit, SpiceJunctionCapacitanceIsFitParameterForBothDiodes) {
         EXPECT_NEAR(r["parameters"][0]["fitted"].get<double>()/2e-9,1.,1e-3);
         EXPECT_EQ(r["parameters"][0]["unit"],"F");
     }
+}
+}
+
+namespace SST::Prototypes::CapLab {
+TEST(CapLabISFit, JacobianCovarianceMatchesIndependentResistorEstimate) {
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    auto m=Measurement({100,1000,10000}); m["columns"][1]={90.,100.,110.}; m["columns"][2]={0.,0.,0.};
+    auto c=Circuit("R0"); c["schematic"]["elements"][0]["value"]=80.;
+    Json settings{{"Z_floor_Ohm",1.},{"sigma_Ohm",{2.,2.,2.}},{"max_iterations",300},{"score_tolerance",0.},
+        {"parameters",Json::array({{{"element","R0"},{"field","value"},{"unit","ohm"},{"free",true},{"min",1.},{"max",200.}}})}};
+    const auto r=FitIS(m,c,settings,context);
+    ASSERT_EQ(r.at("covariance_status"),"estimated_from_jacobian");
+    EXPECT_NEAR(r["parameters"][0]["fitted"].get<double>(),100.,1e-4);
+    // Six complex components, one parameter: s2=(10^2+10^2)/4/5; inv(JtJ)=4/3.
+    EXPECT_NEAR(r["covariance"][0][0].get<double>(),40./3,1e-5);
+    EXPECT_NEAR(r["parameters"][0]["sigma"].get<double>(),std::sqrt(40./3),1e-5);
+    c=Circuit("R0-R1");
+    for (auto& e : c["schematic"]["elements"]) e["value"]=50.;
+    settings["parameters"].push_back(settings["parameters"][0]);
+    settings["parameters"][1]["element"]="R1";
+    const auto singular=FitIS(m,c,settings,context);
+    EXPECT_TRUE(singular.at("covariance").is_null());
+    EXPECT_EQ(singular.at("covariance_status"),"rank_deficient_or_invalid_jacobian");
 }
 }

@@ -281,7 +281,75 @@ Json FitIS(const Json &measurement, const Json &circuit, const Json &settings, J
     out["score"]=score(out); out["initial_score"]=score(initial); out["score_kind"]="weighted_complex_residual_sum";
     out["stop_status"]=stop; out["iterations"]=optimizer.iteration(); out["invalid_evaluations"]=invalid;
     out["covariance"]=nullptr;
-    for (std::size_t i=0;i<specs.size();++i) specs[i]["fitted"]=fitted.at("schematic").at("elements").at(elements[i]).at(fields[i]);
+    out["covariance_status"]="insufficient_degrees_of_freedom";
+    std::vector<std::size_t> free;
+    for (std::size_t i=0;i<specs.size();++i) {
+        specs[i]["fitted"]=fitted.at("schematic").at("elements").at(elements[i]).at(fields[i]);
+        specs[i]["sigma"]=nullptr;
+        if (parameters[i].free) free.push_back(i);
+    }
+    const auto n=free.size(), rows=weights.size()*2;
+    out["covariance_parameters"]=Json::array();
+    for (auto i : free) out["covariance_parameters"].push_back(specs[i].at("element").get<std::string>()+"."+fields[i]);
+    if (rows>n) {
+        // Differentiate in scaled coordinates; convert covariance back to each parameter's SI units.
+        std::vector<std::vector<double>> jacobian(n,std::vector<double>(rows));
+        bool valid=true;
+        for (std::size_t j=0;j<n;++j) {
+            context.ThrowIfCancellationRequested();
+            const auto i=free[j];
+            const double value=specs[i]["fitted"], lo=specs[i]["min"], hi=specs[i]["max"];
+            const double step=std::cbrt(std::numeric_limits<double>::epsilon())*scales[i];
+            const double a=std::max(lo,value-step), b=std::min(hi,value+step);
+            auto left=fitted, right=fitted;
+            left["schematic"]["elements"][elements[i]][fields[i]]=a;
+            right["schematic"]["elements"][elements[i]][fields[i]]=b;
+            Json l,r;
+            try {l=SimulateIS(m,left,settings,evaluation,false); r=SimulateIS(m,right,settings,evaluation,false);}
+            catch (const JobCancelledException&) {throw;}
+            catch (const std::exception&) {valid=false; break;}
+            if (b<=a || l.at("status")!="valid" || r.at("status")!="valid") {valid=false; break;}
+            for (std::size_t k=0;k<weights.size();++k) for (int part=0;part<2;++part) {
+                const char* key=part ? "residual_ImZ_Ohm" : "residual_ReZ_Ohm";
+                jacobian[j][2*k+part]=(r.at(key).at(k).get<double>()-l.at(key).at(k).get<double>())*scales[i]/((b-a)*weights[k]);
+            }
+        }
+        std::vector<std::vector<double>> matrix(n,std::vector<double>(2*n));
+        double largest=0;
+        for (std::size_t j=0;valid && j<n;++j) {
+            context.ThrowIfCancellationRequested();
+            for (std::size_t k=0;k<n;++k) {
+                for (std::size_t row=0;row<rows;++row) matrix[j][k]+=jacobian[j][row]*jacobian[k][row];
+                largest=std::max(largest,std::abs(matrix[j][k]));
+            }
+            matrix[j][n+j]=1;
+        }
+        for (std::size_t j=0;valid && j<n;++j) {
+            context.ThrowIfCancellationRequested();
+            auto pivot=j;
+            for (std::size_t k=j+1;k<n;++k) if (std::abs(matrix[k][j])>std::abs(matrix[pivot][j])) pivot=k;
+            if (!std::isfinite(matrix[pivot][j]) || std::abs(matrix[pivot][j])<=largest*1e-12) {valid=false; break;}
+            std::swap(matrix[pivot],matrix[j]);
+            const double divisor=matrix[j][j];
+            for (auto& value : matrix[j]) value/=divisor;
+            for (std::size_t k=0;k<n;++k) if (k!=j) {
+                const double factor=matrix[k][j];
+                for (std::size_t c=0;c<2*n;++c) matrix[k][c]-=factor*matrix[j][c];
+            }
+        }
+        out["covariance_status"]=valid ? "estimated_from_jacobian" : "rank_deficient_or_invalid_jacobian";
+        if (valid) {
+            Json covariance=Json::array();
+            const double variance=score(out)/(rows-n);
+            for (std::size_t j=0;j<n;++j) {
+                Json row=Json::array();
+                for (std::size_t k=0;k<n;++k) row.push_back(matrix[j][n+k]*variance*scales[free[j]]*scales[free[k]]);
+                specs[free[j]]["sigma"]=std::sqrt(std::max(0.,row.at(j).get<double>()));
+                covariance.push_back(std::move(row));
+            }
+            out["covariance"]=std::move(covariance);
+        }
+    }
     out["parameters"]=specs;
     context.ThrowIfCancellationRequested(); return out;
 }

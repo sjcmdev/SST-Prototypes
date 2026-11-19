@@ -282,3 +282,49 @@ def test_scaps_bom_does_not_drop_first_batch():
     ms = result['samples'][0]['measurements']
     assert len(ms) == 11 and ms[0]['temperature_K'] == 200
     assert ms[0]['sha256'] == hashlib.sha256(body.encode()).hexdigest()
+
+
+def test_owner_cl02_uses_same_core_import_command_path(tmp_path):
+    from caplab import execute, project_from_preview, parse_lab_as
+    project = project_from_preview(parse_lab_as("100 1e-9 1000", "seed.dat"), 300)
+    root = Path(__file__).resolve().parents[2] / "tests/fixtures"
+    for filename in ("m2/samples_Cd_diffusion.json", "cf_100K_7.dat", "m2/benchmark_propho.cf"):
+        request = {"operation": "import", "path": str(root / filename)}
+        if filename.endswith(".cf"):
+            request["options"] = {"profile": "auto", "area_m2": 3.7e-6}
+        result = execute(project, request)
+        assert result["ok"], json.dumps(result.get("error"), indent=2)
+        assert len(result["project"]["samples"]) > len(project["samples"])
+    suggested = tmp_path / "cf_222K.dat"
+    suggested.write_text("100 1e-9 1000", encoding="utf-8")
+    assert parse_lab_as(suggested.read_text(), str(suggested))["suggested_temperature_K"] == 222
+    unknown = execute(project, {"operation": "import", "path": str(suggested)})
+    assert unknown["ok"], json.dumps(unknown.get("error"), indent=2)
+    assert unknown["project"]["sweeps"][-1]["temperature_K"] is None
+    confirmed = execute(project, {"operation": "import", "path": str(suggested),
+                                  "options": {"profile": "auto", "temperature_K": 222}})
+    assert confirmed["ok"], json.dumps(confirmed.get("error"), indent=2)
+    assert confirmed["project"]["measurements"][-1]["metadata"]["temperature_K"] == 222
+    bad = execute(project, {"operation": "import", "path": str(root / "missing.json")})
+    assert not bad["ok"] and bad["error"]["code"] == "import_failed"
+    assert bad["project"] == project
+
+    for filename, text in [("cf_0K.dat", "100 1e-9 1000"),
+                           ("bad-name.json", '{"samples":[{"name":7,"as_data":[],"dl_data":[]}]}')]:
+        invalid = tmp_path / filename
+        invalid.write_text(text, encoding="utf-8")
+        bad = execute(project, {"operation": "import", "path": str(invalid)})
+        assert not bad["ok"] and bad["error"]["code"] == "import_failed"
+        assert bad["project"] == project
+    malformed = tmp_path / "malformed.json"
+    malformed.write_text("{bad json", encoding="utf-8")
+    bad = execute(project, {"operation": "import", "path": str(malformed)})
+    assert not bad["ok"] and bad["error"]["code"] == "import_failed"
+    assert bad["project"] == project
+
+
+def test_conversion_annotation_does_not_become_sample_name():
+    from caplab import import_preview
+    preview = import_preview("100 1e-9 1e-6", "measurement.dat (Cp/Rp -> C/G)", options={"profile": "lab_is_c_g"})
+    assert preview["samples"][0]["name"] == "measurement"
+    assert preview["samples"][0]["measurements"][0]["source"].endswith("(Cp/Rp -> C/G)")

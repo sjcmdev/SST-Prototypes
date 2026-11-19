@@ -20,7 +20,7 @@ FROZEN = json.loads((FIX/"m8/synthetic.json").read_text(encoding="utf-8"))
 
 def run(p, operation, **request):
     r = execute(p, dict(operation=operation, **request))
-    assert r["ok"], r
+    assert r["ok"], json.dumps(r.get("error"), indent=2)
     return r
 
 
@@ -167,13 +167,25 @@ def test_png_snapshot_parity_every_module_and_missing_dependency(tmp_path, monke
             for graph in a["graphs"]:
                 path=tmp_path/(str(graph)+a["type"]+".png")
                 r=run(project,"export",graph_id=graph,path=str(path),ranges=[1,10,-1,1])
+                if a["type"] == "Circuit" and graph == a["graphs"][0]:
+                    assert seen[-1].get("custom_axes") is True
+                    figure = renderer.build_figure(seen[-1])
+                    figure.canvas.draw()
+                    box = figure.axes[0].get_window_extent()
+                    assert box.width / 9 == pytest.approx(box.height / 2, rel=1e-6)
+                    figure.clear()
                 assert r["export"] == seen[-1]
                 assert r["export"]["ranges"] == [1,10,-1,1]
                 assert path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
                 # The emitted figure consumes the exact series/ranges/styles captured by the worker.
                 fig=renderer.build_figure(r["export"])
-                assert list(fig.axes[0].get_xlim()) == [1,10]
-                assert list(fig.axes[0].get_ylim()) == [-1,1]
+                custom = r["export"].get("custom_axes", False)
+                assert list(fig.axes[0].get_xlim()) == ([0,1] if custom else [1,10])
+                assert list(fig.axes[0].get_ylim()) == ([0,1] if custom else [-1,1])
+                if custom:
+                    for line, series in zip(fig.axes[0].lines, r["export"]["series"]):
+                        assert list(line.get_xdata()) == pytest.approx([(x-1)/9 for x in series["x"]])
+                        assert list(line.get_ydata()) == pytest.approx([(y+1)/2 for y in series["y"]])
                 fig.clear()
     # Visibility uses stable plot IDs, not series positions.
     project=p

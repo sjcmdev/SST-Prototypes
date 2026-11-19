@@ -9,11 +9,16 @@ namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderImport() {
     auto &doc = state->document;
     ImGui::Text("%s%s", doc.path.Empty() ? "Untitled" : doc.path.Utf8().c_str(), doc.dirty ? " (unsaved)" : "");
+    ImGui::SeparatorText("Import settings and metadata");
     bool comma = state->decimal == ',';
     if (sst::ui::widgets::Checkbox("Decimal comma (semicolon/whitespace columns)", &comma)) state->decimal = comma ? ',' : '.';
     static int profile = 1;
     const char *profiles[] = {"Lab AS Cp/Rp (SI)", "Lab AS Cp/Rp (mapped)", "Converted AS C/G", "ProPho DL/CV", "Lab CV", "Lab DLCP raw", "Lab IS Z", "Lab IS C/G", "Lab IS Cp/Rp", "SCAPS .cf", "SCAPS .cv", "ProPho manifest / project"};
     const char *keys[] = {"", "lab_as_cp_rp", "converted_as_c_g", "propho_dl", "lab_cv", "lab_dlcp_raw", "lab_is_z", "lab_is_c_g", "lab_is_cp_rp", "scaps_cf", "scaps_cv", "propho_json"};
+    if (state->preview && !state->importOptions.empty()) {
+        const auto importedProfile=Json::parse(state->importOptions).value("profile",std::string{});
+        for (int i=1;i<IM_ARRAYSIZE(keys);++i) if (importedProfile==keys[i]) profile=i;
+    }
     static int mapping[5] = {1,2,3,4,5}, unitChoice[5] = {}, sign = -1, amplitude = 0, asVariant = -1;
     static bool areaKnown = false, temperatureKnown = false, frequencyKnown = false, biasKnown = false, optionalG = false, columnTF = false, maxKnown = false, maxConstant = false;
     static double area = 0, temperature = 0, frequency = 0, bias = 0;
@@ -64,7 +69,7 @@ void CapLabPrototypePanel::RenderImport() {
             else fields={{"f","Hz"},{"C","F"},{profile == 2 || profile == 7 ? "G" : "Rp",profile == 2 || profile == 7 ? "S" : "Ohm"}};
             for (std::size_t i=0;i<fields.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
-                ImGui::TextUnformatted(fields[i].first.c_str());
+                ImGui::Spacing(); ImGui::SeparatorText(fields[i].first.c_str());
                 sst::ui::widgets::Int("Source column (1 = first)", &mapping[i]);
                 const auto &unit = fields[i].second;
                 const std::vector<std::string> choices = unit == "Hz" ? std::vector<std::string>{"Hz","kHz","MHz"} :
@@ -122,7 +127,9 @@ void CapLabPrototypePanel::RenderImport() {
             }
             if (!preview.at("historical").empty()) ImGui::TextUnformatted("Saved ProPho fits, results and selections will be imported as historical.");
             ImGui::TextWrapped("To correct metadata, mapping or units, change import fields and read preview again. Filename values are suggestions only.");
-            const bool settingsChanged = state->importOptions != options.dump() || preview.value("decimal",std::string(1,state->decimal)) != std::string(1,state->decimal);
+            auto previousOptions=Json::parse(state->importOptions.empty() ? "{}" : state->importOptions);
+            if (profile!=11 && !previousOptions.contains("exclude_rows")) previousOptions["exclude_rows"]=Json::array();
+            const bool settingsChanged = previousOptions != options || preview.value("decimal",std::string(1,state->decimal)) != std::string(1,state->decimal);
             if (ImGui::Button("Refresh preview with current fields")) {
                 const Path source{preview.at("source").get<std::string>()};
                 state->importOptions = options.dump(); state->Start(Operation::Preview,source);
@@ -240,9 +247,16 @@ void CapLabPrototypePanel::RenderContent() {
     switch (view) {
     case View::Project: RenderTree(); break;
     case View::Plot: RenderPlot(); break;
-    case View::Analysis: RenderWalter(); RenderIS(); RenderAS(); RenderAnalysis(); break;
+    case View::Analysis:
+        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(8,6));
+        RenderWalter(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+        RenderIS(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+        RenderAS(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing(); RenderAnalysis();
+        ImGui::PopStyleVar(); break;
     case View::Import: RenderImport(); break;
     }
+    ImGui::Spacing(); ImGui::SeparatorText("Status");
+    if (state->failure) ImGui::TextWrapped("%s",state->failure->code.c_str());
     ImGui::TextWrapped("%s", state->status.c_str());
     if (const auto job = state->jobs->GetJob(state->activeJob)) {
         ImGui::TextUnformatted(job->currentStage.c_str());

@@ -11,7 +11,7 @@ public:
         : EditorWindow(view == View::Project ? "caplab.workspace" : view == View::Plot ? "caplab.plot" :
             view == View::Analysis ? "caplab.analysis" : "caplab.import",
             view == View::Project ? "Project / measurements" : view == View::Plot ? "C-f" :
-            view == View::Analysis ? "Analysis / results" : "Import", true), state(state), commands(std::move(commands)), view(view) {
+            view == View::Analysis ? "Analysis / results" : "Import", true, {.auxiliary = view == View::Import, .openCommand = "caplab.preview", .closeCommand = "caplab.import"}), state(state), commands(std::move(commands)), view(view) {
         auto layout = GetState();
         layout.x = view == View::Project ? 10.0f : view == View::Analysis ? 900.0f : 260.0f;
         layout.y = view == View::Import ? 480.0f : 40.0f;

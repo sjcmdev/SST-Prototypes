@@ -41,7 +41,10 @@ def test_fit_is_draft_until_explicit_acceptance(noisy):
     assert json.dumps(p, sort_keys=True) == original
     a = r["draft"]["project"]["analyses"][-1]
     assert a["score"] < a["initial_score"]
-    assert a["covariance"] is None and a["weighting"] == "modulus_floor"
+    assert len(a["covariance"]) == 3 and a["weighting"] == "modulus_floor"
+    assert a["covariance_status"] == "estimated_from_jacobian"
+    for i, parameter in enumerate(a["parameters"]):
+        assert parameter["sigma"] == pytest.approx(math.sqrt(a["covariance"][i][i]))
     assert a["Z_floor_Ohm"] == 1 and len(a["graphs"]) == 7
     if not noisy:
         for v in a["parameters"]:

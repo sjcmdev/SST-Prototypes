@@ -74,7 +74,12 @@ bool CapLabSchematicEditor::properties(CircuitDocument& d) {
                     selected=static_cast<int>(i); terminal=-1;
                     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) openValue=true;
                 }
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("Double-click to edit. Uncertainty unavailable (Nelder-Mead has no covariance).");
+                if (ImGui::IsItemHovered()) {
+                    const auto sigma=uncertainties.find(item.name+".value");
+                    const auto value=SST::Prototypes::CapLab::Engineering(item.value,SST::Prototypes::CapLab::ElementUnit(item));
+                    if (sigma!=uncertainties.end()) ImGui::SetTooltip("%s \u00b1 %s. Double-click to edit.",value.c_str(),SST::Prototypes::CapLab::Engineering(sigma->second,SST::Prototypes::CapLab::ElementUnit(item)).c_str());
+                    else ImGui::SetTooltip("Double-click to edit. No identifiable fitted uncertainty for this value.");
+                }
                 ImGui::TableNextColumn();
                 auto value=SST::Prototypes::CapLab::Engineering(item.value,SST::Prototypes::CapLab::ElementUnit(item));
                 ImGui::TextUnformatted(value.c_str());
@@ -103,12 +108,16 @@ bool CapLabSchematicEditor::draw(CircuitDocument& d) {
     for (int k=0;k<=8;++k) {
         if (k) sst::ui::widgets::SameLineIfFits(56);
         ImGui::PushID(k);
+        ImGui::BeginGroup();
         auto p=ImGui::GetCursorScreenPos();
         if (ImGui::Selectable("##element",palette==k,0,ImVec2(56,32))) { palette=k; tool=Tool::Select; pending=-1; }
         symbol(ImGui::GetWindowDrawList(),static_cast<Kind>(k),[&](float x,float y) {return ImVec2(p.x+28+x*.55f,p.y+16+y*.55f);},.55f,ImGui::GetColorU32(ImGuiCol_Text));
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s: click, then place on canvas",typeName(static_cast<Kind>(k)));
+        ImGui::TextUnformatted(typeName(static_cast<Kind>(k)));
+        ImGui::EndGroup();
         ImGui::PopID();
     }
+    ImGui::Spacing(); ImGui::SeparatorText("Tools");
     const char* tools[]{"Select","Wire","Ground","Port +","Port -"};
     for (int i=0;i<5;++i) {
         if (i) sst::ui::widgets::SameLineIfFits(65);
@@ -159,7 +168,12 @@ bool CapLabSchematicEditor::draw(CircuitDocument& d) {
         auto value=SST::Prototypes::CapLab::Engineering(e.value,SST::Prototypes::CapLab::ElementUnit(e));
         ImGui::BeginTooltip(); ImGui::Text("%s: %s",e.name.c_str(),value.c_str());
         if (e.kind==Kind::CPE) ImGui::Text("Exponent n = %.6g",e.secondary);
-        ImGui::TextDisabled("Uncertainty unavailable (Nelder-Mead has no covariance)."); ImGui::EndTooltip();
+        const auto uncertainty=uncertainties.find(e.name+".value");
+        if (uncertainty!=uncertainties.end()) ImGui::Text("%s \u00b1 %s",value.c_str(),SST::Prototypes::CapLab::Engineering(uncertainty->second,SST::Prototypes::CapLab::ElementUnit(e)).c_str());
+        else ImGui::TextDisabled("No identifiable fitted uncertainty for this value.");
+        const auto secondary=uncertainties.find(e.name+".secondary");
+        if (secondary!=uncertainties.end()) ImGui::Text("n = %.6g \u00b1 %.6g",e.secondary,secondary->second);
+        ImGui::EndTooltip();
     }
     if (hovered && !ImGui::IsPopupOpen("Edit element value") && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         if (palette>=0) {

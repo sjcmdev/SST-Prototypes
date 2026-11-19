@@ -1,6 +1,6 @@
 #include "Core/dspch.hpp"
 #include "App/Application.hpp"
-#include "Core/EntryPoint.hpp"
+
 #include "Core/Commands/SystemCommandEvents.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/IO/IOLayer.hpp"
@@ -38,4 +38,13 @@ void SetupApplication(Application &application) {
         editor.RegisterPanel<CapLabPrototypePanel>(state, registry, view);
     application.InsertLayerBefore(LayerId::ImGui, std::move(workflow));
 }
+}
+
+int main(int argc, char** argv) {
+    // Keep the shared --open interface and accept the tester's positional path.
+    std::vector<char*> arguments(argv,argv+argc+1);
+    char open[]="--open";
+    if (argc>1 && argv[1][0]!='-') arguments.insert(arguments.begin()+1,open);
+    auto app=SST::Application::Create(static_cast<int>(arguments.size()-1),arguments.data(),SST::SetupApplication);
+    return app.Run();
 }

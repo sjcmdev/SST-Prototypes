@@ -11,7 +11,7 @@
 #include <sst/plotlab/GraphSnapshot.hpp>
 namespace SST::Prototypes::CapLab
 {
-    enum class Operation { Preview, Open, Save, Export, Analyze };
+    enum class Operation { Preview, Open, OpenOrImport, Save, Export, Analyze };
     struct DocumentRequested : BusEvent { Operation operation = Operation::Preview; Path target; };
     struct DocumentChanged : BusEvent { pl::Id project; std::uint64_t revision; };
     class DocumentJob final : public IJob
@@ -52,6 +52,7 @@ namespace SST::Prototypes::CapLab
         pl::ImporterRegistry importers;
         JobId activeJob = 0;
         std::string status;
+        std::optional<StructuredError> failure;
         Json analysisOptions = Json::object();
         Json exportResult;
         std::optional<Project> analysisDraft;

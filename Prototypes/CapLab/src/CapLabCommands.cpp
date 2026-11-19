@@ -95,12 +95,13 @@ public:
             if (state.preview->contains("samples")) bundle.emplace(state.document.project,*state.preview);
             else change.emplace(state.document.project, *state.preview, state.temperature,
                 state.templates.find("caplab.cf", 1));
-            state.Changed(); state.preview.reset(); state.status = "Imported.";
+            state.Changed(); state.preview.reset(); state.status = "Imported."; state.failure.reset();
             return {};
         } catch (const std::exception &e) {
             state.status = e.what();
-            return StructuredError{ErrorCategory::Validation, Severity::Error, "Import failed", e.what(),
+            state.failure=StructuredError{ErrorCategory::Validation, Severity::Error, "Import failed", e.what(),
                 "Check the preview and metadata.", "CapLab", "caplab.import"};
+            return *state.failure;
         }
     }
     Result<void> Undo(CommandContext &) override { if (bundle) bundle->Undo(); else change->Undo(); state.Changed(); return {}; }
@@ -133,6 +134,7 @@ void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWo
         if (!r) throw std::runtime_error(r.Error().technicalDetails);
     }
     for (const auto &[id, name, operation] : {
+        std::tuple{"app.open", "Open project or import measurements", Operation::OpenOrImport},
         std::tuple{"caplab.save", "Save CapLab project", Operation::Save},
         std::tuple{"caplab.analyze", "Analyze CapLab data", Operation::Analyze},
         std::tuple{"caplab.preview", "Import measurements", Operation::Preview},

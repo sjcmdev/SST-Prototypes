@@ -9,6 +9,9 @@
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "Core/ScientificRuntime/Python/PythonGilScope.hpp"
+#include "Presentation/CapLabPrototypePanel.hpp"
+#include <imgui_internal.h>
+#include <implot.h>
 
 namespace SST::Prototypes::CapLab
 {
@@ -18,6 +21,19 @@ namespace SST::Prototypes::CapLab
         RegisterPrototypePythonModule();
         PythonInterpreter interpreter;
         ASSERT_TRUE(interpreter.Start());
+        // A GUI first import has not imported sst_caplab or initialized nanobind yet.
+        {
+            auto bus=CreateRef<EventBus>(); auto jobs=CreateRef<JobSystem>(nullptr,1);
+            auto commands=CreateRef<CommandRegistry>(); auto undo=CreateRef<UndoStack>();
+            CapLabWorkflow cold(jobs,bus,undo); RegisterCommands(commands,bus,cold);
+            auto subscription=bus->Subscribe<DocumentRequested>([&](const auto& e) {cold.Start(e.operation,e.target);});
+            CommandContext request; request.Set("path",Path{std::filesystem::path(SST_PROTOTYPE_PYTHON_ROOT).parent_path()/"tests/fixtures/m2/samples_Cd_diffusion.json"});
+            cold.importOptions=R"({"profile":"propho_json"})";
+            ASSERT_TRUE(commands->Execute(CommandID{"caplab.preview"},std::move(request)));
+            bus->ProcessQueue(); jobs->Shutdown(); cold.OnUpdate(0);
+            ASSERT_TRUE(cold.preview) << cold.status;
+            ASSERT_TRUE(commands->Execute(CommandID{"caplab.import"})) << cold.status;
+        }
         {
         PythonGilAcquireScope gil;
         ASSERT_TRUE(gil.IsActive());
@@ -38,6 +54,56 @@ namespace SST::Prototypes::CapLab
                 "pytest_result = pytest.main([os.environ['SST_RUN_PYTEST'], '-q', '-p', 'no:cacheprovider'])\n"
                 "sys.stdout.flush(); sys.stderr.flush()\n"
                 "assert pytest_result == 0\n"), 0);
+        }
+        // CL-02: render the actual import panel around the GUI command/job path.
+        {
+        auto* gui=ImGui::CreateContext(); auto* plot=ImPlot::CreateContext();
+        auto& io=ImGui::GetIO(); io.IniFilename=nullptr; io.DisplaySize={1600,1200}; io.DeltaTime=1.f/60;
+        io.ConfigDebugHighlightIdConflicts=true;
+        unsigned char* pixels; int width,height; io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+        for (const auto* filename : {"m2/samples_Cd_diffusion.json", "cf_100K_7.dat"}) {
+            auto bus=CreateRef<EventBus>(); auto jobs=CreateRef<JobSystem>(nullptr,1);
+            auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
+            CapLabWorkflow w(jobs,bus,undo); RegisterCommands(commands,bus,w);
+            auto subscription=bus->Subscribe<DocumentRequested>([&](const auto& e) {w.Start(e.operation,e.target);});
+            CapLabPrototypePanel panel(&w,commands,CapLabPrototypePanel::View::Import);
+            auto render=[&] {
+                ImGui::NewFrame(); ImGui::SetNextWindowSize({1500,1100}); ImGui::Begin("CL-02");
+                panel.RenderContent(); ImGui::End(); ImGui::Render();
+            };
+            render();
+            const Path path{std::filesystem::path(SST_PROTOTYPE_PYTHON_ROOT).parent_path()/"tests/fixtures"/filename};
+            if (path.Native().extension()==".json") w.importOptions=R"({"profile":"propho_json"})";
+            CommandContext request; request.Set("path",path);
+            ASSERT_TRUE(commands->Execute(CommandID{"caplab.preview"},std::move(request)));
+            bus->ProcessQueue(); ASSERT_NE(w.activeJob,0);
+            jobs->Shutdown(); w.OnUpdate(0); ASSERT_TRUE(w.preview) << w.status;
+            render();
+            ASSERT_TRUE(commands->Execute(CommandID{"caplab.import"})) << w.status;
+            EXPECT_FALSE(w.document.project.samples.empty()); render();
+            EXPECT_EQ(gui->DebugDrawIdConflictsCount,0);
+        }
+        ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
+        }
+        // Invalid preview metadata must fail in the job, never in the GUI update/render loop.
+        for (const auto& [name,contents] : {
+            std::pair{"caplab-clfix1-cf_0K.dat","100 1e-9 1000"},
+            std::pair{"caplab-clfix1-bad-name.json",R"({"samples":[{"name":7,"as_data":[],"dl_data":[]}]})"}}) {
+            const Path path{FileSystem::TempDirectoryPath()/name}; std::string error;
+            ASSERT_TRUE(TextFileIO::Save(path,contents,error));
+            auto bus=CreateRef<EventBus>(); auto jobs=CreateRef<JobSystem>(nullptr,1);
+            auto commands=CreateRef<CommandRegistry>(); auto undo=CreateRef<UndoStack>();
+            CapLabWorkflow invalid(jobs,bus,undo); RegisterCommands(commands,bus,invalid);
+            auto subscription=bus->Subscribe<DocumentRequested>([&](const auto& e) {invalid.Start(e.operation,e.target);});
+            if (path.Native().extension()==".json") invalid.importOptions=R"({"profile":"propho_json"})";
+            CommandContext request; request.Set("path",path);
+            ASSERT_TRUE(commands->Execute(CommandID{"caplab.preview"},std::move(request)));
+            bus->ProcessQueue(); jobs->Shutdown();
+            ASSERT_NO_THROW(invalid.OnUpdate(0));
+            EXPECT_FALSE(invalid.preview); ASSERT_TRUE(invalid.failure);
+            EXPECT_EQ(invalid.failure->code,"caplab.preview");
+            EXPECT_TRUE(invalid.document.project.samples.empty());
+            EXPECT_TRUE(FileSystem::Remove(path.Native()));
         }
         // Exercise the real command -> EventBus -> Python job -> main-thread commit path.
         auto bus=CreateRef<EventBus>(); auto jobs=CreateRef<JobSystem>(nullptr,1);

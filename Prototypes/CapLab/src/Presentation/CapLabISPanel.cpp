@@ -26,6 +26,7 @@ void CapLabPrototypePanel::RenderIS() {
         (void)commands->Execute(CommandID{"caplab.circuit"},std::move(context));
     };
     try {
+        ImGui::SeparatorText("Create circuit");
         sst::ui::widgets::Text("Circuit name", name, sizeof(name));
         sst::ui::widgets::Text("Topology", topology, sizeof(topology));
         static pl::Id sample=0;
@@ -38,6 +39,7 @@ void CapLabPrototypePanel::RenderIS() {
             edit({{"action","create"},{"sample_id",sample},{"name",name},{"topology",topology}});
             if (p.circuits.size()>old) { selectedCircuit=p.circuits.back().at("id"); circuitMeasurement=0; circuitRecalc=false; circuitAutoReady=false; circuitEditor.reset(); }
         }
+        ImGui::Spacing(); ImGui::SeparatorText("Schematic and parameters");
         auto selected=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==selectedCircuit;});
         if (sst::ui::widgets::BeginCombo("Schematic", selected==p.circuits.end() ? "Select circuit" : selected->at("name").get<std::string>().c_str())) {
             for (const auto &c : p.circuits) {
@@ -50,6 +52,11 @@ void CapLabPrototypePanel::RenderIS() {
         selected=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==selectedCircuit;});
         if (selected!=p.circuits.end()) {
             auto d=ReadCircuit(selected->at("schematic"));
+            circuitEditor.uncertainties.clear();
+            for (const auto& a : p.analyses) if (a.at("type")=="Circuit" && a.at("status")=="valid" &&
+                a.contains("parameters") && a.at("circuit")==*selected)
+                for (const auto& v : a.at("parameters")) if (v.contains("sigma") && !v.at("sigma").is_null())
+                    circuitEditor.uncertainties[v.at("element").get<std::string>()+"."+v.at("field").get<std::string>()]=v.at("sigma");
             bool changed=circuitEditor.properties(d);
             ImGui::BeginChild("Circuit editor",ImVec2(0,std::max(340.f,ImGui::GetContentRegionAvail().y*.8f)),ImGuiChildFlags_Borders);
             try {changed |= circuitEditor.draw(d);}
@@ -61,6 +68,7 @@ void CapLabPrototypePanel::RenderIS() {
             }
             // Commands replace the project; never retain JSON iterators across one.
             selected=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==selectedCircuit;});
+            ImGui::Spacing(); ImGui::SeparatorText("Measurement and simulation");
             if (sst::ui::widgets::BeginCombo("IS measurement", circuitMeasurement ? std::to_string(circuitMeasurement).c_str() : "Select sweep")) {
                 auto item=[&](pl::Id id) {
                     const auto m=AnalysisMeasurement(p,id);
@@ -94,6 +102,7 @@ void CapLabPrototypePanel::RenderIS() {
                 }
                 if (ImGui::Button("Simulate IS")) {circuitAutoReady=true; circuitRecalc=false; state->analysisOptions=settings; (void)commands->Execute(CommandID{"caplab.analyze"});}
                 ImGui::EndDisabled();
+                ImGui::Spacing(); ImGui::SeparatorText("Fit parameters and bounds");
                 if (fitCircuit!=selectedCircuit || ImGui::Button("Reset fit parameters from schematic")) {
                     fitCircuit=selectedCircuit; isParameters=Json::array();
                     for (const auto &e : selected->at("schematic").at("elements")) {
@@ -143,14 +152,14 @@ void CapLabPrototypePanel::RenderIS() {
             const auto &a=draft.analyses.back();
             if (a.contains("score")) {
                 ImGui::Text("Draft score %.9g -> %.9g / %s",a.at("initial_score").get<double>(),a.at("score").get<double>(),a.at("stop_status").get<std::string>().c_str());
-                ImGui::TextUnformatted("Covariance unavailable (Nelder-Mead).");
+                ImGui::TextWrapped("Uncertainty: %s",a.value("covariance_status",std::string("unavailable in saved fit")).c_str());
                 const auto fittedCircuit=ReadCircuit(a.at("circuit").at("schematic"));
                 for (const auto &v : a.at("parameters")) {
                     std::string unit=v.at("unit");
                     if (v.at("field")=="value") for (const auto& e : fittedCircuit.elements)
                         if (e.name==v.at("element").get<std::string>()) unit=ElementUnit(e);
                     ImGui::Text("%s.%s: %s -> %s%s",v.at("element").get<std::string>().c_str(),v.at("field").get<std::string>().c_str(),
-                        Engineering(v.at("start"),unit).c_str(),Engineering(v.at("fitted"),unit).c_str(),v.at("free").get<bool>() ? "" : " (fixed)");
+                        Engineering(v.at("start"),unit).c_str(),(Engineering(v.at("fitted"),unit)+(v.contains("sigma") && !v.at("sigma").is_null() ? " \u00b1 "+Engineering(v.at("sigma"),unit) : "")).c_str(),v.at("free").get<bool>() ? "" : " (fixed)");
                 }
                 ImGui::PushID("Draft plots");
                 RenderISTabs(draft,a,fitView);
@@ -164,7 +173,7 @@ void CapLabPrototypePanel::RenderIS() {
         for (const auto &a : p.analyses) if (a.at("type")=="Circuit") {
             ImGui::PushID(std::to_string(a.at("id").get<pl::Id>()).c_str());
             ImGui::Text("IS %llu: %s / T=%s K / bias=%s V",a.at("id").get<pl::Id>(),a.at("status").get<std::string>().c_str(),a.at("temperature_K").dump().c_str(),a.at("bias_V").dump().c_str());
-            if (a.contains("score")) ImGui::Text("Score %.9g / %s; covariance unavailable",a.at("score").get<double>(),a.at("stop_status").get<std::string>().c_str());
+            if (a.contains("score")) ImGui::Text("Score %.9g / %s",a.at("score").get<double>(),a.at("stop_status").get<std::string>().c_str());
             if (ImGui::TreeNode("Open IS view")) {
             for (const auto &g : a.at("graphs")) {
                 const auto id=g.get<pl::Id>();
@@ -192,7 +201,7 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
     const auto current=project.engine->object(project.graph).name;
     const bool selectTab=isPlotAnalysis!=analysisId || isPlotGraph!=project.graph;
     isPlotAnalysis=analysisId;
-    const std::string sample=SelectionLabel(project,analysis.at("sample_id"));
+    const auto sample=SelectionLabel(project,analysis.at("sample_id"));
     const auto measurement=analysis.at("inputs").at(0).at("id").get<pl::Id>();
     bool refitPlot=false;
     auto render=[&](std::size_t index, float height) {
@@ -244,7 +253,10 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
                 const auto graph=graphs.at(tab.index).get<pl::Id>();
                 if (isPlotGraph!=graph) {viewState={}; fitView={}; bodePhaseView={};}
                 project.graph=graph; isPlotGraph=graph;
-                const std::string title=sample+" / "+SelectionLabel(project,measurement)+" — "+tab.label;
+                auto measurementLabel=SelectionLabel(project,measurement);
+                if (const auto temperature=measurementLabel.rfind(", T = "); temperature!=std::string::npos) measurementLabel.resize(temperature);
+                const std::string title=(measurementLabel==sample ? measurementLabel : sample+" / "+measurementLabel)+
+                    ", T = "+analysis.at("temperature_K").dump()+" K \u2014 "+tab.label;
                 if (&project==&state->document.project) {
                     auto window=GetState();
                     if (window.shortName!=title) {window.shortName=title; window.longName=title; ApplyState(window);}

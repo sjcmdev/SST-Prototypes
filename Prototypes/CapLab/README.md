@@ -235,8 +235,9 @@ Headless callers may instead supply positive sigma_Ohm for every original row.
 The selected frequency interval is inclusive, evaluated on exact measured f,
 T and bias. Invalid initial points block fitting; invalid trial points receive
 infinite objective and are counted, never published as usable simulations.
-This score is not labeled statistical chi-squared. Covariance is unavailable,
-represented by null rather than zero uncertainty.
+This score is not labeled statistical chi-squared. Covariance is estimated from
+the weighted residual Jacobian at the optimum; insufficient degrees of freedom
+or a rank-deficient Jacobian give null rather than zero uncertainty.
 
 Fit/stop run through Core commands/jobs. Cancellation is checked between
 frequencies, objective calls and iterations. A finished draft shows parameters,
@@ -434,3 +435,21 @@ bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes
 bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py PlotLab --require-embedding --configuration Release
 bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py JFM --require-embedding --configuration Release
 ```
+
+### Startup and headless import
+
+`CapLab.exe <project-or-import-file>` and `CapLab.exe --open <project-or-import-file>`
+use the same Core command/job path. CapLab JSON projects open directly; measurement
+files open an import preview for confirmation. ProPho JSON is detected automatically.
+Python callers use `caplab.execute(project, {"operation": "import", "path": path})` to
+read and confirm through the same commands, with a JSON error envelope on failure.
+Use `options` for the existing import profile, mapping, units and confirmed metadata
+(e.g. `temperature_K`, `area_m2`). Filename temperature suggestions stay unknown
+unless explicitly confirmed through these options.
+
+IS fit results include covariance in the order given by `covariance_parameters` and
+per-parameter `sigma` in the accompanying `unit`. The estimate is
+`inverse(J.T @ J) * weighted_residual_sum / (2 * frequency_count - free_parameter_count)`
+for the weighted complex residual Jacobian at the optimum. Unidentifiable parameters
+or insufficient degrees of freedom give null covariance and an explicit
+`covariance_status`; fixed parameters have null sigma. Saved older fits remain readable.

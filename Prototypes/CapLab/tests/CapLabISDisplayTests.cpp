@@ -2,8 +2,14 @@
 #include "Presentation/CircuitDisplay.hpp"
 #include "Presentation/CapLabISPlot.hpp"
 #include <limits>
+#include "Presentation/SelectionLabel.hpp"
 
 namespace SST::Prototypes::CapLab {
+TEST(CapLabISDisplay, ConversionAnnotationIsNotAMeasurementPath) {
+    Project p;
+    p.measurements.push_back({{"id",123u},{"metadata",{{"source","D:/data/cf_100K_7.dat (Cp/Rp -> C/G)"},{"temperature_K",100}}}});
+    EXPECT_EQ(SelectionLabel(p,123),"cf_100K_7, T = 100 K");
+}
 TEST(CapLabISDisplay, EngineeringRoundTripAndExplicitCPEExponent) {
     EXPECT_EQ(Engineering(2.2e-15,"F"),"2.2 fF");
     EXPECT_EQ(Engineering(.85,"1"),"0.85 1");
@@ -47,6 +53,9 @@ TEST(CapLabISDisplay, RenderedNyquistEqualScaleOnResizeAndWheelZoom) {
         EXPECT_NEAR(scale.xPixelsPerOhm,scale.yPixelsPerOhm,scale.xPixelsPerOhm*1e-6);
         const auto* rendered=ImPlot::GetPlot("Nyquist");
         EXPECT_FALSE(rendered->Axes[ImAxis_Y1].IsInverted());
+        char label[32];
+        rendered->Axes[ImAxis_X1].Formatter(65000,label,sizeof(label),nullptr);
+        EXPECT_EQ(std::string(label),"65 k");
         hover=rendered->PlotRect.GetCenter();
         if (frame==1) {
             initialRange=rendered->Axes[ImAxis_X1].Range.Size();

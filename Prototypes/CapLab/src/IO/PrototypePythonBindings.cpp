@@ -161,8 +161,9 @@ NB_MODULE(sst_caplab, module)
             RegisterCommands(commands,bus,state);
             const auto analysisCount=state.document.project.analyses.size();
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target);});
-            if (operation=="export" || operation=="save" || operation=="open") {
+            if (operation=="export" || operation=="save" || operation=="open" || operation=="import") {
                 const auto path=Path{r.at("path").get<std::string>()};
+                if (operation=="import" && r.contains("options")) state.importOptions=r.at("options").dump();
                 if (r.contains("graph_id")) state.document.project.graph=r.at("graph_id").get<pl::Id>();
                 Validate(state.document.project);
                 if (operation=="export" && path.Native().extension()==".png") {
@@ -171,13 +172,19 @@ NB_MODULE(sst_caplab, module)
                     state.view.viewport=sst::ui::plot::Bounds{b[0],b[1],b[2],b[3]};
                     if (r.contains("visibility")) for (const auto &v : r.at("visibility")) state.view.visibility[state.document.project.engine->series(v.at("plot_id").get<pl::Id>()).id]=v.at("visible").get<bool>();
                 }
-                const auto result=commands->Execute(CommandID{operation=="export" ? "caplab.export" : operation=="save" ? "caplab.save" : "caplab.open"},[&] { CommandContext c; c.Set("path",path); return c; }());
+                const auto result=commands->Execute(CommandID{operation=="export" ? "caplab.export" : operation=="save" ? "caplab.save" : operation=="import" ? "app.open" : "caplab.open"},[&] { CommandContext c; c.Set("path",path); return c; }());
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
                 bus->ProcessQueue(); const auto id=state.activeJob;
                 jobs->Shutdown(); state.OnUpdate(0);
                 const auto job=jobs->GetJob(id);
                 if (!job || job->status!=JobStatus::Completed)
                     return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",operation+"_failed"},{"message",state.status}}}}.dump();
+                if (state.preview) {
+                    // A filename is a suggestion; headless callers confirm metadata through options.
+                    if (!state.preview->contains("samples")) state.temperature=Optional(state.preview->at("temperature_K"));
+                    const auto imported=commands->Execute(CommandID{"caplab.import"});
+                    if (!imported) return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code","caplab.import"},{"message",state.status}}}}.dump();
+                }
                 response["export"]=state.exportResult;
             } else if (operation=="edit_defect" || operation=="area" || operation=="delete_measurement") {
                 CommandContext context;
@@ -252,6 +259,7 @@ namespace SST::Prototypes::CapLab
         nanobind::gil_scoped_acquire gil;
         namespace nb=nanobind;
         try {
+            nb::module_::import_("sst_caplab");
             auto paths=nb::module_::import_("sys").attr("path");
             const auto executable=Platform::CurrentExecutablePath();
             if (!executable) throw std::runtime_error("Cannot locate embedded Python package.");
@@ -290,6 +298,7 @@ namespace SST::Prototypes::CapLab
         nanobind::gil_scoped_acquire gil;
         namespace nb = nanobind;
         try {
+            nb::module_::import_("sst_caplab");
             auto paths = nb::module_::import_("sys").attr("path");
             const auto executable = Platform::CurrentExecutablePath();
             if (!executable) throw std::runtime_error("Cannot locate Python runtime.");
@@ -314,6 +323,7 @@ namespace SST::Prototypes::CapLab
         namespace nb = nanobind;
         try
         {
+            nb::module_::import_("sst_caplab");
             auto paths = nb::module_::import_("sys").attr("path");
             const auto executable = Platform::CurrentExecutablePath();
             if (!executable) throw std::runtime_error(executable.Error().technicalDetails);
@@ -322,6 +332,7 @@ namespace SST::Prototypes::CapLab
             if (!nb::cast<bool>(paths.attr("__contains__")(pythonRoot))) paths.attr("insert")(0,pythonRoot);
             const std::function<bool()> cancel = [&] { return context.IsCancellationRequested(); };
             const std::function<void(double)> progress = [&](double v) { context.SetProgress(float(v),1); };
+            // nanobind must be initialized before converting std::function callbacks.
             const auto result = nb::module_::import_("caplab").attr("preview_json")(text,source.Utf8(),std::string(1,decimal),cancel,progress,options);
             return Json::parse(nb::cast<std::string>(result));
         }

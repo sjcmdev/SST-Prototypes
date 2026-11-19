@@ -165,6 +165,8 @@ project "CapLabTests"
     files {
         _SST_ROOT .. "/Prototypes/CapLab/src/CapLabCommands.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabSchematicEditor.cpp",
+        _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabPrototypePanel.cpp",
+        _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabISPanel.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/IO/PrototypeWorkflow.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp"
     }

@@ -273,7 +273,7 @@ namespace SST::Prototypes::CapLab
                     }
                     if ((a.at("weighting")!="modulus_floor" && a.at("weighting")!="sigma_Ohm") ||
                         (a.at("stop_status")!="score_tolerance" && a.at("stop_status")!="max_iterations") ||
-                        !a.at("covariance").is_null() || !a.at("parameters").is_array() || a.at("parameters").empty() ||
+                        (!a.at("covariance").is_null() && !a.at("covariance").is_array()) || !a.at("parameters").is_array() || a.at("parameters").empty() ||
                         a.at("scale_Ohm").size()!=n || a.at("iterations").get<int>()<0 || a.at("invalid_evaluations").get<int>()<0)
                         throw std::runtime_error("Invalid IS fit metadata");
                     for (const auto &value : a.at("scale_Ohm")) if (value.is_null() || !Optional(value)) throw std::runtime_error("Invalid IS weighting scale");
@@ -288,6 +288,9 @@ namespace SST::Prototypes::CapLab
                         if (!std::isfinite(start) || !std::isfinite(fitted) || !std::isfinite(lo) || !std::isfinite(hi) ||
                             lo>hi || start<lo || start>hi || fitted<lo || fitted>hi || (free && lo==hi) || (!free && start!=fitted) ||
                             !parameters.emplace(name,field).second || v.at("unit").get<std::string>().empty()) throw std::runtime_error("Invalid IS fitted parameter");
+                        if (v.contains("sigma") && !v.at("sigma").is_null() &&
+                            (!free || !v.at("sigma").is_number() || !std::isfinite(v.at("sigma").get<double>()) || v.at("sigma").get<double>()<0))
+                            throw std::runtime_error("Invalid IS parameter uncertainty");
                         bool found=false;
                         for (const auto &e : a.at("circuit").at("schematic").at("elements")) if (e.at("name")==name) {
                             found=true;
@@ -300,6 +303,17 @@ namespace SST::Prototypes::CapLab
                         if (!found) throw std::runtime_error("Missing IS fitted element");
                     }
                     if (!hasFree) throw std::runtime_error("No free IS fit parameters");
+                    if (!a.at("covariance").is_null()) {
+                        std::size_t count=0;
+                        for (const auto& v : a.at("parameters")) if (v.at("free").get<bool>()) ++count;
+                        const auto& covariance=a.at("covariance");
+                        if (covariance.size()!=count) throw std::runtime_error("Invalid covariance dimension");
+                        for (std::size_t i=0;i<count;++i) {
+                            if (!covariance[i].is_array() || covariance[i].size()!=count) throw std::runtime_error("Invalid covariance row");
+                            for (const auto& v : covariance[i]) if (!v.is_number() || !std::isfinite(v.get<double>())) throw std::runtime_error("Nonfinite covariance");
+                            if (covariance[i][i].get<double>()<0) throw std::runtime_error("Negative covariance variance");
+                        }
+                    }
                 }
                 Optional(a.at("temperature_K"));
                 if (a.at("temperature_K").is_null() || !std::isfinite(a.at("bias_V").get<double>())) throw std::runtime_error("Invalid IS T/bias");
