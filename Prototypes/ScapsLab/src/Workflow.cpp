@@ -1,8 +1,10 @@
-﻿#include "Workflow.hpp"
+#include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include <scaps_core/api.hpp>
+#include <scaps_core/physics.hpp>
 #include <scaps_core/device_project_yaml.hpp>
 #include <yaml-cpp/yaml.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -124,6 +126,12 @@ public:
 scaps_core::DeviceProject Model(const Json &j) {
     if(j.contains("constants_mode") && j.at("constants_mode")!="codata" && j.at("constants_mode")!="scaps_compat") throw std::invalid_argument("Unknown constants_mode");
     if(j.contains("mobility_temperature_model") && j.at("mobility_temperature_model")!="constant" && j.at("mobility_temperature_model")!="sqrt_T" && j.at("mobility_temperature_model")!="caughey_thomas_T") throw std::invalid_argument("Unknown mobility_temperature_model");
+    std::set<std::string> defectIds;
+    for(const auto &l:j.at("layers")) for(const auto &d:l.value("defects",Json::array())) {
+        if(d.contains("scapslab_id")) {const auto id=d.at("scapslab_id").get<std::string>();if(id.empty() || !defectIds.insert(id).second) throw std::invalid_argument("Invalid or duplicate defect scapslab_id");}
+        if(!std::set<std::string>{"relative_to_Ei","relative_to_Ec","relative_to_Ev"}.contains(d.value("energy_reference",std::string("relative_to_Ei")))) throw std::invalid_argument("Unknown defect energy_reference");
+        if(!std::set<std::string>{"neutral","donor_like","acceptor_like"}.contains(d.value("charge_type",std::string("neutral")))) throw std::invalid_argument("Unknown defect charge_type");
+    }
     Temporary t; SaveText(t.path,Text(j)); auto p=scaps_core::load_device_project_yaml(t.path);
     if (p.schema_version!=1) throw std::invalid_argument("Unsupported project schema_version");
     Positive(p.temperature_K,"temperature_K"); Positive(p.solver.residual_tolerance,"residual_tolerance");
@@ -151,6 +159,33 @@ scaps_core::DeviceProject Model(const Json &j) {
         (p.voltage.stop_V-p.voltage.start_V)*p.voltage.step_V<0 || std::abs((p.voltage.stop_V-p.voltage.start_V)/p.voltage.step_V)>10000) throw std::invalid_argument("Invalid voltage sweep (maximum 10001 points)");
     (void)scaps_core::make_device_from_project(p); return p;
 }
+const Json &PointAtBias(const Json &sweep,const Json &band,int selected) {
+    if(sweep.empty()) return band.at("points").at(0);
+    const auto &points=sweep.at("points");const auto &point=points.at(std::clamp(selected,0,int(points.size())-1));
+    return !band.empty() && band.at("points").at(0).at("voltage_V")==point.at("voltage_V")?band.at("points").at(0):point;
+}
+Json NewDefect(bool sheet) {
+    Json d={{"energy_distribution","single"},{"energy_offset_eV",0.0},{"charge_type","neutral"},
+        {"characteristic_energy_eV",0.05},{"gaussian_width",6.0},{"energy_levels",63},{"energy_quadrature","gauss_legendre"}};
+    if(sheet) d.update(Json{{"id","interface-defect"},{"left_layer_index",0},{"energy_reference",7},{"Nt_m2",1e14},
+        {"sigma_n_left_m2",1e-19},{"sigma_p_left_m2",1e-19},{"sigma_n_right_m2",1e-19},{"sigma_p_right_m2",1e-19},
+        {"density_convention","integrated_sheet"},{"peak_density_m2_eV",0.0}});
+    else d.update(Json{{"scapslab_id","defect"},{"label","Defect"},{"energy_reference","relative_to_Ei"},{"Nt_m3",1e19},
+        {"sigma_n_m2",1e-19},{"sigma_p_m2",1e-19},{"tail_width",7.0},{"distribution_normalization","scaps"},
+        {"amphoteric",false},{"correlated",true},{"second_energy_offset_eV",0.1},{"second_sigma_n_m2",1e-19},{"second_sigma_p_m2",1e-19}});
+    return d;
+}
+void ChangeSheetDistribution(Json &d,const std::string &shape,const std::string &convention) {
+    auto width=[&](const std::string &kind) {
+        return d.at("characteristic_energy_eV").get<double>()*(kind=="gaussian"?std::sqrt(std::numbers::pi)*std::erf(d.value("gaussian_width",6.0)*.5):1);
+    };
+    // Keep the total sheet density when changing its representation.
+    const auto oldShape=d.at("energy_distribution").get<std::string>();
+    const double total=oldShape=="single" || d.at("density_convention")=="integrated_sheet"?d.at("Nt_m2").get<double>():d.at("peak_density_m2_eV").get<double>()*width(oldShape);
+    d["energy_distribution"]=shape;d["density_convention"]=convention;
+    const bool integrated=shape=="single" || convention=="integrated_sheet";
+    d["Nt_m2"]=integrated?total:0.;d["peak_density_m2_eV"]=integrated?0.:total/width(shape);
+}
 Json ReadProject(const std::string &path) {
     auto raw=FromYaml(YAML::LoadFile(path)); const auto p=Model(raw);
     Temporary t; scaps_core::save_device_project_yaml(p,t.path);
@@ -163,9 +198,98 @@ Json ReadProject(const std::string &path) {
         while(ids.contains("layer-"+std::to_string(next))) ++next;
         l["scapslab_id"]="layer-"+std::to_string(next); ids.insert(l["scapslab_id"]);
     }
+    unsigned defectId=1;
+    std::set<std::string> defectIds;
+    for(const auto &l:full["layers"]) for(const auto &d:l["defects"]) if(d.contains("scapslab_id")) defectIds.insert(d.at("scapslab_id"));
+    for(auto &l:full["layers"]) for(auto &d:l["defects"]) if(!d.contains("scapslab_id")) {
+        while(defectIds.contains("defect-"+std::to_string(defectId))) ++defectId;
+        d["scapslab_id"]="defect-"+std::to_string(defectId); defectIds.insert(d.at("scapslab_id"));
+    }
     return full;
 }
 void WriteProject(const Json &j,const std::string &path) { (void)Model(j); SaveText(Path{path}.Native(),Text(j)); }
+namespace {
+Json DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::DeviceState &state) {
+    using namespace scaps_core;
+    Json curves=Json::array(); const auto pc=physical_constants(p.constants_mode);
+    auto curve=[&](const Json &d,double ev,double ec,double ei,double total,bool sheet) {
+        const auto shape=d.value("energy_distribution",std::string("single"));
+        const double offset=d.value("energy_offset_eV",0.0),width=d.value("characteristic_energy_eV",0.05);
+        double center=ei+offset;
+        if(sheet) {
+            const int ref=d.value("energy_reference",7);
+            const int l=d.at("left_layer_index"); const auto &a=p.layers[l].material,&b=p.layers[l+1].material;
+            const auto ta=evaluate_thermal_material(a,p.temperature_K,pc),tb=evaluate_thermal_material(b,p.temperature_K,pc);
+            const double va=-a.chi_eV-a.Eg_eV,vb=-b.chi_eV-b.Eg_eV,ca=-a.chi_eV,cb=-b.chi_eV;
+            center=(ref==3?std::max(va,vb):ref==4?std::min(ca,cb):ref==5?Ei_of(ca,va,ta.Nc_m3,ta.Nv_m3,ta.Vt_V):ref==6?Ei_of(cb,vb,tb.Nc_m3,tb.Nv_m3,tb.Vt_V):ref==8?vb:ref==9?.5*(std::max(va,vb)+std::min(ca,cb)):va)+(ref==4?-offset:offset);
+        } else {
+            const auto ref=d.value("energy_reference",std::string("relative_to_Ei"));
+            center=ref=="relative_to_Ec"?ec-offset:ref=="relative_to_Ev"?ev+offset:ei+offset;
+        }
+        const bool single=shape=="single",gaussian=shape=="gaussian",cb=shape=="cb_tail",vb=shape=="vb_tail";
+        double lo=std::max(ev,center-(cb?d.value("tail_width",7.0)*width:vb?0:.5*width*(gaussian?d.value("gaussian_width",6.0):1)));
+        double hi=std::min(ec,center+(vb?d.value("tail_width",7.0)*width:cb?0:.5*width*(gaussian?d.value("gaussian_width",6.0):1)));
+        // Interface quadrature spans its reference-coordinate interval, without bulk gap clipping.
+        if(sheet) {lo=center-.5*width*(gaussian?d.value("gaussian_width",6.0):1);hi=2*center-lo;}
+        auto mass=[&](double e) {return gaussian?.5*std::erf((e-center)/width):cb?std::exp((e-center)/width):vb?-std::exp((center-e)/width):(e-center)/width;};
+        double amplitude=total/width;
+        if(sheet && d.value("density_convention",std::string("scaps_peak"))=="scaps_peak") amplitude=d.value("peak_density_m2_eV",0.0)*(gaussian?std::sqrt(std::numbers::pi):1);
+        else if((sheet || d.value("distribution_normalization",std::string("scaps"))=="normalized_continuum") && hi>lo) amplitude/=mass(hi)-mass(lo);
+        Json c={{"id",d.at(sheet?"id":"scapslab_id")},{"label",d.value("label",d.value("id",std::string("Defect")))},{"sheet",sheet},{"Ev_eV",ev},{"Ec_eV",ec},
+            {"energy_eV",Json::array()},{sheet?"density_m2_eV":"density_m3_eV",Json::array()},{"occupation_energy_eV",Json::array()},{"occupation",Json::array()},
+            {"single",single},{"level_energy_eV",center},{sheet?"Nt_m2":"Nt_m3",total},{"amphoteric",d.value("amphoteric",false)},{"correlated",d.value("correlated",true)}};
+        if(!single) for(int i=0;i<=400;++i) {
+            const double e=ev+(ec-ev)*i/400.;double value=0;
+            if(e>=lo && e<=hi) value=amplitude*(gaussian?std::exp(-std::pow((e-center)/width,2))/std::sqrt(std::numbers::pi):cb?std::exp((e-center)/width):vb?std::exp((center-e)/width):1);
+            c["energy_eV"].push_back(e-ev);c[sheet?"density_m2_eV":"density_m3_eV"].push_back(value);
+        }
+        c["level_energy_eV"]=center-ev;c["band_edges_eV"]={0.,ec-ev};
+        if(sheet) {
+            const int l=d.at("left_layer_index");const auto &a=p.layers[l].material,&b=p.layers[l+1].material;
+            c["band_edges_eV"]={-a.chi_eV-a.Eg_eV-ev,-a.chi_eV-ev,-b.chi_eV-b.Eg_eV-ev,-b.chi_eV-ev};
+        }
+        if(d.value("amphoteric",false)) c["second_level_energy_eV"]=center-ev+(d.at("second_energy_offset_eV").get<double>()-offset)*(d.value("energy_reference",std::string("relative_to_Ei"))=="relative_to_Ec"?-1:1);
+        return c;
+    };
+    double x=0;
+    for(std::size_t li=0;li<p.layers.size();++li) {
+        const auto &l=p.layers[li]; const double middle=x+l.thickness_m*.5;x+=l.thickness_m;
+        const auto at=std::min_element(state.x_m.begin(),state.x_m.end(),[&](double a,double b){return std::abs(a-middle)<std::abs(b-middle);});
+        const std::size_t node=std::size_t(at-state.x_m.begin());
+        const auto tm=evaluate_thermal_material(l.material,p.temperature_K,pc);
+        const double ev=-l.material.chi_eV-l.material.Eg_eV,ec=-l.material.chi_eV,ei=Ei_of(ec,ev,tm.Nc_m3,tm.Nv_m3,tm.Vt_V);
+        std::size_t levelOffset=0;
+        for(std::size_t di=0;di<l.defects.size();++di) {
+            auto isolated=p;isolated.interface_defects.clear();for(auto &layer:isolated.layers) layer.defects.clear();isolated.layers[li].defects={l.defects[di]};
+            const auto levels=make_device_from_project(isolated).layers[li].defects;
+            auto c=curve(document.at("layers")[li].at("defects")[di],ev,ec,ei,l.defects[di].Nt_m3,false);
+            c["layer_id"]=document.at("layers")[li].at("scapslab_id");
+            for(std::size_t k=0;k<levels.size();++k) {
+                const auto &level=levels[k];const double e=level.energy_reference==DefectEnergyReference::RelativeToEc?ec-level.energy_offset_eV:level.energy_reference==DefectEnergyReference::RelativeToEv?ev+level.energy_offset_eV:ei+level.energy_offset_eV;
+                c["occupation_energy_eV"].push_back(e-ev);
+                c["occupation"].push_back(node<state.trap_occupation.size() && levelOffset+k<state.trap_occupation[node].size()?Json(state.trap_occupation[node][levelOffset+k]):Json(nullptr));
+            }
+            levelOffset+=levels.size();curves.push_back(std::move(c));
+        }
+    }
+    std::size_t offset=0;
+    for(std::size_t i=0;i<p.interface_defects.size();++i) {
+        const auto &d=p.interface_defects[i];const auto &a=p.layers[d.left_layer_index].material,&b=p.layers[d.left_layer_index+1].material;
+        const double ev=std::min(-a.chi_eV-a.Eg_eV,-b.chi_eV-b.Eg_eV),ec=std::max(-a.chi_eV,-b.chi_eV);
+        auto c=curve(document.at("interface_defects")[i],ev,ec,(ev+ec)*.5,d.Nt_m2,true);c["left_layer_index"]=d.left_layer_index;
+        auto isolated=p;isolated.interface_defects={d};const auto levels=make_device_from_project(isolated).interface_defects;
+        for(std::size_t k=0;k<levels.size();++k) {
+            auto sample=document.at("interface_defects")[i];sample["energy_offset_eV"]=levels[k].energy_offset_eV;
+            const auto single=curve(sample,ev,ec,(ev+ec)*.5,d.Nt_m2,true);
+            c["occupation_energy_eV"].push_back(single.at("level_energy_eV"));
+            c["occupation"].push_back(offset+k<state.interface_occupation.size()?Json(state.interface_occupation[offset+k]):Json(nullptr));
+        }
+        double integrated=0;for(const auto &level:levels) integrated+=level.Nt_m2;c["Nt_m2"]=integrated;
+        offset+=levels.size();curves.push_back(std::move(c));
+    }
+    return curves;
+}
+}
 void Operation::Execute(JobContext &ctx) {
     using namespace scaps_core;
     const auto started=std::chrono::steady_clock::now();
@@ -177,10 +301,13 @@ void Operation::Execute(JobContext &ctx) {
         if(request.contains("document")) candidate=patch; else candidate.update(patch,true); (void)Model(candidate); document=std::move(candidate);
     } else if (op=="layer") {
         auto &layers=document["layers"]; const std::string action=request.at("action");
+        if(action!="add" && !document.value("interface_defects",Json::array()).empty()) throw std::invalid_argument("Remove interface defects before removing or reordering layers; interface attachment must be preserved");
         if (action=="add") { auto l=layers.back(); unsigned n=1; std::set<std::string> ids;
             for (const auto &v:layers) ids.insert(v.at("scapslab_id"));
             while (ids.contains("layer-"+std::to_string(n))) ++n;
-            l["scapslab_id"]="layer-"+std::to_string(n); l["name"]="New layer"; layers.push_back(l);
+            l["scapslab_id"]="layer-"+std::to_string(n); l["name"]="New layer";
+            for(auto &d:l["defects"]) d["scapslab_id"]=l["scapslab_id"].get<std::string>()+"-"+d.at("scapslab_id").get<std::string>();
+            layers.push_back(l);
         } else {
             auto it=std::find_if(layers.begin(),layers.end(),[&](const auto &l){return l.at("scapslab_id")==request.at("layer_id");});
             if (it==layers.end()) throw std::invalid_argument("Unknown layer_id");
@@ -194,10 +321,11 @@ void Operation::Execute(JobContext &ctx) {
         const auto kind=request.at("kind").get<std::string>();
         if ((kind!="cv" && kind!="cf") || !acResults.contains(kind)) throw std::invalid_argument("No AC result for kind");
         std::ostringstream csv; csv << std::setprecision(17);
-        csv << "point_id,voltage_V,frequency_Hz,temperature_K,capacitance_F,conductance_S,G_over_omega_F,inverse_C2_F_minus2,status\n";
-        for (const auto &pt:acResults.at(kind).at("points")) {
+        csv << "point_id,voltage_V,frequency_Hz,temperature_K,capacitance_F,conductance_S,G_over_omega_F,inverse_C2_F_minus2,status,valid,validity_status,conservation_relative,area_m2\n";
+        for (auto pt:acResults.at(kind).at("points")) {
+            pt["area_m2"]=acResults.at(kind).at("area_m2");
             ctx.ThrowIfCancellationRequested();
-            for(const auto *key:{"point_id","voltage_V","frequency_Hz","temperature_K","capacitance_F","conductance_S","G_over_omega_F","inverse_C2_F_minus2","status"}) {
+            for(const auto *key:{"point_id","voltage_V","frequency_Hz","temperature_K","capacitance_F","conductance_S","G_over_omega_F","inverse_C2_F_minus2","status","valid","validity_status","conservation_relative","area_m2"}) {
                 if (std::string(key)!="point_id") csv << ',';
                 const auto &v=pt.at(key); if(v.is_string()) csv << v.get<std::string>(); else if(!v.is_null()) csv << v.dump();
             }
@@ -271,15 +399,31 @@ void Operation::Execute(JobContext &ctx) {
                 if(r.status==SolverStatus::Converged) previous=r.state;
             }
             const auto &s=pt.state;
+            const auto curves=DefectCurves(document,p,s);
             const bool external=p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
             const double terminalJ=pt.status!=SolverStatus::Converged ? NAN : external ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
-            output["points"].push_back({{"bias_id","bias-"+std::to_string(i)},{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(terminalJ)?Json(terminalJ):Json(nullptr)},
+            output["points"].push_back({{"defect_previews",curves},{"bias_id","bias-"+std::to_string(i)},{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(terminalJ)?Json(terminalJ):Json(nullptr)},
                 {"conservation_error_A_m2",pt.J_conservation_error_Am2},{"status",to_string(pt.status)},{"iterations",pt.iterations},{"residual",pt.final_residual_norm},
-                {"x_m",s.x_m.empty()?mesh.x_m:s.x_m},{"Ec_eV",s.Ec_eV},{"Ev_eV",s.Ev_eV},{"EFn_eV",s.EFn_eV},{"EFp_eV",s.EFp_eV},{"n_m3",s.n_m3},{"p_m3",s.p_m3}});
+                {"internal_voltage_V",-s.applied_voltage_V},{"terminal_voltage_V",external?-pt.voltage_V:-volts[i]},{"trap_occupation",s.trap_occupation},{"interface_occupation",s.interface_occupation},{"x_m",s.x_m.empty()?mesh.x_m:s.x_m},{"Ec_eV",s.Ec_eV},{"Ev_eV",s.Ev_eV},{"EFn_eV",s.EFn_eV},{"EFp_eV",s.EFp_eV},{"n_m3",s.n_m3},{"p_m3",s.p_m3}});
             ctx.SetProgress(float(i+1),float(volts.size()));
         }
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
     if(op=="run" || op=="band" || op=="cv" || op=="cf") {
+        output["project_snapshot"]=document;
+        bool valid=true;
+        for(auto &point:output["points"]) {
+            const bool converged=point.at("status")=="Converged";
+            const double conservation=!point.contains("conservation_relative")?0:point.at("conservation_relative").is_number()?point.at("conservation_relative").get<double>():NAN;
+            bool physical=converged && std::isfinite(conservation) && conservation<=0.01;
+            if(point.contains("J_A_m2")) {
+                const double current=point.at("J_A_m2").is_number()?std::abs(point.at("J_A_m2").get<double>()):0;
+                physical=physical && point.at("J_A_m2").is_number() && point.at("conservation_error_A_m2").is_number() && point.at("conservation_error_A_m2").get<double>()<=std::max(1e-10,current*0.01);
+            }
+            if(point.contains("capacitance_F")) physical=physical && point.at("capacitance_F").is_number() && point.at("conductance_S").is_number();
+            point["valid"]=physical;point["validity_status"]=!converged?"solver_failed":physical?"valid":"current_unresolved";
+            valid &= physical;
+        }
+        output["valid"]=valid;output["validity_status"]=valid?"valid":"contains_invalid_points";
         output["compute_time_ms"]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
         output["mesh_node_count"]=output.at("mesh_x_m").size();
     }
@@ -330,7 +474,7 @@ void Workflow::OnUpdate(float) {
         if(op=="load") undo.Clear();
         if(op=="load" || op=="save") { path=pending->request.at("path"); dirty=false; undo.MarkClean(); }
         if(op=="edit" || op=="layer") dirty=!undo.IsClean();
-        status="Completed: "+op; response={{"ok",true},{"document",document},{"result",result},{"ac_results",acResults},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"band_result",bandResult},{"error",nullptr}};
+        status="Completed: "+op;if(pending->output.contains("validity_status")) status+=" | validity: "+pending->output.at("validity_status").get<std::string>(); response={{"ok",true},{"document",document},{"result",result},{"ac_results",acResults},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"band_result",bandResult},{"error",nullptr}};
     } else {status=snapshot->errorMessage; response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);}
     active=0; pending.reset();
 }

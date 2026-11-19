@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Core/Layer.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
@@ -13,6 +13,9 @@ using Json = nlohmann::json;
 Json ReadProject(const std::string &path);
 scaps_core::DeviceProject Model(const Json &document);
 void WriteProject(const Json &document, const std::string &path);
+Json NewDefect(bool sheet = false);
+const Json &PointAtBias(const Json &sweep,const Json &band,int selected);
+void ChangeSheetDistribution(Json &defect,const std::string &shape,const std::string &convention);
 class Operation final : public IJob {
 public:
     Json document, request, output, acResults;
@@ -36,7 +39,7 @@ public:
     double biasVoltage_V = 0;
     bool autoRecalculateBand = false, needsBand = false;
     bool dirty = false, autoRecalculate = false, interacting = false, needsRecalculate = false, focusLayers = false;
-    int selectedLayer = 0, selectedBias = 0;
+    int selectedLayer = 0, selectedInterface = -1, selectedBias = 0;
     UndoStack undo;
     std::deque<Json> edits;
     std::chrono::steady_clock::time_point changedAt;

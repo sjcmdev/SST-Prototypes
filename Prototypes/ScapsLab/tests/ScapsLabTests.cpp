@@ -18,7 +18,7 @@ std::filesystem::path Temp(const char *name) {return std::filesystem::temp_direc
 TEST(ScapsLab,YamlFullMappingRoundtrip) {
     auto d=ReadProject(SCAPSLAB_PROJECT);
     d["future_extension"]={{"numeric_string","001"},{"nullable",nullptr},{"list",{1,true,".inf"}}};
-    d["layers"][0]["defects"]=Json::array({{{"label","retained"},{"energy_reference","relative_to_Ei"},{"energy_offset_eV",0.1},{"Nt_m3",1e15},{"sigma_n_m2",1e-19},{"sigma_p_m2",1e-19},{"charge_type","neutral"}}});
+    d["layers"][0]["defects"]=Json::array({{{"scapslab_id","retained-defect"},{"label","retained"},{"energy_reference","relative_to_Ei"},{"energy_offset_eV",0.1},{"Nt_m3",1e15},{"sigma_n_m2",1e-19},{"sigma_p_m2",1e-19},{"charge_type","neutral"}}});
     const auto path=Temp("scapslab-roundtrip.yaml");
     WriteProject(d,path.string()); EXPECT_EQ(ReadProject(path.string()),d);
     const auto original=scaps_core::load_device_project_yaml(SCAPSLAB_PROJECT);
@@ -127,7 +127,7 @@ TEST(ScapsLab,ACMatchesCoreAndExports) {
         const auto csv=Temp("scapslab-ac.csv");
         ASSERT_TRUE(Execute(w,{{"operation","export_ac"},{"kind",kind},{"path",csv.string()}}).at("ok").get<bool>());
         std::ifstream stream(csv); std::string line; ASSERT_TRUE(bool(std::getline(stream,line)));
-        EXPECT_EQ(line,"point_id,voltage_V,frequency_Hz,temperature_K,capacitance_F,conductance_S,G_over_omega_F,inverse_C2_F_minus2,status");
+        EXPECT_EQ(line,"point_id,voltage_V,frequency_Hz,temperature_K,capacitance_F,conductance_S,G_over_omega_F,inverse_C2_F_minus2,status,valid,validity_status,conservation_relative,area_m2");
         std::size_t rows=0; while(std::getline(stream,line)) ++rows; EXPECT_EQ(rows,points.size()); stream.close(); std::filesystem::remove(csv);
     }
     const auto prior=w.acResults;
@@ -215,4 +215,59 @@ TEST(ScapsLab,StructuralChangesDoNotAcceptStaleEditorSnapshots) {
     EXPECT_FALSE(w.Dispatch({{"operation","edit"},{"document",w.document}}).at("ok").get<bool>());
     ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.document.at("layers").size(),count+1);
+}
+
+TEST(ScapsLab,DefectEditorsPreviewResistanceRoundtripAndStaleExport) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    auto draft=w.document;draft["layers"][0]["defects"]=Json::array();
+    for(const auto *shape:{"single","uniform","gaussian","cb_tail","vb_tail"}) {
+        auto d=NewDefect();d["scapslab_id"]=std::string("test-")+shape;d["energy_distribution"]=shape;d["Nt_m3"]=1e16;
+        if(std::string(shape)=="cb_tail") d["energy_reference"]="relative_to_Ec";
+        if(std::string(shape)=="vb_tail") d["energy_reference"]="relative_to_Ev";
+        draft["layers"][0]["defects"].push_back(d);
+    }
+    auto second=draft["layers"][0];second["scapslab_id"]="layer-2";second["defects"]=Json::array();second["material"]["chi_eV"]=4.1;draft["layers"].push_back(second);
+    auto sheet=NewDefect(true);sheet["energy_distribution"]="gaussian";sheet["energy_offset_eV"]=.5;sheet["Nt_m2"]=1e10;draft["interface_defects"]=Json::array({sheet});
+    draft["external"]={{"area_m2",1e-4},{"series_ohm_m2",1e-5},{"shunt_ohm_m2",1.0}};
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"document",draft}}).at("ok").get<bool>());
+    const auto path=Temp("scapslab-editors.yaml");ASSERT_TRUE(Execute(w,{{"operation","save"},{"path",path.string()}}).at("ok").get<bool>());EXPECT_EQ(ReadProject(path.string()),draft);
+    ASSERT_TRUE(Execute(w,{{"operation","band"},{"voltage_V",0.05}}).at("ok").get<bool>())<<w.response.dump();
+    const auto &point=w.bandResult.at("points")[0];EXPECT_EQ(point.at("defect_previews").size(),6u);
+    for(const auto &curve:point.at("defect_previews")) {
+        EXPECT_EQ(curve.at("band_edges_eV").size(),curve.at("sheet").get<bool>()?4u:2u);
+        EXPECT_FALSE(curve.at("occupation").empty());
+        for(const auto &f:curve.at("occupation")) if(f.is_number()) {EXPECT_GE(f.get<double>(),0);EXPECT_LE(f.get<double>(),1);}
+        if(!curve.at("single").get<bool>()) {EXPECT_EQ(curve.at("energy_eV").size(),401u);for(const auto &n:curve.at(curve.at("sheet").get<bool>()?"density_m2_eV":"density_m3_eV")) EXPECT_GE(n.get<double>(),0);}
+    }
+    EXPECT_EQ(w.bandResult.at("project_snapshot"),draft);EXPECT_TRUE(w.bandResult.contains("validity_status"));
+    EXPECT_FALSE(Execute(w,{{"operation","layer"},{"action","remove"},{"layer_id","layer-2"}}).at("ok").get<bool>());
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());EXPECT_TRUE(w.bandResult.empty());
+    EXPECT_FALSE(Execute(w,{{"operation","export_ac"},{"kind","cv"},{"path",Temp("stale.csv").string()}}).at("ok").get<bool>());
+    std::filesystem::remove(path);
+}
+
+TEST(ScapsLab,AmphotericPreviewAndDuplicateDefectIds) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    auto d=NewDefect();d["amphoteric"]=true;d["Nt_m3"]=1e16;
+    auto draft=w.document;draft["layers"][0]["defects"]=Json::array({d,d});EXPECT_THROW((void)Model(draft),std::invalid_argument);
+    draft["layers"][0]["defects"]=Json::array({d});ASSERT_TRUE(Execute(w,{{"operation","edit"},{"document",draft}}).at("ok").get<bool>());
+    ASSERT_TRUE(Execute(w,{{"operation","band"},{"voltage_V",0.05}}).at("ok").get<bool>())<<w.response.dump();
+    const auto &c=w.bandResult.at("points")[0].at("defect_previews")[0];EXPECT_TRUE(c.at("amphoteric").get<bool>());EXPECT_TRUE(c.contains("second_level_energy_eV"));
+    ASSERT_EQ(c.at("occupation").size(),1u);EXPECT_GE(c.at("occupation")[0].get<double>(),0);EXPECT_LE(c.at("occupation")[0].get<double>(),1);
+}
+
+TEST(ScapsLab,ChangingSheetRepresentationPreservesDensity) {
+    auto d=NewDefect(true);const double original=d.at("Nt_m2");
+    ChangeSheetDistribution(d,"gaussian","scaps_peak");EXPECT_GT(d.at("peak_density_m2_eV").get<double>(),0);EXPECT_EQ(d.at("Nt_m2"),0.);
+    ChangeSheetDistribution(d,"uniform","integrated_sheet");EXPECT_NEAR(d.at("Nt_m2").get<double>(),original,original*1e-15);EXPECT_EQ(d.at("peak_density_m2_eV"),0.);
+    ChangeSheetDistribution(d,"gaussian","scaps_peak");ChangeSheetDistribution(d,"single","scaps_peak");EXPECT_NEAR(d.at("Nt_m2").get<double>(),original,original*1e-15);EXPECT_EQ(d.at("peak_density_m2_eV"),0.);
+}
+
+TEST(ScapsLab,DefectPreviewFollowsSelectedBiasInsteadOfStaleBand) {
+    const Json sweep={{"points",Json::array({{{"voltage_V",0.0},{"bias_id","iv-0"}},{{"voltage_V",0.1},{"bias_id","iv-1"}}})}};
+    Json band={{"points",Json::array({{{"voltage_V",0.0},{"bias_id","band"}}})}};
+    EXPECT_EQ(PointAtBias(sweep,band,1).at("bias_id"),"iv-1");
+    band["points"][0]["voltage_V"]=0.1;EXPECT_EQ(PointAtBias(sweep,band,1).at("bias_id"),"band");
+    EXPECT_EQ(PointAtBias(Json::object(),band,0).at("bias_id"),"band");
+    EXPECT_EQ(PointAtBias(sweep,Json::object(),999).at("bias_id"),"iv-1");
 }

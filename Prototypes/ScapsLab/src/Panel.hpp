@@ -14,6 +14,10 @@ private:
     char file[1024]{}, csvFile[1024]="scapslab-ac.csv";
     Json acRequest;
     void AC();
+    bool Defects(Json &draft,bool interface);
+    bool Structure(Json &draft);
+    void Preview(bool interface);
+    int selectedDefect=0;
     void Send(const Json &request);
     void Results();
 };

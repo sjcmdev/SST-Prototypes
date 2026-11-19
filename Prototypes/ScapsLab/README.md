@@ -1,10 +1,10 @@
-﻿# ScapsLab v2
+﻿# ScapsLab defects and structure
 
 Core application for the read-only sibling `scaps_core` checkout. The old viewer remains independent. No solver sources are copied. `ScapsCore` is a static library compiled with MSVC `/fp:precise`, sharing SST's yaml-cpp target.
 
 Generate with `bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh Vendor/Binaries/Premake/Windows/premake5.exe --scaps-core=../scaps_core vs2022`. Build the generated `ScapsLab`, `ScapsLabHeadless`, and `ScapsLabTests` vcxproj files sequentially through the same lock, with `-p:Configuration=Release -p:Platform=x64 -nr:false -m:1`. Run `ScapsLabTests.exe` through the lock. Build outputs are under `build/bin/Release-windows-x86_64/`.
 
-Launch ScapsLab from its output directory. The build reuses PrototypeTemplate's install assets and overlays ScapsLab's config. The initial example is read from the checkout; its default save destination is the local `device_project.yaml`. Project/Layers/Contacts/Solver/Run/Results, I-V and four AC plots are Core docking windows. First start (or `--reset-layout`) docks Project/Layers left, Results and AC plots in center tabs, Run/Solver right. I-V is docked beside the band diagram. The first v2 launch upgrades a v1 layout to make I-V visible; subsequent layouts are retained. Use `--reset-layout` to restore the v2 layout. Results shows the scaled, clickable layer stack, contact regions, metal and quasi-Fermi levels, layer boundaries and carrier profiles. I-V is a first-class window beside Results by default, with signed J/log |J| and a selected point linked to both bias sliders and a draggable line. Failed points remain gaps. Carrier ticks use powers of ten. Physical controls use left labels and sliders; logarithmic quantities use mantissa/exponent controls. Ctrl+click enters exact values; text fields support Ctrl+A and select on focus. Device edits use Core UndoStack; each drag is one undo record. Project has Undo/Redo, also Ctrl+Z/Ctrl+Y outside text editing. Loading and closing protect unsaved edits.
+Launch ScapsLab from its output directory. The build reuses PrototypeTemplate's install assets and overlays ScapsLab's config. The initial example is read from the checkout; its default save destination is the local `device_project.yaml`. Project/Layers/Contacts/Solver/Run/Results, I-V and four AC plots are Core docking windows. First start (or `--reset-layout`) docks Project/Layers left, Results and AC plots in center tabs, Run/Solver right. I-V is docked beside the band diagram. The first launch with Structure upgrades older layouts to expose the new editors; subsequent layouts are retained. Use `--reset-layout` to restore the v2 layout. Results shows the scaled, clickable layer stack, contact regions, metal and quasi-Fermi levels, layer boundaries and carrier profiles. I-V is a first-class window beside Results by default, with signed J/log |J| and a selected point linked to both bias sliders and a draggable line. Failed points remain gaps. Carrier ticks use powers of ten. Physical controls use left labels and sliders; logarithmic quantities use mantissa/exponent controls. Ctrl+click enters exact values; text fields support Ctrl+A and select on focus. Device edits use Core UndoStack; each drag is one undo record. Project has Undo/Redo, also Ctrl+Z/Ctrl+Y outside text editing. Loading and closing protect unsaved edits.
 
 The full YAML mapping is retained, including fields without v0 editors and unknown extension mappings. Defaults are materialized and stable `scapslab_id` strings are added to layers. YAML formatting and comments are not retained. Save uses Core's atomic TextFileIO replacement. JSON infinity is the string `.inf`; failed current values are JSON null.
 
@@ -56,7 +56,7 @@ numeric = io.StringIO()
 writer = csv.writer(numeric)
 writer.writerow(columns)
 writer.writerows([row[key] for key in columns] for row in rows
-                 if row['status'] == 'Converged' and all(row[key] for key in columns))
+                 if row['valid'] == 'true' and all(row[key] for key in columns))
 # Import numeric.getvalue(); mapping {'f': 0, 'C': 1, 'G': 2} (CV: 'V': 0).
 ```
 
@@ -68,4 +68,29 @@ Gallery: set `SCAPSLAB_GALLERY_PANEL=default` for the docked layout, or 0..10 fo
 
 Validation: `ScapsLabTests` also checks undo gesture merging, distinct queued edits, auto-recalculate cancellation/debounce, band snapshots, masked failed bias points, and floating/docked Project title IDs with conflict highlighting enabled. Existing checks cover C/G against `solve_cv`/`solve_cf` on `device_project.yaml` at relative tolerance 1e-12, mesh/conventions, CSV, invalid requests, snapshot preservation/cancellation, and embedded Python AC/export commands. Existing I-V and YAML roundtrip tests remain.
 
-Next: Rs/Rsh editor; illumination/QE; defects editor; heterojunction interface panel; temperature sweep; adaptive-mesh visualization.
+Next: illumination/QE; temperature sweep; adaptive-mesh visualization.
+
+
+Defect/structure editors (slf): `Defects` selects a layer and an explicit list of stable defect IDs; `Interfaces` selects a boundary and its list of sheet defects. Bulk distributions are discrete, uniform, Gaussian, CB/VB tails, plus the current core's correlated/independent amphoteric single transitions. Energy references and both capture cross sections are explicit. Sheet distributions are single/uniform/Gaussian, with SCAPS references 3..9, independent left/right electron/hole cross sections and peak/integrated density conventions. The core does not support sheet tails or amphoteric sheets. Gaussian Echar is sigma times sqrt(2); the editor states this convention.
+
+Auto-recalculate band is enabled at GUI startup. Each successful band/I-V point carries `defect_previews`: analytic density samples per eV, band edges and the core's actual expanded-level occupations at the layer midpoint or interface, at the reported voltage/temperature. Discrete levels are vertical lines (their integrated Nt is edited separately); correlated amphoteric occupancy is P-. Density is shown as cm^-3/eV or cm^-2/eV; canonical JSON remains SI. Preview state is cleared on model edits. All curves on the selected object are plotted together. Imported quadrature/normalization fields are retained.
+
+`Rs-Rsh` edits canonical `external.area_m2`, `series_ohm_m2` and `shunt_ohm_m2`; controls show cm^2 and Ohm cm^2, with the corresponding Ohm values. Zero Rs and infinite Rsh are explicit controls. `Structure` (also above Results) draws true thickness proportions and vacuum-referenced Ec/Ev from chi/Eg, allows layer/interface selection and thickness dragging, and badges each interface with its defect count. Layer removal/reordering is rejected while sheet defects exist to prevent silent reassignment of their indexed attachment. Remove the sheet defects first.
+
+Every editor uses the existing `edit` command/job, undo merging and nanobind JSON surface; no additional editor-only API is required:
+
+```python
+state = session.execute({'operation': 'inspect'})
+doc = state['document']
+doc['layers'][0]['thickness_m'] = 2e-6
+doc['layers'][0]['defects'] = [dict(scapslab_id='defect-1', label='Gaussian',
+    energy_distribution='gaussian', energy_reference='relative_to_Ev', energy_offset_eV=0.5,
+    characteristic_energy_eV=0.05, Nt_m3=1e19, sigma_n_m2=1e-19, sigma_p_m2=1e-19,
+    charge_type='neutral')]
+session.execute({'operation': 'edit', 'document': doc})
+preview = session.execute({'operation': 'band', 'voltage_V': 0.1})['band_result']
+```
+
+Results carry independent solver `status`, `valid`, `validity_status`, and immutable `project_snapshot`. The numerical validity gate requires convergence and current conservation within 1% (DC absolute floor 1e-10 A/m^2); it does not establish physical model applicability. Invalid points are masked in plots. AC CSV retains raw rows with separate `valid`, `validity_status`, `conservation_relative` and `area_m2` columns. DC exposes consumer `terminal_voltage_V` and `internal_voltage_V` independently for external networks. Changes clear DC/band/AC snapshots, preventing export of a previous model's AC data.
+
+Gallery indices 11..14 select Defects, Interfaces, Rs-Rsh and Structure. These gallery views use a synthetic two-layer fixture with Gaussian plus both tails and a Gaussian interface sheet, submitted through `edit`; normal startup continues to load the checkout example. Required slf images are under `../tools/agents/runs/slf/shots/`. Index 4 is Run. Window titles retain the shared EditorWindow icon before the title.

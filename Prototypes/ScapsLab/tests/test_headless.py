@@ -69,3 +69,31 @@ assert band['ok'] and len(band['band_result']['points']) == 1, band
 assert band['band_result']['points'][0]['voltage_V'] == 0.1
 assert band['band_result']['compute_time_ms'] > 0
 print('Python undo merge + redo + band calculation verified', flush=True)
+
+# Editor parity: the same JSON edit used by the panels, including stable object IDs.
+import copy
+editor = scapslab.Session(copy.deepcopy(loaded['document']))
+defect = dict(scapslab_id='python-defect', label='Gaussian', energy_reference='relative_to_Ev',
+              energy_offset_eV=0.5, energy_distribution='gaussian', characteristic_energy_eV=0.05,
+              Nt_m3=1e16, sigma_n_m2=1e-19, sigma_p_m2=1e-19, charge_type='neutral')
+document = copy.deepcopy(loaded['document'])
+document['layers'][0]['defects'] = [defect]
+second = copy.deepcopy(document['layers'][0])
+second.update(scapslab_id='python-layer-2', name='Second layer', thickness_m=2e-7, defects=[])
+document['layers'].append(second)
+document['interface_defects'] = [dict(id='python-interface', left_layer_index=0, energy_reference=7,
+    energy_offset_eV=0.5, Nt_m2=1e10, energy_distribution='gaussian', density_convention='integrated_sheet',
+    characteristic_energy_eV=0.05, sigma_n_left_m2=1e-19, sigma_n_right_m2=1e-19,
+    sigma_p_left_m2=1e-19, sigma_p_right_m2=1e-19, charge_type='neutral')]
+document['external'] = dict(area_m2=1e-4, series_ohm_m2=1e-5, shunt_ohm_m2=1.0)
+assert editor.execute(dict(operation='edit', document=document))['ok']
+preview = editor.execute(dict(operation='band', voltage_V=0.05))
+assert preview['ok'], preview
+assert len(preview['band_result']['points'][0]['defect_previews']) == 2
+assert 'validity_status' in preview['band_result']
+with tempfile.TemporaryDirectory(prefix='scapslab-editors-') as output:
+    path = str(Path(output) / 'editors.yaml')
+    assert editor.execute(dict(operation='save', path=path))['ok']
+    assert editor.execute(dict(operation='load', path=path))['document'] == document
+assert editor.execute(dict(operation='undo'))['ok']
+print('Python defect/interface/resistance/thickness edit and YAML round-trip: passed', flush=True)
