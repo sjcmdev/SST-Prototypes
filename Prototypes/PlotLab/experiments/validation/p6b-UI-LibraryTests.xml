@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="23" failures="0" disabled="0" errors="0" time="0.023" timestamp="2026-11-19T02:10:51.349" name="AllTests">
+  <testsuite name="PlotRenderer" tests="8" failures="0" disabled="0" skipped="0" errors="0" time="0.023" timestamp="2026-11-19T02:10:51.349">
+    <testcase name="LineScatterHasOneLegendItemAndSharedVisibility" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="30" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:10:51.349" classname="PlotRenderer" />
+    <testcase name="TwoPlotsKeepSameSeriesIdIndependent" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="45" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:10:51.352" classname="PlotRenderer" />
+    <testcase name="MigrationStylePreservesPixelSizesAndRgba" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="59" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:10:51.355" classname="PlotRenderer" />
+    <testcase name="RangeScopesDoNotLeakIdsWhenTheyFinishPlotSetup" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="73" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:10:51.357" classname="PlotRenderer" />
+    <testcase name="MigratedSeriesMatchLegacyDrawBuffers" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="86" status="run" result="completed" time="0.004" timestamp="2026-11-19T02:10:51.360" classname="PlotRenderer" />
+    <testcase name="MigrationRetainsLegacyEndpointIdsAndHover" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="127" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:10:51.364" classname="PlotRenderer" />
+    <testcase name="CapturesTicksAndCtrlClickPointWithoutGuiBackend" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="146" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:10:51.367" classname="PlotRenderer" />
+    <testcase name="NyquistHasEqualPhysicalAxisScale" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="170" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:10:51.370" classname="PlotRenderer" />
+  </testsuite>
+  <testsuite name="PlotBounds" tests="6" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.372">
+    <testcase name="EmptyAndNullData" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="14" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.372" classname="PlotBounds" />
+    <testcase name="SinglePointHasNondegeneratePadding" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="19" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.372" classname="PlotBounds" />
+    <testcase name="FiltersPairedNonfiniteAndNonpositiveValues" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="27" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.372" classname="PlotBounds" />
+    <testcase name="PadsInLogSpaceWithoutChangingData" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="36" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.372" classname="PlotBounds" />
+    <testcase name="ErrorBarsContributeToBounds" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="40" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.372" classname="PlotBounds" />
+    <testcase name="InvalidBoundsAreRejectedAndExtremePaddingStaysFinite" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="47" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.372" classname="PlotBounds" />
+  </testsuite>
+  <testsuite name="PlotDescription" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.372">
+    <testcase name="AutoFitHonoursVisibilityAndManualViewport" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="57" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.372" classname="PlotDescription" />
+    <testcase name="IndependentPlotsAndHiddenSeries" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="75" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.373" classname="PlotDescription" />
+  </testsuite>
+  <testsuite name="PlotPreparation" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.373">
+    <testcase name="LogScaleNeverAppliesAbsOrFloor" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="85" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.373" classname="PlotPreparation" />
+    <testcase name="FiltersInvalidXAndYTogether" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="96" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.373" classname="PlotPreparation" />
+  </testsuite>
+  <testsuite name="PlotRange" tests="4" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.373">
+    <testcase name="FullGestureAndHover" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="101" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.373" classname="PlotRange" />
+    <testcase name="ImmediateChangeAndPanelClosure" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="110" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.373" classname="PlotRange" />
+    <testcase name="ClampingCrossingAndDescendingCoordinates" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="117" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.373" classname="PlotRange" />
+    <testcase name="TwoInstancesDoNotShareGesture" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="124" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.373" classname="PlotRange" />
+  </testsuite>
+  <testsuite name="PlotStyle" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.373">
+    <testcase name="ScientificCycleAndPhysicalUnits" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="129" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.373" classname="PlotStyle" />
+  </testsuite>
+</testsuites>

@@ -1,0 +1,341 @@
+{
+  "autoRecompute": true,
+  "format": "sst.plotlab",
+  "id": 601,
+  "nextId": 60,
+  "nextObjectRevision": 5,
+  "objects": [
+    {
+      "id": 2,
+      "name": "P6b - Set Column Values",
+      "order": 2,
+      "parent": 0,
+      "revision": 0,
+      "type": 0
+    },
+    {
+      "id": 3,
+      "name": "Measurements",
+      "order": 3,
+      "parent": 2,
+      "revision": 0,
+      "type": 1
+    },
+    {
+      "hiddenHeaders": [],
+      "id": 4,
+      "name": "Derived columns",
+      "order": 4,
+      "parameters": [
+        {
+          "id": 50,
+          "name": "T",
+          "visible": true
+        }
+      ],
+      "parent": 3,
+      "revision": 0,
+      "rows": [
+        30,
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41
+      ],
+      "source": {},
+      "type": 2
+    },
+    {
+      "columnType": 0,
+      "comments": "Measured",
+      "display": {
+        "digits": 2,
+        "mode": 1
+      },
+      "errorOf": 0,
+      "id": 5,
+      "longName": "Input",
+      "name": "A",
+      "order": 5,
+      "parameters": [
+        {
+          "id": 50,
+          "value": "300"
+        }
+      ],
+      "parent": 4,
+      "revision": 0,
+      "role": 1,
+      "type": 3,
+      "units": "a.u.",
+      "values": [
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0,
+        9.0,
+        10.0,
+        11.0,
+        12.0
+      ]
+    },
+    {
+      "columnType": 0,
+      "comments": "Calculated",
+      "display": {
+        "digits": 2,
+        "mode": 1
+      },
+      "errorOf": 0,
+      "formula": {
+        "beforeScript": "scale = 2",
+        "bindingDiagnostic": "",
+        "bindings": {
+          "col(A)": 5
+        },
+        "evaluatorVersion": 2,
+        "expression": "scale*col(A)+i",
+        "parameterBindings": {},
+        "recalculate": "Auto",
+        "rowFrom": 1,
+        "rowTo": 0,
+        "scriptInputs": [],
+        "variables": [
+          "scale"
+        ]
+      },
+      "id": 6,
+      "longName": "Scaled",
+      "name": "B",
+      "order": 6,
+      "parameters": [
+        {
+          "id": 50,
+          "value": "300"
+        }
+      ],
+      "parent": 4,
+      "revision": 1,
+      "role": 2,
+      "type": 3,
+      "units": "a.u.",
+      "values": [
+        3.0,
+        6.0,
+        9.0,
+        12.0,
+        15.0,
+        18.0,
+        21.0,
+        24.0,
+        27.0,
+        30.0,
+        33.0,
+        36.0
+      ]
+    },
+    {
+      "columnType": 0,
+      "comments": "Calculated",
+      "display": {
+        "digits": 2,
+        "mode": 1
+      },
+      "errorOf": 0,
+      "formula": {
+        "beforeScript": "",
+        "bindingDiagnostic": "",
+        "bindings": {
+          "col(B)": 6
+        },
+        "evaluatorVersion": 2,
+        "expression": "diff(col(B),1)",
+        "parameterBindings": {},
+        "recalculate": "Auto",
+        "rowFrom": 1,
+        "rowTo": 0,
+        "scriptInputs": [],
+        "variables": []
+      },
+      "id": 7,
+      "longName": "Derivative",
+      "name": "C",
+      "order": 7,
+      "parameters": [
+        {
+          "id": 50,
+          "value": "300"
+        }
+      ],
+      "parent": 4,
+      "revision": 2,
+      "role": 2,
+      "type": 3,
+      "units": "a.u.",
+      "values": [
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0,
+        3.0
+      ]
+    },
+    {
+      "columnType": 0,
+      "comments": "Calculated",
+      "display": {
+        "digits": 2,
+        "mode": 1
+      },
+      "errorOf": 0,
+      "formula": {
+        "beforeScript": "",
+        "bindingDiagnostic": "",
+        "bindings": {
+          "col(B)": 6
+        },
+        "evaluatorVersion": 2,
+        "expression": "integ(col(B))",
+        "parameterBindings": {},
+        "recalculate": "Auto",
+        "rowFrom": 1,
+        "rowTo": 0,
+        "scriptInputs": [],
+        "variables": []
+      },
+      "id": 8,
+      "longName": "Integral",
+      "name": "D",
+      "order": 8,
+      "parameters": [
+        {
+          "id": 50,
+          "value": "300"
+        }
+      ],
+      "parent": 4,
+      "revision": 3,
+      "role": 2,
+      "type": 3,
+      "units": "a.u.",
+      "values": [
+        0.0,
+        4.5,
+        12.0,
+        22.5,
+        36.0,
+        52.5,
+        72.0,
+        94.5,
+        120.0,
+        148.5,
+        180.0,
+        214.5
+      ]
+    },
+    {
+      "columnType": 0,
+      "comments": "Calculated",
+      "display": {
+        "digits": 2,
+        "mode": 1
+      },
+      "errorOf": 0,
+      "formula": {
+        "beforeScript": "",
+        "bindingDiagnostic": "",
+        "bindings": {
+          "col(B)": 6
+        },
+        "evaluatorVersion": 2,
+        "expression": "smooth(col(B),1)",
+        "parameterBindings": {},
+        "recalculate": "Auto",
+        "rowFrom": 1,
+        "rowTo": 0,
+        "scriptInputs": [],
+        "variables": []
+      },
+      "id": 9,
+      "longName": "Smoothed",
+      "name": "E",
+      "order": 9,
+      "parameters": [
+        {
+          "id": 50,
+          "value": "300"
+        }
+      ],
+      "parent": 4,
+      "revision": 4,
+      "role": 2,
+      "type": 3,
+      "units": "a.u.",
+      "values": [
+        3.0,
+        6.0,
+        9.0,
+        12.0,
+        15.0,
+        18.0,
+        21.0,
+        24.0,
+        27.0,
+        30.0,
+        33.0,
+        36.0
+      ]
+    }
+  ],
+  "recompute": [
+    {
+      "column": 6,
+      "diagnostic": "",
+      "initial": false,
+      "stale": false,
+      "state": 0
+    },
+    {
+      "column": 7,
+      "diagnostic": "",
+      "initial": false,
+      "stale": false,
+      "state": 0
+    },
+    {
+      "column": 8,
+      "diagnostic": "",
+      "initial": false,
+      "stale": false,
+      "state": 0
+    },
+    {
+      "column": 9,
+      "diagnostic": "",
+      "initial": false,
+      "stale": false,
+      "state": 0
+    }
+  ],
+  "revision": 5,
+  "root": 2,
+  "version": 5
+}

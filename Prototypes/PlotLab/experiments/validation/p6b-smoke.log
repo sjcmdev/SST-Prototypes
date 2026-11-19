@@ -1,0 +1,523 @@
+[00:37:46] [info] File logging active: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:37:46] [info] Startup step end: CreateFromSpecification.initializeLogger.initial success=true elapsed_ms=0.641
+[00:37:46] [debug] Startup step begin: CreateFromSpecification.begin
+[00:37:46] [info] CreateFromSpecification: begin
+[00:37:46] [info] Startup step end: CreateFromSpecification.begin success=true elapsed_ms=0.076
+[00:37:46] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration
+[00:37:46] [debug] Startup step begin: CreateFromSpecification.resolveConfigDirectory
+[00:37:46] [info] Startup step end: CreateFromSpecification.resolveConfigDirectory success=true elapsed_ms=0.110
+[00:37:46] [info] CreateFromSpecification: resolved config directory=D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app\config
+[00:37:46] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration.load
+[00:37:46] [debug] Startup step begin: ConfigManager.Initialize
+[00:37:46] [info] Config bootstrap complete: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app\config
+[00:37:46] [info] Startup step end: ConfigManager.Initialize success=true elapsed_ms=23.898
+[00:37:46] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration.load success=true elapsed_ms=23.987
+[00:37:46] [debug] Startup step begin: CreateFromSpecification.applySpecificationFromConfig
+[00:37:46] [debug] Startup step begin: ConfigManager.ApplySpecification
+[00:37:46] [info] Runtime tuning loaded: font_scale=[0.7, 10] step=[0.01, 1] step_slider_max=0.5 workers_default=5 reserve_urgent=true event_queue={capacity:256, growth:256}
+[00:37:46] [info] Startup step end: ConfigManager.ApplySpecification success=true elapsed_ms=0.072
+[00:37:46] [info] Startup step end: CreateFromSpecification.applySpecificationFromConfig success=true elapsed_ms=0.118
+[00:37:46] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration success=true elapsed_ms=28.680
+[00:37:46] [debug] Startup step begin: CreateFromSpecification.initializeLogger.afterConfig
+[00:37:46] [info] File logging active: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:37:46] [info] Startup step end: CreateFromSpecification.initializeLogger.afterConfig success=true elapsed_ms=0.433
+[00:37:46] [info] Config directory: D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app\config
+[00:37:46] [info] Starting SST prototype shell
+[00:37:46] [info] Log level: info
+[00:37:46] [info] File logging enabled: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:37:46] [info] CreateFromSpecification: init EventDispatchingSystem
+[00:37:46] [info] Init: EventDispatchingSystem (EventQueue)
+[00:37:46] [info] EventQueue configured capacity=256 growthStep=256
+[00:37:46] [info] Startup step end: CreateFromSpecification.initializeEventDispatchingSystem success=true elapsed_ms=0.091
+[00:37:46] [info] CreateFromSpecification: EventDispatchingSystem ready
+[00:37:46] [info] CreateFromSpecification: create EventBus
+[00:37:46] [info] Startup step end: CreateFromSpecification.createEventBus success=true elapsed_ms=0.024
+[00:37:46] [info] CreateFromSpecification: EventBus ready
+[00:37:46] [info] ApplicationConfigController event handlers bound
+[00:37:46] [info] ApplicationEventController initialized
+[00:37:46] [info] Startup step end: CreateFromSpecification.createEventController success=true elapsed_ms=0.184
+[00:37:46] [info] Startup step end: CreateFromSpecification.eventInfrastructure success=true elapsed_ms=0.433
+[00:37:46] [info] Startup step end: CreateFromSpecification.validateAssets success=true elapsed_ms=0.173
+[00:37:46] [error] Critical asset missing [assets/icon.ico]: Logical asset path 'assets/icon.ico' was not found under user override root 'D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app' or default root 'D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app'.
+[00:37:46] [warning] Optional asset missing [assets/fonts/DejaVuSans.ttf]: Logical asset path 'assets/fonts/DejaVuSans.ttf' was not found under user override root 'D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app' or default root 'D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app'.
+[00:37:46] [warning] Optional asset missing [assets/fonts/fa-solid-900.ttf]: Logical asset path 'assets/fonts/fa-solid-900.ttf' was not found under user override root 'D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app' or default root 'D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app'.
+[00:37:46] [info] Startup step end: CreateFromSpecification.initializeAssetManager.detail success=false elapsed_ms=0.419
+[00:37:46] [error] Asset validation failed: critical assets are missing
+[00:37:46] [info] Shutdown: persisting UI settings
+[00:37:46] [info] User config save event received
+[00:37:46] [info] Config apply requested: directory=D:\SJCM\01_SemiconductorStudio\SST-Prototypes\install\app\config window=1280x720 maximized=false workers=5 reserve_urgent=true font_scale=1
+[00:39:59] [info] File logging active: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:39:59] [info] Startup step end: CreateFromSpecification.initializeLogger.initial success=true elapsed_ms=0.435
+[00:39:59] [debug] Startup step begin: CreateFromSpecification.begin
+[00:39:59] [info] CreateFromSpecification: begin
+[00:39:59] [info] Startup step end: CreateFromSpecification.begin success=true elapsed_ms=0.088
+[00:39:59] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration
+[00:39:59] [debug] Startup step begin: CreateFromSpecification.resolveConfigDirectory
+[00:39:59] [info] Startup step end: CreateFromSpecification.resolveConfigDirectory success=true elapsed_ms=0.120
+[00:39:59] [info] CreateFromSpecification: resolved config directory=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[00:39:59] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration.load
+[00:39:59] [debug] Startup step begin: ConfigManager.Initialize
+[00:39:59] [info] Config bootstrap complete: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[00:39:59] [info] Startup step end: ConfigManager.Initialize success=true elapsed_ms=59.179
+[00:39:59] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration.load success=true elapsed_ms=59.265
+[00:39:59] [debug] Startup step begin: CreateFromSpecification.applySpecificationFromConfig
+[00:39:59] [debug] Startup step begin: ConfigManager.ApplySpecification
+[00:39:59] [info] Runtime tuning loaded: font_scale=[0.7, 10] step=[0.01, 1] step_slider_max=1 workers_default=6 reserve_urgent=true event_queue={capacity:256, growth:256}
+[00:39:59] [info] Startup step end: ConfigManager.ApplySpecification success=true elapsed_ms=0.050
+[00:39:59] [info] Startup step end: CreateFromSpecification.applySpecificationFromConfig success=true elapsed_ms=0.094
+[00:39:59] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration success=true elapsed_ms=59.677
+[00:39:59] [debug] Startup step begin: CreateFromSpecification.initializeLogger.afterConfig
+[00:39:59] [info] File logging active: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:39:59] [info] Startup step end: CreateFromSpecification.initializeLogger.afterConfig success=true elapsed_ms=0.379
+[00:39:59] [info] Config directory: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[00:39:59] [info] Starting SST prototype shell
+[00:39:59] [info] Log level: info
+[00:39:59] [info] File logging enabled: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:39:59] [info] CreateFromSpecification: init EventDispatchingSystem
+[00:39:59] [info] Init: EventDispatchingSystem (EventQueue)
+[00:39:59] [info] EventQueue configured capacity=256 growthStep=256
+[00:39:59] [info] Startup step end: CreateFromSpecification.initializeEventDispatchingSystem success=true elapsed_ms=0.177
+[00:39:59] [info] CreateFromSpecification: EventDispatchingSystem ready
+[00:39:59] [info] CreateFromSpecification: create EventBus
+[00:39:59] [info] Startup step end: CreateFromSpecification.createEventBus success=true elapsed_ms=0.027
+[00:39:59] [info] CreateFromSpecification: EventBus ready
+[00:39:59] [info] ApplicationConfigController event handlers bound
+[00:39:59] [info] ApplicationEventController initialized
+[00:39:59] [info] Startup step end: CreateFromSpecification.createEventController success=true elapsed_ms=0.138
+[00:39:59] [info] Startup step end: CreateFromSpecification.eventInfrastructure success=true elapsed_ms=0.490
+[00:39:59] [info] Startup step end: CreateFromSpecification.validateAssets success=true elapsed_ms=0.300
+[00:39:59] [info] AssetManager initialized: default_root=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app user_override_root=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app resolved=3 issues=0
+[00:39:59] [info] Startup step end: CreateFromSpecification.initializeAssetManager.detail success=true elapsed_ms=0.452
+[00:39:59] [info] Startup step end: CreateFromSpecification.assetManager success=true elapsed_ms=0.484
+[00:39:59] [info] CreateFromSpecification: init GLFW
+[00:39:59] [info] GLFW initialized
+[00:39:59] [info] Startup step end: GLFW.initialize success=true elapsed_ms=6.796
+[00:39:59] [info] Startup step end: CreateFromSpecification.initializeGlfw success=true elapsed_ms=6.844
+[00:39:59] [info] CreateFromSpecification: GLFW ready
+[00:39:59] [info] CreateFromSpecification: create main window
+[00:39:59] [info] Windows icon assigned
+[00:39:59] [info] GLFW window created
+[00:39:59] [info] Window config event handlers bound
+[00:39:59] [info] Startup step end: Window.BindEventBus success=true elapsed_ms=0.050
+[00:39:59] [info] Window config applied (full): title="PlotLab" size=1280x720 position=(-1, -1) explicit_position=false maximized=false
+[00:39:59] [info] Startup step end: Window.ApplyConfig.initial success=true elapsed_ms=0.163
+[00:39:59] [info] Startup step end: Window.configureInputBackend success=true elapsed_ms=0.007
+[00:39:59] [info] Startup step end: Window.createMainWindow.detail success=true elapsed_ms=163.382
+[00:39:59] [info] Startup step end: CreateFromSpecification.createMainWindow success=true elapsed_ms=163.411
+[00:39:59] [info] CreateFromSpecification: main window ready
+[00:39:59] [info] CreateFromSpecification: init graphics
+[00:39:59] [info] OpenGL loaded: 4.3
+[00:39:59] [info] Startup step end: OpenGL.initializeGraphics success=true elapsed_ms=3.624
+[00:39:59] [info] Startup step end: CreateFromSpecification.initializeGraphics success=true elapsed_ms=3.668
+[00:39:59] [info] CreateFromSpecification: graphics ready
+[00:39:59] [info] Startup step end: CreateFromSpecification.windowingAndGraphics success=true elapsed_ms=174.243
+[00:39:59] [info] CreateFromSpecification: setup core layer
+[00:39:59] [info] CoreLayer attached
+[00:39:59] [info] Startup step end: LayerStack.push.CoreLayer success=true elapsed_ms=0.051
+[00:39:59] [info] CreateFromSpecification: core layer ready
+[00:39:59] [info] Startup step end: CreateFromSpecification.applicationLayers success=true elapsed_ms=0.110
+[00:39:59] [info] CreateFromSpecification: init core runtime services
+[00:39:59] [info] Startup step end: CreateFromSpecification.createCapabilityService success=true elapsed_ms=0.023
+[00:39:59] [info] Startup step end: CreateFromSpecification.registerCapabilities success=true elapsed_ms=0.000
+[00:39:59] [info] Startup step end: CreateFromSpecification.lockCapabilitiesAfterStartup success=true elapsed_ms=0.006
+[00:39:59] [info] Startup step end: CreateFromSpecification.createNotifier success=true elapsed_ms=0.030
+[00:39:59] [info] Init: Core runtime services via CoreLayer
+[00:39:59] [info] Init: JobSystem worker_count=7 (base=6 reserve_urgent=true)
+[00:39:59] [info] Init: ProgressTracker
+[00:39:59] [info] CoreLayer: system commands and bindings registered
+[00:39:59] [info] Init complete: runtime services worker_count=7 (base=6 reserve_urgent=true)
+[00:39:59] [info] Startup step end: CoreLayer.InitializeSystems success=true elapsed_ms=0.788
+[00:39:59] [info] Startup step end: CoreLayer.VerifyRuntimeServices success=true elapsed_ms=0.015
+[00:39:59] [info] Init: Core runtime services ready
+[00:39:59] [info] Startup step end: CreateFromSpecification.initializeCoreLayerSystems success=true elapsed_ms=0.949
+[00:39:59] [info] CreateFromSpecification: core runtime services ready
+[00:39:59] [info] Startup step end: CreateFromSpecification.coreRuntimeServices success=true elapsed_ms=1.173
+[00:39:59] [info] LayerStack default setup: begin
+[00:39:59] [info] Startup step end: LayerStack.push.IOLayer success=true elapsed_ms=0.057
+[00:39:59] [info] ScientificRuntimeLayer attached
+[00:39:59] [info] Startup step end: LayerStack.push.ScientificRuntimeLayer success=true elapsed_ms=0.040
+[00:39:59] [info] Startup step end: LayerStack.build.ImGuiRuntime success=true elapsed_ms=0.007
+[00:39:59] [info] ImGuiLayer UI event handlers bound
+[00:39:59] [info] UI settings loaded: font_scale=1, font_scale_step=0.1, font_path=<default>
+[00:39:59] [info] ImGuiLayer attached: context and backends initialized
+[00:39:59] [info] Startup step end: LayerStack.push.ImGuiLayer success=true elapsed_ms=1.179
+[00:39:59] [info] Startup step end: LayerStack.push.EditorLayer success=true elapsed_ms=0.034
+[00:39:59] [info] LayerStack default setup: complete
+[00:39:59] [info] ImGuiLayer UI state bound: available=true
+[00:39:59] [info] Font scan complete: local=4, system=341, total=346
+[00:39:59] [info] Loading UI font: Default: Segoe UI [C:\WINDOWS\Fonts\segoeui.ttf]
+[00:39:59] [info] Active UI font: Default: Segoe UI [C:\WINDOWS\Fonts\segoeui.ttf]
+[00:39:59] [info] ImGui layout load queued on UI state bind: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config\layouts\imgui.ini
+[00:39:59] [info] Startup step end: Application.LoadStartupKeybindings success=true elapsed_ms=31.225
+[00:39:59] [info] PythonInterpreter started (embedded mode)
+[00:39:59] [info] ScientificRuntimeLayer: Python bridge initialized
+[00:39:59] [info] CreateFromSpecification: application layers ready
+[00:39:59] [info] Startup step end: CreateFromSpecification.projectLayerSetup success=true elapsed_ms=153.348
+[00:39:59] [info] CreateFromSpecification: success, runtime running
+[00:39:59] [info] Startup step end: CreateFromSpecification.finish success=true elapsed_ms=0.020
+[00:39:59] [info] Startup step end: CreateFromSpecification.total success=true elapsed_ms=390.997
+[00:39:59] [info] Entering render loop
+[00:39:59] [info] Layout loaded from payload: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config\layouts\imgui.ini bytes=247
+[00:39:59] [info] CoreLayer: 5 user keybindings loaded
+[00:39:59] [critical] Unhandled exception in main loop: Smoke: graph font preview did not render
+[00:39:59] [info] Shutdown: cancelling and joining jobs
+[00:39:59] [info] Shutdown: persisting UI settings
+[00:39:59] [info] Window config captured: size=1280x720 position=(112, 135) maximized=false
+[00:39:59] [info] User config save event received
+[00:39:59] [info] Config apply requested: directory=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config window=1280x720 maximized=false workers=6 reserve_urgent=true font_scale=1
+[00:42:26] [info] File logging active: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:42:26] [info] Startup step end: CreateFromSpecification.initializeLogger.initial success=true elapsed_ms=0.444
+[00:42:26] [debug] Startup step begin: CreateFromSpecification.begin
+[00:42:26] [info] CreateFromSpecification: begin
+[00:42:26] [info] Startup step end: CreateFromSpecification.begin success=true elapsed_ms=0.088
+[00:42:26] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration
+[00:42:26] [debug] Startup step begin: CreateFromSpecification.resolveConfigDirectory
+[00:42:26] [info] Startup step end: CreateFromSpecification.resolveConfigDirectory success=true elapsed_ms=0.112
+[00:42:26] [info] CreateFromSpecification: resolved config directory=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[00:42:26] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration.load
+[00:42:26] [debug] Startup step begin: ConfigManager.Initialize
+[00:42:26] [info] Config bootstrap complete: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[00:42:26] [info] Startup step end: ConfigManager.Initialize success=true elapsed_ms=44.993
+[00:42:26] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration.load success=true elapsed_ms=45.072
+[00:42:26] [debug] Startup step begin: CreateFromSpecification.applySpecificationFromConfig
+[00:42:26] [debug] Startup step begin: ConfigManager.ApplySpecification
+[00:42:26] [info] Runtime tuning loaded: font_scale=[0.7, 10] step=[0.01, 1] step_slider_max=1 workers_default=6 reserve_urgent=true event_queue={capacity:256, growth:256}
+[00:42:26] [info] Startup step end: ConfigManager.ApplySpecification success=true elapsed_ms=0.053
+[00:42:26] [info] Startup step end: CreateFromSpecification.applySpecificationFromConfig success=true elapsed_ms=0.102
+[00:42:26] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration success=true elapsed_ms=45.441
+[00:42:26] [debug] Startup step begin: CreateFromSpecification.initializeLogger.afterConfig
+[00:42:26] [info] File logging active: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:42:26] [info] Startup step end: CreateFromSpecification.initializeLogger.afterConfig success=true elapsed_ms=0.426
+[00:42:26] [info] Config directory: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[00:42:26] [info] Starting SST prototype shell
+[00:42:26] [info] Log level: info
+[00:42:26] [info] File logging enabled: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[00:42:26] [info] CreateFromSpecification: init EventDispatchingSystem
+[00:42:26] [info] Init: EventDispatchingSystem (EventQueue)
+[00:42:26] [info] EventQueue configured capacity=256 growthStep=256
+[00:42:26] [info] Startup step end: CreateFromSpecification.initializeEventDispatchingSystem success=true elapsed_ms=0.088
+[00:42:26] [info] CreateFromSpecification: EventDispatchingSystem ready
+[00:42:26] [info] CreateFromSpecification: create EventBus
+[00:42:26] [info] Startup step end: CreateFromSpecification.createEventBus success=true elapsed_ms=0.025
+[00:42:26] [info] CreateFromSpecification: EventBus ready
+[00:42:26] [info] ApplicationConfigController event handlers bound
+[00:42:26] [info] ApplicationEventController initialized
+[00:42:26] [info] Startup step end: CreateFromSpecification.createEventController success=true elapsed_ms=0.139
+[00:42:26] [info] Startup step end: CreateFromSpecification.eventInfrastructure success=true elapsed_ms=0.380
+[00:42:26] [info] Startup step end: CreateFromSpecification.validateAssets success=true elapsed_ms=0.274
+[00:42:26] [info] AssetManager initialized: default_root=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app user_override_root=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app resolved=3 issues=0
+[00:42:26] [info] Startup step end: CreateFromSpecification.initializeAssetManager.detail success=true elapsed_ms=0.404
+[00:42:26] [info] Startup step end: CreateFromSpecification.assetManager success=true elapsed_ms=0.432
+[00:42:26] [info] CreateFromSpecification: init GLFW
+[00:42:26] [info] GLFW initialized
+[00:42:26] [info] Startup step end: GLFW.initialize success=true elapsed_ms=7.176
+[00:42:26] [info] Startup step end: CreateFromSpecification.initializeGlfw success=true elapsed_ms=7.225
+[00:42:26] [info] CreateFromSpecification: GLFW ready
+[00:42:26] [info] CreateFromSpecification: create main window
+[00:42:26] [info] Windows icon assigned
+[00:42:26] [info] GLFW window created
+[00:42:26] [info] Window config event handlers bound
+[00:42:26] [info] Startup step end: Window.BindEventBus success=true elapsed_ms=0.044
+[00:42:26] [info] Window config applied (full): title="PlotLab" size=1280x720 position=(112, 135) explicit_position=true maximized=false
+[00:42:26] [info] Startup step end: Window.ApplyConfig.initial success=true elapsed_ms=0.475
+[00:42:26] [info] Startup step end: Window.configureInputBackend success=true elapsed_ms=0.007
+[00:42:26] [info] Startup step end: Window.createMainWindow.detail success=true elapsed_ms=136.168
+[00:42:26] [info] Startup step end: CreateFromSpecification.createMainWindow success=true elapsed_ms=136.195
+[00:42:26] [info] CreateFromSpecification: main window ready
+[00:42:26] [info] CreateFromSpecification: init graphics
+[00:42:26] [info] OpenGL loaded: 4.3
+[00:42:26] [info] Startup step end: OpenGL.initializeGraphics success=true elapsed_ms=3.023
+[00:42:26] [info] Startup step end: CreateFromSpecification.initializeGraphics success=true elapsed_ms=3.069
+[00:42:26] [info] CreateFromSpecification: graphics ready
+[00:42:26] [info] Startup step end: CreateFromSpecification.windowingAndGraphics success=true elapsed_ms=146.865
+[00:42:26] [info] CreateFromSpecification: setup core layer
+[00:42:26] [info] CoreLayer attached
+[00:42:26] [info] Startup step end: LayerStack.push.CoreLayer success=true elapsed_ms=0.042
+[00:42:26] [info] CreateFromSpecification: core layer ready
+[00:42:26] [info] Startup step end: CreateFromSpecification.applicationLayers success=true elapsed_ms=0.097
+[00:42:26] [info] CreateFromSpecification: init core runtime services
+[00:42:26] [info] Startup step end: CreateFromSpecification.createCapabilityService success=true elapsed_ms=0.015
+[00:42:26] [info] Startup step end: CreateFromSpecification.registerCapabilities success=true elapsed_ms=0.000
+[00:42:26] [info] Startup step end: CreateFromSpecification.lockCapabilitiesAfterStartup success=true elapsed_ms=0.005
+[00:42:26] [info] Startup step end: CreateFromSpecification.createNotifier success=true elapsed_ms=0.037
+[00:42:26] [info] Init: Core runtime services via CoreLayer
+[00:42:26] [info] Init: JobSystem worker_count=7 (base=6 reserve_urgent=true)
+[00:42:26] [info] Init: ProgressTracker
+[00:42:26] [info] CoreLayer: system commands and bindings registered
+[00:42:26] [info] Init complete: runtime services worker_count=7 (base=6 reserve_urgent=true)
+[00:42:26] [info] Startup step end: CoreLayer.InitializeSystems success=true elapsed_ms=0.712
+[00:42:26] [info] Startup step end: CoreLayer.VerifyRuntimeServices success=true elapsed_ms=0.011
+[00:42:26] [info] Init: Core runtime services ready
+[00:42:26] [info] Startup step end: CreateFromSpecification.initializeCoreLayerSystems success=true elapsed_ms=0.829
+[00:42:26] [info] CreateFromSpecification: core runtime services ready
+[00:42:26] [info] Startup step end: CreateFromSpecification.coreRuntimeServices success=true elapsed_ms=1.069
+[00:42:26] [info] LayerStack default setup: begin
+[00:42:26] [info] Startup step end: LayerStack.push.IOLayer success=true elapsed_ms=0.045
+[00:42:26] [info] ScientificRuntimeLayer attached
+[00:42:26] [info] Startup step end: LayerStack.push.ScientificRuntimeLayer success=true elapsed_ms=0.036
+[00:42:26] [info] Startup step end: LayerStack.build.ImGuiRuntime success=true elapsed_ms=0.007
+[00:42:26] [info] ImGuiLayer UI event handlers bound
+[00:42:26] [info] UI settings loaded: font_scale=1, font_scale_step=0.1, font_path=<default>
+[00:42:26] [info] ImGuiLayer attached: context and backends initialized
+[00:42:26] [info] Startup step end: LayerStack.push.ImGuiLayer success=true elapsed_ms=1.165
+[00:42:26] [info] Startup step end: LayerStack.push.EditorLayer success=true elapsed_ms=0.024
+[00:42:26] [info] LayerStack default setup: complete
+[00:42:26] [info] ImGuiLayer UI state bound: available=true
+[00:42:26] [info] Font scan complete: local=4, system=341, total=346
+[00:42:26] [info] Loading UI font: Default: Segoe UI [C:\WINDOWS\Fonts\segoeui.ttf]
+[00:42:26] [info] Active UI font: Default: Segoe UI [C:\WINDOWS\Fonts\segoeui.ttf]
+[00:42:26] [info] ImGui layout load queued on UI state bind: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config\layouts\imgui.ini
+[00:42:26] [info] Startup step end: Application.LoadStartupKeybindings success=true elapsed_ms=13.834
+[00:42:26] [info] PythonInterpreter started (embedded mode)
+[00:42:26] [info] ScientificRuntimeLayer: Python bridge initialized
+[00:42:26] [info] CreateFromSpecification: application layers ready
+[00:42:26] [info] Startup step end: CreateFromSpecification.projectLayerSetup success=true elapsed_ms=87.690
+[00:42:26] [info] CreateFromSpecification: success, runtime running
+[00:42:26] [info] Startup step end: CreateFromSpecification.finish success=true elapsed_ms=0.020
+[00:42:26] [info] Startup step end: CreateFromSpecification.total success=true elapsed_ms=283.542
+[00:42:26] [info] Entering render loop
+[00:42:26] [info] Layout loaded from payload: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config\layouts\imgui.ini bytes=1084
+[00:42:26] [info] CoreLayer: 5 user keybindings loaded
+[00:42:26] [info] Shutdown: cancelling and joining jobs
+[00:42:26] [info] Shutdown: persisting UI settings
+[00:42:26] [info] Window config captured: size=1280x720 position=(112, 135) maximized=false
+[00:42:26] [info] User config save event received
+[00:42:26] [info] Config apply requested: directory=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config window=1280x720 maximized=false workers=6 reserve_urgent=true font_scale=1
+[01:50:39] [info] File logging active: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[01:50:39] [info] Startup step end: CreateFromSpecification.initializeLogger.initial success=true elapsed_ms=0.470
+[01:50:39] [debug] Startup step begin: CreateFromSpecification.begin
+[01:50:39] [info] CreateFromSpecification: begin
+[01:50:39] [info] Startup step end: CreateFromSpecification.begin success=true elapsed_ms=0.062
+[01:50:39] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration
+[01:50:39] [debug] Startup step begin: CreateFromSpecification.resolveConfigDirectory
+[01:50:39] [info] Startup step end: CreateFromSpecification.resolveConfigDirectory success=true elapsed_ms=0.111
+[01:50:39] [info] CreateFromSpecification: resolved config directory=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[01:50:39] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration.load
+[01:50:39] [debug] Startup step begin: ConfigManager.Initialize
+[01:50:39] [info] Config bootstrap complete: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[01:50:39] [info] Startup step end: ConfigManager.Initialize success=true elapsed_ms=58.300
+[01:50:39] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration.load success=true elapsed_ms=58.536
+[01:50:39] [debug] Startup step begin: CreateFromSpecification.applySpecificationFromConfig
+[01:50:39] [debug] Startup step begin: ConfigManager.ApplySpecification
+[01:50:39] [info] Runtime tuning loaded: font_scale=[0.7, 10] step=[0.01, 1] step_slider_max=1 workers_default=6 reserve_urgent=true event_queue={capacity:256, growth:256}
+[01:50:39] [info] Startup step end: ConfigManager.ApplySpecification success=true elapsed_ms=0.109
+[01:50:39] [info] Startup step end: CreateFromSpecification.applySpecificationFromConfig success=true elapsed_ms=0.237
+[01:50:39] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration success=true elapsed_ms=59.216
+[01:50:39] [debug] Startup step begin: CreateFromSpecification.initializeLogger.afterConfig
+[01:50:39] [info] File logging active: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[01:50:39] [info] Startup step end: CreateFromSpecification.initializeLogger.afterConfig success=true elapsed_ms=0.567
+[01:50:39] [info] Config directory: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[01:50:39] [info] Starting SST prototype shell
+[01:50:39] [info] Log level: info
+[01:50:39] [info] File logging enabled: D:/SJCM/01_SemiconductorStudio/SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[01:50:39] [info] CreateFromSpecification: init EventDispatchingSystem
+[01:50:39] [info] Init: EventDispatchingSystem (EventQueue)
+[01:50:39] [info] EventQueue configured capacity=256 growthStep=256
+[01:50:39] [info] Startup step end: CreateFromSpecification.initializeEventDispatchingSystem success=true elapsed_ms=0.129
+[01:50:39] [info] CreateFromSpecification: EventDispatchingSystem ready
+[01:50:39] [info] CreateFromSpecification: create EventBus
+[01:50:39] [info] Startup step end: CreateFromSpecification.createEventBus success=true elapsed_ms=0.030
+[01:50:39] [info] CreateFromSpecification: EventBus ready
+[01:50:39] [info] ApplicationConfigController event handlers bound
+[01:50:39] [info] ApplicationEventController initialized
+[01:50:39] [info] Startup step end: CreateFromSpecification.createEventController success=true elapsed_ms=0.246
+[01:50:39] [info] Startup step end: CreateFromSpecification.eventInfrastructure success=true elapsed_ms=0.602
+[01:50:39] [info] Startup step end: CreateFromSpecification.validateAssets success=true elapsed_ms=0.392
+[01:50:39] [info] AssetManager initialized: default_root=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app user_override_root=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app resolved=3 issues=0
+[01:50:39] [info] Startup step end: CreateFromSpecification.initializeAssetManager.detail success=true elapsed_ms=0.662
+[01:50:39] [info] Startup step end: CreateFromSpecification.assetManager success=true elapsed_ms=0.739
+[01:50:39] [info] CreateFromSpecification: init GLFW
+[01:50:39] [info] GLFW initialized
+[01:50:39] [info] Startup step end: GLFW.initialize success=true elapsed_ms=10.949
+[01:50:39] [info] Startup step end: CreateFromSpecification.initializeGlfw success=true elapsed_ms=10.998
+[01:50:39] [info] CreateFromSpecification: GLFW ready
+[01:50:39] [info] CreateFromSpecification: create main window
+[01:50:40] [info] Windows icon assigned
+[01:50:40] [info] GLFW window created
+[01:50:40] [info] Window config event handlers bound
+[01:50:40] [info] Startup step end: Window.BindEventBus success=true elapsed_ms=0.046
+[01:50:40] [info] Window config applied (full): title="PlotLab" size=1280x720 position=(-1, -1) explicit_position=false maximized=false
+[01:50:40] [info] Startup step end: Window.ApplyConfig.initial success=true elapsed_ms=0.493
+[01:50:40] [info] Startup step end: Window.configureInputBackend success=true elapsed_ms=0.009
+[01:50:40] [info] Startup step end: Window.createMainWindow.detail success=true elapsed_ms=235.260
+[01:50:40] [info] Startup step end: CreateFromSpecification.createMainWindow success=true elapsed_ms=235.301
+[01:50:40] [info] CreateFromSpecification: main window ready
+[01:50:40] [info] CreateFromSpecification: init graphics
+[01:50:40] [info] OpenGL loaded: 4.3
+[01:50:40] [info] Startup step end: OpenGL.initializeGraphics success=true elapsed_ms=3.081
+[01:50:40] [info] Startup step end: CreateFromSpecification.initializeGraphics success=true elapsed_ms=3.150
+[01:50:40] [info] CreateFromSpecification: graphics ready
+[01:50:40] [info] Startup step end: CreateFromSpecification.windowingAndGraphics success=true elapsed_ms=249.817
+[01:50:40] [info] CreateFromSpecification: setup core layer
+[01:50:40] [info] CoreLayer attached
+[01:50:40] [info] Startup step end: LayerStack.push.CoreLayer success=true elapsed_ms=0.053
+[01:50:40] [info] CreateFromSpecification: core layer ready
+[01:50:40] [info] Startup step end: CreateFromSpecification.applicationLayers success=true elapsed_ms=0.111
+[01:50:40] [info] CreateFromSpecification: init core runtime services
+[01:50:40] [info] Startup step end: CreateFromSpecification.createCapabilityService success=true elapsed_ms=0.019
+[01:50:40] [info] Startup step end: CreateFromSpecification.registerCapabilities success=true elapsed_ms=0.000
+[01:50:40] [info] Startup step end: CreateFromSpecification.lockCapabilitiesAfterStartup success=true elapsed_ms=0.006
+[01:50:40] [info] Startup step end: CreateFromSpecification.createNotifier success=true elapsed_ms=0.027
+[01:50:40] [info] Init: Core runtime services via CoreLayer
+[01:50:40] [info] Init: JobSystem worker_count=7 (base=6 reserve_urgent=true)
+[01:50:40] [info] Init: ProgressTracker
+[01:50:40] [info] CoreLayer: system commands and bindings registered
+[01:50:40] [info] Init complete: runtime services worker_count=7 (base=6 reserve_urgent=true)
+[01:50:40] [info] Startup step end: CoreLayer.InitializeSystems success=true elapsed_ms=0.691
+[01:50:40] [info] Startup step end: CoreLayer.VerifyRuntimeServices success=true elapsed_ms=0.018
+[01:50:40] [info] Init: Core runtime services ready
+[01:50:40] [info] Startup step end: CreateFromSpecification.initializeCoreLayerSystems success=true elapsed_ms=0.834
+[01:50:40] [info] CreateFromSpecification: core runtime services ready
+[01:50:40] [info] Startup step end: CreateFromSpecification.coreRuntimeServices success=true elapsed_ms=1.067
+[01:50:40] [info] LayerStack default setup: begin
+[01:50:40] [info] Startup step end: LayerStack.push.IOLayer success=true elapsed_ms=0.049
+[01:50:40] [info] ScientificRuntimeLayer attached
+[01:50:40] [info] Startup step end: LayerStack.push.ScientificRuntimeLayer success=true elapsed_ms=0.035
+[01:50:40] [info] Startup step end: LayerStack.build.ImGuiRuntime success=true elapsed_ms=0.007
+[01:50:40] [info] ImGuiLayer UI event handlers bound
+[01:50:40] [info] UI settings loaded: font_scale=1, font_scale_step=0.1, font_path=<default>
+[01:50:40] [info] ImGuiLayer attached: context and backends initialized
+[01:50:40] [info] Startup step end: LayerStack.push.ImGuiLayer success=true elapsed_ms=1.932
+[01:50:40] [info] Startup step end: LayerStack.push.EditorLayer success=true elapsed_ms=0.047
+[01:50:40] [info] LayerStack default setup: complete
+[01:50:40] [info] ImGuiLayer UI state bound: available=true
+[01:50:40] [info] Font scan complete: local=4, system=341, total=346
+[01:50:40] [info] Loading UI font: Default: Segoe UI [C:\WINDOWS\Fonts\segoeui.ttf]
+[01:50:40] [info] Active UI font: Default: Segoe UI [C:\WINDOWS\Fonts\segoeui.ttf]
+[01:50:40] [info] ImGui layout load queued on UI state bind: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config\layouts\imgui.ini
+[01:50:40] [info] Startup step end: Application.LoadStartupKeybindings success=true elapsed_ms=23.789
+[01:50:40] [info] PythonInterpreter using app-local runtime at C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none
+[01:50:40] [info] PythonInterpreter started (embedded mode)
+[01:50:40] [info] ScientificRuntimeLayer: Python bridge initialized
+[01:50:40] [info] CreateFromSpecification: application layers ready
+[01:50:40] [info] Startup step end: CreateFromSpecification.projectLayerSetup success=true elapsed_ms=103.178
+[01:50:40] [info] CreateFromSpecification: success, runtime running
+[01:50:40] [info] Startup step end: CreateFromSpecification.finish success=true elapsed_ms=0.022
+[01:50:40] [info] Startup step end: CreateFromSpecification.total success=true elapsed_ms=416.741
+[01:50:40] [info] Entering render loop
+[01:50:40] [info] Layout loaded from payload: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config\layouts\imgui.ini bytes=247
+[01:50:40] [info] CoreLayer: 5 user keybindings loaded
+[01:50:40] [info] Shutdown: cancelling and joining jobs
+[01:50:40] [info] Shutdown: persisting UI settings
+[01:50:40] [info] Window config captured: size=1280x720 position=(190, 213) maximized=false
+[01:50:40] [info] User config save event received
+[01:50:40] [info] Config apply requested: directory=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config window=1280x720 maximized=false workers=6 reserve_urgent=true font_scale=1
+[02:11:41] [info] File logging active: D:\SJCM\01_SemiconductorStudio\SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[02:11:41] [info] Startup step end: CreateFromSpecification.initializeLogger.initial success=true elapsed_ms=0.439
+[02:11:41] [debug] Startup step begin: CreateFromSpecification.begin
+[02:11:41] [info] CreateFromSpecification: begin
+[02:11:41] [info] Startup step end: CreateFromSpecification.begin success=true elapsed_ms=0.059
+[02:11:41] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration
+[02:11:41] [debug] Startup step begin: CreateFromSpecification.resolveConfigDirectory
+[02:11:41] [info] Startup step end: CreateFromSpecification.resolveConfigDirectory success=true elapsed_ms=0.120
+[02:11:41] [info] CreateFromSpecification: resolved config directory=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[02:11:41] [debug] Startup step begin: CreateFromSpecification.bootstrapConfiguration.load
+[02:11:41] [debug] Startup step begin: ConfigManager.Initialize
+[02:11:41] [info] Config bootstrap complete: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[02:11:41] [info] Startup step end: ConfigManager.Initialize success=true elapsed_ms=28.791
+[02:11:41] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration.load success=true elapsed_ms=28.879
+[02:11:41] [debug] Startup step begin: CreateFromSpecification.applySpecificationFromConfig
+[02:11:41] [debug] Startup step begin: ConfigManager.ApplySpecification
+[02:11:41] [info] Runtime tuning loaded: font_scale=[0.7, 10] step=[0.01, 1] step_slider_max=1 workers_default=6 reserve_urgent=true event_queue={capacity:256, growth:256}
+[02:11:41] [info] Startup step end: ConfigManager.ApplySpecification success=true elapsed_ms=0.061
+[02:11:41] [info] Startup step end: CreateFromSpecification.applySpecificationFromConfig success=true elapsed_ms=0.108
+[02:11:41] [info] Startup step end: CreateFromSpecification.bootstrapConfiguration success=true elapsed_ms=29.274
+[02:11:41] [debug] Startup step begin: CreateFromSpecification.initializeLogger.afterConfig
+[02:11:41] [info] File logging active: D:\SJCM\01_SemiconductorStudio\SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[02:11:41] [info] Startup step end: CreateFromSpecification.initializeLogger.afterConfig success=true elapsed_ms=0.413
+[02:11:41] [info] Config directory: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config
+[02:11:41] [info] Starting SST prototype shell
+[02:11:41] [info] Log level: info
+[02:11:41] [info] File logging enabled: D:\SJCM\01_SemiconductorStudio\SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-smoke.log
+[02:11:41] [info] CreateFromSpecification: init EventDispatchingSystem
+[02:11:41] [info] Init: EventDispatchingSystem (EventQueue)
+[02:11:41] [info] EventQueue configured capacity=256 growthStep=256
+[02:11:41] [info] Startup step end: CreateFromSpecification.initializeEventDispatchingSystem success=true elapsed_ms=0.109
+[02:11:41] [info] CreateFromSpecification: EventDispatchingSystem ready
+[02:11:41] [info] CreateFromSpecification: create EventBus
+[02:11:41] [info] Startup step end: CreateFromSpecification.createEventBus success=true elapsed_ms=0.029
+[02:11:41] [info] CreateFromSpecification: EventBus ready
+[02:11:41] [info] ApplicationConfigController event handlers bound
+[02:11:41] [info] ApplicationEventController initialized
+[02:11:41] [info] Startup step end: CreateFromSpecification.createEventController success=true elapsed_ms=0.162
+[02:11:41] [info] Startup step end: CreateFromSpecification.eventInfrastructure success=true elapsed_ms=0.476
+[02:11:41] [info] Startup step end: CreateFromSpecification.validateAssets success=true elapsed_ms=0.304
+[02:11:41] [info] AssetManager initialized: default_root=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app user_override_root=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app resolved=3 issues=0
+[02:11:41] [info] Startup step end: CreateFromSpecification.initializeAssetManager.detail success=true elapsed_ms=0.431
+[02:11:41] [info] Startup step end: CreateFromSpecification.assetManager success=true elapsed_ms=0.458
+[02:11:41] [info] CreateFromSpecification: init GLFW
+[02:11:41] [info] GLFW initialized
+[02:11:41] [info] Startup step end: GLFW.initialize success=true elapsed_ms=6.684
+[02:11:41] [info] Startup step end: CreateFromSpecification.initializeGlfw success=true elapsed_ms=6.731
+[02:11:41] [info] CreateFromSpecification: GLFW ready
+[02:11:41] [info] CreateFromSpecification: create main window
+[02:11:41] [info] Windows icon assigned
+[02:11:41] [info] GLFW window created
+[02:11:41] [info] Window config event handlers bound
+[02:11:41] [info] Startup step end: Window.BindEventBus success=true elapsed_ms=0.048
+[02:11:41] [info] Window config applied (full): title="PlotLab" size=1280x720 position=(-1, -1) explicit_position=false maximized=false
+[02:11:41] [info] Startup step end: Window.ApplyConfig.initial success=true elapsed_ms=0.137
+[02:11:41] [info] Startup step end: Window.configureInputBackend success=true elapsed_ms=0.007
+[02:11:41] [info] Startup step end: Window.createMainWindow.detail success=true elapsed_ms=153.707
+[02:11:41] [info] Startup step end: CreateFromSpecification.createMainWindow success=true elapsed_ms=153.732
+[02:11:41] [info] CreateFromSpecification: main window ready
+[02:11:41] [info] CreateFromSpecification: init graphics
+[02:11:41] [info] OpenGL loaded: 4.3
+[02:11:41] [info] Startup step end: OpenGL.initializeGraphics success=true elapsed_ms=2.822
+[02:11:41] [info] Startup step end: CreateFromSpecification.initializeGraphics success=true elapsed_ms=2.854
+[02:11:41] [info] CreateFromSpecification: graphics ready
+[02:11:41] [info] Startup step end: CreateFromSpecification.windowingAndGraphics success=true elapsed_ms=163.605
+[02:11:41] [info] CreateFromSpecification: setup core layer
+[02:11:41] [info] CoreLayer attached
+[02:11:41] [info] Startup step end: LayerStack.push.CoreLayer success=true elapsed_ms=0.041
+[02:11:41] [info] CreateFromSpecification: core layer ready
+[02:11:41] [info] Startup step end: CreateFromSpecification.applicationLayers success=true elapsed_ms=0.097
+[02:11:41] [info] CreateFromSpecification: init core runtime services
+[02:11:41] [info] Startup step end: CreateFromSpecification.createCapabilityService success=true elapsed_ms=0.014
+[02:11:41] [info] Startup step end: CreateFromSpecification.registerCapabilities success=true elapsed_ms=0.000
+[02:11:41] [info] Startup step end: CreateFromSpecification.lockCapabilitiesAfterStartup success=true elapsed_ms=0.005
+[02:11:41] [info] Startup step end: CreateFromSpecification.createNotifier success=true elapsed_ms=0.024
+[02:11:41] [info] Init: Core runtime services via CoreLayer
+[02:11:41] [info] Init: JobSystem worker_count=7 (base=6 reserve_urgent=true)
+[02:11:41] [info] Init: ProgressTracker
+[02:11:41] [info] CoreLayer: system commands and bindings registered
+[02:11:41] [info] Init complete: runtime services worker_count=7 (base=6 reserve_urgent=true)
+[02:11:41] [info] Startup step end: CoreLayer.InitializeSystems success=true elapsed_ms=0.734
+[02:11:41] [info] Startup step end: CoreLayer.VerifyRuntimeServices success=true elapsed_ms=0.008
+[02:11:41] [info] Init: Core runtime services ready
+[02:11:41] [info] Startup step end: CreateFromSpecification.initializeCoreLayerSystems success=true elapsed_ms=0.845
+[02:11:41] [info] CreateFromSpecification: core runtime services ready
+[02:11:41] [info] Startup step end: CreateFromSpecification.coreRuntimeServices success=true elapsed_ms=1.047
+[02:11:41] [info] LayerStack default setup: begin
+[02:11:41] [info] Startup step end: LayerStack.push.IOLayer success=true elapsed_ms=0.052
+[02:11:41] [info] ScientificRuntimeLayer attached
+[02:11:41] [info] Startup step end: LayerStack.push.ScientificRuntimeLayer success=true elapsed_ms=0.036
+[02:11:41] [info] Startup step end: LayerStack.build.ImGuiRuntime success=true elapsed_ms=0.007
+[02:11:41] [info] ImGuiLayer UI event handlers bound
+[02:11:41] [info] UI settings loaded: font_scale=1, font_scale_step=0.1, font_path=<default>
+[02:11:41] [info] ImGuiLayer attached: context and backends initialized
+[02:11:41] [info] Startup step end: LayerStack.push.ImGuiLayer success=true elapsed_ms=1.069
+[02:11:41] [info] Startup step end: LayerStack.push.EditorLayer success=true elapsed_ms=0.025
+[02:11:41] [info] LayerStack default setup: complete
+[02:11:41] [info] ImGuiLayer UI state bound: available=true
+[02:11:41] [info] Font scan complete: local=4, system=341, total=346
+[02:11:41] [info] Loading UI font: Default: Segoe UI [C:\WINDOWS\Fonts\segoeui.ttf]
+[02:11:41] [info] Active UI font: Default: Segoe UI [C:\WINDOWS\Fonts\segoeui.ttf]
+[02:11:41] [info] ImGui layout load queued on UI state bind: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config\layouts\imgui.ini
+[02:11:41] [info] Startup step end: Application.LoadStartupKeybindings success=true elapsed_ms=21.879
+[02:11:41] [info] PythonInterpreter using app-local runtime at C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none
+[02:11:41] [info] PythonInterpreter started (embedded mode)
+[02:11:41] [info] ScientificRuntimeLayer: Python bridge initialized
+[02:11:41] [info] CreateFromSpecification: application layers ready
+[02:11:41] [info] Startup step end: CreateFromSpecification.projectLayerSetup success=true elapsed_ms=93.446
+[02:11:41] [info] CreateFromSpecification: success, runtime running
+[02:11:41] [info] Startup step end: CreateFromSpecification.finish success=true elapsed_ms=0.031
+[02:11:41] [info] Startup step end: CreateFromSpecification.total success=true elapsed_ms=289.957
+[02:11:41] [info] Entering render loop
+[02:11:41] [info] Layout loaded from payload: C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config\layouts\imgui.ini bytes=247
+[02:11:41] [info] CoreLayer: 5 user keybindings loaded
+[02:11:42] [info] Shutdown: cancelling and joining jobs
+[02:11:42] [info] Shutdown: persisting UI settings
+[02:11:42] [info] Window config captured: size=1280x720 position=(34, 57) maximized=false
+[02:11:42] [info] User config save event received
+[02:11:42] [info] Config apply requested: directory=C:\Users\Franek\AppData\Local\Temp\codex-builds\SST-Prototypes\bin\Debug-windows-x86_64\PlotLab\install\app\config window=1280x720 maximized=false workers=6 reserve_urgent=true font_scale=1

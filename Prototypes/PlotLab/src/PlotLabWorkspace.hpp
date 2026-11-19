@@ -60,7 +60,8 @@ namespace SST::Prototypes::PlotLab
     class WorkspacePanel final : public IPanel
     {
       public:
-        explicit WorkspacePanel(Ref<Session> session) : IPanel("Project Explorer"), state(std::move(session)) {}
+        explicit WorkspacePanel(Ref<Session> session, pl::Id previewColumn = 0)
+            : IPanel("Project Explorer"), state(std::move(session)), previewColumn(previewColumn) {}
         Ref<IPanel> Clone() const override
         {
             return CreateRef<WorkspacePanel>(state);
@@ -70,9 +71,13 @@ namespace SST::Prototypes::PlotLab
       private:
         Ref<Session> state;
         pl::Id rename = 0, remove = 0, metadata = 0, exportGraph = 0;
+        pl::Id previewColumn = 0;
+        bool previewLibrary = false;
         pl::Id targetGraph = 0, sheetChoice = 0, xChoice = 0, yChoice = 0, errorChoice = 0;
         std::string name, units, longName, formula, comments, parameterName, cellText;
         int displayMode = 0, displayDigits = 6;
+        int rowFrom = 1, rowTo = 0, recalculate = 1;
+        std::string beforeScript;
         int role = 0, format = 0;
         bool textColumn = false, graphDialog = false, importDialog = false;
         std::string importText, importName, importPath;
@@ -87,6 +92,7 @@ namespace SST::Prototypes::PlotLab
         void Worksheet(pl::Id);
         void Graph(pl::Id);
         void Dialogs();
+        void EditColumn(pl::Id);
         void BeginImport();
         void PreviewImport();
         template <class F> void Attempt(F &&operation)

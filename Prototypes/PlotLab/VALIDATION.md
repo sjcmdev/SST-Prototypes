@@ -1,4 +1,4 @@
-﻿# PL3 validation — 2026-11-18
+# PL3 validation — 2026-11-18
 
 Build: Debug x64, MSBuild 17.14.40/v143, dynamic Debug CRT, C++latest. Built
 `PlotLab`, `PlotLabTests`, `JFM`, `JFMTests`, and the SST-Libraries solution.
@@ -185,3 +185,91 @@ shared lock, then canceled before launch while another job's long experiment
 held the lock. The embedded headless suite already passed in PlotLabTests; the
 standalone CLI entry itself was not executed in this job. Only this job's waiting
 shell was stopped; the other lock holder was left untouched.
+
+## P6b - Set Column Values (2026-11-19)
+
+Final builds use Debug x64, MSBuild 17.14/v143, dynamic Debug CRT. Repository
+builds encountered MSB3491 write denials on existing `.tlog` files; all final
+binaries and tests were built out of tree in:
+
+- `C:/Users/Franek/AppData/Local/Temp/codex-builds/SST-Prototypes`
+- `C:/Users/Franek/AppData/Local/Temp/codex-builds/SST-Libraries`
+
+Temporary Premake wrappers include the unchanged repository recipes and override
+workspace/project locations, output and intermediate directories. All Premake,
+MSBuild, test and application-validation commands ran through
+`bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh`; MSBuild used
+`-nr:false -m:1`. No git commands or .git writes were made.
+
+| Final suite, actually run in this job | Passed | Failed |
+|---|---:|---:|
+| PlotLabTests (including embedded Python commands) | 29 | 0 |
+| PlotLab Python pytest | 43 | 0 |
+| PlotLab-EngineTests | 47 | 0 |
+| UI-LibraryTests | 23 | 0 |
+| SST-LibrariesTests aggregate | 107 | 0 |
+
+The aggregate includes the Engine and UI tests; these counts must not be added
+as distinct tests. Complete logs/XML are `experiments/validation/p6b-*`.
+
+Measured recompute: **216.959 ms** for 1,000,000 rows, expression
+`sqrt(col(A))*2+i`, Debug x64. Timing covers worker scheduling, evaluation and
+owner-thread publication; model construction and formula-definition edits are
+outside the interval. The test asserts worker execution on a different thread
+and a hard recompute limit of 1000 ms. Ten legacy full-column formula edits on
+1,000,000 rows retain **9840 bytes** of history (existing limit: <10000 bytes).
+
+Coverage: every math/reduction/vector function; forward/central differences,
+trapezoidal integration, linear interpolation and quadratic five-point SG;
+NaN handling and conditional domain masking; inclusive row ranges; short/long
+names, cross-book/sheet references, user parameter IDs and wcol; different source
+and destination lengths; cycle/missing/domain diagnostics and cache preservation;
+None/Auto/Manual; formula/range/frozen-cache undo/redo; normal and blocked-state
+persistence; evaluator-v1 migration including a column named i; malformed numeric
+indices/IDs; Python scope escapes, oversized scripts/IDs, full-precision uint64
+IDs, script dependencies and GIL-safe document destruction/replacement.
+
+The standalone `--worksheet-script` command generated
+`examples/p6b-formulas.plotlab` through the same Core commands and recompute jobs.
+Native `--smoke-test` passed (exit 0). Native validation runs from the TEMP
+PlotLab executable directory, with PYTHONHOME read from the repository's
+`.venv/pyvenv.cfg` and PYTHONPATH set to its `.venv/Lib/site-packages`; this supplies
+the existing Python runtime/packages when the TEMP build has no nearby venv.
+`p6b-worksheet.png` and `p6b-set-column-values.png` were captured by in-app
+`--screenshot` and visually inspected. The panel capture uses the
+`--column-values-preview` view preset and the shared column-editor initializer.
+
+Source/artifact manifest (only the requested product directories):
+
+- `SST-Libraries/PlotLab-Engine/include/sst/plotlab/Engine.hpp`
+- `SST-Libraries/PlotLab-Engine/src/Engine.cpp`
+- `SST-Libraries/PlotLab-Engine/src/Formula.hpp`
+- `SST-Libraries/PlotLab-Engine/src/Formula.cpp`
+- `SST-Libraries/PlotLab-Engine/src/Recompute.cpp`
+- `SST-Libraries/PlotLab-Engine/src/Persistence.cpp`
+- `SST-Libraries/PlotLab-Engine/src/Diff.hpp`
+- `SST-Libraries/PlotLab-Engine/src/Diff.cpp`
+- `SST-Libraries/PlotLab-Engine/README.md`
+- `SST-Libraries/PlotLab-Engine/VALIDATION.md`
+- `SST-Prototypes/Prototypes/PlotLab/src/App.cpp`
+- `SST-Prototypes/Prototypes/PlotLab/src/PlotLabDocument.cpp`
+- `SST-Prototypes/Prototypes/PlotLab/src/PlotLabWorkspace.hpp`
+- `SST-Prototypes/Prototypes/PlotLab/src/PlotLabWorkspace.cpp`
+- `SST-Prototypes/Prototypes/PlotLab/tests/PlotLabTests.cpp`
+- `SST-Prototypes/Prototypes/PlotLab/python/sst_plotlab/formula_script.py`
+- `SST-Prototypes/Prototypes/PlotLab/python/tests/formula_headless.py`
+- `SST-Prototypes/Prototypes/PlotLab/python/tests/formula_example.py`
+- `SST-Prototypes/Prototypes/PlotLab/python/tests/test_formula_script.py`
+- `SST-Prototypes/Prototypes/PlotLab/examples/p6b-formulas.plotlab`
+- `SST-Prototypes/Prototypes/PlotLab/README.md`
+- `SST-Prototypes/Prototypes/PlotLab/VALIDATION.md`
+- `SST-Prototypes/Prototypes/PlotLab/experiments/validation/p6b-*` evidence
+
+Limits: before-formula Python is the restricted finite-scalar AST described in
+README, not arbitrary Python; SG uses a fixed quadratic five-point window.
+Frozen/ranged edits retain a full cache baseline; worksheet row changes require
+detaching those formulas until row-ID cache diffs are available. Release/Dist,
+non-Windows platforms and portable runtime packaging were not checked. No unit
+conversion or Units-row note was added (excluded from this milestone).
+
+

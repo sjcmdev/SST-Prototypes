@@ -17,6 +17,14 @@ namespace SST::Prototypes::PlotLab
 {
     namespace
     {
+        void StopWorker(pl::Project& project) {
+#if DS_PYTHON_CAPI_AVAILABLE
+            std::optional<nanobind::gil_scoped_release> release;
+            if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check()) release.emplace();
+#endif
+            // A Python caller may own the GIL while the cancelled worker is acquiring it.
+            project.setBeforeFormulaRunner({});
+        }
         StructuredError Error(const std::exception &e)
         {
             return {ErrorCategory::Validation,
@@ -98,6 +106,7 @@ namespace SST::Prototypes::PlotLab
     }
     Document::~Document()
     {
+        StopWorker(*project);
         project->unsubscribe(*this);
     }
     void Document::changed(const pl::Event &e) noexcept
@@ -117,11 +126,23 @@ namespace SST::Prototypes::PlotLab
     {
         if (project)
         {
-            project->cancelRecompute();
+            StopWorker(*project);
             project->unsubscribe(*this);
         }
         undo->Clear();
         project = std::move(next);
+        project->setBeforeFormulaRunner([](const std::string& script,const std::string& data) {
+#if DS_PYTHON_CAPI_AVAILABLE
+            if(!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python is unavailable");
+            nanobind::gil_scoped_acquire gil;
+            auto result=nanobind::module_::import_("sst_plotlab.formula_script").attr("run")(script,data);
+            return nlohmann::json::parse(nanobind::cast<std::string>(result)).get<std::map<std::string,double>>();
+#else
+            (void)script; (void)data;
+            throw std::runtime_error("Embedded Python is unavailable");
+            return std::map<std::string,double>{};
+#endif
+        });
         project->subscribe(*this);
         undo->MarkClean();
     }
@@ -201,9 +222,10 @@ namespace SST::Prototypes::PlotLab
                 if (const auto *c = std::get_if<pl::Column>(&o->data))
                 {
                     dependent |= c->errorOf && remove.contains(c->errorOf);
-                    if (c->formula)
-                        for (const auto &[name, input] : c->formula->bindings)
-                            dependent |= remove.contains(input);
+                    if (c->formula) {
+                        for (const auto &[name, input] : c->formula->bindings) dependent |= remove.contains(input);
+                        for (auto input:c->formula->scriptInputs) dependent |= remove.contains(input);
+                    }
                 }
                 if (dependent)
                     changed |= remove.insert(key).second;
@@ -312,7 +334,7 @@ namespace SST::Prototypes::PlotLab
     {
         using Json = nlohmann::json;
         try {
-            const auto request = Json::parse(requestJson);
+            auto request = Json::parse(requestJson);
             const auto action = request.at("action").get<std::string>();
             for(const auto* key : {"column_id","worksheet_id","parameter_id"}) if(request.contains(key)) {
                 const auto& id=request.at(key);
@@ -334,12 +356,43 @@ namespace SST::Prototypes::PlotLab
                 if (const auto* values = std::get_if<std::vector<double>>(&c.values))
                     result["text"] = action == "copy_cell" ? pl::fullPrecision(values->at(row)) : pl::formatValue(values->at(row), c.display);
                 else result["text"] = std::get<std::vector<std::string>>(c.values).at(row);
-            } else Execute(project->worksheetEdit(requestJson));
+            } else if(action=="set_column_values") {
+#if DS_PYTHON_CAPI_AVAILABLE
+                auto script=request.value("before_script",std::string{});
+                request["variables"]=Json::array(); request["script_input_ids"]=Json::array();
+                if(!script.empty()) {
+                    if(!PythonInterpreter::IsRuntimeInitialized()) throw std::invalid_argument("Embedded Python is unavailable");
+                    nanobind::gil_scoped_acquire gil;
+                    auto validator=nanobind::module_::import_("sst_plotlab.formula_script");
+                    request["variables"]=Json::parse(nanobind::cast<std::string>(validator.attr("declared_json")(script)));
+                    request["script_input_ids"]=Json::parse(nanobind::cast<std::string>(validator.attr("inputs_json")(script)));
+                }
+#else
+                if(!request.value("before_script",std::string{}).empty()) throw std::invalid_argument("Embedded Python is unavailable");
+#endif
+                Execute(project->worksheetEdit(request.dump()));
+            } else if(action=="recompute") {
+#if DS_PYTHON_CAPI_AVAILABLE
+                std::optional<nanobind::gil_scoped_release> release;
+                if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check()) release.emplace();
+#endif
+                auto job=project->recompute();
+                if(request.value("wait",true)) job.wait();
+            } else if(action=="recompute_status") {
+                const auto& info=project->recomputeInfo(request.at("column_id").get<pl::Id>());
+                const char* states[]={"Clean","Dirty","Running","Failed","Blocked"};
+                result={{"state",states[static_cast<int>(info.state)]},{"stale",info.stale},{"diagnostic",info.diagnostic},{"runs",info.runs}};
+            } else Execute(project->worksheetEdit(request.dump()));
             return Json{{"ok",true},{"result",result}}.dump();
         } catch (const std::out_of_range& e) {
             return Json{{"ok",false},{"error",{{"type","not_found"},{"message",e.what()}}}}.dump();
         } catch (const std::exception& e) {
-            return Json{{"ok",false},{"error",{{"type","validation"},{"message",e.what()}}}}.dump();
+            std::string message=e.what(), type="validation";
+            if(message.find("Missing column")!=std::string::npos) type="missing_column";
+            else if(message.find("Formula dependency cycle")!=std::string::npos) type="cycle";
+            else if(message.find("Domain error at row")!=std::string::npos) type="domain";
+            else if(message.find("Recompute column")!=std::string::npos) type="recompute";
+            return Json{{"ok",false},{"error",{{"type",type},{"message",message}}}}.dump();
         }
     }
     void InstallWorksheetPython(Document* active, const std::filesystem::path& pythonRoot)

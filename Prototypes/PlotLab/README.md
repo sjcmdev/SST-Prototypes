@@ -137,3 +137,59 @@ Run without a window: `PlotLab.exe --worksheet-script script.py`.
 it is also run by `PlotLabTests.EmbeddedPythonWorksheetCommands` with a C++ fixture.
 `examples/p6a-worksheet.plotlab` demonstrates all formats and header rows.
 P6b formula extensions, P6c sort/filter and P6d import remain separate work.
+
+
+### Set Column Values
+
+Click a worksheet column header to open **Column definition**, then use the
+**Set Column Values** panel: expression, inclusive one-based row range, optional
+Python scalar assignments and None/Auto/Manual recalculate mode. The function
+library lists syntax and algorithm conventions. Recalculate now starts the
+worker without blocking rendering; hover a Failed/Blocked worksheet status to
+read its diagnostic. Missing columns and cycles leave the formula Blocked with a diagnostic and preserve the previous values.
+
+Embedded/headless Python uses the same commands and history:
+
+```python
+from sst_plotlab import WorksheetSession
+s = WorksheetSession(active=True)  # False (default) creates an isolated document
+response = s.command(dict(action="set_column_values", column_id=6,
+    expression="scale*source+i", bindings={"source":5}, row_from=1, row_to=0,
+    before_script="scale = mean(col(5))", recalculate="Auto"))
+assert response["ok"], response
+response = s.command(dict(action="recompute"))  # waits and publishes results
+status = s.command(dict(action="recompute_status", column_id=6))
+```
+
+Inputs/outputs are JSON compatible. IDs are stable integers. Headless calls can
+provide `bindings` (expression token to column ID) and `parameter_bindings`
+(reference token to header-row ID), bypassing editor name lookup. `row_from` and
+`row_to` are one-based inclusive; zero end means the last row. `i` is one-based.
+Before-formula scripts run in Core's embedded interpreter on the recompute
+worker. Their restricted AST allows finite scalar assignments, arithmetic,
+math functions and mean/sum/min/max over `col(literal_stable_id)`. It exposes
+read-only numeric data from this project, with no imports, attributes, I/O,
+loops, arbitrary functions or object access. Script column IDs participate in
+the dependency DAG, invalidation and dependent deletion. Script inputs are
+read-only, and a script failure keeps the previous output.
+
+Each formula evaluates once when set. Afterwards None freezes results, Manual
+requires Recalculate now and Auto follows sources. Domain failures have typed
+`domain` errors and row diagnostics; blocked recomputes have `cycle` or `missing_column` errors; invalid requests have
+`validation` or `not_found` errors. History and persistence include range, mode,
+script and stable bindings. Evaluator v1 remains supported.
+
+
+Cross-sheet sources may have different row counts. Scalar math retains the
+source vector length; destination rows beyond a reference use NaN, and `interp`
+uses all source samples. Before-script column IDs are listed in the function
+library. Changing rows requires detaching frozen/ranged formulas; formula edits
+and their undo/redo preserve those cached values.
+
+
+UI validation preset: `--column-values-preview` waits for the P6b fixture's
+derived B column (stable ID 6), opens the same editor initialization as a header
+click, and expands its function library. With `--open examples/p6b-formulas.plotlab
+--screenshot <path.png> --screenshot-after-frames 60 --exit-after-screenshot`,
+this captures the actual panel without desktop automation. The preset only sets
+view state; data operations continue through the shared Core/Python commands.

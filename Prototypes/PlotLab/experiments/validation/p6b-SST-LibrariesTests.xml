@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="107" failures="0" disabled="0" errors="0" time="48.883" timestamp="2026-11-19T02:10:51.591" name="AllTests">
+  <testsuite name="Capacitance" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.592">
+    <testcase name="IndependentSIExamples" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\CapacitanceTests.cpp" line="4" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.592" classname="Capacitance" />
+  </testsuite>
+  <testsuite name="Walter" tests="3" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.592">
+    <testcase name="IndependentLinearAndCompatPoints" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\CapacitanceTests.cpp" line="17" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.592" classname="Walter" />
+    <testcase name="InvalidDomainAndInputs" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\CapacitanceTests.cpp" line="30" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.592" classname="Walter" />
+    <testcase name="IntegrationDirectionClippingAndInvalidGaps" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\CapacitanceTests.cpp" line="36" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.592" classname="Walter" />
+  </testsuite>
+  <testsuite name="JfmParity" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0.004" timestamp="2026-11-19T02:10:51.592">
+    <testcase name="FrozenStepsWithBoundsFixedParameterAndSA" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\JfmSolverParity.cpp" line="33" status="run" result="completed" time="0.004" timestamp="2026-11-19T02:10:51.592" classname="JfmParity" />
+  </testsuite>
+  <testsuite name="Materials" tests="12" failures="0" disabled="0" skipped="0" errors="0" time="0.077" timestamp="2026-11-19T02:10:51.596">
+    <testcase name="LookupsAndSources" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="27" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.596" classname="Materials" />
+    <testcase name="MetalWorkFunctions" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="41" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.597" classname="Materials" />
+    <testcase name="MissingNameHasClearError" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="51" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.598" classname="Materials" />
+    <testcase name="DensityOfStatesTemperatureScaling" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="56" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.598" classname="Materials" />
+    <testcase name="SiliconIntrinsicConcentrationUsesExplicitSzeAnchor" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="63" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.599" classname="Materials" />
+    <testcase name="InvalidTemperatures" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="74" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.599" classname="Materials" />
+    <testcase name="ProPhoCompatibilityIsSeparateFromPhysicalMaterials" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="81" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.600" classname="Materials" />
+    <testcase name="ProjectOverridesAndNewMaterial" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="88" status="run" result="completed" time="0.017" timestamp="2026-11-19T02:10:51.600" classname="Materials" />
+    <testcase name="VarshniAnchorsAt300AndChangesIntrinsicConcentration" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="105" status="run" result="completed" time="0.007" timestamp="2026-11-19T02:10:51.618" classname="Materials" />
+    <testcase name="RejectsBadProjectsAtomically" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="115" status="run" result="completed" time="0.037" timestamp="2026-11-19T02:10:51.626" classname="Materials" />
+    <testcase name="MissingProjectHasPathInError" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="135" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.663" classname="Materials" />
+    <testcase name="UnicodeFilenameKeepsDiagnosticsAndAtomicMerge" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MaterialTests.cpp" line="140" status="run" result="completed" time="0.01" timestamp="2026-11-19T02:10:51.664" classname="Materials" />
+  </testsuite>
+  <testsuite name="Simplex" tests="4" failures="0" disabled="0" skipped="0" errors="0" time="0.001" timestamp="2026-11-19T02:10:51.674">
+    <testcase name="Rosenbrock" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="11" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.674" classname="Simplex" />
+    <testcase name="BoundsAndFixedAssembly" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="16" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.675" classname="Simplex" />
+    <testcase name="ValidationAndNonfiniteObjective" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="28" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="Simplex" />
+    <testcase name="CoolingAndTrace" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="39" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="Simplex" />
+  </testsuite>
+  <testsuite name="LambertW" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.676">
+    <testcase name="Identities" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="49" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="LambertW" />
+    <testcase name="BranchPointDomainAndNonfinite" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="53" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="LambertW" />
+  </testsuite>
+  <testsuite name="LinearFit" tests="4" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.676">
+    <testcase name="AnalyticCoefficientsAndAbsoluteCovariance" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="66" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="LinearFit" />
+    <testcase name="UnequalWeightsAndRelativeCovariance" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="73" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="LinearFit" />
+    <testcase name="TwoPointsRankAndInvalidData" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="81" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="LinearFit" />
+    <testcase name="LargeOffsetSmallSpread" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\MathTests.cpp" line="90" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="LinearFit" />
+  </testsuite>
+  <testsuite name="Constants" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.676">
+    <testcase name="CodataAndThermalVoltage" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="9" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="Constants" />
+  </testsuite>
+  <testsuite name="IV" tests="4" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.676">
+    <testcase name="JfmFixtureAllTenModelsWithCodata" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="17" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="IV" />
+    <testcase name="HistoricalJfmNumbersAtEquivalentThermalVoltage" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="33" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="IV" />
+    <testcase name="ZeroSeriesLimitAndNoMinusOne" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="41" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="IV" />
+    <testcase name="InvalidInputsOverflowAndFractionalReversePower" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="47" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="IV" />
+  </testsuite>
+  <testsuite name="Arrhenius" tests="4" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.676">
+    <testcase name="SyntheticEmissionAndProPhoRecoverEnergy" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="58" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="Arrhenius" />
+    <testcase name="OmegaAndFrequencyConventions" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="76" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="Arrhenius" />
+    <testcase name="InvalidAndRankDeficient" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="83" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="Arrhenius" />
+    <testcase name="ProPhoCrossSectionAssumptionsAreExplicit" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="92" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="Arrhenius" />
+  </testsuite>
+  <testsuite name="Impedance" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:10:51.676">
+    <testcase name="SIConversionAndReciprocalRoundtrip" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PhysicsTests.cpp" line="103" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.676" classname="Impedance" />
+  </testsuite>
+  <testsuite name="PlotLab" tests="13" failures="0" disabled="0" skipped="0" errors="0" time="0.009" timestamp="2026-11-19T02:10:51.676">
+    <testcase name="CreateEditUndoRedoPreservesIdsAndRows" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="56" status="run" result="completed" time="0.001" timestamp="2026-11-19T02:10:51.676" classname="PlotLab" />
+    <testcase name="GraphReadsCurrentWorksheetById" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="70" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.678" classname="PlotLab" />
+    <testcase name="AlternativeEditsHaveDistinctRevisionTokensAfterUndo" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="82" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.679" classname="PlotLab" />
+    <testcase name="RowAppendAndReorderKeepSourceMappingThroughUndo" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="90" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.679" classname="PlotLab" />
+    <testcase name="MovesMetadataOrderingAndProjectRenameAreReversible" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="103" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.680" classname="PlotLab" />
+    <testcase name="DeletionRequiresExplicitDependentsAndUndoesAsOneOperation" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="115" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.680" classname="PlotLab" />
+    <testcase name="FailedOperationsAreAtomicAndConflictsAreRejected" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="123" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.681" classname="PlotLab" />
+    <testcase name="CyclesInvalidReferencesAndWrongTypesAreRejected" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="137" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.681" classname="PlotLab" />
+    <testcase name="TextCellsAndSymmetricErrors" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="148" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.682" classname="PlotLab" />
+    <testcase name="ObserversSeeCommittedDataAndMonotonicUndoRevisions" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="160" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.682" classname="PlotLab" />
+    <testcase name="HeadlessSnapshotOwnsDataAndNeverRefitsViewport" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="587" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.683" classname="PlotLab" />
+    <testcase name="ImportPreviewReportsHeaderAndUnitsDecisions" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="600" status="run" result="completed" time="0." timestamp="2026-11-19T02:10:51.683" classname="PlotLab" />
+    <testcase name="EqualAspectPersistsAndReachesSnapshot" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="606" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:10:51.683" classname="PlotLab" />
+  </testsuite>
+  <testsuite name="PlotLabFiles" tests="9" failures="0" disabled="0" skipped="0" errors="0" time="37.518" timestamp="2026-11-19T02:10:51.686">
+    <testcase name="RoundTripIsByteStableAndSelfContained" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="176" status="run" result="completed" time="0.02" timestamp="2026-11-19T02:10:51.686" classname="PlotLabFiles" />
+    <testcase name="FutureVersionCannotLoadOrBeOverwritten" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="204" status="run" result="completed" time="0.003" timestamp="2026-11-19T02:10:51.706" classname="PlotLabFiles" />
+    <testcase name="FailedSaveKeepsPreviousFileAndCleansTemporary" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="214" status="run" result="completed" time="0.01" timestamp="2026-11-19T02:10:51.709" classname="PlotLabFiles" />
+    <testcase name="NonfiniteValuesAndEmptyProjectRoundTrip" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="221" status="run" result="completed" time="0.022" timestamp="2026-11-19T02:10:51.719" classname="PlotLabFiles" />
+    <testcase name="MalformedModelAndTrailingContentAreRejected" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="231" status="run" result="completed" time="0.022" timestamp="2026-11-19T02:10:51.742" classname="PlotLabFiles" />
+    <testcase name="UnsignedDocumentIdentityAndInvalidNumericSchema" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="239" status="run" result="completed" time="0.012" timestamp="2026-11-19T02:10:51.765" classname="PlotLabFiles" />
+    <testcase name="MillionPointColumnEditSaveLoadTiming" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="312" status="run" result="completed" time="37.323" timestamp="2026-11-19T02:10:51.778" classname="PlotLabFiles" />
+    <testcase name="FormulaDagV2CachesAndV1Migration" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="497" status="run" result="completed" time="0.077" timestamp="2026-11-19T02:11:29.102" classname="PlotLabFiles" />
+    <testcase name="LegacyNumericColumnMigratesAndMalformedFormulaDagIsRejected" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="556" status="run" result="completed" time="0.024" timestamp="2026-11-19T02:11:29.179" classname="PlotLabFiles" />
+  </testsuite>
+  <testsuite name="PlotLabCsv" tests="5" failures="0" disabled="0" skipped="0" errors="0" time="0.001" timestamp="2026-11-19T02:11:29.204">
+    <testcase name="CommaHeadersInlineUnitsQuotedTextAndMissingValues" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="251" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:29.204" classname="PlotLabCsv" />
+    <testcase name="SemicolonDecimalCommaAndUnitsRow" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="258" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:29.204" classname="PlotLabCsv" />
+    <testcase name="TabPlainUnitsAndWhitespaceWithoutHeader" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="264" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:29.204" classname="PlotLabCsv" />
+    <testcase name="ExplicitOptionsUtf8BomMultilineAndTextOnly" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="270" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:29.205" classname="PlotLabCsv" />
+    <testcase name="RejectsMalformedRowsAndSupportsCancellationPreview" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="279" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:29.205" classname="PlotLabCsv" />
+  </testsuite>
+  <testsuite name="PlotLabExtensions" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0.001" timestamp="2026-11-19T02:11:29.206">
+    <testcase name="ImportCommitAndExampleTemplateUseExistingColumns" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="290" status="run" result="completed" time="0.001" timestamp="2026-11-19T02:11:29.206" classname="PlotLabExtensions" />
+    <testcase name="RegistriesRequireExactVersionsAndRejectDuplicates" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="302" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:29.207" classname="PlotLabExtensions" />
+  </testsuite>
+  <testsuite name="PlotLabM3" tests="18" failures="0" disabled="0" skipped="0" errors="0" time="11.246" timestamp="2026-11-19T02:11:29.207">
+    <testcase name="MillionRowsCellDiffMemoryAndFullReplacement" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="338" status="run" result="completed" time="3.847" timestamp="2026-11-19T02:11:29.207" classname="PlotLabM3" />
+    <testcase name="MillionRowsFormulaHistoryStoresOnlyDefinitions" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="353" status="run" result="completed" time="5.922" timestamp="2026-11-19T02:11:33.054" classname="PlotLabM3" />
+    <testcase name="CompactRowInsertDeleteAndReverse" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="373" status="run" result="completed" time="0.022" timestamp="2026-11-19T02:11:38.977" classname="PlotLabM3" />
+    <testcase name="ArithmeticFunctionsScalarsAndDomainDiagnostics" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="392" status="run" result="completed" time="0.045" timestamp="2026-11-19T02:11:38.999" classname="PlotLabM3" />
+    <testcase name="ParserRejectsInvalidExpressionsTypesAndMissingColumns" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="402" status="run" result="completed" time="0.001" timestamp="2026-11-19T02:11:39.045" classname="PlotLabM3" />
+    <testcase name="CrossSheetNamesBindToIdsAndSurviveRename" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="412" status="run" result="completed" time="0.031" timestamp="2026-11-19T02:11:39.046" classname="PlotLabM3" />
+    <testcase name="DirtyPropagationSkipsIndependentBranchAndSupportsManualMode" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="428" status="run" result="completed" time="0.062" timestamp="2026-11-19T02:11:39.077" classname="PlotLabM3" />
+    <testcase name="DetachManualEditUndoAndDefinitionUndoRedo" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="440" status="run" result="completed" time="0.062" timestamp="2026-11-19T02:11:39.140" classname="PlotLabM3" />
+    <testcase name="CancelDiscardsPartialResultsAndStaleJobCannotOverwriteNewEdit" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="452" status="run" result="completed" time="0.405" timestamp="2026-11-19T02:11:39.203" classname="PlotLabM3" />
+    <testcase name="CoalescesConsecutiveEditsAndPreservesMetadataDuringWork" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="464" status="run" result="completed" time="0.034" timestamp="2026-11-19T02:11:39.608" classname="PlotLabM3" />
+    <testcase name="WorkerFailureBlocksDependentsAndRetainsPreviousResults" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="472" status="run" result="completed" time="0.063" timestamp="2026-11-19T02:11:39.642" classname="PlotLabM3" />
+    <testcase name="LinkedSelectionUsesRowIdsAndDoesNotEchoOrEnterHistory" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="484" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:39.706" classname="PlotLabM3" />
+    <testcase name="RecomputeBenchmarkThreeDependentFormulas100kRows" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="510" status="run" result="completed" time="0.547" timestamp="2026-11-19T02:11:39.706" classname="PlotLabM3" />
+    <testcase name="ProjectDestructionCancelsWorkerAndInvalidatesJobHandle" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="520" status="run" result="completed" time="0.003" timestamp="2026-11-19T02:11:40.254" classname="PlotLabM3" />
+    <testcase name="UnrelatedEditKeepsRunningBranchAndComputedNanCanBeRenamed" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="526" status="run" result="completed" time="0.04" timestamp="2026-11-19T02:11:40.257" classname="PlotLabM3" />
+    <testcase name="SelectionTracksReorderedAndDeletedRowsAndGraphEventsCarryGraphId" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="535" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.298" classname="PlotLabM3" />
+    <testcase name="NewDependentWaitsForUnpublishedProducerAndSparsePasteStoresChangedCells" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="568" status="run" result="completed" time="0.092" timestamp="2026-11-19T02:11:40.299" classname="PlotLabM3" />
+    <testcase name="CancelBeforeOwnerPublicationDiscardsCompletedBatch" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotLabTests.cpp" line="579" status="run" result="completed" time="0.061" timestamp="2026-11-19T02:11:40.392" classname="PlotLabM3" />
+  </testsuite>
+  <testsuite name="PlotRenderer" tests="8" failures="0" disabled="0" skipped="0" errors="0" time="0.021" timestamp="2026-11-19T02:11:40.453">
+    <testcase name="LineScatterHasOneLegendItemAndSharedVisibility" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="30" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:11:40.453" classname="PlotRenderer" />
+    <testcase name="TwoPlotsKeepSameSeriesIdIndependent" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="45" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:11:40.456" classname="PlotRenderer" />
+    <testcase name="MigrationStylePreservesPixelSizesAndRgba" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="59" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:11:40.459" classname="PlotRenderer" />
+    <testcase name="RangeScopesDoNotLeakIdsWhenTheyFinishPlotSetup" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="73" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:11:40.461" classname="PlotRenderer" />
+    <testcase name="MigratedSeriesMatchLegacyDrawBuffers" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="86" status="run" result="completed" time="0.003" timestamp="2026-11-19T02:11:40.464" classname="PlotRenderer" />
+    <testcase name="MigrationRetainsLegacyEndpointIdsAndHover" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="127" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:11:40.467" classname="PlotRenderer" />
+    <testcase name="CapturesTicksAndCtrlClickPointWithoutGuiBackend" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="146" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:11:40.469" classname="PlotRenderer" />
+    <testcase name="NyquistHasEqualPhysicalAxisScale" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotRendererTests.cpp" line="170" status="run" result="completed" time="0.002" timestamp="2026-11-19T02:11:40.472" classname="PlotRenderer" />
+  </testsuite>
+  <testsuite name="PlotBounds" tests="6" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:11:40.474">
+    <testcase name="EmptyAndNullData" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="14" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotBounds" />
+    <testcase name="SinglePointHasNondegeneratePadding" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="19" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotBounds" />
+    <testcase name="FiltersPairedNonfiniteAndNonpositiveValues" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="27" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotBounds" />
+    <testcase name="PadsInLogSpaceWithoutChangingData" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="36" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotBounds" />
+    <testcase name="ErrorBarsContributeToBounds" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="40" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotBounds" />
+    <testcase name="InvalidBoundsAreRejectedAndExtremePaddingStaysFinite" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="47" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotBounds" />
+  </testsuite>
+  <testsuite name="PlotDescription" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:11:40.474">
+    <testcase name="AutoFitHonoursVisibilityAndManualViewport" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="57" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotDescription" />
+    <testcase name="IndependentPlotsAndHiddenSeries" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="75" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotDescription" />
+  </testsuite>
+  <testsuite name="PlotPreparation" tests="2" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:11:40.474">
+    <testcase name="LogScaleNeverAppliesAbsOrFloor" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="85" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotPreparation" />
+    <testcase name="FiltersInvalidXAndYTogether" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="96" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.474" classname="PlotPreparation" />
+  </testsuite>
+  <testsuite name="PlotRange" tests="4" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:11:40.475">
+    <testcase name="FullGestureAndHover" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="101" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.475" classname="PlotRange" />
+    <testcase name="ImmediateChangeAndPanelClosure" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="110" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.475" classname="PlotRange" />
+    <testcase name="ClampingCrossingAndDescendingCoordinates" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="117" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.475" classname="PlotRange" />
+    <testcase name="TwoInstancesDoNotShareGesture" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="124" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.475" classname="PlotRange" />
+  </testsuite>
+  <testsuite name="PlotStyle" tests="1" failures="0" disabled="0" skipped="0" errors="0" time="0." timestamp="2026-11-19T02:11:40.475">
+    <testcase name="ScientificCycleAndPhysicalUnits" file="D:\SJCM\01_SemiconductorStudio\SST-Libraries\tests\PlotTests.cpp" line="129" status="run" result="completed" time="0." timestamp="2026-11-19T02:11:40.475" classname="PlotStyle" />
+  </testsuite>
+</testsuites>

@@ -266,9 +266,30 @@ namespace SST::Prototypes::PlotLab
             state->status = e.what();
         }
     }
+    void WorkspacePanel::EditColumn(pl::Id id)
+    {
+        const auto& o=state->document->project->object(id);
+        const auto& col=std::get<pl::Column>(o.data);
+        metadata = o.id;
+        name = o.name;
+        units = col.units;
+        comments = col.comments;
+        displayMode = static_cast<int>(col.display.mode);
+        displayDigits = static_cast<int>(col.display.digits);
+        longName = col.longName;
+        role = static_cast<int>(col.role);
+        formula = col.formula ? col.formula->expression : "";
+        rowFrom=col.formula?static_cast<int>(col.formula->rowFrom):1;
+        rowTo=col.formula?static_cast<int>(col.formula->rowTo):0;
+        beforeScript=col.formula?col.formula->beforeScript:"";
+        recalculate=col.formula?static_cast<int>(col.formula->recalculate):1;
+    }
     void WorkspacePanel::Render()
     {
         auto &p = *state->document->project;
+        if(previewColumn && Exists(p,previewColumn,3)) {
+            EditColumn(previewColumn); previewColumn=0; previewLibrary=true;
+        }
         if (!p.objects().contains(state->selected))
             state->selected = p.root();
         ImGui::SetNextWindowPos({ImGui::GetMainViewport()->WorkPos.x + 10, ImGui::GetMainViewport()->WorkPos.y + 10},
@@ -480,15 +501,7 @@ namespace SST::Prototypes::PlotLab
                     const auto &col = std::get<pl::Column>(o.data);
                     if (ImGui::SmallButton((o.name + "(" + pl::roleTag(col.role) + ")").c_str()))
                     {
-                        metadata = o.id;
-                        name = o.name;
-                        units = col.units;
-                        comments = col.comments;
-                        displayMode = static_cast<int>(col.display.mode);
-                        displayDigits = static_cast<int>(col.display.digits);
-                        longName = col.longName;
-                        role = static_cast<int>(col.role);
-                        formula = col.formula ? col.formula->expression : "";
+                        EditColumn(o.id);
                     }
                     if (col.formula)
                     {
@@ -875,8 +888,10 @@ namespace SST::Prototypes::PlotLab
             ImGui::TextWrapped("%s", state->status.c_str());
             ImGui::EndPopup();
         }
-        if (metadata)
+        if (metadata) {
+            ImGui::SetNextWindowSizeConstraints({600,0},{1000,std::max(300.0f,ImGui::GetMainViewport()->WorkSize.y-40)});
             ImGui::OpenPopup("Column definition");
+        }
         if (ImGui::BeginPopupModal("Column definition", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::InputText("Short name", &name);
@@ -898,12 +913,36 @@ namespace SST::Prototypes::PlotLab
                             auto result=group.Commit(); if(!result) throw std::runtime_error(result.Error().technicalDetails);
                         } catch(...) { (void)group.Cancel(); throw; }
                     });
-            ImGui::InputText("Formula", &formula);
-            ImGui::TextUnformatted(
-                "Engine grammar: + - * / ^, abs/sqrt/exp/log/log10/sin/cos, pow, min/max/mean.\nReferences: Column, "
-                "Sheet.Column, Workbook.Sheet.Column, [qualified name].");
-            if (ImGui::Button("Set formula"))
-                Attempt([&] { doc.Execute(p.setFormula(metadata, formula)); });
+            ImGui::SeparatorText("Set Column Values");
+            if(previewLibrary) ImGui::SetScrollHereY(0.0f);
+            const auto& info=p.recomputeInfo(metadata);
+            const char* states[]={"Clean","Dirty","Running","Failed","Blocked"};
+            ImGui::Text("Result: %s%s",states[static_cast<int>(info.state)],info.stale?" (previous values retained)":"");
+            if(!info.diagnostic.empty()) ImGui::TextWrapped("%s",info.diagnostic.c_str());
+            ImGui::SetNextItemWidth(480);
+            ImGui::InputText("Expression", &formula);
+            ImGui::InputInt("From row (1-based)", &rowFrom);
+            ImGui::InputInt("To row (0 = last)", &rowTo);
+            ImGui::Combo("Recalculate", &recalculate, "None\0Auto\0Manual\0");
+            ImGui::InputTextMultiline("Python before formula", &beforeScript, {480,65});
+            ImGui::TextDisabled("Scalar assignments; col(stable_id), mean/sum/min/max; no imports or I/O.");
+            if(previewLibrary) {ImGui::SetNextItemOpen(true); previewLibrary=false;}
+            if(ImGui::TreeNode("Function library / references")) {
+                ImGui::TextUnformatted("abs sqrt exp ln log10 pow sin cos tan atan2\nmin max mean sum std (sample); i (1-based), nrows\ndiff(y[,0 forward / 1 central]); integ(y) (unit row spacing)\ninterp(x,xcol,ycol); smooth(y[,0 average / 1 SG quadratic, 5 points])\nifelse(condition,a,b); + - * / ^ > >= < <= == !=\ncol(A), col(\"Long Name\"), [Book]Sheet!col(A), col(B)[T], wcol(1)");
+                ImGui::TextUnformatted("Before-script inputs in this worksheet:");
+                for(auto id:p.children(p.object(metadata).parent)) if(std::get<pl::Column>(p.object(id).data).values.index()==0)
+                    ImGui::BulletText("%s: col(%llu)",p.object(id).name.c_str(),static_cast<unsigned long long>(id));
+                ImGui::TreePop();
+            }
+            if (ImGui::Button("Set Column Values")) Attempt([&] {
+                auto response=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{"action","set_column_values"},{"column_id",metadata},{"expression",formula},{"row_from",rowFrom},{"row_to",rowTo},{"before_script",beforeScript},{"recalculate",pl::recalculateModes[recalculate]}}.dump()));
+                if(!response.at("ok").get<bool>()) throw std::runtime_error(response.at("error").at("message").get<std::string>());
+            });
+            ImGui::SameLine();
+            if(ImGui::Button("Recalculate now")) Attempt([&] {
+                auto result=nlohmann::json::parse(doc.WorksheetCommand("{\"action\":\"recompute\",\"wait\":false}"));
+                if(!result.at("ok").get<bool>()) throw std::runtime_error(result.at("error").at("message").get<std::string>());
+            });
             ImGui::SameLine();
             if (ImGui::Button("Detach formula"))
                 Attempt([&] { doc.Execute(p.detach(metadata)); });

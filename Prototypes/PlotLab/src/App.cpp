@@ -15,6 +15,7 @@ namespace SST
     namespace
     {
         bool smokeTest = false;
+        bool columnValuesPreview = false;
         struct FileRequested : BusEvent
         {
             FileAction action = FileAction::New;
@@ -145,7 +146,8 @@ namespace SST
             doc->undo->MarkClean();
             state->RefreshWindows();
         }
-        application.GetEditorLayer().RegisterPanel<WorkspacePanel>(state);
+        // The preview flag opens the fixture's derived B column for CLI screenshot validation.
+        application.GetEditorLayer().RegisterPanel<WorkspacePanel>(state,columnValuesPreview?pl::Id{6}:pl::Id{0});
         application.InsertLayerBefore(LayerId::ImGui, CreateUnique<WorkspaceLayer>(state, smokeTest));
     }
 } // namespace SST
@@ -173,6 +175,8 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; ++i)
         if (std::string_view(argv[i]) == "--smoke-test")
             SST::smokeTest = true;
+        else if (std::string_view(argv[i]) == "--column-values-preview")
+            SST::columnValuesPreview = true;
     auto app = SST::Application::Create(argc, argv, SST::SetupApplication);
     return app.Run();
 }
