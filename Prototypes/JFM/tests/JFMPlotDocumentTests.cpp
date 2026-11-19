@@ -4,6 +4,9 @@
 #include "Analysis/JFMMonteCarloStatistics.hpp"
 #include "Presentation/JFMFitMonteCarloWidgets.hpp"
 #include <limits>
+#include "Presentation/Panels/MonteCarloCurvesPanel.hpp"
+#include "Vendor/implot/implot.h"
+#include "Vendor/implot/implot_internal.h"
 
 namespace SST::Prototypes::JFM
 {
@@ -99,6 +102,54 @@ namespace SST::Prototypes::JFM
         auto id = snapshot->series[0].plot;
         PopulateJFMMonteCarloPlot(doc, stats, options, "A", "Rs");
         EXPECT_EQ(doc.Snapshot()->series[0].plot, id);
+    }
+
+    TEST(JFMPlotDocumentTests, OutsideThreeSigmaAndZeroVarianceKeepOwnClasses)
+    {
+        JFMPlotDocument doc; JFMMonteCarloScatterStatistics stats;
+        stats.points = {{1,2,0,30,3},{2,3,0,0,4}};
+        JFMMonteCarloScatterPlotOptions options;
+        doc.view.viewport = PopulateJFMMonteCarloPlot(doc,stats,options,"I0","I_ph");
+        auto snapshot = doc.Snapshot(); ASSERT_EQ(snapshot->series.size(),2);
+        EXPECT_EQ(snapshot->series[0].label,"Unclassified (zero variance)");
+        EXPECT_EQ(snapshot->series[1].label,">3 sigma");
+        EXPECT_STREQ(JFMSigmaTsvLabels[3],"gt_3_sigma");
+        EXPECT_EQ(snapshot->series[1].x.size(),1);
+    }
+
+    TEST(JFMPlotDocumentTests, CurvesHideRejectedSamplesByDefault)
+    {
+        auto store = CreateRef<JFMWorkspaceStore>(); auto bus = CreateRef<EventBus>();
+        auto project = store->GetActiveProjectHandle();
+        JFMCharacteristic curve; curve.info.name = "MC regression"; curve.info.temperatureK = 300.;
+        curve.data.voltage = {.2,.3}; curve.data.current = {1e-5,2e-5};
+        const auto id = store->AddCharacteristics(project,{curve}).front();
+        JFMCharacteristicRef ref{project,id};
+        ASSERT_TRUE(store->SetPrefitModel(project,{id},"SD-0"));
+        JFMPrefitState pre; pre.modelId = "SD-0";
+        ASSERT_TRUE(store->ApplyPrefitResult(ref,store->BeginPrefit(ref),pre,{}));
+        JFMFitState fit; fit.modelId = "SD-0";
+        ASSERT_TRUE(store->ApplyFitResult(ref,store->BeginFit(ref),fit,{}));
+        JFMMonteCarloState state; state.modelId = "SD-0";
+        JFMMonteCarloResult result; result.parameterNames = {"I0","A"};
+        result.voltage = {.2,.3}; result.idealCurrent = {1e-5,2e-5};
+        result.noisyCurrent = {1e-5,2e-5,1e-5,2e-5};
+        result.samples = {{{1e-10,1.5},0,0,1,true},{{1e-9,1.5},0,0,1,false}};
+        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,result));
+        auto *gui = ImGui::CreateContext(); auto *plot = ImPlot::CreateContext();
+        auto &io = ImGui::GetIO(); io.DisplaySize = {1200,800}; io.DeltaTime = 1.f/60;
+        io.IniFilename = nullptr;
+        unsigned char *pixels; int width,height;
+        io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+        {
+            MonteCarloCurvesPanel panel(store,bus,"MC regression",true);
+            bus->PublishNew<MonteCarloRequested>(project,std::vector<CharacteristicId>{id});
+            ImGui::NewFrame(); ImGui::SetNextWindowSize({1100,700}); panel.Render(); ImGui::Render();
+            ASSERT_EQ(plot->Plots.GetBufSize(),1);
+            // Ideal + accepted noisy + accepted fitted; rejected curves create no items.
+            EXPECT_EQ(plot->Plots.GetByIndex(0)->Items.GetItemCount(),3);
+        }
+        ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
     }
 
 }

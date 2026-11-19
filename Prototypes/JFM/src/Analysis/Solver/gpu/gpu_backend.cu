@@ -184,7 +184,7 @@ __device__ double evaluateFinalChi2Serial_d(
     int count)
 {
     const double kDeviceInf = __longlong_as_double(0x7FF0000000000000ULL);
-    const double noise = fmax(noise_fraction, 1.0e-30);
+    const double noise = noise_fraction == 0.0 ? 1.0 : noise_fraction;
     double params[GpuParamLayout::MAX_PARAMS] = {};
     buildFullParams_d(layout, free_values, params);
 
@@ -199,7 +199,7 @@ __device__ double evaluateFinalChi2Serial_d(
             return kDeviceInf;
         chi2 += residual * residual;
     }
-    return chi2;
+    return noise_fraction == 0.0 ? 0.0 : chi2;
 }
 
 __device__ __forceinline__ void clipToBounds_d(const GpuParamLayout& layout, double* values)
@@ -609,6 +609,7 @@ __global__ void simplexFullKernel(
     const int run = blockIdx.x;
     const double* measured_run = measured + static_cast<size_t>(run) * point_count;
     GpuMcResult* out = result + run;
+    out->solver_converged = 0;
     double vertices[GpuSimplexStepResult::MAX_VERTICES][GpuSimplexStepResult::MAX_FREE] = {};
     double chi2[GpuSimplexStepResult::MAX_VERTICES] = {};
     int order[GpuSimplexStepResult::MAX_VERTICES] = {};
@@ -633,6 +634,15 @@ __global__ void simplexFullKernel(
     {
         sortOrder_d(chi2, n_vertices, order);
         const int best = order[0];
+        const double high = chi2[order[n_vertices - 1]];
+        double simplexSize = 0.0;
+        for (int vertex = 0; vertex < n_vertices; ++vertex)
+            for (int j = 0; j < n_free; ++j)
+                simplexSize = fmax(simplexSize, fabs(vertices[vertex][j] - vertices[best][j]) / fmax(fmax(fabs(vertices[vertex][j]), fabs(vertices[best][j])), 1e-300));
+        if (iteration > 0 && simplexSize <= 1e-6 && isfinite(high) && high - chi2[best] <= 1e-8 * fmax(fabs(high), 1.0)) {
+            out->solver_converged = 1;
+            break;
+        }
         if (chi2[best] / static_cast<double>(layout.dof) < config.reduced_chi2_tol)
             break;
 
@@ -743,7 +753,7 @@ __global__ void simplexFullKernel(
     out->ref_reduced_chi2 = ref_clean_chi2;
     out->delta_reduced_chi2 = final_clean_chi2;
     out->iterations = iteration;
-    out->converged = isfinite(final_clean_chi2) ? 1 : 0;
+    out->converged = isfinite(final_clean_chi2) && isfinite(chi2[best]) ? 1 : 0;
     out->n_free = n_free;
 }
 
@@ -1676,7 +1686,7 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
     for (size_t i = 0; i < request.true_current.size(); ++i)
     {
         noiseAmplitude[i] = request.true_current[i] * noiseFactor;
-        sigma[i] = std::max(std::abs(noiseAmplitude[i]), 1e-30);
+        sigma[i] = std::abs(noiseAmplitude[i]);
     }
 
     double* deviceVoltages = nullptr;

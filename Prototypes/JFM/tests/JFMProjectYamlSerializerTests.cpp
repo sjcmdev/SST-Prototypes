@@ -49,6 +49,7 @@ namespace SST::Prototypes::JFM
 		characteristic.monteCarlo->status = "completed";
 		characteristic.monteCarlo->sampleCount = 512;
 		characteristic.monteCarlo->acceptedCount = 490;
+        characteristic.monteCarlo->convergedCount = 400;
 		characteristic.monteCarlo->backend = "cuda";
 		characteristic.monteCarlo->outputPath = Path::FromResolved("results/mc");
 
@@ -77,6 +78,8 @@ namespace SST::Prototypes::JFM
 		auto loaded = JFMProjectYamlSerializer::Deserialize(*text);
 		ASSERT_TRUE(loaded) << loaded.Error().technicalDetails;
 		EXPECT_EQ(loaded->name, "JFM test");
+        ASSERT_TRUE(loaded->characteristics.front().monteCarlo);
+        EXPECT_EQ(loaded->characteristics.front().monteCarlo->convergedCount,400);
 		ASSERT_EQ(loaded->series.size(), 1);
 		ASSERT_EQ(loaded->groups.size(), 1);
 		EXPECT_EQ(loaded->series.front().groupId, "group-1");

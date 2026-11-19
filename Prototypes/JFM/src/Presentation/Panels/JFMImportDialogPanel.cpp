@@ -1292,7 +1292,7 @@ namespace SST::Prototypes::JFM
 		if (record->info.monteCarlo)
 		{
 			const JFMMonteCarloState &state = *record->info.monteCarlo;
-			ImGui::Text("MC: %s, %d/%d converged, %s, %.3f ms", state.status.c_str(), state.acceptedCount, state.sampleCount, state.backend.c_str(), state.totalMilliseconds);
+			ImGui::Text("MC: %s, %d/%d accepted, %d converged, %s, %.3f ms", state.status.c_str(), state.acceptedCount, state.sampleCount, state.convergedCount, state.backend.c_str(), state.totalMilliseconds);
 			if (!state.outputPath.Empty())
 				ImGui::TextWrapped("Output: %s", state.outputPath.Utf8().c_str());
 			for (const std::string &warning : state.warnings)

@@ -53,4 +53,36 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(statistics->points[3].sigmaClass, 3);
 		EXPECT_DOUBLE_EQ(statistics->points[2].deltaChiSquared, 10.0);
 	}
+
+    TEST(JFMMonteCarloStatisticsTests, SevenParameterThresholdsIncludeBoundary75)
+    {
+        EXPECT_EQ(ClassifyJFMDeltaChiSquared(7.5, 6), 1);
+        EXPECT_EQ(ClassifyJFMDeltaChiSquared(7.5, 7), 0);
+        EXPECT_EQ(ClassifyJFMDeltaChiSquared(8.1762, 7), 0);
+        EXPECT_EQ(ClassifyJFMDeltaChiSquared(14.3371, 7), 1);
+        EXPECT_EQ(ClassifyJFMDeltaChiSquared(21.8466, 7), 2);
+        EXPECT_EQ(ClassifyJFMDeltaChiSquared(21.8467, 7), 3);
+    }
+
+    TEST(JFMMonteCarloStatisticsTests, MahalanobisIsUnitInvariantAndHandlesDegenerateAxes)
+    {
+        for (double scale : {1., 1e-10}) {
+            JFMMonteCarloResult result; result.parameterNames = {"I0", "Rsh"};
+            for (const auto &v : std::vector<std::vector<double>>{{-1.,-1.},{-1.,1.},{1.,-1.},{1.,1.}})
+                result.samples.push_back({{v[0]*scale, v[1]*1000.}, 0., 0., 1, true});
+            auto stats = CalculateJFMMonteCarloScatterStatistics(result,0,1);
+            ASSERT_TRUE(stats); EXPECT_GT(stats->eigenvalueMinor, 0.);
+            for (const auto &point : stats->points) EXPECT_NEAR(point.mahalanobisSquared,1.5,1e-12);
+            for (auto &sample : result.samples) sample.parameters[0] = 0.;
+            stats = CalculateJFMMonteCarloScatterStatistics(result,0,1);
+            ASSERT_TRUE(stats);
+            for (const auto &point : stats->points) EXPECT_NEAR(point.mahalanobisSquared,.75,1e-12);
+            result.confidenceAvailable = false;
+            stats = CalculateJFMMonteCarloScatterStatistics(result,0,1);
+            ASSERT_TRUE(stats); EXPECT_EQ(stats->points.front().sigmaClass,4);
+            for (auto &sample : result.samples) sample.parameters[1] = 0.;
+            stats = CalculateJFMMonteCarloScatterStatistics(result,0,1);
+            ASSERT_TRUE(stats); EXPECT_DOUBLE_EQ(stats->points.front().mahalanobisSquared,0.);
+        }
+    }
 } // namespace SST::Prototypes::JFM

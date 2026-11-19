@@ -114,16 +114,20 @@ namespace SST::Prototypes::JFM
 		ImGui::SameLine();
 		if (ImGui::Button("Clear"))
 			m_Plots.clear();
-		ImGui::SameLine();
-		ImGui::Checkbox("Ideal", &m_ShowIdeal);
-		ImGui::SameLine();
-		ImGui::Checkbox("Noisy", &m_ShowNoisy);
-		ImGui::SameLine();
-		ImGui::Checkbox("Fitted", &m_ShowFitted);
-		ImGui::SameLine();
-		ImGui::Checkbox("Semi-log", &m_SemiLog);
-		ImGui::SameLine();
-		ImGui::Checkbox("Single iteration", &m_SingleIteration);
+        if (ImGui::BeginTable("##curve_controls", 2, ImGuiTableFlags_SizingFixedFit))
+        {
+            const std::pair<const char *, bool *> controls[] = {
+                {"Ideal", &m_ShowIdeal}, {"Noisy", &m_ShowNoisy}, {"Fitted", &m_ShowFitted},
+                {"Semi-log", &m_SemiLog}, {"Single iteration", &m_SingleIteration},
+                {"Show rejected (dimmed)", &m_ShowRejected}};
+            for (const auto &[label, value] : controls)
+            {
+                ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(label); ImGui::TableSetColumnIndex(1);
+                ImGui::PushID(label); ImGui::Checkbox("##value", value); ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
 
 		for (JFMCharacteristicRef ref : m_Plots)
 		{
@@ -131,6 +135,9 @@ namespace SST::Prototypes::JFM
 			const auto record = m_Store->FindCharacteristicRecord(ref);
 			if (result == nullptr || !record || !record->info.temperatureK || result->voltage.empty() || result->samples.empty())
 				continue;
+            const auto accepted = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.converged; });
+            const auto converged = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.solverConverged; });
+            ImGui::Text("%s: %d/%d accepted, %d converged", record->info.name.c_str(), static_cast<int>(accepted), static_cast<int>(result->samples.size()), static_cast<int>(converged));
 			const std::size_t pointCount = result->voltage.size();
 			const std::size_t sampleCount = std::min(result->samples.size(), result->noisyCurrent.size() / pointCount);
 			if (sampleCount == 0)
@@ -138,8 +145,12 @@ namespace SST::Prototypes::JFM
 			m_Iteration = std::clamp(m_Iteration, 0, static_cast<int>(sampleCount - 1));
 			if (m_SingleIteration)
 			{
-				ImGui::SetNextItemWidth(1000.0f);
-				ImGui::SliderInt("Iteration", &m_Iteration, 0, static_cast<int>(sampleCount - 1));
+				ImGui::SetNextItemWidth(-1.0f);
+				ImGui::TextUnformatted("Iteration"); ImGui::SameLine();
+                ImGui::PushID(static_cast<int>(ref.project));
+                ImGui::PushID(static_cast<int>(ref.characteristic));
+                ImGui::SliderInt("##iteration", &m_Iteration, 0, static_cast<int>(sampleCount - 1));
+                ImGui::PopID(); ImGui::PopID();
 			}
 
 			const std::string title = record->info.name + "###mc_curves_" + std::to_string(ref.project) + "_" + std::to_string(ref.characteristic);
@@ -160,10 +171,12 @@ namespace SST::Prototypes::JFM
 				const std::size_t last = m_SingleIteration ? first + 1 : sampleCount;
 				for (std::size_t sampleIndex = first; sampleIndex < last; ++sampleIndex)
 				{
+                    const bool rejected = !result->samples[sampleIndex].converged;
+                    if (rejected && !m_ShowRejected) continue;
 					if (m_ShowNoisy)
 					{
 						ImPlotSpec spec;
-						spec.LineColor = ImVec4(1.0, 0.0f, 0.0f, m_SingleIteration ? 0.9f : 0.18f);
+						spec.LineColor = ImVec4(1.0, 0.0f, 0.0f, rejected ? 0.06f : m_SingleIteration ? 0.9f : 0.18f);
 						spec.LineWeight = 2.0f;
 						spec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##mc_noisy_" + std::to_string(sampleIndex);
@@ -173,7 +186,7 @@ namespace SST::Prototypes::JFM
 					{
 						std::vector<double> fitted = FitCurveForSample(*result, result->samples[sampleIndex], record->info.monteCarlo ? record->info.monteCarlo->modelId : "SD-RsRsh", *record->info.temperatureK);
 						ImPlotSpec spec;
-						spec.LineColor = ImVec4(0.10f, 0.56f, 1.0f, m_SingleIteration ? 1.0f : 0.28f);
+						spec.LineColor = ImVec4(0.10f, 0.56f, 1.0f, rejected ? 0.08f : m_SingleIteration ? 1.0f : 0.28f);
 						spec.LineWeight = 2.5;
 						spec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##mc_fit_" + std::to_string(sampleIndex);

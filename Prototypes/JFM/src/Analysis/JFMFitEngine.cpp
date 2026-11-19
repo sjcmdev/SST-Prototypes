@@ -69,7 +69,7 @@ namespace SST::Prototypes::JFM
 			for (std::size_t index = 0; index < ParameterCount; ++index)
 			{
 				const auto found = values.find(std::string(ParameterNames[index]));
-				if (found != values.end() && std::isfinite(found->second.value))
+				if (found != values.end())
 					result[index] = found->second.value;
 			}
 			return result;
@@ -96,9 +96,6 @@ namespace SST::Prototypes::JFM
 
 		double SeriesDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
-			if (parameters[Rs] == 0.0)
-				return std::numeric_limits<double>::quiet_NaN();
 			return sst::physics::seriesDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], dark ? 0.0 : parameters[Iph]);
 		}
 
@@ -109,17 +106,11 @@ namespace SST::Prototypes::JFM
 
 		double SeriesShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
-			if (parameters[Rs] == 0.0)
-				return std::numeric_limits<double>::quiet_NaN();
 			return sst::physics::seriesShuntDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
 		}
 
 		double NonlinearShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
 		{
-			// Preserve FitEngine's undefined Rs=0 result until a separate model change.
-			if (parameters[Rs] == 0.0)
-				return std::numeric_limits<double>::quiet_NaN();
 			return sst::physics::nonlinearShuntDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], parameters[Alpha], parameters[Rsh2], dark ? 0.0 : parameters[Iph]);
 		}
 
@@ -181,33 +172,38 @@ namespace SST::Prototypes::JFM
 			std::vector<double> sigma;
 		};
 
-		FitData BuildFitData(const JFMCharacteristicRecord &characteristic, const JFMPrefitState &prefit, const JFMPrefitCurve *prefitCurve, double noisePercent)
+		FitData BuildFitData(const JFMCharacteristicRecord &characteristic, const JFMPrefitState &prefit, double noisePercent)
 		{
 			FitData result;
 			const std::vector<double> &sourceCurrent = Current(characteristic);
-			const std::size_t count = std::min(characteristic.data->voltage.size(), sourceCurrent.size());
-			std::size_t lower = std::min(prefit.fitRange.lowerIndex, count);
-			std::size_t upper = std::min(prefit.fitRange.upperIndex, count);
-			if (upper <= lower + 1)
-			{
-				lower = 0;
-				upper = count;
-			}
-			const double factor = std::clamp(noisePercent, 0.0, 100.0) / 100.0;
-			result.voltage.reserve(upper - lower);
-			result.current.reserve(upper - lower);
-			result.sigma.reserve(upper - lower);
-			for (std::size_t index = lower; index < upper; ++index)
-			{
-				const double ideal = prefitCurve != nullptr && index < prefitCurve->current.size()
-					? prefitCurve->current[index]
-					: sourceCurrent[index];
-				result.voltage.push_back(characteristic.data->voltage[index]);
-				result.current.push_back(sourceCurrent[index]);
-				result.sigma.push_back(std::max(std::abs(ideal * factor), 1.0e-30));
-			}
+			const std::size_t count = characteristic.data->voltage.size();
+            if (sourceCurrent.size() != count) return result;
+            const double lower = prefit.fitRange.lowerVoltage;
+            const double upper = prefit.fitRange.upperVoltage;
+            if (!std::isfinite(lower) || !std::isfinite(upper) || upper <= lower)
+                return result;
+            const double factor = noisePercent / 100.0;
+            for (std::size_t index = 0; index < count; ++index)
+            {
+                const double voltage = characteristic.data->voltage[index];
+                if (std::isfinite(voltage) && (voltage < lower - 1e-12 || voltage > upper + 1e-12))
+                    continue;
+                result.voltage.push_back(voltage);
+                result.current.push_back(sourceCurrent[index]);
+                result.sigma.push_back(std::abs(sourceCurrent[index] * factor));
+            }
 			return result;
 		}
+
+        std::string ValidateData(const FitData &data)
+        {
+            if (data.voltage.size() < 2)
+                return "Invalid or empty fit range; choose increasing voltage bounds.";
+            for (std::size_t i = 0; i < data.voltage.size(); ++i)
+                if (!std::isfinite(data.voltage[i]) || !std::isfinite(data.current[i]) || !(data.current[i] > 0.0) || data.current[i] == 1.0)
+                    return "Objective domain: voltage must be finite and current must be finite, positive and different from 1. Choose the positive branch.";
+            return {};
+        }
 
 		JFMParameterSolverSetting ParameterSetting(const JFMFitMonteCarloSettings &settings, std::size_t index)
 		{
@@ -290,8 +286,27 @@ namespace SST::Prototypes::JFM
 			const double degreesOfFreedom = static_cast<double>(std::max(1, static_cast<int>(data.voltage.size()) - freeCount));
 			sst::math::SANelderMead solver(std::move(fitParameters), std::move(objective), 1.0, 2.0, 0.5, 0.5, 1.0e-12, false, {}, 0, false, degreesOfFreedom);
 			solver.initSimplex();
-			// JFM's negative tolerance disables early stopping; this objective is nonnegative.
-			output.result = solver.runUntilConvergence(std::max(1, maxIterations), std::max(0.0, settings.fitReducedChiSquaredTolerance));
+			// MC convergence requires both relative objective spread and relative simplex size.
+            if (settings.fitReducedChiSquaredTolerance >= 0.0)
+                output.result = solver.runUntilConvergence(std::max(1, maxIterations), settings.fitReducedChiSquaredTolerance);
+            else {
+                for (int iteration = 0; iteration < std::max(1, maxIterations); ++iteration) {
+                    solver.step();
+                    const auto &values = solver.state().chi2_values;
+                    const auto [lo, hi] = std::minmax_element(values.begin(), values.end());
+                    double simplexSize = 0.0;
+                    const auto &best = solver.state().vertices[solver.state().best_idx];
+                    for (const auto &vertex : solver.state().vertices)
+                        for (std::size_t j = 0; j < best.size(); ++j)
+                            simplexSize = std::max(simplexSize, std::abs(vertex[j] - best[j]) / std::max({std::abs(vertex[j]), std::abs(best[j]), 1e-300}));
+                    if (iteration + 1 < maxIterations && simplexSize <= 1e-6 && std::isfinite(*hi) && *hi - *lo <= 1e-8 * std::max(std::abs(*hi), 1.0)) {
+                        output.result.converged = true;
+                        break;
+                    }
+                }
+                output.result.chi2_min = solver.bestChiSquared();
+                output.result.iterations = solver.iteration();
+            }
 			const std::vector<double> full = solver.bestFullParams();
 			std::copy_n(full.begin(), std::min(full.size(), output.parameters.size()), output.parameters.begin());
 			return output;
@@ -344,7 +359,7 @@ namespace SST::Prototypes::JFM
 			const ParameterArray &parameters,
 			double noisePercent)
 		{
-			const double noise = std::max(std::clamp(noisePercent, 0.0, 100.0) / 100.0, 1.0e-30);
+			const double noise = std::clamp(noisePercent, 0.0, 100.0) / 100.0;
 			double chiSquared = 0.0;
 			const std::size_t count = std::min(voltage.size(), trueCurrent.size());
 			for (std::size_t index = 0; index < count; ++index)
@@ -352,12 +367,12 @@ namespace SST::Prototypes::JFM
 				const double fitCurrent = Evaluate(model, voltage[index], temperature, parameters);
 				if (!(trueCurrent[index] > 0.0) || !(fitCurrent > 0.0) || !std::isfinite(trueCurrent[index]) || !std::isfinite(fitCurrent))
 					return std::numeric_limits<double>::infinity();
-				const double residual = (std::log(fitCurrent) - std::log(trueCurrent[index])) / noise;
+				const double residual = (std::log(fitCurrent) - std::log(trueCurrent[index])) / (noise == 0.0 ? 1.0 : noise);
 				if (!std::isfinite(residual))
 					return std::numeric_limits<double>::infinity();
 				chiSquared += residual * residual;
 			}
-			return chiSquared;
+			return noise == 0.0 ? 0.0 : chiSquared;
 		}
 	} // namespace FitEngineDetail
 
@@ -403,11 +418,17 @@ namespace SST::Prototypes::JFM
 		ParameterArray tuned = prefitStart;
 		ApplyTunedMetadata(tuned, characteristic.info.metadata);
 		const ParameterArray start = useTunedStart ? tuned : prefitStart;
-		const FitData data = BuildFitData(characteristic, *characteristic.info.prefit, nullptr, settings.monteCarloNoisePercent);
+		const FitData data = BuildFitData(characteristic, *characteristic.info.prefit, settings.monteCarloNoisePercent);
+		if (const auto error = ValidateData(data); !error.empty())
+			return MakeError(error);
 		if (data.voltage.size() < model->parameters.size() + 2)
 			return MakeError("Fit range contains too few points.");
+        for (double voltage : data.voltage)
+            if (!std::isfinite(Evaluate(*model, voltage, *characteristic.info.temperatureK, start)))
+                return MakeError("Model domain: invalid parameters or negative junction voltage with fractional alpha.");
 		const SolverOutput solved = Solve(*model, data, *characteristic.info.temperatureK, start, tuned, MonteCarloParameters(*model, settings), settings, settings.fitMaxIterations);
 
+        if (!std::isfinite(solved.result.chi2_min)) return MakeError("Objective or model domain is non-finite; no fit was accepted.");
 		JFMFitComputation output;
 		output.state.modelId = std::string(model->id);
 		output.state.status = "completed";
@@ -461,18 +482,32 @@ namespace SST::Prototypes::JFM
 			output.result.parameterNames.emplace_back(name);
 		output.result.freeParameterCount = static_cast<int>(std::count(freeMask.begin(), freeMask.end(), true));
 		auto attachCurvesToResult = [&output]() {
-			output.result.voltage = output.voltage;
+            if (output.state.acceptedCount == 0) {
+                output.state.status = "failed";
+                output.state.warnings.push_back("No accepted Monte Carlo samples: non-finite objective or model domain.");
+            }
+            if (!output.result.confidenceAvailable)
+                output.state.warnings.push_back("Zero noise variance: chi_squared=0 is a sentinel; confidence classes are unavailable.");
+            output.result.voltage = output.voltage;
 			output.result.idealCurrent = output.idealCurrent;
 			output.result.noisyCurrent = output.noisyCurrent;
 		};
 
-		const FitData source = BuildFitData(characteristic, prefit, nullptr, settings.monteCarloNoisePercent);
-		output.voltage = source.voltage;
+		const FitData source = BuildFitData(characteristic, prefit, settings.monteCarloNoisePercent);
+        if (const auto error = ValidateData(source); !error.empty())
+            return MakeError(error);
+        if (settings.monteCarloSamples <= 0 || !std::isfinite(settings.monteCarloNoisePercent) || settings.monteCarloNoisePercent < 0.0)
+            return MakeError("Invalid Monte Carlo sample count or noise percent.");
+        output.result.confidenceAvailable = settings.monteCarloNoisePercent > 0.0;
+        output.voltage = source.voltage;
 		output.idealCurrent = EvaluateCurve(*model, output.voltage, *characteristic.info.temperatureK, fitValues);
-		const double factor = std::clamp(settings.monteCarloNoisePercent, 0.0, 100.0) / 100.0;
+        for (double current : output.idealCurrent)
+            if (!std::isfinite(current) || !(current > 0.0) || current == 1.0)
+                return MakeError("Model domain: non-finite or non-positive current (possibly negative junction voltage with fractional alpha). Choose a positive fit range and valid parameters.");
+        const double factor = std::clamp(settings.monteCarloNoisePercent, 0.0, 100.0) / 100.0;
 		output.sigma.resize(output.idealCurrent.size());
 		for (std::size_t index = 0; index < output.idealCurrent.size(); ++index)
-			output.sigma[index] = std::max(std::abs(output.idealCurrent[index] * factor), 1.0e-30);
+			output.sigma[index] = std::abs(output.idealCurrent[index] * factor);
 
 		std::string gpuMessage;
 		if (settings.preferGpu && JFMGpuAvailable(&gpuMessage))
@@ -539,7 +574,10 @@ namespace SST::Prototypes::JFM
 					sample.chiSquared = gpuSample.chi2_min;
 					sample.reducedChiSquared = gpuSample.reduced_chi2_min;
 					sample.iterations = gpuSample.iterations;
-					sample.converged = gpuSample.converged != 0;
+                    sample.converged = sample.accepted = gpuSample.converged != 0;
+                    sample.solverConverged = sample.accepted && gpuSample.solver_converged != 0;
+                    sample.stopReason = !sample.accepted ? "non_finite" : sample.solverConverged ? "converged" : "max_iter";
+                    output.state.convergedCount += sample.solverConverged ? 1 : 0;
 					output.state.acceptedCount += sample.converged ? 1 : 0;
 					output.result.samples.push_back(std::move(sample));
 				}
@@ -592,7 +630,10 @@ namespace SST::Prototypes::JFM
 			sample.chiSquared = finalChiSquared;
 			sample.reducedChiSquared = finalChiSquared;
 			sample.iterations = solved.result.iterations;
-			sample.converged = std::isfinite(finalChiSquared);
+            sample.converged = sample.accepted = std::isfinite(finalChiSquared) && std::isfinite(solved.result.chi2_min);
+            sample.solverConverged = sample.accepted && solved.result.converged;
+            sample.stopReason = !sample.accepted ? "non_finite" : sample.solverConverged ? "converged" : "max_iter";
+            output.state.convergedCount += sample.solverConverged ? 1 : 0;
 			output.state.acceptedCount += sample.converged ? 1 : 0;
 			output.result.samples.push_back(std::move(sample));
 		}

@@ -62,12 +62,17 @@ def _automatic_bounds(
     count = voltage.size
     warnings: list[str] = []
 
-    lower_voltage = options.n_sigma_lower * thermal_voltage(sample.temperature_k)
+    lower_voltage = max(options.n_sigma_lower * thermal_voltage(sample.temperature_k), np.nextafter(0.0, 1.0))
     eligible = voltage >= lower_voltage
     if sample.characteristic_type == "dark":
         eligible &= current >= 0.0
     candidates = np.flatnonzero(eligible)
-    lo = int(candidates[0]) if candidates.size else 0
+    if not candidates.size:
+        candidates = np.flatnonzero(voltage > 0.0)
+        if not candidates.size:
+            raise ValueError("No positive voltage points in automatic fit range")
+        warnings.append("automatic_range_fallback_positive_voltage")
+    lo = int(candidates[0])
     if sample.characteristic_type == "dark":
         lo = _stable_lower_bound(voltage, current, lo, options)
     lo = min(lo + max(0, options.margin_points), max(0, count - 4))
@@ -77,15 +82,21 @@ def _automatic_bounds(
         warnings.append("plateau_not_detected_full_upper_range_used")
 
     if hi - lo < 4:
-        lo, hi = 0, count
-        warnings.append("automatic_range_fallback_full")
+        lo, hi = int(candidates[0]), count
+        if hi - lo < 4:
+            raise ValueError("Too few positive voltage points in automatic fit range")
+        warnings.append("automatic_range_fallback_positive_range")
     return lo, hi, warnings
 
 
 def _manual_bounds(sample: Sample, options: RangeOptions) -> tuple[int, int] | None:
     if options.manual_lower_voltage is None or options.manual_upper_voltage is None:
         return None
-    lower, upper = sorted((options.manual_lower_voltage, options.manual_upper_voltage))
+    lower, upper = options.manual_lower_voltage, options.manual_upper_voltage
+    if not np.isfinite(lower) or not np.isfinite(upper) or upper <= lower:
+        raise ValueError("Invalid manual fit range: bounds must be finite and increasing")
+    if not np.any((sample.voltage >= lower) & (sample.voltage <= upper)):
+        raise ValueError("Empty manual fit range")
     lo = int(np.searchsorted(sample.voltage, lower, side="left"))
     hi = int(np.searchsorted(sample.voltage, upper, side="right"))
     lo = max(0, min(lo, sample.voltage.size - 4))
@@ -115,6 +126,8 @@ def detect_fit_range(
     else:
         lo, hi = manual
         warnings = []
+        if sample.voltage[lo] < options.manual_lower_voltage or sample.voltage[hi - 1] > options.manual_upper_voltage:
+            warnings.append("manual_range_expanded_to_minimum_four_points")
         reason = "manual"
 
     if hi - lo < 9:

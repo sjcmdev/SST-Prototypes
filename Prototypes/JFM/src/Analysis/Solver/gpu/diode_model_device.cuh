@@ -49,7 +49,7 @@ __device__ __forceinline__ double evaluateJFMCurrent_d(GpuModelType model, doubl
         if (!(series >= 0.0))
             return gpu_nan();
         const double argument = (i0 * series / thermal) * exp(voltage / thermal);
-        diode = LambertW0_d(argument) * thermal / series;
+        diode = series == 0.0 ? i0 * exp(voltage / thermal) : LambertW0_d(argument) * thermal / series;
         internal_voltage = voltage - diode * series;
     }
     else
@@ -72,6 +72,7 @@ __device__ __forceinline__ double evaluateJFMCurrent_d(GpuModelType model, doubl
         const double rsh2 = params[5];
         if (!(alpha > 0.0) || !(rsh2 > 0.0))
             return gpu_nan();
+        if (internal_voltage < 0.0 && alpha != floor(alpha)) return gpu_nan();
         current += pow(internal_voltage, alpha) / rsh2;
     }
     if (gpu_model_has_photocurrent(model))

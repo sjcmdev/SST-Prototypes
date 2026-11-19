@@ -164,6 +164,7 @@ namespace SST::Prototypes::JFM
 		std::string status = "not_started";
 		int sampleCount = 0;
 		int acceptedCount = 0;
+		int convergedCount = 0;
 		double noisePercent = 0.0;
 		double startPerturbationPercent = 0.0;
 		std::uint32_t seed = 42;
@@ -179,13 +180,17 @@ namespace SST::Prototypes::JFM
 		double chiSquared = 0.0;
 		double reducedChiSquared = 0.0;
 		int iterations = 0;
-		bool converged = false;
-	};
+        bool converged = false; // Legacy accepted flag retained for saved data.
+        bool accepted = converged;
+        bool solverConverged = false;
+        std::string stopReason = "unknown";
+    };
 
-	struct JFMMonteCarloResult
+    struct JFMMonteCarloResult
 	{
 		std::vector<std::string> parameterNames;
 		int freeParameterCount = 0;
+		bool confidenceAvailable = true;
 		std::vector<JFMMonteCarloSample> samples;
 		std::vector<double> voltage;
 		std::vector<double> idealCurrent;

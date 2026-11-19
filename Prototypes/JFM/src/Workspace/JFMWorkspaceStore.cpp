@@ -1444,6 +1444,8 @@ namespace SST::Prototypes::JFM
 		JFMMonteCarloState &state = info->get().monteCarlo.emplace(info->get().monteCarlo.value_or(JFMMonteCarloState{}));
 		state.modelId = info->get().fit->modelId;
 		state.status = "running";
+        state.acceptedCount = 0;
+        state.convergedCount = 0;
 		state.warnings.clear();
 		document->get().monteCarloResults.erase(ref.characteristic);
 		return ++document->get().monteCarloGenerations[ref.characteristic];

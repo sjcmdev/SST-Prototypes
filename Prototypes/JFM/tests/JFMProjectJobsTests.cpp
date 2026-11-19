@@ -755,12 +755,21 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     EXPECT_EQ(loaded.characteristics[0].monteCarlo->outputPath, info.monteCarlo->outputPath);
     EXPECT_EQ(loaded.scripts[0].path, project.scripts[0].path);
     JFMProjectBundleSnapshot snapshot; snapshot.project = project;
+    JFMMonteCarloResult mc; mc.parameterNames = {"I0","A"}; mc.freeParameterCount = 2; mc.confidenceAvailable = false;
+    JFMMonteCarloSample sample; sample.parameters = {1e-10,1.5}; sample.accepted = sample.converged = true;
+    sample.solverConverged = false; sample.stopReason = "max_iter"; mc.samples.push_back(sample);
+    snapshot.monteCarloResults.push_back({1,mc});
     const auto bundle = root / "bundle.jfm";
     auto saved = JFMProjectBundleSerializer::Save(bundle, snapshot);
     ASSERT_TRUE(saved) << saved.Error().technicalDetails;
     auto opened = JFMProjectBundleSerializer::Load(bundle);
     ASSERT_TRUE(opened) << opened.Error().technicalDetails;
-    EXPECT_EQ(opened->snapshot.project.characteristics[0].monteCarlo->outputPath, info.monteCarlo->outputPath);
+    EXPECT_EQ(opened->snapshot.project.characteristics[0].monteCarlo->outputPath, bundle / Path("mc/1"));
+    ASSERT_EQ(opened->snapshot.monteCarloResults.size(),1);
+    const auto &roundtrip = opened->snapshot.monteCarloResults.front().result;
+    EXPECT_FALSE(roundtrip.confidenceAvailable); ASSERT_EQ(roundtrip.samples.size(),1);
+    EXPECT_TRUE(roundtrip.samples.front().accepted); EXPECT_FALSE(roundtrip.samples.front().solverConverged);
+    EXPECT_EQ(roundtrip.samples.front().stopReason,"max_iter");
 }
 TEST_F(UnicodePaths, EmbeddedPythonPathAndImport) {
 #if DS_PYTHON_CAPI_AVAILABLE

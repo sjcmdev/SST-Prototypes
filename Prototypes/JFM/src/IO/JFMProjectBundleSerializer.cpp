@@ -275,6 +275,7 @@ namespace SST::Prototypes::JFM
 			node["status"] = state.status;
 			node["sample_count"] = state.sampleCount;
 			node["accepted_count"] = state.acceptedCount;
+            node["converged_count"] = state.convergedCount;
 			node["noise_percent"] = state.noisePercent;
 			node["start_perturbation_percent"] = state.startPerturbationPercent;
 			node["seed"] = state.seed;
@@ -294,6 +295,7 @@ namespace SST::Prototypes::JFM
 			state.status = ReadOr<std::string>(node, "status", "not_started");
 			state.sampleCount = ReadOr<int>(node, "sample_count", 0);
 			state.acceptedCount = ReadOr<int>(node, "accepted_count", 0);
+            state.convergedCount = ReadOr<int>(node, "converged_count", 0);
 			state.noisePercent = ReadOr<double>(node, "noise_percent", 0.0);
 			state.startPerturbationPercent = ReadOr<double>(node, "start_perturbation_percent", 0.0);
 			state.seed = ReadOr<std::uint32_t>(node, "seed", 42);
@@ -404,14 +406,14 @@ namespace SST::Prototypes::JFM
 			parameters << std::setprecision(17) << "sample";
 			for (const std::string &name : result.parameterNames)
 				parameters << '\t' << name;
-			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\n";
+			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\n";
 			for (std::size_t index = 0; index < result.samples.size(); ++index)
 			{
 				const JFMMonteCarloSample &sample = result.samples[index];
 				parameters << index;
 				for (double value : sample.parameters)
 					parameters << '\t' << value;
-				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.converged ? 1 : 0) << '\n';
+				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.converged ? 1 : 0) << '\t' << (sample.converged ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (result.confidenceAvailable ? 1 : 0) << '\n';
 			}
 			std::string error;
 			if (!SaveText(parameterPath, parameters.str(), error))
@@ -429,7 +431,7 @@ namespace SST::Prototypes::JFM
 					if (offset >= result.noisyCurrent.size())
 						break;
 					const double ideal = point < result.idealCurrent.size() ? result.idealCurrent[point] : 0.0;
-					const double sigma = std::max(std::abs(ideal * factor), 1e-30);
+					const double sigma = std::abs(ideal * factor);
 					const double noisy = result.noisyCurrent[offset];
 					noise << sample << '\t' << result.voltage[point] << '\t' << ideal << '\t' << noisy << '\t' << noisy - ideal << '\t' << sigma << '\n';
 				}
@@ -476,6 +478,14 @@ namespace SST::Prototypes::JFM
 				sample.reducedChiSquared = std::stod(columns[chiIndex + 1]);
 				sample.iterations = std::stoi(columns[chiIndex + 2]);
 				sample.converged = std::stoi(columns[chiIndex + 3]) != 0;
+                sample.accepted = sample.converged;
+                if (columns.size() >= chiIndex + 8) {
+                    sample.accepted = std::stoi(columns[chiIndex + 4]) != 0;
+                    sample.converged = sample.accepted;
+                    sample.solverConverged = std::stoi(columns[chiIndex + 5]) != 0;
+                    sample.stopReason = columns[chiIndex + 6];
+                    result.confidenceAvailable = std::stoi(columns[chiIndex + 7]) != 0;
+                }
 				result.samples.push_back(std::move(sample));
 			}
 
@@ -630,6 +640,8 @@ namespace SST::Prototypes::JFM
 					{
 						node["monte_carlo_files"]["parameters"] = McParameterRelativePath(info.id);
 						node["monte_carlo_files"]["noise"] = McNoiseRelativePath(info.id);
+                        node["monte_carlo_files"]["free_parameter_count"] = mcById.at(info.id)->result.freeParameterCount;
+                        node["monte_carlo_files"]["confidence_available"] = mcById.at(info.id)->result.confidenceAvailable;
 					}
 				}
 				characteristics.push_back(node);
@@ -663,8 +675,11 @@ namespace SST::Prototypes::JFM
 				if (parameterFile.empty())
 					continue;
 				auto result = ReadMonteCarloTsv(bundleRoot / Path(parameterFile), noiseFile.empty() ? Path{} : bundleRoot / Path(noiseFile));
-				if (result)
-					snapshot.monteCarloResults.push_back(JFMMonteCarloBundleRecord{id, std::move(result).Value()});
+                if (result) {
+                    result->freeParameterCount = ReadOr<int>(files, "free_parameter_count", result->freeParameterCount);
+                    result->confidenceAvailable = ReadOr<bool>(files, "confidence_available", info.monteCarlo ? info.monteCarlo->noisePercent > 0.0 : result->confidenceAvailable);
+                    snapshot.monteCarloResults.push_back(JFMMonteCarloBundleRecord{id, std::move(result).Value()});
+                }
 				else
 					warnings.push_back("MC TSV skipped for characteristic " + std::to_string(id) + ": " + result.Error().technicalDetails);
 				if (info.monteCarlo)

@@ -52,6 +52,7 @@ struct GpuMcResult
     double delta_reduced_chi2 = 0.0;
     int iterations = 0;
     int converged = 0;
+    int solver_converged = 0;
     int n_free = 0;
 };
 

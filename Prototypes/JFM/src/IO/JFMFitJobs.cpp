@@ -99,14 +99,14 @@ namespace SST::Prototypes::JFM
 			parameters << std::setprecision(17) << "sample";
 			for (const std::string &name : computation.result.parameterNames)
 				parameters << '\t' << name;
-			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\n";
+			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\n";
 			for (std::size_t index = 0; index < savedSamples; ++index)
 			{
 				const JFMMonteCarloSample &sample = computation.result.samples[index];
 				parameters << index;
 				for (double value : sample.parameters)
 					parameters << '\t' << value;
-				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.converged ? 1 : 0) << '\n';
+				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.converged ? 1 : 0) << '\t' << (sample.converged ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (computation.result.confidenceAvailable ? 1 : 0) << '\n';
 			}
 			if (!noise || !parameters)
 				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo results could not be saved.", "Writing the result files failed.", "Check available disk space.", "JFMMonteCarloJob", "jfm.mc.write"};
@@ -194,10 +194,10 @@ namespace SST::Prototypes::JFM
 					if (m_Store == nullptr || !m_Store->IsMonteCarloGenerationCurrent(item.ref, item.generation))
 						continue;
 					auto result = RunJFMMonteCarlo(item.characteristic, item.prefit, item.fit, item.settings);
-					if (!result)
-					{
-						if (m_EventBus != nullptr)
-							m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, result.Error().technicalDetails});
+                    if (!result || result->state.acceptedCount == 0)
+                    {
+                        if (m_EventBus != nullptr)
+                            m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, !result ? result.Error().technicalDetails : "No accepted Monte Carlo samples: non-finite objective or model domain."});
 						continue;
 					}
 					auto outputPath = PersistMonteCarlo(item, *result);

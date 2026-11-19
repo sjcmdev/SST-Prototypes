@@ -59,11 +59,12 @@ namespace SST::Prototypes::JFM
 		bool preferGpu = true;
 		bool saveSamples = true;
 		int savedSampleLimit = 0;
-		std::array<std::array<float, 4>, 3> sigmaColors = {{
+		std::array<std::array<float, 4>, 5> sigmaColors = {{
 			{1.00f, 0.12156863f, 0.07843137f, 1.00f},
 			{1.00f, 0.90196078f, 0.05882353f, 1.00f},
-			{0.00f, 1.00f, 0.90980392f, 1.00f}}};
-		std::array<bool, 3> showSigmaClasses = {true, true, true};
+			{0.00f, 1.00f, 0.90980392f, 1.00f},
+            {0.65f, 0.45f, 0.85f, 1.0f}, {0.65f, 0.65f, 0.65f, 1.0f}}};
+		std::array<bool, 5> showSigmaClasses = {true, true, true, true, true};
 		std::array<bool, 3> showSigmaEllipses = {false, false, false};
 		float scatterZoomOut = 0.08f;
 		std::vector<JFMMonteCarloParameterPair> defaultParameterPairs = {{"A", "I0"}, {"Rs", "Rsh"}};

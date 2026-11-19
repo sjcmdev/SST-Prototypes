@@ -288,6 +288,7 @@ end
 project "JFMTests"
     files {
         _SST_ROOT .. "/Prototypes/JFM/src/Presentation/JFMPlotDocument.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/Presentation/Panels/MonteCarloCurvesPanel.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPlotExport.cpp"
     }
 project "JFM"

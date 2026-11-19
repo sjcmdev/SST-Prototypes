@@ -29,6 +29,7 @@ namespace SST::Prototypes::JFM
 		bool m_ShowIdeal = true;
 		bool m_ShowNoisy = true;
 		bool m_ShowFitted = true;
+        bool m_ShowRejected = false;
 		bool m_SemiLog = false;
 		bool m_SingleIteration = false;
 		int m_Iteration = 0;

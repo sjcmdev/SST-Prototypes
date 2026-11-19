@@ -291,6 +291,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "status" << YAML::Value << state.status;
 		out << YAML::Key << "sample_count" << YAML::Value << state.sampleCount;
 		out << YAML::Key << "accepted_count" << YAML::Value << state.acceptedCount;
+        out << YAML::Key << "converged_count" << YAML::Value << state.convergedCount;
 		out << YAML::Key << "noise_percent" << YAML::Value << state.noisePercent;
 		out << YAML::Key << "start_perturbation_percent" << YAML::Value << state.startPerturbationPercent;
 		out << YAML::Key << "seed" << YAML::Value << state.seed;
@@ -310,6 +311,7 @@ namespace SST::Prototypes::JFM
 		state.status = readOr<std::string>(node, "status", "not_started");
 		state.sampleCount = readOr<int>(node, "sample_count", 0);
 		state.acceptedCount = readOr<int>(node, "accepted_count", 0);
+        state.convergedCount = readOr<int>(node, "converged_count", 0);
 		state.noisePercent = readOr<double>(node, "noise_percent", 0.0);
 		state.startPerturbationPercent = readOr<double>(node, "start_perturbation_percent", 0.0);
 		state.seed = readOr<std::uint32_t>(node, "seed", 42);

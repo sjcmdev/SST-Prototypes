@@ -113,7 +113,7 @@ namespace SST::Prototypes::JFM
 	bool RenderJFMMonteCarloScatterDefaults(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id)
 	{
 		bool changed = false;
-		static constexpr const char *labels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
+		const auto &labels = JFMSigmaLabels;
 		const auto &parameters = JFMModelParameterNames(modelId);
 		ImGui::PushID(id);
 		if (IsKnownDefaultPairs(settings.defaultParameterPairs))
@@ -121,7 +121,8 @@ namespace SST::Prototypes::JFM
 		for (std::size_t index = 0; index < settings.showSigmaClasses.size(); ++index)
 		{
 			ImGui::PushID(static_cast<int>(index));
-			changed |= ImGui::Checkbox(labels[index], &settings.showSigmaClasses[index]);
+			ImGui::TextUnformatted(labels[index]); ImGui::SameLine();
+            changed |= ImGui::Checkbox("##visible", &settings.showSigmaClasses[index]);
 			ImGui::SameLine();
 			changed |= ImGui::ColorEdit4("##color", settings.sigmaColors[index].data(), ImGuiColorEditFlags_NoInputs);
 			ImGui::SameLine();
@@ -200,7 +201,7 @@ namespace SST::Prototypes::JFM
 			options.yParameter = (options.xParameter + 1) % count;
 
 		ImGui::PushID(id);
-		static constexpr const char *classLabels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
+		const auto &classLabels = JFMSigmaLabels;
 		if (ImGui::BeginChild("##scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 1.8f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 		{
 			ImGui::SetNextItemWidth(120.0f);
@@ -235,7 +236,8 @@ namespace SST::Prototypes::JFM
 			for (std::size_t index = 0; index < options.showSigmaClasses.size(); ++index)
 			{
 				ImGui::PushID(static_cast<int>(index));
-				changed |= ImGui::Checkbox(classLabels[index], &options.showSigmaClasses[index]);
+				ImGui::TextUnformatted(classLabels[index]); ImGui::SameLine();
+                changed |= ImGui::Checkbox("##visible", &options.showSigmaClasses[index]);
 				ImGui::SameLine();
 				changed |= ImGui::ColorEdit4("##color", options.sigmaColors[index].data(), ImGuiColorEditFlags_NoInputs);
 				ImGui::PopID();
@@ -255,7 +257,7 @@ namespace SST::Prototypes::JFM
 		const auto statistics = CalculateJFMMonteCarloScatterStatistics(result, options.xParameter, options.yParameter);
 		if (!statistics)
 		{
-			ImGui::TextDisabled("Too few converged samples");
+			ImGui::TextDisabled("Too few accepted samples");
 			ImGui::PopID();
 			return changed;
 		}

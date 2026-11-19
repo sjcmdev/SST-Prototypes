@@ -120,6 +120,7 @@ def test_very_narrow_manual_range_stays_inside_selected_data() -> None:
             }
         },
     )
+    assert "manual_range_expanded_to_minimum_four_points" in result["warnings"]
     fit_range = result["fit_range"]
     for window in result["segmentation"].values():
         assert fit_range["lo"] <= window["lo"] < window["hi"] <= fit_range["hi"]
@@ -195,3 +196,18 @@ def test_missing_resistance_terms_are_removed() -> None:
     np.testing.assert_allclose(
         evaluate_current(voltage, temperature_k, "SD-Rs", parameters), with_series
     )
+
+
+@pytest.mark.parametrize("lower,upper", [(0.4,0.2), (0.3,0.3), (2.,3.), (float("nan"),0.8)])
+def test_invalid_manual_range_fails_loudly(lower: float, upper: float) -> None:
+    voltage, current = _sample()
+    with pytest.raises(ValueError, match="fit range"):
+        prefit_characteristic(voltage, current, 300., "SD-RsRsh", options={
+            "range_options": {"manual_lower_voltage": lower, "manual_upper_voltage": upper}})
+
+
+def test_automatic_range_does_not_fall_back_to_negative_voltage() -> None:
+    from jfm_prefit.range_detection import detect_fit_range
+    from jfm_prefit.types import Sample
+    with pytest.raises(ValueError, match="positive voltage"):
+        detect_fit_range(Sample(np.linspace(-1., -0.1, 20), np.ones(20)*1e-5, 300.))

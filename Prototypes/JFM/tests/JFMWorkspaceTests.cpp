@@ -495,6 +495,8 @@ namespace SST::Prototypes::JFM
 		const std::uint64_t mcGeneration = store.BeginMonteCarlo(ref);
 		JFMMonteCarloState monteCarlo;
 		monteCarlo.modelId = "SD-0";
+        monteCarlo.acceptedCount = 2;
+        monteCarlo.convergedCount = 1;
 		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, mcGeneration, monteCarlo, {{"I0", "A"}, {}}));
 		EXPECT_NE(store.GetFitCurve(ref), nullptr);
 		EXPECT_NE(store.GetMonteCarloResult(ref), nullptr);
@@ -502,6 +504,8 @@ namespace SST::Prototypes::JFM
 		EXPECT_FALSE(store.GetMonteCarloState(ref).has_value());
 		EXPECT_EQ(store.GetMonteCarloResult(ref), nullptr);
 		const std::uint64_t rerunGeneration = store.BeginMonteCarlo(ref);
+        EXPECT_EQ(store.GetMonteCarloState(ref)->acceptedCount,0);
+        EXPECT_EQ(store.GetMonteCarloState(ref)->convergedCount,0);
 		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, rerunGeneration, monteCarlo, {{"I0", "A"}, {}}));
 
 		ASSERT_TRUE(store.SetManualFitRange(project, id, 0.0, 0.5));

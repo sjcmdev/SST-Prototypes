@@ -96,19 +96,19 @@ namespace SST::Prototypes::JFM
     plot::Bounds PopulateJFMMonteCarloPlot(JFMPlotDocument &doc, const JFMMonteCarloScatterStatistics &statistics,
         const JFMMonteCarloScatterPlotOptions &options, const std::string &xLabel, const std::string &yLabel)
     {
-        if (statistics.points.empty()) throw std::invalid_argument("No converged Monte Carlo samples");
-        std::array<std::vector<double>, 3> x, y;
+        if (statistics.points.empty()) throw std::invalid_argument("No accepted Monte Carlo samples");
+        std::array<std::vector<double>, 5> x, y;
         auto first = statistics.points.front();
         plot::Bounds bounds{first.x,first.x,first.y,first.y};
         for (const auto &point : statistics.points) {
-            const auto group = std::min<std::size_t>(point.sigmaClass, 2);
+            const auto group = std::min<std::size_t>(point.sigmaClass, 4);
             x[group].push_back(point.x); y[group].push_back(point.y);
             bounds.minX = std::min(bounds.minX, point.x); bounds.maxX = std::max(bounds.maxX, point.x);
             bounds.minY = std::min(bounds.minY, point.y); bounds.maxY = std::max(bounds.maxY, point.y);
         }
         doc.BeginFrame();
-        static constexpr const char *labels[] = {"<= 1 sigma", "1-2 sigma", "2-3 sigma"};
-        for (int group = 2; group >= 0; --group) {
+        const auto &labels = JFMSigmaLabels;
+        for (int group = 4; group >= 0; --group) {
             plot::SeriesStyle style;
             style.color = style.markerFill = options.sigmaColors[group];
             style.marker = static_cast<plot::Marker>(1 + std::clamp(options.marker, 0, 5));

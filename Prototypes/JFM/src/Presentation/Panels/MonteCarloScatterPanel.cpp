@@ -313,11 +313,11 @@ namespace SST::Prototypes::JFM
 		}
 		else
 		{
-			std::array<std::vector<const JFMMonteCarloScatterPoint *>, 3> classes;
+			std::array<std::vector<const JFMMonteCarloScatterPoint *>, 5> classes;
 			for (const JFMMonteCarloScatterPoint &point : statistics->points)
 				if (point.sigmaClass < classes.size())
 					classes[point.sigmaClass].push_back(&point);
-			static constexpr const char *labels[] = {"le_1_sigma", "1_2_sigma", "2_3_sigma"};
+			const auto &labels = JFMSigmaTsvLabels;
 			for (std::size_t sigma = 0; sigma < classes.size(); ++sigma)
 			{
 				if (sigma > 0)
@@ -381,7 +381,7 @@ namespace SST::Prototypes::JFM
         try {
             if (!plot.document->view.viewport) {
                 auto statistics = CalculateJFMMonteCarloScatterStatistics(*result, xParameter, yParameter);
-                if (!statistics) throw std::runtime_error("Too few converged samples");
+                if (!statistics) throw std::runtime_error("Too few accepted samples");
                 auto bounds = PopulateJFMMonteCarloPlot(*plot.document, *statistics, plot.options,
                     result->parameterNames[xParameter], result->parameterNames[yParameter]);
                 if (plot.options.hasAxisLimits)

@@ -8,6 +8,11 @@
 #include "solver/objective.hpp"
 
 #include <array>
+#include <algorithm>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <limits>
 #include <cmath>
 #include <string>
 #include <unordered_map>
@@ -93,13 +98,16 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
-	TEST(JFMFitEngineTests, MigrationPreservesSeparateZeroSeriesBehaviors)
+	TEST(JFMFitEngineTests, ZeroSeriesUsesContinuousLimit)
 	{
 		auto parameters = Parameters;
 		parameters["Rs"] = 0.0;
 		for (const char *model : {"SD-Rs", "SD-RsRsh", "SD-RsRsh-alpha-Rsh2"})
-			EXPECT_TRUE(std::isnan(EvaluateJFMCurrent(model, 0.55, 300.0, parameters)));
-		const double array[] = {1.0e-10, 1.5, 0.0, 1.0e6, 2.0, 5.0e7};
+			EXPECT_TRUE(std::isfinite(EvaluateJFMCurrent(model, 0.55, 300.0, parameters)));
+		EXPECT_NEAR(EvaluateJFMCurrent("SD-Rs", .55,300.,parameters), .00014445377415953838,1e-16);
+        EXPECT_NEAR(EvaluateJFMCurrent("SD-RsRsh", .55,300.,parameters), .0001450037741595384,1e-16);
+        EXPECT_NEAR(EvaluateJFMCurrent("SD-RsRsh-alpha-Rsh2", .55,300.,parameters), .0001450098241595384,1e-16);
+        const double array[] = {1.0e-10, 1.5, 0.0, 1.0e6, 2.0, 5.0e7};
 		EXPECT_NEAR(evaluateDiodeIV4(0.55, array, 300.0), 0.0001450037741595384, 1.0e-16);
 		EXPECT_NEAR(evaluateDiodeIV6(0.55, array, 300.0), 0.0001450098241595384, 1.0e-16);
 	}
@@ -259,7 +267,7 @@ namespace SST::Prototypes::JFM
 			ASSERT_EQ(sample.parameters.size(), 2);
 			EXPECT_DOUBLE_EQ(sample.parameters[0], Parameters.at("I0"));
 			EXPECT_DOUBLE_EQ(sample.reducedChiSquared, sample.chiSquared);
-			EXPECT_EQ(sample.iterations, settings.monteCarloMaxIterations);
+			EXPECT_LE(sample.iterations, settings.monteCarloMaxIterations);
 			sawNonZeroDeltaChiSquared = sawNonZeroDeltaChiSquared || sample.chiSquared > 0.0;
 		}
 		EXPECT_TRUE(sawNonZeroDeltaChiSquared);
@@ -305,4 +313,128 @@ namespace SST::Prototypes::JFM
 		EXPECT_DOUBLE_EQ(result->result.samples.front().chiSquared, 0.0);
 		EXPECT_DOUBLE_EQ(result->result.samples.front().reducedChiSquared, 0.0);
 	}
+
+    TEST(JFMFitEngineTests, VoltageRangeMapsDescendingRealSweepWithoutReordering)
+    {
+        const auto fixture = std::filesystem::current_path() / "Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z035_02/IV_C002_Z035_02_300,0K_100mW.dat";
+        std::ifstream input(fixture);
+        ASSERT_TRUE(input.is_open()) << fixture;
+        auto record = MakeRecord("SD-0");
+        auto data = CreateRef<JFMCharacteristicData>();
+        std::string line;
+        while (std::getline(input, line)) {
+            std::istringstream row(line); double v, i, j;
+            if (row >> v >> i >> j) { data->voltage.push_back(v); data->current.push_back(i); }
+        }
+        ASSERT_GT(data->voltage.size(), 100);
+        const auto rawVoltage = data->voltage, rawCurrent = data->current;
+        // Isolate range selection from the pending light-current objective decision.
+        for (double &i : data->current) i = std::max(std::abs(i), 1e-20);
+        record.data = data;
+        record.info.prefit->fitRange = {39, 149, 0.0958904, 0.643379, "manual"};
+        JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
+        JFMFitMonteCarloSettings settings; settings.preferGpu = false; settings.monteCarloSamples = 1;
+        settings.parameters = {{"I0", {1e-15, 1e-5, false}}, {"A", {0.5, 3., false}}};
+        auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
+        ASSERT_TRUE(result) << result.Error().technicalDetails;
+        const auto [lo, hi] = std::minmax_element(result->voltage.begin(), result->voltage.end());
+        EXPECT_NEAR(*lo, 0.0958904, 1e-8); EXPECT_NEAR(*hi, 0.643379, 1e-8);
+        EXPECT_EQ(data->voltage, rawVoltage);
+        data->current = rawCurrent;
+        EXPECT_FALSE(RunJFMMonteCarlo(record, *record.info.prefit, fit, settings));
+    }
+
+    TEST(JFMFitEngineTests, BadRangesAndObjectiveDataReturnVisibleErrors)
+    {
+        auto record = MakeRecord("SD-0");
+        JFMFitMonteCarloSettings settings;
+        for (const auto bounds : {std::pair{0.8, 0.9}, std::pair{0.4, 0.2}, std::pair{0.3, 0.3}}) {
+            record.info.prefit->fitRange.lowerVoltage = bounds.first;
+            record.info.prefit->fitRange.upperVoltage = bounds.second;
+            auto result = RunJFMSimplexFit(record, settings);
+            ASSERT_FALSE(result); EXPECT_FALSE(result.Error().technicalDetails.empty());
+        }
+        for (double bad : {-1.0, 0.0, 1.0, std::numeric_limits<double>::quiet_NaN()}) {
+            record = MakeRecord("SD-0"); auto data = CreateRef<JFMCharacteristicData>(*record.data);
+            data->current[10] = bad; record.data = data;
+            auto result = RunJFMSimplexFit(record, settings);
+            ASSERT_FALSE(result); EXPECT_NE(result.Error().technicalDetails.find("domain"), std::string::npos);
+        }
+    }
+
+    TEST(JFMFitEngineTests, FractionalAlphaOutsideRealDomainFailsLoudly)
+    {
+        auto record = MakeRecord("SD-RsRsh-alpha-Rsh2");
+        record.info.prefit->parameters["alpha"].value = 2.3;
+        auto data = CreateRef<JFMCharacteristicData>(*record.data);
+        data->voltage[0] = -0.1; data->current[0] = 1e-4; record.data = data;
+        record.info.prefit->fitRange.lowerVoltage = -0.1;
+        JFMFitState fit; fit.modelId = record.info.prefit->modelId; fit.parameters = record.info.prefit->parameters;
+        auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, {});
+        ASSERT_FALSE(result); EXPECT_NE(result.Error().technicalDetails.find("domain"), std::string::npos);
+    }
+
+    TEST(JFMFitEngineTests, OneIterationAcceptedDoesNotMeanSolverConvergence)
+    {
+        auto record = MakeRecord("SD-0");
+        JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
+        JFMFitMonteCarloSettings settings; settings.preferGpu = false;
+        settings.monteCarloSamples = 4; settings.monteCarloMaxIterations = 1;
+        auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
+        ASSERT_TRUE(result); EXPECT_GT(result->state.acceptedCount, 0); EXPECT_EQ(result->state.convergedCount, 0);
+        for (const auto &sample : result->result.samples) {
+            EXPECT_EQ(sample.accepted, sample.converged); EXPECT_FALSE(sample.solverConverged);
+            EXPECT_EQ(sample.stopReason, sample.accepted ? "max_iter" : "non_finite");
+        }
+    }
+
+    TEST(JFMFitEngineTests, ZeroNoiseHasNoConfidenceClassesOrArtificialVariance)
+    {
+        auto record = MakeRecord("SD-0");
+        JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
+        JFMFitMonteCarloSettings settings; settings.preferGpu = false;
+        settings.monteCarloSamples = 3; settings.monteCarloNoisePercent = 0.; settings.monteCarloMaxIterations = 1;
+        auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
+        ASSERT_TRUE(result); EXPECT_FALSE(result->result.confidenceAvailable);
+        EXPECT_FALSE(result->state.warnings.empty());
+        for (double sigma : result->sigma) EXPECT_DOUBLE_EQ(sigma, 0.);
+        for (const auto &sample : result->result.samples) EXPECT_DOUBLE_EQ(sample.chiSquared, 0.);
+    }
+
+    TEST(JFMFitEngineTests, RealSimplexConvergenceStopsBeforeIterationBudget)
+    {
+        auto record = MakeRecord("SD-0");
+        JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
+        JFMFitMonteCarloSettings settings; settings.preferGpu = false;
+        settings.monteCarloSamples = 1; settings.monteCarloMaxIterations = 1000;
+        settings.monteCarloNoisePercent = 0.; settings.monteCarloStartPerturbationPercent = 0.;
+        settings.parameters = {{"I0", {1e-15,1e-5,false}}, {"A", {.5,3.,true}}};
+        auto result = RunJFMMonteCarlo(record,*record.info.prefit,fit,settings);
+        ASSERT_TRUE(result); ASSERT_EQ(result->result.samples.size(),1);
+        const auto &sample = result->result.samples.front();
+        EXPECT_TRUE(sample.accepted); EXPECT_TRUE(sample.solverConverged);
+        EXPECT_EQ(sample.stopReason,"converged"); EXPECT_LT(sample.iterations,settings.monteCarloMaxIterations);
+    }
+
+    TEST(JFMFitEngineTests, ZeroAcceptedSamplesHaveFailureStatusAndMessage)
+    {
+        auto record = MakeRecord("SD-RsRsh-alpha-Rsh2-I_ph");
+        auto data = CreateRef<JFMCharacteristicData>();
+        for (int index=0; index<48; ++index) {
+            const double voltage = .9 + .2*index/47.;
+            data->voltage.push_back(voltage);
+            data->current.push_back(EvaluateJFMCurrent(record.info.prefit->modelId,voltage,300.,Parameters));
+        }
+        record.data = data; record.info.prefit->fitRange = {0,48,.9,1.1,"test"};
+        JFMFitState fit; fit.modelId = record.info.prefit->modelId; fit.parameters = record.info.prefit->parameters;
+        record.info.prefit->parameters["I_ph"].value = 10.;
+        JFMFitMonteCarloSettings settings; settings.preferGpu = false;
+        settings.monteCarloSamples = 2; settings.monteCarloMaxIterations = 2;
+        for (auto name : JFMModelParameterNames(fit.modelId)) settings.parameters[std::string(name)] = {1e-15,1e15,false};
+        settings.parameters["I_ph"] = {0.,1e6,true};
+        auto result = RunJFMMonteCarlo(record,*record.info.prefit,fit,settings);
+        ASSERT_TRUE(result); EXPECT_EQ(result->state.acceptedCount,0);
+        EXPECT_EQ(result->state.status,"failed"); EXPECT_FALSE(result->state.warnings.empty());
+        for (const auto &sample : result->result.samples) EXPECT_EQ(sample.stopReason,"non_finite");
+    }
 } // namespace SST::Prototypes::JFM

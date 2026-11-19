@@ -56,9 +56,9 @@ namespace SST::Prototypes::JFM
 		template <std::size_t Size>
 		std::array<bool, Size> ReadFlags(const YAML::Node &node, std::array<bool, Size> fallback)
 		{
-			if (!node || !node.IsSequence() || node.size() < Size)
+			if (!node || !node.IsSequence())
 				return fallback;
-			for (std::size_t index = 0; index < Size; ++index)
+			for (std::size_t index = 0; index < Size && index < node.size(); ++index)
 				fallback[index] = node[index].as<bool>();
 			return fallback;
 		}
