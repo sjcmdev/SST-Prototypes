@@ -17,6 +17,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <implot.h>
+#include <implot3d.h>
 
 #if defined(_MSC_VER)
 #pragma warning(push)
@@ -360,6 +361,7 @@ namespace SST
 		IMGUI_CHECKVERSION();
 		ImGui::CreateContext();
 		ImPlot::CreateContext();
+		ImPlot3D::CreateContext();
 		ImGuiIO &io = ImGui::GetIO();
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
@@ -380,6 +382,7 @@ namespace SST
 			DS_LOG_ERROR("ImGuiLayer attach failed: backend initialization failed");
 			ImGui_ImplOpenGL3_Shutdown();
 			ImGui_ImplGlfw_Shutdown();
+			ImPlot3D::DestroyContext();
 			ImPlot::DestroyContext();
 			ImGui::DestroyContext();
 			return;
@@ -527,6 +530,7 @@ namespace SST
 
 		ImGui_ImplOpenGL3_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
+		ImPlot3D::DestroyContext();
 		ImPlot::DestroyContext();
 		ImGui::DestroyContext();
 		m_Initialized = false;

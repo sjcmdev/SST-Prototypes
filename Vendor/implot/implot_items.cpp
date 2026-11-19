@@ -2812,7 +2812,7 @@ struct GetterHeatmapRowMaj {
         rect.HalfSize = HalfSize;
         const float t = ImClamp((float)ImRemap01(val, ScaleMin, ScaleMax),0.0f,1.0f);
         ImPlotContext& gp = *GImPlot;
-        rect.Color = gp.ColormapData.LerpTable(gp.Style.Colormap, t);
+        rect.Color = ImNanOrInf(val) ? 0 : gp.ColormapData.LerpTable(gp.Style.Colormap, t);
         return rect;
     }
     const _Indexer Indexer;
@@ -2848,7 +2848,7 @@ struct GetterHeatmapColMaj {
         rect.HalfSize = HalfSize;
         const float t = ImClamp((float)ImRemap01(val, ScaleMin, ScaleMax),0.0f,1.0f);
         ImPlotContext& gp = *GImPlot;
-        rect.Color = gp.ColormapData.LerpTable(gp.Style.Colormap, t);
+        rect.Color = ImNanOrInf(val) ? 0 : gp.ColormapData.LerpTable(gp.Style.Colormap, t);
         return rect;
     }
     // const T* const Values;

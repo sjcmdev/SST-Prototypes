@@ -1,5 +1,5 @@
 #include "IO/JFMPlotExport.hpp"
-#include "Prototypes/PlotLab/src/PlotLabExport.hpp"
+#include "Core/PlotExport/PlotExport.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -12,7 +12,7 @@
 namespace SST::Prototypes::JFM
 {
     namespace pl = sst::plotlab;
-    namespace host = SST::Prototypes::PlotLab;
+    namespace host = SST::PlotExport;
     namespace {
         WeakRef<CommandRegistry> appCommands;
         WeakRef<JobSystem> appJobs;
@@ -36,7 +36,7 @@ namespace SST::Prototypes::JFM
             void Execute(JobContext &context) override {
                 context.ThrowIfCancellationRequested();
                 // ExportGraph owns the GIL scope, matching PlotLab's existing exporter job.
-                host::ExportGraph(snapshot, std::filesystem::u8path(path), format, dpi, SST_PLOTLAB_PYTHON_ROOT);
+                host::ExportGraph(snapshot, std::filesystem::u8path(path), format, dpi, SST_PLOT_EXPORT_PYTHON_ROOT);
                 context.SetProgress(1, 1);
             }
         };
@@ -115,7 +115,7 @@ namespace SST::Prototypes::JFM
                 return result;
             }
             auto project = pl::Project::fromJson(request.at("project").dump());
-            sst::ui::plot::PlotViewState view;
+            sst::ui::plot::PlotViewState view = request.contains("view") ? pl::viewStateFromJson(request.at("view").dump()) : sst::ui::plot::PlotViewState{};
             const auto &r = request.at("ranges");
             if (r.size() != 4) throw std::invalid_argument("ranges requires four values");
             view.viewport = sst::ui::plot::Bounds{r.at(0), r.at(1), r.at(2), r.at(3)};

@@ -166,9 +166,10 @@ NB_MODULE(sst_caplab, module)
                 if (operation=="import" && r.contains("options")) state.importOptions=r.at("options").dump();
                 if (r.contains("graph_id")) state.document.project.graph=r.at("graph_id").get<pl::Id>();
                 Validate(state.document.project);
-                if (operation=="export" && path.Native().extension()==".png") {
+                if (operation=="export" && (path.Native().extension()==".png" || path.Native().extension()==".svg" || path.Native().extension()==".pdf")) {
+                    if(r.contains("view")) state.view=pl::viewStateFromJson(r.at("view").dump());
                     const auto b=r.at("ranges").get<std::vector<double>>();
-                    if (b.size()!=4) throw std::runtime_error("PNG requires four resolved preview ranges");
+                    if (b.size()!=4) throw std::runtime_error("Figure export requires four resolved preview ranges");
                     state.view.viewport=sst::ui::plot::Bounds{b[0],b[1],b[2],b[3]};
                     if (r.contains("visibility")) for (const auto &v : r.at("visibility")) state.view.visibility[state.document.project.engine->series(v.at("plot_id").get<pl::Id>()).id]=v.at("visible").get<bool>();
                 }

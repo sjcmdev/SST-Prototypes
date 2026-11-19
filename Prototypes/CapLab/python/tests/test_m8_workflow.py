@@ -150,8 +150,8 @@ def test_frozen_m8_manifest():
 
 
 def test_png_snapshot_parity_every_module_and_missing_dependency(tmp_path, monkeypatch):
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3]/"PlotLab/python"))
-    import sst_plotlab.exporter as renderer
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[4]/"Core/PlotExport/python"))
+    import sst_plot_export.exporter as renderer
     from test_m6_fit import fixture
     p = pipeline()
     is_project, settings = fixture()
@@ -168,7 +168,7 @@ def test_png_snapshot_parity_every_module_and_missing_dependency(tmp_path, monke
                 path=tmp_path/(str(graph)+a["type"]+".png")
                 r=run(project,"export",graph_id=graph,path=str(path),ranges=[1,10,-1,1])
                 if a["type"] == "Circuit" and graph == a["graphs"][0]:
-                    assert seen[-1].get("custom_axes") is True
+                    assert seen[-1].get("equal_aspect") is True
                     figure = renderer.build_figure(seen[-1])
                     figure.canvas.draw()
                     box = figure.axes[0].get_window_extent()

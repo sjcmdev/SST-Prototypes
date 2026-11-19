@@ -5,7 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <tuple>
-#include <sst/ui/Plot/Axis.hpp>
+#include <cstdio>
 
 namespace SST::Prototypes::JFM
 {
@@ -88,8 +88,7 @@ namespace SST::Prototypes::JFM
         }
         const auto &old = std::get<pl::Layer>(project.object(layer).data).spec;
         if (old.x.label != spec.x.label || old.y.label != spec.y.label || old.x.scale != spec.x.scale
-            || old.y.scale != spec.y.scale || old.x.labels.format != spec.x.labels.format || old.y.labels.format != spec.y.labels.format
-            || old.x.labels.formatString != spec.x.labels.formatString || old.y.labels.formatString != spec.y.labels.formatString
+            || old.y.scale != spec.y.scale
             || old.legend.visible != spec.legend.visible
             || old.legend.outside != spec.legend.outside || old.legend.interactive != spec.legend.interactive)
             changes.push_back({layer, graph, "Axes", 0, pl::Layer{std::move(spec)}});
@@ -102,8 +101,14 @@ namespace SST::Prototypes::JFM
         if (exportView.viewport) {
             const auto &b = *exportView.viewport;
             auto ticks = [](const auto &axis, double lo, double hi, auto &out) {
-                if (out.empty()) for (const auto &tick : plot::BuildTickPlan(axis, lo, hi).ticks)
-                    out.push_back({tick.value, tick.label, tick.major});
+                if (!out.empty()) return;
+                const bool log=axis.scale==plot::AxisScale::Log10;
+                if(log) {lo=std::log10(lo);hi=std::log10(hi);}
+                for(int i=0;i<=5;++i) {
+                    const auto value=log?std::pow(10.,lo+(hi-lo)*i/5):lo+(hi-lo)*i/5;
+                    char label[64];std::snprintf(label,sizeof(label),"%.6g",value);
+                    out.push_back({value,label,true});
+                }
             };
             ticks(spec.x, b.minX, b.maxX, exportView.xTicks);
             ticks(spec.y, b.minY, b.maxY, exportView.yTicks);
@@ -136,8 +141,6 @@ namespace SST::Prototypes::JFM
         }
         plot::PlotSpec spec; spec.x.label = xLabel; spec.y.label = yLabel;
         spec.legend.outside = true;
-        spec.x.labels.format = spec.y.labels.format = plot::LabelFormat::Custom;
-        spec.x.labels.formatString = spec.y.labels.formatString = "%.6g";
         doc.EndFrame(spec);
         auto padded = [&](double lo, double hi) {
             // Physical values can be far below one ampere; never impose an absolute span.
