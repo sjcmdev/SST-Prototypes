@@ -1,4 +1,5 @@
 #pragma once
+#include "Presentation/Panels/HostedWindows.hpp"
 #include <sst/ui/Plot/RangeSelector.hpp>
 #include "Presentation/JFMPlotDocument.hpp"
 
@@ -47,6 +48,7 @@ namespace SST::Prototypes::JFM
 		void RenderContent() override;
 
 	private:
+        HostedWindows m_Windows;
 		struct PlotCurveGroup
 		{
 			std::string key;

@@ -113,7 +113,9 @@ namespace SST::Prototypes::JFM
 
 	WindowDuplicate MonteCarloScatterPanel::Duplicate() const
 	{
-		return {CreateRef<MonteCarloScatterPanel>(m_Store, m_Settings, m_EventBus, GetTitle(), IsVisible()), {}};
+		auto copy = CreateRef<MonteCarloScatterPanel>(m_Store, m_Settings, m_EventBus, GetTitle(), IsVisible());
+        copy->m_Windows.UseInstanceIdentity();
+        return {copy, {}};
 	}
 
 	void MonteCarloScatterPanel::AddGroup(std::string title)
@@ -553,11 +555,8 @@ namespace SST::Prototypes::JFM
 			ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_Once);
 			plot.needsInitialPlacement = false;
 		}
-		if (!ImGui::Begin(title.c_str(), &plot.open, ImGuiWindowFlags_HorizontalScrollbar))
-		{
-			ImGui::End();
-			return;
-		}
+        m_Windows.Render(title, plot.open, ImGuiWindowFlags_HorizontalScrollbar, [&] {
+
 		if (ImGui::Button("Save"))
 		{
 			const Path defaultPath = OutputDirectory(plot.ref);
@@ -581,11 +580,12 @@ namespace SST::Prototypes::JFM
 		}
 		const float height = std::max(360.0f, ImGui::GetContentRegionAvail().y - 8.0f);
 		(void)RenderJFMCovariancePlot(*result, plot.options, "plot", height, *plot.document);
-		ImGui::End();
+		});
 	}
 
 	void MonteCarloScatterPanel::RenderContent()
 	{
+        m_Windows.BeginFrame();
 		if (m_Store == nullptr)
 		{
 			ImGui::TextDisabled("Workspace unavailable");
@@ -750,5 +750,6 @@ namespace SST::Prototypes::JFM
 			group.plots.erase(std::remove_if(group.plots.begin(), group.plots.end(), [](const PlotState &plot) {
 				return plot.remove;
 			}), group.plots.end());
+        m_Windows.EndFrame();
 	}
 } // namespace SST::Prototypes::JFM

@@ -3,7 +3,7 @@
 #include "App/JFMUserSettings.hpp"
 #include "Core/Commands/CommandContext.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
-#include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 namespace SST
@@ -13,7 +13,7 @@ namespace SST
 
 namespace SST::Prototypes::JFM
 {
-	class MonteCarloSettingsPanel final : public IPanel
+	class MonteCarloSettingsPanel final : public EditorWindow
 	{
 	public:
 		MonteCarloSettingsPanel(
@@ -24,8 +24,8 @@ namespace SST::Prototypes::JFM
 			std::string title = "MC Settings",
 			bool visibleByDefault = true);
 
-		[[nodiscard]] Ref<IPanel> Clone() const override;
-		void Render() override;
+		[[nodiscard]] WindowDuplicate Duplicate() const override;
+		void RenderContent() override;
 
 	private:
 		void Execute(const char *commandId, CommandContext context = {}) const;

@@ -246,11 +246,14 @@ namespace SST::Prototypes::JFM
 
 	Ref<IPanel> JFMImportDialogPanel::Clone() const
 	{
-		return CreateRef<JFMImportDialogPanel>(m_EventBus, m_Store, m_State, m_Settings, m_CommandRegistry, m_UndoStack);
+		auto copy = CreateRef<JFMImportDialogPanel>(m_EventBus, m_Store, m_State, m_Settings, m_CommandRegistry, m_UndoStack);
+        copy->m_Windows.UseInstanceIdentity();
+        return copy;
 	}
 
 	void JFMImportDialogPanel::Render()
 	{
+        m_Windows.BeginFrame();
 		if (m_State != nullptr)
 		{
 			if (auto request = m_State->ConsumeOpenRequest())
@@ -258,21 +261,16 @@ namespace SST::Prototypes::JFM
 				loadRequest(std::move(*request));
 				m_Open = true;
 				m_PreviewOpen = true;
+                m_Windows.Activate("Import Data");
+                m_Windows.Activate("Import Preview");
 			}
 		}
 
-		if (!m_Open)
-			return;
+		if (!m_Open) { m_Windows.EndFrame(); return; }
 
-		bool open = true;
 		ImGui::SetNextWindowSize(ImVec2(1180.0f, 760.0f), ImGuiCond_FirstUseEver);
-		if (!ImGui::Begin("Import Data", &open, ImGuiWindowFlags_NoDocking))
-		{
-			finishRangeUndoGroup();
-			ImGui::End();
-			renderPreviewWindow();
-			return;
-		}
+        const bool rendered = m_Windows.Render("Import Data", m_Open, ImGuiWindowFlags_NoDocking, [&] {
+
 		const ImGuiIO &io = ImGui::GetIO();
 		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && io.KeyCtrl && !io.WantTextInput && !ImGui::IsAnyItemActive())
 		{
@@ -448,14 +446,11 @@ namespace SST::Prototypes::JFM
 			ImGui::EndTabBar();
 		}
 
-		if (!open)
-		{
-			finishRangeUndoGroup();
-			m_Open = false;
-			m_PreviewOpen = false;
-		}
-		ImGui::End();
-		renderPreviewWindow();
+        });
+        if (!rendered || !m_Open) finishRangeUndoGroup();
+        if (!m_Open) m_PreviewOpen = false;
+        renderPreviewWindow();
+        m_Windows.EndFrame();
 	}
 
 	void JFMImportDialogPanel::renderAnalysisTab(bool fitMode)
@@ -1737,16 +1732,11 @@ namespace SST::Prototypes::JFM
 			return;
 
 		ImGui::SetNextWindowSize(ImVec2(1180.0f, 720.0f), ImGuiCond_FirstUseEver);
-		if (!ImGui::Begin("Import Preview", &m_PreviewOpen, ImGuiWindowFlags_NoDocking))
-		{
-			ImGui::End();
-			return;
-		}
+        m_Windows.Render("Import Preview", m_PreviewOpen, ImGuiWindowFlags_NoDocking, [&] {
 
 		if (m_PreviewFiles.empty())
 		{
 			ImGui::TextDisabled("No previewable data files.");
-			ImGui::End();
 			return;
 		}
 
@@ -1822,7 +1812,7 @@ namespace SST::Prototypes::JFM
 		ImGui::TextUnformatted(selectedItem == nullptr || selectedItem->text.empty() ? "No preview" : selectedItem->text.c_str());
 		ImGui::EndChild();
 		ImGui::EndChild();
-		ImGui::End();
+        });
 	}
 
 	JFMImportOptions JFMImportDialogPanel::buildOptions() const

@@ -4,7 +4,7 @@
 #include "Core/Commands/CommandContext.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "App/JFMUserSettings.hpp"
-#include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 #include <array>
@@ -18,7 +18,7 @@ namespace SST
 
 namespace SST::Prototypes::JFM
 {
-	class ControlPanel final : public IPanel
+	class ControlPanel final : public EditorWindow
 	{
 	public:
 		ControlPanel(
@@ -28,8 +28,9 @@ namespace SST::Prototypes::JFM
 			WeakRef<CommandRegistry> commandRegistry,
 			WeakRef<UndoStack> undoStack);
 
-		[[nodiscard]] Ref<IPanel> Clone() const override;
-		void Render() override;
+		[[nodiscard]] WindowDuplicate Duplicate() const override;
+		void RenderContent() override;
+        void OnContentSkipped() override;
 
 	private:
 		void Execute(const char *commandId, CommandContext context = {}) const;

@@ -7,34 +7,22 @@
 namespace SST::Prototypes::JFM
 {
 	CharacteristicDetailsPanel::CharacteristicDetailsPanel(Ref<JFMWorkspaceStore> store)
-		: IPanel("Characteristic Details", true), m_Store(std::move(store))
+		: EditorWindow("jfm.details", "Characteristic Details", true, {.duplicable = true}), m_Store(std::move(store))
 	{
 	}
 
-	Ref<IPanel> CharacteristicDetailsPanel::Clone() const
+	WindowDuplicate CharacteristicDetailsPanel::Duplicate() const
 	{
-		return CreateRef<CharacteristicDetailsPanel>(*this);
+		return {CreateRef<CharacteristicDetailsPanel>(*this), {}};
 	}
 
-	void CharacteristicDetailsPanel::Render()
+	void CharacteristicDetailsPanel::RenderContent()
 	{
-		if (!IsVisible())
-			return;
-
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible))
-		{
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
-
 		auto selected = m_Store != nullptr ? m_Store->GetSelectedCharacteristicRecord() : std::optional<JFMCharacteristicRecord>{};
 		if (!selected)
 		{
 			ImGui::TextDisabled("No characteristic selected");
-			ImGui::End();
-			SetVisible(visible);
+
 			return;
 		}
 
@@ -62,8 +50,5 @@ namespace SST::Prototypes::JFM
 			if (info.qc.warnings.empty())
 				ImGui::TextDisabled("No warnings");
 		}
-
-		ImGui::End();
-		SetVisible(visible);
 	}
 } // namespace SST::Prototypes::JFM

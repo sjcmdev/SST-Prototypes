@@ -1,4 +1,5 @@
 #pragma once
+#include "Presentation/Panels/HostedWindows.hpp"
 #include <sst/ui/Plot/RangeSelector.hpp>
 
 #include <array>
@@ -67,6 +68,7 @@ namespace SST::Prototypes::JFM
 		void Render() override;
 
 	private:
+        HostedWindows m_Windows;
 		struct VariableRuleDraft
 		{
 			std::array<char, 32> name = {};

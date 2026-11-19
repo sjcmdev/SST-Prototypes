@@ -1,7 +1,7 @@
 ﻿#pragma once
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Layer.hpp"
-#include "Core/Presentation/Panels/IPanel.hpp"
+#include "Core/Presentation/Panels/HostedWindows.hpp"
 #include "PlotLabDocument.hpp"
 #include "PlotLabExport.hpp"
 #include <set>
@@ -64,11 +64,14 @@ namespace SST::Prototypes::PlotLab
             : IPanel("Project Explorer"), state(std::move(session)), previewColumn(previewColumn) {}
         Ref<IPanel> Clone() const override
         {
-            return CreateRef<WorkspacePanel>(state);
+            auto copy = CreateRef<WorkspacePanel>(state);
+            copy->windows.UseInstanceIdentity();
+            return copy;
         }
         void Render() override;
 
       private:
+        HostedWindows windows;
         Ref<Session> state;
         pl::Id rename = 0, remove = 0, metadata = 0, exportGraph = 0;
         pl::Id previewColumn = 0;

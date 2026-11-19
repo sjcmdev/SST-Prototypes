@@ -3,7 +3,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Events/JFMEvents.hpp"
-#include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 #include <cstdint>
@@ -12,13 +12,14 @@
 
 namespace SST::Prototypes::JFM
 {
-	class MonteCarloCurvesPanel final : public IPanel, public EventReceiver
+	class MonteCarloCurvesPanel final : public EditorWindow, public EventReceiver
 	{
 	public:
 		MonteCarloCurvesPanel(Ref<JFMWorkspaceStore> store, Ref<EventBus> eventBus, std::string title = "MC Curves", bool visibleByDefault = false);
 
-		[[nodiscard]] Ref<IPanel> Clone() const override;
-		void Render() override;
+		[[nodiscard]] WindowDuplicate Duplicate() const override;
+		void RenderContent() override;
+        int WindowFlags() const override;
 
 	private:
 		void AddPlot(JFMCharacteristicRef ref);

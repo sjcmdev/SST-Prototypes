@@ -35,4 +35,8 @@ The `SSTWindows` settings handler adds state and named workspaces to the existin
 
 ## Migration and limits
 
-PrototypeTemplate, JFMOverviewPanel and ImportStatusPanel use the base; JFM content/store calls stay unchanged and old INI placement is imported. Other IPanel windows keep their existing chrome until migration. No ImGui patch. Pin freezes geometry and floats/restores docking; maximize uses the main viewport. Arrangement skips pinned/minimized/closed views. The minimized strip has one row. Short names label titles; long names appear in context menus. Proposal removal points are listed in WindowChromeLab/REPORT.md.
+PlotLab and JFM application panels use the shared chrome. Static panels implement `RenderContent`; `HostedWindows` adapts dynamic windows whose contents must stay in their owner's current document/undo scope. Call `BeginFrame`, synchronous `Render` callbacks, then `EndFrame` to unregister removed views. Hosted entries participate in WindowWorkspace commands and persistence, while their registry render is empty to avoid drawing twice. No callback or document reference is retained by the registry. `OnContentSkipped` lets static panels finish pending undo groups or release input contexts when hidden/minimized.
+
+Existing identities remain unchanged for hosted views; duplicated owners receive separate IDs. Static panels with plain legacy names import their INI geometry and dock ID into `###sst-window-ID` on first render. The hosted factory restores workspace entries before owners reattach their content. JFM's standalone `solver-to-integrate/gui.cpp` is outside the application build and retains its own windows.
+
+No ImGui patch. Pin freezes geometry and floats/restores docking; maximize uses the main viewport. Arrangement skips pinned/minimized/closed views. The minimized strip has one row. Short names label titles; long names appear in context menus. Proposal removal points are listed in WindowChromeLab/REPORT.md.

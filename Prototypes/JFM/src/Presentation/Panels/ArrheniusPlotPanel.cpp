@@ -734,13 +734,11 @@ namespace SST::Prototypes::JFM
 		if (m_PlotWindows.empty())
 			return;
 		ImGui::SetNextWindowSize(ImVec2(1200.0f, 760.0f), ImGuiCond_FirstUseEver);
-		const bool contentVisible = ImGui::Begin("Arrhenius Plot Dock###arrhenius_plot_dock", nullptr, ImGuiWindowFlags_HorizontalScrollbar);
-		m_DockspaceId = ImGui::GetID("##arrhenius_dockspace");
-		if (contentVisible)
-			RenderDockspace();
-		else
-			ImGui::DockSpace(m_DockspaceId, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_KeepAliveOnly);
-		ImGui::End();
+		const bool rendered = m_Windows.Render("Arrhenius Plot Dock###arrhenius_plot_dock", m_DockHostOpen, ImGuiWindowFlags_HorizontalScrollbar, [&] {
+            RenderDockspace();
+        });
+        if (!rendered && m_DockspaceId != 0)
+            ImGui::DockSpace(m_DockspaceId, ImVec2(0, 0), ImGuiDockNodeFlags_KeepAliveOnly);
 	}
 
 	void ArrheniusPlotPanel::RenderSelector(ProjectHandle projectHandle, const JFMProject &snapshot)
@@ -837,7 +835,6 @@ namespace SST::Prototypes::JFM
 		}
 		window.fitModel = std::clamp(window.fitModel, 0, static_cast<int>(IM_ARRAYSIZE(FitModelLabels)) - 1);
 
-		bool open = window.open;
 		const std::string title = window.title + "###arrhenius_plot_window_" + std::to_string(window.id);
 		if (window.needsDock && m_DockspaceId != 0)
 		{
@@ -858,14 +855,8 @@ namespace SST::Prototypes::JFM
 			ImGui::SetNextWindowSize(ImVec2(width, height), ImGuiCond_Once);
 			window.needsInitialPlacement = false;
 		}
-		if (!ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_HorizontalScrollbar))
-		{
-			for (auto &series : window.series) (void)series.rangeInteraction.Finish();
-			ImGui::End();
-			window.open = open;
-			return;
-		}
-		window.open = open;
+        const bool rendered = m_Windows.Render(title, window.open, ImGuiWindowFlags_HorizontalScrollbar, [&] {
+
 		m_ActivePlotId = window.id;
 
 		auto addFitToSeries = [&](std::size_t index) {
@@ -1354,16 +1345,18 @@ namespace SST::Prototypes::JFM
 		}
 
 		window.fitColumnsNextFrame = false;
-		ImGui::End();
+        });
+        if (!rendered) for (auto &series : window.series) (void)series.rangeInteraction.Finish();
 	}
 
 	void ArrheniusPlotPanel::Render()
 	{
+        m_Windows.BeginFrame();
         if (m_Store == nullptr) {
-            if (!IsVisible()) return;
+            if (!IsVisible()) { m_Windows.EndFrame(); return; }
             bool visible = IsVisible();
-            if (ImGui::Begin(GetTitle().c_str(), &visible)) ImGui::TextDisabled("Workspace unavailable");
-            ImGui::End(); SetVisible(visible); return;
+            m_Windows.Render(GetTitle(), visible, 0, [] { ImGui::TextDisabled("Workspace unavailable"); });
+            m_Windows.EndFrame(); SetVisible(visible); return;
         }
 
 		const ProjectHandle projectHandle = m_Store->GetActiveProjectHandle();
@@ -1383,7 +1376,7 @@ namespace SST::Prototypes::JFM
 		const JFMProject snapshot = m_Store->GetProjectSnapshot(projectHandle);
         if (IsVisible()) {
             bool visible = IsVisible();
-            if (ImGui::Begin(GetTitle().c_str(), &visible, ImGuiWindowFlags_HorizontalScrollbar)) {
+            m_Windows.Render(GetTitle(), visible, ImGuiWindowFlags_HorizontalScrollbar, [&] {
 				RenderSelector(projectHandle, snapshot);
 				ImGui::Separator();
 				if (m_PlotWindows.empty())
@@ -1413,8 +1406,8 @@ namespace SST::Prototypes::JFM
 					}
 					ImGui::EndTable();
 				}
-            }
-            ImGui::End(); SetVisible(visible);
+            });
+            SetVisible(visible);
         }
 
 		RenderDockspaceHost();
@@ -1424,5 +1417,6 @@ namespace SST::Prototypes::JFM
 			return !window.open;
 		}), m_PlotWindows.end());
 		PersistLayout(projectHandle);
+        m_Windows.EndFrame();
 	}
 } // namespace SST::Prototypes::JFM

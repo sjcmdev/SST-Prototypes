@@ -253,7 +253,9 @@ namespace SST::Prototypes::JFM
 
 	WindowDuplicate RawPlotPanel::Duplicate() const
 	{
-		return {CreateRef<RawPlotPanel>(m_Store, m_Settings, m_EventBus, m_CommandRegistry, m_UndoStack, GetTitle(), IsVisible()), {}};
+		auto copy = CreateRef<RawPlotPanel>(m_Store, m_Settings, m_EventBus, m_CommandRegistry, m_UndoStack, GetTitle(), IsVisible());
+        copy->m_Windows.UseInstanceIdentity();
+        return {copy, {}};
 	}
 
 	RawPlotPanel::PlotArea RawPlotPanel::CreatePlotArea(ProjectHandle project)
@@ -655,6 +657,7 @@ namespace SST::Prototypes::JFM
 
 	void RawPlotPanel::RenderContent()
 	{
+        m_Windows.BeginFrame();
 		if (m_Store == nullptr)
 		{
 			ImGui::TextDisabled("Workspace unavailable");
@@ -716,19 +719,7 @@ namespace SST::Prototypes::JFM
 
 			bool plotVisible = true;
 			const std::string windowTitle = area.title + "###jfm_raw_plot_window_" + std::to_string(area.id);
-			if (!ImGui::Begin(windowTitle.c_str(), &plotVisible))
-			{
-				FinishRangeUndoGroup(area);
-				ImGui::End();
-				if (!plotVisible)
-				{
-					FinishRangeUndoGroup(area);
-					m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
-				}
-				else
-					++areaIndex;
-				continue;
-			}
+			const bool rendered = m_Windows.Render(windowTitle, plotVisible, 0, [&] {
 
 			ImGui::PushID(static_cast<int>(area.id));
 			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
@@ -775,10 +766,8 @@ namespace SST::Prototypes::JFM
 			if (m_PlotAreas.size() > 1 && ImGui::Button("Close Plot"))
 			{
 				ImGui::PopID();
-				ImGui::End();
-				FinishRangeUndoGroup(area);
-				m_PlotAreas.erase(m_PlotAreas.begin() + static_cast<std::ptrdiff_t>(areaIndex));
-				continue;
+				plotVisible = false;
+				return;
 			}
 
 			int scale = static_cast<int>(area.scale);
@@ -833,8 +822,7 @@ namespace SST::Prototypes::JFM
 			const std::string curvesTitle = area.title + " Curves###jfm_raw_plot_curves_" + std::to_string(area.id);
 			if (area.curvesWindowVisible)
 			{
-				if (ImGui::Begin(curvesTitle.c_str(), &area.curvesWindowVisible, ImGuiWindowFlags_AlwaysAutoResize))
-				{
+				m_Windows.Render(curvesTitle, area.curvesWindowVisible, ImGuiWindowFlags_AlwaysAutoResize, [&] {
 					if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 						(void)HandleUndoShortcuts();
 					if (area.showOnlyActive && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive())
@@ -1007,8 +995,7 @@ namespace SST::Prototypes::JFM
 					}
 					if (area.groups.empty())
 						ImGui::TextDisabled("Drop characteristics here or use selection.");
-				}
-				ImGui::End();
+				});
 			}
 			area.groupTreeOpenRequest = 0;
 
@@ -1228,7 +1215,8 @@ namespace SST::Prototypes::JFM
 				ImGui::EndDragDropTarget();
 			}
 			ImGui::PopID();
-			ImGui::End();
+            });
+            if (!rendered) FinishRangeUndoGroup(area);
 
 			if (!plotVisible)
 			{
@@ -1238,5 +1226,6 @@ namespace SST::Prototypes::JFM
 			else
 				++areaIndex;
 		}
+        m_Windows.EndFrame();
 	}
 } // namespace SST::Prototypes::JFM

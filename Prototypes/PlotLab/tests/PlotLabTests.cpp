@@ -710,3 +710,138 @@ TEST_F(PlotLabApp, ColumnValuesInterpolationAcrossDifferentSheetLengths)
     doc.project->recompute().wait();
     const auto& values=Values(sourceY); ASSERT_EQ(values.size(),5u); EXPECT_EQ(values[2],3); EXPECT_TRUE(std::isnan(values[3]));
 }
+#include "Presentation/Panels/HostedEditorWindow.hpp"
+#include "Presentation/Panels/WindowWorkspace.hpp"
+#include <imgui.h>
+#include <imgui_internal.h>
+
+TEST(WindowMigration, LegacyIdentityFlagsGeometryAndWorkspaceActions)
+{
+    ImGui::CreateContext();
+    struct Cleanup { ~Cleanup() { ImGui::DestroyContext(); } } cleanup;
+    auto &io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.DisplaySize = ImVec2(1280, 800);
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigDebugHighlightIdConflicts = true;
+    io.Fonts->AddFontDefault(); io.Fonts->Build();
+    PanelRegistry panels;
+    auto workspace = CreateRef<WindowWorkspace>(panels);
+    auto commands = CreateRef<CommandRegistry>();
+    ASSERT_TRUE(workspace->Bind(commands, {}));
+    auto window = CreateRef<HostedEditorWindow>("Graph: Data###Graph: 1:2");
+    const auto id = panels.AddExisting(window);
+    const auto identity = ImHashStr(window->ImGuiName().c_str());
+    EXPECT_EQ(identity, ImHashStr("Graph: Data###Graph: 1:2"));
+    int rendered = 0;
+    auto frame = [&] {
+        ImGui::NewFrame();
+        ImGui::SetNextWindowSize(ImVec2(900, 300), ImGuiCond_FirstUseEver);
+        window->Render([&] { ++rendered; ImGui::TextUnformatted("Graph"); }, ImGuiWindowFlags_HorizontalScrollbar);
+        // The registry must not draw hosted content a second time.
+        for (const auto &entry : panels.Entries()) entry.panel->Render();
+        workspace->RenderOverlays();
+        ImGui::Render();
+        EXPECT_EQ(GImGui->DebugDrawIdConflictsCount, 0);
+    };
+    frame(); frame();
+    EXPECT_EQ(rendered, 2);
+    auto *gui = ImGui::FindWindowByName(window->ImGuiName().c_str());
+    ASSERT_NE(gui, nullptr);
+    EXPECT_TRUE(gui->Flags & ImGuiWindowFlags_HorizontalScrollbar);
+    EXPECT_FLOAT_EQ(gui->SizeFull.x, 900);
+    EXPECT_FLOAT_EQ(gui->SizeFull.y, 300);
+    window->SetLegacyName("Graph: Renamed###Graph: 1:2");
+    EXPECT_EQ(ImHashStr(window->ImGuiName().c_str()), identity);
+    EXPECT_EQ(window->ImGuiName().find(ICON_FA_WINDOW_MAXIMIZE " Graph: Renamed"), 0);
+    EXPECT_TRUE(workspace->Execute({WindowAction::Minimize, id}));
+    frame();
+    EXPECT_EQ(rendered, 2);
+    EXPECT_TRUE(workspace->Execute({WindowAction::Restore, id}));
+    frame();
+    EXPECT_EQ(rendered, 3);
+    EXPECT_TRUE(workspace->Execute({WindowAction::Close, id}));
+    frame();
+    EXPECT_EQ(rendered, 3);
+    EXPECT_FALSE(window->IsVisible());
+
+    // A fresh process restores hosted windows before app coordinators attach their content.
+    const auto saved = workspace->Save();
+    EXPECT_TRUE(panels.Remove(id));
+    EXPECT_EQ(panels.AddExisting(window, id), id);
+    EXPECT_EQ(ImHashStr(window->ImGuiName().c_str()), identity);
+    PanelRegistry restoredPanels;
+    auto restored = CreateRef<WindowWorkspace>(restoredPanels);
+    EXPECT_TRUE(restored->Load(saved));
+    ASSERT_NE(restored->Find(id), nullptr);
+    EXPECT_EQ(restored->Find(id)->ImGuiName(), window->ImGuiName());
+    EXPECT_FALSE(restored->Find(id)->IsVisible());
+}
+
+TEST(WindowMigration, PlainTitleIniMappingAndIndependentCopies)
+{
+    ImGui::CreateContext();
+    struct Cleanup { ~Cleanup() { ImGui::DestroyContext(); } } cleanup;
+    auto &io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.DisplaySize = ImVec2(1280, 800);
+    io.ConfigDebugHighlightIdConflicts = true;
+    io.Fonts->AddFontDefault(); io.Fonts->Build();
+    ImGui::LoadIniSettingsFromMemory("[Window][Import Data]\nPos=42,74\nSize=777,555\nCollapsed=0\n");
+    PanelRegistry panels;
+    auto original = CreateRef<HostedEditorWindow>("Import Data");
+    EXPECT_EQ(ImHashStr(original->ImGuiName().c_str()), ImHashStr("Import Data"));
+    auto copy = CreateRef<HostedEditorWindow>("Data###data", false);
+    auto otherCopy = CreateRef<HostedEditorWindow>("Data###data", false);
+    panels.AddExisting(original); panels.AddExisting(copy); panels.AddExisting(otherCopy);
+    EXPECT_NE(ImHashStr(copy->ImGuiName().c_str()), ImHashStr(otherCopy->ImGuiName().c_str()));
+    for (int i = 0; i < 2; ++i)
+    {
+        ImGui::NewFrame();
+        original->Render([] { ImGui::TextUnformatted("Import"); });
+        ImGui::Render();
+        EXPECT_EQ(GImGui->DebugDrawIdConflictsCount, 0);
+    }
+    auto *gui = ImGui::FindWindowByName(original->ImGuiName().c_str());
+    ASSERT_NE(gui, nullptr);
+    EXPECT_FLOAT_EQ(gui->Pos.x, 42);
+    EXPECT_FLOAT_EQ(gui->Pos.y, 74);
+    EXPECT_FLOAT_EQ(gui->SizeFull.x, 777);
+    EXPECT_FLOAT_EQ(gui->SizeFull.y, 555);
+}
+
+TEST(WindowMigration, OlderWorkspaceDoesNotOverrideMigratedPanelIni)
+{
+    ImGui::CreateContext();
+    struct Cleanup { ~Cleanup() { ImGui::DestroyContext(); } } cleanup;
+    auto &io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.DisplaySize = ImVec2(1280, 800);
+    io.Fonts->AddFontDefault(); io.Fonts->Build();
+    ImGui::LoadIniSettingsFromMemory("[Window][Project Tree]\nPos=42,74\nSize=777,555\nCollapsed=0\n");
+    PanelRegistry panels;
+    auto workspace = CreateRef<WindowWorkspace>(panels);
+    panels.AddExisting(CreateRef<HostedEditorWindow>("Existing"));
+    const auto olderWorkspace = workspace->Save();
+    class MigratedPanel final : public EditorWindow
+    {
+    public:
+        MigratedPanel() : EditorWindow("jfm.project-tree", "Project Tree") {}
+        void RenderContent() override {}
+    };
+    auto migrated = CreateRef<MigratedPanel>();
+    panels.AddExisting(migrated);
+    ASSERT_TRUE(workspace->Load(olderWorkspace));
+    for (int frame = 0; frame < 2; ++frame)
+    {
+        ImGui::NewFrame();
+        migrated->Render();
+        ImGui::Render();
+    }
+    auto *gui = ImGui::FindWindowByName(migrated->ImGuiName().c_str());
+    ASSERT_NE(gui, nullptr);
+    EXPECT_FLOAT_EQ(gui->Pos.x, 42);
+    EXPECT_FLOAT_EQ(gui->Pos.y, 74);
+    EXPECT_FLOAT_EQ(gui->SizeFull.x, 777);
+    EXPECT_FLOAT_EQ(gui->SizeFull.y, 555);
+}

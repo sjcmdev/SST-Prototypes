@@ -109,7 +109,7 @@ namespace SST::Prototypes::JFM
 		WeakRef<CommandRegistry> commandRegistry,
 		std::string title,
 		bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault),
+		: EditorWindow("jfm.mc-settings", std::move(title), visibleByDefault, {.duplicable = true}),
 		  m_Store(std::move(store)),
 		  m_Settings(std::move(settings)),
 		  m_EventBus(std::move(eventBus)),
@@ -117,9 +117,9 @@ namespace SST::Prototypes::JFM
 	{
 	}
 
-	Ref<IPanel> MonteCarloSettingsPanel::Clone() const
+	WindowDuplicate MonteCarloSettingsPanel::Duplicate() const
 	{
-		return CreateRef<MonteCarloSettingsPanel>(m_Store, m_Settings, m_EventBus, m_CommandRegistry, GetTitle(), IsVisible());
+		return {CreateRef<MonteCarloSettingsPanel>(m_Store, m_Settings, m_EventBus, m_CommandRegistry, GetTitle(), IsVisible()), {}};
 	}
 
 	void MonteCarloSettingsPanel::Execute(const char *commandId, CommandContext context) const
@@ -152,23 +152,12 @@ namespace SST::Prototypes::JFM
 		m_Status = "MC queued, seed " + std::to_string(m_Draft.monteCarloSeed);
 	}
 
-	void MonteCarloSettingsPanel::Render()
+	void MonteCarloSettingsPanel::RenderContent()
 	{
-		if (!IsVisible())
-			return;
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible))
-		{
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
-
 		if (m_Store == nullptr || m_Settings == nullptr)
 		{
 			ImGui::TextDisabled("Workspace unavailable");
-			ImGui::End();
-			SetVisible(visible);
+
 			return;
 		}
 		if (!m_DraftInitialized)
@@ -307,8 +296,5 @@ namespace SST::Prototypes::JFM
 		}
 		if (!m_Status.empty())
 			ImGui::TextUnformatted(m_Status.c_str());
-
-		ImGui::End();
-		SetVisible(visible);
 	}
 } // namespace SST::Prototypes::JFM

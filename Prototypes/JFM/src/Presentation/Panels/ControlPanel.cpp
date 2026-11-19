@@ -175,7 +175,7 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> eventBus,
 		WeakRef<CommandRegistry> commandRegistry,
 		WeakRef<UndoStack> undoStack)
-		: IPanel("Control Panel", true),
+		: EditorWindow("jfm.control", "Control Panel", true, {.duplicable = true}),
 		  m_Store(std::move(store)),
 		  m_Settings(std::move(settings)),
 		  m_EventBus(std::move(eventBus)),
@@ -184,9 +184,9 @@ namespace SST::Prototypes::JFM
 	{
 	}
 
-	Ref<IPanel> ControlPanel::Clone() const
+	WindowDuplicate ControlPanel::Duplicate() const
 	{
-		return CreateRef<ControlPanel>(*this);
+		return {CreateRef<ControlPanel>(*this), {}};
 	}
 
 	void ControlPanel::Execute(const char *commandId, CommandContext context) const
@@ -279,20 +279,9 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
-	void ControlPanel::Render()
+	void ControlPanel::RenderContent()
 	{
-		if (!IsVisible())
-			return;
 
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible))
-		{
-			FinishRangeUndoGroup();
-			FinishTunedUndoGroup();
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
 		const ImGuiIO &io = ImGui::GetIO();
 		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && io.KeyCtrl && !io.WantTextInput && !ImGui::IsAnyItemActive())
 		{
@@ -311,8 +300,7 @@ namespace SST::Prototypes::JFM
 		{
 			FinishTunedUndoGroup();
 			ImGui::TextDisabled("Workspace unavailable");
-			ImGui::End();
-			SetVisible(visible);
+
 			return;
 		}
 
@@ -324,8 +312,7 @@ namespace SST::Prototypes::JFM
 			FinishRangeUndoGroup();
 			FinishTunedUndoGroup();
 			ImGui::TextDisabled("No characteristic selected");
-			ImGui::End();
-			SetVisible(visible);
+
 			return;
 		}
 
@@ -337,9 +324,6 @@ namespace SST::Prototypes::JFM
 		RenderParameterTable(project, activeRecord->info);
 		RenderTunedControls(project, ids, activeRecord->info);
 		RenderSolverControls(project, ids, activeRecord->info);
-
-		ImGui::End();
-		SetVisible(visible);
 	}
 
 	void ControlPanel::RenderModelControls(ProjectHandle project, const std::vector<CharacteristicId> &ids)
@@ -806,4 +790,9 @@ namespace SST::Prototypes::JFM
 			ImGui::EndTable();
 		}
 	}
+    void ControlPanel::OnContentSkipped()
+    {
+        FinishRangeUndoGroup();
+        FinishTunedUndoGroup();
+    }
 } // namespace SST::Prototypes::JFM

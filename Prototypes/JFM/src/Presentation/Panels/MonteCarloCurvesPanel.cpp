@@ -57,7 +57,7 @@ namespace SST::Prototypes::JFM
 	}
 
 	MonteCarloCurvesPanel::MonteCarloCurvesPanel(Ref<JFMWorkspaceStore> store, Ref<EventBus> eventBus, std::string title, bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault),
+		: EditorWindow("jfm.mc-curves", std::move(title), visibleByDefault, {.duplicable = true}),
 		  m_Store(std::move(store)),
 		  m_EventBus(std::move(eventBus))
 	{
@@ -73,9 +73,9 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
-	Ref<IPanel> MonteCarloCurvesPanel::Clone() const
+	WindowDuplicate MonteCarloCurvesPanel::Duplicate() const
 	{
-		return CreateRef<MonteCarloCurvesPanel>(m_Store, m_EventBus, GetTitle(), IsVisible());
+		return {CreateRef<MonteCarloCurvesPanel>(m_Store, m_EventBus, GetTitle(), IsVisible()), {}};
 	}
 
 	void MonteCarloCurvesPanel::AddPlot(JFMCharacteristicRef ref)
@@ -86,22 +86,13 @@ namespace SST::Prototypes::JFM
 			m_Plots.push_back(ref);
 	}
 
-	void MonteCarloCurvesPanel::Render()
+	void MonteCarloCurvesPanel::RenderContent()
 	{
-		if (!IsVisible())
-			return;
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible, ImGuiWindowFlags_HorizontalScrollbar))
-		{
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
+
 		if (m_Store == nullptr)
 		{
 			ImGui::TextDisabled("Workspace unavailable");
-			ImGui::End();
-			SetVisible(visible);
+
 			return;
 		}
 
@@ -198,7 +189,9 @@ namespace SST::Prototypes::JFM
 		}
 		if (m_Plots.empty())
 			ImGui::TextDisabled("No MC curves");
-		ImGui::End();
-		SetVisible(visible);
 	}
+    int MonteCarloCurvesPanel::WindowFlags() const
+    {
+        return ImGuiWindowFlags_HorizontalScrollbar;
+    }
 } // namespace SST::Prototypes::JFM

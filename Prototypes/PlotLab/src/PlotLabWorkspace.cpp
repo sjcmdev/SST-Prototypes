@@ -287,6 +287,7 @@ namespace SST::Prototypes::PlotLab
     }
     void WorkspacePanel::Render()
     {
+        windows.BeginFrame();
         auto &p = *state->document->project;
         if(previewColumn && Exists(p,previewColumn,3)) {
             EditColumn(previewColumn); previewColumn=0; previewLibrary=true;
@@ -296,8 +297,8 @@ namespace SST::Prototypes::PlotLab
         ImGui::SetNextWindowPos({ImGui::GetMainViewport()->WorkPos.x + 10, ImGui::GetMainViewport()->WorkPos.y + 10},
                                 ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize({330, 640}, ImGuiCond_FirstUseEver);
-        if (ImGui::Begin(GetTitle().c_str()))
-        {
+        bool explorerOpen = IsVisible();
+        windows.Render(GetTitle(), explorerOpen, 0, [&] {
             ImGui::TextUnformatted(state->document->Dirty() ? "Unsaved changes" : "Saved / new project");
             ImGui::TextWrapped("%s",
                                state->document->path.empty() ? "Untitled" : Path(state->document->path).Utf8().c_str());
@@ -365,8 +366,8 @@ namespace SST::Prototypes::PlotLab
             ImGui::TextWrapped("%s", state->status.c_str());
             if (state->exporting)
                 ImGui::TextUnformatted("Export in progress (see Core Progress Monitor)");
-        }
-        ImGui::End();
+        });
+        SetVisible(explorerOpen);
         for (auto it = state->sheets.begin(); it != state->sheets.end();)
         {
             const auto id = *it++;
@@ -380,6 +381,7 @@ namespace SST::Prototypes::PlotLab
                 Graph(id);
         }
         Dialogs();
+        windows.EndFrame();
     }
     void WorkspacePanel::Worksheet(pl::Id id)
     {
@@ -389,11 +391,7 @@ namespace SST::Prototypes::PlotLab
         ImGui::SetNextWindowPos({ImGui::GetMainViewport()->WorkPos.x + 350, ImGui::GetMainViewport()->WorkPos.y + 10},
                                 ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize({std::max(900.0f,ImGui::GetMainViewport()->WorkSize.x-370), std::max(600.0f,ImGui::GetMainViewport()->WorkSize.y-60)}, ImGuiCond_FirstUseEver);
-        const bool expanded = ImGui::Begin(Title("Worksheet: ", p.object(id), p.id()).c_str(), &open);
-        if (!open)
-            state->sheets.erase(id);
-        if (expanded)
-        {
+        windows.Render(Title("Worksheet: ", p.object(id), p.id()), open, 0, [&] {
             if (ImGui::Button("Add row"))
                 Attempt([&] { doc.ResizeRows(id); });
             ImGui::SameLine();
@@ -605,8 +603,8 @@ namespace SST::Prototypes::PlotLab
                     }
                 ImGui::EndTable();
             }
-        }
-        ImGui::End();
+        });
+        if (!open) state->sheets.erase(id);
     }
     void WorkspacePanel::Graph(pl::Id id)
     {
@@ -616,11 +614,7 @@ namespace SST::Prototypes::PlotLab
         ImGui::SetNextWindowPos({ImGui::GetMainViewport()->WorkPos.x + 350, ImGui::GetMainViewport()->WorkPos.y + 320},
                                 ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize({850, 330}, ImGuiCond_FirstUseEver);
-        const bool expanded = ImGui::Begin(Title("Graph: ", p.object(id), p.id()).c_str(), &open);
-        if (!open)
-            state->graphs.erase(id);
-        if (expanded)
-        {
+        windows.Render(Title("Graph: ", p.object(id), p.id()), open, 0, [&] {
             auto graphObject = p.object(id);
             auto &fontSettings = std::get<pl::Graph>(graphObject.data);
             bool fontChanged = false;
@@ -667,7 +661,6 @@ namespace SST::Prototypes::PlotLab
             } catch (const std::exception &e) { fontErrors[id] = e.what(); }
             if (!graphFont) {
                 ImGui::TextWrapped("Graph font unavailable: %s", fontErrors[id].c_str());
-                ImGui::End();
                 return;
             }
             const auto layer = p.children(id).at(0);
@@ -799,8 +792,8 @@ namespace SST::Prototypes::PlotLab
                         doc.SelectRow(source.worksheet, view.picked->point, 2, ImGui::GetIO().KeyShift, series);
                         state->sheets.insert(source.worksheet);
                     });
-        }
-        ImGui::End();
+        });
+        if (!open) state->graphs.erase(id);
     }
     void WorkspacePanel::Dialogs()
     {

@@ -8,7 +8,7 @@
 #include "Core/EventSystem/BusEventSystem/EventReceiver.hpp"
 #include "Core/Input/ContextManager.hpp"
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
-#include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 #include <array>
@@ -17,7 +17,7 @@
 
 namespace SST::Prototypes::JFM
 {
-	class ProjectTreePanel final : public IPanel, public EventReceiver
+	class ProjectTreePanel final : public EditorWindow, public EventReceiver
 	{
 	public:
 		explicit ProjectTreePanel(
@@ -30,8 +30,9 @@ namespace SST::Prototypes::JFM
 			std::string title = "Project Tree",
 			bool visibleByDefault = true);
 
-		[[nodiscard]] Ref<IPanel> Clone() const override;
-		void Render() override;
+		[[nodiscard]] WindowDuplicate Duplicate() const override;
+		void RenderContent() override;
+        void OnContentSkipped() override;
 
 	private:
 		enum class RenameTarget

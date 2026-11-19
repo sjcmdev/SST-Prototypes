@@ -81,6 +81,8 @@ namespace SST
 			return m_Panels.AddExisting(std::move(window), savedId);
 		}
 
+        bool UnregisterWindow(WindowId id) { return m_Panels.Remove(id); }
+
 		void OnDetach() override;
 		void OnEvent(Event &event) override;
 		void OnImGuiRender() override;

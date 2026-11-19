@@ -2,20 +2,19 @@
 
 #include "App/JFMUserSettings.hpp"
 #include "Core/Utils/Memory.hpp"
-#include "Presentation/Panels/IPanel.hpp"
+#include "Presentation/Panels/EditorWindow.hpp"
 
 #include <array>
 
 namespace SST::Prototypes::JFM
 {
-	class JFMSettingsPanel final : public IPanel
+	class JFMSettingsPanel final : public EditorWindow
 	{
 	public:
 		explicit JFMSettingsPanel(Ref<JFMUserSettingsStore> settings);
 
-		[[nodiscard]] Ref<IPanel> Clone() const override;
-		void Render() override;
-		void RenderContent();
+		[[nodiscard]] WindowDuplicate Duplicate() const override;
+		void RenderContent() override;
 
 	private:
 		void renderPathRow(const char *label, const Path &path, void (JFMUserSettingsStore::*setter)(Path));

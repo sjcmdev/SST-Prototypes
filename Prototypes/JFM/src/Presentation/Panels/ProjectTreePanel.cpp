@@ -110,7 +110,7 @@ namespace SST::Prototypes::JFM
 		WeakRef<ContextManager> contextManager,
 		std::string title,
 		bool visibleByDefault)
-		: IPanel(std::move(title), visibleByDefault),
+		: EditorWindow("jfm.project-tree", std::move(title), visibleByDefault, {.duplicable = true}),
 		  m_Store(std::move(store)),
 		  m_Settings(std::move(settings)),
 		  m_ImportDialog(std::move(importDialog)),
@@ -139,9 +139,9 @@ namespace SST::Prototypes::JFM
 		}
 	}
 
-	Ref<IPanel> ProjectTreePanel::Clone() const
+	WindowDuplicate ProjectTreePanel::Duplicate() const
 	{
-		return CreateRef<ProjectTreePanel>(m_Store, m_Settings, m_ImportDialog, m_EventBus, m_CommandRegistry, m_ContextManager, GetTitle(), IsVisible());
+		return {CreateRef<ProjectTreePanel>(m_Store, m_Settings, m_ImportDialog, m_EventBus, m_CommandRegistry, m_ContextManager, GetTitle(), IsVisible()), {}};
 	}
 
 	void ProjectTreePanel::ExecuteCommand(const char *commandId, CommandContext context)
@@ -158,24 +158,9 @@ namespace SST::Prototypes::JFM
 		(void)registry->Execute(CommandID{commandId}, std::move(context));
 	}
 
-	void ProjectTreePanel::Render()
+	void ProjectTreePanel::RenderContent()
 	{
-		if (!IsVisible())
-		{
-			if (auto contextManager = m_ContextManager.lock())
-				contextManager->SetActive("jfm.project_tree.focused", false);
-			return;
-		}
 
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible))
-		{
-			if (auto contextManager = m_ContextManager.lock())
-				contextManager->SetActive("jfm.project_tree.focused", false);
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
 		if (auto contextManager = m_ContextManager.lock())
 			contextManager->SetActive(
 				"jfm.project_tree.focused",
@@ -184,8 +169,7 @@ namespace SST::Prototypes::JFM
 		if (m_Store == nullptr)
 		{
 			ImGui::TextDisabled("Workspace unavailable");
-			ImGui::End();
-			SetVisible(visible);
+
 			return;
 		}
 
@@ -229,9 +213,6 @@ namespace SST::Prototypes::JFM
 		RenderShortNamePopup();
 		RenderPastePopup(project);
 		RenderGroupingPopup(project);
-
-		ImGui::End();
-		SetVisible(visible);
 	}
 
 	void ProjectTreePanel::FocusItem(RenameTarget target, std::string id)
@@ -1153,4 +1134,8 @@ namespace SST::Prototypes::JFM
 			context.Set("item", MakeTreeItem(m_FocusedTarget, m_FocusedTargetId, m_Store->GetSelectedCharacteristicIds()));
 		ExecuteCommand(m_PasteDuplicateFocused ? JFMDuplicateTreeItemCommandId : JFMPasteTreeItemCommandId, std::move(context));
 	}
+    void ProjectTreePanel::OnContentSkipped()
+    {
+        if (auto context = m_ContextManager.lock()) context->SetActive("jfm.project_tree.focused", false);
+    }
 } // namespace SST::Prototypes::JFM

@@ -14,32 +14,13 @@
 namespace SST::Prototypes::JFM
 {
 	JFMSettingsPanel::JFMSettingsPanel(Ref<JFMUserSettingsStore> settings)
-		: IPanel("JFM Settings", false), m_Settings(std::move(settings))
+		: EditorWindow("jfm.settings", "JFM Settings", false, {.duplicable = true}), m_Settings(std::move(settings))
 	{
 	}
 
-	Ref<IPanel> JFMSettingsPanel::Clone() const
+	WindowDuplicate JFMSettingsPanel::Duplicate() const
 	{
-		return CreateRef<JFMSettingsPanel>(*this);
-	}
-
-	void JFMSettingsPanel::Render()
-	{
-		if (!IsVisible())
-			return;
-
-		bool visible = IsVisible();
-		if (!ImGui::Begin(GetTitle().c_str(), &visible))
-		{
-			ImGui::End();
-			SetVisible(visible);
-			return;
-		}
-
-		RenderContent();
-
-		ImGui::End();
-		SetVisible(visible);
+		return {CreateRef<JFMSettingsPanel>(*this), {}};
 	}
 
 	void JFMSettingsPanel::RenderContent()

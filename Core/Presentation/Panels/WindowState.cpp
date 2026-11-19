@@ -1,5 +1,6 @@
 #include "Core/dspch.hpp"
 #include "Presentation/Panels/WindowWorkspace.hpp"
+#include "Presentation/Panels/HostedEditorWindow.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include "IconsFontAwesome6.h"
 #include <nlohmann/json.hpp>
@@ -325,7 +326,8 @@ namespace SST
                 if (!window)
                 {
                     if (m_Panels.Contains(id)) return invalid("Layout ID conflicts with a legacy panel.");
-                    for (auto &candidate : Windows()) if (candidate->GetType() == type && candidate->Capabilities().duplicable)
+                    if (type.starts_with("hosted.")) window = CreateRef<HostedEditorWindow>(type.substr(7));
+                    for (auto &candidate : Windows()) if (!window && candidate->GetType() == type && candidate->Capabilities().duplicable)
                     {
                         auto factory = candidate->Duplicate();
                         if (factory.contentCommand) return invalid("Restore engine-backed windows from the project before loading its layout.");
@@ -341,8 +343,13 @@ namespace SST
                 staged.items.push_back({{id, window}, state});
                 views.push_back({window, window->SaveViewState(), item.at("view").get<std::string>()});
             }
-            // Layout loading must never destroy document windows omitted by another workspace.
-            for (auto &w : Windows()) if (!ids.contains(w->GetId())) staged.items.push_back({{w->GetId(), w}, w->GetState()});
+            // Retained windows must still be able to import legacy INI geometry on their first render.
+            std::vector<std::pair<Ref<EditorWindow>, bool>> retainedGeometry;
+            for (auto &w : Windows()) if (!ids.contains(w->GetId()))
+            {
+                staged.items.push_back({{w->GetId(), w}, w->GetState()});
+                retainedGeometry.emplace_back(w, w->m_ApplyGeometry);
+            }
             for (std::size_t i = 0; i < views.size(); ++i)
             {
                 bool accepted = false;
@@ -354,7 +361,9 @@ namespace SST
                     return invalid("Window rejected saved view state.");
                 }
             }
-            Restore(staged); return {};
+            Restore(staged);
+            for (auto &[window, applyGeometry] : retainedGeometry) window->m_ApplyGeometry = applyGeometry;
+            return {};
         }
         catch (const std::exception &error) { return invalid(std::string("Invalid window layout: ") + error.what()); }
     }

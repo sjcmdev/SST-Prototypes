@@ -35,11 +35,11 @@ namespace SST
     void EditorWindow::Render()
     {
         auto workspace = m_Workspace.lock();
-        if (!IsVisible() || m_State.mode == WindowMode::Minimized) return;
+        if (!IsVisible() || m_State.mode == WindowMode::Minimized) { OnContentSkipped(); return; }
         auto *viewport = ImGui::GetMainViewport();
         const bool maximized = m_State.mode == WindowMode::Maximized;
         const bool locked = workspace && workspace->IsLocked();
-        ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | WindowFlags();
         if (m_State.pinned || locked || maximized) flags |= ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
         if (m_State.pinned || maximized || (locked && m_State.dockId == 0)) flags |= ImGuiWindowFlags_NoDocking;
         if (!m_Capabilities.dockable) flags |= ImGuiWindowFlags_NoDocking;
@@ -65,7 +65,8 @@ namespace SST
                 ImGui::SetNextWindowSize(ImVec2(m_State.width, m_State.height));
             }
         }
-        else ImGui::SetNextWindowSize(ImVec2(m_State.width, m_State.height), ImGuiCond_FirstUseEver);
+        else if (!(GImGui->NextWindowData.HasFlags & ImGuiNextWindowDataFlags_HasSize))
+            ImGui::SetNextWindowSize(ImVec2(m_State.width, m_State.height), ImGuiCond_FirstUseEver);
         m_ApplyGeometry = false;
         const auto name = ImGuiName();
         if (!ImGui::FindWindowByName(name.c_str()) && !ImGui::FindWindowSettingsByID(ImHashStr(name.c_str())))
@@ -157,6 +158,7 @@ namespace SST
             }
             RenderContent();
         }
+        else OnContentSkipped();
         ImGui::End();
     }
 

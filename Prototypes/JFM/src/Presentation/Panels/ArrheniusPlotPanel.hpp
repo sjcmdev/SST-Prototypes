@@ -1,4 +1,5 @@
 #pragma once
+#include "Presentation/Panels/HostedWindows.hpp"
 #include <sst/ui/Plot/RangeSelector.hpp>
 #include "Presentation/JFMPlotDocument.hpp"
 
@@ -72,6 +73,7 @@ namespace SST::Prototypes::JFM
 		};
 
 	private:
+        HostedWindows m_Windows;
 		struct SeriesStyle
 		{
 			std::array<float, 4> color{0.26f, 0.47f, 0.86f, 1.0f};
@@ -141,6 +143,7 @@ namespace SST::Prototypes::JFM
 		unsigned int m_DockspaceId = 0;
 		std::array<unsigned int, 6> m_DockIds{};
 		bool m_RebuildDockLayout = true;
+        bool m_DockHostOpen = true;
 		ProjectHandle m_LayoutProject = InvalidProjectHandle;
 		std::vector<PlotWindow> m_PlotWindows;
 	};

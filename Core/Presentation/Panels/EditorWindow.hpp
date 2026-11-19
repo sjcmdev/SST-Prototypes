@@ -65,11 +65,13 @@ namespace SST
         [[nodiscard]] virtual bool IsDirty() const { return false; }
         [[nodiscard]] virtual WindowDuplicate Duplicate() const { return {}; }
         [[nodiscard]] Ref<IPanel> Clone() const final { return {}; } // Use the undoable workspace factory.
-        void Render() final;
-        [[nodiscard]] std::string ImGuiName() const;
+        void Render() override;
+        [[nodiscard]] virtual std::string ImGuiName() const;
 
     protected:
         virtual void RenderContent() = 0;
+        virtual int WindowFlags() const { return 0; }
+        virtual void OnContentSkipped() {}
         virtual void RenderContextMenu() {}
         virtual void RevealInProject() {}
         // Project serializers own content. This hook is for window-specific view state.

@@ -1,4 +1,5 @@
 #pragma once
+#include "Presentation/Panels/HostedWindows.hpp"
 #include "Presentation/JFMPlotDocument.hpp"
 
 #include "App/JFMUserSettings.hpp"
@@ -30,6 +31,7 @@ namespace SST::Prototypes::JFM
 		void RenderContent() override;
 
 	private:
+        HostedWindows m_Windows;
 		struct PlotState
 		{
 			Ref<JFMPlotDocument> document = CreateRef<JFMPlotDocument>();
