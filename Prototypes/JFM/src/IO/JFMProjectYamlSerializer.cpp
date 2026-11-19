@@ -247,6 +247,14 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "flat_directions" << YAML::Value << fit.flatDirections;
 		out << YAML::Key << "lm_status" << YAML::Value << fit.lmStatus;
 		out << YAML::Key << "backend" << YAML::Value << fit.backend;
+        out << YAML::Key << "objective_mode" << YAML::Value << fit.objective.mode;
+        out << YAML::Key << "objective_current_unit" << YAML::Value << fit.objective.currentUnit;
+        out << YAML::Key << "objective_shift" << YAML::Value << fit.objective.shift;
+        out << YAML::Key << "objective_sigma_absolute" << YAML::Value << fit.objective.sigmaAbsolute;
+        out << YAML::Key << "objective_sigma_relative" << YAML::Value << fit.objective.sigmaRelative;
+        out << YAML::Key << "objective_switch_k" << YAML::Value << fit.objective.switchK;
+        out << YAML::Key << "objective_linear_points" << YAML::Value << fit.objective.linearPoints;
+        out << YAML::Key << "objective_log_points" << YAML::Value << fit.objective.logPoints;
 		out << YAML::Key << "warnings" << YAML::Value << fit.warnings;
 		out << YAML::EndMap;
 	}
@@ -289,6 +297,14 @@ namespace SST::Prototypes::JFM
 		fit.flatDirections = readOr<bool>(node, "flat_directions", false);
 		fit.lmStatus = readOr<int>(node, "lm_status", -1);
 		fit.backend = readOr<std::string>(node, "backend", "cpu");
+        fit.objective.mode = readOr<std::string>(node, "objective_mode", "log_legacy");
+        fit.objective.currentUnit = readOr<std::string>(node, "objective_current_unit", "A");
+        fit.objective.shift = readOr<double>(node, "objective_shift", 0.0);
+        fit.objective.sigmaAbsolute = readOr<double>(node, "objective_sigma_absolute", 0.0);
+        fit.objective.sigmaRelative = readOr<double>(node, "objective_sigma_relative", 0.0);
+        fit.objective.switchK = readOr<double>(node, "objective_switch_k", 3.0);
+        fit.objective.linearPoints = readOr<int>(node, "objective_linear_points", 0);
+        fit.objective.logPoints = readOr<int>(node, "objective_log_points", 0);
 		if (node["warnings"])
 			fit.warnings = node["warnings"].as<std::vector<std::string>>();
 		return fit;
@@ -306,6 +322,14 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "start_perturbation_percent" << YAML::Value << state.startPerturbationPercent;
 		out << YAML::Key << "seed" << YAML::Value << state.seed;
 		out << YAML::Key << "backend" << YAML::Value << state.backend;
+        out << YAML::Key << "objective_mode" << YAML::Value << state.objective.mode;
+        out << YAML::Key << "objective_current_unit" << YAML::Value << state.objective.currentUnit;
+        out << YAML::Key << "objective_shift" << YAML::Value << state.objective.shift;
+        out << YAML::Key << "objective_sigma_absolute" << YAML::Value << state.objective.sigmaAbsolute;
+        out << YAML::Key << "objective_sigma_relative" << YAML::Value << state.objective.sigmaRelative;
+        out << YAML::Key << "objective_switch_k" << YAML::Value << state.objective.switchK;
+        out << YAML::Key << "objective_linear_points" << YAML::Value << state.objective.linearPoints;
+        out << YAML::Key << "objective_log_points" << YAML::Value << state.objective.logPoints;
 		out << YAML::Key << "output_path" << YAML::Value << state.outputPath.Utf8();
 		out << YAML::Key << "total_milliseconds" << YAML::Value << state.totalMilliseconds;
 		out << YAML::Key << "warnings" << YAML::Value << state.warnings;
@@ -326,6 +350,14 @@ namespace SST::Prototypes::JFM
 		state.startPerturbationPercent = readOr<double>(node, "start_perturbation_percent", 0.0);
 		state.seed = readOr<std::uint32_t>(node, "seed", 42);
 		state.backend = readOr<std::string>(node, "backend", {});
+        state.objective.mode = readOr<std::string>(node, "objective_mode", "log_legacy");
+        state.objective.currentUnit = readOr<std::string>(node, "objective_current_unit", "A");
+        state.objective.shift = readOr<double>(node, "objective_shift", 0.0);
+        state.objective.sigmaAbsolute = readOr<double>(node, "objective_sigma_absolute", 0.0);
+        state.objective.sigmaRelative = readOr<double>(node, "objective_sigma_relative", 0.0);
+        state.objective.switchK = readOr<double>(node, "objective_switch_k", 3.0);
+        state.objective.linearPoints = readOr<int>(node, "objective_linear_points", 0);
+        state.objective.logPoints = readOr<int>(node, "objective_log_points", 0);
 		state.outputPath = Path::FromResolved(std::filesystem::u8path(readOr<std::string>(node, "output_path", {})));
 		state.totalMilliseconds = readOr<double>(node, "total_milliseconds", 0.0);
 		if (node["warnings"])

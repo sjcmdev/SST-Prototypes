@@ -102,20 +102,60 @@ JFM_HD inline void full(const GpuParamLayout& l,const double* p,double* out) {
  for(int j=0;j<l.n_total;++j)out[j]=l.fixed_values[j];
  for(int j=0;j<l.n_free;++j)out[l.free_to_total[j]]=p[j];
 }
-// Existing light/dark objective; switch residual policy here when the owner decides.
+// Kept verbatim for dark-fit regression.
 JFM_HD inline double relativeLogResidual(double predicted, double measured, bool precise=true, bool shared=true, double* jacobian=nullptr) {
  if(!(predicted>0&&measured>0)||!isfinite(predicted)||!isfinite(measured)||measured==1)return inf;
  double ly=mlog(measured,shared);
  if(jacobian)for(int k=0;k<7;++k)jacobian[k]=-jacobian[k]/predicted/ly;
  return precise&&fabs(predicted-measured)<.5*measured?-mlog1p((predicted-measured)/measured,shared)/ly:1-mlog(predicted,shared)/ly;
 }
+JFM_HD inline double currentSigma(const GpuParamLayout& l, double measured, int i) {
+ return l.point_sigma ? l.point_sigma[i] : l.sigma_rel*fabs(measured)+l.sigma_abs;
+}
+// Tangent continuation of log keeps the residual and analytic derivative continuous at k sigma.
+JFM_HD inline double statisticalResidual(double predicted, double measured, double sigma,
+ const GpuParamLayout& l, double* derivative=nullptr, bool shared=true) {
+ if(!isfinite(predicted)||!isfinite(measured)||!(sigma>0)||!isfinite(sigma))return inf;
+ double r, d;
+ if(l.objective==JfmObjective::SignedSigma) { r=(predicted-measured)/sigma; d=1/sigma; }
+ else {
+  const double x=predicted+l.shift,y=measured+l.shift,t=l.switch_k*sigma;
+  const double scale=fmax(y,t)/sigma;
+  if(x<=t&&y<=t)r=(predicted-measured)/sigma;
+  else if(x>t&&y>t)r=scale*mlog1p((predicted-measured)/y,shared);
+  else {
+   const double fx=x>t?mlog(x/t,shared):(x-t)/t;
+   const double fy=y>t?mlog(y/t,shared):(y-t)/t;
+   r=scale*(fx-fy);
+  }
+  d=scale/fmax(x,t);
+ }
+ if(derivative)*derivative=d;
+ return r;
+}
+// Measured V=0 interpolation, independent of fitted Iph; never extrapolate.
+JFM_HD inline double iscShift(const double* v,const double* y,int count) {
+ for(int i=0;i<count;++i)if(v[i]==0)return -y[i];
+ for(int i=1;i<count;++i)if((v[i-1]<0&&v[i]>0)||(v[i-1]>0&&v[i]<0))
+  return -(y[i-1]+(y[i]-y[i-1])*(-v[i-1])/(v[i]-v[i-1]));
+ return NAN;
+}
 JFM_HD inline double objective(GpuModelType model,const GpuParamLayout& l,const double* p,const double* v,const double* y,int count,double* h=nullptr,double* g=nullptr,bool precise=false,bool shared=false) {
  double params[8];full(l,p,params);double chi=0;
  if(g)for(int j=0;j<l.n_free;++j){g[j]=0;for(int k=0;k<l.n_free;++k)h[j*8+k]=0;}
  for(int i=0;i<count;++i) {
   double dj[8],I=current(model,v[i],params,l.T,g?dj:nullptr,shared);
-  if(!(y[i]>0&&I>0)||!isfinite(I)||y[i]==1)return inf;
-  double r=relativeLogResidual(I,y[i],precise,shared,g?dj:nullptr); chi+=r*r;
+  double r;
+  if(l.objective==JfmObjective::LogLegacy) {
+   if(!(y[i]>0&&I>0)||!isfinite(I)||y[i]==1)return inf;
+   r=relativeLogResidual(I,y[i],precise,shared,g?dj:nullptr);
+  } else {
+   double derivative;
+   r=statisticalResidual(I,y[i],currentSigma(l,y[i],i),l,&derivative,shared);
+   if(!isfinite(r))return inf;
+   if(g)for(int k=0;k<7;++k)dj[k]*=derivative;
+  }
+  chi+=r*r;
   if(g) {
    double jv[8];for(int j=0;j<l.n_free;++j)jv[j]=dj[l.free_to_total[j]];
    for(int j=0;j<l.n_free;++j){g[j]+=jv[j]*r;for(int k=0;k<=j;++k)h[j*8+k]+=jv[j]*jv[k];}

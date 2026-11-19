@@ -28,7 +28,7 @@ namespace SST::Prototypes::JFM
             : name == "Rsh2" ? "(" + voltage + ")^alpha/(" + current + ")" : std::string("1");
         return std::string(name) + " [" + unit + "]";
     }
-	[[nodiscard]] bool RenderJFMFitMethod(JFMFitMonteCarloSettings &settings);
+	[[nodiscard]] bool RenderJFMFitMethod(JFMFitMonteCarloSettings &settings, const JFMCharacteristicInfo* characteristic = nullptr);
 	bool RenderJFMFitMonteCarloSettings(
 		JFMFitMonteCarloSettings &settings,
 		std::string_view modelId,

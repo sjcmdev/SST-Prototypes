@@ -18,7 +18,7 @@
 
 namespace SST::Prototypes::JFM
 {
-    bool RenderJFMFitMethod(JFMFitMonteCarloSettings &settings)
+    bool RenderJFMFitMethod(JFMFitMonteCarloSettings &settings, const JFMCharacteristicInfo* characteristic)
     {
         bool changed = false;
         if (sst::ui::widgets::BeginCombo("Fit method", settings.fitMethod == "nm" ? "NM" : "LM")) {
@@ -28,13 +28,33 @@ namespace SST::Prototypes::JFM
                 }
             sst::ui::widgets::EndCombo();
         }
+        if (sst::ui::widgets::BeginCombo("Objective", settings.objectiveMode.c_str(), 0, "Auto: all fitted currents > 0 use log_legacy; signed fit-range data use isc_shift.\nisc_shift: constant measured -I(V=0), propagated sigma, tangent linear below k*sigma.\nsigned_sigma: (model-data)/(sigma_rel*abs(data)+sigma_abs).\nlog_legacy is a unit-dependent regression reference, not statistical chi squared.")) {
+            for (const auto *mode : {"auto", "isc_shift", "signed_sigma", "log_legacy"})
+                if (ImGui::Selectable(mode, settings.objectiveMode == mode)) { settings.objectiveMode = mode; changed = true; }
+            sst::ui::widgets::EndCombo();
+        }
+        changed |= sst::ui::widgets::Double("Switch k (sigma)", &settings.objectiveSwitchK, .1f, "%.3g", "For isc_shift only. Positive threshold for the continuous log/linear transition. Ctrl+click for exact entry.");
+        changed |= sst::ui::widgets::Double("Sigma rel (%)", &settings.monteCarloNoisePercent, .1f, "%.6g", "Current sigma = relative fraction * abs(current) + absolute floor; used by the fit and MC noise generator. Ctrl+click for exact entry.");
+        bool automatic = settings.sigmaAbsolute == 0;
+        if (sst::ui::widgets::Checkbox("Automatic sigma floor", &automatic, "For statistical modes: a data-derived floor, active even at zero relative noise. Enter a calibrated instrument floor when known.")) {
+            settings.sigmaAbsolute = automatic ? 0 : 1e-6; changed = true;
+        }
+        if (!automatic) {
+            int exponent = static_cast<int>(std::floor(std::log10(settings.sigmaAbsolute)));
+            float mantissa = static_cast<float>(settings.sigmaAbsolute/std::pow(10.,exponent));
+            bool floorChanged = sst::ui::widgets::SliderFloat(("Sigma abs mantissa " + JFMParameterLabel("I0", characteristic).substr(3)).c_str(), &mantissa, 1.f, 9.999f, "%.4g");
+            float exponentSlider = static_cast<float>(exponent);
+            floorChanged |= sst::ui::widgets::SliderFloat("Sigma abs exponent (10^)", &exponentSlider, -30.f, 10.f, "%.0f");
+            exponent = static_cast<int>(std::round(exponentSlider));
+            if (floorChanged) { settings.sigmaAbsolute = mantissa*std::pow(10.,std::clamp(exponent,-30,10)); changed = true; }
+        }
         return changed;
     }
 	bool RenderJFMFitMonteCarloSettings(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id, bool showParameterBounds, const JFMCharacteristicInfo* characteristic)
 	{
 		bool changed = false;
 		ImGui::PushID(id);
-        changed |= RenderJFMFitMethod(settings);
+        changed |= RenderJFMFitMethod(settings, characteristic);
 		int simplexIterations = std::max(settings.fitMaxIterations, settings.monteCarloMaxIterations);
 		if (sst::ui::widgets::Int("Fit iterations", &simplexIterations))
 		{
@@ -45,7 +65,6 @@ namespace SST::Prototypes::JFM
 		ImGui::SeparatorText("Monte Carlo");
 		changed |= sst::ui::widgets::Int("N", &settings.monteCarloSamples);
 		changed |= sst::ui::widgets::Checkbox("Save samples", &settings.saveSamples);
-		changed |= sst::ui::widgets::Double("Sigma (%)", &settings.monteCarloNoisePercent, 0.1f, "%.6g", "Definition: Monte Carlo relative noise. Unit: percent. Range: nonnegative; validated when settings are applied. Ctrl+click for exact entry.");
 		int seed = static_cast<int>(settings.monteCarloSeed);
 		if (sst::ui::widgets::Int("Seed", &seed))
 		{

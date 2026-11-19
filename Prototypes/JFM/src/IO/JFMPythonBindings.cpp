@@ -58,6 +58,11 @@ NB_MODULE(sst_jfm, module)
                     if (name == (incoming ? unitName : id)) return incoming ? id : unitName;
                 throw std::invalid_argument("Unknown parameter field: " + name);
             };
+            if ((density && input.contains("sigma_abs_A")) || (!density && input.contains("sigma_abs_A_per_cm2")))
+                throw std::invalid_argument("Absolute sigma units must match the supplied current or current density");
+            if (density && input.contains("sigma_abs_A_per_cm2")) {
+                input["sigma_abs_A"] = input.at("sigma_abs_A_per_cm2"); input.erase("sigma_abs_A_per_cm2");
+            }
             input["method"] = method;
             for (const char *key : {"parameters", "bounds"}) if (input.contains(key)) {
                 auto values = nlohmann::json::object();
@@ -75,6 +80,12 @@ NB_MODULE(sst_jfm, module)
             if (density) for (const auto &[from, to] : {std::pair{"ideal_current_A", "ideal_current_density_A_per_cm2"},
                                                          std::pair{"noisy_current_A", "noisy_current_density_A_per_cm2"}})
                 if (result.contains(from)) { result[to] = std::move(result[from]); result.erase(from); }
+            if (density && result.contains("sigma_current_A")) {
+                result["sigma_current_density_A_per_cm2"] = std::move(result["sigma_current_A"]); result.erase("sigma_current_A");
+            }
+            if (density && result.contains("objective")) for (const auto &[from,to] : {std::pair{"shift_A", "shift_A_per_cm2"}, std::pair{"sigma_abs_A", "sigma_abs_A_per_cm2"}}) {
+                result["objective"][to] = std::move(result["objective"][from]); result["objective"].erase(from);
+            }
             if (result.contains("parameter_names"))
                 for (auto &name : result.at("parameter_names")) name = field(name.get<std::string>(), false);
         } catch (const std::exception &error) {

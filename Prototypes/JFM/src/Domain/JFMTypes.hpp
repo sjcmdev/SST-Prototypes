@@ -138,6 +138,17 @@ namespace SST::Prototypes::JFM
 		std::vector<double> current;
 	};
 
+    struct JFMObjectiveSummary
+    {
+        std::string mode = "log_legacy";
+        std::string currentUnit = "A";
+        double shift = 0;
+        double sigmaAbsolute = 0;
+        double sigmaRelative = 0;
+        double switchK = 3;
+        int linearPoints = 0;
+        int logPoints = 0;
+    };
 	struct JFMFitState
 	{
 		std::string modelId = "SD-RsRsh";
@@ -148,6 +159,7 @@ namespace SST::Prototypes::JFM
 		double reducedChiSquared = 0.0;
 		int iterations = 0;
 		bool converged = false;
+        JFMObjectiveSummary objective;
         bool accepted = false;
         bool flatDirections = false;
         std::string fitMethod = "NM";
@@ -165,6 +177,7 @@ namespace SST::Prototypes::JFM
 
 	struct JFMMonteCarloState
 	{
+        JFMObjectiveSummary objective;
 		std::string modelId = "SD-RsRsh";
 		std::string status = "not_started";
 		int sampleCount = 0;
@@ -193,6 +206,8 @@ namespace SST::Prototypes::JFM
         bool flatDirections = false;
         int lmStatus = -1;
         double objectiveChiSquared = 0.0;
+        int linearPoints = 0;
+        int logPoints = 0;
     };
 
     struct JFMMonteCarloResult
@@ -203,6 +218,7 @@ namespace SST::Prototypes::JFM
 		std::vector<JFMMonteCarloSample> samples;
 		std::vector<double> voltage;
 		std::vector<double> idealCurrent;
+        std::vector<double> currentSigma;
 		std::vector<double> noisyCurrent;
 	};
 

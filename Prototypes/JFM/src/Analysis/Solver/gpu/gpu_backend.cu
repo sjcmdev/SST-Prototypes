@@ -604,12 +604,22 @@ __global__ void sharedFitKernel(GpuModelType model, GpuParamLayout layout, GpuNm
     double chi = 0;
     for (int i = 0; i < point_count; ++i) {
         const double current = lm::current(model, voltages[i], full, layout.T, nullptr, true);
-        if (!(current > 0) || !isfinite(current)) { chi = lm::inf; break; }
-        const double r = (lm::shared_log(current)-lm::shared_log(reference_current[i]))/(noise == 0 ? 1 : noise);
+        if (layout.objective == JfmObjective::LogLegacy && (!(current > 0) || !isfinite(current))) { chi = lm::inf; break; }
+        const double sigma = lm::currentSigma(layout, reference_current[i], i);
+        const double r = layout.objective == JfmObjective::LogLegacy ?
+            (lm::shared_log(current)-lm::shared_log(reference_current[i]))/(noise == 0 ? 1 : noise) :
+            sigma > 0 ? lm::statisticalResidual(current, reference_current[i], sigma, layout) : 0;
         chi += r*r;
     }
-    out.chi2_min = out.reduced_chi2_min = noise == 0 && isfinite(chi) ? 0 : chi;
+    out.chi2_min = noise == 0 && layout.sigma_abs == 0 && isfinite(chi) ? 0 : chi;
+    out.reduced_chi2_min = layout.objective == JfmObjective::LogLegacy ? out.chi2_min : out.chi2_min / (layout.n_free > 0 ? layout.n_free : 1);
+    out.linear_points = out.log_points = 0;
     out.objective_chi2 = fit.result.chi;
+    for (int i=0;i<point_count;++i) {
+        const double y=measured[size_t(run)*point_count+i];
+        if (layout.objective == JfmObjective::SignedSigma || (layout.objective == JfmObjective::IscShift && y+layout.shift <= layout.switch_k*lm::currentSigma(layout,y,i))) ++out.linear_points;
+        else ++out.log_points;
+    }
     out.converged = isfinite(out.chi2_min) && isfinite(fit.result.chi);
     out.solver_converged = out.converged && fit.result.status == 1 && !fit.flat;
     out.stop_status = fit.result.status; out.lm_status = fit.lm_status;
@@ -1580,6 +1590,9 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
         output.message = "GPU MC: voltages and true_current size mismatch";
         return output;
     }
+    if (!request.sigma.empty() && request.sigma.size() != request.true_current.size()) {
+        output.message = "GPU MC: sigma length mismatch"; return output;
+    }
     if (request.layout.n_free <= 0 || request.layout.n_free >= GpuSimplexStepResult::MAX_VERTICES)
     {
         output.message = "GPU MC: invalid free parameter count";
@@ -1595,8 +1608,9 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
     const double noiseFactor = std::clamp(request.noise_pct, 0.0, 100.0) / 100.0;
     for (size_t i = 0; i < request.true_current.size(); ++i)
     {
-        noiseAmplitude[i] = request.true_current[i] * noiseFactor;
-        sigma[i] = std::abs(noiseAmplitude[i]);
+        sigma[i] = request.sigma.empty() ? std::abs(request.true_current[i]*request.layout.sigma_rel)+request.layout.sigma_abs : request.sigma[i];
+        noiseAmplitude[i] = request.layout.objective == JfmObjective::LogLegacy ? request.true_current[i]*noiseFactor :
+            !request.generate_noise ? 0 : sigma[i];
     }
 
     double* deviceVoltages = nullptr;
@@ -1651,9 +1665,12 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
         output.noise_ms = hostTimeMs()-stageStartMs;
     }
     stageStartMs = hostTimeMs();
-    sharedFitKernel<<<(sampleCount+127)/128, 128>>>(request.model_type, request.layout, request.nm_config,
+    {
+    auto layout = request.layout; layout.point_sigma = deviceSigma;
+    sharedFitKernel<<<(sampleCount+127)/128, 128>>>(request.model_type, layout, request.nm_config,
         deviceVoltages, deviceNoisy, deviceTrueCurrent, pointCount, sampleCount, request.noise_seed,
         request.start_perturbation_pct, noiseFactor, request.use_lm, deviceResults);
+    }
     error = cudaGetLastError();
     if (error != cudaSuccess)
         goto cuda_failure;

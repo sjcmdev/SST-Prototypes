@@ -166,6 +166,9 @@ namespace SST::Prototypes::JFM
 			if (const YAML::Node fit = root["fit_monte_carlo"]; fit && fit.IsMap())
 			{
 				m_Settings.fitMonteCarlo.fitMethod = ReadOr<std::string>(fit, "fit_method", "lm");
+                m_Settings.fitMonteCarlo.objectiveMode = ReadOr<std::string>(fit, "objective_mode", "auto");
+                m_Settings.fitMonteCarlo.objectiveSwitchK = ReadOr<double>(fit, "objective_switch_k", 3.0);
+                m_Settings.fitMonteCarlo.sigmaAbsolute = ReadOr<double>(fit, "sigma_absolute", 0.0);
 				m_Settings.fitMonteCarlo.fitMaxIterations = std::max(1, ReadOr<int>(fit, "fit_max_iterations", m_Settings.fitMonteCarlo.fitMaxIterations));
 				m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance = std::max(0.0, ReadOr<double>(fit, "fit_reduced_chi2_tolerance", m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance));
 				m_Settings.fitMonteCarlo.monteCarloSamples = std::max(1, ReadOr<int>(fit, "mc_samples", m_Settings.fitMonteCarlo.monteCarloSamples));
@@ -289,6 +292,9 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
 		out << YAML::Key << "fit_monte_carlo" << YAML::Value << YAML::BeginMap;
 		out << YAML::Key << "fit_method" << YAML::Value << snapshot.fitMonteCarlo.fitMethod;
+        out << YAML::Key << "objective_mode" << YAML::Value << snapshot.fitMonteCarlo.objectiveMode;
+        out << YAML::Key << "objective_switch_k" << YAML::Value << snapshot.fitMonteCarlo.objectiveSwitchK;
+        out << YAML::Key << "sigma_absolute" << YAML::Value << snapshot.fitMonteCarlo.sigmaAbsolute;
 		out << YAML::Key << "fit_max_iterations" << YAML::Value << snapshot.fitMonteCarlo.fitMaxIterations;
 		out << YAML::Key << "fit_reduced_chi2_tolerance" << YAML::Value << snapshot.fitMonteCarlo.fitReducedChiSquaredTolerance;
 		out << YAML::Key << "mc_samples" << YAML::Value << snapshot.fitMonteCarlo.monteCarloSamples;
@@ -466,6 +472,9 @@ namespace SST::Prototypes::JFM
 	void JFMUserSettingsStore::SetFitMonteCarloSettings(JFMFitMonteCarloSettings settings)
 	{
 		if (settings.fitMethod != "nm") settings.fitMethod = "lm";
+        if (settings.objectiveMode != "isc_shift" && settings.objectiveMode != "signed_sigma" && settings.objectiveMode != "log_legacy") settings.objectiveMode = "auto";
+        if (!std::isfinite(settings.objectiveSwitchK) || settings.objectiveSwitchK <= 0) settings.objectiveSwitchK = 3;
+        if (!std::isfinite(settings.sigmaAbsolute) || settings.sigmaAbsolute < 0) settings.sigmaAbsolute = 0;
 		settings.fitMaxIterations = std::max(1, settings.fitMaxIterations);
 		settings.fitReducedChiSquaredTolerance = std::max(0.0, settings.fitReducedChiSquaredTolerance);
 		settings.monteCarloSamples = std::max(1, settings.monteCarloSamples);

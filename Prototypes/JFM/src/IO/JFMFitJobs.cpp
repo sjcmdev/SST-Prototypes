@@ -105,14 +105,14 @@ namespace SST::Prototypes::JFM
 			parameters << std::setprecision(17) << "sample";
 			for (const std::string &name : computation.result.parameterNames)
 				parameters << '\t' << name;
-			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\tfit_method\tflat_directions\tlm_status\tobjective_chi_squared\n";
+			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\tfit_method\tflat_directions\tlm_status\tobjective_chi_squared\tlinear_points\tlog_points\n";
 			for (std::size_t index = 0; index < savedSamples; ++index)
 			{
 				const JFMMonteCarloSample &sample = computation.result.samples[index];
 				parameters << index;
 				for (double value : sample.parameters)
 					parameters << '\t' << value;
-				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (computation.result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\n';
+				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (computation.result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\t' << sample.linearPoints << '\t' << sample.logPoints << '\n';
 			}
 			if (!noise || !parameters)
 				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo results could not be saved.", "Writing the result files failed.", "Check available disk space.", "JFMMonteCarloJob", "jfm.mc.write"};
@@ -287,6 +287,13 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
         if (range.size() != 2) throw std::invalid_argument("fit_range_V requires two values");
         pre.fitRange = {0, data->voltage.size(), range[0], range[1], "headless"};
         JFMFitMonteCarloSettings settings;
+        settings.objectiveMode = request.value("objective_mode", "auto");
+        if (settings.objectiveMode != "auto" && settings.objectiveMode != "isc_shift" && settings.objectiveMode != "signed_sigma" && settings.objectiveMode != "log_legacy")
+            throw std::invalid_argument("objective_mode must be auto, isc_shift, signed_sigma or log_legacy");
+        settings.sigmaAbsolute = request.value("sigma_abs_A", 0.0);
+        settings.objectiveSwitchK = request.value("objective_switch_k", 3.0);
+        if (!std::isfinite(settings.sigmaAbsolute) || settings.sigmaAbsolute < 0 || !std::isfinite(settings.objectiveSwitchK) || settings.objectiveSwitchK <= 0)
+            throw std::invalid_argument("sigma_abs_A must be nonnegative and objective_switch_k positive, both finite");
         settings.fitMethod = method; settings.preferGpu = request.value("backend", "cpu") == "cuda";
         if (request.value("backend", "cpu") != "cpu" && request.value("backend", "cpu") != "cuda")
             throw std::invalid_argument("backend must be cpu or cuda");
@@ -324,6 +331,10 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
         record = *store->FindCharacteristicRecord(ref);
         auto bus = CreateRef<EventBus>();
         Json result;
+        auto objectiveJson = [](const JFMObjectiveSummary &o) -> Json {
+            return {{"mode", o.mode}, {"shift_A", o.shift}, {"sigma_abs_A", o.sigmaAbsolute}, {"sigma_rel", o.sigmaRelative},
+                {"switch_k", o.switchK}, {"linear_points", o.linearPoints}, {"log_points", o.logPoints}};
+        };
         auto failed = [&](const auto &event) { result = {{"ok", false}, {"error", {{"code", "jfm.fit.failed"}, {"message", event.error}}}}; };
         auto fitDone = bus->Subscribe<FitCompleted>([&](const FitCompleted &event) {
             Json parameters = Json::object();
@@ -332,7 +343,7 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
                 {"reduced_chi_squared", event.state.reducedChiSquared}, {"iterations", event.state.iterations},
                 {"fit_method", event.state.fitMethod}, {"accepted", event.state.accepted}, {"converged", event.state.converged},
                 {"stop_reason", event.state.stopReason}, {"flat_directions", event.state.flatDirections},
-                {"lm_status", event.state.lmStatus}, {"backend", event.state.backend}};
+                {"lm_status", event.state.lmStatus}, {"backend", event.state.backend}, {"objective", objectiveJson(event.state.objective)}};
         });
         auto fitFailed = bus->Subscribe<FitFailed>(failed);
         auto mcDone = bus->Subscribe<MonteCarloCompleted>([&](const MonteCarloCompleted &event) {
@@ -340,7 +351,7 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
             for (std::size_t i = 0; i < event.result.samples.size(); ++i) {
                 const auto &s = event.result.samples[i];
                 samples.push_back({{"sample_id", i}, {"parameters", s.parameters}, {"chi_squared", s.chiSquared},
-                    {"objective_chi_squared", s.objectiveChiSquared}, {"accepted", s.accepted}, {"converged", s.solverConverged},
+                    {"objective_chi_squared", s.objectiveChiSquared}, {"linear_points",s.linearPoints}, {"log_points",s.logPoints}, {"reduced_chi_squared", s.reducedChiSquared}, {"accepted", s.accepted}, {"converged", s.solverConverged},
                     {"solver_converged", s.solverConverged}, {"stop_reason", s.stopReason}, {"fit_method", s.fitMethod},
                     {"lm_status", s.lmStatus}, {"flat_directions", s.flatDirections}, {"iterations", s.iterations}});
             }
@@ -348,7 +359,9 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
                 {"voltage_V", event.result.voltage}, {"ideal_current_A", event.result.idealCurrent},
                 {"noisy_current_A", event.result.noisyCurrent}, {"total_ms", event.state.totalMilliseconds},
                 {"accepted_count", event.state.acceptedCount}, {"converged_count", event.state.convergedCount},
-                {"backend", event.state.backend}, {"warnings", event.state.warnings}};
+                {"backend", event.state.backend}, {"warnings", event.state.warnings}, {"objective", objectiveJson(event.state.objective)},
+                {"sigma_current_A", event.result.currentSigma}, {"free_parameter_count", event.result.freeParameterCount},
+                {"fit_dof", static_cast<int>(event.result.voltage.size())-event.result.freeParameterCount}};
         });
         auto mcFailed = bus->Subscribe<MonteCarloFailed>(failed);
         Ref<IJob> job;

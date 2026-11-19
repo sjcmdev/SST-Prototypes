@@ -47,6 +47,9 @@ namespace SST::Prototypes::JFM
 	struct JFMFitMonteCarloSettings
 	{
 		std::string fitMethod = "lm";
+        std::string objectiveMode = "auto";
+        double objectiveSwitchK = 3.0;
+        double sigmaAbsolute = 0.0; // Zero selects 1e-4 of the median absolute measured current.
 		int fitMaxIterations = 2500;
 		double fitReducedChiSquaredTolerance = 1.0;
 		int monteCarloSamples = 512;

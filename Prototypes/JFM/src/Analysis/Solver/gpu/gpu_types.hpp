@@ -15,6 +15,7 @@ enum class GpuModelType : int
     Diode4P = SDRsRsh,
     Diode6P = SDRsRshAlphaRsh2
 };
+enum class JfmObjective : int { LogLegacy, IscShift, SignedSigma };
 struct GpuParamLayout
 {
     static constexpr int MAX_PARAMS = 8;
@@ -26,6 +27,12 @@ struct GpuParamLayout
     double max_bounds[MAX_PARAMS] = {};
     double T = 300.0;
     int dof = 1;
+    JfmObjective objective = JfmObjective::LogLegacy;
+    double sigma_rel = .01;
+    double sigma_abs = 0;
+    double shift = 0;
+    double switch_k = 3;
+    const double* point_sigma = nullptr;
 };
 
 struct GpuNmConfig
@@ -58,6 +65,8 @@ struct GpuMcResult
     int lm_fallback = 0;
     int flat_directions = 0;
     double objective_chi2 = 0;
+    int linear_points = 0;
+    int log_points = 0;
     int n_free = 0;
 };
 

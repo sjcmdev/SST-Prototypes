@@ -39,9 +39,11 @@ struct GpuMonteCarloRequest
     GpuModelType model_type = GpuModelType::Diode4P;
     GpuParamLayout layout;
     bool use_lm = true;
+    bool generate_noise = true;
     GpuNmConfig nm_config;
     std::vector<double> voltages;
     std::vector<double> true_current;
+    std::vector<double> sigma;
     int n_samples = 0;
     double noise_pct = 0.0;
     unsigned int noise_seed = 42;

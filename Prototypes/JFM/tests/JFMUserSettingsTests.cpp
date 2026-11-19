@@ -26,6 +26,7 @@ namespace SST::Prototypes::JFM
 		JFMFitMonteCarloSettings solverSettings = store.GetSnapshot().fitMonteCarlo;
 		solverSettings.monteCarloSamples = 2048;
 		solverSettings.monteCarloNoisePercent = 2.5;
+        solverSettings.objectiveMode="signed_sigma";solverSettings.objectiveSwitchK=4.;solverSettings.sigmaAbsolute=1e-8;
 		solverSettings.monteCarloStartPerturbationPercent = 12.0;
 		solverSettings.saveSamples = false;
 		solverSettings.savedSampleLimit = 321;
@@ -65,6 +66,7 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(settings.defaultColorPresetName, "Green/Yellow");
 		EXPECT_EQ(settings.fitMonteCarlo.monteCarloSamples, 2048);
 		EXPECT_DOUBLE_EQ(settings.fitMonteCarlo.monteCarloNoisePercent, 2.5);
+        EXPECT_EQ(settings.fitMonteCarlo.objectiveMode,"signed_sigma");EXPECT_DOUBLE_EQ(settings.fitMonteCarlo.objectiveSwitchK,4.);EXPECT_DOUBLE_EQ(settings.fitMonteCarlo.sigmaAbsolute,1e-8);
 		EXPECT_DOUBLE_EQ(settings.fitMonteCarlo.monteCarloStartPerturbationPercent, 12.0);
 		EXPECT_FALSE(settings.fitMonteCarlo.saveSamples);
 		EXPECT_EQ(settings.fitMonteCarlo.savedSampleLimit, 321);

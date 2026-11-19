@@ -373,7 +373,7 @@ namespace SST::Prototypes::JFM
 		if (m_Settings != nullptr)
 		{
 			JFMUserSettings settings = m_Settings->GetSnapshot();
-			const bool methodChanged = RenderJFMFitMethod(settings.fitMonteCarlo);
+			const bool methodChanged = RenderJFMFitMethod(settings.fitMonteCarlo, &activeInfo);
 			if ((sst::ui::widgets::Int("Fit iterations", &settings.fitMonteCarlo.fitMaxIterations) || methodChanged)
 				&& settings.fitMonteCarlo.fitMaxIterations > 0)
 				m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
@@ -407,6 +407,9 @@ namespace SST::Prototypes::JFM
 			ImGui::Text("Fit: %s, reduced chi2 %.6g", activeInfo.fit->status.c_str(), activeInfo.fit->reducedChiSquared);
             ImGui::Text("Method: %s | Stop: %s | Accepted: %s", activeInfo.fit->fitMethod.c_str(), activeInfo.fit->stopReason.c_str(), activeInfo.fit->accepted ? "yes" : "no");
             ImGui::Text("Converged: %s | Flat directions: %s", activeInfo.fit->converged ? "yes" : "no", activeInfo.fit->flatDirections ? "yes" : "no");
+            const auto &o = activeInfo.fit->objective;
+            ImGui::Text("Objective: %s | shift %.6g %s | sigma abs %.6g %s", o.mode.c_str(), o.shift, o.currentUnit.c_str(), o.sigmaAbsolute, o.currentUnit.c_str());
+            ImGui::Text("k %.3g | linear %d | log %d", o.switchK, o.linearPoints, o.logPoints);
 			for (const std::string &warning : activeInfo.fit->warnings)
 				ImGui::TextWrapped("Fit warning: %s", warning.c_str());
 		}

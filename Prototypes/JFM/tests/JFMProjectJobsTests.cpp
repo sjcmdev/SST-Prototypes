@@ -740,6 +740,7 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     info.id = 1; info.name = "curve";
     info.sourcePath = root / name / "source.dat";
     info.monteCarlo = JFMMonteCarloState{};
+    info.monteCarlo->objective={"signed_sigma","A",0.,1e-5,.01,3.,2,0};
     info.monteCarlo->outputPath = root / name / "output";
     project.characteristics.push_back(info);
     project.scripts.push_back({"script", "custom", root / name / "custom.py", true, 0});
@@ -760,6 +761,7 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     JFMMonteCarloSample sample; sample.parameters = {1e-10,1.5}; sample.accepted = sample.converged = true;
     sample.solverConverged = false; sample.stopReason = "max_iter"; sample.fitMethod = "LM→NM";
     sample.lmStatus = 0; sample.flatDirections = true; sample.objectiveChiSquared = .125; mc.samples.push_back(sample);
+    mc.voltage={0.,.1};mc.idealCurrent={-.03,.02};mc.currentSigma={.00123,.0006};mc.noisyCurrent={-.029,.021};
     snapshot.monteCarloResults.push_back({1,mc});
     const auto bundle = root / "bundle.jfm";
     auto saved = JFMProjectBundleSerializer::Save(bundle, snapshot);
@@ -772,6 +774,9 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     EXPECT_EQ(opened->snapshot.project.characteristics[0].monteCarlo->outputPath, bundle / Path("mc/1"));
     ASSERT_EQ(opened->snapshot.monteCarloResults.size(),1);
     const auto &roundtrip = opened->snapshot.monteCarloResults.front().result;
+    EXPECT_EQ(roundtrip.currentSigma,mc.currentSigma); EXPECT_EQ(roundtrip.idealCurrent,mc.idealCurrent);
+    EXPECT_EQ(opened->snapshot.project.characteristics[0].monteCarlo->objective.mode,"signed_sigma");
+    EXPECT_DOUBLE_EQ(opened->snapshot.project.characteristics[0].monteCarlo->objective.sigmaAbsolute,1e-5);
     EXPECT_FALSE(roundtrip.confidenceAvailable); ASSERT_EQ(roundtrip.samples.size(),1);
     EXPECT_TRUE(roundtrip.samples.front().accepted); EXPECT_FALSE(roundtrip.samples.front().solverConverged);
     EXPECT_EQ(roundtrip.samples.front().stopReason,"max_iter");
@@ -831,9 +836,22 @@ mc=sst_jfm.fit(dict(q,samples=2,noise_percent=0.,start_perturbation_percent=0.,
 assert mc["ok"], mc
 assert mc["parameter_names"] == ["I0_A","ideality_factor"], mc
 assert all(sample["accepted"] for sample in mc["samples"]), mc
+for mode in ("signed_sigma","isc_shift"):
+    light=dict(q,model_id="SD-0-I_ph",parameters=dict(I0_A=1e-10,ideality_factor=1.5,Iph_A=.03),objective_mode=mode,sigma_abs_A=1e-5)
+    light["voltage_V"]=[-.1+i*.02 for i in range(45)]
+    light["current_A"]=[1e-10*math.exp(v/(1.5*1.380649e-23/1.602176634e-19*300.))-.03 for v in light["voltage_V"]]
+    r=sst_jfm.fit(light)
+    assert r["ok"], r
+    assert r["objective"]["mode"]==mode and r["objective"]["sigma_abs_A"]==1e-5, r
+    json.dumps(r,allow_nan=False)
 json.dumps(mc,allow_nan=False)
 density_q=dict(q,parameters=dict(I0_A_per_cm2=1e-10,ideality_factor=1.5))
 density_q["current_density_A_per_cm2"]=density_q.pop("current_A")
+wrong_units=sst_jfm.fit(dict(density_q,sigma_abs_A=1e-6))
+assert not wrong_units["ok"] and wrong_units["error"]["code"]=="jfm.fit.validation", wrong_units
+floor_density=sst_jfm.fit(dict(density_q,objective_mode="signed_sigma",sigma_abs_A_per_cm2=1e-6))
+assert floor_density["ok"] and floor_density["objective"]["sigma_abs_A_per_cm2"]==1e-6, floor_density
+json.dumps(floor_density,allow_nan=False)
 density=sst_jfm.fit(dict(density_q,samples=2,noise_percent=0.,start_perturbation_percent=0.))
 assert density["ok"], density
 assert density["parameter_names"] == ["I0_A_per_cm2","ideality_factor"], density

@@ -67,3 +67,30 @@ flat fits are never counted as converged. Errors have `ok=false` and a typed
 New TSV exports write true stationarity in both `converged` and `solver_converged`;
 `accepted` remains the finite-result flag. Older files retain their accepted-sample
 interpretation when loaded. Flat fits are exported with `converged=0`.
+
+
+Objective settings on `sst_jfm.fit(request)` (same Core command/job as the GUI):
+`objective_mode="auto"|"isc_shift"|"signed_sigma"|"log_legacy"`,
+`objective_switch_k=3`, `sigma_abs_A=0` (density requests: `sigma_abs_A_per_cm2`).
+Zero floor means derive `1e-4 * max(upper median abs current, 1e-12 * max abs current)` from the input data;
+the absolute floor remains active when relative noise is zero.
+The floor is fixed before fitting and reported in `objective`, with `shift_A`, `sigma_rel`,
+`switch_k`, `linear_points`, `log_points` (density fields carry `_A_per_cm2`).
+Auto preserves the legacy objective bitwise for entirely positive data within the selected fit range; signed curves use
+isc_shift. Use an explicit statistical mode for dark statistical inference.
+
+`isc_shift` uses S=-I_data(0), interpolated from the full measured curve (no extrapolation),
+never fitted Iph. For t=k*sigma, h(x)=log(x/t) above t and (x-t)/t below it;
+r=max(I_data+S,t)/sigma * [h(I_model+S)-h(I_data+S)].
+This is the propagated log residual on the log branch and exactly (model-data)/sigma
+when both arguments are in the linear branch; the tangent continuation makes the residual
+and analytic Jacobian continuous when the model crosses the threshold too.
+`signed_sigma` uses (model-data)/sigma. Sigma = sigma_rel*abs(data)+sigma_abs.
+MC generates additive Gaussian noise with sigma from the nominal curve, holds that sigma
+and the measured shift fixed, and uses them for fitting and clean-curve parameter distance.
+`objective_chi_squared` is the noisy-data fit statistic (dof=N-free parameters);
+`chi_squared` is the fitted-to-nominal curve distance used by confidence classes (asymptotic
+chi-square with free-parameter dof). These statistics have different dof, not different weights.
+Legacy zero-noise MC reports a zero confidence sentinel. Legacy retains its historical final statistic
+and relative noise for regression only: 1-log(model)/log(data) is singular at 1 current unit,
+unit dependent, and cannot be interpreted as statistical chi-square.

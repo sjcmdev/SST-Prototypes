@@ -143,9 +143,10 @@ namespace SST::Prototypes::JFM
 			std::vector<double> voltage;
 			std::vector<double> current;
 			std::vector<double> sigma;
+            GpuParamLayout objective;
 		};
 
-		FitData BuildFitData(const JFMCharacteristicRecord &characteristic, const JFMPrefitState &prefit, double noisePercent)
+		FitData BuildFitData(const JFMCharacteristicRecord &characteristic, const JFMPrefitState &prefit, const JFMFitMonteCarloSettings &settings)
 		{
 			FitData result;
 			const std::vector<double> &sourceCurrent = Current(characteristic);
@@ -155,7 +156,28 @@ namespace SST::Prototypes::JFM
             const double upper = prefit.fitRange.upperVoltage;
             if (!std::isfinite(lower) || !std::isfinite(upper) || upper <= lower)
                 return result;
-            const double factor = noisePercent / 100.0;
+            const double factor = settings.monteCarloNoisePercent / 100.0;
+            auto &policy = result.objective;
+            // Reverse-current points outside a dark fit must not change its regression weights.
+            bool dark = true;
+            for (std::size_t i=0;i<count;++i) {
+                const double v=characteristic.data->voltage[i];
+                if ((!std::isfinite(v) || (v>=lower-1e-12 && v<=upper+1e-12)) && !(sourceCurrent[i]>0)) { dark=false; break; }
+            }
+            policy.objective = settings.objectiveMode == "signed_sigma" ? JfmObjective::SignedSigma :
+                settings.objectiveMode == "isc_shift" || (settings.objectiveMode == "auto" && !dark) ? JfmObjective::IscShift : JfmObjective::LogLegacy;
+            policy.sigma_rel = factor; policy.switch_k = settings.objectiveSwitchK;
+            if (policy.objective != JfmObjective::LogLegacy) {
+                std::vector<double> magnitudes; magnitudes.reserve(sourceCurrent.size());
+                for (double y : sourceCurrent) magnitudes.push_back(std::abs(y));
+                const double maximum = *std::max_element(magnitudes.begin(),magnitudes.end());
+                auto middle = magnitudes.begin()+magnitudes.size()/2;
+                std::nth_element(magnitudes.begin(),middle,magnitudes.end());
+                const double scale = std::max(*middle,maximum*1e-12);
+                policy.sigma_abs = settings.sigmaAbsolute > 0 ? settings.sigmaAbsolute : scale*1e-4;
+                if (policy.objective == JfmObjective::IscShift)
+                    policy.shift = lm::iscShift(characteristic.data->voltage.data(), sourceCurrent.data(), static_cast<int>(count));
+            }
             for (std::size_t index = 0; index < count; ++index)
             {
                 const double voltage = characteristic.data->voltage[index];
@@ -163,7 +185,7 @@ namespace SST::Prototypes::JFM
                     continue;
                 result.voltage.push_back(voltage);
                 result.current.push_back(sourceCurrent[index]);
-                result.sigma.push_back(std::abs(sourceCurrent[index] * factor));
+                result.sigma.push_back(std::abs(sourceCurrent[index] * factor) + policy.sigma_abs);
             }
 			return result;
 		}
@@ -172,9 +194,21 @@ namespace SST::Prototypes::JFM
         {
             if (data.voltage.size() < 2)
                 return "Invalid or empty fit range; choose increasing voltage bounds.";
-            for (std::size_t i = 0; i < data.voltage.size(); ++i)
-                if (!std::isfinite(data.voltage[i]) || !std::isfinite(data.current[i]) || !(data.current[i] > 0.0) || data.current[i] == 1.0)
-                    return "Objective domain: voltage must be finite and current must be finite, positive and different from 1. Choose the positive branch.";
+            if (!std::isfinite(data.objective.sigma_rel) || data.objective.sigma_rel < 0 || data.objective.sigma_rel > 1 ||
+                !std::isfinite(data.objective.sigma_abs) || data.objective.sigma_abs < 0)
+                return "Invalid noise model: sigma must be finite and nonnegative.";
+            if (!std::isfinite(data.objective.shift))
+                return "Objective domain: isc_shift requires measured data bracketing V=0; use signed_sigma otherwise.";
+            if (!(data.objective.switch_k > 0) || !std::isfinite(data.objective.switch_k))
+                return "Objective switch k must be finite and positive.";
+            for (std::size_t i = 0; i < data.voltage.size(); ++i) {
+                if (!std::isfinite(data.voltage[i]) || !std::isfinite(data.current[i]))
+                    return "Objective domain: non-finite voltage or current.";
+                if (data.objective.objective != JfmObjective::LogLegacy && !(data.sigma[i]>0))
+                    return "Cannot infer a nonzero instrument floor from these data; set a positive absolute sigma floor.";
+                if (data.objective.objective == JfmObjective::LogLegacy && (!(data.current[i]>0) || data.current[i]==1))
+                    return "Objective domain: log_legacy requires positive current different from 1.";
+            }
             return {};
         }
 
@@ -233,14 +267,18 @@ namespace SST::Prototypes::JFM
             ParameterArray start, const ParameterArray &fixed, const FreeMask &freeMask,
             const JFMFitMonteCarloSettings &settings, int maxIterations, uint64_t seed = 0, int sample = 0, double perturb = 0)
         {
-            const auto layout = Layout(model, temperature, start, fixed, freeMask, settings, static_cast<int>(data.voltage.size()));
+            auto layout = Layout(model, temperature, start, fixed, freeMask, settings, static_cast<int>(data.voltage.size()));
+            layout.objective = data.objective.objective; layout.shift = data.objective.shift;
+            layout.sigma_rel = data.objective.sigma_rel; layout.sigma_abs = data.objective.sigma_abs;
+            layout.switch_k = data.objective.switch_k;
+            layout.point_sigma = data.sigma.data();
             GpuNmConfig config; config.max_iter = std::max(1, maxIterations); config.reduced_chi2_tol = -1;
             SolverOutput out;
             if (settings.preferGpu && JFMGpuAvailable() && layout.n_free > 0) {
                 GpuMonteCarloRequest request; request.model_type = model.gpuType; request.layout = layout;
                 request.nm_config = config; request.use_lm = settings.fitMethod == "lm";
                 request.voltages = data.voltage; request.true_current = data.current;
-                request.n_samples = 1; request.noise_pct = 0; request.noise_seed = static_cast<unsigned int>(seed);
+                request.generate_noise = false; request.sigma = data.sigma; request.n_samples = 1; request.noise_pct = 0; request.noise_seed = static_cast<unsigned int>(seed);
                 request.start_perturbation_pct = perturb;
                 auto gpu = gpuRunMonteCarlo(request);
                 if (gpu.success && gpu.results.size() == 1) {
@@ -297,20 +335,26 @@ namespace SST::Prototypes::JFM
 			return current;
 		}
 
-		double ChiSquaredFor(const ModelSpec &model, const FitData &data, double temperature, const ParameterArray &parameters)
-		{
-			return computeChiSquared(
-				parameters.data(), data.voltage.data(), data.current.data(), data.sigma.data(), static_cast<int>(data.voltage.size()),
-				[&model, temperature](double voltage, const double *values) { return Evaluate(model, voltage, temperature, values); });
-		}
-
+        JFMObjectiveSummary ObjectiveSummary(const FitData &data, const JFMCharacteristicRecord &record) {
+            JFMObjectiveSummary out;
+            out.mode = data.objective.objective == JfmObjective::LogLegacy ? "log_legacy" : data.objective.objective == JfmObjective::IscShift ? "isc_shift" : "signed_sigma";
+            out.currentUnit = record.data->currentDensity.empty() ? "A" : "A/m2";
+            const auto role = record.data->currentDensity.empty() ? "current" : "current_density";
+            for (const auto &column : record.info.columns) if (column.role == role && !column.unit.empty()) out.currentUnit = column.unit;
+            out.shift = data.objective.shift; out.sigmaAbsolute = data.objective.sigma_abs;
+            out.sigmaRelative = data.objective.sigma_rel; out.switchK = data.objective.switch_k;
+            for (std::size_t i=0;i<data.current.size();++i)
+                if (out.mode == "signed_sigma" || (out.mode == "isc_shift" && data.current[i]+out.shift <= out.switchK*data.sigma[i])) ++out.linearPoints;
+                else ++out.logPoints;
+            return out;
+        }
 		double FinalMonteCarloChiSquared(
 			const ModelSpec &model,
 			const std::vector<double> &voltage,
 			const std::vector<double> &trueCurrent,
 			double temperature,
 			const ParameterArray &parameters,
-			double noisePercent)
+			double noisePercent, const FitData &data)
 		{
 			const double noise = std::clamp(noisePercent, 0.0, 100.0) / 100.0;
 			double chiSquared = 0.0;
@@ -318,6 +362,12 @@ namespace SST::Prototypes::JFM
 			for (std::size_t index = 0; index < count; ++index)
 			{
 				const double fitCurrent = Evaluate(model, voltage[index], temperature, parameters);
+                if (data.objective.objective != JfmObjective::LogLegacy) {
+                    if (data.sigma[index] == 0) continue;
+                    const double r = lm::statisticalResidual(fitCurrent, trueCurrent[index], data.sigma[index], data.objective);
+                    chiSquared += r*r;
+                    continue;
+                }
 				if (!(trueCurrent[index] > 0.0) || !(fitCurrent > 0.0) || !std::isfinite(trueCurrent[index]) || !std::isfinite(fitCurrent))
 					return std::numeric_limits<double>::infinity();
 				const double residual = (lm::shared_log(fitCurrent) - lm::shared_log(trueCurrent[index])) / (noise == 0.0 ? 1.0 : noise);
@@ -325,7 +375,7 @@ namespace SST::Prototypes::JFM
 					return std::numeric_limits<double>::infinity();
 				chiSquared += residual * residual;
 			}
-			return noise == 0.0 ? 0.0 : chiSquared;
+			return noise == 0.0 && data.objective.sigma_abs == 0.0 ? 0.0 : chiSquared;
 		}
 	} // namespace FitEngineDetail
 
@@ -371,7 +421,7 @@ namespace SST::Prototypes::JFM
 		ParameterArray tuned = prefitStart;
 		ApplyTunedMetadata(tuned, characteristic.info.metadata);
 		const ParameterArray start = useTunedStart ? tuned : prefitStart;
-		const FitData data = BuildFitData(characteristic, *characteristic.info.prefit, settings.monteCarloNoisePercent);
+		const FitData data = BuildFitData(characteristic, *characteristic.info.prefit, settings);
 		if (const auto error = ValidateData(data); !error.empty())
 			return MakeError(error);
 		if (data.voltage.size() < model->parameters.size() + 2)
@@ -383,6 +433,7 @@ namespace SST::Prototypes::JFM
 
         if (!std::isfinite(solved.result.chi2_min)) return MakeError("Objective or model domain is non-finite; no fit was accepted.");
 		JFMFitComputation output;
+		output.state.objective = ObjectiveSummary(data, characteristic);
 		output.state.modelId = std::string(model->id);
 		output.state.status = "completed";
 		output.state.fitRange = characteristic.info.prefit->fitRange;
@@ -449,24 +500,26 @@ namespace SST::Prototypes::JFM
                 output.state.warnings.push_back("Zero noise variance: chi_squared=0 is a sentinel; confidence classes are unavailable.");
             output.result.voltage = output.voltage;
 			output.result.idealCurrent = output.idealCurrent;
+            output.result.currentSigma = output.sigma;
 			output.result.noisyCurrent = output.noisyCurrent;
 		};
 
-		const FitData source = BuildFitData(characteristic, prefit, settings.monteCarloNoisePercent);
+		const FitData source = BuildFitData(characteristic, prefit, settings);
         if (const auto error = ValidateData(source); !error.empty())
             return MakeError(error);
         if (settings.monteCarloSamples <= 0 || !std::isfinite(settings.monteCarloNoisePercent) || settings.monteCarloNoisePercent < 0.0)
             return MakeError("Invalid Monte Carlo sample count or noise percent.");
-        output.result.confidenceAvailable = settings.monteCarloNoisePercent > 0.0;
+        output.state.objective = ObjectiveSummary(source, characteristic);
+        output.result.confidenceAvailable = settings.monteCarloNoisePercent > 0.0 || source.objective.sigma_abs > 0;
         output.voltage = source.voltage;
 		output.idealCurrent = EvaluateCurve(*model, output.voltage, *characteristic.info.temperatureK, fitValues);
         for (double current : output.idealCurrent)
-            if (!std::isfinite(current) || !(current > 0.0) || current == 1.0)
+            if (!std::isfinite(current) || (source.objective.objective == JfmObjective::LogLegacy && (!(current > 0.0) || current == 1.0)))
                 return MakeError("Model domain: non-finite or non-positive current (possibly negative junction voltage with fractional alpha). Choose a positive fit range and valid parameters.");
         const double factor = std::clamp(settings.monteCarloNoisePercent, 0.0, 100.0) / 100.0;
 		output.sigma.resize(output.idealCurrent.size());
 		for (std::size_t index = 0; index < output.idealCurrent.size(); ++index)
-			output.sigma[index] = std::abs(output.idealCurrent[index] * factor);
+			output.sigma[index] = std::abs(output.idealCurrent[index] * factor) + source.objective.sigma_abs;
 
 		std::string gpuMessage;
 		if (settings.preferGpu && JFMGpuAvailable(&gpuMessage))
@@ -481,6 +534,9 @@ namespace SST::Prototypes::JFM
 			request.start_perturbation_pct = settings.monteCarloStartPerturbationPercent;
 			request.use_lm = settings.fitMethod == "lm";
             request.layout = Layout(*model, *characteristic.info.temperatureK, prefitValues, fitValues, freeMask, settings, static_cast<int>(output.voltage.size()));
+            request.layout.objective = source.objective.objective; request.layout.shift = source.objective.shift;
+            request.layout.sigma_rel = source.objective.sigma_rel; request.layout.sigma_abs = source.objective.sigma_abs;
+            request.layout.switch_k = source.objective.switch_k; request.sigma = output.sigma;
 			request.nm_config.max_iter = settings.monteCarloMaxIterations;
 			request.nm_config.reduced_chi2_tol = monteCarloSolverSettings.fitReducedChiSquaredTolerance;
 			if (!request.use_lm && settings.autoCalibrateGpuSimplexIterations && settings.simplexCalibrationRuns > 0)
@@ -525,6 +581,7 @@ namespace SST::Prototypes::JFM
                     sample.fitMethod = settings.fitMethod == "nm" ? "NM" : gpuSample.lm_fallback ? "LM→NM" : "LM";
                     sample.lmStatus = gpuSample.lm_status;
                     sample.objectiveChiSquared = gpuSample.objective_chi2;
+                    sample.linearPoints = gpuSample.linear_points; sample.logPoints = gpuSample.log_points;
                     sample.stopReason = !sample.accepted ? "non_finite" : lm::stopReason(gpuSample.stop_status, sample.flatDirections);
                     output.state.convergedCount += sample.solverConverged ? 1 : 0;
 					output.state.acceptedCount += sample.converged ? 1 : 0;
@@ -550,21 +607,22 @@ namespace SST::Prototypes::JFM
 			FitData noisyData;
 			noisyData.voltage = output.voltage;
 			noisyData.sigma = output.sigma;
+            noisyData.objective = source.objective;
 			noisyData.current.resize(output.idealCurrent.size());
 			for (std::size_t point = 0; point < output.idealCurrent.size(); ++point)
 			{
-				const double noiseAmplitude = output.idealCurrent[point] * factor;
+				const double noiseAmplitude = source.objective.objective == JfmObjective::LogLegacy ? output.idealCurrent[point]*factor : output.sigma[point];
 				noisyData.current[point] = output.idealCurrent[point] + lm::normal(settings.monteCarloSeed + static_cast<uint64_t>(run)*0xD1B54A32D192ED03ULL, static_cast<int>(point)) * noiseAmplitude;
 				output.noisyCurrent.push_back(noisyData.current[point]);
 			}
 			ParameterArray start = prefitValues;
             const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations, settings.monteCarloSeed, run, settings.monteCarloStartPerturbationPercent);
-			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.voltage, output.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent);
+			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.voltage, output.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent, noisyData);
 			JFMMonteCarloSample sample;
 			for (std::string_view name : model->parameters)
 				sample.parameters.push_back(solved.parameters[IndexOf(name)]);
 			sample.chiSquared = finalChiSquared;
-			sample.reducedChiSquared = finalChiSquared;
+			sample.reducedChiSquared = source.objective.objective == JfmObjective::LogLegacy ? finalChiSquared : finalChiSquared / std::max(1, output.result.freeParameterCount);
 			sample.iterations = solved.result.iterations;
             sample.converged = sample.accepted = std::isfinite(finalChiSquared) && std::isfinite(solved.result.chi2_min);
             sample.solverConverged = sample.accepted && solved.result.converged;
@@ -572,6 +630,8 @@ namespace SST::Prototypes::JFM
             sample.fitMethod = settings.fitMethod == "nm" ? "NM" : solved.outcome.fallback ? "LM→NM" : "LM";
             sample.lmStatus = solved.outcome.lm_status;
             sample.objectiveChiSquared = solved.result.chi2_min;
+            const auto branches = ObjectiveSummary(noisyData, characteristic);
+            sample.linearPoints = branches.linearPoints; sample.logPoints = branches.logPoints;
             sample.stopReason = !sample.accepted ? "non_finite" : solved.result.stop_reason;
             output.state.convergedCount += sample.solverConverged ? 1 : 0;
 			output.state.acceptedCount += sample.converged ? 1 : 0;

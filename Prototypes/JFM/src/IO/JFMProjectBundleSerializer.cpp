@@ -244,7 +244,20 @@ namespace SST::Prototypes::JFM
 			node["reduced_chi_squared"] = state.reducedChiSquared;
 			node["iterations"] = state.iterations;
 			node["converged"] = state.converged;
+            node["lm_status"] = state.lmStatus;
+            node["flat_directions"] = state.flatDirections;
+            node["accepted"] = state.accepted;
+            node["stop_reason"] = state.stopReason;
+            node["fit_method"] = state.fitMethod;
 			node["backend"] = state.backend;
+            node["objective_mode"] = state.objective.mode;
+            node["objective_current_unit"] = state.objective.currentUnit;
+            node["objective_shift"] = state.objective.shift;
+            node["objective_sigma_absolute"] = state.objective.sigmaAbsolute;
+            node["objective_sigma_relative"] = state.objective.sigmaRelative;
+            node["objective_switch_k"] = state.objective.switchK;
+            node["objective_linear_points"] = state.objective.linearPoints;
+            node["objective_log_points"] = state.objective.logPoints;
 			node["warnings"] = state.warnings;
 			return node;
 		}
@@ -262,7 +275,20 @@ namespace SST::Prototypes::JFM
 			state.reducedChiSquared = ReadOr<double>(node, "reduced_chi_squared", 0.0);
 			state.iterations = ReadOr<int>(node, "iterations", 0);
 			state.converged = ReadOr<bool>(node, "converged", false);
+            state.lmStatus = ReadOr<int>(node, "lm_status", -1);
+            state.flatDirections = ReadOr<bool>(node, "flat_directions", false);
+            state.accepted = ReadOr<bool>(node, "accepted", state.converged);
+            state.stopReason = ReadOr<std::string>(node, "stop_reason", "unknown");
+            state.fitMethod = ReadOr<std::string>(node, "fit_method", "NM");
 			state.backend = ReadOr<std::string>(node, "backend", "cpu");
+            state.objective.mode = ReadOr<std::string>(node, "objective_mode", "log_legacy");
+            state.objective.currentUnit = ReadOr<std::string>(node, "objective_current_unit", "A");
+            state.objective.shift = ReadOr<double>(node, "objective_shift", 0.0);
+            state.objective.sigmaAbsolute = ReadOr<double>(node, "objective_sigma_absolute", 0.0);
+            state.objective.sigmaRelative = ReadOr<double>(node, "objective_sigma_relative", 0.0);
+            state.objective.switchK = ReadOr<double>(node, "objective_switch_k", 3.0);
+            state.objective.linearPoints = ReadOr<int>(node, "objective_linear_points", 0);
+            state.objective.logPoints = ReadOr<int>(node, "objective_log_points", 0);
 			if (node["warnings"])
 				state.warnings = node["warnings"].as<std::vector<std::string>>();
 			return state;
@@ -280,6 +306,14 @@ namespace SST::Prototypes::JFM
 			node["start_perturbation_percent"] = state.startPerturbationPercent;
 			node["seed"] = state.seed;
 			node["backend"] = state.backend;
+            node["objective_mode"] = state.objective.mode;
+            node["objective_current_unit"] = state.objective.currentUnit;
+            node["objective_shift"] = state.objective.shift;
+            node["objective_sigma_absolute"] = state.objective.sigmaAbsolute;
+            node["objective_sigma_relative"] = state.objective.sigmaRelative;
+            node["objective_switch_k"] = state.objective.switchK;
+            node["objective_linear_points"] = state.objective.linearPoints;
+            node["objective_log_points"] = state.objective.logPoints;
 			node["output_path"] = state.outputPath.Utf8();
 			node["total_milliseconds"] = state.totalMilliseconds;
 			node["warnings"] = state.warnings;
@@ -300,6 +334,14 @@ namespace SST::Prototypes::JFM
 			state.startPerturbationPercent = ReadOr<double>(node, "start_perturbation_percent", 0.0);
 			state.seed = ReadOr<std::uint32_t>(node, "seed", 42);
 			state.backend = ReadOr<std::string>(node, "backend", {});
+            state.objective.mode = ReadOr<std::string>(node, "objective_mode", "log_legacy");
+            state.objective.currentUnit = ReadOr<std::string>(node, "objective_current_unit", "A");
+            state.objective.shift = ReadOr<double>(node, "objective_shift", 0.0);
+            state.objective.sigmaAbsolute = ReadOr<double>(node, "objective_sigma_absolute", 0.0);
+            state.objective.sigmaRelative = ReadOr<double>(node, "objective_sigma_relative", 0.0);
+            state.objective.switchK = ReadOr<double>(node, "objective_switch_k", 3.0);
+            state.objective.linearPoints = ReadOr<int>(node, "objective_linear_points", 0);
+            state.objective.logPoints = ReadOr<int>(node, "objective_log_points", 0);
 			state.outputPath = Path::FromResolved(std::filesystem::u8path(ReadOr<std::string>(node, "output_path", {})));
 			state.totalMilliseconds = ReadOr<double>(node, "total_milliseconds", 0.0);
 			if (node["warnings"])
@@ -406,14 +448,14 @@ namespace SST::Prototypes::JFM
 			parameters << std::setprecision(17) << "sample";
 			for (const std::string &name : result.parameterNames)
 				parameters << '\t' << name;
-			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\tfit_method\tflat_directions\tlm_status\tobjective_chi_squared\n";
+			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\tfit_method\tflat_directions\tlm_status\tobjective_chi_squared\tlinear_points\tlog_points\n";
 			for (std::size_t index = 0; index < result.samples.size(); ++index)
 			{
 				const JFMMonteCarloSample &sample = result.samples[index];
 				parameters << index;
 				for (double value : sample.parameters)
 					parameters << '\t' << value;
-				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\n';
+				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\t' << sample.linearPoints << '\t' << sample.logPoints << '\n';
 			}
 			std::string error;
 			if (!SaveText(parameterPath, parameters.str(), error))
@@ -431,7 +473,7 @@ namespace SST::Prototypes::JFM
 					if (offset >= result.noisyCurrent.size())
 						break;
 					const double ideal = point < result.idealCurrent.size() ? result.idealCurrent[point] : 0.0;
-					const double sigma = std::abs(ideal * factor);
+					const double sigma = point < result.currentSigma.size() ? result.currentSigma[point] : std::abs(ideal * factor);
 					const double noisy = result.noisyCurrent[offset];
 					noise << sample << '\t' << result.voltage[point] << '\t' << ideal << '\t' << noisy << '\t' << noisy - ideal << '\t' << sigma << '\n';
 				}
@@ -491,6 +533,7 @@ namespace SST::Prototypes::JFM
                     sample.flatDirections = std::stoi(columns[chiIndex+9]) != 0;
                     sample.lmStatus = std::stoi(columns[chiIndex+10]);
                     sample.objectiveChiSquared = std::stod(columns[chiIndex+11]);
+                    if (columns.size() > chiIndex+13) { sample.linearPoints=std::stoi(columns[chiIndex+12]); sample.logPoints=std::stoi(columns[chiIndex+13]); }
                 }
 				result.samples.push_back(std::move(sample));
 			}
@@ -517,6 +560,7 @@ namespace SST::Prototypes::JFM
 				{
 					result.voltage.push_back(std::stod(columns[1]));
 					result.idealCurrent.push_back(std::stod(columns[2]));
+                    if (columns.size() > 5) result.currentSigma.push_back(std::stod(columns[5]));
 				}
 				result.noisyCurrent.push_back(std::stod(columns[3]));
 			}

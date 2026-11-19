@@ -124,7 +124,7 @@ JFM_HD inline lm::Result fit(GpuModelType model,GpuParamLayout layout,GpuNmConfi
             double f=lm::objective(model,layout,vertices[best],voltages,measured_run,point_count,h,g,true,true);
             double gn=lm::gradient(layout,vertices[best],f,h,g), span=0, size=0;
             for(int k=1;k<n_vertices;++k) {
-                span=fmax(span,fabs(chi2[order[k]]-f)/fmax(f,1e-300));
+                span=fmax(span,fabs(chi2[order[k]]-f)/fmax(f,layout.objective==JfmObjective::LogLegacy?1e-300:double(layout.dof)));
                 for(int j=0;j<n_free;++j) {
                     double scale=fmax(fabs(vertices[best][j]),fmax(fabs(layout.fixed_values[layout.free_to_total[j]]),1e-30));
                     size=fmax(size,fabs(vertices[order[k]][j]-vertices[best][j])/scale);

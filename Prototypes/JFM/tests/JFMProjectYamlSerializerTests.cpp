@@ -39,6 +39,7 @@ namespace SST::Prototypes::JFM
 		characteristic.fit = JFMFitState{};
 		characteristic.fit->modelId = characteristic.prefit->modelId;
 		characteristic.fit->status = "completed";
+        characteristic.fit->objective={"isc_shift","A",.03,1e-6,.01,4.,12,30};
         characteristic.fit->fitMethod = "LM→NM"; characteristic.fit->stopReason = "converged";
         characteristic.fit->accepted = true; characteristic.fit->lmStatus = 3;
 		characteristic.fit->fitRange = characteristic.prefit->fitRange;
@@ -111,6 +112,9 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(loaded->characteristics.front().fit.has_value());
 		EXPECT_DOUBLE_EQ(loaded->characteristics.front().fit->parameters.at("A").value, 1.58);
 		EXPECT_TRUE(loaded->characteristics.front().fit->converged);
+        const auto &objective=loaded->characteristics.front().fit->objective;
+        EXPECT_EQ(objective.mode,"isc_shift"); EXPECT_DOUBLE_EQ(objective.shift,.03);
+        EXPECT_DOUBLE_EQ(objective.sigmaAbsolute,1e-6); EXPECT_EQ(objective.linearPoints,12);
         EXPECT_EQ(loaded->characteristics.front().fit->fitMethod,"LM→NM");
         EXPECT_EQ(loaded->characteristics.front().fit->stopReason,"converged");
         EXPECT_TRUE(loaded->characteristics.front().fit->accepted); EXPECT_EQ(loaded->characteristics.front().fit->lmStatus,3);

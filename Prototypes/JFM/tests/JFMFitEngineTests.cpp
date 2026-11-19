@@ -344,7 +344,7 @@ namespace SST::Prototypes::JFM
         EXPECT_NEAR(*lo, 0.0958904, 1e-8); EXPECT_NEAR(*hi, 0.643379, 1e-8);
         EXPECT_EQ(data->voltage, rawVoltage);
         data->current = rawCurrent;
-        EXPECT_FALSE(RunJFMMonteCarlo(record, *record.info.prefit, fit, settings));
+        EXPECT_TRUE(RunJFMMonteCarlo(record, *record.info.prefit, fit, settings));
     }
 
     TEST(JFMFitEngineTests, BadRangesAndObjectiveDataReturnVisibleErrors)
@@ -357,6 +357,7 @@ namespace SST::Prototypes::JFM
             auto result = RunJFMSimplexFit(record, settings);
             ASSERT_FALSE(result); EXPECT_FALSE(result.Error().technicalDetails.empty());
         }
+        settings.objectiveMode = "log_legacy";
         for (double bad : {-1.0, 0.0, 1.0, std::numeric_limits<double>::quiet_NaN()}) {
             record = MakeRecord("SD-0"); auto data = CreateRef<JFMCharacteristicData>(*record.data);
             data->current[10] = bad; record.data = data;
@@ -516,4 +517,118 @@ TEST(JFMParameterLabels, PreserveImportedUnitsAndCurrentDensityPrecedence)
     info.columns[0].role.clear(); info.columns[1].role.clear();
     EXPECT_EQ(JFMParameterLabel("Rs", &info), "Rs [(mV)/(uA)]");
     EXPECT_EQ(JFMParameterLabel("I0"), "I0 [input I]");
+}
+
+namespace SST::Prototypes::JFM {
+TEST(JFMObjectiveTests, ResidualAndAnalyticDerivativeAreContinuousAndUnitInvariant) {
+    GpuParamLayout policy; policy.shift=.03; policy.switch_k=3;
+    for (auto mode : {JfmObjective::IscShift,JfmObjective::SignedSigma}) {
+        policy.objective=mode;
+        for (double y : {-.04,-.03,-.027,-.02,0.,1.,2.})
+            for(double x : {-.04,-.03,-.02700000001,-.027,-.02699999999,-.02,0.,1.,2.}) {
+                double d; const double r=lm::statisticalResidual(x,y,.001,policy,&d);
+                ASSERT_TRUE(std::isfinite(r));
+                const double eps=1e-8;
+                const double numeric=(lm::statisticalResidual(x+eps,y,.001,policy)-lm::statisticalResidual(x-eps,y,.001,policy))/(2*eps);
+                EXPECT_NEAR(d,numeric,std::abs(d)*2e-6);
+                auto scaled=policy; scaled.shift*=1000;
+                EXPECT_NEAR(r,lm::statisticalResidual(x*1000,y*1000,1.,scaled),std::max(1.,std::abs(r))*1e-11);
+                EXPECT_DOUBLE_EQ(lm::statisticalResidual(y,y,.001,policy),0);
+            }
+    }
+    policy.objective=JfmObjective::IscShift;
+    EXPECT_NEAR(lm::statisticalResidual(-.04,-.03,.001,policy),-10.,1e-13);
+    const double v[]={-.1,.1}, y[]={-.032,-.028};
+    EXPECT_DOUBLE_EQ(lm::iscShift(v,y,2),.03);
+}
+TEST(JFMObjectiveTests, LightFitUsesMeasuredShiftAndReportsBranches) {
+    auto record=MakeRecord("SD-RsRsh-I_ph");
+    auto data=CreateRef<JFMCharacteristicData>(*record.data);
+    data->voltage.insert(data->voltage.begin(),{-.1,0.});
+    data->current.insert(data->current.begin(),{EvaluateJFMCurrent("SD-RsRsh-I_ph",-.1,300.,Parameters),EvaluateJFMCurrent("SD-RsRsh-I_ph",0.,300.,Parameters)});
+    record.data=data; record.info.prefit->fitRange.lowerVoltage=-.1;
+    JFMFitMonteCarloSettings options; options.preferGpu=false;
+    for(auto mode : {"auto","isc_shift","signed_sigma"}) {
+        options.objectiveMode=mode;
+        auto result=RunJFMSimplexFit(record,options);
+        ASSERT_TRUE(result) << result.Error().technicalDetails;
+        EXPECT_TRUE(result->state.accepted);
+        EXPECT_EQ(result->state.objective.mode,std::string(mode)=="auto"?"isc_shift":mode);
+        EXPECT_GT(result->state.objective.sigmaAbsolute,0);
+        auto magnitudes=data->current;for(double &y:magnitudes)y=std::abs(y);std::sort(magnitudes.begin(),magnitudes.end());
+        EXPECT_DOUBLE_EQ(result->state.objective.sigmaAbsolute,magnitudes[magnitudes.size()/2]*1e-4);
+        EXPECT_EQ(result->state.objective.linearPoints+result->state.objective.logPoints,data->voltage.size());
+        if (std::string(mode)!="signed_sigma") EXPECT_DOUBLE_EQ(result->state.objective.shift,-data->current[1]);
+    }
+    options.objectiveMode="log_legacy";
+    EXPECT_FALSE(RunJFMSimplexFit(record,options));
+}
+TEST(JFMObjectiveTests, StatisticalMonteCarloHandlesZeroCrossingAndAbsoluteNoise) {
+    auto record=MakeRecord("SD-RsRsh-I_ph");
+    JFMFitState fit; fit.modelId=record.info.prefit->modelId; fit.parameters=record.info.prefit->parameters;
+    JFMFitMonteCarloSettings options; options.preferGpu=false; options.objectiveMode="signed_sigma";
+    options.monteCarloSamples=8; options.sigmaAbsolute=1e-5; options.monteCarloNoisePercent=0;
+    options.monteCarloMaxIterations=200;
+    auto result=RunJFMMonteCarlo(record,*record.info.prefit,fit,options);
+    ASSERT_TRUE(result) << result.Error().technicalDetails;
+    EXPECT_EQ(result->state.acceptedCount,8); EXPECT_TRUE(result->result.confidenceAvailable);
+    for(double sigma:result->sigma) EXPECT_DOUBLE_EQ(sigma,1e-5);
+    EXPECT_NE(result->noisyCurrent[0],result->idealCurrent[0]);
+    auto automatic=options;automatic.sigmaAbsolute=0;
+    auto withFloor=RunJFMMonteCarlo(record,*record.info.prefit,fit,automatic);
+    ASSERT_TRUE(withFloor);EXPECT_GT(withFloor->state.objective.sigmaAbsolute,0);
+    EXPECT_TRUE(withFloor->result.confidenceAvailable);
+    EXPECT_NE(withFloor->noisyCurrent[0],withFloor->idealCurrent[0]);
+    for(auto &s:result->result.samples) {
+        EXPECT_TRUE(std::isfinite(s.objectiveChiSquared));
+        EXPECT_DOUBLE_EQ(s.reducedChiSquared,s.chiSquared/5);
+    }
+}
+TEST(JFMObjectiveTests, HeadlessObjectiveValidationIsTyped) {
+    nlohmann::json q={{"voltage_V",{-.1,0.,.1,.2,.3,.4,.5,.6}}, {"current_A",{-.03,-.03,-.03,-.03,-.03,-.02,-.01,.01}},
+        {"temperature_K",300.},{"model_id","SD-0-I_ph"},{"parameters",{{"I0",1e-10},{"A",1.5},{"I_ph",.03}}}};
+    for (auto mode : {"isc_shift","signed_sigma"}) {
+        q["objective_mode"]=mode; auto r=RunJFMFitRequest(q); ASSERT_TRUE(r.at("ok")) << r.dump();
+        EXPECT_EQ(r["objective"]["mode"],mode); EXPECT_TRUE(r["objective"].contains("sigma_abs_A"));
+    }
+    for(auto bad : {nlohmann::json{{"objective_mode","wrong"}},nlohmann::json{{"sigma_abs_A",-1.}},nlohmann::json{{"objective_switch_k",0.}}}) {
+        auto input=q;input.update(bad);auto r=RunJFMFitRequest(input);
+        EXPECT_FALSE(r.at("ok"));EXPECT_EQ(r["error"]["code"],"jfm.fit.validation");
+    }
+}
+}
+
+TEST(JFMStatisticalObjective, UsesAmpereSigmaWithoutCurrentDomainRestrictions) {
+    const double p[]={0},v[]={0,1},y[]={-1,1},sigma[]={.1,.2};
+    GpuParamLayout policy;policy.objective=JfmObjective::SignedSigma;
+    EXPECT_NEAR(computeChiSquared(p,v,y,sigma,2,[](double v,const double*){return v==0?-.9:1.2;},policy),2.,1e-14);
+}
+
+TEST(JFMStatisticalObjective, AnalyticNormalEquationsMatchFiniteDifferencesInBothModes) {
+    GpuParamLayout l;l.n_total=l.n_free=7;l.T=300.;l.shift=.03;l.sigma_abs=1e-5;l.sigma_rel=.01;
+    double p[]={1e-9,1.5,2.,1000.,2.3,200.,.03},v[]={.02,.2,.4,.6,.8,1.};
+    double y[6];for(int j=0;j<7;++j){l.free_to_total[j]=j;l.fixed_values[j]=p[j];}
+    for(int i=0;i<6;++i)y[i]=lm::current(GpuModelType::SDRsRshAlphaRsh2Iph,v[i],p,300.,nullptr,true)+1e-5*(i-2);
+    for(auto mode:{JfmObjective::IscShift,JfmObjective::SignedSigma}) {
+        l.objective=mode;double h[64],g[8];
+        const double f=lm::objective(GpuModelType::SDRsRshAlphaRsh2Iph,l,p,v,y,6,h,g,true,true);ASSERT_TRUE(std::isfinite(f));
+        for(int j=0;j<7;++j) {
+            const double old=p[j],eps=std::abs(old)*1e-5;p[j]=old+eps;
+            const double plus=lm::objective(GpuModelType::SDRsRshAlphaRsh2Iph,l,p,v,y,6,nullptr,nullptr,true,true);
+            p[j]=old-eps;const double minus=lm::objective(GpuModelType::SDRsRshAlphaRsh2Iph,l,p,v,y,6,nullptr,nullptr,true,true);p[j]=old;
+            EXPECT_NEAR(g[j],(plus-minus)/(4*eps),std::max(1e-8,std::abs(g[j])*1e-3));
+        }
+    }
+}
+
+namespace SST::Prototypes::JFM {
+TEST(JFMObjectiveTests, DarkAutoIgnoresNegativePointsOutsideFitRangeBitwise) {
+    auto record=MakeRecord("SD-RsRsh");JFMFitMonteCarloSettings options;options.preferGpu=false;
+    auto original=RunJFMSimplexFit(record,options);ASSERT_TRUE(original);
+    auto data=CreateRef<JFMCharacteristicData>(*record.data);data->voltage.insert(data->voltage.begin(),-.1);data->current.insert(data->current.begin(),-1e-8);record.data=data;
+    auto extended=RunJFMSimplexFit(record,options);ASSERT_TRUE(extended);
+    EXPECT_EQ(extended->state.objective.mode,"log_legacy");
+    EXPECT_DOUBLE_EQ(original->state.chiSquared,extended->state.chiSquared);
+    for(auto &[name,value]:original->state.parameters) EXPECT_DOUBLE_EQ(value.value,extended->state.parameters.at(name).value);
+}
 }
