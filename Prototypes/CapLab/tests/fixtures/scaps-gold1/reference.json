@@ -1,0 +1,1471 @@
+{
+  "phase3_reference": {
+    "cv": [
+      {
+        "name": "cv-1kHz",
+        "Nd_m3": 9.944714836063323e+21,
+        "Vbi_V": 0.5652892841505026,
+        "Vbi_expected_V": 0.5714207120030086,
+        "slope_m4_F2_V": 12116932.14997563
+      },
+      {
+        "name": "cv-1MHz",
+        "Nd_m3": 9.94471529584775e+21,
+        "Vbi_V": 0.5652897301898502,
+        "Vbi_expected_V": 0.5714207120030086,
+        "slope_m4_F2_V": 12116931.589760827
+      }
+    ],
+    "admittance": [
+      {
+        "temperature_K": 240.0,
+        "inflection_frequency_Hz": 72.63875217994743,
+        "local_Debye_frequency_Hz": 80.25932866873123,
+        "emission_rate_s1": 255.0055690645773,
+        "frequency_ratio": 1.7897755806004614,
+        "step_F_m2": 2.479078399999999e-05,
+        "local_fit_max_error_nF_cm2": 0.12328084203821277
+      },
+      {
+        "temperature_K": 270.0,
+        "inflection_frequency_Hz": 748.2878437709995,
+        "local_Debye_frequency_Hz": 896.7312281519605,
+        "emission_rate_s1": 2767.8781450480597,
+        "frequency_ratio": 1.698640958574931,
+        "step_F_m2": 2.425125399999999e-05,
+        "local_fit_max_error_nF_cm2": 0.11959682800758031
+      },
+      {
+        "temperature_K": 300.0,
+        "inflection_frequency_Hz": 5583.3046763092025,
+        "local_Debye_frequency_Hz": 6283.340427995791,
+        "emission_rate_s1": 19067.58771379729,
+        "frequency_ratio": 1.8398204552277226,
+        "step_F_m2": 2.3763533999999993e-05,
+        "local_fit_max_error_nF_cm2": 0.0961271015773093
+      },
+      {
+        "temperature_K": 330.0,
+        "inflection_frequency_Hz": 28240.496990630716,
+        "local_Debye_frequency_Hz": 30651.620743767893,
+        "emission_rate_s1": 94181.00652299808,
+        "frequency_ratio": 1.8840346085667607,
+        "step_F_m2": 2.3118849000000027e-05,
+        "local_fit_max_error_nF_cm2": 0.0978962750651391
+      },
+      {
+        "temperature_K": 360.0,
+        "inflection_frequency_Hz": 103722.27564056695,
+        "local_Debye_frequency_Hz": 113895.50984686274,
+        "emission_rate_s1": 361916.9746031052,
+        "frequency_ratio": 1.800706582073782,
+        "step_F_m2": 2.217788800000001e-05,
+        "local_fit_max_error_nF_cm2": 0.08909975152461413
+      }
+    ],
+    "activation_energy_eV": 0.4028921031899731,
+    "activation_energy_Debye_fit_eV": 0.4004877853707404,
+    "arrhenius_R2": 0.9998263195788354
+  },
+  "phase6_reference": {
+    "barrier_set_eV": 0.75,
+    "defect_depth_below_Ec_set_eV": 0.4,
+    "richardson": {
+      "energy_eV": 0.7444065757823889,
+      "energy_J": 1.1926708219144937e-19,
+      "R_squared": 0.9999997945330932,
+      "slope_K": -8638.479598467955,
+      "log_intercept": 12.491616256635657,
+      "temperature_power": 2,
+      "A_eff_A_m2_K2": 266097.0196088449
+    },
+    "IV_window_sensitivity": {
+      "0.08-0.16_V": {
+        "barrier_eff_eV": 0.7434526862307215,
+        "A_eff_A_m2_K2": 248365.46375919014,
+        "A_eff_A_cm2_K2": 24.836546375919013,
+        "R_squared": 0.9999990674512873
+      },
+      "0.16-0.24_V": {
+        "barrier_eff_eV": 0.7451227337125199,
+        "A_eff_A_m2_K2": 279228.77196316276,
+        "A_eff_A_cm2_K2": 27.922877196316275,
+        "R_squared": 0.9999994034621078
+      }
+    },
+    "admittance_inflection": {
+      "energy_eV": 0.4028921031899731,
+      "energy_J": 6.455043137540917e-20,
+      "R_squared": 0.9998263195788354,
+      "slope_K": -4675.368712497565,
+      "log_intercept": 14.623695432019048,
+      "temperature_power": 2
+    },
+    "admittance_local_Debye": {
+      "energy_eV": 0.4004877853707404,
+      "energy_J": 6.416521719234073e-20,
+      "R_squared": 0.999935375995532,
+      "slope_K": -4647.467762794313,
+      "log_intercept": 14.643635822967989,
+      "temperature_power": 2
+    },
+    "uncorrected_ln_J0": {
+      "energy_eV": 0.7900364466926951,
+      "energy_J": 1.2657779348994226e-19,
+      "R_squared": 0.9999783320581618,
+      "slope_K": -9167.992262330605,
+      "log_intercept": 25.68571514791064,
+      "temperature_power": 0
+    },
+    "uncorrected_ln_omega": {
+      "energy_eV": 0.4530492606503965,
+      "energy_J": 7.25864939465041e-20,
+      "R_squared": 0.9998139511152496,
+      "slope_K": -5257.418355172502,
+      "log_intercept": 27.991252068451384,
+      "temperature_power": 0
+    },
+    "IV_fits": [
+      {
+        "temperature_K": 200.0,
+        "J0_A_m2": 1.8497081867085855e-09,
+        "ideality_factor": 1.0200012960619222,
+        "max_relative_fit_error": 0.0031223204146845892,
+        "R_squared_logJ": 0.9999994765226928
+      },
+      {
+        "temperature_K": 220.0,
+        "J0_A_m2": 1.1415682099088336e-07,
+        "ideality_factor": 1.0226700423752504,
+        "max_relative_fit_error": 0.003383024191364684,
+        "R_squared_logJ": 0.9999992603988165
+      },
+      {
+        "temperature_K": 240.0,
+        "J0_A_m2": 3.58976168354741e-06,
+        "ideality_factor": 1.0256274215227503,
+        "max_relative_fit_error": 0.003684622909635135,
+        "R_squared_logJ": 0.9999989631591798
+      },
+      {
+        "temperature_K": 260.0,
+        "J0_A_m2": 6.71404590755742e-05,
+        "ideality_factor": 1.0289482502184846,
+        "max_relative_fit_error": 0.00403981815984024,
+        "R_squared_logJ": 0.9999985503842834
+      },
+      {
+        "temperature_K": 280.0,
+        "J0_A_m2": 0.0008341452255491145,
+        "ideality_factor": 1.0327034420212169,
+        "max_relative_fit_error": 0.0044918552649827,
+        "R_squared_logJ": 0.99999794926329
+      },
+      {
+        "temperature_K": 300.0,
+        "J0_A_m2": 0.007469415918622355,
+        "ideality_factor": 1.0370526755482385,
+        "max_relative_fit_error": 0.005132893339986533,
+        "R_squared_logJ": 0.9999969921982043
+      },
+      {
+        "temperature_K": 320.0,
+        "J0_A_m2": 0.05128304758034205,
+        "ideality_factor": 1.0422671233496708,
+        "max_relative_fit_error": 0.006174008133144675,
+        "R_squared_logJ": 0.999995216578146
+      },
+      {
+        "temperature_K": 340.0,
+        "J0_A_m2": 0.28343343282059125,
+        "ideality_factor": 1.0489125172767382,
+        "max_relative_fit_error": 0.008019200638773495,
+        "R_squared_logJ": 0.9999912919604144
+      },
+      {
+        "temperature_K": 360.0,
+        "J0_A_m2": 1.3106094926595175,
+        "ideality_factor": 1.0579442684957368,
+        "max_relative_fit_error": 0.011339702201068261,
+        "R_squared_logJ": 0.9999812561121504
+      }
+    ],
+    "admittance": [
+      {
+        "temperature_K": 240,
+        "inflection_frequency_Hz": 72.63875217994743,
+        "local_Debye_frequency_Hz": 80.25932866873123,
+        "local_fit_max_error_nF_cm2": 0.12328084203821277
+      },
+      {
+        "temperature_K": 270,
+        "inflection_frequency_Hz": 748.2878437709995,
+        "local_Debye_frequency_Hz": 896.7312281519605,
+        "local_fit_max_error_nF_cm2": 0.11959682800758031
+      },
+      {
+        "temperature_K": 300,
+        "inflection_frequency_Hz": 5583.3046763092025,
+        "local_Debye_frequency_Hz": 6283.340427995791,
+        "local_fit_max_error_nF_cm2": 0.0961271015773093
+      },
+      {
+        "temperature_K": 330,
+        "inflection_frequency_Hz": 28240.496990630716,
+        "local_Debye_frequency_Hz": 30651.620743767893,
+        "local_fit_max_error_nF_cm2": 0.0978962750651391
+      },
+      {
+        "temperature_K": 360,
+        "inflection_frequency_Hz": 103722.27564056695,
+        "local_Debye_frequency_Hz": 113895.50984686274,
+        "local_fit_max_error_nF_cm2": 0.08909975152461413
+      }
+    ]
+  },
+  "phase7_reference": {
+    "measurements": [
+      {
+        "model": "baseline",
+        "temperature_K": 150,
+        "Vbi_V": 0.6740089499999999,
+        "width_m": 2.923467643086183e-07
+      },
+      {
+        "model": "baseline",
+        "temperature_K": 175,
+        "Vbi_V": 0.65785034,
+        "width_m": 2.882167994946699e-07
+      },
+      {
+        "model": "baseline",
+        "temperature_K": 200,
+        "Vbi_V": 0.64122764,
+        "width_m": 2.839693113955645e-07
+      },
+      {
+        "model": "baseline",
+        "temperature_K": 225,
+        "Vbi_V": 0.62419919,
+        "width_m": 2.795719650118729e-07
+      },
+      {
+        "model": "baseline",
+        "temperature_K": 250,
+        "Vbi_V": 0.60681027,
+        "width_m": 2.750171207009167e-07
+      },
+      {
+        "model": "baseline",
+        "temperature_K": 275,
+        "Vbi_V": 0.58909707,
+        "width_m": 2.7030545772486356e-07
+      },
+      {
+        "model": "baseline",
+        "temperature_K": 300,
+        "Vbi_V": 0.57108914,
+        "width_m": 2.6543729777331987e-07
+      },
+      {
+        "model": "baseline",
+        "temperature_K": 325,
+        "Vbi_V": 0.5528111,
+        "width_m": 2.604103351713922e-07
+      },
+      {
+        "model": "baseline",
+        "temperature_K": 350,
+        "Vbi_V": 0.53428378,
+        "width_m": 2.5521958898657254e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 150,
+        "Vbi_V": 0.67334471,
+        "width_m": 2.9873915718701243e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 175,
+        "Vbi_V": 0.65707538,
+        "width_m": 2.9440347101161037e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 200,
+        "Vbi_V": 0.64034197,
+        "width_m": 2.8991917365829813e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 225,
+        "Vbi_V": 0.62320283,
+        "width_m": 2.8527218100176393e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 250,
+        "Vbi_V": 0.60570328,
+        "width_m": 2.804505397120711e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 275,
+        "Vbi_V": 0.58787974,
+        "width_m": 2.75445207291322e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 300,
+        "Vbi_V": 0.56976258,
+        "width_m": 2.7024543646534295e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 325,
+        "Vbi_V": 0.55137857,
+        "width_m": 2.6483598785846835e-07
+      },
+      {
+        "model": "single",
+        "temperature_K": 350,
+        "Vbi_V": 0.53275327,
+        "width_m": 2.591952462282592e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 150,
+        "Vbi_V": 0.67334472,
+        "width_m": 2.987284845817108e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 175,
+        "Vbi_V": 0.6570754,
+        "width_m": 2.9438557082976e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 200,
+        "Vbi_V": 0.640342,
+        "width_m": 2.89900304028341e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 225,
+        "Vbi_V": 0.62320286,
+        "width_m": 2.852532940349003e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 250,
+        "Vbi_V": 0.60570338,
+        "width_m": 2.804292735483466e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 275,
+        "Vbi_V": 0.5878801,
+        "width_m": 2.7541867136465267e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 300,
+        "Vbi_V": 0.56976375,
+        "width_m": 2.7021100990914925e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 325,
+        "Vbi_V": 0.5513817599999999,
+        "width_m": 2.647907985595476e-07
+      },
+      {
+        "model": "gaussian",
+        "temperature_K": 350,
+        "Vbi_V": 0.53276068,
+        "width_m": 2.591355823940408e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 150,
+        "Vbi_V": 0.67264453,
+        "width_m": 3.0541660585794984e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 175,
+        "Vbi_V": 0.65625852,
+        "width_m": 3.008407059856908e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 200,
+        "Vbi_V": 0.63940847,
+        "width_m": 2.960731292066523e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 225,
+        "Vbi_V": 0.62215299,
+        "width_m": 2.9111536016407757e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 250,
+        "Vbi_V": 0.6045386,
+        "width_m": 2.8593942119454954e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 275,
+        "Vbi_V": 0.5866052900000001,
+        "width_m": 2.8051680268113346e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 300,
+        "Vbi_V": 0.5683919,
+        "width_m": 2.7481777672699573e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 325,
+        "Vbi_V": 0.54994047,
+        "width_m": 2.688050327415197e-07
+      },
+      {
+        "model": "double",
+        "temperature_K": 350,
+        "Vbi_V": 0.5312961700000001,
+        "width_m": 2.6244589975407973e-07
+      }
+    ],
+    "fits": {
+      "single": {
+        "0.35": {
+          "temperatures_K": [
+            200,
+            225,
+            250,
+            275,
+            300,
+            325,
+            350
+          ],
+          "frequency_Hz": [
+            35.29736594752235,
+            300.33683128320513,
+            1829.586155452316,
+            8735.916864618437,
+            35665.65539615716,
+            124241.21514056913,
+            343956.9984862154
+          ],
+          "Ea_eV": 0.32565640012140284,
+          "xi_s1_K2": 767564.1107353597,
+          "sigma_p_apparent_m2": 6.908076996618236e-20,
+          "ProPho_ln_f_Ea_eV": 0.3705887605877065,
+          "ProPho_f_intercept_Hz": 63557924099.142746,
+          "R2": 0.998446680088227,
+          "set_Et_eV": 0.35,
+          "Ea_error_eV": -0.024343599878597133,
+          "sigma_p_set_m2": 1e-19,
+          "xi_theory_s1_K2": 1111111.1111111112,
+          "sigma_ratio_apparent_to_set": 0.6908076996618236,
+          "local_Debye_Ea_eV": 0.3365715890889685
+        }
+      },
+      "gaussian": {
+        "0.35": {
+          "temperatures_K": [
+            200,
+            225,
+            250,
+            275,
+            300,
+            325,
+            350
+          ],
+          "frequency_Hz": [
+            44.839626682799384,
+            341.80065199741875,
+            1860.6551579189738,
+            8261.961696353592,
+            35010.96890983885,
+            137058.1529937764,
+            357659.18953020795
+          ],
+          "Ea_eV": 0.3183607281909209,
+          "xi_s1_K2": 595025.0599248833,
+          "sigma_p_apparent_m2": 5.355225539323949e-20,
+          "ProPho_ln_f_Ea_eV": 0.3632930886572246,
+          "ProPho_f_intercept_Hz": 49270877919.971756,
+          "R2": 0.9956865110836816,
+          "set_Et_eV": 0.35,
+          "Ea_error_eV": -0.03163927180907905,
+          "sigma_p_set_m2": 1e-19,
+          "xi_theory_s1_K2": 1111111.1111111112,
+          "sigma_ratio_apparent_to_set": 0.5355225539323949,
+          "local_Debye_Ea_eV": 0.3248393091880796
+        }
+      },
+      "double": {
+        "0.28": {
+          "temperatures_K": [
+            175,
+            200,
+            225,
+            250,
+            275,
+            300
+          ],
+          "frequency_Hz": [
+            117.81948475366313,
+            1152.0637506412518,
+            7563.137132854198,
+            40245.54743574564,
+            181386.80071431646,
+            541093.7025592796
+          ],
+          "Ea_eV": 0.2683133563727727,
+          "xi_s1_K2": 1125330.637970052,
+          "sigma_p_apparent_m2": 1.0127975741730466e-19,
+          "ProPho_ln_f_Ea_eV": 0.3072005781573875,
+          "ProPho_f_intercept_Hz": 69732662643.8703,
+          "R2": 0.9981257583672798,
+          "set_Et_eV": 0.28,
+          "Ea_error_eV": -0.011686643627227322,
+          "sigma_p_set_m2": 1e-19,
+          "xi_theory_s1_K2": 1111111.1111111112,
+          "sigma_ratio_apparent_to_set": 1.0127975741730466
+        },
+        "0.43": {
+          "temperatures_K": [
+            250,
+            275,
+            300,
+            325,
+            350
+          ],
+          "frequency_Hz": [
+            44.48265125410189,
+            361.53521066111847,
+            1824.6036310001546,
+            7266.411994194278,
+            24669.940840345207
+          ],
+          "Ea_eV": 0.4233944289004683,
+          "xi_s1_K2": 1614873.5377278232,
+          "sigma_p_apparent_m2": 1.4533861839550407e-19,
+          "ProPho_ln_f_Ea_eV": 0.47402699393076453,
+          "ProPho_f_intercept_Hz": 166259605908.19666,
+          "R2": 0.999580874483841,
+          "set_Et_eV": 0.43,
+          "Ea_error_eV": -0.006605571099531693,
+          "sigma_p_set_m2": 1e-19,
+          "xi_theory_s1_K2": 1111111.1111111112,
+          "sigma_ratio_apparent_to_set": 1.4533861839550406
+        }
+      }
+    },
+    "walter": [
+      {
+        "peak_eV": 0.28093847475164063,
+        "centroid_eV": 0.2609290812478191,
+        "sigma_eV": 0.023155228263586514,
+        "integral_m3": 9.694386011958834e+17,
+        "model": "single",
+        "temperature_K": 150,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.0019388772023917668
+      },
+      {
+        "peak_eV": 0.3173638825798296,
+        "centroid_eV": 0.3136870324948661,
+        "sigma_eV": 0.014584554581171394,
+        "integral_m3": 8.450265739501924e+19,
+        "model": "single",
+        "temperature_K": 175,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.16900531479003847
+      },
+      {
+        "peak_eV": 0.32365160331593457,
+        "centroid_eV": 0.3247871975071335,
+        "sigma_eV": 0.021736526077748924,
+        "integral_m3": 1.4894417440404554e+20,
+        "model": "single",
+        "temperature_K": 200,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.29788834880809106
+      },
+      {
+        "peak_eV": 0.3270069437255995,
+        "centroid_eV": 0.3236653398745362,
+        "sigma_eV": 0.02459995023192959,
+        "integral_m3": 1.500154325764414e+20,
+        "model": "single",
+        "temperature_K": 225,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.3000308651528828
+      },
+      {
+        "peak_eV": 0.32819639567884434,
+        "centroid_eV": 0.32185020731343755,
+        "sigma_eV": 0.027476275940382645,
+        "integral_m3": 1.4533726746387215e+20,
+        "model": "single",
+        "temperature_K": 250,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.2906745349277443
+      },
+      {
+        "peak_eV": 0.3291560306032942,
+        "centroid_eV": 0.31970560495859207,
+        "sigma_eV": 0.029875531384165894,
+        "integral_m3": 1.389081416072114e+20,
+        "model": "single",
+        "temperature_K": 275,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.2778162832144228
+      },
+      {
+        "peak_eV": 0.32587807044493644,
+        "centroid_eV": 0.317848826937294,
+        "sigma_eV": 0.03160867835304907,
+        "integral_m3": 1.3204736114138022e+20,
+        "model": "single",
+        "temperature_K": 300,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.26409472228276043
+      },
+      {
+        "peak_eV": 0.3231249337292279,
+        "centroid_eV": 0.316733818983263,
+        "sigma_eV": 0.03269090824344019,
+        "integral_m3": 1.2429986717034573e+20,
+        "model": "single",
+        "temperature_K": 325,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.24859973434069146
+      },
+      {
+        "peak_eV": 0.3223570724557917,
+        "centroid_eV": 0.3166674200063273,
+        "sigma_eV": 0.033012203493101064,
+        "integral_m3": 1.1484065817566265e+20,
+        "model": "single",
+        "temperature_K": 350,
+        "xi_s1_K2": 767564.1107353597,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.2296813163513253
+      },
+      {
+        "peak_eV": 0.2776472762327232,
+        "centroid_eV": 0.25717466280943513,
+        "sigma_eV": 0.017226059536014558,
+        "integral_m3": 4.775398403973822e+18,
+        "model": "gaussian",
+        "temperature_K": 150,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.009550796807947645,
+        "peak_error_eV": -0.0723527237672768,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 0.6881730797197224
+      },
+      {
+        "peak_eV": 0.310051775950685,
+        "centroid_eV": 0.3024956789695546,
+        "sigma_eV": 0.019629957836919062,
+        "integral_m3": 8.464421240755341e+19,
+        "model": "gaussian",
+        "temperature_K": 175,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.1692884248151068,
+        "peak_error_eV": -0.03994822404931497,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 0.784207700615338
+      },
+      {
+        "peak_eV": 0.3139721004552356,
+        "centroid_eV": 0.32057097775882587,
+        "sigma_eV": 0.031033820960428126,
+        "integral_m3": 1.462259621190361e+20,
+        "model": "gaussian",
+        "temperature_K": 200,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.2924519242380722,
+        "peak_error_eV": -0.036027899544764375,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 1.239786737132652
+      },
+      {
+        "peak_eV": 0.31909382447175405,
+        "centroid_eV": 0.3204635679817518,
+        "sigma_eV": 0.03512341542053872,
+        "integral_m3": 1.4811351739732348e+20,
+        "model": "gaussian",
+        "temperature_K": 225,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.29622703479464696,
+        "peak_error_eV": -0.030906175528245927,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 1.4031641368528296
+      },
+      {
+        "peak_eV": 0.3227110648139819,
+        "centroid_eV": 0.31785961171630833,
+        "sigma_eV": 0.03690058559667072,
+        "integral_m3": 1.4351977315295524e+20,
+        "model": "gaussian",
+        "temperature_K": 250,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.2870395463059105,
+        "peak_error_eV": -0.027288935186018104,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 1.4741612601785599
+      },
+      {
+        "peak_eV": 0.32312216665194554,
+        "centroid_eV": 0.31549381206635607,
+        "sigma_eV": 0.03837719505159264,
+        "integral_m3": 1.3802161019437621e+20,
+        "model": "gaussian",
+        "temperature_K": 275,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.27604322038875245,
+        "peak_error_eV": -0.026877833348054436,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 1.5331511222542358
+      },
+      {
+        "peak_eV": 0.3212798877155137,
+        "centroid_eV": 0.3136312544581717,
+        "sigma_eV": 0.03946704274293465,
+        "integral_m3": 1.3147272133410008e+20,
+        "model": "gaussian",
+        "temperature_K": 300,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.2629454426682002,
+        "peak_error_eV": -0.028720112284486288,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 1.5766900314637522
+      },
+      {
+        "peak_eV": 0.3138444380794257,
+        "centroid_eV": 0.3125574289006327,
+        "sigma_eV": 0.03997801970457638,
+        "integral_m3": 1.2353062741376542e+20,
+        "model": "gaussian",
+        "temperature_K": 325,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.24706125482753086,
+        "peak_error_eV": -0.036155561920574286,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 1.597103323814428
+      },
+      {
+        "peak_eV": 0.31236269255183674,
+        "centroid_eV": 0.3126740538210418,
+        "sigma_eV": 0.039708592742028204,
+        "integral_m3": 1.137289064277064e+20,
+        "model": "gaussian",
+        "temperature_K": 350,
+        "xi_s1_K2": 595025.0599248833,
+        "total_set_m3": 5e+20,
+        "integral_ratio": 0.22745781285541278,
+        "peak_error_eV": -0.03763730744816324,
+        "sigma_set_eV": 0.025031580054003782,
+        "sigma_ratio": 1.5863398417662748
+      },
+      {
+        "peak_eV": 0.2634157195463967,
+        "centroid_eV": 0.26360754470313097,
+        "sigma_eV": 0.013561825577686662,
+        "integral_m3": 1.2400998600454444e+20,
+        "model": "double",
+        "temperature_K": 150,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.12400998600454444,
+        "components": [
+          {
+            "peak_eV": 0.2634157195463967,
+            "centroid_eV": 0.26360754470313097,
+            "sigma_eV": 0.013561825577686662,
+            "integral_m3": 1.2400998600454444e+20,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.01658428045360333,
+            "integral_ratio": 0.24801997200908887
+          },
+          {
+            "set_energy_eV": 0.43,
+            "status": "outside_measured_energy_window"
+          }
+        ]
+      },
+      {
+        "peak_eV": 0.2691416678363155,
+        "centroid_eV": 0.26791383833910454,
+        "sigma_eV": 0.01844792016676851,
+        "integral_m3": 1.4228248511629256e+20,
+        "model": "double",
+        "temperature_K": 175,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.14228248511629257,
+        "components": [
+          {
+            "peak_eV": 0.2691416678363155,
+            "centroid_eV": 0.26791383833910454,
+            "sigma_eV": 0.01844792016676851,
+            "integral_m3": 1.4228248511629256e+20,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.010858332163684536,
+            "integral_ratio": 0.28456497023258515
+          },
+          {
+            "set_energy_eV": 0.43,
+            "status": "outside_measured_energy_window"
+          }
+        ]
+      },
+      {
+        "peak_eV": 0.27250892935047943,
+        "centroid_eV": 0.2881760554295505,
+        "sigma_eV": 0.04765954693393001,
+        "integral_m3": 1.629561123723943e+20,
+        "model": "double",
+        "temperature_K": 200,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.1629561123723943,
+        "components": [
+          {
+            "peak_eV": 0.27250892935047943,
+            "centroid_eV": 0.269164840880201,
+            "sigma_eV": 0.023549273593485708,
+            "integral_m3": 1.3565860931242956e+20,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.0074910706495205925,
+            "integral_ratio": 0.27131721862485914
+          },
+          {
+            "set_energy_eV": 0.43,
+            "status": "outside_measured_energy_window"
+          }
+        ]
+      },
+      {
+        "peak_eV": 0.4242401517718171,
+        "centroid_eV": 0.348327301240999,
+        "sigma_eV": 0.0755742870902386,
+        "integral_m3": 2.8000004192363355e+20,
+        "model": "double",
+        "temperature_K": 225,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.28000004192363354,
+        "components": [
+          {
+            "peak_eV": 0.2754240784313369,
+            "centroid_eV": 0.2689853509783799,
+            "sigma_eV": 0.027567150867200768,
+            "integral_m3": 1.259430708845371e+20,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.004575921568663099,
+            "integral_ratio": 0.2518861417690742
+          },
+          {
+            "peak_eV": 0.4242401517718171,
+            "centroid_eV": 0.41330297684466677,
+            "sigma_eV": 0.020001953378062824,
+            "integral_m3": 1.537584920041078e+20,
+            "set_energy_eV": 0.43,
+            "peak_error_eV": -0.005759848228182873,
+            "integral_ratio": 0.30751698400821564
+          }
+        ]
+      },
+      {
+        "peak_eV": 0.42135168620015867,
+        "centroid_eV": 0.35374401515001175,
+        "sigma_eV": 0.07717062855558116,
+        "integral_m3": 2.8056776870535132e+20,
+        "model": "double",
+        "temperature_K": 250,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.28056776870535133,
+        "components": [
+          {
+            "peak_eV": 0.27418912478569085,
+            "centroid_eV": 0.2688403065292893,
+            "sigma_eV": 0.029918326585185315,
+            "integral_m3": 1.1814530713825968e+20,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.005810875214309175,
+            "integral_ratio": 0.23629061427651937
+          },
+          {
+            "peak_eV": 0.42135168620015867,
+            "centroid_eV": 0.4156955188283539,
+            "sigma_eV": 0.02384158486588607,
+            "integral_m3": 1.619111164403536e+20,
+            "set_energy_eV": 0.43,
+            "peak_error_eV": -0.008648313799841323,
+            "integral_ratio": 0.3238222328807072
+          }
+        ]
+      },
+      {
+        "peak_eV": 0.41707594525221675,
+        "centroid_eV": 0.35561521716811223,
+        "sigma_eV": 0.0767674881217631,
+        "integral_m3": 2.6940448780849014e+20,
+        "model": "double",
+        "temperature_K": 275,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.26940448780849013,
+        "components": [
+          {
+            "peak_eV": 0.2697480325925917,
+            "centroid_eV": 0.2699158175066418,
+            "sigma_eV": 0.031192371027651176,
+            "integral_m3": 1.1045907806633329e+20,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.010251967407408302,
+            "integral_ratio": 0.22091815613266658
+          },
+          {
+            "peak_eV": 0.41707594525221675,
+            "centroid_eV": 0.4154341363708511,
+            "sigma_eV": 0.025464581937056183,
+            "integral_m3": 1.582632018522258e+20,
+            "set_energy_eV": 0.43,
+            "peak_error_eV": -0.012924054747783242,
+            "integral_ratio": 0.3165264037044516
+          }
+        ]
+      },
+      {
+        "peak_eV": 0.4178222758734677,
+        "centroid_eV": 0.3588463806537269,
+        "sigma_eV": 0.07543173389401366,
+        "integral_m3": 2.5492743422931e+20,
+        "model": "double",
+        "temperature_K": 300,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.25492743422931,
+        "components": [
+          {
+            "peak_eV": 0.2709904168681164,
+            "centroid_eV": 0.2729541385134157,
+            "sigma_eV": 0.032015340559562025,
+            "integral_m3": 1.0100041167083e+20,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.009009583131883603,
+            "integral_ratio": 0.20200082334166
+          },
+          {
+            "peak_eV": 0.4178222758734677,
+            "centroid_eV": 0.4155296154136076,
+            "sigma_eV": 0.026800071341421577,
+            "integral_m3": 1.530971899397996e+20,
+            "set_energy_eV": 0.43,
+            "peak_error_eV": -0.012177724126532286,
+            "integral_ratio": 0.3061943798795992
+          }
+        ]
+      },
+      {
+        "peak_eV": 0.4184320253204531,
+        "centroid_eV": 0.3641855892280186,
+        "sigma_eV": 0.07271702856982827,
+        "integral_m3": 2.3635233847537533e+20,
+        "model": "double",
+        "temperature_K": 325,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.23635233847537532,
+        "components": [
+          {
+            "peak_eV": 0.27226157107166493,
+            "centroid_eV": 0.2778547056567244,
+            "sigma_eV": 0.031502561067003484,
+            "integral_m3": 8.785389093212452e+19,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.007738428928335095,
+            "integral_ratio": 0.17570778186424904
+          },
+          {
+            "peak_eV": 0.4184320253204531,
+            "centroid_eV": 0.41564164860029706,
+            "sigma_eV": 0.028161138278566755,
+            "integral_m3": 1.4756348406610174e+20,
+            "set_energy_eV": 0.43,
+            "peak_error_eV": -0.0115679746795469,
+            "integral_ratio": 0.29512696813220346
+          }
+        ]
+      },
+      {
+        "peak_eV": 0.41805072870443405,
+        "centroid_eV": 0.37249305849959014,
+        "sigma_eV": 0.06790511627754658,
+        "integral_m3": 2.1324879584911357e+20,
+        "model": "double",
+        "temperature_K": 350,
+        "xi_s1_K2": 1348060.3356126917,
+        "total_set_m3": 1e+21,
+        "integral_ratio": 0.21324879584911358,
+        "components": [
+          {
+            "peak_eV": 0.2722109768237045,
+            "centroid_eV": 0.2856738651977522,
+            "sigma_eV": 0.029701263048476412,
+            "integral_m3": 7.0509062751146205e+19,
+            "set_energy_eV": 0.28,
+            "peak_error_eV": -0.00778902317629554,
+            "integral_ratio": 0.14101812550229242
+          },
+          {
+            "peak_eV": 0.41805072870443405,
+            "centroid_eV": 0.4158377167999209,
+            "sigma_eV": 0.029480027464027003,
+            "integral_m3": 1.4167369681529905e+20,
+            "set_energy_eV": 0.43,
+            "peak_error_eV": -0.011949271295565944,
+            "integral_ratio": 0.2833473936305981
+          }
+        ]
+      }
+    ],
+    "walter_policy": "User requested simplified formula Vbi/(q W) * (-dC/dln omega)/(kB_eV T); W=epsilon/C(10MHz), Vbi from equilibrium band bending. Raw and baseline-corrected DOS both saved; metrics use positive part of baseline-corrected DOS over measured positive-energy interval. Double xi is geometric mean of two branch intercepts."
+  },
+  "phase8_reference": {
+    "scans": [
+      {
+        "id": "uniform-T200-f1000",
+        "temperature_K": 200,
+        "frequency_Hz": 1000,
+        "points": 121,
+        "depth_range_m": [
+          2.839572302130083e-07,
+          6.844267378536382e-07
+        ],
+        "N_CV_median_m3": 1.0036778401982642e+22,
+        "C_at_zero_F_m2": 0.00036482253800000007,
+        "negative_conductance_points": 12,
+        "minimum_conductance_S_m2": -2.5589940500000002e-08,
+        "conductance_quality": "negative_conductance_unresolved",
+        "MS_N_m3": 1.0002510353069033e+22,
+        "MS_error_relative": 0.0002510353069031801,
+        "MS_fit_bias_range_V": [
+          -3,
+          -0.2
+        ]
+      },
+      {
+        "id": "uniform-T200-f100000",
+        "temperature_K": 200,
+        "frequency_Hz": 100000,
+        "points": 121,
+        "depth_range_m": [
+          2.8395723176969526e-07,
+          6.844267378536382e-07
+        ],
+        "N_CV_median_m3": 1.0036778401982642e+22,
+        "C_at_zero_F_m2": 0.000364822536,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 0.00182079042,
+        "conductance_quality": "not_independently_validated",
+        "MS_N_m3": 1.0002510359588302e+22,
+        "MS_error_relative": 0.00025103595883013696,
+        "MS_fit_bias_range_V": [
+          -3,
+          -0.2
+        ]
+      },
+      {
+        "id": "uniform-T200-f1000000",
+        "temperature_K": 200,
+        "frequency_Hz": 1000000,
+        "points": 121,
+        "depth_range_m": [
+          2.839573508562932e-07,
+          6.844267785505897e-07
+        ],
+        "N_CV_median_m3": 1.0036776378457207e+22,
+        "C_at_zero_F_m2": 0.00036482238300000004,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 0.182099588,
+        "conductance_quality": "not_independently_validated",
+        "MS_N_m3": 1.0002510728317725e+22,
+        "MS_error_relative": 0.00025107283177239204,
+        "MS_fit_bias_range_V": [
+          -3,
+          -0.2
+        ]
+      },
+      {
+        "id": "uniform-T300-f1000",
+        "temperature_K": 300,
+        "frequency_Hz": 1000,
+        "points": 121,
+        "depth_range_m": [
+          2.654286094495503e-07,
+          6.769445397045258e-07
+        ],
+        "N_CV_median_m3": 1.0037064117540922e+22,
+        "C_at_zero_F_m2": 0.000390289493,
+        "negative_conductance_points": 120,
+        "minimum_conductance_S_m2": -0.561408902,
+        "conductance_quality": "negative_conductance_unresolved",
+        "MS_N_m3": 1.0003730106773106e+22,
+        "MS_error_relative": 0.00037301067731054793,
+        "MS_fit_bias_range_V": [
+          -3,
+          -0.2
+        ]
+      },
+      {
+        "id": "uniform-T300-f100000",
+        "temperature_K": 300,
+        "frequency_Hz": 100000,
+        "points": 121,
+        "depth_range_m": [
+          2.654286101296316e-07,
+          6.769445397045258e-07
+        ],
+        "N_CV_median_m3": 1.0037064117540922e+22,
+        "C_at_zero_F_m2": 0.00039028949200000003,
+        "negative_conductance_points": 120,
+        "minimum_conductance_S_m2": -0.559879817,
+        "conductance_quality": "negative_conductance_unresolved",
+        "MS_N_m3": 1.0003730113507948e+22,
+        "MS_error_relative": 0.00037301135079470527,
+        "MS_fit_bias_range_V": [
+          -3,
+          -0.2
+        ]
+      },
+      {
+        "id": "uniform-T300-f1000000",
+        "temperature_K": 300,
+        "frequency_Hz": 1000000,
+        "points": 121,
+        "depth_range_m": [
+          2.6542869581991116e-07,
+          6.769445662458665e-07
+        ],
+        "N_CV_median_m3": 1.0037062292823547e+22,
+        "C_at_zero_F_m2": 0.00039028936600000005,
+        "negative_conductance_points": 81,
+        "minimum_conductance_S_m2": -0.408485262,
+        "conductance_quality": "negative_conductance_unresolved",
+        "MS_N_m3": 1.0003730364477076e+22,
+        "MS_error_relative": 0.0003730364477076975,
+        "MS_fit_bias_range_V": [
+          -3,
+          -0.2
+        ]
+      },
+      {
+        "id": "step-T200-f1000",
+        "temperature_K": 200,
+        "frequency_Hz": 1000,
+        "points": 121,
+        "depth_range_m": [
+          2.834730899513819e-07,
+          5.133955174741142e-07
+        ],
+        "N_CV_median_m3": 2.9292804450848986e+22,
+        "C_at_zero_F_m2": 0.00036544561400000004,
+        "negative_conductance_points": 63,
+        "minimum_conductance_S_m2": -9.73725743e-08,
+        "conductance_quality": "negative_conductance_unresolved",
+        "front_plateau_m3": 1.0672222865085446e+22,
+        "front_error_relative": 0.06722228650854456,
+        "front_points": 9,
+        "back_plateau_m3": 3.0058499833282723e+22,
+        "back_error_relative": 0.0019499944427574523,
+        "back_points": 10,
+        "step_midpoint_depth_m": 4.0731960647948166e-07
+      },
+      {
+        "id": "step-T200-f100000",
+        "temperature_K": 200,
+        "frequency_Hz": 100000,
+        "points": 121,
+        "depth_range_m": [
+          2.834730907270735e-07,
+          5.133955174741142e-07
+        ],
+        "N_CV_median_m3": 2.9292804450848986e+22,
+        "C_at_zero_F_m2": 0.000365445613,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 0.00121856435,
+        "conductance_quality": "not_independently_validated",
+        "front_plateau_m3": 1.0672223924443412e+22,
+        "front_error_relative": 0.06722239244434114,
+        "front_points": 9,
+        "back_plateau_m3": 3.0058499833282723e+22,
+        "back_error_relative": 0.0019499944427574523,
+        "back_points": 10,
+        "step_midpoint_depth_m": 4.0731960647948166e-07
+      },
+      {
+        "id": "step-T200-f1000000",
+        "temperature_K": 200,
+        "frequency_Hz": 1000000,
+        "points": 121,
+        "depth_range_m": [
+          2.834731070165979e-07,
+          5.133955225627287e-07
+        ],
+        "N_CV_median_m3": 2.9292802913196415e+22,
+        "C_at_zero_F_m2": 0.00036544559200000007,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 0.12187813800000001,
+        "conductance_quality": "not_independently_validated",
+        "front_plateau_m3": 1.0672223700483456e+22,
+        "front_error_relative": 0.06722237004834564,
+        "front_points": 9,
+        "back_plateau_m3": 3.005848090908952e+22,
+        "back_error_relative": 0.0019493636363172584,
+        "back_points": 10,
+        "step_midpoint_depth_m": 4.073196363474852e-07
+      },
+      {
+        "id": "step-T300-f1000",
+        "temperature_K": 300,
+        "frequency_Hz": 1000,
+        "points": 121,
+        "depth_range_m": [
+          2.646607511827706e-07,
+          5.104837228340891e-07
+        ],
+        "N_CV_median_m3": 2.803228037739933e+22,
+        "C_at_zero_F_m2": 0.000391421837,
+        "negative_conductance_points": 120,
+        "minimum_conductance_S_m2": -0.590350809,
+        "conductance_quality": "negative_conductance_unresolved",
+        "front_plateau_m3": 1.093633988854294e+22,
+        "front_error_relative": 0.09363398885429386,
+        "front_points": 13,
+        "back_plateau_m3": 3.0167460829765952e+22,
+        "back_error_relative": 0.005582027658865174,
+        "back_points": 7,
+        "step_midpoint_depth_m": 4.089404940475529e-07
+      },
+      {
+        "id": "step-T300-f100000",
+        "temperature_K": 300,
+        "frequency_Hz": 100000,
+        "points": 121,
+        "depth_range_m": [
+          2.646607511827706e-07,
+          5.104837228340891e-07
+        ],
+        "N_CV_median_m3": 2.803228037739933e+22,
+        "C_at_zero_F_m2": 0.000391421837,
+        "negative_conductance_points": 120,
+        "minimum_conductance_S_m2": -0.589342012,
+        "conductance_quality": "negative_conductance_unresolved",
+        "front_plateau_m3": 1.093633988854294e+22,
+        "front_error_relative": 0.09363398885429386,
+        "front_points": 13,
+        "back_plateau_m3": 3.0167460829765952e+22,
+        "back_error_relative": 0.005582027658865174,
+        "back_points": 7,
+        "step_midpoint_depth_m": 4.089404940475529e-07
+      },
+      {
+        "id": "step-T300-f1000000",
+        "temperature_K": 300,
+        "frequency_Hz": 1000000,
+        "points": 121,
+        "depth_range_m": [
+          2.6466076402966374e-07,
+          5.104837253496175e-07
+        ],
+        "N_CV_median_m3": 2.8032279301152234e+22,
+        "C_at_zero_F_m2": 0.00039142181800000007,
+        "negative_conductance_points": 111,
+        "minimum_conductance_S_m2": -0.48946111099999995,
+        "conductance_quality": "negative_conductance_unresolved",
+        "front_plateau_m3": 1.0936339939660686e+22,
+        "front_error_relative": 0.09363399396606864,
+        "front_points": 13,
+        "back_plateau_m3": 3.0167459945301143e+22,
+        "back_error_relative": 0.005581998176704683,
+        "back_points": 7,
+        "step_midpoint_depth_m": 4.089404716670292e-07
+      },
+      {
+        "id": "deep-T200-f1000",
+        "temperature_K": 200,
+        "frequency_Hz": 1000,
+        "points": 121,
+        "depth_range_m": [
+          3.69013247245201e-07,
+          7.86023699530646e-07
+        ],
+        "N_CV_median_m3": 8.198713793904082e+21,
+        "C_at_zero_F_m2": 0.000280732462,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 0.0106905684,
+        "conductance_quality": "not_independently_validated"
+      },
+      {
+        "id": "deep-T200-f100000",
+        "temperature_K": 200,
+        "frequency_Hz": 100000,
+        "points": 121,
+        "depth_range_m": [
+          3.722240101658973e-07,
+          7.894853285446089e-07
+        ],
+        "N_CV_median_m3": 8.152216686474016e+21,
+        "C_at_zero_F_m2": 0.00027831089500000004,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 0.021700722199999998,
+        "conductance_quality": "not_independently_validated"
+      },
+      {
+        "id": "deep-T200-f1000000",
+        "temperature_K": 200,
+        "frequency_Hz": 1000000,
+        "points": 121,
+        "depth_range_m": [
+          3.722444620783877e-07,
+          7.89504714612794e-07
+        ],
+        "N_CV_median_m3": 8.151977417899109e+21,
+        "C_at_zero_F_m2": 0.000278295604,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 0.273642044,
+        "conductance_quality": "not_independently_validated"
+      },
+      {
+        "id": "deep-T300-f1000",
+        "temperature_K": 300,
+        "frequency_Hz": 1000,
+        "points": 121,
+        "depth_range_m": [
+          2.4476043085161243e-07,
+          6.691268066106763e-07
+        ],
+        "N_CV_median_m3": 1.0010132229977291e+22,
+        "C_at_zero_F_m2": 0.00042324650700000004,
+        "negative_conductance_points": 120,
+        "minimum_conductance_S_m2": -0.555198203,
+        "conductance_quality": "negative_conductance_unresolved"
+      },
+      {
+        "id": "deep-T300-f100000",
+        "temperature_K": 300,
+        "frequency_Hz": 100000,
+        "points": 121,
+        "depth_range_m": [
+          2.960363079786662e-07,
+          7.181248964326256e-07
+        ],
+        "N_CV_median_m3": 9.113400608444574e+21,
+        "C_at_zero_F_m2": 0.00034993679700000003,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 3.77094227,
+        "conductance_quality": "not_independently_validated"
+      },
+      {
+        "id": "deep-T300-f1000000",
+        "temperature_K": 300,
+        "frequency_Hz": 1000000,
+        "points": 121,
+        "depth_range_m": [
+          3.2952548310085064e-07,
+          7.534894778353572e-07
+        ],
+        "N_CV_median_m3": 8.526916134866822e+21,
+        "C_at_zero_F_m2": 0.00031437325100000003,
+        "negative_conductance_points": 0,
+        "minimum_conductance_S_m2": 11.9691781,
+        "conductance_quality": "not_independently_validated"
+      }
+    ],
+    "conventions": "p-Schottky at right; reverse Vleft-Vright<0; depth measured inward from right",
+    "profile_formula": "x=eps/c; N=-2/(q*eps*d(c^-2)/dV), c=C/A [F/m2]",
+    "limitations": [
+      "Differentiation amplifies mesh noise; edges and step vicinity are not plateau truth.",
+      "G is unvalidated: negative exported conductance down to about -0.59 S/m2 has unresolved origin; C profiling does not use G.",
+      "Deep-case N_CV is apparent density including trap charge/response; difference from Na is not a doping error.",
+      "No finite-amplitude DLCP data: SCAPS small-signal AC only.",
+      "Raw SCAPS Napp/W use eps_r=10; reconstructed profiles use saved material eps_r=11.7."
+    ],
+    "dispersion": [
+      {
+        "device": "uniform",
+        "temperature_K": 200,
+        "C1k_over_C1M_at_0V": 1.0000004248642826,
+        "max_frequency_dispersion_relative": 4.2486428264432163e-07,
+        "C1k_over_uniform_at_0V": 1.0
+      },
+      {
+        "device": "step",
+        "temperature_K": 200,
+        "C1k_over_C1M_at_0V": 1.0000000602004797,
+        "max_frequency_dispersion_relative": 6.020047971233566e-08,
+        "C1k_over_uniform_at_0V": 1.0017078879046666
+      },
+      {
+        "device": "deep",
+        "temperature_K": 200,
+        "C1k_over_C1M_at_0V": 1.0087563654077698,
+        "max_frequency_dispersion_relative": 0.008823394423175923,
+        "C1k_over_uniform_at_0V": 0.7695041636928691
+      },
+      {
+        "device": "uniform",
+        "temperature_K": 300,
+        "C1k_over_C1M_at_0V": 1.0000003253995908,
+        "max_frequency_dispersion_relative": 3.2539959082811265e-07,
+        "C1k_over_uniform_at_0V": 1.0
+      },
+      {
+        "device": "step",
+        "temperature_K": 300,
+        "C1k_over_C1M_at_0V": 1.0000000485409832,
+        "max_frequency_dispersion_relative": 4.854098323292533e-08,
+        "C1k_over_uniform_at_0V": 1.00290129255414
+      },
+      {
+        "device": "deep",
+        "temperature_K": 300,
+        "C1k_over_C1M_at_0V": 1.346318446794317,
+        "max_frequency_dispersion_relative": 0.346318446794317,
+        "C1k_over_uniform_at_0V": 1.0844424833132775
+      }
+    ]
+  }
+}

@@ -1,0 +1,751 @@
+{
+  "phase-4-dark-rs0-rsh100": {
+    "Rs_Ohm_cm2": 0,
+    "Rsh_Ohm_cm2": 100,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-dark-rs0-rsh10000": {
+    "Rs_Ohm_cm2": 0,
+    "Rsh_Ohm_cm2": 10000,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-dark-rs0-rshoff": {
+    "Rs_Ohm_cm2": 0,
+    "Rsh_Ohm_cm2": null,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-dark-rs1-rsh100": {
+    "Rs_Ohm_cm2": 1,
+    "Rsh_Ohm_cm2": 100,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-dark-rs1-rsh10000": {
+    "Rs_Ohm_cm2": 1,
+    "Rsh_Ohm_cm2": 10000,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-dark-rs1-rshoff": {
+    "Rs_Ohm_cm2": 1,
+    "Rsh_Ohm_cm2": null,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-dark-rs10-rsh100": {
+    "Rs_Ohm_cm2": 10,
+    "Rsh_Ohm_cm2": 100,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-dark-rs10-rsh10000": {
+    "Rs_Ohm_cm2": 10,
+    "Rsh_Ohm_cm2": 10000,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-dark-rs10-rshoff": {
+    "Rs_Ohm_cm2": 10,
+    "Rsh_Ohm_cm2": null,
+    "light": false,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs0-rsh100": {
+    "Rs_Ohm_cm2": 0,
+    "Rsh_Ohm_cm2": 100,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs0-rsh10000": {
+    "Rs_Ohm_cm2": 0,
+    "Rsh_Ohm_cm2": 10000,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs0-rshoff": {
+    "Rs_Ohm_cm2": 0,
+    "Rsh_Ohm_cm2": null,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs1-rsh100": {
+    "Rs_Ohm_cm2": 1,
+    "Rsh_Ohm_cm2": 100,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs1-rsh10000": {
+    "Rs_Ohm_cm2": 1,
+    "Rsh_Ohm_cm2": 10000,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs1-rshoff": {
+    "Rs_Ohm_cm2": 1,
+    "Rsh_Ohm_cm2": null,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs10-rsh100": {
+    "Rs_Ohm_cm2": 10,
+    "Rsh_Ohm_cm2": 100,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs10-rsh10000": {
+    "Rs_Ohm_cm2": 10,
+    "Rsh_Ohm_cm2": 10000,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-4-light-rs10-rshoff": {
+    "Rs_Ohm_cm2": 10,
+    "Rsh_Ohm_cm2": null,
+    "light": true,
+    "temperature_K": 300
+  },
+  "phase-9-cdte-dark": {
+    "area_m2": 0.0001
+  },
+  "phase-9-cdte-light": {
+    "area_m2": 0.0001
+  },
+  "phase-9-cigs-dark": {
+    "area_m2": 0.0001
+  },
+  "phase-9-cigs-light": {
+    "area_m2": 0.0001
+  },
+  "phase9_reference": {
+    "cigs": {
+      "Eg_absorber_eV": 1.2,
+      "Ea_Voc_intercept_200_340K_eV": 1.3179455498557027,
+      "Ea_Voc_intercept_280_340K_eV": 1.3358657569535615,
+      "Voc_slope_V_K": -0.0025335874043560776,
+      "max_linear_residual_V": 0.002222527959238052,
+      "Ea_minus_Eg_eV": 0.11794554985570271,
+      "QE_bandgap_wavelength_nm": 1033.3142500000001,
+      "QE_last_above_1e-5_nm": 1030.0,
+      "QE_max_fraction": 0.9243021,
+      "dark_effective_parameters": [
+        {
+          "temperature_K": 200,
+          "n_eff": 1.9926015114612758,
+          "J0_eff_A_m2": 1.0757285423636595e-08,
+          "lnJ_R2": 0.9999756632478439,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 2641742.802530787,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 6.164180630633901e-05,
+          "Rs_voltage_range_V": [
+            0.85,
+            0.9
+          ],
+          "Rs_current_range_A_m2": [
+            204.987216,
+            1001.0303899999999
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 220,
+          "n_eff": 1.995868586322443,
+          "J0_eff_A_m2": 3.4456919158622944e-07,
+          "lnJ_R2": 0.9999677320702467,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 92164.5781157151,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 3.976820269216866e-05,
+          "Rs_voltage_range_V": [
+            0.82,
+            0.87
+          ],
+          "Rs_current_range_A_m2": [
+            395.40064299999995,
+            1633.60267
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 240,
+          "n_eff": 1.9988551885587742,
+          "J0_eff_A_m2": 6.333913409561772e-06,
+          "lnJ_R2": 0.9999601488524353,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 5526.877466846557,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 2.752308734961823e-05,
+          "Rs_voltage_range_V": [
+            0.79,
+            0.84
+          ],
+          "Rs_current_range_A_m2": [
+            692.974949,
+            2486.89261
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 260,
+          "n_eff": 2.0011423210935027,
+          "J0_eff_A_m2": 7.57349198968842e-05,
+          "lnJ_R2": 0.9999535326937271,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 503.4278671972321,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 2.0118387088564987e-05,
+          "Rs_voltage_range_V": [
+            0.76,
+            0.81
+          ],
+          "Rs_current_range_A_m2": [
+            1125.23961,
+            3584.59449
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 280,
+          "n_eff": 2.0023267613628275,
+          "J0_eff_A_m2": 0.000644427143394016,
+          "lnJ_R2": 0.9999483936519079,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 63.752058133990445,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 1.5358818835693357e-05,
+          "Rs_voltage_range_V": [
+            0.73,
+            0.78
+          ],
+          "Rs_current_range_A_m2": [
+            1717.56668,
+            4944.27131
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 300,
+          "n_eff": 2.00202624276961,
+          "J0_eff_A_m2": 0.004169239015717968,
+          "lnJ_R2": 0.9999451021106945,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 10.517027424295257,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 1.2141681426671313e-05,
+          "Rs_voltage_range_V": [
+            0.7,
+            0.75
+          ],
+          "Rs_current_range_A_m2": [
+            2492.2333900000003,
+            6579.381560000001
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 320,
+          "n_eff": 1.999891619488147,
+          "J0_eff_A_m2": 0.021558951521570634,
+          "lnJ_R2": 0.9999438296154066,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 2.1522090865778645,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 9.87439264231262e-06,
+          "Rs_voltage_range_V": [
+            0.67,
+            0.72
+          ],
+          "Rs_current_range_A_m2": [
+            3468.3387199999997,
+            8499.37383
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 340,
+          "n_eff": 1.995640743638876,
+          "J0_eff_A_m2": 0.09259686169861354,
+          "lnJ_R2": 0.999944435144621,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 0.5262231359351823,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 8.219265835107208e-06,
+          "Rs_voltage_range_V": [
+            0.64,
+            0.69
+          ],
+          "Rs_current_range_A_m2": [
+            4662.24147,
+            10711.677899999999
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        }
+      ],
+      "light_metrics": [
+        {
+          "temperature_K": 200,
+          "Voc_V": 0.8090055410252491,
+          "Jsc_A_m2": 325.103785,
+          "Pmax_W_m2": 172.44603841500003,
+          "FF": 0.6556615255501453,
+          "nearest_Voc_sample_voltage_V": 0.81,
+          "bulk_rec_near_Voc_A_m2": 366.29330600000003,
+          "interface_rec_near_Voc_A_m2": 19.5533015,
+          "minority_left_near_Voc_A_m2": 1.62520729,
+          "minority_right_near_Voc_A_m2": 0.8406206430000001
+        },
+        {
+          "temperature_K": 220,
+          "Voc_V": 0.7603480981657251,
+          "Jsc_A_m2": 324.038698,
+          "Pmax_W_m2": 160.56141116000003,
+          "FF": 0.6516761604748254,
+          "nearest_Voc_sample_voltage_V": 0.76,
+          "bulk_rec_near_Voc_A_m2": 360.653497,
+          "interface_rec_near_Voc_A_m2": 18.789335700000002,
+          "minority_left_near_Voc_A_m2": 1.7518011599999999,
+          "minority_right_near_Voc_A_m2": 0.8389984640000001
+        },
+        {
+          "temperature_K": 240,
+          "Voc_V": 0.710888742607331,
+          "Jsc_A_m2": 322.56031399999995,
+          "Pmax_W_m2": 148.08978080999998,
+          "FF": 0.6458215315051139,
+          "nearest_Voc_sample_voltage_V": 0.71,
+          "bulk_rec_near_Voc_A_m2": 358.631804,
+          "interface_rec_near_Voc_A_m2": 18.1067956,
+          "minority_left_near_Voc_A_m2": 1.87830037,
+          "minority_right_near_Voc_A_m2": 0.8373758789999999
+        },
+        {
+          "temperature_K": 260,
+          "Voc_V": 0.6607553253029456,
+          "Jsc_A_m2": 320.852623,
+          "Pmax_W_m2": 135.195754575,
+          "FF": 0.6377005448698086,
+          "nearest_Voc_sample_voltage_V": 0.66,
+          "bulk_rec_near_Voc_A_m2": 359.788878,
+          "interface_rec_near_Voc_A_m2": 17.489364899999998,
+          "minority_left_near_Voc_A_m2": 2.00447462,
+          "minority_right_near_Voc_A_m2": 0.835755747
+        },
+        {
+          "temperature_K": 280,
+          "Voc_V": 0.6100177593535512,
+          "Jsc_A_m2": 318.951109,
+          "Pmax_W_m2": 122.0382958,
+          "FF": 0.6272339238141441,
+          "nearest_Voc_sample_voltage_V": 0.61,
+          "bulk_rec_near_Voc_A_m2": 363.752469,
+          "interface_rec_near_Voc_A_m2": 16.9252694,
+          "minority_left_near_Voc_A_m2": 2.1300380299999997,
+          "minority_right_near_Voc_A_m2": 0.834141996
+        },
+        {
+          "temperature_K": 300,
+          "Voc_V": 0.558656743806523,
+          "Jsc_A_m2": 316.86491,
+          "Pmax_W_m2": 108.69070359999999,
+          "FF": 0.6140068367224644,
+          "nearest_Voc_sample_voltage_V": 0.56,
+          "bulk_rec_near_Voc_A_m2": 370.208033,
+          "interface_rec_near_Voc_A_m2": 16.405915399999998,
+          "minority_left_near_Voc_A_m2": 2.2546804700000003,
+          "minority_right_near_Voc_A_m2": 0.832537822
+        },
+        {
+          "temperature_K": 320,
+          "Voc_V": 0.5068088825936007,
+          "Jsc_A_m2": 314.590053,
+          "Pmax_W_m2": 95.30400418,
+          "FF": 0.5977532461917755,
+          "nearest_Voc_sample_voltage_V": 0.505,
+          "bulk_rec_near_Voc_A_m2": 356.52443,
+          "interface_rec_near_Voc_A_m2": 15.875930700000001,
+          "minority_left_near_Voc_A_m2": 2.37635291,
+          "minority_right_near_Voc_A_m2": 0.830848783
+        },
+        {
+          "temperature_K": 340,
+          "Voc_V": 0.45453451258156796,
+          "Jsc_A_m2": 312.15648999999996,
+          "Pmax_W_m2": 81.94979509000001,
+          "FF": 0.5775753350196126,
+          "nearest_Voc_sample_voltage_V": 0.455,
+          "bulk_rec_near_Voc_A_m2": 366.937815,
+          "interface_rec_near_Voc_A_m2": 15.432833800000001,
+          "minority_left_near_Voc_A_m2": 2.49789943,
+          "minority_right_near_Voc_A_m2": 0.8292726109999999
+        }
+      ],
+      "QE_last_above_1percent_nm": 1030.0,
+      "QE_at_1200nm_fraction": 0.0
+    },
+    "cdte": {
+      "Eg_absorber_eV": 1.5,
+      "Ea_Voc_intercept_200_340K_eV": 1.3230717610460014,
+      "Ea_Voc_intercept_280_340K_eV": 1.5383275641831817,
+      "Voc_slope_V_K": -0.0015397438797000187,
+      "max_linear_residual_V": 0.022519565184440538,
+      "Ea_minus_Eg_eV": -0.17692823895399856,
+      "QE_bandgap_wavelength_nm": 826.6514000000001,
+      "QE_last_above_1e-5_nm": 1200.0000000000002,
+      "QE_max_fraction": 0.8946735,
+      "dark_effective_parameters": [
+        {
+          "temperature_K": 200,
+          "n_eff": 1.9117678586259381,
+          "J0_eff_A_m2": 3.851473200651176e-13,
+          "lnJ_R2": 0.9999999678622705,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 107486948304.23637,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 1.733381369532013,
+          "Rs_voltage_range_V": [
+            0.99,
+            1.04
+          ],
+          "Rs_current_range_A_m2": [
+            0.14452468,
+            0.173393311
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 220,
+          "n_eff": 1.905314051024178,
+          "J0_eff_A_m2": 2.6352643200022113e-11,
+          "lnJ_R2": 0.9999995858441654,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 1732602643.3980668,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 0.15010085695055198,
+          "Rs_voltage_range_V": [
+            0.97,
+            1.02
+          ],
+          "Rs_current_range_A_m2": [
+            1.2501974800000002,
+            1.5837598499999999
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 240,
+          "n_eff": 1.8987264725283086,
+          "J0_eff_A_m2": 9.094331587465156e-10,
+          "lnJ_R2": 0.9999983860416809,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 55612857.80943096,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 0.016716169127329678,
+          "Rs_voltage_range_V": [
+            0.95,
+            1.0
+          ],
+          "Rs_current_range_A_m2": [
+            7.18758544,
+            10.175250899999998
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 260,
+          "n_eff": 1.8917811435725267,
+          "J0_eff_A_m2": 1.8488963134291484e-08,
+          "lnJ_R2": 0.9999958797852013,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 2918631.3198284116,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 0.002253745129016042,
+          "Rs_voltage_range_V": [
+            0.93,
+            0.98
+          ],
+          "Rs_current_range_A_m2": [
+            29.2668015,
+            51.3440208
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 280,
+          "n_eff": 1.8840722531924232,
+          "J0_eff_A_m2": 2.47471015325742e-07,
+          "lnJ_R2": 0.9999915671205982,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 232791.50601787554,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 0.0003292655328307682,
+          "Rs_voltage_range_V": [
+            0.91,
+            0.96
+          ],
+          "Rs_current_range_A_m2": [
+            90.4773996,
+            241.657178
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 300,
+          "n_eff": 1.8746617603495503,
+          "J0_eff_A_m2": 2.363492681471782e-06,
+          "lnJ_R2": 0.9999854948676027,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 25828.32641683611,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 7.21014103270666e-05,
+          "Rs_voltage_range_V": [
+            0.89,
+            0.94
+          ],
+          "Rs_current_range_A_m2": [
+            235.176761,
+            916.768112
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 320,
+          "n_eff": 1.861667973094229,
+          "J0_eff_A_m2": 1.7089111507811067e-05,
+          "lnJ_R2": 0.9999792942985936,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 3735.6708203339804,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 2.731369524912387e-05,
+          "Rs_voltage_range_V": [
+            0.87,
+            0.92
+          ],
+          "Rs_current_range_A_m2": [
+            562.1418,
+            2360.2534800000003
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        },
+        {
+          "temperature_K": 340,
+          "n_eff": 1.8427356108307635,
+          "J0_eff_A_m2": 9.800643400777062e-05,
+          "lnJ_R2": 0.9999749247165436,
+          "fit_voltage_range_V": [
+            0.2,
+            0.4
+          ],
+          "Rsh_slope_Ohm_m2": 671.629211284296,
+          "Rsh_voltage_range_V": [
+            -0.02,
+            0.02
+          ],
+          "Rs_high_slope_Ohm_m2": 1.3437161530481936e-05,
+          "Rs_voltage_range_V": [
+            0.85,
+            0.9
+          ],
+          "Rs_current_range_A_m2": [
+            1246.96984,
+            4911.944930000001
+          ],
+          "resistance_interpretation": "Differential device slopes, not identifiable external Rs/Rsh; upper-bias window may be contact limited."
+        }
+      ],
+      "light_metrics": [
+        {
+          "temperature_K": 200,
+          "Voc_V": 0.9935558869475977,
+          "Jsc_A_m2": 240.90423099999998,
+          "Pmax_W_m2": 189.0663789,
+          "FF": 0.7899099382165552,
+          "nearest_Voc_sample_voltage_V": 0.995,
+          "bulk_rec_near_Voc_A_m2": 151.178012,
+          "interface_rec_near_Voc_A_m2": 0.0,
+          "minority_left_near_Voc_A_m2": 116.852164,
+          "minority_right_near_Voc_A_m2": 5.3483443500000005
+        },
+        {
+          "temperature_K": 220,
+          "Voc_V": 0.978496437656658,
+          "Jsc_A_m2": 240.903773,
+          "Pmax_W_m2": 184.43609446,
+          "FF": 0.7824256266968447,
+          "nearest_Voc_sample_voltage_V": 0.98,
+          "bulk_rec_near_Voc_A_m2": 148.677556,
+          "interface_rec_near_Voc_A_m2": 0.0,
+          "minority_left_near_Voc_A_m2": 119.06524599999999,
+          "minority_right_near_Voc_A_m2": 5.32819714
+        },
+        {
+          "temperature_K": 240,
+          "Voc_V": 0.9619916089177858,
+          "Jsc_A_m2": 240.90890900000002,
+          "Pmax_W_m2": 179.55792774000003,
+          "FF": 0.7747836366571264,
+          "nearest_Voc_sample_voltage_V": 0.96,
+          "bulk_rec_near_Voc_A_m2": 142.900394,
+          "interface_rec_near_Voc_A_m2": 0.0,
+          "minority_left_near_Voc_A_m2": 105.57297200000001,
+          "minority_right_near_Voc_A_m2": 5.30580651
+        },
+        {
+          "temperature_K": 260,
+          "Voc_V": 0.9410854398304068,
+          "Jsc_A_m2": 240.901198,
+          "Pmax_W_m2": 174.24113758000001,
+          "FF": 0.7685686823966913,
+          "nearest_Voc_sample_voltage_V": 0.94,
+          "bulk_rec_near_Voc_A_m2": 142.200105,
+          "interface_rec_near_Voc_A_m2": 0.0,
+          "minority_left_near_Voc_A_m2": 111.292884,
+          "minority_right_near_Voc_A_m2": 5.28122387
+        },
+        {
+          "temperature_K": 280,
+          "Voc_V": 0.9107628040701514,
+          "Jsc_A_m2": 240.903507,
+          "Pmax_W_m2": 167.862122415,
+          "FF": 0.7650755127757813,
+          "nearest_Voc_sample_voltage_V": 0.91,
+          "bulk_rec_near_Voc_A_m2": 142.536686,
+          "interface_rec_near_Voc_A_m2": 0.0,
+          "minority_left_near_Voc_A_m2": 112.683841,
+          "minority_right_near_Voc_A_m2": 5.2544233799999995
+        },
+        {
+          "temperature_K": 300,
+          "Voc_V": 0.8706765329799483,
+          "Jsc_A_m2": 240.88660399999998,
+          "Pmax_W_m2": 159.68827745000002,
+          "FF": 0.7613836525097398,
+          "nearest_Voc_sample_voltage_V": 0.87,
+          "bulk_rec_near_Voc_A_m2": 144.571661,
+          "interface_rec_near_Voc_A_m2": 0.0,
+          "minority_left_near_Voc_A_m2": 111.15356399999999,
+          "minority_right_near_Voc_A_m2": 5.22541012
+        },
+        {
+          "temperature_K": 320,
+          "Voc_V": 0.8251193210498666,
+          "Jsc_A_m2": 240.87886300000002,
+          "Pmax_W_m2": 149.83626843000002,
+          "FF": 0.7538787459385882,
+          "nearest_Voc_sample_voltage_V": 0.825,
+          "bulk_rec_near_Voc_A_m2": 148.65401,
+          "interface_rec_near_Voc_A_m2": 0.0,
+          "minority_left_near_Voc_A_m2": 110.277752,
+          "minority_right_near_Voc_A_m2": 5.19419128
+        },
+        {
+          "temperature_K": 340,
+          "Voc_V": 0.7770392767635546,
+          "Jsc_A_m2": 240.85660000000001,
+          "Pmax_W_m2": 138.90530944,
+          "FF": 0.7421938021315427,
+          "nearest_Voc_sample_voltage_V": 0.775,
+          "bulk_rec_near_Voc_A_m2": 150.434035,
+          "interface_rec_near_Voc_A_m2": 0.0,
+          "minority_left_near_Voc_A_m2": 98.9278916,
+          "minority_right_near_Voc_A_m2": 5.16075404
+        }
+      ],
+      "QE_last_above_1percent_nm": 845.0000000000001,
+      "QE_at_1200nm_fraction": 0.0002887609,
+      "ideal_back_hole_barrier_eV": 0.40000000000000036
+    }
+  }
+}

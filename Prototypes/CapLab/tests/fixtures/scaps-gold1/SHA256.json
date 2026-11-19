@@ -1,0 +1,42 @@
+{
+  "sources": {
+    "datasets\\phase-7-baseline-admittance\\clean.csv": "9fc8aa955cd8892f4186b88b1ba985dfb638587c97cd8f9842d2cdb5d7a789a1",
+    "datasets\\phase-7-double-admittance\\clean.csv": "4e116656786830258f55f6dab14c385b237cb2ae1f7db7d9a6eb0eb07dacba25",
+    "datasets\\phase-7-gaussian-admittance\\clean.csv": "294944867e498fe0362e998db258b534141aeac6f8dfb9ee81d3ef976bc2c2dd",
+    "datasets\\phase-7-single-admittance\\clean.csv": "b4bb7e039f1ff69d97b0e67386f5fa03349d7ac33940b02d41476c7a5533438a",
+    "datasets\\phase-3-cf-defect-T240\\clean.csv": "89b495ac7e7edbd2c07a39e8f7eb8a0ce3bdcad8e987585a329db570a6363602",
+    "datasets\\phase-3-cf-defect-T270\\clean.csv": "f38e4d4d1f9a0ce3469665e62fa5e53fbc992eaf50db728bcbf75f4cd379d2ce",
+    "datasets\\phase-3-cf-defect-T300\\clean.csv": "d2278307d7e6f6189ad18bb26b1015ef873ce3445f484b309b0b2d90646d60c0",
+    "datasets\\phase-3-cf-defect-T330\\clean.csv": "658b25a9af3421e710f1d09a407c706377eceb89c3172b4c4516273f7888b514",
+    "datasets\\phase-3-cf-defect-T360\\clean.csv": "56c32c3a11a1504543f3ef10348a1f55effffec30ea8aa215f82a457f418118f",
+    "datasets\\phase-8-uniform-cv\\uniform-T200-f1000-profile.csv": "1f587c0c2fd56a213612fc121a05550ab40ee99e844a7a2b396ea202cffac069",
+    "datasets\\phase-8-uniform-cv\\uniform-T200-f1000.csv": "08304fc9d5388aa9570f32d5c72efa3a8a84a93373758427cfb289440286ace8",
+    "datasets\\phase-8-uniform-cv\\uniform-T200-f100000-profile.csv": "6314c651aee1ef32880dbe85b4205488f12058a2c9699e4cdcce36cc08000d8c",
+    "datasets\\phase-8-uniform-cv\\uniform-T200-f100000.csv": "04f537b9c48d5efddb527f60881dd4da06dd655103c060310f404390c1da7a93",
+    "datasets\\phase-8-uniform-cv\\uniform-T200-f1000000-profile.csv": "89120aed39f356d0197103428c52660c3bb253713d045551aadbf253a555435d",
+    "datasets\\phase-8-uniform-cv\\uniform-T200-f1000000.csv": "717f408aa68d3c9fbde614ed529095776a5552a19b429ecf898d16ccb0df1e35",
+    "datasets\\phase-8-uniform-cv\\uniform-T300-f1000-profile.csv": "f89b5170e9d0a9271868b4463337c355d89dbe623ed9acf2cb1f60d079096840",
+    "datasets\\phase-8-uniform-cv\\uniform-T300-f1000.csv": "680121cbf6c0286944027c3854ac02083be5775e5978d1696fa0e7ea93733d00",
+    "datasets\\phase-8-uniform-cv\\uniform-T300-f100000-profile.csv": "2129fe9318e291e9c4e2d1f04a223458c70d806bdd9c2cb5841eb806a4b588a3",
+    "datasets\\phase-8-uniform-cv\\uniform-T300-f100000.csv": "7a016f681ba461de3d7fe9b672779ea411d701cd1fa87810fbb4561401daf3e2",
+    "datasets\\phase-8-uniform-cv\\uniform-T300-f1000000-profile.csv": "2196ee737990485b001e58f52f2e169704951a90b6dc5e2277a0d3ef2e2cb316",
+    "datasets\\phase-8-uniform-cv\\uniform-T300-f1000000.csv": "8d5db902a7097dd7bc4bd06619ba0594ea3c8b2a0c936e3e949a40f5c047bde3",
+    "datasets\\phase-8-step-cv\\step-T200-f1000-profile.csv": "cc307b6cf96713945fc68aa89ab10ee086fb66f1d7e629dd2ca72c8142ad98f2",
+    "datasets\\phase-8-step-cv\\step-T200-f1000.csv": "f366f9b880944481e40626acaafbefe34e70851e508a7d0448c850dbd67a8d9f",
+    "datasets\\phase-8-step-cv\\step-T200-f100000-profile.csv": "668b3b5f0ee05c33aae77066083a28afdd05c31051822bade08be902040f8d51",
+    "datasets\\phase-8-step-cv\\step-T200-f100000.csv": "fe3d71cec7df1593601bf4ad92f6b19a939a8ea773e7dab64b7d500c6e925f06",
+    "datasets\\phase-8-step-cv\\step-T200-f1000000-profile.csv": "1f308657de605f72da7bcd05e3b16f1395cab02c82a71e82e1968bfe2d897d3a",
+    "datasets\\phase-8-step-cv\\step-T200-f1000000.csv": "4700c3f9d6520d0d11813b8704beea50efb40388c799d9a74101a51d8d4a472a",
+    "datasets\\phase-8-step-cv\\step-T300-f1000-profile.csv": "70394835b39423195ea02c56b93d2eab522a31d063c79c5c42ef516502c0d4f8",
+    "datasets\\phase-8-step-cv\\step-T300-f1000.csv": "a3b400c5e6a20e2053794df3a3808092200be31142c01f5e5154c79af3ecadd1",
+    "datasets\\phase-8-step-cv\\step-T300-f100000-profile.csv": "d0a1666b41fa5281277adadc580b7135574792d2fa2b79fcf8e99d3b4b35d0a1",
+    "datasets\\phase-8-step-cv\\step-T300-f100000.csv": "96a10cdea91b8f4a1ec573a9609be0ed9f4f5dd8221412d4ba76ea00b1f2abba",
+    "datasets\\phase-8-step-cv\\step-T300-f1000000-profile.csv": "0c7a86c457c889d5d2c1d81b6979dcce6466425c5b48ac8e1f83043c37b0943f",
+    "datasets\\phase-8-step-cv\\step-T300-f1000000.csv": "09fa0eb207ae54dfdfdf61d376d73fbe56aa7a804a9a4eb9f9c7a92c1f6bb647"
+  },
+  "fixtures": {
+    "curves.npz": "8b72f5b81811e61b21ba2ada3c5a0d268b3542a208e009398c9ce14fa22f1c05",
+    "reference.json": "0c1afeec9b75945133a699a0dc9d2c7cd692964c904c9ec79578588a2904bc8f",
+    "README.md": "9d01c233e8c10308e9cf86813fd563df9cd5ab2699c189b97855e46ef82478d7"
+  }
+}
