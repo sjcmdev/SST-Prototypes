@@ -318,12 +318,12 @@ namespace SST::Prototypes::JFM
 
 		ImGui::Text("Selected: %d", static_cast<int>(ids.size()));
 		RenderModelControls(project, ids);
+        RenderSolverControls(project, ids, activeRecord->info);
 		RenderPrefitDisplayControls();
 		RenderColorControls(project, ids, activeRecord->info);
 		RenderRangeControls(project, ids, *activeRecord);
 		RenderParameterTable(project, activeRecord->info);
 		RenderTunedControls(project, ids, activeRecord->info);
-		RenderSolverControls(project, ids, activeRecord->info);
 	}
 
 	void ControlPanel::RenderModelControls(ProjectHandle project, const std::vector<CharacteristicId> &ids)
@@ -373,7 +373,8 @@ namespace SST::Prototypes::JFM
 		if (m_Settings != nullptr)
 		{
 			JFMUserSettings settings = m_Settings->GetSnapshot();
-			if (sst::ui::widgets::Int("Simplex iterations", &settings.fitMonteCarlo.fitMaxIterations)
+			const bool methodChanged = RenderJFMFitMethod(settings.fitMonteCarlo);
+			if ((sst::ui::widgets::Int("Fit iterations", &settings.fitMonteCarlo.fitMaxIterations) || methodChanged)
 				&& settings.fitMonteCarlo.fitMaxIterations > 0)
 				m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
 
@@ -404,6 +405,8 @@ namespace SST::Prototypes::JFM
 		if (activeInfo.fit)
 		{
 			ImGui::Text("Fit: %s, reduced chi2 %.6g", activeInfo.fit->status.c_str(), activeInfo.fit->reducedChiSquared);
+            ImGui::Text("Method: %s | Stop: %s | Accepted: %s", activeInfo.fit->fitMethod.c_str(), activeInfo.fit->stopReason.c_str(), activeInfo.fit->accepted ? "yes" : "no");
+            ImGui::Text("Converged: %s | Flat directions: %s", activeInfo.fit->converged ? "yes" : "no", activeInfo.fit->flatDirections ? "yes" : "no");
 			for (const std::string &warning : activeInfo.fit->warnings)
 				ImGui::TextWrapped("Fit warning: %s", warning.c_str());
 		}

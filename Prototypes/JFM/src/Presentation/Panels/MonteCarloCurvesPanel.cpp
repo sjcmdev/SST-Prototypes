@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include <map>
 
 #include "Presentation/Panels/MonteCarloCurvesPanel.hpp"
 
@@ -129,7 +130,16 @@ namespace SST::Prototypes::JFM
             const auto accepted = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.converged; });
             const auto converged = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.solverConverged; });
             ImGui::Text("%s: %d/%d accepted, %d converged", record->info.name.c_str(), static_cast<int>(accepted), static_cast<int>(result->samples.size()), static_cast<int>(converged));
-			const std::size_t pointCount = result->voltage.size();
+			std::map<std::string, int> reasons;
+            int fallback = 0, flat = 0;
+            for (const auto &s : result->samples) { ++reasons[s.stopReason]; fallback += s.fitMethod == "LM→NM"; flat += s.flatDirections; }
+            ImGui::Text("LM fallback: %d | Flat directions: %d", fallback, flat);
+            for (const auto &[reason, count] : reasons) ImGui::Text("%s: %d", reason.c_str(), count);
+            if (m_SingleIteration) {
+                const auto &s = result->samples[std::min(static_cast<std::size_t>(std::max(0,m_Iteration)),result->samples.size()-1)];
+                ImGui::Text("Method: %s | Stop: %s", s.fitMethod.c_str(), s.stopReason.c_str());
+            }
+            const std::size_t pointCount = result->voltage.size();
 			const std::size_t sampleCount = std::min(result->samples.size(), result->noisyCurrent.size() / pointCount);
 			if (sampleCount == 0)
 				continue;

@@ -1,4 +1,10 @@
 #include "Core/dspch.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
+#include <thread>
+#include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include "IO/JFMFitJobs.hpp"
 
@@ -99,14 +105,14 @@ namespace SST::Prototypes::JFM
 			parameters << std::setprecision(17) << "sample";
 			for (const std::string &name : computation.result.parameterNames)
 				parameters << '\t' << name;
-			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\n";
+			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\tfit_method\tflat_directions\tlm_status\tobjective_chi_squared\n";
 			for (std::size_t index = 0; index < savedSamples; ++index)
 			{
 				const JFMMonteCarloSample &sample = computation.result.samples[index];
 				parameters << index;
 				for (double value : sample.parameters)
 					parameters << '\t' << value;
-				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.converged ? 1 : 0) << '\t' << (sample.converged ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (computation.result.confidenceAvailable ? 1 : 0) << '\n';
+				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (computation.result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\n';
 			}
 			if (!noise || !parameters)
 				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo results could not be saved.", "Writing the result files failed.", "Check available disk space.", "JFMMonteCarloJob", "jfm.mc.write"};
@@ -128,7 +134,7 @@ namespace SST::Prototypes::JFM
 
 	void JFMFitJob::Execute(JobContext &context)
 	{
-		context.SetStage("JFM Simplex fit");
+		context.SetStage("JFM fit");
 		try
 		{
 			while (m_Queue != nullptr)
@@ -222,3 +228,175 @@ namespace SST::Prototypes::JFM
 		}
 	}
 } // namespace SST::Prototypes::JFM
+
+
+namespace SST::Prototypes::JFM {
+namespace {
+WeakRef<CommandRegistry> fitCommands;
+WeakRef<JobSystem> fitJobs;
+Ref<JobSystem> FitJobs() {
+    if (auto jobs=fitJobs.lock()) return jobs;
+    static auto headless=CreateRef<JobSystem>(Ref<EventBus>{},1);
+    return headless;
+}
+Ref<CommandRegistry> FitCommands() {
+    if (auto commands=fitCommands.lock()) return commands;
+    static auto headless=CreateRef<CommandRegistry>();
+    return headless;
+}
+class SubmitFitCommand final : public ICommand {
+    JobSystem &jobs;
+    Ref<IJob> job;
+    Ref<JobId> id;
+public:
+    SubmitFitCommand(JobSystem &j, Ref<IJob> work, Ref<JobId> result) : jobs(j), job(std::move(work)), id(std::move(result)) {}
+    Result<void> Execute(CommandContext &) override { *id = jobs.Submit(job); return {}; }
+    std::string Description() const override { return "Fit JFM characteristic"; }
+};
+}
+void ConfigureJFMFitServices(WeakRef<CommandRegistry> commands, WeakRef<JobSystem> jobs) {
+    fitCommands=std::move(commands); fitJobs=std::move(jobs);
+}
+nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
+    using Json = nlohmann::json;
+    try {
+        const std::string method = request.value("method", "lm");
+        if (method != "lm" && method != "nm") throw std::invalid_argument("method must be lm or nm");
+        auto data = CreateRef<JFMCharacteristicData>();
+        data->voltage = request.at("voltage_V").get<std::vector<double>>();
+        data->current = request.at("current_A").get<std::vector<double>>();
+        if (data->voltage.size() != data->current.size() || data->voltage.empty())
+            throw std::invalid_argument("voltage_V and current_A require equal nonzero lengths");
+        const double temperature = request.at("temperature_K");
+        if (!std::isfinite(temperature) || temperature <= 0) throw std::invalid_argument("temperature_K must be positive");
+        JFMCharacteristicRecord record;
+        record.info.name = request.value("name", "Headless fit"); record.info.temperatureK = temperature; record.data = data;
+        record.info.prefit = JFMPrefitState{};
+        auto &pre = *record.info.prefit;
+        pre.modelId = request.at("model_id"); pre.status = "completed";
+        const auto &names = JFMModelParameterNames(pre.modelId);
+        if (names.empty()) throw std::invalid_argument("Unknown model_id");
+        for (auto name : names) {
+            const auto key = std::string(name);
+            double value = request.at("parameters").at(key);
+            if (!std::isfinite(value)) throw std::invalid_argument("Non-finite parameter: "+key);
+            pre.parameters[key] = {value, std::nullopt, "headless", {}};
+        }
+        auto limits = std::minmax_element(data->voltage.begin(), data->voltage.end());
+        const auto range = request.value("fit_range_V", std::vector<double>{*limits.first, *limits.second});
+        if (range.size() != 2) throw std::invalid_argument("fit_range_V requires two values");
+        pre.fitRange = {0, data->voltage.size(), range[0], range[1], "headless"};
+        JFMFitMonteCarloSettings settings;
+        settings.fitMethod = method; settings.preferGpu = request.value("backend", "cpu") == "cuda";
+        if (request.value("backend", "cpu") != "cpu" && request.value("backend", "cpu") != "cuda")
+            throw std::invalid_argument("backend must be cpu or cuda");
+        settings.fitMaxIterations = settings.monteCarloMaxIterations = request.value("max_iterations", 2500);
+        if (settings.fitMaxIterations < 1) throw std::invalid_argument("max_iterations must be positive");
+        settings.monteCarloSamples = request.value("samples", 0);
+        if (settings.monteCarloSamples < 0) throw std::invalid_argument("samples must be nonnegative");
+        settings.monteCarloNoisePercent = request.value("noise_percent", 1.0);
+        settings.monteCarloStartPerturbationPercent = request.value("start_perturbation_percent", 5.0);
+        const auto seed = request.value("seed", Json(42));
+        if (!seed.is_number_integer() || seed.get<std::uint64_t>() > std::numeric_limits<std::uint32_t>::max())
+            throw std::invalid_argument("seed must be an integer in [0, 4294967295]");
+        settings.monteCarloSeed = seed.get<std::uint32_t>();
+        if (!std::isfinite(settings.monteCarloNoisePercent) || settings.monteCarloNoisePercent < 0 || settings.monteCarloNoisePercent > 100
+            || !std::isfinite(settings.monteCarloStartPerturbationPercent) || settings.monteCarloStartPerturbationPercent < 0 || settings.monteCarloStartPerturbationPercent > 100)
+            throw std::invalid_argument("noise_percent and start_perturbation_percent must be in [0, 100]");
+        settings.autoCalibrateGpuSimplexIterations = false; settings.saveSamples = false;
+        for (const auto &[name, bound] : request.value("bounds", Json::object()).items()) {
+            if (std::find(names.begin(), names.end(), name) == names.end()) throw std::invalid_argument("Unknown bound parameter: "+name);
+            const double lo = bound.at(0), hi = bound.at(1);
+            if (!std::isfinite(lo) || !std::isfinite(hi) || lo >= hi) throw std::invalid_argument("Invalid bounds for "+name);
+            settings.parameters[name] = {lo, hi, true};
+        }
+        const auto fixed = request.value("fixed_parameters", std::vector<std::string>{});
+        for (const auto &name : fixed) {
+            if (std::find(names.begin(), names.end(), name) == names.end()) throw std::invalid_argument("Unknown fixed parameter: "+name);
+            if (!settings.parameters.contains(name)) {
+                const double v = pre.parameters.at(name).value;
+                settings.parameters[name] = {std::nextafter(v, -INFINITY), std::nextafter(v, INFINITY), false};
+            } else settings.parameters[name].monteCarloFree = false;
+        }
+        auto store = CreateRef<JFMWorkspaceStore>(); const auto project = store->CreateProject("Headless fit");
+        const auto ids = store->AddCharacteristicRecords(project, {record});
+        const JFMCharacteristicRef ref{project, ids.at(0)};
+        record = *store->FindCharacteristicRecord(ref);
+        auto bus = CreateRef<EventBus>();
+        Json result;
+        auto failed = [&](const auto &event) { result = {{"ok", false}, {"error", {{"code", "jfm.fit.failed"}, {"message", event.error}}}}; };
+        auto fitDone = bus->Subscribe<FitCompleted>([&](const FitCompleted &event) {
+            Json parameters = Json::object();
+            for (const auto &[name, estimate] : event.state.parameters) parameters[name] = estimate.value;
+            result = {{"ok", true}, {"parameters", parameters}, {"chi_squared", event.state.chiSquared},
+                {"reduced_chi_squared", event.state.reducedChiSquared}, {"iterations", event.state.iterations},
+                {"fit_method", event.state.fitMethod}, {"accepted", event.state.accepted}, {"converged", event.state.converged},
+                {"stop_reason", event.state.stopReason}, {"flat_directions", event.state.flatDirections},
+                {"lm_status", event.state.lmStatus}, {"backend", event.state.backend}};
+        });
+        auto fitFailed = bus->Subscribe<FitFailed>(failed);
+        auto mcDone = bus->Subscribe<MonteCarloCompleted>([&](const MonteCarloCompleted &event) {
+            Json samples = Json::array();
+            for (std::size_t i = 0; i < event.result.samples.size(); ++i) {
+                const auto &s = event.result.samples[i];
+                samples.push_back({{"sample_id", i}, {"parameters", s.parameters}, {"chi_squared", s.chiSquared},
+                    {"objective_chi_squared", s.objectiveChiSquared}, {"accepted", s.accepted}, {"converged", s.solverConverged},
+                    {"solver_converged", s.solverConverged}, {"stop_reason", s.stopReason}, {"fit_method", s.fitMethod},
+                    {"lm_status", s.lmStatus}, {"flat_directions", s.flatDirections}, {"iterations", s.iterations}});
+            }
+            result = {{"ok", true}, {"samples", samples}, {"parameter_names", event.result.parameterNames},
+                {"voltage_V", event.result.voltage}, {"ideal_current_A", event.result.idealCurrent},
+                {"noisy_current_A", event.result.noisyCurrent}, {"total_ms", event.state.totalMilliseconds},
+                {"accepted_count", event.state.acceptedCount}, {"converged_count", event.state.convergedCount},
+                {"backend", event.state.backend}, {"warnings", event.state.warnings}};
+        });
+        auto mcFailed = bus->Subscribe<MonteCarloFailed>(failed);
+        Ref<IJob> job;
+        if (settings.monteCarloSamples == 0) {
+            auto queue = CreateRef<JFMFitWorkQueue>();
+            (void)queue->Enqueue({{ref, store->BeginFit(ref), record, settings, false}});
+            job = CreateRef<JFMFitJob>(bus, store, queue);
+        } else {
+            JFMFitState fit; fit.modelId = pre.modelId; fit.status = "completed"; fit.parameters = pre.parameters;
+            if (!store->ApplyFitResult(ref, store->BeginFit(ref), fit, {})) throw std::runtime_error("Cannot initialize Monte Carlo fit");
+            auto queue = CreateRef<JFMMonteCarloWorkQueue>();
+            const auto output = Path::FromResolved(std::filesystem::temp_directory_path()/"sst-jfm-headless");
+            (void)queue->Enqueue({{ref, store->BeginMonteCarlo(ref), record, *record.info.prefit, fit, settings, output}});
+            job = CreateRef<JFMMonteCarloJob>(bus, store, queue);
+        }
+        auto jobs=FitJobs(); auto commands=FitCommands(); auto id=CreateRef<JobId>(0);
+        const CommandID command{"jfm.fit"};
+        if (!commands->HasCommand(command)) {
+            auto registered = commands->Register({command, "Fit JFM characteristic", "JFM", "Submit a prepared fit job.", {}, CommandFlags::HiddenFromPalette | CommandFlags::AsyncCapable},
+                [](CommandContext &context) {
+                    auto *jobs=context.TryGet<JobSystem *>("jobs"); auto *job=context.TryGet<Ref<IJob>>("job");
+                    auto *id=context.TryGet<Ref<JobId>>("job_id");
+                    if (!jobs || !*jobs || !job || !id) throw std::invalid_argument("Missing JFM fit context");
+                    return CreateUnique<SubmitFitCommand>(**jobs,*job,*id);
+                });
+            if (!registered) throw std::runtime_error(registered.Error().technicalDetails);
+        }
+        CommandContext context; context.Set("jobs",jobs.get()); context.Set("job",job); context.Set("job_id",id);
+        auto submitted = commands->Execute(command, std::move(context));
+        if (!submitted || !*id) throw std::runtime_error("Fit submission failed");
+        while (true) {
+            const auto status = jobs->GetJob(*id);
+            if (!status) throw std::runtime_error("Fit job disappeared");
+            if (status->status == JobStatus::Completed) break;
+            if (status->status == JobStatus::Failed || status->status == JobStatus::Cancelled)
+                throw std::runtime_error(status->errorMessage);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        bus->ProcessQueue();
+        if (result.is_null()) throw std::runtime_error("Fit job produced no result");
+        result["project_id"] = project; result["characteristic_id"] = ref.characteristic; result["job_id"] = *id;
+        return result;
+    } catch (const std::invalid_argument &e) {
+        return {{"ok", false}, {"error", {{"code", "jfm.fit.validation"}, {"message", e.what()}}}};
+    } catch (const Json::exception &e) {
+        return {{"ok", false}, {"error", {{"code", "jfm.fit.validation"}, {"message", e.what()}}}};
+    } catch (const std::exception &e) {
+        return {{"ok", false}, {"error", {{"code", "jfm.fit.failed"}, {"message", e.what()}}}};
+    }
+}
+}

@@ -39,6 +39,8 @@ namespace SST::Prototypes::JFM
 		characteristic.fit = JFMFitState{};
 		characteristic.fit->modelId = characteristic.prefit->modelId;
 		characteristic.fit->status = "completed";
+        characteristic.fit->fitMethod = "LM→NM"; characteristic.fit->stopReason = "converged";
+        characteristic.fit->accepted = true; characteristic.fit->lmStatus = 3;
 		characteristic.fit->fitRange = characteristic.prefit->fitRange;
 		characteristic.fit->parameters["A"] = JFMParameterEstimate{1.58, 0.01, "simplex_cpu", {}};
 		characteristic.fit->reducedChiSquared = 0.98;
@@ -109,6 +111,9 @@ namespace SST::Prototypes::JFM
 		ASSERT_TRUE(loaded->characteristics.front().fit.has_value());
 		EXPECT_DOUBLE_EQ(loaded->characteristics.front().fit->parameters.at("A").value, 1.58);
 		EXPECT_TRUE(loaded->characteristics.front().fit->converged);
+        EXPECT_EQ(loaded->characteristics.front().fit->fitMethod,"LM→NM");
+        EXPECT_EQ(loaded->characteristics.front().fit->stopReason,"converged");
+        EXPECT_TRUE(loaded->characteristics.front().fit->accepted); EXPECT_EQ(loaded->characteristics.front().fit->lmStatus,3);
 		ASSERT_TRUE(loaded->characteristics.front().monteCarlo.has_value());
 		EXPECT_EQ(loaded->characteristics.front().monteCarlo->acceptedCount, 490);
 		EXPECT_EQ(loaded->characteristics.front().monteCarlo->outputPath.String(), Path::FromResolved("results/mc").String());

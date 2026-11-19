@@ -100,7 +100,7 @@ project "JFM"
 
         filter { "files:**.cu", "configurations:Debug" }
             buildcommands {
-                '"$(CUDA_PATH)/bin/nvcc" -c -G -g -O0 -std=c++17 -Xcompiler "/MDd /Zi /FS /utf-8"'
+                '"$(CUDA_PATH)/bin/nvcc" -c -G -g -O0 --fmad=false -allow-unsupported-compiler -std=c++17 -Xcompiler "/MDd /Zi /FS /fp:strict /utf-8"'
                 .. ' -I"$(CUDA_PATH)/include"'
                 .. ' -I"' .. _SST_ROOT .. '/../SST-Libraries/SST-Math/include"'
                 .. ' -I"' .. _SST_ROOT .. '/../SST-Libraries/SST-Physics/include"'
@@ -112,7 +112,7 @@ project "JFM"
 
         filter { "files:**.cu", "configurations:Release or Dist" }
             buildcommands {
-                '"$(CUDA_PATH)/bin/nvcc" -c -O2 -std=c++17 -Xcompiler "/MD /FS /utf-8" -DNDEBUG'
+                '"$(CUDA_PATH)/bin/nvcc" -c -O2 --fmad=false -allow-unsupported-compiler -std=c++17 -Xcompiler "/MD /FS /fp:strict /utf-8" -DNDEBUG'
                 .. ' -I"$(CUDA_PATH)/include"'
                 .. ' -I"' .. _SST_ROOT .. '/../SST-Libraries/SST-Math/include"'
                 .. ' -I"' .. _SST_ROOT .. '/../SST-Libraries/SST-Physics/include"'
@@ -296,3 +296,10 @@ project "JFM"
         '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/PlotLab/python/sst_plotlab" "%{cfg.targetdir}/python/sst_plotlab"',
         '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/PlotLab/install/app/assets/fonts" "%{cfg.targetdir}/install/app/assets/fonts"'
     }
+
+for _, target in ipairs { "JFM", "JFMTests" } do
+    project(target)
+    filter { "system:windows" }
+        floatingpoint "Strict"
+    filter {}
+end

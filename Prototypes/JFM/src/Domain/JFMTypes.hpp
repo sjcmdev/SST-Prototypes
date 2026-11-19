@@ -148,6 +148,11 @@ namespace SST::Prototypes::JFM
 		double reducedChiSquared = 0.0;
 		int iterations = 0;
 		bool converged = false;
+        bool accepted = false;
+        bool flatDirections = false;
+        std::string fitMethod = "NM";
+        std::string stopReason = "unknown";
+        int lmStatus = -1;
 		std::string backend = "cpu";
 		std::vector<std::string> warnings;
 	};
@@ -184,6 +189,10 @@ namespace SST::Prototypes::JFM
         bool accepted = converged;
         bool solverConverged = false;
         std::string stopReason = "unknown";
+        std::string fitMethod = "NM";
+        bool flatDirections = false;
+        int lmStatus = -1;
+        double objectiveChiSquared = 0.0;
     };
 
     struct JFMMonteCarloResult

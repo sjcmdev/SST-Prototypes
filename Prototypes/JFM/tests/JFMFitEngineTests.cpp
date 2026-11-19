@@ -7,6 +7,8 @@
 #include <sst/math/lambert_w.hpp>
 #include "solver/diode_model.hpp"
 #include "solver/objective.hpp"
+#include "solver/fit_solver.hpp"
+#include "IO/JFMFitJobs.hpp"
 
 #include <array>
 #include <algorithm>
@@ -124,8 +126,8 @@ namespace SST::Prototypes::JFM
 			return v == 0.0 ? 8.0 : 24.0;
 		});
 
-		const double expected = std::pow(1.0 - std::log(8.0) / std::log(10.0), 2.0)
-			+ std::pow(1.0 - std::log(24.0) / std::log(20.0), 2.0);
+        // 80-digit reference for the same log-ratio objective, independent of native libm rounding.
+        constexpr double expected = 0.0130955426609834715920360489573636408496240556704542490168792887824964479875424;
 		EXPECT_DOUBLE_EQ(chiSquared, expected);
 	}
 
@@ -155,7 +157,7 @@ namespace SST::Prototypes::JFM
 		auto result = RunJFMSimplexFit(record, settings);
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
 		EXPECT_TRUE(result->state.converged);
-		EXPECT_EQ(result->state.backend, "cpu-simplex");
+		EXPECT_EQ(result->state.backend, "cpu");
 		EXPECT_NEAR(result->state.parameters.at("I0").value, Parameters.at("I0"), 1.0e-18);
 		EXPECT_NEAR(result->state.parameters.at("A").value, Parameters.at("A"), 1.0e-9);
 		EXPECT_EQ(result->curve.current.size(), record.data->current.size());
@@ -379,7 +381,7 @@ namespace SST::Prototypes::JFM
     {
         auto record = MakeRecord("SD-0");
         JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
-        JFMFitMonteCarloSettings settings; settings.preferGpu = false;
+        JFMFitMonteCarloSettings settings; settings.fitMethod = "nm"; settings.preferGpu = false;
         settings.monteCarloSamples = 4; settings.monteCarloMaxIterations = 1;
         auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
         ASSERT_TRUE(result); EXPECT_GT(result->state.acceptedCount, 0); EXPECT_EQ(result->state.convergedCount, 0);
@@ -406,7 +408,7 @@ namespace SST::Prototypes::JFM
     {
         auto record = MakeRecord("SD-0");
         JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
-        JFMFitMonteCarloSettings settings; settings.preferGpu = false;
+        JFMFitMonteCarloSettings settings; settings.fitMethod = "nm"; settings.preferGpu = false;
         settings.monteCarloSamples = 1; settings.monteCarloMaxIterations = 1000;
         settings.monteCarloNoisePercent = 0.; settings.monteCarloStartPerturbationPercent = 0.;
         settings.parameters = {{"I0", {1e-15,1e-5,false}}, {"A", {.5,3.,true}}};
@@ -438,6 +440,66 @@ namespace SST::Prototypes::JFM
         EXPECT_EQ(result->state.status,"failed"); EXPECT_FALSE(result->state.warnings.empty());
         for (const auto &sample : result->result.samples) EXPECT_EQ(sample.stopReason,"non_finite");
     }
+    TEST(JFMFitEngineTests, SharedCurrentPreservesJunctionZero80DigitReference)
+    {
+        const std::unordered_map<std::string,double> p = {{"I0",1e-12},{"A",1.5},{"Rs",1e9},{"Rsh",1e6}};
+        const double v[] = {std::nextafter(.001,0.),.001,std::nextafter(.001,1.)};
+        const double oracle[] = {9.99999999999828487367761212899202692681153876613455e-13,
+            1.00000000000003988198809452595472837948552149707722e-12,
+            1.00000000000025127660842783901025406628988932017698e-12};
+        for (int i=0;i<3;++i) EXPECT_NEAR(EvaluateJFMCurrent("SD-RsRsh",v[i],300.,p),oracle[i],std::abs(oracle[i])*1e-12);
+    }
+
+    TEST(JFMFitEngineTests, LmIsDefaultAndNmRemainsAnExplicitOption)
+    {
+        auto record = MakeRecord("SD-RsRsh");
+        JFMFitMonteCarloSettings settings; settings.preferGpu = false;
+        settings.parameters = {{"I0",{1e-14,1e-5,true}},{"A",{.5,3.,true}},{"Rs",{0.,100.,true}},{"Rsh",{10.,1e9,true}}};
+        ASSERT_EQ(settings.fitMethod,"lm");
+        auto lm = RunJFMSimplexFit(record,settings); ASSERT_TRUE(lm);
+        EXPECT_EQ(lm->state.fitMethod,"LM"); EXPECT_TRUE(lm->state.accepted);
+        settings.fitMethod = "nm";
+        auto nm = RunJFMSimplexFit(record,settings); ASSERT_TRUE(nm);
+        EXPECT_EQ(nm->state.fitMethod,"NM"); EXPECT_LE(lm->state.chiSquared,nm->state.chiSquared+1e-28);
+    }
+
+    TEST(JFMFitEngineTests, LmCapRunsNmFallbackAndReportsBothStatuses)
+    {
+        auto record = MakeRecord("SD-0"); record.info.prefit->parameters["I0"].value *= 2;
+        JFMFitMonteCarloSettings settings; settings.preferGpu=false; settings.fitMaxIterations=1;
+        auto result=RunJFMSimplexFit(record,settings); ASSERT_TRUE(result);
+        EXPECT_EQ(result->state.fitMethod,"LM→NM"); EXPECT_EQ(result->state.lmStatus,0);
+        EXPECT_FALSE(result->state.converged); EXPECT_EQ(result->state.stopReason,"max_iter");
+    }
+
+    TEST(JFMFitEngineTests, FlatDirectionsAreFlaggedSeparatelyFromConvergence)
+    {
+        auto record=MakeRecord("SD-RsRsh");
+        record.info.prefit->parameters["Rsh"].value=1e15;
+        JFMFitMonteCarloSettings settings; settings.preferGpu=false; settings.monteCarloSamples=1;
+        settings.monteCarloNoisePercent=0; settings.monteCarloStartPerturbationPercent=0;
+        JFMFitState fit; fit.modelId=record.info.prefit->modelId; fit.parameters=record.info.prefit->parameters;
+        auto result=RunJFMMonteCarlo(record,*record.info.prefit,fit,settings); ASSERT_TRUE(result);
+        const auto &sample=result->result.samples.front();
+        EXPECT_TRUE(sample.flatDirections); EXPECT_FALSE(sample.solverConverged);
+        EXPECT_EQ(sample.stopReason,"flat_direction"); EXPECT_TRUE(sample.accepted);
+    }
+
+    TEST(JFMFitEngineTests, HeadlessFitUsesCommandAndJobAndValidatesMethod)
+    {
+        auto record=MakeRecord("SD-0");
+        nlohmann::json q={{"voltage_V",record.data->voltage},{"current_A",record.data->current},
+            {"temperature_K",300.},{"model_id","SD-0"},{"parameters",{{"I0",1e-10},{"A",1.5}}}};
+        auto result=RunJFMFitRequest(q); ASSERT_TRUE(result.at("ok")) << result.dump();
+        EXPECT_EQ(result.at("fit_method"),"LM"); EXPECT_TRUE(result.contains("job_id"));
+        const auto firstId=result.at("job_id").get<std::uint64_t>();
+        auto second=RunJFMFitRequest(q); ASSERT_TRUE(second.at("ok")); EXPECT_GT(second.at("job_id").get<std::uint64_t>(),firstId);
+        q["method"]="bogus"; result=RunJFMFitRequest(q); EXPECT_FALSE(result.at("ok"));
+        EXPECT_EQ(result.at("error").at("code"),"jfm.fit.validation");
+        q["method"]="lm"; q["noise_percent"]=-1.; result=RunJFMFitRequest(q);
+        EXPECT_FALSE(result.at("ok")); EXPECT_EQ(result.at("error").at("code"),"jfm.fit.validation");
+    }
+
 } // namespace SST::Prototypes::JFM
 
 TEST(JFMParameterLabels, PreserveImportedUnitsAndCurrentDensityPrecedence)

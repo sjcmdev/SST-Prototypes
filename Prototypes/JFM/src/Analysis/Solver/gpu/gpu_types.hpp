@@ -53,6 +53,11 @@ struct GpuMcResult
     int iterations = 0;
     int converged = 0;
     int solver_converged = 0;
+    int stop_status = 0;
+    int lm_status = -1;
+    int lm_fallback = 0;
+    int flat_directions = 0;
+    double objective_chi2 = 0;
     int n_free = 0;
 };
 

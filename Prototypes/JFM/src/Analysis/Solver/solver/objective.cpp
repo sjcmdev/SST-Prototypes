@@ -1,5 +1,6 @@
 // src/solver/objective.cpp
 #include "objective.hpp"
+#include "lm_core.hpp"
 
 #include <cmath>
 #include <limits>
@@ -25,7 +26,7 @@ double computeChiSquared(
 		if (!(I_model > 0.0) || !std::isfinite(I_model))
 			return kInf;
 
-		const double residual = 1.0 - std::log(I_model) / std::log(I_meas[i]);
+		const double residual = lm::relativeLogResidual(I_model, I_meas[i]);
 		if (!std::isfinite(residual))
 			return kInf;
 		chi2 += residual * residual;

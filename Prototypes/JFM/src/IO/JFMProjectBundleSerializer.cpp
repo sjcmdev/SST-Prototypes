@@ -406,14 +406,14 @@ namespace SST::Prototypes::JFM
 			parameters << std::setprecision(17) << "sample";
 			for (const std::string &name : result.parameterNames)
 				parameters << '\t' << name;
-			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\n";
+			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\tfit_method\tflat_directions\tlm_status\tobjective_chi_squared\n";
 			for (std::size_t index = 0; index < result.samples.size(); ++index)
 			{
 				const JFMMonteCarloSample &sample = result.samples[index];
 				parameters << index;
 				for (double value : sample.parameters)
 					parameters << '\t' << value;
-				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.converged ? 1 : 0) << '\t' << (sample.converged ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (result.confidenceAvailable ? 1 : 0) << '\n';
+				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\n';
 			}
 			std::string error;
 			if (!SaveText(parameterPath, parameters.str(), error))
@@ -485,6 +485,12 @@ namespace SST::Prototypes::JFM
                     sample.solverConverged = std::stoi(columns[chiIndex + 5]) != 0;
                     sample.stopReason = columns[chiIndex + 6];
                     result.confidenceAvailable = std::stoi(columns[chiIndex + 7]) != 0;
+                }
+                if (columns.size() >= chiIndex+12) {
+                    sample.fitMethod = columns[chiIndex+8];
+                    sample.flatDirections = std::stoi(columns[chiIndex+9]) != 0;
+                    sample.lmStatus = std::stoi(columns[chiIndex+10]);
+                    sample.objectiveChiSquared = std::stod(columns[chiIndex+11]);
                 }
 				result.samples.push_back(std::move(sample));
 			}

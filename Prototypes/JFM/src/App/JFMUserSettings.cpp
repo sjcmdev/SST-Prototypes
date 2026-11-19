@@ -165,6 +165,7 @@ namespace SST::Prototypes::JFM
 			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
 			if (const YAML::Node fit = root["fit_monte_carlo"]; fit && fit.IsMap())
 			{
+				m_Settings.fitMonteCarlo.fitMethod = ReadOr<std::string>(fit, "fit_method", "lm");
 				m_Settings.fitMonteCarlo.fitMaxIterations = std::max(1, ReadOr<int>(fit, "fit_max_iterations", m_Settings.fitMonteCarlo.fitMaxIterations));
 				m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance = std::max(0.0, ReadOr<double>(fit, "fit_reduced_chi2_tolerance", m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance));
 				m_Settings.fitMonteCarlo.monteCarloSamples = std::max(1, ReadOr<int>(fit, "mc_samples", m_Settings.fitMonteCarlo.monteCarloSamples));
@@ -287,6 +288,7 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "hovered_curve_line_weight" << YAML::Value << snapshot.hoveredCurveLineWeight;
 		out << YAML::Key << "auto_plot_after_import" << YAML::Value << snapshot.autoPlotAfterImport;
 		out << YAML::Key << "fit_monte_carlo" << YAML::Value << YAML::BeginMap;
+		out << YAML::Key << "fit_method" << YAML::Value << snapshot.fitMonteCarlo.fitMethod;
 		out << YAML::Key << "fit_max_iterations" << YAML::Value << snapshot.fitMonteCarlo.fitMaxIterations;
 		out << YAML::Key << "fit_reduced_chi2_tolerance" << YAML::Value << snapshot.fitMonteCarlo.fitReducedChiSquaredTolerance;
 		out << YAML::Key << "mc_samples" << YAML::Value << snapshot.fitMonteCarlo.monteCarloSamples;
@@ -463,6 +465,7 @@ namespace SST::Prototypes::JFM
 
 	void JFMUserSettingsStore::SetFitMonteCarloSettings(JFMFitMonteCarloSettings settings)
 	{
+		if (settings.fitMethod != "nm") settings.fitMethod = "lm";
 		settings.fitMaxIterations = std::max(1, settings.fitMaxIterations);
 		settings.fitReducedChiSquaredTolerance = std::max(0.0, settings.fitReducedChiSquaredTolerance);
 		settings.monteCarloSamples = std::max(1, settings.monteCarloSamples);

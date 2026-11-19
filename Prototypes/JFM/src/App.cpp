@@ -3,6 +3,7 @@
 #include "App/Application.hpp"
 #include "App/JFMCommands.hpp"
 #include "IO/JFMPlotExport.hpp"
+#include "IO/JFMFitJobs.hpp"
 #include "App/JFMUserSettings.hpp"
 #include "Core/EntryPoint.hpp"
 #include "Core/Utils/Assert.hpp"
@@ -127,6 +128,7 @@ namespace SST
 		application.InsertLayerBefore(LayerId::ImGui, CreateUnique<JFMDomainLayer>(workspace));
 		RegisterJFMEditor(application, workspace, settings, importDialog);
 		ConfigureJFMPlotServices(runtime.commandRegistry, application.GetJobSystemHandle());
+        ConfigureJFMFitServices(runtime.commandRegistry, application.GetJobSystemHandle());
 		RegisterJFMCommands(JFMCommandRegistrationContext{
 			eventBus,
 			runtime.commandRegistry,

@@ -99,7 +99,7 @@ namespace SST::Prototypes::JFM
 		ImGui::SeparatorText("JFM Numeric");
 		JFMFitMonteCarloSettings solver = settings.fitMonteCarlo;
 		bool changed = false;
-		changed |= sst::ui::widgets::Double("Reduced chi2 target", &solver.fitReducedChiSquaredTolerance, 0.1, "%.6g");
+		ImGui::TextWrapped("Convergence requires the projected gradient and relative objective/step criteria.");
 		changed |= sst::ui::widgets::Checkbox("Auto-calibrate GPU simplex iterations", &solver.autoCalibrateGpuSimplexIterations);
 		changed |= sst::ui::widgets::Int("Simplex calibration runs", &solver.simplexCalibrationRuns);
 		changed |= sst::ui::widgets::Int("Simplex calibration margin", &solver.simplexCalibrationExtraIterations);

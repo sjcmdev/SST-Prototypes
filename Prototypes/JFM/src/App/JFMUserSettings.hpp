@@ -46,6 +46,7 @@ namespace SST::Prototypes::JFM
 
 	struct JFMFitMonteCarloSettings
 	{
+		std::string fitMethod = "lm";
 		int fitMaxIterations = 2500;
 		double fitReducedChiSquaredTolerance = 1.0;
 		int monteCarloSamples = 512;

@@ -6,6 +6,7 @@
 #include <sst/math/nelder_mead.hpp>
 #include <sst/physics/iv.hpp>
 #include "solver/objective.hpp"
+#include "solver/fit_solver.hpp"
 
 #include <algorithm>
 #include <array>
@@ -33,7 +34,6 @@ namespace SST::Prototypes::JFM
 
 		using ParameterArray = std::array<double, ParameterCount>;
 		using FreeMask = std::array<bool, ParameterCount>;
-		using CurrentFunction = double (*)(double, double, const ParameterArray &, bool) noexcept;
 
 		constexpr std::array<std::string_view, ParameterCount> ParameterNames = {
 			"I0", "A", "Rs", "Rsh", "alpha", "Rsh2", "I_ph"};
@@ -42,8 +42,6 @@ namespace SST::Prototypes::JFM
 		{
 			std::string_view id;
 			std::vector<std::string_view> parameters;
-			CurrentFunction current = nullptr;
-			bool dark = true;
 			GpuModelType gpuType = GpuModelType::SD0;
 		};
 
@@ -89,42 +87,17 @@ namespace SST::Prototypes::JFM
 			}
 		}
 
-		double DiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
-		{
-			return sst::physics::diodeCurrent(voltage, temperature, parameters[I0], parameters[A], dark ? 0.0 : parameters[Iph]);
-		}
-
-		double SeriesDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
-		{
-			return sst::physics::seriesDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], dark ? 0.0 : parameters[Iph]);
-		}
-
-		double ShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
-		{
-			return sst::physics::shuntDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
-		}
-
-		double SeriesShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
-		{
-			return sst::physics::seriesShuntDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], dark ? 0.0 : parameters[Iph]);
-		}
-
-		double NonlinearShuntDiodeCurrent(double voltage, double temperature, const ParameterArray &parameters, bool dark) noexcept
-		{
-			return sst::physics::nonlinearShuntDiodeCurrent(voltage, temperature, parameters[I0], parameters[A], parameters[Rs], parameters[Rsh], parameters[Alpha], parameters[Rsh2], dark ? 0.0 : parameters[Iph]);
-		}
-
 		const std::array<ModelSpec, 10> Models = {{
-			{"SD-0", {"I0", "A"}, &DiodeCurrent, true, GpuModelType::SD0},
-			{"SD-Rs", {"I0", "A", "Rs"}, &SeriesDiodeCurrent, true, GpuModelType::SDRs},
-			{"SD-Rsh", {"I0", "A", "Rsh"}, &ShuntDiodeCurrent, true, GpuModelType::SDRsh},
-			{"SD-RsRsh", {"I0", "A", "Rs", "Rsh"}, &SeriesShuntDiodeCurrent, true, GpuModelType::SDRsRsh},
-			{"SD-0-I_ph", {"I0", "A", "I_ph"}, &DiodeCurrent, false, GpuModelType::SD0Iph},
-			{"SD-Rs-I_ph", {"I0", "A", "Rs", "I_ph"}, &SeriesDiodeCurrent, false, GpuModelType::SDRsIph},
-			{"SD-Rsh-I_ph", {"I0", "A", "Rsh", "I_ph"}, &ShuntDiodeCurrent, false, GpuModelType::SDRshIph},
-			{"SD-RsRsh-I_ph", {"I0", "A", "Rs", "Rsh", "I_ph"}, &SeriesShuntDiodeCurrent, false, GpuModelType::SDRsRshIph},
-			{"SD-RsRsh-alpha-Rsh2", {"I0", "A", "Rs", "Rsh", "alpha", "Rsh2"}, &NonlinearShuntDiodeCurrent, true, GpuModelType::SDRsRshAlphaRsh2},
-			{"SD-RsRsh-alpha-Rsh2-I_ph", {"I0", "A", "Rs", "Rsh", "alpha", "Rsh2", "I_ph"}, &NonlinearShuntDiodeCurrent, false, GpuModelType::SDRsRshAlphaRsh2Iph},
+			{"SD-0", {"I0", "A"}, GpuModelType::SD0},
+			{"SD-Rs", {"I0", "A", "Rs"}, GpuModelType::SDRs},
+			{"SD-Rsh", {"I0", "A", "Rsh"}, GpuModelType::SDRsh},
+			{"SD-RsRsh", {"I0", "A", "Rs", "Rsh"}, GpuModelType::SDRsRsh},
+			{"SD-0-I_ph", {"I0", "A", "I_ph"}, GpuModelType::SD0Iph},
+			{"SD-Rs-I_ph", {"I0", "A", "Rs", "I_ph"}, GpuModelType::SDRsIph},
+			{"SD-Rsh-I_ph", {"I0", "A", "Rsh", "I_ph"}, GpuModelType::SDRshIph},
+			{"SD-RsRsh-I_ph", {"I0", "A", "Rs", "Rsh", "I_ph"}, GpuModelType::SDRsRshIph},
+			{"SD-RsRsh-alpha-Rsh2", {"I0", "A", "Rs", "Rsh", "alpha", "Rsh2"}, GpuModelType::SDRsRshAlphaRsh2},
+			{"SD-RsRsh-alpha-Rsh2-I_ph", {"I0", "A", "Rs", "Rsh", "alpha", "Rsh2", "I_ph"}, GpuModelType::SDRsRshAlphaRsh2Iph},
 		}};
 
 		const ModelSpec *FindModel(std::string_view id)
@@ -137,7 +110,7 @@ namespace SST::Prototypes::JFM
 
 		double Evaluate(const ModelSpec &model, double voltage, double temperature, const ParameterArray &parameters) noexcept
 		{
-			const double current = model.current(voltage, temperature, parameters, model.dark);
+			const double current = lm::current(model.gpuType, voltage, parameters.data(), temperature, nullptr, true);
 			return std::isfinite(current) ? current : std::numeric_limits<double>::quiet_NaN();
 		}
 
@@ -231,86 +204,66 @@ namespace SST::Prototypes::JFM
 			return setting;
 		}
 
-		struct SolverOutput
-		{
-			ParameterArray parameters{};
-			sst::math::FitResult result;
-		};
-
-		SolverOutput Solve(
-			const ModelSpec &model,
-			const FitData &data,
-			double temperature,
-			ParameterArray start,
-			const ParameterArray &fixed,
-			const FreeMask &freeMask,
-			const JFMFitMonteCarloSettings &settings,
-			int maxIterations)
-		{
-			std::vector<sst::math::FitParam> fitParameters;
-			fitParameters.reserve(ParameterCount);
-			int freeCount = 0;
-			for (std::size_t index = 0; index < ParameterCount; ++index)
-			{
-				const bool inModel = HasParameter(model, index);
-				const bool free = inModel && freeMask[index];
-				double value = free ? start[index] : fixed[index];
-				const JFMParameterSolverSetting setting = inModel ? ParameterSettingIncludingValue(settings, index, value) : ParameterSetting(settings, index);
-				value = std::clamp(value, setting.minimum, setting.maximum);
-				fitParameters.emplace_back(std::string(ParameterNames[index]), value, setting.minimum, setting.maximum, free);
-				freeCount += free ? 1 : 0;
-			}
-
-			SolverOutput output;
-			if (freeCount == 0)
-			{
-				output.parameters = fixed;
-				output.result.chi2_min = computeChiSquared(
-					fixed.data(), data.voltage.data(), data.current.data(), data.sigma.data(), static_cast<int>(data.voltage.size()),
-					[&model, temperature](double voltage, const double *parameters) { return Evaluate(model, voltage, temperature, parameters); });
-				output.result.reduced_chi2_min = output.result.chi2_min / static_cast<double>(std::max<std::size_t>(1, data.voltage.size()));
-				output.result.converged = std::isfinite(output.result.chi2_min);
-				output.result.stop_reason = "fixed_parameters";
-				return output;
-			}
-
-			auto objective = [model, data, temperature, fitParameters](const std::vector<double> &freeValues) {
-				ParameterArray full{};
-				std::size_t freeIndex = 0;
-				for (std::size_t index = 0; index < ParameterCount; ++index)
-					full[index] = fitParameters[index].free ? freeValues[freeIndex++] : fitParameters[index].value;
-				return computeChiSquared(
-					full.data(), data.voltage.data(), data.current.data(), data.sigma.data(), static_cast<int>(data.voltage.size()),
-					[&model, temperature](double voltage, const double *parameters) { return Evaluate(model, voltage, temperature, parameters); });
-			};
-			const double degreesOfFreedom = static_cast<double>(std::max(1, static_cast<int>(data.voltage.size()) - freeCount));
-			sst::math::SANelderMead solver(std::move(fitParameters), std::move(objective), 1.0, 2.0, 0.5, 0.5, 1.0e-12, false, {}, 0, false, degreesOfFreedom);
-			solver.initSimplex();
-			// MC convergence requires both relative objective spread and relative simplex size.
-            if (settings.fitReducedChiSquaredTolerance >= 0.0)
-                output.result = solver.runUntilConvergence(std::max(1, maxIterations), settings.fitReducedChiSquaredTolerance);
-            else {
-                for (int iteration = 0; iteration < std::max(1, maxIterations); ++iteration) {
-                    solver.step();
-                    const auto &values = solver.state().chi2_values;
-                    const auto [lo, hi] = std::minmax_element(values.begin(), values.end());
-                    double simplexSize = 0.0;
-                    const auto &best = solver.state().vertices[solver.state().best_idx];
-                    for (const auto &vertex : solver.state().vertices)
-                        for (std::size_t j = 0; j < best.size(); ++j)
-                            simplexSize = std::max(simplexSize, std::abs(vertex[j] - best[j]) / std::max({std::abs(vertex[j]), std::abs(best[j]), 1e-300}));
-                    if (iteration + 1 < maxIterations && simplexSize <= 1e-6 && std::isfinite(*hi) && *hi - *lo <= 1e-8 * std::max(std::abs(*hi), 1.0)) {
-                        output.result.converged = true;
-                        break;
-                    }
+        GpuParamLayout Layout(const ModelSpec &model, double temperature, const ParameterArray &start,
+            const ParameterArray &fixed, const FreeMask &freeMask, const JFMFitMonteCarloSettings &settings, int count)
+        {
+            GpuParamLayout layout;
+            layout.n_total = ParameterCount; layout.T = temperature;
+            for (std::size_t k = 0; k < ParameterCount; ++k) {
+                const bool free = HasParameter(model, k) && freeMask[k];
+                const double value = free ? start[k] : fixed[k];
+                const auto bounds = ParameterSettingIncludingValue(settings, k, value);
+                layout.fixed_values[k] = std::clamp(value, bounds.minimum, bounds.maximum);
+                if (free) {
+                    const int j = layout.n_free++;
+                    layout.free_to_total[j] = static_cast<int>(k);
+                    layout.min_bounds[j] = bounds.minimum; layout.max_bounds[j] = bounds.maximum;
                 }
-                output.result.chi2_min = solver.bestChiSquared();
-                output.result.iterations = solver.iteration();
             }
-			const std::vector<double> full = solver.bestFullParams();
-			std::copy_n(full.begin(), std::min(full.size(), output.parameters.size()), output.parameters.begin());
-			return output;
-		}
+            layout.dof = std::max(1, count-layout.n_free);
+            return layout;
+        }
+        struct SolverOutput {
+            ParameterArray parameters{};
+            sst::math::FitResult result;
+            lm::FitOutcome outcome;
+            std::string backend = "cpu";
+        };
+        SolverOutput Solve(const ModelSpec &model, const FitData &data, double temperature,
+            ParameterArray start, const ParameterArray &fixed, const FreeMask &freeMask,
+            const JFMFitMonteCarloSettings &settings, int maxIterations, uint64_t seed = 0, int sample = 0, double perturb = 0)
+        {
+            const auto layout = Layout(model, temperature, start, fixed, freeMask, settings, static_cast<int>(data.voltage.size()));
+            GpuNmConfig config; config.max_iter = std::max(1, maxIterations); config.reduced_chi2_tol = -1;
+            SolverOutput out;
+            if (settings.preferGpu && JFMGpuAvailable() && layout.n_free > 0) {
+                GpuMonteCarloRequest request; request.model_type = model.gpuType; request.layout = layout;
+                request.nm_config = config; request.use_lm = settings.fitMethod == "lm";
+                request.voltages = data.voltage; request.true_current = data.current;
+                request.n_samples = 1; request.noise_pct = 0; request.noise_seed = static_cast<unsigned int>(seed);
+                request.start_perturbation_pct = perturb;
+                auto gpu = gpuRunMonteCarlo(request);
+                if (gpu.success && gpu.results.size() == 1) {
+                    const auto &r = gpu.results.front(); out.backend = "cuda";
+                    std::copy_n(r.best_free_params, layout.n_free, out.outcome.result.p);
+                    out.outcome.result.chi = r.objective_chi2; out.outcome.result.status = r.stop_status;
+                    out.outcome.result.iterations = r.iterations; out.outcome.lm_status = r.lm_status;
+                    out.outcome.fallback = r.lm_fallback != 0; out.outcome.flat = r.flat_directions != 0;
+                }
+            }
+            if (out.backend == "cpu") {
+            out.outcome = lm::fitSample(model.gpuType, layout, config, data.voltage.data(), data.current.data(),
+                static_cast<int>(data.voltage.size()), seed, sample, perturb, settings.fitMethod == "lm");
+            }
+            double full[8]; lm::full(layout, out.outcome.result.p, full);
+            std::copy_n(full, ParameterCount, out.parameters.begin());
+            out.result.chi2_min = out.outcome.result.chi;
+            out.result.reduced_chi2_min = out.result.chi2_min / layout.dof;
+            out.result.iterations = out.outcome.result.iterations;
+            out.result.converged = out.outcome.result.status == 1 && !out.outcome.flat;
+            out.result.stop_reason = lm::stopReason(out.outcome.result.status, out.outcome.flat);
+            return out;
+        }
 
 		FreeMask AllModelParameters(const ModelSpec &model)
 		{
@@ -367,7 +320,7 @@ namespace SST::Prototypes::JFM
 				const double fitCurrent = Evaluate(model, voltage[index], temperature, parameters);
 				if (!(trueCurrent[index] > 0.0) || !(fitCurrent > 0.0) || !std::isfinite(trueCurrent[index]) || !std::isfinite(fitCurrent))
 					return std::numeric_limits<double>::infinity();
-				const double residual = (std::log(fitCurrent) - std::log(trueCurrent[index])) / (noise == 0.0 ? 1.0 : noise);
+				const double residual = (lm::shared_log(fitCurrent) - lm::shared_log(trueCurrent[index])) / (noise == 0.0 ? 1.0 : noise);
 				if (!std::isfinite(residual))
 					return std::numeric_limits<double>::infinity();
 				chiSquared += residual * residual;
@@ -409,7 +362,7 @@ namespace SST::Prototypes::JFM
 		if (!characteristic.info.temperatureK)
 			return MakeError("Characteristic temperature is missing.");
 		if (!characteristic.info.prefit || characteristic.info.prefit->status != "completed")
-			return MakeError("Completed prefit is required as the Simplex start point.");
+			return MakeError("Completed prefit is required as the fit start point.");
 		const ModelSpec *model = FindModel(characteristic.info.prefit->modelId);
 		if (model == nullptr)
 			return MakeError("Unsupported model: " + characteristic.info.prefit->modelId);
@@ -437,11 +390,16 @@ namespace SST::Prototypes::JFM
 		output.state.reducedChiSquared = solved.result.reduced_chi2_min;
 		output.state.iterations = solved.result.iterations;
 		output.state.converged = solved.result.converged;
-		output.state.backend = "cpu-simplex";
+		output.state.backend = solved.backend;
+        output.state.accepted = true;
+        output.state.flatDirections = solved.outcome.flat;
+        output.state.fitMethod = settings.fitMethod == "nm" ? "NM" : solved.outcome.fallback ? "LM→NM" : "LM";
+        output.state.stopReason = solved.result.stop_reason;
+        output.state.lmStatus = solved.outcome.lm_status;
 		if (!solved.result.converged)
-			output.state.warnings.push_back("Simplex stopped: " + solved.result.stop_reason);
+			output.state.warnings.push_back("Fit stopped: " + solved.result.stop_reason);
 		for (std::string_view name : model->parameters)
-			output.state.parameters[std::string(name)] = JFMParameterEstimate{solved.parameters[IndexOf(name)], std::nullopt, "simplex_cpu", {}};
+			output.state.parameters[std::string(name)] = JFMParameterEstimate{solved.parameters[IndexOf(name)], std::nullopt, "fit_" + solved.backend + "_" + settings.fitMethod, {}};
 		output.curve.voltage = characteristic.data->voltage;
 		output.curve.current = EvaluateCurve(*model, output.curve.voltage, *characteristic.info.temperatureK, solved.parameters);
 		return output;
@@ -470,6 +428,7 @@ namespace SST::Prototypes::JFM
 		ParameterArray fitValues = ParametersFrom(fit.parameters);
 		const FreeMask freeMask = MonteCarloParameters(*model, settings);
 		JFMFitMonteCarloSettings monteCarloSolverSettings = settings;
+        monteCarloSolverSettings.preferGpu = false;
 		monteCarloSolverSettings.fitReducedChiSquaredTolerance = -1.0;
 
 		JFMMonteCarloComputation output;
@@ -520,25 +479,11 @@ namespace SST::Prototypes::JFM
 			request.noise_pct = settings.monteCarloNoisePercent;
 			request.noise_seed = settings.monteCarloSeed;
 			request.start_perturbation_pct = settings.monteCarloStartPerturbationPercent;
-			request.layout.n_total = static_cast<int>(ParameterCount);
-			request.layout.T = *characteristic.info.temperatureK;
-			for (std::size_t index = 0; index < ParameterCount; ++index)
-				request.layout.fixed_values[index] = freeMask[index] ? prefitValues[index] : fitValues[index];
-			for (std::size_t index = 0; index < ParameterCount; ++index)
-			{
-				if (!freeMask[index])
-					continue;
-				const int freeIndex = request.layout.n_free++;
-				const double value = request.layout.fixed_values[index];
-				const JFMParameterSolverSetting setting = ParameterSettingIncludingValue(settings, index, value);
-				request.layout.free_to_total[freeIndex] = static_cast<int>(index);
-				request.layout.min_bounds[freeIndex] = setting.minimum;
-				request.layout.max_bounds[freeIndex] = setting.maximum;
-			}
-			request.layout.dof = std::max(1, static_cast<int>(output.voltage.size()) - request.layout.n_free);
+			request.use_lm = settings.fitMethod == "lm";
+            request.layout = Layout(*model, *characteristic.info.temperatureK, prefitValues, fitValues, freeMask, settings, static_cast<int>(output.voltage.size()));
 			request.nm_config.max_iter = settings.monteCarloMaxIterations;
 			request.nm_config.reduced_chi2_tol = monteCarloSolverSettings.fitReducedChiSquaredTolerance;
-			if (settings.autoCalibrateGpuSimplexIterations && settings.simplexCalibrationRuns > 0)
+			if (!request.use_lm && settings.autoCalibrateGpuSimplexIterations && settings.simplexCalibrationRuns > 0)
 			{
 				GpuMonteCarloRequest calibration = request;
 				calibration.n_samples = settings.simplexCalibrationRuns;
@@ -576,7 +521,11 @@ namespace SST::Prototypes::JFM
 					sample.iterations = gpuSample.iterations;
                     sample.converged = sample.accepted = gpuSample.converged != 0;
                     sample.solverConverged = sample.accepted && gpuSample.solver_converged != 0;
-                    sample.stopReason = !sample.accepted ? "non_finite" : sample.solverConverged ? "converged" : "max_iter";
+                    sample.flatDirections = gpuSample.flat_directions != 0;
+                    sample.fitMethod = settings.fitMethod == "nm" ? "NM" : gpuSample.lm_fallback ? "LM→NM" : "LM";
+                    sample.lmStatus = gpuSample.lm_status;
+                    sample.objectiveChiSquared = gpuSample.objective_chi2;
+                    sample.stopReason = !sample.accepted ? "non_finite" : lm::stopReason(gpuSample.stop_status, sample.flatDirections);
                     output.state.convergedCount += sample.solverConverged ? 1 : 0;
 					output.state.acceptedCount += sample.converged ? 1 : 0;
 					output.result.samples.push_back(std::move(sample));
@@ -593,9 +542,7 @@ namespace SST::Prototypes::JFM
 
 		output.state.backend = "cpu";
 		const auto started = std::chrono::steady_clock::now();
-		std::mt19937 rng(settings.monteCarloSeed);
-		std::normal_distribution<double> normal(0.0, 1.0);
-		std::uniform_real_distribution<double> perturbation(-1.0, 1.0);
+		
 		output.noisyCurrent.reserve(static_cast<std::size_t>(settings.monteCarloSamples) * output.idealCurrent.size());
 		output.result.samples.reserve(settings.monteCarloSamples);
 		for (int run = 0; run < settings.monteCarloSamples; ++run)
@@ -607,22 +554,11 @@ namespace SST::Prototypes::JFM
 			for (std::size_t point = 0; point < output.idealCurrent.size(); ++point)
 			{
 				const double noiseAmplitude = output.idealCurrent[point] * factor;
-				noisyData.current[point] = output.idealCurrent[point] + normal(rng) * noiseAmplitude;
+				noisyData.current[point] = output.idealCurrent[point] + lm::normal(settings.monteCarloSeed + static_cast<uint64_t>(run)*0xD1B54A32D192ED03ULL, static_cast<int>(point)) * noiseAmplitude;
 				output.noisyCurrent.push_back(noisyData.current[point]);
 			}
 			ParameterArray start = prefitValues;
-			const double perturbationFactor = settings.monteCarloStartPerturbationPercent / 100.0;
-			for (std::size_t index = 0; index < ParameterCount; ++index)
-			{
-				if (!freeMask[index])
-					continue;
-				const JFMParameterSolverSetting setting = ParameterSettingIncludingValue(settings, index, start[index]);
-				const double scale = std::abs(start[index]) > 1.0e-300
-					? std::abs(start[index])
-					: std::max((setting.maximum - setting.minimum) * 1.0e-12, 1.0e-15);
-				start[index] = std::clamp(start[index] + perturbation(rng) * perturbationFactor * scale, setting.minimum, setting.maximum);
-			}
-			const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations);
+            const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations, settings.monteCarloSeed, run, settings.monteCarloStartPerturbationPercent);
 			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.voltage, output.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent);
 			JFMMonteCarloSample sample;
 			for (std::string_view name : model->parameters)
@@ -632,7 +568,11 @@ namespace SST::Prototypes::JFM
 			sample.iterations = solved.result.iterations;
             sample.converged = sample.accepted = std::isfinite(finalChiSquared) && std::isfinite(solved.result.chi2_min);
             sample.solverConverged = sample.accepted && solved.result.converged;
-            sample.stopReason = !sample.accepted ? "non_finite" : sample.solverConverged ? "converged" : "max_iter";
+            sample.flatDirections = solved.outcome.flat;
+            sample.fitMethod = settings.fitMethod == "nm" ? "NM" : solved.outcome.fallback ? "LM→NM" : "LM";
+            sample.lmStatus = solved.outcome.lm_status;
+            sample.objectiveChiSquared = solved.result.chi2_min;
+            sample.stopReason = !sample.accepted ? "non_finite" : solved.result.stop_reason;
             output.state.convergedCount += sample.solverConverged ? 1 : 0;
 			output.state.acceptedCount += sample.converged ? 1 : 0;
 			output.result.samples.push_back(std::move(sample));

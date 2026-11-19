@@ -38,6 +38,7 @@ struct GpuMonteCarloRequest
 {
     GpuModelType model_type = GpuModelType::Diode4P;
     GpuParamLayout layout;
+    bool use_lm = true;
     GpuNmConfig nm_config;
     std::vector<double> voltages;
     std::vector<double> true_current;

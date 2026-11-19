@@ -17,6 +17,7 @@
 #include "Events/JFMEvents.hpp"
 #include "IO/JFMExportRawTsvJob.hpp"
 #include "IO/JFMPlotExport.hpp"
+#include "IO/JFMFitJobs.hpp"
 #include "Presentation/JFMPlotDocument.hpp"
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMImportPreviewJob.hpp"
@@ -757,11 +758,15 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     JFMProjectBundleSnapshot snapshot; snapshot.project = project;
     JFMMonteCarloResult mc; mc.parameterNames = {"I0","A"}; mc.freeParameterCount = 2; mc.confidenceAvailable = false;
     JFMMonteCarloSample sample; sample.parameters = {1e-10,1.5}; sample.accepted = sample.converged = true;
-    sample.solverConverged = false; sample.stopReason = "max_iter"; mc.samples.push_back(sample);
+    sample.solverConverged = false; sample.stopReason = "max_iter"; sample.fitMethod = "LM→NM";
+    sample.lmStatus = 0; sample.flatDirections = true; sample.objectiveChiSquared = .125; mc.samples.push_back(sample);
     snapshot.monteCarloResults.push_back({1,mc});
     const auto bundle = root / "bundle.jfm";
     auto saved = JFMProjectBundleSerializer::Save(bundle, snapshot);
     ASSERT_TRUE(saved) << saved.Error().technicalDetails;
+    std::string exported, exportError;
+    ASSERT_TRUE(TextFileIO::Load(bundle / Path("mc/1/parameters.tsv"), exported, exportError)) << exportError;
+    EXPECT_NE(exported.find("\t0\t1\t0\tmax_iter\t"), std::string::npos);
     auto opened = JFMProjectBundleSerializer::Load(bundle);
     ASSERT_TRUE(opened) << opened.Error().technicalDetails;
     EXPECT_EQ(opened->snapshot.project.characteristics[0].monteCarlo->outputPath, bundle / Path("mc/1"));
@@ -770,6 +775,8 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     EXPECT_FALSE(roundtrip.confidenceAvailable); ASSERT_EQ(roundtrip.samples.size(),1);
     EXPECT_TRUE(roundtrip.samples.front().accepted); EXPECT_FALSE(roundtrip.samples.front().solverConverged);
     EXPECT_EQ(roundtrip.samples.front().stopReason,"max_iter");
+    EXPECT_EQ(roundtrip.samples.front().fitMethod,"LM→NM"); EXPECT_EQ(roundtrip.samples.front().lmStatus,0);
+    EXPECT_TRUE(roundtrip.samples.front().flatDirections); EXPECT_DOUBLE_EQ(roundtrip.samples.front().objectiveChiSquared,.125);
 }
 TEST_F(UnicodePaths, EmbeddedPythonPathAndImport) {
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -802,4 +809,45 @@ TEST_F(UnicodePaths, EmbeddedPythonPathAndImport) {
     GTEST_SKIP() << "Embedded Python unavailable";
 #endif
 }
+    TEST(JFMProjectJobsTests, NanobindFitAcceptsJsonAndMethodKeyword)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        auto runtime=EnsurePythonRuntimeForBridgeTests(); ASSERT_TRUE(runtime);
+        const auto gil=PythonInterpreter::AcquireRuntimeGil();
+        const int status=PyRun_SimpleString(R"PY(
+import json, math, sst_jfm
+q = dict(voltage_V=[.1+i*.02 for i in range(30)], temperature_K=300.,
+         model_id="SD-0", parameters=dict(I0_A=1e-10,ideality_factor=1.5))
+q["current_A"]=[1e-10*math.exp(v/(1.5*1.380649e-23/1.602176634e-19*300.)) for v in q["voltage_V"]]
+for method in ("lm", "nm"):
+    r=sst_jfm.fit(q,method=method)
+    assert r["ok"], r
+    assert r["fit_method"] in (("LM", "LM→NM") if method == "lm" else ("NM",)), r
+    assert "I0_A" in r["parameters"] and "ideality_factor" in r["parameters"], r
+    json.dumps(r,allow_nan=False)
+
+mc=sst_jfm.fit(dict(q,samples=2,noise_percent=0.,start_perturbation_percent=0.,
+                   fixed_parameters=["I0_A"],bounds={"ideality_factor":[.5,3.]}),method="lm")
+assert mc["ok"], mc
+assert mc["parameter_names"] == ["I0_A","ideality_factor"], mc
+assert all(sample["accepted"] for sample in mc["samples"]), mc
+json.dumps(mc,allow_nan=False)
+density_q=dict(q,parameters=dict(I0_A_per_cm2=1e-10,ideality_factor=1.5))
+density_q["current_density_A_per_cm2"]=density_q.pop("current_A")
+density=sst_jfm.fit(dict(density_q,samples=2,noise_percent=0.,start_perturbation_percent=0.))
+assert density["ok"], density
+assert density["parameter_names"] == ["I0_A_per_cm2","ideality_factor"], density
+assert density["ideal_current_density_A_per_cm2"] == mc["ideal_current_A"], density
+assert "current_A" not in density and "noisy_current_A" not in density, density
+json.dumps(density,allow_nan=False)
+
+assert sst_jfm.fit(q,method="invalid")["error"]["code"] == "jfm.fit.validation"
+bad=dict(q,parameters=dict(I0=1e-10,A=1.5))
+assert sst_jfm.fit(bad)["error"]["code"] == "jfm.fit.validation"
+
+)PY");
+        PythonInterpreter::ReleaseRuntimeGil(gil); EXPECT_EQ(status,0);
+#endif
+    }
+
 }

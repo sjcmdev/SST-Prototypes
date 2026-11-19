@@ -18,12 +18,25 @@
 
 namespace SST::Prototypes::JFM
 {
+    bool RenderJFMFitMethod(JFMFitMonteCarloSettings &settings)
+    {
+        bool changed = false;
+        if (sst::ui::widgets::BeginCombo("Fit method", settings.fitMethod == "nm" ? "NM" : "LM")) {
+            for (const auto *method : {"lm", "nm"})
+                if (ImGui::Selectable(method[0] == 'l' ? "LM" : "NM", settings.fitMethod == method)) {
+                    settings.fitMethod = method; changed = true;
+                }
+            sst::ui::widgets::EndCombo();
+        }
+        return changed;
+    }
 	bool RenderJFMFitMonteCarloSettings(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id, bool showParameterBounds, const JFMCharacteristicInfo* characteristic)
 	{
 		bool changed = false;
 		ImGui::PushID(id);
+        changed |= RenderJFMFitMethod(settings);
 		int simplexIterations = std::max(settings.fitMaxIterations, settings.monteCarloMaxIterations);
-		if (sst::ui::widgets::Int("Simplex iterations", &simplexIterations))
+		if (sst::ui::widgets::Int("Fit iterations", &simplexIterations))
 		{
 			settings.fitMaxIterations = simplexIterations;
 			settings.monteCarloMaxIterations = simplexIterations;

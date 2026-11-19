@@ -1,4 +1,5 @@
 #include "gpu_backend.hpp"
+#include "solver/fit_solver.hpp"
 
 #include "diode_model_device.cuh"
 
@@ -589,25 +590,44 @@ __global__ void simplexOneStepKernel(
     }
 }
 
+__global__ void sharedFitKernel(GpuModelType model, GpuParamLayout layout, GpuNmConfig config,
+    const double* voltages, const double* measured, const double* reference_current,
+    int point_count, int sample_count, uint64_t seed, double perturb, double noise, bool use_lm, GpuMcResult* result)
+{
+    const int run = blockIdx.x*blockDim.x+threadIdx.x;
+    if (run >= sample_count) return;
+    const auto fit = lm::fitSample(model, layout, config, voltages, measured+size_t(run)*point_count,
+        point_count, seed, run, perturb, use_lm);
+    auto &out = result[run];
+    for (int j = 0; j < layout.n_free; ++j) out.best_free_params[j] = fit.result.p[j];
+    double full[8]; lm::full(layout, fit.result.p, full);
+    double chi = 0;
+    for (int i = 0; i < point_count; ++i) {
+        const double current = lm::current(model, voltages[i], full, layout.T, nullptr, true);
+        if (!(current > 0) || !isfinite(current)) { chi = lm::inf; break; }
+        const double r = (lm::shared_log(current)-lm::shared_log(reference_current[i]))/(noise == 0 ? 1 : noise);
+        chi += r*r;
+    }
+    out.chi2_min = out.reduced_chi2_min = noise == 0 && isfinite(chi) ? 0 : chi;
+    out.objective_chi2 = fit.result.chi;
+    out.converged = isfinite(out.chi2_min) && isfinite(fit.result.chi);
+    out.solver_converged = out.converged && fit.result.status == 1 && !fit.flat;
+    out.stop_status = fit.result.status; out.lm_status = fit.lm_status;
+    out.lm_fallback = fit.fallback; out.flat_directions = fit.flat;
+    out.iterations = fit.result.iterations; out.n_free = layout.n_free;
+}
+
+// Retained NM baseline: GPU-fit-bench/lm/generate.py reads this kernel's bookkeeping.
 __global__ void simplexFullKernel(
-    GpuModelType model,
-    GpuParamLayout layout,
-    GpuNmConfig config,
-    const double* voltages,
-    const double* measured,
-    const double* reference_current,
-    const double* sigma,
-    int point_count,
-    uint64_t start_seed,
-    double start_perturbation_pct,
-    double noise_fraction,
-    GpuMcResult* result)
+    GpuModelType model, GpuParamLayout layout, GpuNmConfig config,
+    const double* voltages, const double* measured, const double* reference_current,
+    const double* sigma, int point_count, uint64_t start_seed,
+    double start_perturbation_pct, double noise_fraction, GpuMcResult* result)
 {
     if (threadIdx.x != 0)
         return;
-
     const int run = blockIdx.x;
-    const double* measured_run = measured + static_cast<size_t>(run) * point_count;
+    const double* measured_run = measured + static_cast<size_t>(run)*point_count;
     GpuMcResult* out = result + run;
     out->solver_converged = 0;
     double vertices[GpuSimplexStepResult::MAX_VERTICES][GpuSimplexStepResult::MAX_FREE] = {};
@@ -628,24 +648,23 @@ __global__ void simplexFullKernel(
         vertices[0][j] = fmin(fmax(start + centered * start_perturbation_pct * 0.01 * scale, layout.min_bounds[j]), layout.max_bounds[j]);
     }
     initSimplexFromStart_d(model, layout, vertices[0], voltages, measured_run, sigma, point_count, vertices, chi2);
-    const double ref_clean_chi2 = evaluateFinalChi2Serial_d(model, layout, vertices[0], voltages, reference_current, noise_fraction, point_count);
+
 
     for (; iteration < config.max_iter; ++iteration)
     {
         sortOrder_d(chi2, n_vertices, order);
         const int best = order[0];
+
         const double high = chi2[order[n_vertices - 1]];
-        double simplexSize = 0.0;
-        for (int vertex = 0; vertex < n_vertices; ++vertex)
+        double simplexSize = 0;
+        for (int k = 0; k < n_vertices; ++k)
             for (int j = 0; j < n_free; ++j)
-                simplexSize = fmax(simplexSize, fabs(vertices[vertex][j] - vertices[best][j]) / fmax(fmax(fabs(vertices[vertex][j]), fabs(vertices[best][j])), 1e-300));
-        if (iteration > 0 && simplexSize <= 1e-6 && isfinite(high) && high - chi2[best] <= 1e-8 * fmax(fabs(high), 1.0)) {
-            out->solver_converged = 1;
-            break;
+                simplexSize = fmax(simplexSize,fabs(vertices[k][j]-vertices[best][j])/fmax(fmax(fabs(vertices[k][j]),fabs(vertices[best][j])),1e-300));
+        if (iteration > 0 && simplexSize <= 1e-6 && isfinite(high) && high-chi2[best] <= 1e-8*fmax(fabs(high),1.)) {
+            out->solver_converged = 1; break;
         }
         if (chi2[best] / static_cast<double>(layout.dof) < config.reduced_chi2_tol)
             break;
-
         const int second_worst = order[n_vertices - 2];
         const int worst = order[n_vertices - 1];
 
@@ -745,16 +764,11 @@ __global__ void simplexFullKernel(
 
     sortOrder_d(chi2, n_vertices, order);
     const int best = order[0];
-    const double final_clean_chi2 = evaluateFinalChi2Serial_d(model, layout, vertices[best], voltages, reference_current, noise_fraction, point_count);
-    for (int j = 0; j < n_free; ++j)
-        out->best_free_params[j] = vertices[best][j];
-    out->chi2_min = final_clean_chi2;
-    out->reduced_chi2_min = final_clean_chi2;
-    out->ref_reduced_chi2 = ref_clean_chi2;
-    out->delta_reduced_chi2 = final_clean_chi2;
-    out->iterations = iteration;
-    out->converged = isfinite(final_clean_chi2) && isfinite(chi2[best]) ? 1 : 0;
-    out->n_free = n_free;
+    const double final_clean_chi2 = evaluateFinalChi2Serial_d(model,layout,vertices[best],voltages,reference_current,noise_fraction,point_count);
+    for (int j = 0; j < n_free; ++j) out->best_free_params[j] = vertices[best][j];
+    out->chi2_min = out->reduced_chi2_min = final_clean_chi2;
+    out->iterations = iteration; out->n_free = n_free;
+    out->converged = isfinite(final_clean_chi2) && isfinite(chi2[best]);
 }
 
 std::string cudaErrorMessage(cudaError_t error)
@@ -1302,137 +1316,33 @@ cuda_failure:
 GpuNumericValidationResult gpuValidateSimplexFull()
 {
     GpuNumericValidationResult result;
-    const GpuDeviceStatus device = gpuQueryDevice();
-    result.cuda_available = device.available;
-    if (!device.available)
-    {
-        result.message = device.message;
-        return result;
+    const auto device = gpuQueryDevice(); result.cuda_available = device.available;
+    if (!device.available) { result.message = device.message; return result; }
+    constexpr int count = 24;
+    const double truth[] = {1e-10,1.5,.1,1000.};
+    double start[] = {1.2e-10,1.45,.2,900.};
+    const double lower[] = {1e-15,.5,0.,10.}, upper[] = {1e-5,3.,10.,1e6};
+    GpuMonteCarloRequest request; request.model_type = GpuModelType::Diode4P;
+    request.layout = makeFourParamLayout(start,lower,upper,count);
+    request.use_lm = false; request.n_samples = 1; request.noise_pct = 0;
+    request.nm_config.max_iter = 24; request.nm_config.reduced_chi2_tol = -1;
+    for (int i = 0; i < count; ++i) {
+        const double v = .02+.58*i/(count-1.);
+        request.voltages.push_back(v); request.true_current.push_back(evaluateDiodeIV4(v,truth,300.));
     }
-
-    constexpr int pointCount = 24;
-    constexpr int maxIter = 24;
-    std::vector<double> voltages(pointCount);
-    std::vector<double> measured(pointCount);
-    std::vector<double> sigma(pointCount, 1e-2);
-    const double trueParams[] = {1.0e-10, 1.5, 0.1, 1000.0};
-    double startParams[] = {1.2e-10, 1.45, 0.2, 900.0};
-    const double minBounds[] = {1e-15, 0.5, 0.0, 10.0};
-    const double maxBounds[] = {1e-5, 3.0, 10.0, 1e6};
-    for (int i = 0; i < pointCount; ++i)
-    {
-        voltages[i] = -0.3 + 0.9 * static_cast<double>(i) / static_cast<double>(pointCount - 1);
-        measured[i] = evaluateDiodeIV4(voltages[i], trueParams, 300.0);
+    const auto cpu = lm::fitSample(request.model_type,request.layout,request.nm_config,
+        request.voltages.data(),request.true_current.data(),count,request.noise_seed,0,0,false);
+    const auto gpu = gpuRunMonteCarlo(request);
+    if (!gpu.success || gpu.results.size() != 1) { result.message = gpu.message; return result; }
+    const auto &fit = gpu.results.front();
+    result.passed = fit.objective_chi2 == cpu.result.chi && fit.iterations == cpu.result.iterations;
+    result.cases_checked = request.layout.n_free+1;
+    for (int j = 0; j < request.layout.n_free; ++j) {
+        const double delta = std::abs(fit.best_free_params[j]-cpu.result.p[j]);
+        result.max_abs_error = std::max(result.max_abs_error,delta);
+        result.passed = result.passed && delta == 0;
     }
-
-    std::vector<sst::math::FitParam> fitParams = {
-        sst::math::FitParam("I0", startParams[0], minBounds[0], maxBounds[0], true),
-        sst::math::FitParam("A", startParams[1], minBounds[1], maxBounds[1], true),
-        sst::math::FitParam("Rs", startParams[2], minBounds[2], maxBounds[2], true),
-        sst::math::FitParam("Rsh", startParams[3], minBounds[3], maxBounds[3], true),
-    };
-    auto objective = makeDiodeIVObjective(
-        fitParams,
-        [](double voltage, const double* params) { return evaluateDiodeIV4(voltage, params, 300.0); },
-        voltages,
-        measured,
-        sigma);
-    sst::math::SANelderMead cpuSolver(fitParams, objective, 1.0, 2.0, 0.5, 0.5, 1e-12, false, sst::math::SAConfig{}, 0, false, std::max(1, pointCount - 4));
-    cpuSolver.initSimplex();
-    const sst::math::FitResult cpuResult = cpuSolver.runUntilConvergence(maxIter, 1e-300);
-
-    GpuParamLayout layout = makeFourParamLayout(startParams, minBounds, maxBounds, pointCount);
-    GpuNmConfig config;
-    config.max_iter = maxIter;
-    config.reduced_chi2_tol = 1e-300;
-
-    double* deviceVoltages = nullptr;
-    double* deviceMeasured = nullptr;
-    double* deviceSigma = nullptr;
-    GpuMcResult* deviceResult = nullptr;
-    GpuMcResult gpuResult;
-    cudaError_t error = cudaMalloc(&deviceVoltages, voltages.size() * sizeof(double));
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaMalloc(&deviceMeasured, measured.size() * sizeof(double));
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaMalloc(&deviceSigma, sigma.size() * sizeof(double));
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaMalloc(&deviceResult, sizeof(GpuMcResult));
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaMemcpy(deviceVoltages, voltages.data(), voltages.size() * sizeof(double), cudaMemcpyHostToDevice);
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaMemcpy(deviceMeasured, measured.data(), measured.size() * sizeof(double), cudaMemcpyHostToDevice);
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaMemcpy(deviceSigma, sigma.data(), sigma.size() * sizeof(double), cudaMemcpyHostToDevice);
-    if (error != cudaSuccess)
-        goto cuda_failure;
-
-    simplexFullKernel<<<1, 32>>>(GpuModelType::Diode4P, layout, config, deviceVoltages, deviceMeasured, deviceMeasured, deviceSigma, pointCount, 42, 0.0, 0.05, deviceResult);
-    error = cudaGetLastError();
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaDeviceSynchronize();
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaMemcpy(&gpuResult, deviceResult, sizeof(GpuMcResult), cudaMemcpyDeviceToHost);
-    if (error != cudaSuccess)
-        goto cuda_failure;
-
-    result.passed = true;
-    result.cases_checked = static_cast<int>(cpuResult.best_params.size()) + 3;
-    result.passed = result.passed && gpuResult.n_free == static_cast<int>(cpuResult.best_params.size());
-    result.passed = result.passed && gpuResult.iterations == cpuResult.iterations;
-    {
-        const double chiAbsError = std::abs(gpuResult.chi2_min - cpuResult.chi2_min);
-        const double chiRelError = relativeError(gpuResult.chi2_min, cpuResult.chi2_min);
-        result.max_abs_error = std::max(result.max_abs_error, chiAbsError);
-        result.max_rel_error = std::max(result.max_rel_error, chiRelError);
-        result.passed = result.passed && chiRelError < 1e-7;
-    }
-    {
-        const double rchiAbsError = std::abs(gpuResult.reduced_chi2_min - cpuResult.reduced_chi2_min);
-        const double rchiRelError = relativeError(gpuResult.reduced_chi2_min, cpuResult.reduced_chi2_min);
-        result.max_abs_error = std::max(result.max_abs_error, rchiAbsError);
-        result.max_rel_error = std::max(result.max_rel_error, rchiRelError);
-        result.passed = result.passed && rchiRelError < 1e-7;
-    }
-    for (int j = 0; j < gpuResult.n_free; ++j)
-    {
-        const double absError = std::abs(gpuResult.best_free_params[j] - cpuResult.best_params[static_cast<size_t>(j)]);
-        const double relError = relativeError(gpuResult.best_free_params[j], cpuResult.best_params[static_cast<size_t>(j)]);
-        result.max_abs_error = std::max(result.max_abs_error, absError);
-        result.max_rel_error = std::max(result.max_rel_error, relError);
-        result.passed = result.passed && relError < 1e-7;
-    }
-
-    {
-        std::ostringstream stream;
-        stream << (result.passed ? "GPU full simplex validation PASS" : "GPU full simplex validation FAIL")
-               << ": iterations=" << gpuResult.iterations
-               << ", chi2_gpu=" << gpuResult.chi2_min
-               << ", chi2_cpu=" << cpuResult.chi2_min
-               << ", max_abs_error=" << result.max_abs_error
-               << ", max_rel_error=" << result.max_rel_error;
-        result.message = stream.str();
-    }
-    freeDevice(deviceVoltages);
-    freeDevice(deviceMeasured);
-    freeDevice(deviceSigma);
-    freeDevice(deviceResult);
-    return result;
-
-cuda_failure:
-    result.message = "CUDA full simplex validation failed: " + cudaErrorMessage(error);
-    freeDevice(deviceVoltages);
-    freeDevice(deviceMeasured);
-    freeDevice(deviceSigma);
-    freeDevice(deviceResult);
+    result.message = result.passed ? "Shared NM-real CPU/CUDA validation PASS" : "Shared NM-real CPU/CUDA validation FAIL";
     return result;
 }
 
@@ -1731,39 +1641,19 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
 
     {
         stageStartMs = hostTimeMs();
-        const int blockSize = 256;
-        const int total = pointCount * sampleCount;
-        const int gridSize = (total + blockSize - 1) / blockSize;
-        addPercentNoiseMcKernel<<<gridSize, blockSize>>>(
-            deviceTrueCurrent,
-            deviceNoiseAmplitude,
-            deviceNoisy,
-            static_cast<uint64_t>(request.noise_seed),
-            pointCount,
-            sampleCount);
-        error = cudaGetLastError();
-        if (error != cudaSuccess)
-            goto cuda_failure;
-        error = cudaDeviceSynchronize();
-        if (error != cudaSuccess)
-            goto cuda_failure;
-        output.noise_ms = hostTimeMs() - stageStartMs;
+        std::vector<double> measured(size_t(pointCount)*sampleCount);
+        for (int run = 0; run < sampleCount; ++run)
+            for (int i = 0; i < pointCount; ++i)
+                measured[size_t(run)*pointCount+i] = request.true_current[i] +
+                    lm::normal(request.noise_seed+uint64_t(run)*0xD1B54A32D192ED03ULL, i)*noiseAmplitude[i];
+        error = cudaMemcpy(deviceNoisy, measured.data(), noisyBytes, cudaMemcpyHostToDevice);
+        if (error != cudaSuccess) goto cuda_failure;
+        output.noise_ms = hostTimeMs()-stageStartMs;
     }
-
     stageStartMs = hostTimeMs();
-    simplexFullKernel<<<sampleCount, 32>>>(
-        request.model_type,
-        request.layout,
-        request.nm_config,
-        deviceVoltages,
-        deviceNoisy,
-        deviceTrueCurrent,
-        deviceSigma,
-        pointCount,
-        static_cast<uint64_t>(request.noise_seed),
-        request.start_perturbation_pct,
-        noiseFactor,
-        deviceResults);
+    sharedFitKernel<<<(sampleCount+127)/128, 128>>>(request.model_type, request.layout, request.nm_config,
+        deviceVoltages, deviceNoisy, deviceTrueCurrent, pointCount, sampleCount, request.noise_seed,
+        request.start_perturbation_pct, noiseFactor, request.use_lm, deviceResults);
     error = cudaGetLastError();
     if (error != cudaSuccess)
         goto cuda_failure;

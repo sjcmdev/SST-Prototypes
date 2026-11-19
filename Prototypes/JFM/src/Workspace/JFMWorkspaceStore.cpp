@@ -1368,6 +1368,8 @@ namespace SST::Prototypes::JFM
 		state.modelId = info->get().prefit->modelId;
 		state.fitRange = info->get().prefit->fitRange;
 		state.status = "running";
+        state.accepted = state.converged = state.flatDirections = false;
+        state.stopReason = "running"; state.fitMethod = "unknown"; state.lmStatus = -1;
 		state.warnings.clear();
 		info->get().monteCarlo.reset();
 		document->get().fitCurves.erase(ref.characteristic);
@@ -1422,6 +1424,8 @@ namespace SST::Prototypes::JFM
 			return false;
 		JFMFitState &state = info->get().fit.emplace(info->get().fit.value_or(JFMFitState{}));
 		state.status = "failed";
+        state.accepted = state.converged = state.flatDirections = false;
+        state.stopReason = "failed"; state.fitMethod = "unknown"; state.lmStatus = -1;
 		state.warnings = {std::move(error)};
 		state.parameters.clear();
 		document->get().fitCurves.erase(ref.characteristic);

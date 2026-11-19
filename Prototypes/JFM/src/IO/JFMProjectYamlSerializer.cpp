@@ -241,6 +241,11 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "reduced_chi_squared" << YAML::Value << fit.reducedChiSquared;
 		out << YAML::Key << "iterations" << YAML::Value << fit.iterations;
 		out << YAML::Key << "converged" << YAML::Value << fit.converged;
+		out << YAML::Key << "fit_method" << YAML::Value << fit.fitMethod;
+		out << YAML::Key << "stop_reason" << YAML::Value << fit.stopReason;
+		out << YAML::Key << "accepted" << YAML::Value << fit.accepted;
+		out << YAML::Key << "flat_directions" << YAML::Value << fit.flatDirections;
+		out << YAML::Key << "lm_status" << YAML::Value << fit.lmStatus;
 		out << YAML::Key << "backend" << YAML::Value << fit.backend;
 		out << YAML::Key << "warnings" << YAML::Value << fit.warnings;
 		out << YAML::EndMap;
@@ -278,6 +283,11 @@ namespace SST::Prototypes::JFM
 		fit.reducedChiSquared = readOr<double>(node, "reduced_chi_squared", 0.0);
 		fit.iterations = readOr<int>(node, "iterations", 0);
 		fit.converged = readOr<bool>(node, "converged", false);
+		fit.fitMethod = readOr<std::string>(node, "fit_method", "NM");
+		fit.stopReason = readOr<std::string>(node, "stop_reason", "unknown");
+		fit.accepted = readOr<bool>(node, "accepted", fit.converged);
+		fit.flatDirections = readOr<bool>(node, "flat_directions", false);
+		fit.lmStatus = readOr<int>(node, "lm_status", -1);
 		fit.backend = readOr<std::string>(node, "backend", "cpu");
 		if (node["warnings"])
 			fit.warnings = node["warnings"].as<std::vector<std::string>>();

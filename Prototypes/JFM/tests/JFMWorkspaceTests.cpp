@@ -508,6 +508,15 @@ namespace SST::Prototypes::JFM
         EXPECT_EQ(store.GetMonteCarloState(ref)->convergedCount,0);
 		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, rerunGeneration, monteCarlo, {{"I0", "A"}, {}}));
 
+        fit.accepted = fit.converged = true; fit.fitMethod = "LM"; fit.stopReason = "converged";
+        ASSERT_TRUE(store.ApplyFitResult(ref,store.BeginFit(ref),fit,{}));
+        const auto newFit = store.BeginFit(ref);
+        EXPECT_FALSE(store.GetFitState(ref)->accepted); EXPECT_FALSE(store.GetFitState(ref)->converged);
+        EXPECT_EQ(store.GetFitState(ref)->stopReason,"running");
+        ASSERT_TRUE(store.FailFit(ref,newFit,"invalid data"));
+        EXPECT_FALSE(store.GetFitState(ref)->accepted); EXPECT_FALSE(store.GetFitState(ref)->converged);
+        EXPECT_EQ(store.GetFitState(ref)->stopReason,"failed");
+
 		ASSERT_TRUE(store.SetManualFitRange(project, id, 0.0, 0.5));
 		EXPECT_FALSE(store.GetFitState(ref).has_value());
 		EXPECT_FALSE(store.GetMonteCarloState(ref).has_value());
