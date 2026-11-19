@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ControlPanel.hpp"
+#include "Presentation/JFMFitMonteCarloWidgets.hpp"
 
 #include "App/JFMCommands.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
@@ -14,6 +15,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <imgui.h>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <sst/ui/Widgets/ParameterBoundsRow.hpp>
 
 namespace SST::Prototypes::JFM
@@ -354,7 +356,7 @@ namespace SST::Prototypes::JFM
 				mixed = true;
 		}
 
-		if (ImGui::BeginCombo("Model", mixed ? "Mixed" : model.c_str()))
+		if (sst::ui::widgets::BeginCombo("Model", mixed ? "Mixed" : model.c_str()))
 		{
 			for (const char *candidate : PrefitModels)
 			{
@@ -367,7 +369,7 @@ namespace SST::Prototypes::JFM
 					Execute(JFMSetPrefitModelCommandId, std::move(context));
 				}
 			}
-			ImGui::EndCombo();
+			sst::ui::widgets::EndCombo();
 		}
 
 		const ImVec2 actionButtonSize{150.0f, 0.0f};
@@ -387,8 +389,7 @@ namespace SST::Prototypes::JFM
 		if (m_Settings != nullptr)
 		{
 			JFMUserSettings settings = m_Settings->GetSnapshot();
-			ImGui::SetNextItemWidth(120.0f);
-			if (ImGui::InputInt("Simplex iterations", &settings.fitMonteCarlo.fitMaxIterations, 100, 1000)
+			if (sst::ui::widgets::Int("Simplex iterations", &settings.fitMonteCarlo.fitMaxIterations)
 				&& settings.fitMonteCarlo.fitMaxIterations > 0)
 				m_Settings->SetFitMonteCarloSettings(settings.fitMonteCarlo);
 
@@ -406,8 +407,9 @@ namespace SST::Prototypes::JFM
 				{
 					const std::string name(nameView);
 					JFMParameterSolverSetting &parameter = settings.fitMonteCarlo.parameters[name];
-					changed |= sst::ui::widgets::ParameterBoundsRow(name.c_str(), name.c_str(),
-						parameter.monteCarloFree, parameter.minimum, parameter.maximum);
+					changed |= sst::ui::widgets::ParameterBoundsRow(name.c_str(),
+						JFMParameterLabel(name, &activeInfo).c_str(),
+						parameter.monteCarloFree, parameter.minimum, parameter.maximum, name != "A" && name != "alpha");
 				}
 				ImGui::EndTable();
 				if (changed)
@@ -456,14 +458,13 @@ namespace SST::Prototypes::JFM
 
 		bool autoPrefit = settings.autoPrefitOnRangeChange;
 		bool autoFit = settings.autoFitOnRangeChange;
-		const bool autoPrefitChanged = ImGui::Checkbox("Auto prefit after range change", &autoPrefit);
-		const bool autoFitChanged = ImGui::Checkbox("Auto fit after range change", &autoFit);
+		const bool autoPrefitChanged = sst::ui::widgets::Checkbox("Auto prefit after range change", &autoPrefit);
+		const bool autoFitChanged = sst::ui::widgets::Checkbox("Auto fit after range change", &autoFit);
 		if (autoPrefitChanged || autoFitChanged)
 			m_Settings->SetAutoRangeAnalysis(autoPrefit, autoFit);
 
 		bool changed = false;
-		ImGui::SetNextItemWidth(160.0f);
-		changed |= ImGui::SliderFloat("Hovered curve thickness", &settings.hoveredCurveLineWeight, 0.5f, 10.0f, "%.1f");
+		changed |= sst::ui::widgets::SliderFloat("Hovered curve thickness", &settings.hoveredCurveLineWeight, 0.5f, 10.0f, "%.1f");
 		if (changed)
 		{
 			m_Settings->SetPrefitCurveDefaults(
@@ -536,15 +537,11 @@ namespace SST::Prototypes::JFM
 		ImGui::SeparatorText("Range");
 		bool changed = false;
 		bool held = false;
-		ImGui::SetNextItemWidth(220.0f);
-		changed = ImGui::SliderInt("Lower index", &m_LowerIndex, 0, maximumIndex) || changed;
+		changed = sst::ui::widgets::SliderInt("Lower index", &m_LowerIndex, 0, maximumIndex) || changed;
 		held = ImGui::IsItemActive() || held;
-		ImGui::SameLine();
 		ImGui::Text("%.6g V", voltage[std::clamp(m_LowerIndex, 0, maximumIndex)]);
-		ImGui::SetNextItemWidth(220.0f);
-		changed = ImGui::SliderInt("Upper index", &m_UpperIndex, 0, maximumIndex) || changed;
+		changed = sst::ui::widgets::SliderInt("Upper index", &m_UpperIndex, 0, maximumIndex) || changed;
 		held = ImGui::IsItemActive() || held;
-		ImGui::SameLine();
 		ImGui::Text("%.6g V", voltage[std::clamp(m_UpperIndex, 0, maximumIndex)]);
 
 		m_LowerIndex = std::clamp(m_LowerIndex, 0, maximumIndex);
@@ -613,7 +610,7 @@ namespace SST::Prototypes::JFM
 		}
 
 		ImGui::SeparatorText("Tuned");
-		ImGui::Checkbox("Fix edited parameter while tuning", &m_AutoFixDuringTuning);
+		sst::ui::widgets::Checkbox("Fix edited parameter while tuning", &m_AutoFixDuringTuning);
 		bool anyHeld = false;
 		bool settingsChanged = false;
 		JFMUserSettings settings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
@@ -637,7 +634,7 @@ namespace SST::Prototypes::JFM
 				ImGui::PushID(name.c_str());
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
-				ImGui::TextUnformatted(name.c_str());
+				ImGui::TextWrapped("%s", JFMParameterLabel(name, &activeInfo).c_str());
 				ImGui::TableSetColumnIndex(1);
 				if (ImGui::Checkbox("##fix", &fixed))
 				{
@@ -717,7 +714,7 @@ namespace SST::Prototypes::JFM
 	void ControlPanel::RenderParameterTable(ProjectHandle project, const JFMCharacteristicInfo &activeInfo)
 	{
 		ImGui::SeparatorText("Parameters");
-		ImGui::Checkbox("Hide prefit parameters", &m_HidePrefitParameters);
+		sst::ui::widgets::Checkbox("Hide prefit parameters", &m_HidePrefitParameters);
 		const Ref<const JFMMonteCarloResult> monteCarlo = m_Store != nullptr ? m_Store->GetMonteCarloResult({project, activeInfo.id}) : Ref<const JFMMonteCarloResult>{};
 		if (ImGui::BeginTable("##jfm_control_parameters", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{

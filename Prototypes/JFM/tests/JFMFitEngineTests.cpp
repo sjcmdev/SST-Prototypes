@@ -1,3 +1,4 @@
+#include "Presentation/JFMFitMonteCarloWidgets.hpp"
 #include <gtest/gtest.h>
 #include <sst/physics/constants.hpp>
 
@@ -438,3 +439,19 @@ namespace SST::Prototypes::JFM
         for (const auto &sample : result->result.samples) EXPECT_EQ(sample.stopReason,"non_finite");
     }
 } // namespace SST::Prototypes::JFM
+
+TEST(JFMParameterLabels, PreserveImportedUnitsAndCurrentDensityPrecedence)
+{
+    using namespace SST::Prototypes::JFM;
+    JFMCharacteristicInfo info;
+    info.columns = {{"Voltage", "mV", "voltage"}, {"Current", "uA", "current"}, {"Density", "mA/cm^2", "current_density"}};
+    EXPECT_EQ(JFMParameterLabel("I0", &info), "I0 [mA/cm^2]");
+    EXPECT_EQ(JFMParameterLabel("Rs", &info), "Rs [(mV)/(mA/cm^2)]");
+    EXPECT_EQ(JFMParameterLabel("Rsh2", &info), "Rsh2 [(mV)^alpha/(mA/cm^2)]");
+    EXPECT_EQ(JFMParameterLabel("A", &info), "A [1]");
+    info.columns.pop_back();
+    EXPECT_EQ(JFMParameterLabel("I_ph", &info), "I_ph [uA]");
+    info.columns[0].role.clear(); info.columns[1].role.clear();
+    EXPECT_EQ(JFMParameterLabel("Rs", &info), "Rs [(mV)/(uA)]");
+    EXPECT_EQ(JFMParameterLabel("I0"), "I0 [input I]");
+}

@@ -9,11 +9,30 @@
 
 namespace SST::Prototypes::JFM
 {
+    // Fitting retains imported values; current-density columns take precedence over current.
+    inline std::string JFMParameterLabel(std::string_view name, const JFMCharacteristicInfo* info = nullptr)
+    {
+        auto columnIndex = [&](std::string_view role, std::size_t fallback) {
+            if (info) for (std::size_t i = 0; i < info->columns.size(); ++i)
+                if (info->columns[i].role == role) return i;
+            return fallback;
+        };
+        auto unitAt = [&](std::size_t index, const char* fallback) {
+            return info && index < info->columns.size() && !info->columns[index].unit.empty()
+                ? info->columns[index].unit : std::string(fallback);
+        };
+        const auto voltage = unitAt(columnIndex("voltage", 0), "input V");
+        const auto current = unitAt(columnIndex("current_density", columnIndex("current", 1)), "input I");
+        const auto unit = name == "I0" || name == "I_ph" ? current
+            : name == "Rs" || name == "Rsh" ? "(" + voltage + ")/(" + current + ")"
+            : name == "Rsh2" ? "(" + voltage + ")^alpha/(" + current + ")" : std::string("1");
+        return std::string(name) + " [" + unit + "]";
+    }
 	[[nodiscard]] bool RenderJFMFitMonteCarloSettings(
 		JFMFitMonteCarloSettings &settings,
 		std::string_view modelId,
 		const char *id,
-		bool showParameterBounds = true);
+		bool showParameterBounds = true, const JFMCharacteristicInfo* characteristic = nullptr);
 	[[nodiscard]] bool RenderJFMMonteCarloScatterDefaults(JFMFitMonteCarloSettings &settings, const char *id);
 	[[nodiscard]] bool RenderJFMMonteCarloScatterDefaults(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id);
 

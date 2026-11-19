@@ -37,6 +37,7 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         _SST_ROOT .. "/Vendor/thread-pool/include", _SST_ROOT .. "/Vendor/json/include",
         _SST_ROOT .. "/Vendor/yaml-cpp/include", _SST_ROOT .. "/Vendor/GoogleTest/googletest/include" }
     links { "Core", "ScapsCore" }
+    if name ~= "ScapsLabHeadless" then sst_link_ui() end
     defines { 'SCAPSLAB_HEADLESS="' .. _SST_ROOT .. '/build/bin/' .. outputdir .. '/ScapsLabHeadless/ScapsLabHeadless.exe"', "YAML_CPP_STATIC_DEFINE", 'SCAPSLAB_PROJECT="' .. scaps .. '/device_project.yaml"', 'SCAPSLAB_PYTHON="' .. root .. '/python"', 'SCAPSLAB_PYTHON_TEST="' .. root .. '/tests/test_headless.py"' }
     if name == "ScapsLab" then
         files { root .. "/src/**.cpp", root .. "/src/**.hpp" }

@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <nlohmann/json.hpp>
 #include <imgui.h>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <limits>
 #include <misc/cpp/imgui_stdlib.h>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
@@ -59,7 +60,7 @@ namespace SST::Prototypes::PlotLab
             bool changed = false;
             const auto label =
                 Exists(p, selected, 3) ? p.object(selected).name + " [" + std::to_string(selected) + "]" : "None";
-            if (ImGui::BeginCombo(title, label.c_str()))
+            if (sst::ui::widgets::BeginCombo(title, label.c_str()))
             {
                 if (optional && ImGui::Selectable("None", !selected))
                 {
@@ -79,7 +80,7 @@ namespace SST::Prototypes::PlotLab
                             changed = true;
                         }
                     }
-                ImGui::EndCombo();
+                sst::ui::widgets::EndCombo();
             }
             return changed;
         }
@@ -423,9 +424,7 @@ namespace SST::Prototypes::PlotLab
                     });
             if (ImGui::Button("Add column"))
                 Attempt([&] { doc.AddColumn(id, textColumn); });
-            ImGui::SameLine();
-            ImGui::Checkbox("Text", &textColumn);
-            ImGui::SameLine();
+            sst::ui::widgets::Checkbox("Text", &textColumn);
             if (ImGui::Button("Recompute"))
                 (void)p.recompute();
             ImGui::TextUnformatted(
@@ -457,17 +456,17 @@ namespace SST::Prototypes::PlotLab
             if (ImGui::BeginPopup("Header rows")) {
                 for (const auto* header : pl::headerNames) {
                     bool visible = std::find(sheet.hiddenHeaders.begin(), sheet.hiddenHeaders.end(), header) == sheet.hiddenHeaders.end();
-                    if (ImGui::Checkbox(header, &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","header_visibility"},{"worksheet_id",id},{"header",header},{"visible",visible}}.dump())); });
+                    if (sst::ui::widgets::Checkbox(header, &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","header_visibility"},{"worksheet_id",id},{"header",header},{"visible",visible}}.dump())); });
                 }
                 for (const auto& row : sheet.parameters) {
                     ImGui::PushID(static_cast<int>(row.id));
                     bool visible = row.visible;
-                    if (ImGui::Checkbox(row.name.c_str(), &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_visibility"},{"worksheet_id",id},{"parameter_id",row.id},{"visible",visible}}.dump())); });
+                    if (sst::ui::widgets::Checkbox(row.name.c_str(), &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_visibility"},{"worksheet_id",id},{"parameter_id",row.id},{"visible",visible}}.dump())); });
                     ImGui::SameLine();
                     if (ImGui::SmallButton("Remove")) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_remove"},{"worksheet_id",id},{"parameter_id",row.id}}.dump())); });
                     ImGui::PopID();
                 }
-                ImGui::InputText("Parameter name", &parameterName);
+                sst::ui::widgets::Text("Parameter name", &parameterName);
                 if (ImGui::Button("Add parameter")) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_add"},{"worksheet_id",id},{"name",parameterName}}.dump())); parameterName.clear(); });
                 ImGui::EndPopup();
             }
@@ -625,7 +624,7 @@ namespace SST::Prototypes::PlotLab
             auto graphObject = p.object(id);
             auto &fontSettings = std::get<pl::Graph>(graphObject.data);
             bool fontChanged = false;
-            if (ImGui::BeginCombo("Font family", fontSettings.fontFamily.c_str()))
+            if (sst::ui::widgets::BeginCombo("Font family", fontSettings.fontFamily.c_str()))
             {
                 for (const char *family : {"DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono"})
                     if (ImGui::Selectable(family, fontSettings.fontFamily == family && fontSettings.fontFile.empty()))
@@ -634,9 +633,8 @@ namespace SST::Prototypes::PlotLab
                         fontSettings.fontFile.clear();
                         fontChanged = true;
                     }
-                ImGui::EndCombo();
+                sst::ui::widgets::EndCombo();
             }
-            ImGui::SameLine();
             if (ImGui::Button("Load font (.ttf/.otf)..."))
                 Attempt([&] {
                     if (auto file = OpenFileDialog({"Font", "ttf,otf"})) {
@@ -646,7 +644,7 @@ namespace SST::Prototypes::PlotLab
                         fontChanged = true;
                     }
                 });
-            fontChanged |= ImGui::InputDouble("Graph font (pt)", &fontSettings.fontSizePt, 1, 2, "%.1f");
+            fontChanged |= sst::ui::widgets::Double("Graph font (pt)", &fontSettings.fontSizePt, 1, "%.1f");
             if (fontChanged)
                 Attempt([&] { doc.Execute(p.change("Graph font", {graphObject})); });
             const auto &chosen = std::get<pl::Graph>(p.object(id).data);
@@ -692,9 +690,8 @@ namespace SST::Prototypes::PlotLab
                 sheetChoice = xChoice = yChoice = errorChoice = 0;
             }
             bool logX = spec.x.scale == plot::AxisScale::Log10, logY = spec.y.scale == plot::AxisScale::Log10;
-            bool changed = ImGui::Checkbox("Log X", &logX);
-            ImGui::SameLine();
-            changed |= ImGui::Checkbox("Log Y", &logY);
+            bool changed = sst::ui::widgets::Checkbox("Log X", &logX);
+            changed |= sst::ui::widgets::Checkbox("Log Y", &logY);
             if (changed)
                 Attempt(
                     [&]
@@ -845,7 +842,7 @@ namespace SST::Prototypes::PlotLab
             ImGui::OpenPopup("Rename object");
         if (ImGui::BeginPopupModal("Rename object", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::InputText("Name", &name);
+            sst::ui::widgets::Text("Name", &name);
             if (ImGui::Button("Apply"))
                 Attempt(
                     [&]
@@ -894,13 +891,13 @@ namespace SST::Prototypes::PlotLab
         }
         if (ImGui::BeginPopupModal("Column definition", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::InputText("Short name", &name);
-            ImGui::InputText("Long name", &longName);
-            ImGui::InputText("Units", &units);
-            ImGui::InputText("Comments", &comments);
-            ImGui::Combo("Role", &role, "None\0X\0Y\0Z\0yErr\0Label\0xErr\0Disregard\0");
-            ImGui::Combo("Display format", &displayMode, "General\0Decimal places\0Significant digits\0Scientific\0Engineering (SI)\0Text\0Date/time (Unix seconds, UTC)\0Categorical\0");
-            ImGui::SliderInt("Digits", &displayDigits, displayMode==2?1:0, 17);
+            sst::ui::widgets::Text("Short name", &name);
+            sst::ui::widgets::Text("Long name", &longName);
+            sst::ui::widgets::Text("Units", &units);
+            sst::ui::widgets::Text("Comments", &comments);
+            sst::ui::widgets::Combo("Role", &role, "None\0X\0Y\0Z\0yErr\0Label\0xErr\0Disregard\0");
+            sst::ui::widgets::Combo("Display format", &displayMode, "General\0Decimal places\0Significant digits\0Scientific\0Engineering (SI)\0Text\0Date/time (Unix seconds, UTC)\0Categorical\0");
+            sst::ui::widgets::SliderInt("Digits", &displayDigits, displayMode==2?1:0, 17);
             if (ImGui::Button("Apply metadata"))
                 Attempt(
                     [&]
@@ -919,12 +916,11 @@ namespace SST::Prototypes::PlotLab
             const char* states[]={"Clean","Dirty","Running","Failed","Blocked"};
             ImGui::Text("Result: %s%s",states[static_cast<int>(info.state)],info.stale?" (previous values retained)":"");
             if(!info.diagnostic.empty()) ImGui::TextWrapped("%s",info.diagnostic.c_str());
-            ImGui::SetNextItemWidth(480);
-            ImGui::InputText("Expression", &formula);
-            ImGui::InputInt("From row (1-based)", &rowFrom);
-            ImGui::InputInt("To row (0 = last)", &rowTo);
-            ImGui::Combo("Recalculate", &recalculate, "None\0Auto\0Manual\0");
-            ImGui::InputTextMultiline("Python before formula", &beforeScript, {480,65});
+            sst::ui::widgets::Text("Expression", &formula, 0, "Definition: column formula. Unit: output column units. Range: supported expressions and stable column references.");
+            sst::ui::widgets::Int("From row (1-based)", &rowFrom, 1, 0, 0, "Definition: first evaluated row. Unit: row index. Range: 1 through the worksheet row count.");
+            sst::ui::widgets::Int("To row (0 = last)", &rowTo, 1, 0, 0, "Definition: last evaluated row. Unit: row index. Range: 0 for the last row, or a worksheet row at/after From row.");
+            sst::ui::widgets::Combo("Recalculate", &recalculate, "None\0Auto\0Manual\0");
+            sst::ui::widgets::MultilineText("Python before formula", &beforeScript, {480,65});
             ImGui::TextDisabled("Scalar assignments; col(stable_id), mean/sum/min/max; no imports or I/O.");
             if(previewLibrary) {ImGui::SetNextItemOpen(true); previewLibrary=false;}
             if(ImGui::TreeNode("Function library / references")) {
@@ -966,7 +962,7 @@ namespace SST::Prototypes::PlotLab
         if (ImGui::BeginPopupModal("Worksheet columns to graph", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             const auto label = Exists(p, sheetChoice, 2) ? p.object(sheetChoice).name : "Choose worksheet";
-            if (ImGui::BeginCombo("Worksheet", label.c_str()))
+            if (sst::ui::widgets::BeginCombo("Worksheet", label.c_str()))
             {
                 for (const auto &[id, o] : p.objects())
                     if (o->data.index() == 2)
@@ -978,7 +974,7 @@ namespace SST::Prototypes::PlotLab
                             xChoice = yChoice = errorChoice = 0;
                         }
                     }
-                ImGui::EndCombo();
+                sst::ui::widgets::EndCombo();
             }
             ColumnPicker("X", p, sheetChoice, xChoice);
             ColumnPicker("Y", p, sheetChoice, yChoice);
@@ -1021,10 +1017,10 @@ namespace SST::Prototypes::PlotLab
             for (int i = 0; i < 3; ++i)
                 if (decimals[i] == importOptions.decimal)
                     decimal = i;
-            bool changed = ImGui::Combo("Delimiter", &delimiter, "Detect\0Comma\0Semicolon\0Tab\0Whitespace\0Pipe\0");
-            changed |= ImGui::Combo("Decimal", &decimal, "Detect\0Point\0Comma\0");
-            changed |= ImGui::Combo("Header", &header, "Detect\0Present\0Absent\0");
-            changed |= ImGui::Combo("Units row", &unitRows, "Detect\0Present\0Absent\0");
+            bool changed = sst::ui::widgets::Combo("Delimiter", &delimiter, "Detect\0Comma\0Semicolon\0Tab\0Whitespace\0Pipe\0");
+            changed |= sst::ui::widgets::Combo("Decimal", &decimal, "Detect\0Point\0Comma\0");
+            changed |= sst::ui::widgets::Combo("Header", &header, "Detect\0Present\0Absent\0");
+            changed |= sst::ui::widgets::Combo("Units row", &unitRows, "Detect\0Present\0Absent\0");
             if (changed)
             {
                 importOptions.delimiter = delimiters[delimiter];
@@ -1096,10 +1092,10 @@ namespace SST::Prototypes::PlotLab
             ImGui::OpenPopup("Export publication figure");
         if (ImGui::BeginPopupModal("Export publication figure", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::InputDouble("Width (mm)", &width);
-            ImGui::InputDouble("Height (mm)", &height);
-            ImGui::InputInt("DPI", &dpi);
-            ImGui::Combo("Format", &format, "SVG\0PDF\0PNG\0");
+            sst::ui::widgets::Double("Width (mm)", &width, .01f, "%.6g");
+            sst::ui::widgets::Double("Height (mm)", &height, .01f, "%.6g");
+            sst::ui::widgets::Int("DPI", &dpi);
+            sst::ui::widgets::Combo("Format", &format, "SVG\0PDF\0PNG\0");
             ImGui::TextUnformatted("Exports current ranges, ticks and visible series. Recompute must be clean.\n"
                                    "Uses graph font settings; SVG outlines, PDF embedded TrueType.");
             ImGui::BeginDisabled(state->exporting != 0);

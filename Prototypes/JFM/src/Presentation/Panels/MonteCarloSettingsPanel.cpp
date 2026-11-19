@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <imgui.h>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <cmath>
 #include <optional>
 #include <random>
@@ -183,23 +184,23 @@ namespace SST::Prototypes::JFM
 		for (const JFMCharacteristicInfo &info : snapshot.characteristics)
 			allIds.push_back(info.id);
 		std::vector<CharacteristicId> selectedIds = m_Store->GetSelectedCharacteristicIds();
-		const ImVec2 buttonSize{150.0f, 0.0f};
+		const ImVec2 buttonSize{std::max(150.0f, ImGui::CalcTextSize("Perform MC selected").x + 2 * ImGui::GetStyle().FramePadding.x), 0.0f};
 		if (ImGui::Button("Perform MC selected", buttonSize))
 			RunMonteCarlo(project, selectedIds);
-		ImGui::SameLine();
+		sst::ui::widgets::SameLineIfFits(buttonSize.x);
 		if (ImGui::Button("Perform MC all", buttonSize))
 			RunMonteCarlo(project, allIds);
-		ImGui::SameLine();
+		sst::ui::widgets::SameLineIfFits(buttonSize.x);
 		if (ImGui::Button("Save MC config", buttonSize))
 		{
 			ApplyDraft();
 			m_Settings->Save();
 			m_Status = "MC config saved";
 		}
-		ImGui::SameLine();
+		sst::ui::widgets::SameLineIfFits(buttonSize.x);
 		if (ImGui::Button("Update", buttonSize))
 			ApplyDraft();
-		ImGui::SameLine();
+		sst::ui::widgets::SameLineIfFits(buttonSize.x);
 		if (ImGui::Button("Restore", buttonSize))
 		{
 			m_Draft = m_Settings->GetSnapshot().fitMonteCarlo;
@@ -208,15 +209,16 @@ namespace SST::Prototypes::JFM
 
 		if (ImGui::Button("All selected", buttonSize))
 			m_BulkMode = true;
-		ImGui::SameLine();
+		sst::ui::widgets::SameLineIfFits(buttonSize.x);
 		if (ImGui::Button("Select all", buttonSize) && !allIds.empty())
 		{
 			m_Store->SetSelectedCharacteristics(project, allIds, allIds.front());
 			selectedIds = allIds;
 			m_BulkMode = true;
 		}
-		ImGui::SameLine();
-		ImGui::Text("Selected: %d / %d", static_cast<int>(selectedIds.size()), static_cast<int>(allIds.size()));
+		const std::string selectedLabel = "Selected: " + std::to_string(selectedIds.size()) + " / " + std::to_string(allIds.size());
+		sst::ui::widgets::SameLineIfFits(ImGui::CalcTextSize(selectedLabel.c_str()).x);
+		ImGui::TextUnformatted(selectedLabel.c_str());
 
 		std::string model = "SD-RsRsh";
 		bool mixed = false;
@@ -230,7 +232,7 @@ namespace SST::Prototypes::JFM
 				mixed = true;
 		}
 		ImGui::SetNextItemWidth(180.0f);
-		if (ImGui::BeginCombo("Model", mixed ? "Mixed" : model.c_str()))
+		if (sst::ui::widgets::BeginCombo("Model", mixed ? "Mixed" : model.c_str()))
 		{
 			for (const char *candidate : PrefitModels)
 			{
@@ -245,7 +247,7 @@ namespace SST::Prototypes::JFM
 					mixed = false;
 				}
 			}
-				ImGui::EndCombo();
+				sst::ui::widgets::EndCombo();
 		}
 
 		if (!mixed)
@@ -275,7 +277,7 @@ namespace SST::Prototypes::JFM
 				if (ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen))
 				{
 					const std::string itemModel = record->info.fit ? record->info.fit->modelId : record->info.prefit ? record->info.prefit->modelId : model;
-					if (RenderJFMFitMonteCarloSettings(m_Draft, itemModel, ("mc_char_settings_" + std::to_string(id)).c_str()))
+					if (RenderJFMFitMonteCarloSettings(m_Draft, itemModel, ("mc_char_settings_" + std::to_string(id)).c_str(), true, &record->info))
 						m_Status = "MC config changed";
 				}
 			}
@@ -299,7 +301,7 @@ namespace SST::Prototypes::JFM
 					if (info.fit)
 						ImGui::Text("Fit: %s", info.fit->status.c_str());
 					if (!m_BulkMode && selected)
-						(void)RenderJFMFitMonteCarloSettings(m_Draft, itemModel, ("mc_list_settings_" + std::to_string(info.id)).c_str());
+						(void)RenderJFMFitMonteCarloSettings(m_Draft, itemModel, ("mc_list_settings_" + std::to_string(info.id)).c_str(), true, &info);
 				}
 			}
 		}

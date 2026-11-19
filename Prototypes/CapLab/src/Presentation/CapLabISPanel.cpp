@@ -1,6 +1,7 @@
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include "Domain/CapLabAnalysis.hpp"
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <cstdlib>
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderIS() {
@@ -18,12 +19,12 @@ void CapLabPrototypePanel::RenderIS() {
         (void)commands->Execute(CommandID{"caplab.circuit"},std::move(context));
     };
     try {
-        ImGui::InputText("Circuit name",name,sizeof(name));
-        ImGui::InputText("Topology",topology,sizeof(topology));
+        sst::ui::widgets::Text("Circuit name", name, sizeof(name));
+        sst::ui::widgets::Text("Topology", topology, sizeof(topology));
         static pl::Id sample=0;
-        if (ImGui::BeginCombo("Circuit sample",sample ? std::to_string(sample).c_str() : "Select sample")) {
+        if (sst::ui::widgets::BeginCombo("Circuit sample", sample ? std::to_string(sample).c_str() : "Select sample")) {
             for (const auto &s : p.samples) if (ImGui::Selectable(s.name.c_str(),sample==s.id)) sample=s.id;
-            ImGui::EndCombo();
+            sst::ui::widgets::EndCombo();
         }
         if (ImGui::Button("Create circuit")) {
             const auto old=p.circuits.size();
@@ -31,13 +32,13 @@ void CapLabPrototypePanel::RenderIS() {
             if (p.circuits.size()>old) { selectedCircuit=p.circuits.back().at("id"); circuitEditor.reset(); }
         }
         auto selected=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==selectedCircuit;});
-        if (ImGui::BeginCombo("Schematic",selected==p.circuits.end() ? "Select circuit" : selected->at("name").get<std::string>().c_str())) {
+        if (sst::ui::widgets::BeginCombo("Schematic", selected==p.circuits.end() ? "Select circuit" : selected->at("name").get<std::string>().c_str())) {
             for (const auto &c : p.circuits) {
                 ImGui::PushID(std::to_string(c.at("id").get<pl::Id>()).c_str());
                 if (ImGui::Selectable(c.at("name").get<std::string>().c_str(),c.at("id")==selectedCircuit)) { selectedCircuit=c.at("id"); circuitEditor.reset(); }
                 ImGui::PopID();
             }
-            ImGui::EndCombo();
+            sst::ui::widgets::EndCombo();
         }
         selected=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==selectedCircuit;});
         if (selected!=p.circuits.end()) {
@@ -50,7 +51,7 @@ void CapLabPrototypePanel::RenderIS() {
             if (changed) edit({{"action","replace"},{"circuit_id",selectedCircuit},{"schematic",CircuitJson(d)}});
             // Commands replace the project; never retain JSON iterators across one.
             selected=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==selectedCircuit;});
-            if (ImGui::BeginCombo("IS measurement",circuitMeasurement ? std::to_string(circuitMeasurement).c_str() : "Select sweep")) {
+            if (sst::ui::widgets::BeginCombo("IS measurement", circuitMeasurement ? std::to_string(circuitMeasurement).c_str() : "Select sweep")) {
                 auto item=[&](pl::Id id) {
                     const auto m=AnalysisMeasurement(p,id);
                     if (m.at("kind")!="FrequencySweep" || m.at("sample_id")!=selected->at("sample_id")) return;
@@ -59,17 +60,17 @@ void CapLabPrototypePanel::RenderIS() {
                 };
                 for (const auto &m : p.sweeps) item(m.id);
                 for (const auto &m : p.measurements) item(m.at("id").get<pl::Id>());
-                ImGui::EndCombo();
+                sst::ui::widgets::EndCombo();
             }
             if (circuitMeasurement) {
                 const auto m=AnalysisMeasurement(p,circuitMeasurement);
                 Json settings{{"type","Circuit"},{"measurement_id",circuitMeasurement},{"circuit_id",selectedCircuit}};
                 if (!m.contains("temperature_K") || m.at("temperature_K").is_null()) {
-                    ImGui::InputDouble("Confirm measurement temperature [K]",&confirmedTemperature);
+                    sst::ui::widgets::Double("Confirm measurement temperature [K]", &confirmedTemperature, .01f, "%.6g");
                     settings["temperature_K"]=confirmedTemperature;
                 } else ImGui::Text("Measured temperature: %s K",m.at("temperature_K").dump().c_str());
                 if (!m.contains("bias_V") || m.at("bias_V").is_null()) {
-                    ImGui::InputDouble("Confirm measurement bias [V]",&confirmedBias); settings["bias_V"]=confirmedBias;
+                    sst::ui::widgets::Double("Confirm measurement bias [V]", &confirmedBias, .01f, "%.6g"); settings["bias_V"]=confirmedBias;
                 } else ImGui::Text("Measured bias: %s V",m.at("bias_V").dump().c_str());
                 ImGui::TextUnformatted("Exact measured frequencies; simulation runs in a cancellable Core job.");
                 ImGui::BeginDisabled(state->activeJob!=0);
@@ -91,18 +92,19 @@ void CapLabPrototypePanel::RenderIS() {
                     }
                 }
                 for (auto &parameter : isParameters) {
+                    const std::string unit=parameter.at("unit");
                     const std::string label=parameter.at("element").get<std::string>()+"."+parameter.at("field").get<std::string>()+" ["+parameter.at("unit").get<std::string>()+"]";
                     ImGui::PushID(label.c_str());
                     bool free=parameter.at("free"); double lo=parameter.at("min"), hi=parameter.at("max");
-                    ImGui::Checkbox(label.c_str(),&free); parameter["free"]=free;
-                    ImGui::InputDouble("Lower bound",&lo,0,0,"%.9g"); parameter["min"]=lo;
-                    ImGui::InputDouble("Upper bound",&hi,0,0,"%.9g"); parameter["max"]=hi;
+                    sst::ui::widgets::Checkbox(label.c_str(), &free); parameter["free"]=free;
+                    sst::ui::widgets::LogValue(("Lower bound ["+unit+"]###Lower bound").c_str(), &lo); parameter["min"]=lo;
+                    sst::ui::widgets::LogValue(("Upper bound ["+unit+"]###Upper bound").c_str(), &hi); parameter["max"]=hi;
                     ImGui::PopID();
                 }
                 static double floor=1., fmin=0., fmax=1e12;
-                ImGui::InputDouble("Weighting floor [Ohm]",&floor);
-                ImGui::InputDouble("Fit minimum frequency [Hz]",&fmin);
-                ImGui::InputDouble("Fit maximum frequency [Hz]",&fmax);
+                sst::ui::widgets::Double("Weighting floor [Ohm]", &floor, .01f, "%.6g");
+                sst::ui::widgets::LogValue("Fit minimum frequency [Hz]", &fmin);
+                sst::ui::widgets::LogValue("Fit maximum frequency [Hz]", &fmax);
                 ImGui::TextUnformatted("Weight = 1/max(|Z|, floor)^2; score is not statistical chi-squared.");
                 ImGui::BeginDisabled(state->activeJob!=0);
                 if (ImGui::Button("Fit IS draft")) {

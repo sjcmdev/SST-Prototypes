@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cmath>
 #include <imgui.h>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <sst/ui/Widgets/ParameterBoundsRow.hpp>
 #include <implot.h>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
@@ -17,34 +18,29 @@
 
 namespace SST::Prototypes::JFM
 {
-	bool RenderJFMFitMonteCarloSettings(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id, bool showParameterBounds)
+	bool RenderJFMFitMonteCarloSettings(JFMFitMonteCarloSettings &settings, std::string_view modelId, const char *id, bool showParameterBounds, const JFMCharacteristicInfo* characteristic)
 	{
 		bool changed = false;
 		ImGui::PushID(id);
 		int simplexIterations = std::max(settings.fitMaxIterations, settings.monteCarloMaxIterations);
-		ImGui::SetNextItemWidth(130.0f);
-		if (ImGui::InputInt("Simplex iterations", &simplexIterations, 100, 1000))
+		if (sst::ui::widgets::Int("Simplex iterations", &simplexIterations))
 		{
 			settings.fitMaxIterations = simplexIterations;
 			settings.monteCarloMaxIterations = simplexIterations;
 			changed = true;
 		}
 		ImGui::SeparatorText("Monte Carlo");
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputInt("N", &settings.monteCarloSamples, 64, 512);
-		changed |= ImGui::Checkbox("Save samples", &settings.saveSamples);
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputDouble("Sigma (%)", &settings.monteCarloNoisePercent, 0.1, 1.0, "%.6g");
+		changed |= sst::ui::widgets::Int("N", &settings.monteCarloSamples);
+		changed |= sst::ui::widgets::Checkbox("Save samples", &settings.saveSamples);
+		changed |= sst::ui::widgets::Double("Sigma (%)", &settings.monteCarloNoisePercent, 0.1f, "%.6g", "Definition: Monte Carlo relative noise. Unit: percent. Range: nonnegative; validated when settings are applied. Ctrl+click for exact entry.");
 		int seed = static_cast<int>(settings.monteCarloSeed);
-		ImGui::SetNextItemWidth(130.0f);
-		if (ImGui::InputInt("Seed", &seed))
+		if (sst::ui::widgets::Int("Seed", &seed))
 		{
 			settings.monteCarloSeed = static_cast<std::uint32_t>(std::max(seed, 0));
 			changed = true;
 		}
 		const char *backend = settings.preferGpu ? "CUDA" : "CPU";
-		ImGui::SetNextItemWidth(130.0f);
-		if (ImGui::BeginCombo("Backend", backend))
+		if (sst::ui::widgets::BeginCombo("Backend", backend))
 		{
 			if (ImGui::Selectable("CUDA", settings.preferGpu))
 			{
@@ -56,9 +52,10 @@ namespace SST::Prototypes::JFM
 				settings.preferGpu = false;
 				changed = true;
 			}
-			ImGui::EndCombo();
+			sst::ui::widgets::EndCombo();
 		}
 
+		if (showParameterBounds) ImGui::TextWrapped("Bounds retain the fitted voltage/current (or current-density) column units.");
 		const auto &names = JFMModelParameterNames(modelId);
 		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
@@ -71,8 +68,9 @@ namespace SST::Prototypes::JFM
 			{
 				const std::string name(nameView);
 				JFMParameterSolverSetting &parameter = settings.parameters[name];
-				changed |= sst::ui::widgets::ParameterBoundsRow(name.c_str(), name.c_str(),
-					parameter.monteCarloFree, parameter.minimum, parameter.maximum);
+				changed |= sst::ui::widgets::ParameterBoundsRow(name.c_str(),
+					JFMParameterLabel(name, characteristic).c_str(),
+					parameter.monteCarloFree, parameter.minimum, parameter.maximum, name != "A" && name != "alpha");
 			}
 			ImGui::EndTable();
 		}
@@ -82,12 +80,7 @@ namespace SST::Prototypes::JFM
 
 	namespace
 	{
-		void SameLineIfFits(float width)
-		{
-			const float right = ImGui::GetWindowContentRegionMax().x;
-			if (ImGui::GetCursorPosX() + ImGui::GetStyle().ItemSpacing.x + width < right)
-				ImGui::SameLine();
-		}
+		using sst::ui::widgets::SameLineIfFits;
 
 		std::vector<JFMMonteCarloParameterPair> DefaultPairsForModel(std::string_view modelId)
 		{
@@ -125,11 +118,11 @@ namespace SST::Prototypes::JFM
             changed |= ImGui::Checkbox("##visible", &settings.showSigmaClasses[index]);
 			ImGui::SameLine();
 			changed |= ImGui::ColorEdit4("##color", settings.sigmaColors[index].data(), ImGuiColorEditFlags_NoInputs);
-			ImGui::SameLine();
 			ImGui::PopID();
+            if (index + 1 < labels.size())
+                SameLineIfFits(ImGui::CalcTextSize(labels[index + 1]).x + 2 * ImGui::GetFrameHeight() + 2 * ImGui::GetStyle().ItemSpacing.x);
 		}
-		ImGui::SetNextItemWidth(170.0f);
-		changed |= ImGui::SliderFloat("Zoom-out", &settings.scatterZoomOut, 0.0f, 1.0f, "%.2f");
+		changed |= sst::ui::widgets::SliderFloat("Zoom-out", &settings.scatterZoomOut, 0.0f, 1.0f, "%.2f");
 		ImGui::SeparatorText("Default parameter pairs");
 		if (ImGui::Button("Add pair"))
 		{

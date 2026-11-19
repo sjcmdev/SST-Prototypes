@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <imgui.h>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <string>
 #include <utility>
 
@@ -117,25 +118,19 @@ namespace SST::Prototypes::JFM
 		ImGui::SeparatorText("JFM Numeric");
 		JFMFitMonteCarloSettings solver = settings.fitMonteCarlo;
 		bool changed = false;
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputDouble("Reduced chi2 target", &solver.fitReducedChiSquaredTolerance, 0.1, 1.0, "%.6g");
-		changed |= ImGui::Checkbox("Auto-calibrate GPU simplex iterations", &solver.autoCalibrateGpuSimplexIterations);
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputInt("Simplex calibration runs", &solver.simplexCalibrationRuns, 10, 100);
-		ImGui::SetNextItemWidth(130.0f);
-		changed |= ImGui::InputInt("Simplex calibration margin", &solver.simplexCalibrationExtraIterations, 10, 50);
+		changed |= sst::ui::widgets::Double("Reduced chi2 target", &solver.fitReducedChiSquaredTolerance, 0.1, "%.6g");
+		changed |= sst::ui::widgets::Checkbox("Auto-calibrate GPU simplex iterations", &solver.autoCalibrateGpuSimplexIterations);
+		changed |= sst::ui::widgets::Int("Simplex calibration runs", &solver.simplexCalibrationRuns);
+		changed |= sst::ui::widgets::Int("Simplex calibration margin", &solver.simplexCalibrationExtraIterations);
 		if (changed)
 			m_Settings->SetFitMonteCarloSettings(std::move(solver));
 
 		ImGui::SeparatorText("JFM Auto Prefit");
 		JFMAutoPrefitSettings autoPrefit = settings.autoPrefit;
 		bool autoPrefitChanged = false;
-		ImGui::SetNextItemWidth(130.0f);
-		autoPrefitChanged |= ImGui::InputDouble("Residual window fraction", &autoPrefit.residualWindowFraction, 0.01, 0.05, "%.3f");
-		ImGui::SetNextItemWidth(130.0f);
-		autoPrefitChanged |= ImGui::InputInt("Residual window min points", &autoPrefit.residualWindowMinPoints, 1, 5);
-		ImGui::SetNextItemWidth(130.0f);
-		autoPrefitChanged |= ImGui::InputInt("Residual window max points", &autoPrefit.residualWindowMaxPoints, 1, 5);
+		autoPrefitChanged |= sst::ui::widgets::Double("Residual window fraction", &autoPrefit.residualWindowFraction, 0.01, "%.3f");
+		autoPrefitChanged |= sst::ui::widgets::Int("Residual window min points", &autoPrefit.residualWindowMinPoints);
+		autoPrefitChanged |= sst::ui::widgets::Int("Residual window max points", &autoPrefit.residualWindowMaxPoints);
 		if (autoPrefitChanged)
 			m_Settings->SetAutoPrefitSettings(autoPrefit);
 	}

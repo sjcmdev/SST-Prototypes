@@ -1,5 +1,6 @@
 ﻿#include "Panel.hpp"
 #include <imgui.h>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <implot.h>
 #include <cmath>
 #include <cstdio>
@@ -19,16 +20,9 @@ void Panel::Send(const Json &r) { const auto response=w->Dispatch(r); if(!respon
 namespace {
 std::uint64_t gesture=0;
 void TrackGesture() {if(ImGui::IsItemActivated()) ++gesture;}
-void Field(const char *label) {
-    ImGui::BeginTable(label,2,ImGuiTableFlags_SizingStretchProp);
-    ImGui::TableSetupColumn("Label",ImGuiTableColumnFlags_WidthStretch,0.43f);
-    ImGui::TableSetupColumn("Control",ImGuiTableColumnFlags_WidthStretch,0.57f);
-    ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextWrapped("%s",label);
-    ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);
-}
-bool Toggle(const char *label,bool &value) {Field(label);const bool changed=ImGui::Checkbox("##value",&value);TrackGesture();ImGui::EndTable();return changed;}
+bool Toggle(const char *label,bool &value) {sst::ui::widgets::BeginLabelledRow(label);const bool changed=ImGui::Checkbox("##value",&value);TrackGesture();ImGui::EndTable();return changed;}
 void TextInput(const char *label,char *text,std::size_t size) {
-    Field(label);ImGui::InputText("##value",text,size,ImGuiInputTextFlags_AutoSelectAll);ImGui::EndTable();
+    sst::ui::widgets::BeginLabelledRow(label);ImGui::InputText("##value",text,size,ImGuiInputTextFlags_AutoSelectAll);ImGui::EndTable();
 }
 }
 static bool Number(const char *label,Json &j,const char *key,double scale=1) {
@@ -36,7 +30,7 @@ static bool Number(const char *label,Json &j,const char *key,double scale=1) {
     const std::string k=key; double value=n.get<double>()*scale;
     const bool logarithmic=k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3" || k=="Sn_m_s" || k=="Sp_m_s" ||
         k=="residual_tolerance" || k=="adaptive_target_relative_J_error" || k=="frequency_Hz" || k=="start_Hz" || k=="stop_Hz";
-    Field(label); bool changed=false;
+    sst::ui::widgets::BeginLabelledRow(label); bool changed=false;
     if(logarithmic) {
         const bool density=k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3";
         const bool zeroAllowed=k=="Nd_m3" || k=="Na_m3" || k=="Sn_m_s" || k=="Sp_m_s";
@@ -74,7 +68,7 @@ static bool Number(const char *label,Json &j,const char *key,double scale=1) {
 static bool Choice(const char *label,Json &j,const char *key,std::initializer_list<std::pair<const char*,const char*>> items) {
     const auto current=j.at(key).get<std::string>(); bool changed=false;
     const char *preview=current.c_str(); for(const auto &[name,value]:items) if(current==value) preview=name;
-    Field(label);
+    sst::ui::widgets::BeginLabelledRow(label);
     if(ImGui::BeginCombo("##value",preview)) {for(const auto &[name,value]:items) if(ImGui::Selectable(name,current==value)) {j[key]=value;changed=true;++gesture;} ImGui::EndCombo();} ImGui::EndTable();return changed;
 }
 void Panel::RenderContent() {
@@ -110,7 +104,7 @@ void Panel::RenderContent() {
         bool changed=false;
         if(view==1) {
             auto &layers=draft["layers"]; auto &selected=w->selectedLayer; selected=std::clamp(selected,0,int(layers.size())-1);
-            Field("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {
+            sst::ui::widgets::BeginLabelledRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {
                 for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i); if(ImGui::Selectable(layers[i].at("name").get<std::string>().c_str(),selected==i)) selected=i; ImGui::PopID();} ImGui::EndCombo();
             }
             ImGui::EndTable();
@@ -121,7 +115,7 @@ void Panel::RenderContent() {
             if(ImGui::Button("Down") && selected+1<int(layers.size())) Send({{"operation","layer"},{"action","move"},{"layer_id",id},{"index",selected+1}});
             ImGui::TextDisabled("Stable ID: %s",id.get<std::string>().c_str());
             char name[256]; std::snprintf(name,sizeof(name),"%s",l.at("name").get<std::string>().c_str());
-            Field("Name");if(ImGui::InputText("##name",name,sizeof(name),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {l["name"]=name;changed=true;++gesture;}ImGui::EndTable();
+            sst::ui::widgets::BeginLabelledRow("Name");if(ImGui::InputText("##name",name,sizeof(name),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {l["name"]=name;changed=true;++gesture;}ImGui::EndTable();
             changed|=Number("Thickness [µm]",l,"thickness_m",1e6);
             auto &m=l["material"];
             changed|=Number("Relative permittivity",m,"eps_r"); changed|=Number("Band gap [eV]",m,"Eg_eV"); changed|=Number("Affinity [eV]",m,"chi_eV");
@@ -135,7 +129,7 @@ void Panel::RenderContent() {
                 ImGui::BeginDisabled(flat);changed|=Number("Work function [eV]",c,"phi_m_eV");ImGui::EndDisabled();
                 if(flat) ImGui::TextWrapped("Work function is derived from the adjacent material in Flat band mode. Select Work function to edit it.");
                 int mode=c.contains("flat_band")?(c["flat_band"].get<bool>()?2:1):0;
-                Field("Boundary mode");if(ImGui::Combo("##mode",&mode,"Legacy default\0Work function\0Flat band\0")) {if(mode==0)c.erase("flat_band");else c["flat_band"]=mode==2;changed=true;++gesture;}ImGui::EndTable();
+                sst::ui::widgets::BeginLabelledRow("Boundary mode");if(ImGui::Combo("##mode",&mode,"Legacy default\0Work function\0Flat band\0")) {if(mode==0)c.erase("flat_band");else c["flat_band"]=mode==2;changed=true;++gesture;}ImGui::EndTable();
                 for(const auto *key:{"Sn_m_s","Sp_m_s"}) {
                     ImGui::PushID(key); bool infinite=c[key].is_string();
                     if(Toggle(key==std::string("Sn_m_s")?"Infinite Sn [m/s]":"Infinite Sp [m/s]",infinite)) {c[key]=infinite?Json(".inf"):Json(1e5);changed=true;}
@@ -212,7 +206,7 @@ void Panel::Results() {
     }
     if(!result.contains("points") || result["points"].empty()) {ImGui::TextUnformatted("Calculate I-V to view results.");return;}
     const auto &points=result.at("points");int bias=bandOnly?0:w->selectedBias;bias=std::clamp(bias,0,int(points.size())-1);
-    Field("Bias point");ImGui::SliderInt("##bias",&bias,0,int(points.size())-1);ImGui::EndTable();if(!bandOnly)w->selectedBias=bias;
+    sst::ui::widgets::BeginLabelledRow("Bias point");ImGui::SliderInt("##bias",&bias,0,int(points.size())-1);ImGui::EndTable();if(!bandOnly)w->selectedBias=bias;
     const auto &band=w->bandResult;
     const bool preview=view==5 && !band.empty() && band.at("points")[0].at("voltage_V")==points[bias].at("voltage_V");
     const auto &p=preview?band.at("points")[0]:points[bias];

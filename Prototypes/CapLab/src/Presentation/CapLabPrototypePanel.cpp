@@ -2,6 +2,7 @@
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include "Presentation/SelectionLabel.hpp"
 #include <imgui.h>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
 #include <cstdlib>
 namespace SST::Prototypes::CapLab {
@@ -9,7 +10,7 @@ void CapLabPrototypePanel::RenderImport() {
     auto &doc = state->document;
     ImGui::Text("%s%s", doc.path.Empty() ? "Untitled" : doc.path.Utf8().c_str(), doc.dirty ? " (unsaved)" : "");
     bool comma = state->decimal == ',';
-    if (ImGui::Checkbox("Decimal comma (semicolon/whitespace columns)", &comma)) state->decimal = comma ? ',' : '.';
+    if (sst::ui::widgets::Checkbox("Decimal comma (semicolon/whitespace columns)", &comma)) state->decimal = comma ? ',' : '.';
     static int profile = 1;
     const char *profiles[] = {"Lab AS Cp/Rp (SI)", "Lab AS Cp/Rp (mapped)", "Converted AS C/G", "ProPho DL/CV", "Lab CV", "Lab DLCP raw", "Lab IS Z", "Lab IS C/G", "Lab IS Cp/Rp", "SCAPS .cf", "SCAPS .cv", "ProPho manifest / project"};
     const char *keys[] = {"", "lab_as_cp_rp", "converted_as_c_g", "propho_dl", "lab_cv", "lab_dlcp_raw", "lab_is_z", "lab_is_c_g", "lab_is_cp_rp", "scaps_cf", "scaps_cv", "propho_json"};
@@ -19,7 +20,7 @@ void CapLabPrototypePanel::RenderImport() {
     static char baseDir[1024] = "", biasDefinition[256] = "";
     static int excludeRow = 0;
     static std::vector<int> excluded;
-    if (ImGui::Combo("Import profile",&profile,profiles,IM_ARRAYSIZE(profiles))) {
+    if (sst::ui::widgets::Combo("Import profile", &profile, profiles, IM_ARRAYSIZE(profiles))) {
         state->preview.reset();
         for (int i=0;i<5;++i) { mapping[i]=i+1; unitChoice[i]=0; }
         excluded.clear();
@@ -27,34 +28,34 @@ void CapLabPrototypePanel::RenderImport() {
     Json options = Json::object();
     if (profile) {
         options["profile"] = keys[profile];
-        ImGui::Checkbox("Area known",&areaKnown);
-        if (areaKnown) { ImGui::InputDouble("Area (mm2)",&area); options["area_m2"] = area * 1e-6; }
-        ImGui::Checkbox("Confirm temperature",&temperatureKnown);
-        if (temperatureKnown) { ImGui::InputDouble("Temperature (K)",&temperature); options["temperature_K"] = temperature; }
-        ImGui::Checkbox("Confirm frequency",&frequencyKnown);
-        if (frequencyKnown) { ImGui::InputDouble("Frequency (Hz)",&frequency); options["frequency_Hz"] = frequency; }
-        ImGui::Checkbox("Confirm bias",&biasKnown);
-        if (biasKnown) { ImGui::InputDouble("Bias (V)",&bias); options["bias_V"] = bias; }
+        sst::ui::widgets::Checkbox("Area known", &areaKnown);
+        if (areaKnown) { sst::ui::widgets::Double("Area (mm2)", &area, .01f, "%.6g"); options["area_m2"] = area * 1e-6; }
+        sst::ui::widgets::Checkbox("Confirm temperature", &temperatureKnown);
+        if (temperatureKnown) { sst::ui::widgets::Double("Temperature (K)", &temperature, .01f, "%.6g"); options["temperature_K"] = temperature; }
+        sst::ui::widgets::Checkbox("Confirm frequency", &frequencyKnown);
+        if (frequencyKnown) { sst::ui::widgets::LogValue("Frequency (Hz)", &frequency); options["frequency_Hz"] = frequency; }
+        sst::ui::widgets::Checkbox("Confirm bias", &biasKnown);
+        if (biasKnown) { sst::ui::widgets::Double("Bias (V)", &bias, .01f, "%.6g"); options["bias_V"] = bias; }
         if (profile == 11) {
-            ImGui::InputText("Manifest base directory (empty = manifest directory)",baseDir,sizeof(baseDir));
+            sst::ui::widgets::Text("Manifest base directory (empty = manifest directory)", baseDir, sizeof(baseDir));
             if (baseDir[0]) options["base_dir"] = baseDir;
-            ImGui::Combo("AS columns in manifest / project",&asVariant,"Cp / Rp\0C / G\0");
+            sst::ui::widgets::Combo("AS columns in manifest / project", &asVariant, "Cp / Rp\0C / G\0");
             if (asVariant >= 0) options["as_profile"] = asVariant ? "converted_as_c_g" : "lab_as_cp_rp";
         }
         if (profile == 6) {
-            ImGui::Combo("Input imaginary impedance",&sign,"Im Z\0-Im Z\0");
+            sst::ui::widgets::Combo("Input imaginary impedance", &sign, "Im Z\0-Im Z\0");
             if (sign >= 0) options["imaginary_sign"] = sign ? "-ImZ" : "ImZ";
         }
         if (profile == 5) {
-            ImGui::Combo("Amplitude convention",&amplitude,"Unknown\0peak\0RMS\0peak-to-peak\0");
+            sst::ui::widgets::Combo("Amplitude convention", &amplitude, "Unknown\0peak\0RMS\0peak-to-peak\0");
             if (amplitude) options["amplitude_definition"] = amplitude == 1 ? "peak" : amplitude == 2 ? "RMS" : "peak-to-peak";
-            ImGui::InputText("Bias meaning",biasDefinition,sizeof(biasDefinition));
+            sst::ui::widgets::Text("Bias meaning", biasDefinition, sizeof(biasDefinition));
             if (biasDefinition[0]) options["bias_definition"] = biasDefinition;
-            ImGui::Checkbox("Maximum voltage condition known",&maxKnown);
-            if (maxKnown) { ImGui::Checkbox("Constant maximum voltage",&maxConstant); options["constant_maximum_voltage"] = maxConstant; }
-            ImGui::Checkbox("T and f in columns 4 and 5",&columnTF);
+            sst::ui::widgets::Checkbox("Maximum voltage condition known", &maxKnown);
+            if (maxKnown) { sst::ui::widgets::Checkbox("Constant maximum voltage", &maxConstant); options["constant_maximum_voltage"] = maxConstant; }
+            sst::ui::widgets::Checkbox("T and f in columns 4 and 5", &columnTF);
         }
-        if (profile == 4) ImGui::Checkbox("Map conductance column",&optionalG);
+        if (profile == 4) sst::ui::widgets::Checkbox("Map conductance column", &optionalG);
         if (profile <= 8 && profile != 3) {
             std::vector<std::pair<std::string,std::string>> fields;
             if (profile == 4) { fields={{"V","V"},{"C","F"}}; if (optionalG) fields.push_back({"G","S"}); }
@@ -64,16 +65,16 @@ void CapLabPrototypePanel::RenderImport() {
             for (std::size_t i=0;i<fields.size();++i) {
                 ImGui::PushID(static_cast<int>(i));
                 ImGui::TextUnformatted(fields[i].first.c_str());
-                ImGui::InputInt("Source column (1 = first)",&mapping[i]);
+                sst::ui::widgets::Int("Source column (1 = first)", &mapping[i]);
                 const auto &unit = fields[i].second;
                 const std::vector<std::string> choices = unit == "Hz" ? std::vector<std::string>{"Hz","kHz","MHz"} :
                     unit == "F" ? std::vector<std::string>{"F","nF","pF"} : unit == "S" ? std::vector<std::string>{"S","mS","uS"} :
                     unit == "V" ? std::vector<std::string>{"V","mV"} : unit == "Ohm" ? std::vector<std::string>{"Ohm","kOhm"} : std::vector<std::string>{"K"};
                 if (unitChoice[i] >= static_cast<int>(choices.size())) unitChoice[i]=0;
                 auto unitLabel = [](const std::string &value) { return value == "Ohm" ? "Ω" : value == "kOhm" ? "kΩ" : value.c_str(); };
-                if (ImGui::BeginCombo("Input unit",unitLabel(choices[unitChoice[i]]))) {
+                if (sst::ui::widgets::BeginCombo("Input unit", unitLabel(choices[unitChoice[i]]))) {
                     for (std::size_t u=0;u<choices.size();++u) if (ImGui::Selectable(unitLabel(choices[u]),unitChoice[i] == static_cast<int>(u))) unitChoice[i]=static_cast<int>(u);
-                    ImGui::EndCombo();
+                    sst::ui::widgets::EndCombo();
                 }
                 options["mapping"][fields[i].first] = mapping[i]-1;
                 options["units"][fields[i].first] = choices[unitChoice[i]];
@@ -81,7 +82,7 @@ void CapLabPrototypePanel::RenderImport() {
             }
         }
         if (profile != 11) {
-            ImGui::InputInt("Source row to exclude",&excludeRow);
+            sst::ui::widgets::Int("Source row to exclude", &excludeRow);
             if (ImGui::Button("Exclude row") && excludeRow > 0 && std::find(excluded.begin(),excluded.end(),excludeRow) == excluded.end()) excluded.push_back(excludeRow);
             ImGui::SameLine(); if (ImGui::Button("Clear exclusions")) excluded.clear();
             options["exclude_rows"] = excluded;
@@ -138,8 +139,8 @@ void CapLabPrototypePanel::RenderImport() {
             preview.at("suggested_temperature_K").dump().c_str());
         ImGui::TextUnformatted("Confirm temperature below; filename is only a suggestion.");
         bool known = state->temperature.has_value();
-        if (ImGui::Checkbox("Temperature known", &known)) state->temperature = known ? std::optional<double>{300} : std::nullopt;
-        if (state->temperature) ImGui::InputDouble("Temperature (K)", &*state->temperature, 0, 0, "%.6g");
+        if (sst::ui::widgets::Checkbox("Temperature known", &known)) state->temperature = known ? std::optional<double>{300} : std::nullopt;
+        if (state->temperature) sst::ui::widgets::Double("Temperature (K)", &*state->temperature, .01f, "%.6g");
         if (state->temperature && !preview.at("temperature_K").is_null() && *state->temperature != preview.at("temperature_K").get<double>())
             ImGui::TextWrapped("Temperature conflict: confirmation will override header T.");
         const auto columns = preview.at("columns").get<std::vector<std::vector<double>>>();
@@ -171,9 +172,7 @@ void CapLabPrototypePanel::RenderTree() {
             for (const auto &sweep : doc.project.sweeps) if (sweep.sample_id == sample.id)
                 ImGui::TextWrapped("Cp (F) / Rp (Ω): %zu points; T=%s K", std::get<pl::Worksheet>(doc.project.engine->object(sweep.id).data).rows.size(), Nullable(sweep.temperature_K).dump().c_str());
             auto &areaMm2 = areaDraft.try_emplace(sample.id, sample.area_m2.value_or(0)*1e6).first->second;
-            ImGui::SetNextItemWidth(80);
-            ImGui::InputDouble("Sample area (mm2)",&areaMm2,0,0,"%.9g",
-                ImGuiInputTextFlags_DisplayEmptyRefVal);
+            sst::ui::widgets::Double("Sample area (mm2)", &areaMm2, .01f, "%.9g");
             if (ImGui::IsItemDeactivatedAfterEdit()) {
                 CommandContext c; c.Set("sample_id",sample.id); c.Set("area_m2",areaMm2*1e-6);
                 (void)commands->Execute(CommandID{"caplab.area"},std::move(c));
@@ -249,13 +248,13 @@ void CapLabPrototypePanel::RenderAnalysis() {
     auto &p = state->document.project;
     static pl::Id selected = 0, xdSelected = 0;
     auto select = [&](const char *label, pl::Id &id, const char *empty = "none — select") {
-        if (ImGui::BeginCombo(label,SelectionLabel(p,id,empty).c_str())) {
+        if (sst::ui::widgets::BeginCombo(label, SelectionLabel(p,id,empty).c_str())) {
             for (const auto &m : p.measurements) {
                 const auto mid=m.at("id").get<pl::Id>();
                 const std::string title=SelectionLabel(p,mid)+"##"+std::to_string(mid);
                 if (ImGui::Selectable(title.c_str(),id==mid)) id=mid;
             }
-            ImGui::EndCombo();
+            sst::ui::widgets::EndCombo();
         }
     };
     select("Measurement",selected);
@@ -268,51 +267,51 @@ void CapLabPrototypePanel::RenderAnalysis() {
         static std::set<pl::Id> masked;
         static pl::Id maskMeasurement=0;
         if (maskMeasurement != selected) { masked.clear(); maskMeasurement=selected; }
-        ImGui::Combo("Analysis",&type,"CV\0Raw DLCP\0");
+        sst::ui::widgets::Combo("Analysis", &type, "CV\0Raw DLCP\0");
         Json options{{"measurement_id",selected},{"type",type ? "DLCPPolynomial" : "CV"}};
         if (!type) {
-            ImGui::InputDouble("Fit minimum voltage (V)",&lo); ImGui::InputDouble("Fit maximum voltage (V)",&hi);
+            sst::ui::widgets::Double("Fit minimum voltage (V)", &lo, .01f, "%.6g"); sst::ui::widgets::Double("Fit maximum voltage (V)", &hi, .01f, "%.6g");
             options["range_V"]={lo,hi};
         } else {
-            ImGui::Combo("Polynomial degree",&degree,"1\0 2\0"); options["degree"]=degree+1;
-            ImGui::InputDouble("Minimum peak amplitude (V)",&ampLo); ImGui::InputDouble("Maximum peak amplitude (V)",&ampHi);
+            sst::ui::widgets::Combo("Polynomial degree", &degree, "1\0 2\0"); options["degree"]=degree+1;
+            sst::ui::widgets::Double("Minimum peak amplitude (V)", &ampLo, .01f, "%.6g"); sst::ui::widgets::Double("Maximum peak amplitude (V)", &ampHi, .01f, "%.6g");
             options["range_amplitude_V"]={ampLo,ampHi};
         }
         const sst::physics::MaterialLibrary library;
         std::vector<std::string> names{"ProPho-compat","project"};
         for (const auto &v : library.list()) if (v.eps_r) names.push_back(v.name);
-        if (ImGui::BeginCombo("Material",materialChoice < 0 ? "Select material" : names.at(materialChoice).c_str())) {
+        if (sst::ui::widgets::BeginCombo("Material", materialChoice < 0 ? "Select material" : names.at(materialChoice).c_str())) {
             for (std::size_t i=0;i<names.size();++i) if (ImGui::Selectable(names[i].c_str(),materialChoice==static_cast<int>(i))) materialChoice=static_cast<int>(i);
-            ImGui::EndCombo();
+            sst::ui::widgets::EndCombo();
         }
         if (materialChoice>=0) {
             options["material"]=names.at(materialChoice);
-            ImGui::Combo("Reference band",&band,"Conduction\0Valence\0"); options["reference_band"]=band ? "valence" : "conduction";
+            sst::ui::widgets::Combo("Reference band", &band, "Conduction\0Valence\0"); options["reference_band"]=band ? "valence" : "conduction";
             if (materialChoice==0) ImGui::TextUnformatted("Owner preset: eps_r=10; N_ref=1.24e19 cm^-3 (constant)");
             if (materialChoice==1) {
-                ImGui::InputDouble("Relative permittivity",&eps); ImGui::InputDouble("N_ref (cm^-3, 0 = unavailable)",&ref,0,0,"%.9g");
-                ImGui::InputText("Material source",materialSource,sizeof(materialSource));
+                sst::ui::widgets::Double("Relative permittivity [1]###Relative permittivity", &eps, .01f, "%.6g"); sst::ui::widgets::LogValue("N_ref (cm^-3, 0 = unavailable)", &ref);
+                sst::ui::widgets::Text("Material source", materialSource, sizeof(materialSource));
                 options["project_material"]={{"eps_r",eps},{"N_ref_m3",ref>0 ? Json(ref*1e6) : Json(nullptr)},
                     {"source",materialSource},{"reference_band",band ? "valence" : "conduction"}};
             }
         }
-        ImGui::Combo("x_d source",&source,"CV at AS bias\0DLCP at V=0\0Manual\0");
-        ImGui::Combo("Missing point policy",&policy,"Block\0Linear interpolation (no extrapolation)\0Nearest point (warning)\0");
+        sst::ui::widgets::Combo("x_d source", &source, "CV at AS bias\0DLCP at V=0\0Manual\0");
+        sst::ui::widgets::Combo("Missing point policy", &policy, "Block\0Linear interpolation (no extrapolation)\0Nearest point (warning)\0");
         options["xd_source"]=source==0 ? "CV" : source==1 ? "DLCP" : "manual";
         options["xd_policy"]=policy==0 ? "block" : policy==1 ? "linear" : "nearest";
         if (source==2) {
-            ImGui::InputDouble("Manual x_d (um)",&manual); ImGui::InputText("x_d description",description,sizeof(description));
+            sst::ui::widgets::Double("Manual x_d (um)", &manual, .01f, "%.6g"); sst::ui::widgets::Text("x_d description", description, sizeof(description));
             options["xd_manual_m"]=manual*1e-6; options["xd_description"]=description;
         } else {
             select("x_d measurement (0 = current)",xdSelected,"current measurement");
             if (ImGui::Button("Use current measurement for x_d")) xdSelected=0;
             if (xdSelected) options["xd_measurement_id"]=xdSelected;
-            if (source==0) { ImGui::InputDouble("AS bias (V)",&bias); options["as_bias_V"]=bias; }
+            if (source==0) { sst::ui::widgets::Double("AS bias (V)", &bias, .01f, "%.6g"); options["as_bias_V"]=bias; }
         }
         if (ImGui::TreeNode("Point mask (unchecked = excluded)")) {
             for (const auto &row : m.at("row_ids")) {
                 const auto id=row.get<pl::Id>(); bool included=!masked.contains(id);
-                if (ImGui::Checkbox(std::to_string(id).c_str(),&included)) { if (included) masked.erase(id); else masked.insert(id); }
+                if (sst::ui::widgets::Checkbox(std::to_string(id).c_str(), &included)) { if (included) masked.erase(id); else masked.insert(id); }
             }
             ImGui::TreePop();
         }
@@ -357,40 +356,40 @@ void CapLabPrototypePanel::RenderAS() {
         CommandContext context; context.Set("edit",std::move(value));
         (void)commands->Execute(CommandID{"caplab.defect"},std::move(context));
     };
-    if (ImGui::BeginCombo("AS sample",SelectionLabel(p,sample).c_str())) {
+    if (sst::ui::widgets::BeginCombo("AS sample", SelectionLabel(p,sample).c_str())) {
         for (const auto &s : p.samples) if (ImGui::Selectable((SelectionLabel(p,s.id)+"##"+std::to_string(s.id)).c_str(),sample==s.id)) {sample=s.id; selectedDefect=0; state->pendingCandidate=nullptr;}
-        ImGui::EndCombo();
+        sst::ui::widgets::EndCombo();
     }
-    ImGui::InputText("Defect name",name,sizeof(name));
+    sst::ui::widgets::Text("Defect name", name, sizeof(name));
     if (ImGui::Button("Create defect")) {edit({{"action","create"},{"sample_id",sample},{"name",name}}); return;}
-    if (ImGui::BeginCombo("AS measurement",SelectionLabel(p,measurement).c_str())) {
+    if (sst::ui::widgets::BeginCombo("AS measurement", SelectionLabel(p,measurement).c_str())) {
         for (const auto &m : p.measurements) if (m.at("sample_id")==sample && m.at("metadata").at("kind")=="FrequencySweep") {
             const auto id=m.at("id").get<pl::Id>();
             if (ImGui::Selectable((SelectionLabel(p,id)+"##"+std::to_string(id)).c_str(),measurement==id)) measurement=id;
         }
         for (const auto &m : p.sweeps) if (m.sample_id==sample)
             if (ImGui::Selectable((SelectionLabel(p,m.id)+"##"+std::to_string(m.id)).c_str(),measurement==m.id)) measurement=m.id;
-        ImGui::EndCombo();
+        sst::ui::widgets::EndCombo();
     }
-    ImGui::Checkbox("Savitzky-Golay smoothing",&smoothing);
+    sst::ui::widgets::Checkbox("Savitzky-Golay smoothing", &smoothing);
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sample index; derivative uses ln f.");
-    if (smoothing) {ImGui::InputInt("Smoothing window (odd)",&window); ImGui::InputInt("Smoothing degree",&degree);}
+    if (smoothing) {sst::ui::widgets::Int("Smoothing window (odd)", &window); sst::ui::widgets::Int("Smoothing degree", &degree);}
     if (ImGui::Button("Calculate AS derivative / candidates")) {
         state->analysisOptions={{"type","AS"},{"measurement_id",measurement},
             {"smoothing",smoothing ? Json{{"method","Savitzky-Golay"},{"window",window},{"degree",degree}} : Json{{"method","none"}}}};
         (void)commands->Execute(CommandID{"caplab.analyze"});
     }
-    if (ImGui::BeginCombo("Active defect",SelectionLabel(p,selectedDefect,"no defects yet").c_str())) {
+    if (sst::ui::widgets::BeginCombo("Active defect", SelectionLabel(p,selectedDefect,"no defects yet").c_str())) {
         for (const auto &d : p.defects) if (d.at("sample_id")==sample)
             if (ImGui::Selectable((SelectionLabel(p,d.at("id").get<pl::Id>())+"##"+std::to_string(d.at("id").get<pl::Id>())).c_str(),d.at("id")==selectedDefect)) selectedDefect=d.at("id").get<pl::Id>();
-        ImGui::EndCombo();
+        sst::ui::widgets::EndCombo();
     }
     if (selectedDefect) {
         if (ImGui::Button("Rename defect")) {edit({{"action","rename"},{"defect_id",selectedDefect},{"name",name}}); return;}
         ImGui::SameLine();
         if (ImGui::Button("Delete defect")) {edit({{"action","delete"},{"defect_id",selectedDefect}}); selectedDefect=0; return;}
-        ImGui::InputDouble("Manual T (K)",&manualT); ImGui::InputDouble("Manual f (Hz)",&manualF);
-        ImGui::InputText("Point provenance",provenance,sizeof(provenance));
+        sst::ui::widgets::Double("Manual T (K)", &manualT, .01f, "%.6g"); sst::ui::widgets::LogValue("Manual f (Hz)", &manualF);
+        sst::ui::widgets::Text("Point provenance", provenance, sizeof(provenance));
         if (ImGui::Button("Add manual point")) {
             edit({{"action","add"},{"defect_id",selectedDefect},{"point",{{"measurement_id",nullptr},{"row_id",nullptr},
                 {"temperature_K",manualT},{"frequency_Hz",manualF},{"provenance",provenance}}}}); return;
@@ -405,17 +404,17 @@ void CapLabPrototypePanel::RenderAS() {
         for (const auto &d : p.defects) if (d.at("id")==selectedDefect) for (const auto &point : d.at("points")) {
             const auto id=point.at("id").get<pl::Id>(); ImGui::PushID(static_cast<int>(id));
             bool enabled=point.at("enabled");
-            if (ImGui::Checkbox("Enabled",&enabled)) {edit({{"action","enable"},{"defect_id",selectedDefect},{"point_id",id},{"enabled",enabled}}); ImGui::PopID(); return;}
-            ImGui::SameLine(); ImGui::Text("%s K / %s Hz",point.at("temperature_K").dump().c_str(),point.at("frequency_Hz").dump().c_str());
+            if (sst::ui::widgets::Checkbox("Enabled", &enabled)) {edit({{"action","enable"},{"defect_id",selectedDefect},{"point_id",id},{"enabled",enabled}}); ImGui::PopID(); return;}
+            ImGui::Text("%s K / %s Hz",point.at("temperature_K").dump().c_str(),point.at("frequency_Hz").dump().c_str());
             ImGui::SameLine(); if (ImGui::Button("Remove")) {edit({{"action","remove"},{"defect_id",selectedDefect},{"point_id",id}}); ImGui::PopID(); return;}
             ImGui::PopID();
         }
-        ImGui::Checkbox("Compare both Arrhenius models",&compare);
-        if (!compare) ImGui::Checkbox("Use ProPho-compat ln(f)",&compat);
-        ImGui::Checkbox("Explicit gamma for default-model sigma",&useGamma);
+        sst::ui::widgets::Checkbox("Compare both Arrhenius models", &compare);
+        if (!compare) sst::ui::widgets::Checkbox("Use ProPho-compat ln(f)", &compat);
+        sst::ui::widgets::Checkbox("Explicit gamma for default-model sigma", &useGamma);
         if (useGamma) {
-            ImGui::InputDouble("gamma (cm^-2 s^-1 K^-2)",&gamma,0,0,"%.9g");
-            ImGui::InputText("gamma source",gammaSource,sizeof(gammaSource));
+            sst::ui::widgets::LogValue("gamma (cm^-2 s^-1 K^-2)", &gamma);
+            sst::ui::widgets::Text("gamma source", gammaSource, sizeof(gammaSource));
         }
         if (ImGui::Button("Fit Arrhenius")) {
             state->analysisOptions={{"type","Arrhenius"},{"defect_id",selectedDefect},
@@ -461,41 +460,41 @@ void CapLabPrototypePanel::RenderWalter() {
     static int model=0, source=0, policy=0;
     static double vb=0, ef=0, prefactor=0, width=1, bias=0, tlo=1, thi=500, flo=100, fhi=1e6, elo=0, ehi=1, ilo=.1, ihi=.5;
     static char provenance[256]="", emissionSource[256]="", description[256]="";
-    if (ImGui::BeginCombo("Sample",std::to_string(sample).c_str())) {
+    if (sst::ui::widgets::BeginCombo("Sample", std::to_string(sample).c_str())) {
         for (const auto &s : p.samples) if (ImGui::Selectable(s.name.c_str(),s.id==sample)) {sample=s.id; selected.clear(); cv=arrhenius=dlcp=xdMeasurement=0;}
-        ImGui::EndCombo();
+        sst::ui::widgets::EndCombo();
     }
-    ImGui::Combo("Model",&model,"Walter1996-linear-field\0ProPho-compat\0");
+    sst::ui::widgets::Combo("Model", &model, "Walter1996-linear-field\0ProPho-compat\0");
     Json options{{"type","Walter"},{"model",model ? "ProPho-compat" : "Walter1996-linear-field"}};
     for (const auto &m : p.measurements) if (m.at("sample_id")==sample && m.at("metadata").at("kind")=="FrequencySweep") {
         const auto id=m.at("id").get<pl::Id>(); bool enabled=selected.contains(id);
         const std::string label=std::to_string(id)+" / "+m.at("metadata").at("temperature_K").dump()+" K";
-        if (ImGui::Checkbox(label.c_str(),&enabled)) {if (enabled) selected.insert(id); else selected.erase(id);}
+        if (sst::ui::widgets::Checkbox(label.c_str(), &enabled)) {if (enabled) selected.insert(id); else selected.erase(id);}
     }
     for (const auto &m : p.sweeps) if (m.sample_id==sample) {
         bool enabled=selected.contains(m.id);
-        if (ImGui::Checkbox((std::to_string(m.id)+" / AS").c_str(),&enabled)) {if (enabled) selected.insert(m.id); else selected.erase(m.id);}
+        if (sst::ui::widgets::Checkbox((std::to_string(m.id)+" / AS").c_str(), &enabled)) {if (enabled) selected.insert(m.id); else selected.erase(m.id);}
     }
     auto chooseFit=[&](const char *label, const char *type, pl::Id &value) {
-        if (ImGui::BeginCombo(label,value ? std::to_string(value).c_str() : "Manual")) {
+        if (sst::ui::widgets::BeginCombo(label, value ? std::to_string(value).c_str() : "Manual")) {
             if (ImGui::Selectable("Manual",value==0)) value=0;
             for (const auto &a : p.analyses) if (a.at("type")==type && a.at("status")=="valid") {
                 const auto sid=a.contains("sample_id") ? a.at("sample_id") : a.at("inputs").at(0).at("sample_id");
                 if (sid==sample && ImGui::Selectable(std::to_string(a.at("id").get<pl::Id>()).c_str(),a.at("id")==value)) value=a.at("id");
             }
-            ImGui::EndCombo();
+            sst::ui::widgets::EndCombo();
         }
     };
     chooseFit("CV fit", "CV",cv);
     if (cv) options["cv_fit_id"]=cv;
-    else {ImGui::InputDouble("V_b (V)",&vb); ImGui::InputDouble("E_F infinity (eV)",&ef); options["V_b_V"]=vb; options["E_F_eV"]=ef;}
+    else {sst::ui::widgets::Double("V_b (V)", &vb, .01f, "%.6g"); sst::ui::widgets::Double("E_F infinity (eV)", &ef, .01f, "%.6g"); options["V_b_V"]=vb; options["E_F_eV"]=ef;}
     if (!model) chooseFit("Arrhenius / defect fit", "Arrhenius",arrhenius);
     if (!model && arrhenius) options["arrhenius_fit_id"]=arrhenius;
-    else {ImGui::InputDouble(model ? "B (s^-1)" : "zeta (s^-1 K^-2)",&prefactor,0,0,"%.10g"); options[model ? "B_s_1" : "zeta_s_1_K_2"]=prefactor;}
-    ImGui::InputText("Parameter source",provenance,sizeof(provenance)); options["parameter_source"]=provenance;
-    if (model) {ImGui::InputText("B source (required)",emissionSource,sizeof(emissionSource)); options["emission_source"]=emissionSource;}
-    ImGui::Combo("x_d source",&source,"CV at AS bias\0DLCP at V=0\0Manual\0");
-    ImGui::Combo("Missing point policy",&policy,"Block\0Linear interpolation\0Nearest point (warning)\0");
+    else {sst::ui::widgets::LogValue(model ? "B (s^-1)" : "zeta (s^-1 K^-2)", &prefactor); options[model ? "B_s_1" : "zeta_s_1_K_2"]=prefactor;}
+    sst::ui::widgets::Text("Parameter source", provenance, sizeof(provenance)); options["parameter_source"]=provenance;
+    if (model) {sst::ui::widgets::Text("B source (required)", emissionSource, sizeof(emissionSource)); options["emission_source"]=emissionSource;}
+    sst::ui::widgets::Combo("x_d source", &source, "CV at AS bias\0DLCP at V=0\0Manual\0");
+    sst::ui::widgets::Combo("Missing point policy", &policy, "Block\0Linear interpolation\0Nearest point (warning)\0");
     options["xd_source"]=source==0 ? "CV" : source==1 ? "DLCP" : "manual";
     options["xd_policy"]=policy==0 ? "block" : policy==1 ? "linear" : "nearest";
     if (source==1) {
@@ -503,32 +502,32 @@ void CapLabPrototypePanel::RenderWalter() {
         if (dlcp) options["dlcp_fit_id"]=dlcp;
     }
     if (source==2) {
-        ImGui::InputDouble("x_d (um)",&width); ImGui::InputText("x_d description",description,sizeof(description));
+        sst::ui::widgets::Double("x_d (um)", &width, .01f, "%.6g"); sst::ui::widgets::Text("x_d description", description, sizeof(description));
         options["xd_manual_m"]=width*1e-6; options["xd_description"]=description;
     } else {
-        if (ImGui::BeginCombo("Width measurement",std::to_string(xdMeasurement).c_str())) {
+        if (sst::ui::widgets::BeginCombo("Width measurement", std::to_string(xdMeasurement).c_str())) {
             for (const auto &m : p.measurements) if (m.at("sample_id")==sample && m.at("metadata").at("kind")!="FrequencySweep")
                 if (ImGui::Selectable(std::to_string(m.at("id").get<pl::Id>()).c_str(),m.at("id")==xdMeasurement)) xdMeasurement=m.at("id");
-            ImGui::EndCombo();
+            sst::ui::widgets::EndCombo();
         }
         if (xdMeasurement) options["xd_measurement_id"]=xdMeasurement;
         if (source==0) {
-            ImGui::InputDouble("Confirmed AS bias (V)",&bias); options["as_bias_V"]=bias;
+            sst::ui::widgets::Double("Confirmed AS bias (V)", &bias, .01f, "%.6g"); options["as_bias_V"]=bias;
             static int mat=-1;
             std::vector<std::string> names{"ProPho-compat"};
             const sst::physics::MaterialLibrary library;
             for (const auto &m : library.list()) if (m.eps_r) names.push_back(m.name);
-            if (ImGui::BeginCombo("Width material",mat<0 ? "Select material" : names.at(mat).c_str())) {
+            if (sst::ui::widgets::BeginCombo("Width material", mat<0 ? "Select material" : names.at(mat).c_str())) {
                 for (std::size_t i=0;i<names.size();++i) if (ImGui::Selectable(names[i].c_str(),mat==int(i))) mat=int(i);
-                ImGui::EndCombo();
+                sst::ui::widgets::EndCombo();
             }
             if (mat>=0) options["material"]=names.at(mat);
         }
     }
-    ImGui::InputDouble("Minimum T (K)",&tlo); ImGui::InputDouble("Maximum T (K)",&thi);
-    ImGui::InputDouble("Minimum f (Hz)",&flo); ImGui::InputDouble("Maximum f (Hz)",&fhi);
-    ImGui::InputDouble("Minimum E (eV)",&elo); ImGui::InputDouble("Maximum E (eV)",&ehi);
-    ImGui::InputDouble("Integral minimum E (eV)",&ilo); ImGui::InputDouble("Integral maximum E (eV)",&ihi);
+    sst::ui::widgets::Double("Minimum T (K)", &tlo, .01f, "%.6g"); sst::ui::widgets::Double("Maximum T (K)", &thi, .01f, "%.6g");
+    sst::ui::widgets::LogValue("Minimum f (Hz)", &flo); sst::ui::widgets::LogValue("Maximum f (Hz)", &fhi);
+    sst::ui::widgets::Double("Minimum E (eV)", &elo, .01f, "%.6g"); sst::ui::widgets::Double("Maximum E (eV)", &ehi, .01f, "%.6g");
+    sst::ui::widgets::Double("Integral minimum E (eV)", &ilo, .01f, "%.6g"); sst::ui::widgets::Double("Integral maximum E (eV)", &ihi, .01f, "%.6g");
     options["temperature_range_K"]={tlo,thi}; options["frequency_range_Hz"]={flo,fhi};
     options["energy_range_eV"]={elo,ehi}; options["integration_range_eV"]={ilo,ihi}; options["measurement_ids"]=selected;
     if (ImGui::Button("Calculate Walter")) {state->analysisOptions=options; (void)commands->Execute(CommandID{"caplab.analyze"});}
