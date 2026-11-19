@@ -1,0 +1,360 @@
+{
+  "active_device": "device-1",
+  "compare_set": ["device-1","device-2","device-3"],
+  "devices": [
+    {
+      "ac_results": {},
+      "band_result": {},
+      "colour": [0.25,0.65,0.95,1],
+      "description": "Source: scaps_core-wt/ui/validation/cases/a4-pn-270K/device_project.yaml. Deck: validation/cases/a4-pn-270K/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "document": {
+        "case_id": "a4-pn-270K",
+        "constants_mode": "codata",
+        "contacts": {
+          "left": {
+            "Sn_m_s": ".inf",
+            "Sp_m_s": ".inf",
+            "label": "left",
+            "phi_m_eV": 5.3
+          },
+          "right": {
+            "Sn_m_s": ".inf",
+            "Sp_m_s": ".inf",
+            "label": "right",
+            "phi_m_eV": 4.05
+          }
+        },
+        "external": {
+          "area_m2": 1,
+          "series_ohm_m2": 0,
+          "shunt_ohm_m2": ".inf"
+        },
+        "illumination": {
+          "enabled": false,
+          "uniform_generation_m3_s": 0
+        },
+        "interface_defects": [],
+        "layers": [
+          {
+            "defects": [],
+            "doping": {
+              "Na_m3": 1e+22,
+              "Nd_m3": 0
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.7,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000.0,
+              "vth_p_ref_m_s": 100000.0
+            },
+            "name": "Si-0",
+            "scapslab_id": "layer-1",
+            "thickness_m": 2e-06
+          },
+          {
+            "defects": [],
+            "doping": {
+              "Na_m3": 0,
+              "Nd_m3": 1e+22
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.7,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000.0,
+              "vth_p_ref_m_s": 100000.0
+            },
+            "name": "Si-1",
+            "scapslab_id": "layer-2",
+            "thickness_m": 2e-06
+          }
+        ],
+        "mesh": {
+          "adaptive_delta_log_carrier": 0.5,
+          "adaptive_delta_psi_Vt": 0.5,
+          "adaptive_max_bias": false,
+          "adaptive_max_layer_fraction": 0.25,
+          "adaptive_target_relative_J_error": 0.001,
+          "adaptivity_level": "0",
+          "clustering_beta": 2,
+          "points_per_layer": 401,
+          "recalculate_generation_limit_uA_cm2": 1,
+          "recalculate_max_adaptions_per_voltage": 10,
+          "recalculate_max_ratio": 1.6,
+          "recalculate_mesh": false,
+          "recalculate_min_ratio": 1.05,
+          "recalculate_points": 10,
+          "recalculate_recombination_limit_uA_cm2": 0.001,
+          "solution_adaptive": false,
+          "thermionic_homojunctions": false
+        },
+        "mobility_temperature_model": "constant",
+        "schema_version": 1,
+        "solver": {
+          "max_line_search_backtracks": 12,
+          "max_newton_iterations": 300,
+          "max_step_multiple_of_Vt": 4,
+          "residual_tolerance": 1e-10
+        },
+        "temperature_K": 270,
+        "voltage": {
+          "start_V": 0,
+          "step_V": 0.01,
+          "stop_V": 0.5
+        }
+      },
+      "id": "device-1",
+      "name": "pn 270 K",
+      "result": {},
+      "status": "no results"
+    },
+    {
+      "ac_results": {},
+      "band_result": {},
+      "colour": [0.95,0.55,0.25,1],
+      "description": "Source: scaps_core-wt/ui/validation/cases/a4-pn-300K/device_project.yaml. Deck: validation/cases/a4-pn-300K/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "document": {
+        "case_id": "a4-pn-300K",
+        "constants_mode": "codata",
+        "contacts": {
+          "left": {
+            "Sn_m_s": ".inf",
+            "Sp_m_s": ".inf",
+            "label": "left",
+            "phi_m_eV": 5.3
+          },
+          "right": {
+            "Sn_m_s": ".inf",
+            "Sp_m_s": ".inf",
+            "label": "right",
+            "phi_m_eV": 4.05
+          }
+        },
+        "external": {
+          "area_m2": 1,
+          "series_ohm_m2": 0,
+          "shunt_ohm_m2": ".inf"
+        },
+        "illumination": {
+          "enabled": false,
+          "uniform_generation_m3_s": 0
+        },
+        "interface_defects": [],
+        "layers": [
+          {
+            "defects": [],
+            "doping": {
+              "Na_m3": 1e+22,
+              "Nd_m3": 0
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.7,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000.0,
+              "vth_p_ref_m_s": 100000.0
+            },
+            "name": "Si-0",
+            "scapslab_id": "layer-1",
+            "thickness_m": 2e-06
+          },
+          {
+            "defects": [],
+            "doping": {
+              "Na_m3": 0,
+              "Nd_m3": 1e+22
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.7,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000.0,
+              "vth_p_ref_m_s": 100000.0
+            },
+            "name": "Si-1",
+            "scapslab_id": "layer-2",
+            "thickness_m": 2e-06
+          }
+        ],
+        "mesh": {
+          "adaptive_delta_log_carrier": 0.5,
+          "adaptive_delta_psi_Vt": 0.5,
+          "adaptive_max_bias": false,
+          "adaptive_max_layer_fraction": 0.25,
+          "adaptive_target_relative_J_error": 0.001,
+          "adaptivity_level": "0",
+          "clustering_beta": 2,
+          "points_per_layer": 401,
+          "recalculate_generation_limit_uA_cm2": 1,
+          "recalculate_max_adaptions_per_voltage": 10,
+          "recalculate_max_ratio": 1.6,
+          "recalculate_mesh": false,
+          "recalculate_min_ratio": 1.05,
+          "recalculate_points": 10,
+          "recalculate_recombination_limit_uA_cm2": 0.001,
+          "solution_adaptive": false,
+          "thermionic_homojunctions": false
+        },
+        "mobility_temperature_model": "constant",
+        "schema_version": 1,
+        "solver": {
+          "max_line_search_backtracks": 12,
+          "max_newton_iterations": 300,
+          "max_step_multiple_of_Vt": 4,
+          "residual_tolerance": 1e-10
+        },
+        "temperature_K": 300,
+        "voltage": {
+          "start_V": 0,
+          "step_V": 0.01,
+          "stop_V": 0.5
+        }
+      },
+      "id": "device-2",
+      "name": "pn 300 K",
+      "result": {},
+      "status": "no results"
+    },
+    {
+      "ac_results": {},
+      "band_result": {},
+      "colour": [0.4,0.8,0.45,1],
+      "description": "Source: scaps_core-wt/ui/validation/cases/a4-pn-T350/device_project.yaml. Deck: validation/cases/a4-pn-T350/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "document": {
+        "case_id": "a4-pn-T350",
+        "constants_mode": "codata",
+        "contacts": {
+          "left": {
+            "Sn_m_s": ".inf",
+            "Sp_m_s": ".inf",
+            "label": "left",
+            "phi_m_eV": 5.3
+          },
+          "right": {
+            "Sn_m_s": ".inf",
+            "Sp_m_s": ".inf",
+            "label": "right",
+            "phi_m_eV": 4.05
+          }
+        },
+        "external": {
+          "area_m2": 1,
+          "series_ohm_m2": 0,
+          "shunt_ohm_m2": ".inf"
+        },
+        "illumination": {
+          "enabled": false,
+          "uniform_generation_m3_s": 0
+        },
+        "interface_defects": [],
+        "layers": [
+          {
+            "defects": [],
+            "doping": {
+              "Na_m3": 1e+22,
+              "Nd_m3": 0
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.7,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000.0,
+              "vth_p_ref_m_s": 100000.0
+            },
+            "name": "Si-0",
+            "scapslab_id": "layer-1",
+            "thickness_m": 2e-06
+          },
+          {
+            "defects": [],
+            "doping": {
+              "Na_m3": 0,
+              "Nd_m3": 1e+22
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.7,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000.0,
+              "vth_p_ref_m_s": 100000.0
+            },
+            "name": "Si-1",
+            "scapslab_id": "layer-2",
+            "thickness_m": 2e-06
+          }
+        ],
+        "mesh": {
+          "adaptive_delta_log_carrier": 0.5,
+          "adaptive_delta_psi_Vt": 0.5,
+          "adaptive_max_bias": false,
+          "adaptive_max_layer_fraction": 0.25,
+          "adaptive_target_relative_J_error": 0.001,
+          "adaptivity_level": "0",
+          "clustering_beta": 2,
+          "points_per_layer": 401,
+          "recalculate_generation_limit_uA_cm2": 1,
+          "recalculate_max_adaptions_per_voltage": 10,
+          "recalculate_max_ratio": 1.6,
+          "recalculate_mesh": false,
+          "recalculate_min_ratio": 1.05,
+          "recalculate_points": 10,
+          "recalculate_recombination_limit_uA_cm2": 0.001,
+          "solution_adaptive": false,
+          "thermionic_homojunctions": false
+        },
+        "mobility_temperature_model": "constant",
+        "schema_version": 1,
+        "solver": {
+          "max_line_search_backtracks": 12,
+          "max_newton_iterations": 300,
+          "max_step_multiple_of_Vt": 4,
+          "residual_tolerance": 1e-10
+        },
+        "temperature_K": 350,
+        "voltage": {
+          "start_V": 0,
+          "step_V": 0.02,
+          "stop_V": 0.6
+        }
+      },
+      "id": "device-3",
+      "name": "pn 350 K",
+      "result": {},
+      "status": "no results"
+    }
+  ],
+  "name": "pn temperature series",
+  "schema_version": 1,
+  "ui": {}
+}

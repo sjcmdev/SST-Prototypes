@@ -97,3 +97,29 @@ with tempfile.TemporaryDirectory(prefix='scapslab-editors-') as output:
     assert editor.execute(dict(operation='load', path=path))['document'] == document
 assert editor.execute(dict(operation='undo'))['ok']
 print('Python defect/interface/resistance/thickness edit and YAML round-trip: passed', flush=True)
+
+workspace = scapslab.Session(loaded['document'])
+assert workspace.device_list()['ok']
+first = workspace.device_list()['active_device']
+second_response = workspace.device_duplicate(first)
+assert second_response['ok'], second_response
+second = second_response['active_device']
+assert first != second
+assert workspace.execute(dict(operation='edit', patch={'temperature_K': 301}))['ok']
+assert workspace.device_select(first)['document']['temperature_K'] == loaded['document']['temperature_K']
+assert workspace.run_all()['ok']
+with tempfile.TemporaryDirectory(prefix='scapslab-multi-') as output:
+    target = str(Path(output) / 'project.scapslab')
+    assert workspace.project_save(target)['ok']
+    reloaded = workspace.project_load(target)
+    assert reloaded['ok'] and len(reloaded['devices']) == 2
+    assert workspace.device_remove(second)['ok']
+    assert len(workspace.device_list()['devices']) == 1
+    assert workspace.execute(dict(operation='undo'))['ok']
+    assert len(workspace.device_list()['devices']) == 2
+print('Python multi-device project load/save/duplicate/select/remove/run_all verified', flush=True)
+
+fresh = scapslab.Session()
+assert fresh.device_list()['ok']
+assert fresh.device_add(name='Template device')['ok']
+assert len(fresh.device_list()['devices']) == 2

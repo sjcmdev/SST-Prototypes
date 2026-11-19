@@ -8,15 +8,16 @@ NB_MODULE(sst_scapslab, m) {
     using namespace SST; using namespace SST::ScapsLab;
     nb::class_<Workflow>(m,"Session")
         .def("__init__",[](Workflow *self,const std::string &document) {
-            auto parsed=Json::parse(document);
-            new(self) Workflow(CreateRef<JobSystem>(nullptr,1)); self->document=std::move(parsed);
+            auto parsed=Json::parse(document);if(parsed.is_null()) parsed=ReadProject(SCAPSLAB_PROJECT);
+            new(self) Workflow(CreateRef<JobSystem>(nullptr,1)); if(parsed.is_object() && parsed.contains("devices")) self->SetWorkspace(UnpackResults(parsed));else self->Current().document=std::move(parsed);
         })
         .def("start",[](Workflow &s,const std::string &request) {
             try {return s.Dispatch(Json::parse(request)).dump();}
             catch(const std::exception &e) {return Json{{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}}.dump();}
         })
         .def("poll",[](Workflow &s) {
-            s.OnUpdate(0); Json j={{"running",s.Busy()},{"auto_recalculate_pending",(s.autoRecalculate && s.needsRecalculate) || (s.autoRecalculateBand && s.needsBand)},{"status",s.status},{"response",s.response}};
+            s.OnUpdate(0); Json j={{"running",s.Busy()},{"auto_recalculate_pending",(s.autoRecalculate && s.Current().needsRecalculate) || (s.autoRecalculateBand && s.Current().needsBand)},{"status",s.status},{"response",s.response}};
+            j["batch_progress"]={{"completed",s.batchCompleted},{"total",s.batchTotal}};
             if(s.active) { const auto p=s.jobs->GetJob(s.active); if(p) j["progress"]={{"completed",p->completedWork},{"total",p->totalWork},{"stage",p->currentStage}}; }
             return j.dump();
         });

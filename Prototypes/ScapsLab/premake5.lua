@@ -1,6 +1,10 @@
 ﻿newoption { trigger = "scaps-core", value = "PATH", description = "Read-only scaps_core checkout (default ../scaps_core)" }
 local scaps = path.getabsolute(_OPTIONS["scaps-core"] or "../scaps_core", _SST_ROOT)
 local root = _SST_ROOT .. "/Prototypes/ScapsLab"
+local solverStamp = os.outputof('powershell -NoProfile -Command "$files=Get-ChildItem -Path \'' .. scaps .. '/src\',\'' .. scaps .. '/include\' -Recurse -File | Sort-Object FullName; $joined=($files | Get-FileHash -Algorithm SHA256 | ForEach-Object Hash) -join \'\'; [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($joined))).Replace(\'-\',\'\')"')
+if not solverStamp or not solverStamp:match("^%x+") then error("Cannot identify scaps_core source version") end
+solverStamp = solverStamp:sub(1,16)
+
 project "ScapsCore"
     location (_SST_ROOT .. "/build/generated/%{_ACTION}/%{prj.name}")
     kind "StaticLib"
@@ -38,14 +42,14 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         _SST_ROOT .. "/Vendor/yaml-cpp/include", _SST_ROOT .. "/Vendor/GoogleTest/googletest/include" }
     links { "Core", "ScapsCore" }
     if name ~= "ScapsLabHeadless" then sst_link_ui() end
-    defines { 'SCAPSLAB_HEADLESS="' .. _SST_ROOT .. '/build/bin/' .. outputdir .. '/ScapsLabHeadless/ScapsLabHeadless.exe"', "YAML_CPP_STATIC_DEFINE", 'SCAPSLAB_PROJECT="' .. scaps .. '/device_project.yaml"', 'SCAPSLAB_PYTHON="' .. root .. '/python"', 'SCAPSLAB_PYTHON_TEST="' .. root .. '/tests/test_headless.py"' }
+    defines { 'SCAPSLAB_HEADLESS="' .. _SST_ROOT .. '/build/bin/' .. outputdir .. '/ScapsLabHeadless/ScapsLabHeadless.exe"', "YAML_CPP_STATIC_DEFINE", 'SCAPSLAB_EXAMPLES="' .. root .. '/examples"', 'SCAPSLAB_SOLVER_VERSION="scaps_core-ui-' .. solverStamp .. '"', 'SCAPSLAB_PROJECT="' .. scaps .. '/device_project.yaml"', 'SCAPSLAB_PYTHON="' .. root .. '/python"', 'SCAPSLAB_PYTHON_TEST="' .. root .. '/tests/test_headless.py"' }
     if name == "ScapsLab" then
         files { root .. "/src/**.cpp", root .. "/src/**.hpp" }
         removefiles { root .. "/src/Headless.cpp" }
         debugdir ("%{cfg.targetdir}")
-        postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/PrototypeTemplate/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/python" "%{cfg.targetdir}/python"' }
+        postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/PrototypeTemplate/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/python" "%{cfg.targetdir}/python"', '{COPYDIR} "' .. root .. '/examples" "%{cfg.targetdir}/examples"' }
     elseif name == "ScapsLabTests" then
-        files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp" }
+        files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Workspace.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp" }
         links { "GoogleTest", "GoogleTestMain" }
     else
         files { scaps .. "/apps/scaps_headless.cpp" }

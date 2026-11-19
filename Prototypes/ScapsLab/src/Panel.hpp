@@ -6,6 +6,7 @@ class Panel final : public EditorWindow {
 public:
     Panel(Workflow *workflow, int view, bool gallery=false);
     void RenderContent() override;
+    bool IsDirty() const override {return view==0 && w->dirty;}
     Workflow *GetWorkflow() const {return w;}
 private:
     Workflow *w;
@@ -20,6 +21,8 @@ private:
     int selectedDefect=0;
     void Send(const Json &request);
     void Results();
+    void Devices();
+    void Compare();
 };
 }
 

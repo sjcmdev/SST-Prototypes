@@ -1,0 +1,22 @@
+{
+  "devices": 3,
+  "points_per_device": 100000,
+  "fields": [
+    "bias_id",
+    "voltage_V",
+    "J_A_m2",
+    "conservation_error_A_m2",
+    "status",
+    "valid",
+    "iterations",
+    "residual",
+    "terminal_voltage_V",
+    "internal_voltage_V",
+    "validity_status"
+  ],
+  "row_bytes": 76418790,
+  "column_bytes": 28419444,
+  "format": "JSON, inline compact result columns; full spatial profiles add their actual array sizes",
+  "full_profile_repeat_column_bytes": 35394890712,
+  "full_profile_measurement": "Byte-counted JSON serialization of actual stored profile columns, cyclically extended to 100000 points per device; not allocated or solved at that length."
+}

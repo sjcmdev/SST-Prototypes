@@ -54,14 +54,14 @@ void Positive(double v,const char *field,bool zero=false) {
 Json Failure(const char *code,const std::string &message) { return {{"ok",false},{"error",{{"code",code},{"message",message}}}}; }
 class EditRecord final : public ICommand {
     Workflow &w;
+    std::string deviceId;
     Json before, after;
     std::string gesture;
     Result<void> Apply(const Json &d) {
-        w.pending=CreateRef<Operation>(w.document,Json{{"operation","edit"},{"document",d},{"history",true}});
-        w.active=w.jobs->Submit(w.pending); return {};
+        w.StartOperation(Json{{"operation","edit"},{"document",d},{"history",true}},deviceId); return {};
     }
 public:
-    EditRecord(Workflow &w,Json before,Json after,std::string gesture):w(w),before(std::move(before)),after(std::move(after)),gesture(std::move(gesture)) {}
+    EditRecord(Workflow &w,Json before,Json after,std::string gesture):w(w),deviceId(w.pendingDevice),before(std::move(before)),after(std::move(after)),gesture(std::move(gesture)) {}
     std::string Description() const override {return "Edit ScapsLab parameters";}
     bool IsUndoable() const noexcept override {return true;}
     Result<void> Execute(CommandContext &) override {return Apply(after);}
@@ -81,10 +81,17 @@ public:
         const auto *r=c.TryGet<Json>("request");
         if (!r) return StructuredError{ErrorCategory::Validation,Severity::Error,"Missing request","Missing JSON request","Supply a request","ScapsLab","invalid_request"};
         if (r->at("operation")=="cancel") {
+            w.runQueue.clear();
             if (!w.active || !w.jobs->RequestCancel(w.active)) return StructuredError{ErrorCategory::Validation,Severity::Error,"No running job","No running job","Start a job","ScapsLab","not_running"};
             return {};
         }
         const std::string op=r->at("operation");
+        if(op=="device_select") {
+            if(w.active) {const std::string pending=w.pending->request.at("operation");if(pending!="run" && pending!="band" && pending!="cv" && pending!="cf") throw std::invalid_argument("Wait for the project operation before selecting a device");}
+            const auto id=r->at("device_id").get<std::string>(); (void)w.Device(id);
+            if(!w.edits.empty()) throw std::invalid_argument("Wait for queued edits before selecting a device");
+            w.project.active_device=id; w.projectDirty=true;w.RefreshDirty();w.response=w.Snapshot(); return {};
+        }
         if(op=="auto_recalculate") {
             const bool automatic=r->at("enabled").get<bool>(), band=r->value("band_enabled",w.autoRecalculateBand);
             w.autoRecalculate=automatic;w.autoRecalculateBand=band;
@@ -92,34 +99,41 @@ public:
             w.response={{"ok",true},{"auto_recalculate",w.autoRecalculate},{"auto_recalculate_band",w.autoRecalculateBand},{"error",nullptr}};
             w.status=(w.autoRecalculate || w.autoRecalculateBand)?"Auto-recalculate enabled (250 ms debounce)":"Auto-recalculate disabled"; return {};
         }
-        if(w.active && op=="edit" && (w.pending->request.at("operation")=="load" || w.pending->request.at("operation")=="layer"))
+        if(w.active && w.pendingDevice==w.project.active_device && op=="edit" && (w.pending->request.at("operation")=="load" || w.pending->request.at("operation")=="project_load" || w.pending->request.at("operation")=="layer"))
             return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","Project structure is changing; wait before editing","Wait for the operation","ScapsLab","busy"};
         if(w.Busy() && op=="edit") {
-            auto candidate=w.document;
-            if(w.pending && w.pending->request.at("operation")=="edit") {
+            auto candidate=w.Current().document;
+            if(w.pending && w.pendingDevice==w.project.active_device && w.pending->request.at("operation")=="edit") {
                 const auto &edit=w.pending->request;
                 if(edit.contains("document")) candidate=edit.at("document");else candidate.update(edit.at("patch"),true);
             }
             if(!w.edits.empty()) candidate=w.edits.back().at("document");
             if(r->contains("document")) candidate=r->at("document");else candidate.update(r->at("patch"),true);
-            auto edit=*r;edit["document"]=std::move(candidate);
+            auto edit=*r;edit["document"]=std::move(candidate);edit["device_id"]=w.project.active_device;
             const auto gesture=edit.value("gesture_id",std::string{});
             if(!gesture.empty() && !w.edits.empty() && w.edits.back().value("gesture_id",std::string{})==gesture) w.edits.back()=std::move(edit);
             else w.edits.push_back(std::move(edit));
             if(w.active && (w.pending->request.at("operation")=="run" || w.pending->request.at("operation")=="band" || w.pending->request.at("operation")=="cv" || w.pending->request.at("operation")=="cf")) (void)w.jobs->RequestCancel(w.active);
-            w.changedAt=std::chrono::steady_clock::now(); return {};
+            w.Current().changedAt=std::chrono::steady_clock::now(); return {};
         }
         if (w.Busy()) return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","A job is still active","Wait or cancel","ScapsLab","busy"};
         if(op=="undo" || op=="redo") {
-            const auto result=op=="undo"?w.undo.Undo():w.undo.Redo();
+            auto &stack=w.preferProjectUndo?w.projectUndo:w.Current().undo;
+            const auto result=op=="undo"?stack.Undo():stack.Redo();
             if(!result) return result;
             w.status=w.active?"Applying history":"No history available";
-            w.response={{"ok",true},{"document",w.document},{"error",nullptr}};return {};
+            w.RefreshDirty();w.response=w.Snapshot();return {};
         }
-        if(op=="run") {w.needsRecalculate=false;w.needsBand=false;}
-        if(op=="band") w.needsBand=false;
-        w.pending=CreateRef<Operation>(w.document,*r); w.pending->acResults=w.acResults; w.response=Json();
-        w.active=w.jobs->Submit(w.pending); w.status="Running"; return {};
+        if(op=="run") {w.Current().needsRecalculate=false;w.Current().needsBand=false;}
+        if(op=="band") w.Current().needsBand=false;
+        if(op=="run_all") {
+            w.batchTotal=0;w.batchCompleted=0;w.batchResponse=Json::array();
+            for(const auto &d:w.project.devices) if(w.project.compare_set.contains(d->id)) w.runQueue.push_back(d->id);
+            w.batchTotal=w.runQueue.size();
+            if(w.runQueue.empty()) throw std::invalid_argument("Select at least one device for compare");
+            const auto id=w.runQueue.front();w.runQueue.pop_front();w.StartOperation({{"operation","run"},{"batch",true}},id);return {};
+        }
+        w.StartOperation(*r,w.project.active_device);return {};
     }
 };
 }
@@ -294,7 +308,52 @@ void Operation::Execute(JobContext &ctx) {
     using namespace scaps_core;
     const auto started=std::chrono::steady_clock::now();
     ctx.ThrowIfCancellationRequested(); const std::string op=request.at("operation");
-    if (op=="load") document=ReadProject(request.at("path").get<std::string>());
+    if(op=="project_load" || op=="load") {
+        const auto file=request.at("path").get<std::string>();
+        std::string source,error;if(!TextFileIO::Load(Path{file},source,error)) throw std::runtime_error(error);
+        auto raw=source.find_first_not_of(" \t\r\n")!=std::string::npos && source[source.find_first_not_of(" \t\r\n")]=='{'?Json::parse(source):FromYaml(YAML::Load(source));
+        if(raw.contains("devices")) workspace=UnpackResults(raw);
+        else { Workflow loaded(CreateRef<JobSystem>(nullptr,1));loaded.Current().document=ReadProject(file);loaded.Current().name=loaded.Current().document.value("case_id",std::string("Device"));workspace=loaded.Workspace();workspace["name"]=std::filesystem::path(file).stem().string(); }
+        Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
+    }
+    else if(op=="project_save" || (op=="save" && std::filesystem::path(request.at("path").get<std::string>()).extension()==".scapslab")) {
+        Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
+        ctx.ThrowIfCancellationRequested();SaveText(Path{request.at("path").get<std::string>()}.Native(),WorkspaceText(PackResults(workspace)));
+    }
+    else if(op.starts_with("device_") || op=="project_edit") {
+        auto &devices=workspace.at("devices");
+        const std::string id=request.value("device_id",workspace.at("active_device").get<std::string>());
+        auto at=std::find_if(devices.begin(),devices.end(),[&](const Json &d){return d.at("id")==id;});
+        if(op=="device_add" || op=="device_duplicate") {
+            Json d;
+            if(op=="device_duplicate") {if(at==devices.end()) throw std::invalid_argument("Unknown device_id");d=*at;}
+            else { const auto doc=request.contains("path")?ReadProject(request.at("path").get<std::string>()):request.contains("document")?request.at("document"):ReadProject(SCAPSLAB_PROJECT);
+                d={{"document",doc},{"name",doc.value("case_id",std::string("Device"))},{"description",request.value("description",std::string{})}}; }
+            static std::atomic_uint64_t sequence{0};
+            d["id"]="device-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"-"+std::to_string(sequence++);
+            d["name"]=request.value("name",d.at("name").get<std::string>()+(op=="device_duplicate"?" copy":""));
+            static const double colours[][4]={{.25,.65,.95,1},{.95,.55,.25,1},{.4,.8,.45,1},{.8,.45,.85,1},{.9,.8,.3,1}};
+            d["colour"]=colours[devices.size()%5];d["result"]=Json::object();d["band_result"]=Json::object();d["ac_results"]=Json::object();d["status"]="no results";
+            devices.push_back(d);workspace["active_device"]=d.at("id");workspace["compare_set"].push_back(d.at("id"));
+        } else if(op=="project_edit") {
+            if(request.contains("name")) workspace["name"]=request.at("name");
+            if(request.contains("ui")) workspace["ui"]=request.at("ui");
+        } else {
+            if(at==devices.end()) throw std::invalid_argument("Unknown device_id");
+            if(op=="device_remove") {
+                if(devices.size()==1) throw std::invalid_argument("Cannot delete the last device");
+                devices.erase(at);auto &compare=workspace["compare_set"];compare.erase(std::remove(compare.begin(),compare.end(),Json(id)),compare.end());
+                if(workspace["active_device"]==id) workspace["active_device"]=devices.front().at("id");
+            } else if(op=="device_update") {
+                for(const auto *key:{"name","colour","description"}) if(request.contains(key)) (*at)[key]=request.at(key);
+                if(request.contains("compare")) {auto &compare=workspace["compare_set"];compare.erase(std::remove(compare.begin(),compare.end(),Json(id)),compare.end());if(request.at("compare").get<bool>()) compare.push_back(id);}
+            } else if(op=="device_move") {
+                const int index=request.at("index");if(index<0 || index>=int(devices.size())) throw std::invalid_argument("Invalid device index");
+                const auto d=*at;devices.erase(at);devices.insert(devices.begin()+index,d);
+            } else if(op!="device_list") throw std::invalid_argument("Unknown device operation");
+        }
+        Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
+    }
     else if (op=="save") WriteProject(document,request.at("path").get<std::string>());
     else if (op=="edit") { auto candidate=document; const auto &patch=request.contains("document")?request.at("document"):request.at("patch");
         if (!patch.is_object()) throw std::invalid_argument("patch must be an object");
@@ -333,7 +392,7 @@ void Operation::Execute(JobContext &ctx) {
         }
         ctx.ThrowIfCancellationRequested(); SaveText(Path{request.at("path").get<std::string>()}.Native(),csv.str());
     } else if (op=="cv" || op=="cf") {
-        const auto p=Model(document); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        const auto p=Model(document);if(p.illumination.enabled) throw std::invalid_argument("This scaps_core snapshot has no illuminated solve API; disable illumination for a dark solve"); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         const double T=request.at("temperature_K"); Positive(T,"temperature_K");
         std::vector<double> volts, frequencies;
         if(op=="cv") {
@@ -376,7 +435,7 @@ void Operation::Execute(JobContext &ctx) {
             ctx.SetProgress(float(i+1),float(total));
         }
     } else if (op=="run" || op=="band") {
-        const auto p=Model(document); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        const auto p=Model(document);if(p.illumination.enabled) throw std::invalid_argument("This scaps_core snapshot has no illuminated solve API; disable illumination for a dark solve"); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         auto volts=op=="band"?std::vector<double>{request.at("voltage_V").get<double>()}:make_voltage_list(p.voltage);
         for(auto &v:volts) {if(!std::isfinite(v)) throw std::invalid_argument("Invalid voltage_V");v=-v;}
         ctx.SetStage("Preparing mesh (cancel checked after preparation)");
@@ -410,6 +469,8 @@ void Operation::Execute(JobContext &ctx) {
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
     if(op=="run" || op=="band" || op=="cv" || op=="cf") {
         output["project_snapshot"]=document;
+        output["provenance"]={{"device_hash",DocumentHash(document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},
+            {"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}};
         bool valid=true;
         for(auto &point:output["points"]) {
             const bool converged=point.at("status")=="Converged";
@@ -429,14 +490,36 @@ void Operation::Execute(JobContext &ctx) {
     }
     if(op!="save" && op!="export_ac") ctx.ThrowIfCancellationRequested();
 }
+namespace {
+class ProjectRecord final : public ICommand {
+    Workflow &w;Project before,after;
+    Result<void> Apply(const Project &p) {w.project=p;w.projectDirty=true;w.RefreshDirty();return {};}
+public:
+    ProjectRecord(Workflow &w,Project before,Project after):w(w),before(std::move(before)),after(std::move(after)) {}
+    std::string Description() const override {return "Delete ScapsLab device";}
+    bool IsUndoable() const noexcept override {return true;}
+    Result<void> Execute(CommandContext &) override {return Apply(after);}
+    Result<void> Undo(CommandContext &) override {return Apply(before);}
+};
+}
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()) {
-    for(const auto *op:{"load","save","edit","layer","run","cv","cf","export_ac","inspect","cancel","undo","redo","auto_recalculate","band"}) {
+    auto initial=CreateRef<DeviceState>();initial->id="device-1";initial->name="Device";project.devices.push_back(initial);project.active_device=initial->id;project.compare_set.insert(initial->id);
+    for(const auto *op:{"load","save","edit","layer","run","cv","cf","export_ac","inspect","cancel","undo","redo","auto_recalculate","band",
+        "project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all"}) {
         const auto registered=commands->Register({CommandID{std::string("scapslab.")+op},std::string("ScapsLab ")+op,"ScapsLab","",{},CommandFlags::AsyncCapable},
             [this](CommandContext &){return CreateUnique<Command>(*this);});
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
     }
 }
-Workflow::~Workflow() { if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
+Workflow::~Workflow() { runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
+void Workflow::StartOperation(const Json &r,const std::string &id) {
+    auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);pending->acResults=d.acResults;
+    const std::string op=r.at("operation");
+    if(op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load") pending->workspace=Workspace();
+    if(op=="run" || op=="band" || op=="cv" || op=="cf") d.status="running";
+    if(op=="run") {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
+    active=jobs->Submit(pending);status="Running: "+d.name;response=Json();
+}
 Json Workflow::Dispatch(const Json &r) {
     try { CommandContext c; c.Set("request",r);
         const auto out=commands->Execute(CommandID{"scapslab."+r.at("operation").get<std::string>()},std::move(c));
@@ -445,42 +528,68 @@ Json Workflow::Dispatch(const Json &r) {
     } catch(const std::exception &e) {return Failure("invalid_request",e.what());}
 }
 void Workflow::Changed() {
-    needsRecalculate=true;needsBand=true;bandResult=Json::object(); changedAt=std::chrono::steady_clock::now();
-    result=Json::object(); acResults=Json::object();
+    auto &d=Current();d.needsRecalculate=true;d.needsBand=true;d.bandResult=Json::object();d.changedAt=std::chrono::steady_clock::now();
+    d.result=Json::object();d.acResults=Json::object();d.status="no results";
 }
 void Workflow::OnUpdate(float) {
     if(!active) {
-        if(!edits.empty()) {
-            pending=CreateRef<Operation>(document,std::move(edits.front()));edits.pop_front();
-            active=jobs->Submit(pending);status="Applying queued edit";response=Json();
-        }
-        else if(autoRecalculate && needsRecalculate && !interacting && std::chrono::steady_clock::now()-changedAt>=std::chrono::milliseconds(250)) {
-            needsRecalculate=false; (void)Dispatch({{"operation","run"}});
-        } else if(autoRecalculateBand && needsBand && !interacting && std::chrono::steady_clock::now()-changedAt>=std::chrono::milliseconds(250)) {
-            needsBand=false;(void)Dispatch({{"operation","band"},{"voltage_V",biasVoltage_V}});
+        if(!edits.empty()) {auto edit=std::move(edits.front());edits.pop_front();StartOperation(edit,edit.value("device_id",project.active_device));}
+        else if(!runQueue.empty()) {const auto id=runQueue.front();runQueue.pop_front();StartOperation({{"operation","run"},{"batch",true}},id);}
+        else {
+            auto &d=Current();
+            if(autoRecalculate && d.needsRecalculate && !interacting && std::chrono::steady_clock::now()-d.changedAt>=std::chrono::milliseconds(250)) {
+                d.needsRecalculate=false;(void)Dispatch({{"operation","run"}});
+            } else if(autoRecalculateBand && d.needsBand && !interacting && std::chrono::steady_clock::now()-d.changedAt>=std::chrono::milliseconds(250)) {
+                d.needsBand=false;(void)Dispatch({{"operation","band"},{"voltage_V",d.biasVoltage_V}});
+            }
         }
         return;
-    } const auto snapshot=jobs->GetJob(active); if(!snapshot) return;
-    if(snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running) return;
+    }
+    const auto snapshot=jobs->GetJob(active);if(!snapshot || snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running) return;
     const auto op=pending->request.at("operation").get<std::string>();
+    auto &d=Device(pendingDevice);
     if(snapshot->status==JobStatus::Completed) {
-        if((op=="edit" || op=="layer") && !pending->request.value("history",false) && document!=pending->document)
-            (void)undo.PushExecuted(CreateUnique<EditRecord>(*this,document,pending->document,pending->request.value("gesture_id",std::string{})));
-        document=pending->document;
-        if(op=="run") {result=pending->output;bandResult=Json::object();}
-        if(op=="band") bandResult=pending->output;
-        if(op=="cv" || op=="cf") acResults[op]=pending->output;
-        if(op=="edit" || op=="layer" || op=="load") Changed();
-        if(op=="load") undo.Clear();
-        if(op=="load" || op=="save") { path=pending->request.at("path"); dirty=false; undo.MarkClean(); }
-        if(op=="edit" || op=="layer") dirty=!undo.IsClean();
-        status="Completed: "+op;if(pending->output.contains("validity_status")) status+=" | validity: "+pending->output.at("validity_status").get<std::string>(); response={{"ok",true},{"document",document},{"result",result},{"ac_results",acResults},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"band_result",bandResult},{"error",nullptr}};
-    } else {status=snapshot->errorMessage; response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);}
-    active=0; pending.reset();
+        if(op=="project_load" || op=="load") {
+            SetWorkspace(pending->workspace);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
+            path=pending->request.at("path");
+            if(std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
+            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();device->needsBand=false;device->needsRecalculate=false;device->selectedLayer=0;device->selectedInterface=-1;device->selectedBias=0;device->biasVoltage_V=0;}
+        } else if(op.starts_with("device_") || op=="project_edit") {
+            const auto before=project;SetWorkspace(pending->workspace);
+            if(op!="device_list") projectDirty=true;
+            if(op=="device_add" || op=="device_duplicate") Current().metadataDirty=true;
+            if(op=="device_update") Device(pending->request.value("device_id",project.active_device)).metadataDirty=true;
+            if(op=="device_remove") {(void)projectUndo.PushExecuted(CreateUnique<ProjectRecord>(*this,before,project));preferProjectUndo=true;}
+        } else if(op=="project_save" || (op=="save" && std::filesystem::path(pending->request.at("path").get<std::string>()).extension()==".scapslab")) {
+            path=pending->request.at("path");projectDirty=false;
+            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();}
+        } else {
+            if((op=="edit" || op=="layer") && !pending->request.value("history",false) && d.document!=pending->document) {
+                (void)d.undo.PushExecuted(CreateUnique<EditRecord>(*this,d.document,pending->document,pending->request.value("gesture_id",std::string{})));preferProjectUndo=false;
+            }
+            d.document=pending->document;
+            if(op=="run") {d.result=pending->output;d.bandResult=Json::object();}
+            if(op=="band") d.bandResult=pending->output;
+            if(op=="cv" || op=="cf") d.acResults[op]=pending->output;
+            if(op=="run" || op=="band" || op=="cv" || op=="cf") {d.status=pending->output.value("valid",false)?"solved":"failed";projectDirty=true;}
+            if(op=="edit" || op=="layer") {
+                d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.result=Json::object();d.bandResult=Json::object();d.acResults=Json::object();d.status="no results";d.dirty=!d.undo.IsClean();
+            }
+            if(op=="save" && project.devices.size()==1) {d.dirty=false;d.metadataDirty=false;d.undo.MarkClean();}
+        }
+        if(op=="load" || op=="project_load" || op=="save" || op=="project_save") {
+            const auto file=pending->request.at("path");recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
+        }
+        RefreshDirty();status="Completed: "+op;response=Snapshot();
+    } else {
+        if(op=="run" || op=="band" || op=="cv" || op=="cf") d.status=snapshot->status==JobStatus::Cancelled?(d.result.empty()?"no results":"solved"):"failed";
+        status=snapshot->errorMessage;response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);
+    }
+    if(pending->request.value("batch",false)) {
+        ++batchCompleted;batchResponse.push_back({{"device_id",pendingDevice},{"ok",response.at("ok")},{"error",response.at("error")}});
+        if(snapshot->status==JobStatus::Cancelled) runQueue.clear();
+        if(runQueue.empty()) {const bool ok=std::all_of(batchResponse.begin(),batchResponse.end(),[](const Json &r){return r.at("ok").get<bool>();});response=Snapshot();response["ok"]=ok;response["runs"]=batchResponse;if(!ok)response["error"]={{"code",snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed"},{"message","One or more device runs failed"}};}
+    }
+    active=0;pending.reset();
 }
 }
-
-
-
-
-

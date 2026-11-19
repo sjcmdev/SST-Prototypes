@@ -51,12 +51,12 @@ TEST(ScapsLab,SameSolveAsHeadlessKernelAndMesh) {
     const auto pc=scaps_core::physical_constants(p.constants_mode);
     const auto mesh=scaps_core::prepare_mesh(device,p.mesh,voltages,{p.temperature_K},p.solver,pc);
     const auto expected=scaps_core::solve_iv(device,mesh,voltages,p.temperature_K,p.solver,pc);
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     const auto r=Execute(w,{{"operation","run"}}); ASSERT_TRUE(r.at("ok").get<bool>())<<r.dump();
-    EXPECT_EQ(w.result.at("mesh_x_m").get<std::vector<double>>(),mesh.x_m);
-    ASSERT_EQ(w.result.at("points").size(),expected.size());
+    EXPECT_EQ(w.Current().result.at("mesh_x_m").get<std::vector<double>>(),mesh.x_m);
+    ASSERT_EQ(w.Current().result.at("points").size(),expected.size());
     for(std::size_t i=0;i<expected.size();++i) {
-        const auto &point=w.result.at("points")[i]; const auto &e=expected[i];
+        const auto &point=w.Current().result.at("points")[i]; const auto &e=expected[i];
         EXPECT_EQ(point.at("status"),scaps_core::to_string(e.status));
         EXPECT_EQ(point.at("x_m").get<std::vector<double>>(),e.state.x_m.empty()?mesh.x_m:e.state.x_m);
         if(e.status==scaps_core::SolverStatus::Converged) {
@@ -66,19 +66,19 @@ TEST(ScapsLab,SameSolveAsHeadlessKernelAndMesh) {
     }
 }
 TEST(ScapsLab,EditsStableIdsValidationAndCancellation) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
-    const auto original=w.document;
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    const auto original=w.Current().document;
     ASSERT_TRUE(Execute(w,{{"operation","layer"},{"action","add"}}).at("ok").get<bool>());
-    const auto id=w.document["layers"][1]["scapslab_id"];
+    const auto id=w.Current().document["layers"][1]["scapslab_id"];
     ASSERT_TRUE(Execute(w,{{"operation","layer"},{"action","move"},{"layer_id",id},{"index",0}}).at("ok").get<bool>());
-    EXPECT_EQ(w.document["layers"][0]["scapslab_id"],id);
+    EXPECT_EQ(w.Current().document["layers"][0]["scapslab_id"],id);
     ASSERT_TRUE(Execute(w,{{"operation","layer"},{"action","remove"},{"layer_id",id}}).at("ok").get<bool>());
-    EXPECT_EQ(w.document,original);
-    EXPECT_FALSE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",-1}}}}).at("ok").get<bool>()); EXPECT_EQ(w.document,original);
+    EXPECT_EQ(w.Current().document,original);
+    EXPECT_FALSE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",-1}}}}).at("ok").get<bool>()); EXPECT_EQ(w.Current().document,original);
     ASSERT_TRUE(w.jobs->PauseAllJobs()); ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>()); ASSERT_TRUE(w.jobs->ResumeAllJobs());
     while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_TRUE(w.result.empty());
+    EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_TRUE(w.Current().result.empty());
     auto bad=original;bad["temperature_K"]=-1;const auto path=Temp("scapslab-protected.yaml");
     std::string error,text;ASSERT_TRUE(TextFileIO::Save(Path{path},"original",error));EXPECT_THROW(WriteProject(bad,path.string()),std::exception);
     ASSERT_TRUE(TextFileIO::Load(Path{path},text,error));EXPECT_EQ(text,"original");std::filesystem::remove(path);
@@ -101,12 +101,12 @@ TEST(ScapsLab,ACMatchesCoreAndExports) {
     using namespace scaps_core;
     const auto p=load_device_project_yaml(SCAPSLAB_PROJECT);
     const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
-    Workflow w(CreateRef<JobSystem>(nullptr,1)); w.document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1)); w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     for(const auto *kind:{"cv","cf"}) {
         const Json request={{"operation",kind},{"start_V",-0.2},{"stop_V",0.2},{"step_V",0.2},{"frequency_Hz",1e4},
             {"voltage_V",0.1},{"start_Hz",10.0},{"stop_Hz",1e5},{"points",5},{"temperature_K",p.temperature_K}};
         const auto response=Execute(w,request); ASSERT_TRUE(response.at("ok").get<bool>())<<response.dump();
-        const auto &result=w.acResults.at(kind); const auto &points=result.at("points");
+        const auto &result=w.Current().acResults.at(kind); const auto &points=result.at("points");
         std::vector<double> volts,frequencies;
         for(const auto &point:points) {
             if(std::string(kind)=="cv") volts.push_back(-point.at("voltage_V").get<double>());
@@ -130,31 +130,31 @@ TEST(ScapsLab,ACMatchesCoreAndExports) {
         EXPECT_EQ(line,"point_id,voltage_V,frequency_Hz,temperature_K,capacitance_F,conductance_S,G_over_omega_F,inverse_C2_F_minus2,status,valid,validity_status,conservation_relative,area_m2");
         std::size_t rows=0; while(std::getline(stream,line)) ++rows; EXPECT_EQ(rows,points.size()); stream.close(); std::filesystem::remove(csv);
     }
-    const auto prior=w.acResults;
+    const auto prior=w.Current().acResults;
     EXPECT_FALSE(Execute(w,{{"operation","cf"},{"temperature_K",300},{"voltage_V",0},{"start_Hz",0},{"stop_Hz",1e6},{"points",10}}).at("ok").get<bool>());
     EXPECT_FALSE(Execute(w,{{"operation","cv"},{"temperature_K",300},{"start_V",0},{"stop_V",1},{"step_V",-0.1},{"frequency_Hz",1e3}}).at("ok").get<bool>());
     EXPECT_FALSE(Execute(w,{{"operation","cv"},{"temperature_K",300},{"start_V",1e20},{"stop_V",1e20+1e6},{"step_V",1000.0},{"frequency_Hz",1e3}}).at("ok").get<bool>());
     EXPECT_FALSE(Execute(w,{{"operation","cf"},{"temperature_K",300},{"voltage_V",0},{"start_Hz",1},{"stop_Hz",1e6},{"points",4294967299LL}}).at("ok").get<bool>());
-    EXPECT_EQ(w.acResults,prior);
+    EXPECT_EQ(w.Current().acResults,prior);
     ASSERT_TRUE(w.jobs->PauseAllJobs()); ASSERT_TRUE(w.Dispatch({{"operation","cf"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>()); ASSERT_TRUE(w.jobs->ResumeAllJobs());
     while(w.Busy()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_EQ(w.acResults,prior);
+    EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_EQ(w.Current().acResults,prior);
 }
 
 TEST(ScapsLab,UndoMergesOnlyOneGesture) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);const auto original=w.document;
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);const auto original=w.Current().document;
     for(int temperature:{301,302,303}) ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",temperature}}},{"gesture_id","drag-1"}}).at("ok").get<bool>());
-    EXPECT_EQ(w.undo.GetUndoDepth(),1u);
-    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.document,original);
-    ASSERT_TRUE(Execute(w,{{"operation","redo"}}).at("ok").get<bool>());EXPECT_EQ(w.document.at("temperature_K"),303);
+    EXPECT_EQ(w.Current().undo.GetUndoDepth(),1u);
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().document,original);
+    ASSERT_TRUE(Execute(w,{{"operation","redo"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().document.at("temperature_K"),303);
     ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",304}}},{"gesture_id","drag-2"}}).at("ok").get<bool>());
-    EXPECT_EQ(w.undo.GetUndoDepth(),2u);
+    EXPECT_EQ(w.Current().undo.GetUndoDepth(),2u);
     EXPECT_FALSE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",-1}}}}).at("ok").get<bool>());
-    EXPECT_EQ(w.undo.GetUndoDepth(),2u);
+    EXPECT_EQ(w.Current().undo.GetUndoDepth(),2u);
 }
 TEST(ScapsLab,AutoRecalculateCancelsAndDebounces) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     ASSERT_TRUE(w.Dispatch({{"operation","auto_recalculate"},{"enabled",true}}).at("ok").get<bool>());
     w.OnUpdate(0);EXPECT_FALSE(w.Busy());
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
@@ -162,47 +162,47 @@ TEST(ScapsLab,AutoRecalculateCancelsAndDebounces) {
     ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());
     ASSERT_TRUE(w.jobs->ResumeAllJobs());
     while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_EQ(w.jobs->GetJob(obsolete)->status,JobStatus::Cancelled);EXPECT_EQ(w.document.at("temperature_K"),301);
-    w.interacting=true;w.changedAt-=std::chrono::seconds(1);w.OnUpdate(0);EXPECT_FALSE(w.Busy());
-    w.interacting=false;w.changedAt=std::chrono::steady_clock::now();const auto start=w.changedAt;
+    EXPECT_EQ(w.jobs->GetJob(obsolete)->status,JobStatus::Cancelled);EXPECT_EQ(w.Current().document.at("temperature_K"),301);
+    w.interacting=true;w.Current().changedAt-=std::chrono::seconds(1);w.OnUpdate(0);EXPECT_FALSE(w.Busy());
+    w.interacting=false;w.Current().changedAt=std::chrono::steady_clock::now();const auto start=w.Current().changedAt;
     while(!w.Busy() && std::chrono::steady_clock::now()-start<std::chrono::seconds(5)) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.Busy());
     EXPECT_GE((std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()),250.0);
     while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.at("ok").get<bool>())<<w.response.dump();
-    EXPECT_GT(w.result.at("compute_time_ms").get<double>(),0);EXPECT_EQ(w.result.at("mesh_node_count"),w.result.at("mesh_x_m").size());
-    std::cout<<"Auto-recalculate compute_ms="<<w.result.at("compute_time_ms")<<"; edit-release-to-result_ms="<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<"; debounce_ms=250\n";
+    EXPECT_GT(w.Current().result.at("compute_time_ms").get<double>(),0);EXPECT_EQ(w.Current().result.at("mesh_node_count"),w.Current().result.at("mesh_x_m").size());
+    std::cout<<"Auto-recalculate compute_ms="<<w.Current().result.at("compute_time_ms")<<"; edit-release-to-result_ms="<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<"; debounce_ms=250\n";
     w.OnUpdate(0);EXPECT_FALSE(w.Busy());
 }
 
 TEST(ScapsLab,BandRecalculationUsesSelectedVoltageAndPreservesSweep) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     ASSERT_TRUE(Execute(w,{{"operation","run"}}).at("ok").get<bool>());
-    const auto sweep=w.result;
+    const auto sweep=w.Current().result;
     ASSERT_TRUE(Execute(w,{{"operation","band"},{"voltage_V",0.1}}).at("ok").get<bool>());
-    EXPECT_EQ(w.result,sweep);ASSERT_EQ(w.bandResult.at("points").size(),1u);
-    EXPECT_EQ(w.bandResult.at("points")[0].at("voltage_V"),0.1);
-    EXPECT_GT(w.bandResult.at("mesh_node_count").get<int>(),0);
+    EXPECT_EQ(w.Current().result,sweep);ASSERT_EQ(w.Current().bandResult.at("points").size(),1u);
+    EXPECT_EQ(w.Current().bandResult.at("points")[0].at("voltage_V"),0.1);
+    EXPECT_GT(w.Current().bandResult.at("mesh_node_count").get<int>(),0);
 }
 
 TEST(ScapsLab,QueuedEditsKeepSeparateGestures) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
     for(int value:{301,302}) ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",value}}},{"gesture_id","first"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",303}}},{"gesture_id","second"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_EQ(w.document.at("temperature_K"),303);EXPECT_EQ(w.undo.GetUndoDepth(),2u);
-    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.document.at("temperature_K"),302);
+    EXPECT_EQ(w.Current().document.at("temperature_K"),303);EXPECT_EQ(w.Current().undo.GetUndoDepth(),2u);
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().document.at("temperature_K"),302);
 }
 
 TEST(ScapsLab,FailedBiasPointsRemainMaskedAndIdentifiable) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
-    w.document["mesh"]["adaptivity_level"]="0";w.document["solver"]["max_newton_iterations"]=1;
-    w.document["solver"]["residual_tolerance"]=1e-30;
-    w.document["voltage"]={{"start_V",0.0},{"stop_V",0.8},{"step_V",0.4}};
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    w.Current().document["mesh"]["adaptivity_level"]="0";w.Current().document["solver"]["max_newton_iterations"]=1;
+    w.Current().document["solver"]["residual_tolerance"]=1e-30;
+    w.Current().document["voltage"]={{"start_V",0.0},{"stop_V",0.8},{"step_V",0.4}};
     const auto response=Execute(w,{{"operation","run"}});ASSERT_TRUE(response.at("ok").get<bool>())<<response.dump();
-    ASSERT_EQ(w.result.at("points").size(),3u);int failed=0;
-    for(const auto &point:w.result.at("points")) {
+    ASSERT_EQ(w.Current().result.at("points").size(),3u);int failed=0;
+    for(const auto &point:w.Current().result.at("points")) {
         EXPECT_TRUE(point.contains("bias_id"));
         if(point.at("status")!="Converged") {++failed;EXPECT_TRUE(point.at("J_A_m2").is_null());}
     }
@@ -210,16 +210,16 @@ TEST(ScapsLab,FailedBiasPointsRemainMaskedAndIdentifiable) {
 }
 
 TEST(ScapsLab,StructuralChangesDoNotAcceptStaleEditorSnapshots) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);const auto count=w.document.at("layers").size();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);const auto count=w.Current().document.at("layers").size();
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","layer"},{"action","add"}}).at("ok").get<bool>());
-    EXPECT_FALSE(w.Dispatch({{"operation","edit"},{"document",w.document}}).at("ok").get<bool>());
+    EXPECT_FALSE(w.Dispatch({{"operation","edit"},{"document",w.Current().document}}).at("ok").get<bool>());
     ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_EQ(w.document.at("layers").size(),count+1);
+    EXPECT_EQ(w.Current().document.at("layers").size(),count+1);
 }
 
 TEST(ScapsLab,DefectEditorsPreviewResistanceRoundtripAndStaleExport) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
-    auto draft=w.document;draft["layers"][0]["defects"]=Json::array();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    auto draft=w.Current().document;draft["layers"][0]["defects"]=Json::array();
     for(const auto *shape:{"single","uniform","gaussian","cb_tail","vb_tail"}) {
         auto d=NewDefect();d["scapslab_id"]=std::string("test-")+shape;d["energy_distribution"]=shape;d["Nt_m3"]=1e16;
         if(std::string(shape)=="cb_tail") d["energy_reference"]="relative_to_Ec";
@@ -232,27 +232,27 @@ TEST(ScapsLab,DefectEditorsPreviewResistanceRoundtripAndStaleExport) {
     ASSERT_TRUE(Execute(w,{{"operation","edit"},{"document",draft}}).at("ok").get<bool>());
     const auto path=Temp("scapslab-editors.yaml");ASSERT_TRUE(Execute(w,{{"operation","save"},{"path",path.string()}}).at("ok").get<bool>());EXPECT_EQ(ReadProject(path.string()),draft);
     ASSERT_TRUE(Execute(w,{{"operation","band"},{"voltage_V",0.05}}).at("ok").get<bool>())<<w.response.dump();
-    const auto &point=w.bandResult.at("points")[0];EXPECT_EQ(point.at("defect_previews").size(),6u);
+    const auto &point=w.Current().bandResult.at("points")[0];EXPECT_EQ(point.at("defect_previews").size(),6u);
     for(const auto &curve:point.at("defect_previews")) {
         EXPECT_EQ(curve.at("band_edges_eV").size(),curve.at("sheet").get<bool>()?4u:2u);
         EXPECT_FALSE(curve.at("occupation").empty());
         for(const auto &f:curve.at("occupation")) if(f.is_number()) {EXPECT_GE(f.get<double>(),0);EXPECT_LE(f.get<double>(),1);}
         if(!curve.at("single").get<bool>()) {EXPECT_EQ(curve.at("energy_eV").size(),401u);for(const auto &n:curve.at(curve.at("sheet").get<bool>()?"density_m2_eV":"density_m3_eV")) EXPECT_GE(n.get<double>(),0);}
     }
-    EXPECT_EQ(w.bandResult.at("project_snapshot"),draft);EXPECT_TRUE(w.bandResult.contains("validity_status"));
+    EXPECT_EQ(w.Current().bandResult.at("project_snapshot"),draft);EXPECT_TRUE(w.Current().bandResult.contains("validity_status"));
     EXPECT_FALSE(Execute(w,{{"operation","layer"},{"action","remove"},{"layer_id","layer-2"}}).at("ok").get<bool>());
-    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());EXPECT_TRUE(w.bandResult.empty());
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());EXPECT_TRUE(w.Current().bandResult.empty());
     EXPECT_FALSE(Execute(w,{{"operation","export_ac"},{"kind","cv"},{"path",Temp("stale.csv").string()}}).at("ok").get<bool>());
     std::filesystem::remove(path);
 }
 
 TEST(ScapsLab,AmphotericPreviewAndDuplicateDefectIds) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     auto d=NewDefect();d["amphoteric"]=true;d["Nt_m3"]=1e16;
-    auto draft=w.document;draft["layers"][0]["defects"]=Json::array({d,d});EXPECT_THROW((void)Model(draft),std::invalid_argument);
+    auto draft=w.Current().document;draft["layers"][0]["defects"]=Json::array({d,d});EXPECT_THROW((void)Model(draft),std::invalid_argument);
     draft["layers"][0]["defects"]=Json::array({d});ASSERT_TRUE(Execute(w,{{"operation","edit"},{"document",draft}}).at("ok").get<bool>());
     ASSERT_TRUE(Execute(w,{{"operation","band"},{"voltage_V",0.05}}).at("ok").get<bool>())<<w.response.dump();
-    const auto &c=w.bandResult.at("points")[0].at("defect_previews")[0];EXPECT_TRUE(c.at("amphoteric").get<bool>());EXPECT_TRUE(c.contains("second_level_energy_eV"));
+    const auto &c=w.Current().bandResult.at("points")[0].at("defect_previews")[0];EXPECT_TRUE(c.at("amphoteric").get<bool>());EXPECT_TRUE(c.contains("second_level_energy_eV"));
     ASSERT_EQ(c.at("occupation").size(),1u);EXPECT_GE(c.at("occupation")[0].get<double>(),0);EXPECT_LE(c.at("occupation")[0].get<double>(),1);
 }
 
@@ -271,3 +271,103 @@ TEST(ScapsLab,DefectPreviewFollowsSelectedBiasInsteadOfStaleBand) {
     EXPECT_EQ(PointAtBias(Json::object(),band,0).at("bias_id"),"band");
     EXPECT_EQ(PointAtBias(sweep,Json::object(),999).at("bias_id"),"iv-1");
 }
+
+TEST(ScapsLab,MultiDeviceIsolationHistoryAndOwnership) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);const auto first=w.project.active_device;
+    ASSERT_TRUE(Execute(w,{{"operation","run"}}).at("ok").get<bool>());const auto firstResult=w.Current().result;
+    ASSERT_TRUE(Execute(w,{{"operation","cf"},{"temperature_K",300},{"voltage_V",0},{"start_Hz",10},{"stop_Hz",1e4},{"points",3}}).at("ok").get<bool>());const auto firstAc=w.Current().acResults;
+    ASSERT_TRUE(Execute(w,{{"operation","device_duplicate"},{"name","Second"}}).at("ok").get<bool>())<<w.response.dump();const auto second=w.project.active_device;
+    EXPECT_NE(first,second);EXPECT_TRUE(w.Current().result.empty());EXPECT_TRUE(w.Current().acResults.empty());
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());
+    EXPECT_EQ(w.Device(first).result,firstResult);EXPECT_EQ(w.Device(first).acResults,firstAc);EXPECT_EQ(w.Current().undo.GetUndoDepth(),1u);EXPECT_TRUE(w.Current().dirty);
+    ASSERT_TRUE(Execute(w,{{"operation","device_select"},{"device_id",first}}).at("ok").get<bool>());
+    EXPECT_EQ(w.Current().undo.GetUndoDepth(),0u);EXPECT_FALSE(w.Current().dirty);
+    ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.Dispatch({{"operation","device_select"},{"device_id",second}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_TRUE(w.Current().result.empty());EXPECT_EQ(w.Device(first).result.at("points"),firstResult.at("points"));
+    ASSERT_TRUE(Execute(w,{{"operation","device_remove"},{"device_id",second}}).at("ok").get<bool>());
+    EXPECT_EQ(w.project.devices.size(),1u);ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());
+    EXPECT_EQ(w.project.devices.size(),2u);EXPECT_EQ(w.Device(second).undo.GetUndoDepth(),1u);
+    ASSERT_TRUE(Execute(w,{{"operation","device_select"},{"device_id",second}}).at("ok").get<bool>());w.preferProjectUndo=false;
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().document,w.Device(first).document);
+    EXPECT_EQ(w.Device(first).result.at("points"),firstResult.at("points"));
+    ASSERT_TRUE(Execute(w,{{"operation","run_all"}}).at("ok").get<bool>())<<w.response.dump();EXPECT_EQ(w.response.at("runs").size(),2u);
+    ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run_all"}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>());ASSERT_TRUE(w.jobs->ResumeAllJobs());
+    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_TRUE(w.runQueue.empty());EXPECT_EQ(w.response.at("error").at("code"),"cancelled");EXPECT_EQ(w.response.at("runs").size(),1u);
+}
+TEST(ScapsLab,EveryExampleSolvesAndRoundtripsBitwise) {
+    std::size_t projects=0,devices=0;
+    for(const auto &entry:std::filesystem::directory_iterator(SCAPSLAB_EXAMPLES)) if(entry.path().extension()==".scapslab") {
+        ++projects;Workflow w(CreateRef<JobSystem>(nullptr,1));
+        ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",entry.path().string()}}).at("ok").get<bool>())<<entry.path()<<w.response.dump();
+        if(std::getenv("SCAPSLAB_WRITE_STORED_EXAMPLE")) {
+            const auto deviceFile=Temp("scapslab-example-normalize.yaml");
+            for(auto &d:w.project.devices) {WriteProject(d->document,deviceFile.string());d->document=ReadProject(deviceFile.string());}
+            std::filesystem::remove(deviceFile);
+            if(entry.path().filename()!="07-pn-compare-with-results.scapslab") ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",entry.path().string()}}).at("ok").get<bool>());
+        }
+        std::vector<std::string> originals;for(const auto &d:w.project.devices){originals.push_back(d->document.dump());++devices;}
+        ASSERT_TRUE(Execute(w,{{"operation","run_all"}}).at("ok").get<bool>())<<entry.path()<<w.response.dump();
+        if(entry.path().filename()=="05-capacitance-ready.scapslab") for(const auto *kind:{"cv","cf"}) {
+            ASSERT_TRUE(Execute(w,{{"operation",kind},{"temperature_K",300},{"start_V",-0.1},{"stop_V",0.1},{"step_V",0.1},{"frequency_Hz",1e4},{"voltage_V",0},{"start_Hz",10},{"stop_Hz",1e4},{"points",3}}).at("ok").get<bool>())<<w.response.dump();
+            for(const auto &point:w.Current().acResults.at(kind).at("points")) ASSERT_EQ(point.at("status"),"Converged");
+        }
+        const auto acBefore=w.Current().acResults;
+        std::vector<Json> solved;for(const auto &d:w.project.devices) {solved.push_back(d->result.at("points"));for(const auto &p:d->result.at("points")) ASSERT_EQ(p.at("status"),"Converged")<<entry.path()<<p.at("voltage_V");}
+        if(std::getenv("SCAPSLAB_WRITE_STORED_EXAMPLE") && entry.path().filename()=="07-pn-compare-with-results.scapslab") {
+            ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",entry.path().string()}}).at("ok").get<bool>());
+        }
+        const auto target=Temp("scapslab-example-roundtrip.scapslab");
+        ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",target.string()}}).at("ok").get<bool>());
+        ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",target.string()}}).at("ok").get<bool>());
+        EXPECT_EQ(w.Current().acResults,acBefore);
+        for(std::size_t i=0;i<w.project.devices.size();++i) {EXPECT_EQ(w.project.devices[i]->document.dump(),originals[i]);EXPECT_EQ(w.project.devices[i]->result.at("points").dump(),solved[i].dump());}
+        ASSERT_TRUE(Execute(w,{{"operation","run_all"}}).at("ok").get<bool>());
+        for(std::size_t i=0;i<w.project.devices.size();++i) EXPECT_EQ(w.project.devices[i]->result.at("points").dump(),solved[i].dump())<<entry.path();
+        std::filesystem::remove(target);
+    }
+    EXPECT_EQ(projects,7u);EXPECT_GE(devices,10u);
+}
+TEST(ScapsLab,LegacyMigrationAndInvalidWorkspaceAreTransactional) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",SCAPSLAB_PROJECT}}).at("ok").get<bool>());
+    ASSERT_EQ(w.project.devices.size(),1u);EXPECT_EQ(w.Current().document,ReadProject(SCAPSLAB_PROJECT));EXPECT_EQ(std::filesystem::path(w.path).extension(),".scapslab");
+    auto workspace=w.Workspace();const auto original=workspace;
+    workspace["devices"].push_back(workspace["devices"][0]);EXPECT_THROW(w.SetWorkspace(workspace),std::invalid_argument);EXPECT_EQ(w.Workspace(),original);
+    workspace=original;workspace["compare_set"]={"missing"};EXPECT_THROW(w.SetWorkspace(workspace),std::invalid_argument);EXPECT_EQ(w.Workspace(),original);
+    workspace=original;workspace["devices"][0]["colour"]={1,0,-1,1};EXPECT_THROW(w.SetWorkspace(workspace),std::invalid_argument);EXPECT_EQ(w.Workspace(),original);
+    EXPECT_FALSE(Execute(w,{{"operation","device_remove"}}).at("ok").get<bool>());EXPECT_EQ(w.Workspace(),original);
+    workspace=original;workspace["devices"][0]["result"]={{"provenance",{{"device_hash",DocumentHash(w.Current().document)},{"solver_version","test"},{"time_unix_ms",0}}},{"points",Json::array()}};
+    EXPECT_THROW(w.SetWorkspace(workspace),std::invalid_argument);EXPECT_EQ(w.Workspace(),original);
+    const Json heterogeneous={{"points",Json::array({{{"a",1}},{{"b",2}}})},{"ui",{{"points",Json::array({1,2})}}}};
+    EXPECT_EQ(UnpackResults(PackResults(heterogeneous)),heterogeneous);
+    auto columns=PackResults(Json{{"points",Json::array({{{"a",1.0},{"b",2}},{{"a",2.0},{"b",3}}})}});
+    EXPECT_EQ(UnpackResults(columns).at("points")[0].at("a").dump(),"1.0");columns["points"]["count"]=3;EXPECT_THROW((void)UnpackResults(columns),std::invalid_argument);
+}
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+TEST(ScapsLab,AtomicSaveChild) {
+    const char *target=std::getenv("SCAPSLAB_ATOMIC_TARGET");if(!target) return;
+    const std::string text(128*1024*1024,'x');std::string error;ASSERT_TRUE(TextFileIO::Save(Path{target},text,error))<<error;
+}
+TEST(ScapsLab,KilledDuringSavePreservesPreviousProject) {
+    const auto dir=Temp("scapslab-atomic-kill");std::filesystem::create_directories(dir);const auto target=dir/"project.scapslab";
+    const std::string previous="previous complete project";std::string error;ASSERT_TRUE(TextFileIO::Save(Path{target},previous,error));
+    wchar_t executable[32768];ASSERT_GT(GetModuleFileNameW(nullptr,executable,32768),0u);
+    std::wstring command=L"\""+std::wstring(executable)+L"\" --gtest_filter=ScapsLab.AtomicSaveChild";
+    _putenv_s("SCAPSLAB_ATOMIC_TARGET",target.string().c_str());STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION process{};
+    const bool started=CreateProcessW(nullptr,command.data(),nullptr,nullptr,FALSE,CREATE_NO_WINDOW,nullptr,nullptr,&startup,&process);_putenv_s("SCAPSLAB_ATOMIC_TARGET","");ASSERT_TRUE(started);
+    bool sawTemporary=false;const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(15);
+    while(std::chrono::steady_clock::now()<deadline && WaitForSingleObject(process.hProcess,0)==WAIT_TIMEOUT) {
+        for(const auto &entry:std::filesystem::directory_iterator(dir)) if(entry.path().filename().string().starts_with("project.scapslab.tmp-")) {sawTemporary=true;TerminateProcess(process.hProcess,99);break;}
+        if(sawTemporary) break;
+    }
+    if(!sawTemporary) TerminateProcess(process.hProcess,99);WaitForSingleObject(process.hProcess,5000);CloseHandle(process.hThread);CloseHandle(process.hProcess);
+    ASSERT_TRUE(sawTemporary)<<"Child must be interrupted during TextFileIO temporary write";
+    std::string contents;ASSERT_TRUE(TextFileIO::Load(Path{target},contents,error));EXPECT_EQ(contents,previous);
+    for(const auto &entry:std::filesystem::directory_iterator(dir)) std::filesystem::remove(entry.path());std::filesystem::remove(dir);
+}
+#endif
