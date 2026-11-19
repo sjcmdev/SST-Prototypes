@@ -141,3 +141,78 @@ TEST(ScapsLab,ACMatchesCoreAndExports) {
     while(w.Busy()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_EQ(w.acResults,prior);
 }
+
+TEST(ScapsLab,UndoMergesOnlyOneGesture) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);const auto original=w.document;
+    for(int temperature:{301,302,303}) ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",temperature}}},{"gesture_id","drag-1"}}).at("ok").get<bool>());
+    EXPECT_EQ(w.undo.GetUndoDepth(),1u);
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.document,original);
+    ASSERT_TRUE(Execute(w,{{"operation","redo"}}).at("ok").get<bool>());EXPECT_EQ(w.document.at("temperature_K"),303);
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",304}}},{"gesture_id","drag-2"}}).at("ok").get<bool>());
+    EXPECT_EQ(w.undo.GetUndoDepth(),2u);
+    EXPECT_FALSE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",-1}}}}).at("ok").get<bool>());
+    EXPECT_EQ(w.undo.GetUndoDepth(),2u);
+}
+TEST(ScapsLab,AutoRecalculateCancelsAndDebounces) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    ASSERT_TRUE(w.Dispatch({{"operation","auto_recalculate"},{"enabled",true}}).at("ok").get<bool>());
+    w.OnUpdate(0);EXPECT_FALSE(w.Busy());
+    ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
+    const auto obsolete=w.active;
+    ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.jobs->ResumeAllJobs());
+    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(w.jobs->GetJob(obsolete)->status,JobStatus::Cancelled);EXPECT_EQ(w.document.at("temperature_K"),301);
+    w.interacting=true;w.changedAt-=std::chrono::seconds(1);w.OnUpdate(0);EXPECT_FALSE(w.Busy());
+    w.interacting=false;w.changedAt=std::chrono::steady_clock::now();const auto start=w.changedAt;
+    while(!w.Busy() && std::chrono::steady_clock::now()-start<std::chrono::seconds(5)) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.Busy());
+    EXPECT_GE((std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()),250.0);
+    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.response.at("ok").get<bool>())<<w.response.dump();
+    EXPECT_GT(w.result.at("compute_time_ms").get<double>(),0);EXPECT_EQ(w.result.at("mesh_node_count"),w.result.at("mesh_x_m").size());
+    std::cout<<"Auto-recalculate compute_ms="<<w.result.at("compute_time_ms")<<"; edit-release-to-result_ms="<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<"; debounce_ms=250\n";
+    w.OnUpdate(0);EXPECT_FALSE(w.Busy());
+}
+
+TEST(ScapsLab,BandRecalculationUsesSelectedVoltageAndPreservesSweep) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    ASSERT_TRUE(Execute(w,{{"operation","run"}}).at("ok").get<bool>());
+    const auto sweep=w.result;
+    ASSERT_TRUE(Execute(w,{{"operation","band"},{"voltage_V",0.1}}).at("ok").get<bool>());
+    EXPECT_EQ(w.result,sweep);ASSERT_EQ(w.bandResult.at("points").size(),1u);
+    EXPECT_EQ(w.bandResult.at("points")[0].at("voltage_V"),0.1);
+    EXPECT_GT(w.bandResult.at("mesh_node_count").get<int>(),0);
+}
+
+TEST(ScapsLab,QueuedEditsKeepSeparateGestures) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
+    for(int value:{301,302}) ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",value}}},{"gesture_id","first"}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",303}}},{"gesture_id","second"}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(w.document.at("temperature_K"),303);EXPECT_EQ(w.undo.GetUndoDepth(),2u);
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.document.at("temperature_K"),302);
+}
+
+TEST(ScapsLab,FailedBiasPointsRemainMaskedAndIdentifiable) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);
+    w.document["mesh"]["adaptivity_level"]="0";w.document["solver"]["max_newton_iterations"]=1;
+    w.document["solver"]["residual_tolerance"]=1e-30;
+    w.document["voltage"]={{"start_V",0.0},{"stop_V",0.8},{"step_V",0.4}};
+    const auto response=Execute(w,{{"operation","run"}});ASSERT_TRUE(response.at("ok").get<bool>())<<response.dump();
+    ASSERT_EQ(w.result.at("points").size(),3u);int failed=0;
+    for(const auto &point:w.result.at("points")) {
+        EXPECT_TRUE(point.contains("bias_id"));
+        if(point.at("status")!="Converged") {++failed;EXPECT_TRUE(point.at("J_A_m2").is_null());}
+    }
+    EXPECT_GT(failed,0);
+}
+
+TEST(ScapsLab,StructuralChangesDoNotAcceptStaleEditorSnapshots) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.document=ReadProject(SCAPSLAB_PROJECT);const auto count=w.document.at("layers").size();
+    ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","layer"},{"action","add"}}).at("ok").get<bool>());
+    EXPECT_FALSE(w.Dispatch({{"operation","edit"},{"document",w.document}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(w.document.at("layers").size(),count+1);
+}

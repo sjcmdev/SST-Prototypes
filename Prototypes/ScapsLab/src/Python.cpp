@@ -16,7 +16,7 @@ NB_MODULE(sst_scapslab, m) {
             catch(const std::exception &e) {return Json{{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}}.dump();}
         })
         .def("poll",[](Workflow &s) {
-            s.OnUpdate(0); Json j={{"running",s.Busy()},{"response",s.response}};
+            s.OnUpdate(0); Json j={{"running",s.Busy()},{"auto_recalculate_pending",(s.autoRecalculate && s.needsRecalculate) || (s.autoRecalculateBand && s.needsBand)},{"status",s.status},{"response",s.response}};
             if(s.active) { const auto p=s.jobs->GetJob(s.active); if(p) j["progress"]={{"completed",p->completedWork},{"total",p->totalWork},{"stage",p->currentStage}}; }
             return j.dump();
         });

@@ -6,9 +6,10 @@ class Panel final : public EditorWindow {
 public:
     Panel(Workflow *workflow, int view, bool gallery=false);
     void RenderContent() override;
+    Workflow *GetWorkflow() const {return w;}
 private:
     Workflow *w;
-    int view, selected=0, bias=0;
+    int view;
     bool absoluteLog=false, placed=false, gallery=false;
     char file[1024]{}, csvFile[1024]="scapslab-ac.csv";
     Json acRequest;

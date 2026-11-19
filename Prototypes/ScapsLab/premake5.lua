@@ -1,5 +1,5 @@
 ﻿newoption { trigger = "scaps-core", value = "PATH", description = "Read-only scaps_core checkout (default ../scaps_core)" }
-local scaps = path.getabsolute(_OPTIONS["scaps-core"] or (_SST_ROOT .. "/../scaps_core"))
+local scaps = path.getabsolute(_OPTIONS["scaps-core"] or "../scaps_core", _SST_ROOT)
 local root = _SST_ROOT .. "/Prototypes/ScapsLab"
 project "ScapsCore"
     location (_SST_ROOT .. "/build/generated/%{_ACTION}/%{prj.name}")
@@ -44,7 +44,7 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         debugdir ("%{cfg.targetdir}")
         postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/PrototypeTemplate/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/python" "%{cfg.targetdir}/python"' }
     elseif name == "ScapsLabTests" then
-        files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Python.cpp" }
+        files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp" }
         links { "GoogleTest", "GoogleTestMain" }
     else
         files { scaps .. "/apps/scaps_headless.cpp" }

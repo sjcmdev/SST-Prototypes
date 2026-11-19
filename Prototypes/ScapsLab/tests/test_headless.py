@@ -57,3 +57,15 @@ for kind in ('cv', 'cf'):
             assert float(row['capacitance_F']) == point['capacitance_F']
             assert float(row['conductance_S']) == point['conductance_S']
 print('Python AC commands + CSV: C-V and C-f verified', flush=True)
+
+assert session.execute(dict(operation='auto_recalculate', enabled=False, band_enabled=False))['ok']
+original = session.execute(dict(operation='inspect'))['document']
+for temperature in (301, 302):
+    assert session.execute(dict(operation='edit', patch={'temperature_K': temperature}, gesture_id='python-drag'))['ok']
+assert session.execute(dict(operation='undo'))['document'] == original
+assert session.execute(dict(operation='redo'))['document']['temperature_K'] == 302
+band = session.execute(dict(operation='band', voltage_V=0.1))
+assert band['ok'] and len(band['band_result']['points']) == 1, band
+assert band['band_result']['points'][0]['voltage_V'] == 0.1
+assert band['band_result']['compute_time_ms'] > 0
+print('Python undo merge + redo + band calculation verified', flush=True)

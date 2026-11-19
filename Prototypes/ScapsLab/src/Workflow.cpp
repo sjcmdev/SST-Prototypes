@@ -50,6 +50,26 @@ void Positive(double v,const char *field,bool zero=false) {
     if (!std::isfinite(v) || (zero ? v<0 : v<=0)) throw std::invalid_argument(std::string("Invalid ")+field);
 }
 Json Failure(const char *code,const std::string &message) { return {{"ok",false},{"error",{{"code",code},{"message",message}}}}; }
+class EditRecord final : public ICommand {
+    Workflow &w;
+    Json before, after;
+    std::string gesture;
+    Result<void> Apply(const Json &d) {
+        w.pending=CreateRef<Operation>(w.document,Json{{"operation","edit"},{"document",d},{"history",true}});
+        w.active=w.jobs->Submit(w.pending); return {};
+    }
+public:
+    EditRecord(Workflow &w,Json before,Json after,std::string gesture):w(w),before(std::move(before)),after(std::move(after)),gesture(std::move(gesture)) {}
+    std::string Description() const override {return "Edit ScapsLab parameters";}
+    bool IsUndoable() const noexcept override {return true;}
+    Result<void> Execute(CommandContext &) override {return Apply(after);}
+    Result<void> Undo(CommandContext &) override {return Apply(before);}
+    bool CanMerge(const ICommand &next) const noexcept override {
+        const auto *edit=dynamic_cast<const EditRecord*>(&next);
+        return edit && !gesture.empty() && gesture==edit->gesture;
+    }
+    Result<void> Merge(std::unique_ptr<ICommand> next) override {after=static_cast<EditRecord&>(*next).after;return {};}
+};
 class Command final : public ICommand {
     Workflow &w;
 public:
@@ -62,7 +82,40 @@ public:
             if (!w.active || !w.jobs->RequestCancel(w.active)) return StructuredError{ErrorCategory::Validation,Severity::Error,"No running job","No running job","Start a job","ScapsLab","not_running"};
             return {};
         }
+        const std::string op=r->at("operation");
+        if(op=="auto_recalculate") {
+            const bool automatic=r->at("enabled").get<bool>(), band=r->value("band_enabled",w.autoRecalculateBand);
+            w.autoRecalculate=automatic;w.autoRecalculateBand=band;
+            if(w.autoRecalculate || w.autoRecalculateBand) w.Changed();
+            w.response={{"ok",true},{"auto_recalculate",w.autoRecalculate},{"auto_recalculate_band",w.autoRecalculateBand},{"error",nullptr}};
+            w.status=(w.autoRecalculate || w.autoRecalculateBand)?"Auto-recalculate enabled (250 ms debounce)":"Auto-recalculate disabled"; return {};
+        }
+        if(w.active && op=="edit" && (w.pending->request.at("operation")=="load" || w.pending->request.at("operation")=="layer"))
+            return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","Project structure is changing; wait before editing","Wait for the operation","ScapsLab","busy"};
+        if(w.Busy() && op=="edit") {
+            auto candidate=w.document;
+            if(w.pending && w.pending->request.at("operation")=="edit") {
+                const auto &edit=w.pending->request;
+                if(edit.contains("document")) candidate=edit.at("document");else candidate.update(edit.at("patch"),true);
+            }
+            if(!w.edits.empty()) candidate=w.edits.back().at("document");
+            if(r->contains("document")) candidate=r->at("document");else candidate.update(r->at("patch"),true);
+            auto edit=*r;edit["document"]=std::move(candidate);
+            const auto gesture=edit.value("gesture_id",std::string{});
+            if(!gesture.empty() && !w.edits.empty() && w.edits.back().value("gesture_id",std::string{})==gesture) w.edits.back()=std::move(edit);
+            else w.edits.push_back(std::move(edit));
+            if(w.active && (w.pending->request.at("operation")=="run" || w.pending->request.at("operation")=="band" || w.pending->request.at("operation")=="cv" || w.pending->request.at("operation")=="cf")) (void)w.jobs->RequestCancel(w.active);
+            w.changedAt=std::chrono::steady_clock::now(); return {};
+        }
         if (w.Busy()) return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","A job is still active","Wait or cancel","ScapsLab","busy"};
+        if(op=="undo" || op=="redo") {
+            const auto result=op=="undo"?w.undo.Undo():w.undo.Redo();
+            if(!result) return result;
+            w.status=w.active?"Applying history":"No history available";
+            w.response={{"ok",true},{"document",w.document},{"error",nullptr}};return {};
+        }
+        if(op=="run") {w.needsRecalculate=false;w.needsBand=false;}
+        if(op=="band") w.needsBand=false;
         w.pending=CreateRef<Operation>(w.document,*r); w.pending->acResults=w.acResults; w.response=Json();
         w.active=w.jobs->Submit(w.pending); w.status="Running"; return {};
     }
@@ -115,6 +168,7 @@ Json ReadProject(const std::string &path) {
 void WriteProject(const Json &j,const std::string &path) { (void)Model(j); SaveText(Path{path}.Native(),Text(j)); }
 void Operation::Execute(JobContext &ctx) {
     using namespace scaps_core;
+    const auto started=std::chrono::steady_clock::now();
     ctx.ThrowIfCancellationRequested(); const std::string op=request.at("operation");
     if (op=="load") document=ReadProject(request.at("path").get<std::string>());
     else if (op=="save") WriteProject(document,request.at("path").get<std::string>());
@@ -193,14 +247,15 @@ void Operation::Execute(JobContext &ctx) {
                 {"inverse_C2_F_minus2",finite(1/(ac.C_F*ac.C_F))},{"status",to_string(ac.status)},{"conservation_relative",finite(ac.current_conservation_relative)}});
             ctx.SetProgress(float(i+1),float(total));
         }
-    } else if (op=="run") {
+    } else if (op=="run" || op=="band") {
         const auto p=Model(document); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
-        auto volts=make_voltage_list(p.voltage); for(auto &v:volts) v=-v;
+        auto volts=op=="band"?std::vector<double>{request.at("voltage_V").get<double>()}:make_voltage_list(p.voltage);
+        for(auto &v:volts) {if(!std::isfinite(v)) throw std::invalid_argument("Invalid voltage_V");v=-v;}
         ctx.SetStage("Preparing mesh (cancel checked after preparation)");
         const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);
         ctx.ThrowIfCancellationRequested(); ctx.SetStage("Equilibrium");
         const auto eq=solve_equilibrium(device,mesh,p.temperature_K,p.solver,pc); auto previous=eq.state;
-        output={{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
+        output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
         for(std::size_t i=0;i<volts.size();++i) {
             ctx.ThrowIfCancellationRequested(); ctx.SetStage("I-V point "+std::to_string(i+1)+" / "+std::to_string(volts.size()));
             IVPoint pt;
@@ -224,10 +279,14 @@ void Operation::Execute(JobContext &ctx) {
             ctx.SetProgress(float(i+1),float(volts.size()));
         }
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
+    if(op=="run" || op=="band" || op=="cv" || op=="cf") {
+        output["compute_time_ms"]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+        output["mesh_node_count"]=output.at("mesh_x_m").size();
+    }
     if(op!="save" && op!="export_ac") ctx.ThrowIfCancellationRequested();
 }
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()) {
-    for(const auto *op:{"load","save","edit","layer","run","cv","cf","export_ac","inspect","cancel"}) {
+    for(const auto *op:{"load","save","edit","layer","run","cv","cf","export_ac","inspect","cancel","undo","redo","auto_recalculate","band"}) {
         const auto registered=commands->Register({CommandID{std::string("scapslab.")+op},std::string("ScapsLab ")+op,"ScapsLab","",{},CommandFlags::AsyncCapable},
             [this](CommandContext &){return CreateUnique<Command>(*this);});
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
@@ -237,22 +296,41 @@ Workflow::~Workflow() { if(active) { (void)jobs->RequestCancel(active); while(ac
 Json Workflow::Dispatch(const Json &r) {
     try { CommandContext c; c.Set("request",r);
         const auto out=commands->Execute(CommandID{"scapslab."+r.at("operation").get<std::string>()},std::move(c));
-        if(!out) return Failure("command_rejected",out.Error().technicalDetails);
+        if(!out) {status=out.Error().technicalDetails; return Failure("command_rejected",status);}
         return {{"ok",true},{"job_id",active},{"error",nullptr}};
     } catch(const std::exception &e) {return Failure("invalid_request",e.what());}
 }
+void Workflow::Changed() {
+    needsRecalculate=true;needsBand=true;bandResult=Json::object(); changedAt=std::chrono::steady_clock::now();
+    result=Json::object(); acResults=Json::object();
+}
 void Workflow::OnUpdate(float) {
-    if(!active) return; const auto snapshot=jobs->GetJob(active); if(!snapshot) return;
+    if(!active) {
+        if(!edits.empty()) {
+            pending=CreateRef<Operation>(document,std::move(edits.front()));edits.pop_front();
+            active=jobs->Submit(pending);status="Applying queued edit";response=Json();
+        }
+        else if(autoRecalculate && needsRecalculate && !interacting && std::chrono::steady_clock::now()-changedAt>=std::chrono::milliseconds(250)) {
+            needsRecalculate=false; (void)Dispatch({{"operation","run"}});
+        } else if(autoRecalculateBand && needsBand && !interacting && std::chrono::steady_clock::now()-changedAt>=std::chrono::milliseconds(250)) {
+            needsBand=false;(void)Dispatch({{"operation","band"},{"voltage_V",biasVoltage_V}});
+        }
+        return;
+    } const auto snapshot=jobs->GetJob(active); if(!snapshot) return;
     if(snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running) return;
     const auto op=pending->request.at("operation").get<std::string>();
     if(snapshot->status==JobStatus::Completed) {
+        if((op=="edit" || op=="layer") && !pending->request.value("history",false) && document!=pending->document)
+            (void)undo.PushExecuted(CreateUnique<EditRecord>(*this,document,pending->document,pending->request.value("gesture_id",std::string{})));
         document=pending->document;
-        if(op=="run") result=pending->output;
+        if(op=="run") {result=pending->output;bandResult=Json::object();}
+        if(op=="band") bandResult=pending->output;
         if(op=="cv" || op=="cf") acResults[op]=pending->output;
-        if(op=="edit" || op=="layer" || op=="load") {result=Json::object();acResults=Json::object();}
-        if(op=="load" || op=="save") { path=pending->request.at("path"); dirty=false; }
-        if(op=="edit" || op=="layer") dirty=true;
-        status="Completed: "+op; response={{"ok",true},{"document",document},{"result",result},{"ac_results",acResults},{"error",nullptr}};
+        if(op=="edit" || op=="layer" || op=="load") Changed();
+        if(op=="load") undo.Clear();
+        if(op=="load" || op=="save") { path=pending->request.at("path"); dirty=false; undo.MarkClean(); }
+        if(op=="edit" || op=="layer") dirty=!undo.IsClean();
+        status="Completed: "+op; response={{"ok",true},{"document",document},{"result",result},{"ac_results",acResults},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"band_result",bandResult},{"error",nullptr}};
     } else {status=snapshot->errorMessage; response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);}
     active=0; pending.reset();
 }

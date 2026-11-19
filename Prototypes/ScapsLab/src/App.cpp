@@ -15,20 +15,26 @@ class DefaultLayout final : public Layer {
 public:
     DefaultLayout(std::vector<Ref<ScapsLab::Panel>> panels,bool force):Layer("ScapsLab layout"),panels(std::move(panels)),force(force) {}
     void OnImGuiRender() override {
-        if(done) {if(focus) {ImGui::SetWindowFocus(panels[5]->ImGuiName().c_str());focus=false;}return;} done=true;
+        // The deferred Core settings payload must load before the default layout is built.
+        if(ImGui::GetFrameCount()<3) return;
+        if(done) {
+            if(panels[0]->GetWorkflow()->focusLayers) {ImGui::SetWindowFocus(panels[1]->ImGuiName().c_str());panels[0]->GetWorkflow()->focusLayers=false;}
+            if(focus) {ImGui::SetWindowFocus(panels[1]->ImGuiName().c_str());ImGui::SetWindowFocus(panels[5]->ImGuiName().c_str());focus=false;}return;} done=true;
         const auto &ini=ImGui::GetCurrentContext()->SettingsIniData;
-        if(!force && ini.size()>0 && std::string(ini.c_str()).find("[Window][sst-window-"+std::to_string(panels[5]->GetId())+"]")!=std::string::npos) return;
+        if(!force && ini.size()>0 && std::string(ini.c_str()).find("[Window][sst-window-"+std::to_string(panels[10]->GetId())+"]")!=std::string::npos) return;
         const auto *vp=ImGui::GetMainViewport(); const auto root=vp->ID;
         ImGui::DockBuilderRemoveNode(root); ImGui::DockBuilderAddNode(root,ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodePos(root,vp->WorkPos); ImGui::DockBuilderSetNodeSize(root,vp->WorkSize);
-        ImGuiID center=root,left,right,topLeft,bottomLeft,topRight,bottomRight;
+        ImGuiID center=root,left,right,topLeft,bottomLeft,topRight,bottomRight,iv;
         ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.24f,&left,&center);
-        ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.29f,&right,&center);
+        ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.25f,&right,&center);
         ImGui::DockBuilderSplitNode(left,ImGuiDir_Up,0.30f,&topLeft,&bottomLeft);
-        ImGui::DockBuilderSplitNode(right,ImGuiDir_Up,0.45f,&topRight,&bottomRight);
+        ImGui::DockBuilderSplitNode(right,ImGuiDir_Up,0.62f,&topRight,&bottomRight);
+        ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.38f,&iv,&center);
         for(std::size_t i=0;i<panels.size();++i) {
             auto &panel=panels[i]; auto state=panel->GetState();
-            state.dockId=i==0?topLeft:i==1 || i==2?bottomLeft:i==3?bottomRight:i==4?topRight:center;
+            state.visible=true;state.mode=WindowMode::Normal;
+            state.dockId=i==0?topLeft:i==1 || i==2?bottomLeft:i==3?bottomRight:i==4?topRight:i==10?iv:center;
             panel->ApplyState(state); ImGui::DockBuilderDockWindow(panel->ImGuiName().c_str(),state.dockId);
         }
         ImGui::DockBuilderFinish(root); focus=true;
@@ -43,10 +49,16 @@ public:
         app.SetCloseGuard([this] {if(!this->w.dirty)return true;requested=true;return false;});
     }
     void OnImGuiRender() override {
+        w.interacting=ImGui::IsAnyItemActive();
+        if(!ImGui::GetIO().WantTextInput) {
+            if(ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z)) (void)w.Dispatch({{"operation","undo"}});
+            if(ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y)) (void)w.Dispatch({{"operation","redo"}});
+        }
         if(requested) {ImGui::OpenPopup("Unsaved ScapsLab project");requested=false;}
         if(ImGui::BeginPopupModal("Unsaved ScapsLab project",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted("Save your changes before closing?");
             ImGui::TextWrapped("%s",w.status.c_str());
+            if(w.Busy()) ImGui::TextUnformatted("Wait for the active operation, or cancel it in Run, before closing.");
             ImGui::BeginDisabled(w.Busy());
             if(ImGui::Button("Save and close")) {const auto r=w.Dispatch({{"operation","save"},{"path",w.path}});saving=r.at("ok");}
             ImGui::SameLine();if(ImGui::Button("Discard")) {w.dirty=false;app.Shutdown();}
@@ -76,7 +88,7 @@ void SetupApplication(Application &app) {
         }
     }
     auto &editor=app.GetEditorLayer(); std::vector<Ref<Panel>> panels;
-    for(int v=0;v<10;++v) if(!single || std::atoi(gallery)==v) {
+    for(int v=0;v<11;++v) if(!single || std::atoi(gallery)==v) {
         auto panel=CreateRef<Panel>(w,v,single); panels.push_back(panel); const auto id=editor.RegisterWindow(panel);
         for(PanelId i=1;i<id;++i) if(auto existing=editor.FindPanel(i).lock();existing && existing->GetTitle()=="Logging Panel") existing->SetVisible(false);
     }
