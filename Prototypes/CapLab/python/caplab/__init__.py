@@ -28,6 +28,13 @@ def project_from_preview(preview, temperature=None):
 def execute(project, request):
     """Headless Core command/job operation; JSON values in/out, typed error envelope.
 
+    operation=preview/import: path or paths, recursive=False, optional parser options
+    and decimal ("." or ","). Preview returns sources with stable source_id (absolute
+    UTF-8 path), root, preview and typed per-file error. Import commits all readable
+    sources atomically; if any source fails, supply source_ids to explicitly select
+    the files to commit. Filename metadata remains a suggestion. cancel=True or
+    operation_id uses the same Core cancellation path as analysis.
+
     operation=walter: settings select measurement_id or measurement_ids, optional
     cv_fit_id / arrhenius_fit_id, model (default Walter1996-linear-field),
     zeta_s_1_K_2 or explicit compat B_s_1/emission_source, V_b_V/E_F_eV,

@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "IO/JFMImportSources.hpp"
+#include "Core/IO/ImportSources.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -14,12 +15,6 @@ namespace SST::Prototypes::JFM::Detail
 	{
 		std::error_code error;
 		return std::filesystem::is_directory(path.Native(), error);
-	}
-
-	bool IsRegularFile(const Path &path)
-	{
-		std::error_code error;
-		return std::filesystem::is_regular_file(path.Native(), error);
 	}
 
 	std::string FolderName(const Path &path)
@@ -45,47 +40,13 @@ namespace SST::Prototypes::JFM::Detail
 		return names;
 	}
 
-	std::vector<Path> DirectDataFilesInDirectory(const Path &directory)
-	{
-		std::vector<Path> paths;
-		std::error_code error;
-		for (const std::filesystem::directory_entry &entry : std::filesystem::directory_iterator(directory.Native(), error))
-		{
-			if (error)
-				break;
-			std::error_code fileError;
-			const Path path = Path::FromResolved(entry.path());
-			if (entry.is_regular_file(fileError) && IsJFMDataFile(path))
-				paths.emplace_back(path);
-		}
-		std::sort(paths.begin(), paths.end(), [](const Path &left, const Path &right) { return left.Native() < right.Native(); });
-		return paths;
-	}
-
-	std::map<std::string, std::vector<Path>> DataFilesByFolder(const Path &directory, bool recursive)
+	std::map<std::string, std::vector<Path>> DataFilesByFolder(const Path &directory, bool recursive, std::vector<std::string> *warnings)
 	{
 		std::map<std::string, std::vector<Path>> filesByFolder;
-		if (!recursive)
-		{
-			std::vector<Path> paths = DirectDataFilesInDirectory(directory);
-			if (!paths.empty())
-				filesByFolder.emplace(directory.Utf8(), std::move(paths));
-			return filesByFolder;
+		for (const auto &entry : CollectSources(std::vector<Path>{directory}, recursive, IsJFMDataFile)) {
+			if (entry.error) { if (warnings) warnings->push_back(entry.error->technicalDetails); }
+			else filesByFolder[entry.source.path.parent_path().Utf8()].push_back(entry.source.path);
 		}
-
-		std::error_code error;
-		const auto options = std::filesystem::directory_options::skip_permission_denied;
-		for (const std::filesystem::directory_entry &entry : std::filesystem::recursive_directory_iterator(directory.Native(), options, error))
-		{
-			if (error)
-				break;
-			std::error_code fileError;
-			const Path path = Path::FromResolved(entry.path());
-			if (entry.is_regular_file(fileError) && IsJFMDataFile(path))
-				filesByFolder[path.parent_path().Utf8()].emplace_back(path);
-		}
-		for (auto &[folder, paths] : filesByFolder)
-			std::sort(paths.begin(), paths.end(), [](const Path &left, const Path &right) { return left.Native() < right.Native(); });
 		return filesByFolder;
 	}
 } // namespace SST::Prototypes::JFM::Detail
@@ -105,7 +66,8 @@ namespace SST::Prototypes::JFM
 		const std::vector<Path> &paths,
 		bool recursive,
 		JFMImportPlacement placement,
-		const std::string &targetSeriesId)
+		const std::string &targetSeriesId,
+		std::vector<std::string> *warnings)
 	{
 		std::vector<JFMImportGroup> groups;
 		std::vector<Path> files;
@@ -115,7 +77,7 @@ namespace SST::Prototypes::JFM
 		{
 			if (Detail::IsDirectory(path))
 			{
-				for (auto &[folder, folderFiles] : Detail::DataFilesByFolder(path, scanRecursively))
+				for (auto &[folder, folderFiles] : Detail::DataFilesByFolder(path, scanRecursively, warnings))
 				{
 					const Path folderPath = Path::FromResolved(std::filesystem::u8path(folder));
 					groups.push_back({
@@ -125,10 +87,12 @@ namespace SST::Prototypes::JFM
 						destinationSeries.empty() ? Detail::FolderName(folderPath) : std::string{}});
 				}
 			}
-			else if (Detail::IsRegularFile(path) || !std::filesystem::exists(path.Native()))
+			else
 			{
-				if (IsJFMDataFile(path))
-					files.emplace_back(path);
+				for (const auto &entry : CollectSources(std::vector<Path>{path}, false, IsJFMDataFile)) {
+					if (entry.error && warnings) warnings->push_back(entry.error->technicalDetails);
+					if (IsJFMDataFile(entry.source.path)) files.emplace_back(entry.source.path);
+				}
 			}
 		}
 
@@ -144,10 +108,8 @@ namespace SST::Prototypes::JFM
 	std::vector<Path> CollectImportSourcePaths(const std::vector<Path> &paths, bool recursive)
 	{
 		std::vector<Path> result;
-		for (JFMImportGroup &group : BuildImportGroups(paths, recursive, JFMImportPlacement::NewSeries, {}))
-			result.insert(result.end(), std::make_move_iterator(group.paths.begin()), std::make_move_iterator(group.paths.end()));
-		std::sort(result.begin(), result.end(), [](const Path &left, const Path &right) { return left.Native() < right.Native(); });
-		result.erase(std::unique(result.begin(), result.end(), [](const Path &left, const Path &right) { return left == right; }), result.end());
+		for (const auto &entry : CollectSources(paths, recursive, IsJFMDataFile))
+			if (IsJFMDataFile(entry.source.path)) result.push_back(entry.source.path);
 		return result;
 	}
 } // namespace SST::Prototypes::JFM

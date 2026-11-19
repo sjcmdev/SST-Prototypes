@@ -9,6 +9,8 @@ public:
     Result<void> Execute(CommandContext &context) override {
         DocumentRequested event; event.operation = operation;
         if (const auto *path = context.TryGet<Path>("path")) event.target = *path;
+        if (const auto *paths = context.TryGet<std::vector<Path>>("paths")) event.sources = *paths;
+        if (const auto *recursive = context.TryGet<bool>("recursive")) event.recursive = *recursive;
         bus->Queue(event); return {};
     }
     std::string Description() const override { return "CapLab document operation"; }
@@ -90,12 +92,29 @@ public:
     explicit ImportCommand(CapLabWorkflow &state) : state(state) {}
     Result<void> Execute(CommandContext &) override {
         try {
-            if (!state.preview || state.previewRevision != state.document.revision)
+            if (state.previewRevision != state.document.revision)
                 throw std::runtime_error("Preview is stale; import the file again.");
-            if (state.preview->contains("samples")) bundle.emplace(state.document.project,*state.preview);
-            else change.emplace(state.document.project, *state.preview, state.temperature,
-                state.templates.find("caplab.cf", 1));
-            state.Changed(); state.preview.reset(); state.status = "Imported."; state.failure.reset();
+            before=state.document.project;
+            auto draft=Parse(Serialize(before));
+            auto append = [&](const Json &preview, std::optional<double> temperature) {
+                if (preview.contains("samples")) { BundleChange change(draft,preview); }
+                else { ImportChange change(draft,preview,temperature,state.templates.find("caplab.cf",1)); }
+            };
+            if (state.sourcePreviews.empty()) {
+                if (!state.preview) throw std::runtime_error("No import preview.");
+                append(*state.preview,state.temperature);
+            } else {
+                if (state.selectedSources.empty()) throw std::runtime_error("Select at least one readable source.");
+                for (int index : state.selectedSources) {
+                    const auto &item=state.sourcePreviews.at(index);
+                    if (!item.value || item.error) throw std::runtime_error("Selected source has a preview error: "+item.source.path.Utf8());
+                    append(*item.value,index==state.previewSourceIndex ? state.temperature :
+                        index<static_cast<int>(state.sourceTemperatures.size()) ? state.sourceTemperatures[index] :
+                        item.value->contains("samples") ? std::nullopt : Optional(item.value->at("temperature_K")));
+                }
+            }
+            Validate(draft); after=std::move(draft);
+            state.document.project=after; state.Changed(); state.ClearPreview(); state.status="Imported."; state.failure.reset();
             return {};
         } catch (const std::exception &e) {
             state.status = e.what();
@@ -104,14 +123,13 @@ public:
             return *state.failure;
         }
     }
-    Result<void> Undo(CommandContext &) override { if (bundle) bundle->Undo(); else change->Undo(); state.Changed(); return {}; }
-    Result<void> Redo(CommandContext &) override { if (bundle) bundle->Redo(); else change->Redo(); state.Changed(); return {}; }
+    Result<void> Undo(CommandContext &) override { state.document.project=before; state.Changed(); return {}; }
+    Result<void> Redo(CommandContext &) override { state.document.project=after; state.Changed(); return {}; }
     std::string Description() const override { return "Import measurements"; }
     bool IsUndoable() const noexcept override { return true; }
 private:
     CapLabWorkflow &state;
-    std::optional<ImportChange> change;
-    std::optional<BundleChange> bundle;
+    Project before, after;
 };
 }
 void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWorkflow &state) {
@@ -138,6 +156,7 @@ void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWo
         std::tuple{"caplab.save", "Save CapLab project", Operation::Save},
         std::tuple{"caplab.analyze", "Analyze CapLab data", Operation::Analyze},
         std::tuple{"caplab.preview", "Import measurements", Operation::Preview},
+        std::tuple{"caplab.preview_folder", "Import measurement folders", Operation::PreviewFolder},
         std::tuple{"caplab.open", "Open CapLab project", Operation::Open},
         std::tuple{"caplab.export", "Export CSV / XLSX / PNG", Operation::Export}}) {
         auto result = registry->Register({CommandID{id}, name, "CapLab"},

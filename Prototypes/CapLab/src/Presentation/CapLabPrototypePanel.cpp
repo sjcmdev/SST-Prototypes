@@ -2,6 +2,7 @@
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include "Presentation/SelectionLabel.hpp"
 #include <imgui.h>
+#include "Core/Presentation/Panels/ImportSourceList.hpp"
 #include <sst/ui/Widgets/LabelledControls.hpp>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
 #include <cstdlib>
@@ -26,7 +27,7 @@ void CapLabPrototypePanel::RenderImport() {
     static int excludeRow = 0;
     static std::vector<int> excluded;
     if (sst::ui::widgets::Combo("Import profile", &profile, profiles, IM_ARRAYSIZE(profiles))) {
-        state->preview.reset();
+        state->ClearPreview();
         for (int i=0;i<5;++i) { mapping[i]=i+1; unitChoice[i]=0; }
         excluded.clear();
     }
@@ -96,10 +97,19 @@ void CapLabPrototypePanel::RenderImport() {
     }
     if (ImGui::Button("Read import preview...")) {
         state->importOptions = profile ? options.dump() : "";
-        (void)commands->Execute(CommandID{"caplab.preview"});
+        CommandContext c; c.Set("recursive",state->recursiveImport);
+        (void)commands->Execute(CommandID{"caplab.preview"},std::move(c));
     }
     ImGui::SameLine();
+    if (ImGui::Button("Read folders...")) {
+        state->importOptions=profile ? options.dump() : "";
+        CommandContext c; c.Set("recursive",state->recursiveImport);
+        (void)commands->Execute(CommandID{"caplab.preview_folder"},std::move(c));
+    }
+    sst::ui::widgets::Checkbox("Include subfolders", &state->recursiveImport);
+    ImGui::TextUnformatted("Ctrl/Shift + click selects several sources. Confirm imports the selected sources as one Undo step.");
     if (ImGui::Button("Save project")) (void)commands->Execute(CommandID{"project.save"});
+    auto renderDetails = [&] {
     if (state->preview) {
         const auto &preview = *state->preview;
         if (preview.contains("samples")) {
@@ -132,12 +142,12 @@ void CapLabPrototypePanel::RenderImport() {
             const bool settingsChanged = previousOptions != options || preview.value("decimal",std::string(1,state->decimal)) != std::string(1,state->decimal);
             if (ImGui::Button("Refresh preview with current fields")) {
                 const Path source{preview.at("source").get<std::string>()};
-                state->importOptions = options.dump(); state->Start(Operation::Preview,source);
+                state->importOptions = options.dump(); state->Start(Operation::Preview,{},state->previewInputs.empty() ? std::vector<Path>{source} : state->previewInputs,state->previewRecursive);
             }
             ImGui::BeginDisabled(settingsChanged);
             if (ImGui::Button("Confirm import")) (void)commands->Execute(CommandID{"caplab.import"});
             ImGui::EndDisabled();
-            ImGui::SameLine(); if (ImGui::Button("Discard preview")) state->preview.reset();
+            ImGui::SameLine(); if (ImGui::Button("Discard preview")) state->ClearPreview();
         } else {
         ImGui::SeparatorText("Import preview: lab Cp/Rp (SI)");
         ImGui::TextWrapped("%s", preview.at("source").get<std::string>().c_str());
@@ -164,8 +174,21 @@ void CapLabPrototypePanel::RenderImport() {
             ImGui::EndTable();
         }
         if (ImGui::Button("Confirm import")) (void)commands->Execute(CommandID{"caplab.import"});
-        ImGui::SameLine(); if (ImGui::Button("Discard preview")) state->preview.reset();
+        ImGui::SameLine(); if (ImGui::Button("Discard preview")) state->ClearPreview();
     }
+    }
+    };
+    if (state->sourcePreviews.empty()) renderDetails();
+    else {
+        std::vector<ImportSourceRow> rows;
+        for (const auto &item : state->sourcePreviews)
+            rows.push_back({ImportSourceLabel(item.source),item.source.path.Utf8(),item.error ? item.error->technicalDetails : std::string{}});
+        int focused=state->previewSourceIndex;
+        RenderImportSources(rows,state->selectedSources,focused,[&](int index) {
+            state->SelectPreview(index);
+            if (state->sourcePreviews[index].error) ImGui::TextWrapped("%s",state->sourcePreviews[index].error->technicalDetails.c_str());
+            renderDetails();
+        });
     }
 }
 void CapLabPrototypePanel::RenderTree() {

@@ -79,7 +79,8 @@ namespace SST::Prototypes::JFM
 
 	void JFMImportJob::Execute(JobContext &context)
 	{
-		std::vector<JFMImportGroup> groups = BuildImportGroups(m_Paths, m_Recursive, m_Placement, m_TargetSeriesId);
+		std::vector<std::string> allWarnings;
+		std::vector<JFMImportGroup> groups = BuildImportGroups(m_Paths, m_Recursive, m_Placement, m_TargetSeriesId, &allWarnings);
 		const std::size_t total = CountPaths(groups);
 		context.SetStage("Python import");
 		context.SetProgress(0.0f, static_cast<float>(total));
@@ -88,14 +89,13 @@ namespace SST::Prototypes::JFM
 		if (groups.empty())
 		{
 			if (m_EventBus != nullptr)
-				m_EventBus->Queue(ImportFailed{"No supported JFM data files were found.", m_Project, m_Operation});
+				m_EventBus->Queue(ImportFailed{allWarnings.empty() ? "No supported JFM data files were found." : allWarnings.front(), m_Project, m_Operation});
 			return;
 		}
 
 		JFMPythonImportBridge bridge(m_PythonRoot);
 		std::size_t completedOffset = 0;
 		std::size_t importedCount = 0;
-		std::vector<std::string> allWarnings;
 		for (std::size_t groupIndex = 0; groupIndex < groups.size(); ++groupIndex)
 		{
 			const JFMImportGroup &group = groups[groupIndex];
@@ -103,7 +103,7 @@ namespace SST::Prototypes::JFM
 				continue;
 
 			std::vector<JFMCharacteristicRecord> records;
-			std::vector<std::string> groupWarnings;
+			std::vector<std::string> groupWarnings = groupIndex == 0 ? allWarnings : std::vector<std::string>{};
 			for (const Path &path : group.paths)
 			{
 				auto result = bridge.ImportFiles(

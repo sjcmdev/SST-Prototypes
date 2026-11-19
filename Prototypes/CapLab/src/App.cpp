@@ -16,7 +16,7 @@ void SetupApplication(Application &application) {
     const auto &services = application.GetRuntimeServices();
     auto workflow = CreateUnique<CapLabWorkflow>(services.jobSystem.lock(), services.eventBus.lock(), services.undoStack.lock());
     auto *state = workflow.get();
-    application.GetIOLayer().RegisterHandler<DocumentRequested>([state](const auto &e) { state->Start(e.operation, e.target); });
+    application.GetIOLayer().RegisterHandler<DocumentRequested>([state](const auto &e) { state->Start(e.operation, e.target, e.sources, e.recursive); });
     application.GetIOLayer().RegisterHandler<CoreEvents::ProjectSaveRequested>([state](const auto &) { state->Start(Operation::Save); });
     auto registry = services.commandRegistry.lock();
     RegisterCommands(registry, services.eventBus.lock(), *state);

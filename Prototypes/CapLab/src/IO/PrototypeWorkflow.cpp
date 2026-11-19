@@ -7,7 +7,6 @@
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "PlotLabExport.hpp"
-#include <sst/ui/Plot/Axis.hpp>
 namespace SST::Prototypes::CapLab
 {
     void DocumentJob::Execute(JobContext &context)
@@ -19,30 +18,41 @@ namespace SST::Prototypes::CapLab
         if (operation == Operation::Open || operation == Operation::Preview || operation == Operation::OpenOrImport)
         {
             std::string text;
-            if (!TextFileIO::Load(path, text, error)) throw std::runtime_error(error);
-            if (operation == Operation::OpenOrImport) {
-                const auto json=Json::parse(text,nullptr,false);
-                operation=json.is_object() && json.contains("schema_version") ? Operation::Open : Operation::Preview;
-                if (operation==Operation::Preview && importOptions.empty()) {
-                    const auto extension=path.Native().extension();
-                    if (extension==".json") importOptions=R"({"profile":"propho_json"})";
-                    else if (extension==".cf") importOptions=R"({"profile":"scaps_cf"})";
-                    else if (extension==".cv") importOptions=R"({"profile":"scaps_cv"})";
+            if (operation != Operation::Preview) {
+                if (!TextFileIO::Load(path, text, error)) throw std::runtime_error(error);
+                if (operation == Operation::OpenOrImport) {
+                    const auto json=Json::parse(text,nullptr,false);
+                    operation=json.is_object() && json.contains("schema_version") ? Operation::Open : Operation::Preview;
                 }
             }
             if (operation == Operation::Open) opened.emplace(Parse(text));
-            else
-            {
-                pl::ImportOptions options; options.decimal = decimal; options.extra["path"] = path.Utf8(); options.extra["options"] = importOptions;
-                const auto table = importer->preview(text, options, {
-                    [&] { return context.IsCancellationRequested(); },
-                    [&](double value) { context.SetProgress(static_cast<float>(value), 1); }});
-                preview = Json::parse(table.source.at("preview_json"));
-                // Validate before the GUI renders metadata from an untrusted file.
-                if (preview.contains("samples")) {
-                    Project checked; BundleChange validation(checked,preview);
-                } else if (!Optional(preview.at("temperature_K")))
-                    (void)Optional(preview.at("suggested_temperature_K"));
+            else {
+                if (sources.empty()) sources.push_back(path);
+                const auto collected = CollectSources(sources, recursive, [&](const Path &source) {
+                    return importer->recognizes(source.Utf8(), "");
+                });
+                sourcePreviews = PreviewSources<Json>(context, collected, [&](const ImportSource &source) -> Result<Json> {
+                    std::string content, readError;
+                    if (!TextFileIO::Load(source.path, content, readError)) throw std::runtime_error(readError);
+                    std::string parserOptions = importOptions;
+                    if (parserOptions.empty()) {
+                        const auto extension = source.path.extension().Utf8();
+                        if (extension == ".json") parserOptions=R"({"profile":"propho_json"})";
+                        else if (extension == ".cf") parserOptions=R"({"profile":"scaps_cf"})";
+                        else if (extension == ".cv") parserOptions=R"({"profile":"scaps_cv"})";
+                    }
+                    pl::ImportOptions options; options.decimal=decimal;
+                    options.extra["path"]=source.path.Utf8(); options.extra["options"]=parserOptions;
+                    const auto table = importer->preview(content, options, {
+                        [&] { return context.IsCancellationRequested(); }, {}});
+                    Json value = Json::parse(table.source.at("preview_json"));
+                    // Validate before rendering metadata from an untrusted file.
+                    if (value.contains("samples")) { Project checked; BundleChange validation(checked,value); }
+                    else if (!Optional(value.at("temperature_K"))) (void)Optional(value.at("suggested_temperature_K"));
+                    return value;
+                });
+                if (sourcePreviews.empty()) throw std::runtime_error("No supported CapLab data files were found.");
+                for (const auto &item : sourcePreviews) if (item.value) { preview=*item.value; break; }
             }
         }
         else if (operation == Operation::Analyze)
@@ -150,15 +160,11 @@ namespace SST::Prototypes::CapLab
             if (snapshot->spec.equalAspect) {
                 auto equal=*snapshot;
                 const double ratio=(equal.ranges.maxX-equal.ranges.minX)/(equal.ranges.maxY-equal.ranges.minY);
-                const double paddingX=2*sst::ui::plot::AxisHorizontalPaddingPt*25.4/72;
-                const double paddingY=2*sst::ui::plot::AxisVerticalPaddingPt*25.4/72;
-                if (!std::isfinite(ratio) || ratio<=0 || equal.widthMm<=paddingX || equal.heightMm<=paddingY)
+                if (!std::isfinite(ratio) || ratio<=0 || equal.widthMm<=0 || equal.heightMm<=0)
                     throw std::runtime_error("Export page is too small for equal-scale axes and labels.");
-                // The shared painter has fixed physical margins; grow the plot area to preserve 1:1 units.
-                equal.spec.customAxes=true;
-                if (ratio>(equal.widthMm-paddingX)/(equal.heightMm-paddingY))
-                    equal.widthMm=(equal.heightMm-paddingY)*ratio+paddingX;
-                else equal.heightMm=(equal.widthMm-paddingX)/ratio+paddingY;
+                // The installed exporter uses the same fractional margin on both axes.
+                if (ratio>equal.widthMm/equal.heightMm) equal.widthMm=equal.heightMm*ratio;
+                else equal.heightMm=equal.widthMm/ratio;
                 preview=Json::parse(PlotLab::SnapshotJson(equal));
                 PlotLab::ExportGraph(equal,path.Native(),"png",300,pythonRoot);
             } else {preview=Json::parse(PlotLab::SnapshotJson(*snapshot)); PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot); }
@@ -167,12 +173,23 @@ namespace SST::Prototypes::CapLab
         if (!saveCommitted && operation!=Operation::Export) context.ThrowIfCancellationRequested();
         context.SetProgress(1,1);
     }
-    void CapLabWorkflow::Start(Operation operation, Path target)
+    void CapLabWorkflow::Start(Operation operation, Path target, std::vector<Path> sources, bool recursive)
     {
         try
         {
             if (activeJob) throw std::runtime_error("Wait for the current job or cancel it.");
             if ((operation == Operation::Open || operation == Operation::OpenOrImport) && document.dirty) throw std::runtime_error("Save pending changes before opening another project.");
+            if (operation == Operation::PreviewFolder) {
+                if (target.Empty() && sources.empty()) sources=PickFoldersDialog(true);
+                operation=Operation::Preview;
+                if (target.Empty() && sources.empty()) { status="Dialog cancelled."; return; }
+            }
+            if (operation == Operation::Preview) {
+                if (!target.Empty()) sources.push_back(target);
+                if (sources.empty()) sources=OpenFilesDialog({"CapLab measurements / ProPho", "dat,txt,csv,cf,cv,json"});
+                if (sources.empty()) { status="Dialog cancelled."; return; }
+                target=sources.front();
+            }
             if (operation != Operation::Analyze && target.Empty())
             {
                 if (operation == Operation::Save) target = document.path;
@@ -187,6 +204,7 @@ namespace SST::Prototypes::CapLab
             }
             auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save || operation == Operation::Analyze || operation == Operation::Export ? Serialize(document.project) : "",target);
             job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
+            job->sources=std::move(sources); job->recursive=recursive;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
             if (operation == Operation::Export && target.Native().extension()==".png") job->snapshot = pl::snapshotGraph(*document.project.engine,document.project.graph,view);
             pendingRevision = document.revision;
@@ -194,11 +212,31 @@ namespace SST::Prototypes::CapLab
             if (!activeJob) throw std::runtime_error("Job submission failed.");
             pending = std::move(job); status.clear(); failure.reset();
             if (operation==Operation::Analyze) analysisDraft.reset();
-            if (operation == Operation::Preview) preview.reset();
+            if (operation == Operation::Preview) {
+                pendingGeneration=previewGeneration.Next();
+                preview.reset(); sourcePreviews.clear(); selectedSources.clear(); sourceTemperatures.clear(); previewSourceIndex=-1;
+            }
         }
         catch (const std::exception &error) {
             status=error.what();
             failure=StructuredError{ErrorCategory::Validation,Severity::Error,"Document operation failed",status,"Check the file and import settings.","CapLab","caplab.document"};
+        }
+    }
+    void CapLabWorkflow::ClearPreview()
+    {
+        previewGeneration.Next(); preview.reset(); sourcePreviews.clear();
+        selectedSources.clear(); sourceTemperatures.clear(); previewSourceIndex=-1;
+    }
+    void CapLabWorkflow::SelectPreview(int index)
+    {
+        if (index==previewSourceIndex) return;
+        if (previewSourceIndex>=0 && previewSourceIndex<static_cast<int>(sourceTemperatures.size()))
+            sourceTemperatures[previewSourceIndex]=temperature;
+        previewSourceIndex=index; preview.reset(); temperature.reset();
+        if (index<0 || index>=static_cast<int>(sourcePreviews.size())) return;
+        preview=sourcePreviews[index].value;
+        if (preview && !preview->contains("samples")) {
+            temperature=sourceTemperatures.at(index);
         }
     }
     void CapLabWorkflow::Changed()
@@ -218,7 +256,8 @@ namespace SST::Prototypes::CapLab
         {
             status = "Completed.";
             if (pending->operation == Operation::Export) {status = "Exported."; exportResult=pending->preview;}
-            else if (document.revision != pendingRevision) status = "Stale revision: result discarded.";
+            else if (document.revision != pendingRevision ||
+                (pending->operation==Operation::Preview && !previewGeneration.IsCurrent(pendingGeneration))) status = "Stale revision: result discarded.";
             else if (pending->operation == Operation::Analyze)
             {
                 analysisDraft = std::move(pending->opened); analysisRevision = pendingRevision;
@@ -229,18 +268,34 @@ namespace SST::Prototypes::CapLab
             {
                 if (undo) undo->Clear();
                 document.Opened(std::move(*pending->opened),pending->path,pendingRevision);
-                preview.reset(); view = {};
+                ClearPreview(); view = {};
                 if (bus) { DocumentChanged e; e.project = document.project.engine->id(); e.revision = document.revision; bus->Queue(e); }
             }
             else if (pending->operation == Operation::Preview)
             {
-                preview = std::move(pending->preview); previewRevision = pendingRevision;
-                importOptions=pending->importOptions;
-                if (preview->contains("samples")) { status = "Preview ready; inspect samples, units and provenance before confirming."; }
-                else {
-                temperature = Optional(preview->at("temperature_K"));
-                if (!temperature) temperature = Optional(preview->at("suggested_temperature_K"));
-                status = "Preview ready; check units and temperature before confirming."; }
+                previewRevision = pendingRevision;
+                sourcePreviews=std::move(pending->sourcePreviews);
+                previewInputs=pending->sources; previewRecursive=pending->recursive;
+                selectedSources.clear(); sourceTemperatures.clear(); previewSourceIndex=-1;
+                for (int i=0;i<static_cast<int>(sourcePreviews.size());++i) {
+                    std::optional<double> value;
+                    if (sourcePreviews[i].value) {
+                        selectedSources.push_back(i);
+                        const auto &item=*sourcePreviews[i].value;
+                        if (!item.contains("samples")) {
+                            value=Optional(item.at("temperature_K"));
+                            if (!value) value=Optional(item.at("suggested_temperature_K"));
+                        }
+                    }
+                    sourceTemperatures.push_back(value);
+                }
+                SelectPreview(selectedSources.empty() ? 0 : selectedSources.front());
+                status="Preview ready; select sources and inspect units and metadata before confirming.";
+                if (selectedSources.empty()) {
+                    status=sourcePreviews.front().error->technicalDetails;
+                    failure=StructuredError{ErrorCategory::Validation,Severity::Error,"Import preview failed",status,
+                        "Check the file and import settings.","CapLab","caplab.preview"};
+                }
             }
         }
         else {
