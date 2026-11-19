@@ -116,7 +116,16 @@ namespace SST
         {
             if (window->DockNode && ImGui::DockNodeBeginAmendTabBar(window->DockNode))
             {
-                ImGui::PushID(static_cast<int>(m_Id));
+                ImGui::PushID("sst-window-actions");
+                auto *tabBar = window->DockNode->TabBar;
+                float trailingRight = 0.0f;
+                for (const auto &tab : tabBar->Tabs)
+                    if (tab.Flags & ImGuiTabItemFlags_Trailing)
+                        trailingRight = std::max(trailingRight, tab.Offset + tab.Width);
+                // ImGui packs trailing tabs beside the titles; keep window actions at the right edge.
+                const float offset = tabBar->BarRect.GetWidth() - trailingRight;
+                for (auto &tab : tabBar->Tabs)
+                    if (tab.Flags & ImGuiTabItemFlags_Trailing) tab.Offset += offset;
                 auto button = [&](const char *icon, const char *tooltip, WindowAction action, bool enabled) {
                     if (!enabled) return;
                     if (ImGui::TabItemButton(icon, ImGuiTabItemFlags_Trailing | ImGuiTabItemFlags_NoTooltip)) Request({action});

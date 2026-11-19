@@ -19,6 +19,8 @@ protected:
 
 The base supplies Begin/End, title buttons, dock-tab actions and context menu. Declare capabilities in the constructor. Override `RenderContextMenu()` to append app items, `RevealInProject()` to select the backing object, and `IsDirty()` to read document state. Closing hides the view and preserves data; dirty close/bulk close requires confirmation. Document saving belongs to the application.
 
+Window and dock-tab labels start with the window icon, before the short title. Minimize, maximize/restore, pin and close stay at the right edge of the title/tab bar. The icon is display text; `###sst-window-ID` remains the stable ImGui identity. Dock actions share the dock node's ID scope so switching active tabs preserves their IDs.
+
 ## Commands and factories
 
 Use `editor.GetWindows()->Execute(WindowRequest{WindowAction::Minimize, id})`. Chrome routes through Core Commands (`window.action`) and the shared UndoStack. Core Input registers `window.next` / `window.previous` on Ctrl+Tab / Ctrl+Shift+Tab; user keymaps can override them. `GetState()` exposes short/long names, mode/restore mode, visibility, pin, geometry and dock ID (0 = floating). `ApplyState()` is for initialization/restoration.

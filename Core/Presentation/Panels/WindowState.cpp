@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 #include "Presentation/Panels/WindowWorkspace.hpp"
 #include "Core/Input/KeymapResolver.hpp"
+#include "IconsFontAwesome6.h"
 #include <nlohmann/json.hpp>
 #include <cmath>
 #include <limits>
@@ -115,7 +116,7 @@ namespace SST
     }
     std::string EditorWindow::ImGuiName() const
     {
-        return GetTitle() + (IsDirty() ? " *" : "") + "###sst-window-" + std::to_string(m_Id);
+        return std::string(ICON_FA_WINDOW_MAXIMIZE " ") + GetTitle() + (IsDirty() ? " *" : "") + "###sst-window-" + std::to_string(m_Id);
     }
 
     std::vector<Ref<EditorWindow>> WindowWorkspace::Windows() const
