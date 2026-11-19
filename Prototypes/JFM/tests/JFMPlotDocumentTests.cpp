@@ -4,6 +4,7 @@
 #include "Analysis/JFMMonteCarloStatistics.hpp"
 #include "Presentation/JFMFitMonteCarloWidgets.hpp"
 #include <limits>
+#include <algorithm>
 #include "Presentation/Panels/MonteCarloCurvesPanel.hpp"
 #include "Vendor/implot/implot.h"
 #include "Vendor/implot/implot_internal.h"
@@ -150,6 +151,55 @@ namespace SST::Prototypes::JFM
             EXPECT_EQ(plot->Plots.GetByIndex(0)->Items.GetItemCount(),3);
         }
         ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
+    }
+
+    TEST(JFMPlotDocumentTests, PicoampScatterKeepsPhysicalSpanAndPublicationTicks)
+    {
+        JFMPlotDocument doc; JFMMonteCarloScatterStatistics stats;
+        stats.points = {{1.7,3.1e-12,0,0,0},{1.8,3.8e-12,0,30,3},{1.75,3.4e-12,0,5,1}};
+        JFMMonteCarloScatterPlotOptions options;
+        const auto b = PopulateJFMMonteCarloPlot(doc, stats, options, "A [1]", "I0 [A]");
+        EXPECT_LT(b.minY, 3.1e-12); EXPECT_GT(b.maxY, 3.8e-12);
+        EXPECT_LT(b.maxY-b.minY, 1e-12);
+        doc.view.viewport = b;
+        const auto snapshot = doc.Snapshot();
+        EXPECT_EQ(snapshot->spec.y.label, "I0 [A]");
+        EXPECT_TRUE(snapshot->spec.legend.outside);
+        ASSERT_FALSE(snapshot->xTicks.empty()); ASSERT_FALSE(snapshot->yTicks.empty());
+        EXPECT_TRUE(std::any_of(snapshot->yTicks.begin(), snapshot->yTicks.end(), [](const auto &t) { return !t.label.empty(); }));
+        ASSERT_EQ(snapshot->series.size(), 3);
+        EXPECT_EQ(snapshot->series.front().label, ">3 sigma");
+        EXPECT_EQ(snapshot->series.back().label, "<= 1 sigma");
+        for (const auto &series : snapshot->series) {
+            EXPECT_LE(series.style.markerSizePt, 1.5);
+            EXPECT_EQ(series.style.color, series.style.markerFill);
+            EXPECT_EQ(series.style.color, series.style.markerOutline);
+        }
+        // Previously rendered ticks and user zoom must survive export unchanged.
+        doc.view.yTicks = {{3.3e-12,"custom",true}};
+        EXPECT_EQ(doc.Snapshot()->yTicks.front().label, "custom");
+    }
+    TEST(JFMPlotDocumentTests, ConstantScatterAxisRemainsExportableWithZeroPadding)
+    {
+        JFMPlotDocument doc; JFMMonteCarloScatterStatistics stats;
+        stats.points = {{1,3e-12,0,0,0},{1,3e-12,0,0,0},{1,3e-12,0,0,0}};
+        JFMMonteCarloScatterPlotOptions options; options.zoomOut = 0;
+        doc.view.viewport = PopulateJFMMonteCarloPlot(doc,stats,options,"A [1]","I0 [A]");
+        EXPECT_NO_THROW(doc.Snapshot());
+        EXPECT_GT(doc.view.viewport->minY, 0);
+        EXPECT_LT(doc.view.viewport->maxY-doc.view.viewport->minY, 1e-12);
+    }
+
+    TEST(JFMPlotDocumentTests, ExportDialogDefaultIsIndependentOfTheImportAndWorkingDirectory)
+    {
+        const auto path = JFMPlotExportDirectory();
+        EXPECT_TRUE(path.Native().is_absolute());
+        EXPECT_TRUE(FileSystem::Exists(path.Native()));
+        auto current = path.Native();
+        while (!current.empty()) {
+            EXPECT_FALSE(FileSystem::Exists(current/"Prototypes"/"JFM"/"src"));
+            const auto parent = current.parent_path(); if (parent == current) break; current = parent;
+        }
     }
 
 }

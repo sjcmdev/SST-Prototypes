@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Workspace/JFMWorkspaceStore.hpp"
+#include "Analysis/JFMFitEngine.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -21,6 +22,27 @@ namespace SST::Prototypes::JFM
 			std::filesystem::path normalized = std::filesystem::weakly_canonical(path.Native(), error);
 			return (error ? path.Native() : normalized).lexically_normal();
 		}
+
+        template <typename Curve, typename State>
+        Ref<const Curve> restoreCurve(const State &state, const JFMCharacteristicInfo &info,
+            const Ref<const JFMCharacteristicData> &data)
+        {
+            if (!state || state->status != "completed" || !info.temperatureK || !data || data->voltage.empty()) return {};
+            std::unordered_map<std::string, double> parameters;
+            const auto &names = JFMModelParameterNames(state->modelId);
+            if (names.empty()) return {};
+            for (auto name : names) {
+                auto found = state->parameters.find(std::string(name));
+                if (found == state->parameters.end() || !std::isfinite(found->second.value)) return {};
+                parameters.emplace(name, found->second.value);
+            }
+            auto curve = CreateRef<Curve>();
+            curve->voltage = data->voltage;
+            curve->current.reserve(curve->voltage.size());
+            for (double voltage : curve->voltage)
+                curve->current.push_back(EvaluateJFMCurrent(state->modelId, voltage, *info.temperatureK, parameters));
+            return curve;
+        }
 
 		std::string numberLabel(double value)
 		{
@@ -568,8 +590,16 @@ namespace SST::Prototypes::JFM
 		auto document = findDocumentLocked(ref.project);
 		if (!document)
 			return {};
-		const auto curve = document->get().prefitCurves.find(ref.characteristic);
-		return curve == document->get().prefitCurves.end() ? Ref<const JFMPrefitCurve>{} : curve->second;
+        auto &curves = document->get().prefitCurves;
+        if (const auto curve = curves.find(ref.characteristic); curve != curves.end() && curve->second && !curve->second->voltage.empty())
+            return curve->second;
+        const auto info = findInfoLocked(document->get(), ref.characteristic);
+        const auto data = document->get().characteristicData.find(ref.characteristic);
+        if (!info || data == document->get().characteristicData.end()) return {};
+        // Project IO persists parameters, not derived plot arrays.
+        auto restored = restoreCurve<JFMPrefitCurve>(info->get().prefit, info->get(), data->second);
+        if (restored) curves[ref.characteristic] = restored;
+        return restored;
 	}
 
 	std::optional<JFMFitState> JFMWorkspaceStore::GetFitState(JFMCharacteristicRef ref) const
@@ -588,8 +618,16 @@ namespace SST::Prototypes::JFM
 		auto document = findDocumentLocked(ref.project);
 		if (!document)
 			return {};
-		const auto curve = document->get().fitCurves.find(ref.characteristic);
-		return curve == document->get().fitCurves.end() ? Ref<const JFMFitCurve>{} : curve->second;
+        auto &curves = document->get().fitCurves;
+        if (const auto curve = curves.find(ref.characteristic); curve != curves.end() && curve->second && !curve->second->voltage.empty())
+            return curve->second;
+        const auto info = findInfoLocked(document->get(), ref.characteristic);
+        const auto data = document->get().characteristicData.find(ref.characteristic);
+        if (!info || data == document->get().characteristicData.end()) return {};
+        // Project IO persists parameters, not derived plot arrays.
+        auto restored = restoreCurve<JFMFitCurve>(info->get().fit, info->get(), data->second);
+        if (restored) curves[ref.characteristic] = restored;
+        return restored;
 	}
 
 	std::optional<JFMMonteCarloState> JFMWorkspaceStore::GetMonteCarloState(JFMCharacteristicRef ref) const

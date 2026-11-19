@@ -269,7 +269,7 @@ namespace SST::Prototypes::JFM
 		if (!m_Open) { m_Windows.EndFrame(); return; }
 
 		ImGui::SetNextWindowSize(ImVec2(1180.0f, 760.0f), ImGuiCond_FirstUseEver);
-        const bool rendered = m_Windows.Render("Import Data", m_Open, ImGuiWindowFlags_NoDocking, [&] {
+        const bool rendered = m_Windows.Render("Import Data", m_Open, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings, [&] {
 
 		const ImGuiIO &io = ImGui::GetIO();
 		if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && io.KeyCtrl && !io.WantTextInput && !ImGui::IsAnyItemActive())
@@ -1732,7 +1732,7 @@ namespace SST::Prototypes::JFM
 			return;
 
 		ImGui::SetNextWindowSize(ImVec2(1180.0f, 720.0f), ImGuiCond_FirstUseEver);
-        m_Windows.Render("Import Preview", m_PreviewOpen, ImGuiWindowFlags_NoDocking, [&] {
+        m_Windows.Render("Import Preview", m_PreviewOpen, ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings, [&] {
 
 		if (m_PreviewFiles.empty())
 		{

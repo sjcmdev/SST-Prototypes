@@ -516,7 +516,7 @@ TEST(JFMParameterLabels, PreserveImportedUnitsAndCurrentDensityPrecedence)
     EXPECT_EQ(JFMParameterLabel("I_ph", &info), "I_ph [uA]");
     info.columns[0].role.clear(); info.columns[1].role.clear();
     EXPECT_EQ(JFMParameterLabel("Rs", &info), "Rs [(mV)/(uA)]");
-    EXPECT_EQ(JFMParameterLabel("I0"), "I0 [input I]");
+    EXPECT_EQ(JFMParameterLabel("I0"), "I0 [A]");
 }
 
 namespace SST::Prototypes::JFM {
@@ -631,4 +631,15 @@ TEST(JFMObjectiveTests, DarkAutoIgnoresNegativePointsOutsideFitRangeBitwise) {
     EXPECT_DOUBLE_EQ(original->state.chiSquared,extended->state.chiSquared);
     for(auto &[name,value]:original->state.parameters) EXPECT_DOUBLE_EQ(value.value,extended->state.parameters.at(name).value);
 }
+}
+
+TEST(JFMParameterLabels, SiDefaultsAndDensityResistanceUsePhysicalUnits)
+{
+    using namespace SST::Prototypes::JFM;
+    EXPECT_EQ(JFMParameterLabel("Rs"), "Rs [Ω]");
+    EXPECT_EQ(JFMParameterLabel("I0"), "I0 [A]");
+    JFMCharacteristicInfo info; info.columns = {{"V","V","voltage"},{"J","A/cm2","current_density"}};
+    EXPECT_EQ(JFMParameterLabel("Rsh", &info), "Rsh [Ω·cm²]");
+    info.columns[1].unit = "A/m2";
+    EXPECT_EQ(JFMParameterLabel("Rsh", &info), "Rsh [Ω·m²]");
 }

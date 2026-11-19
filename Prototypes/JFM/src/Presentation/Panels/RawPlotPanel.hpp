@@ -48,6 +48,8 @@ namespace SST::Prototypes::JFM
 		void RenderContent() override;
 
 	private:
+        void OnContentSkipped() override;
+        void RenderPlots();
         HostedWindows m_Windows;
 		struct PlotCurveGroup
 		{

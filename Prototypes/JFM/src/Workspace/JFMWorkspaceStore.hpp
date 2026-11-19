@@ -192,9 +192,9 @@ namespace SST::Prototypes::JFM
 			ProjectHandle handle = InvalidProjectHandle;
 			JFMProject project;
 			std::unordered_map<CharacteristicId, Ref<const JFMCharacteristicData>> characteristicData;
-			std::unordered_map<CharacteristicId, Ref<const JFMPrefitCurve>> prefitCurves;
+			mutable std::unordered_map<CharacteristicId, Ref<const JFMPrefitCurve>> prefitCurves;
 			std::unordered_map<CharacteristicId, std::uint64_t> prefitGenerations;
-			std::unordered_map<CharacteristicId, Ref<const JFMFitCurve>> fitCurves;
+			mutable std::unordered_map<CharacteristicId, Ref<const JFMFitCurve>> fitCurves;
 			std::unordered_map<CharacteristicId, std::uint64_t> fitGenerations;
 			std::unordered_map<CharacteristicId, Ref<const JFMMonteCarloResult>> monteCarloResults;
 			std::unordered_map<CharacteristicId, std::uint64_t> monteCarloGenerations;

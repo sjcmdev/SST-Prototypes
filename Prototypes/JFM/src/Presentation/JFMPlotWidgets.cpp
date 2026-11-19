@@ -90,7 +90,7 @@ namespace SST::Prototypes::JFM
                 if (changed) doc.project.change("Publication settings", {o}).apply(doc.project);
                 if (ImGui::Button("Export")) {
                     const char *formats[] = {"svg", "pdf", "png"};
-                    auto destination = SaveFileDialog({"Publication figure", formats[format]}, (std::string("figure.")+formats[format]).c_str());
+                    auto destination = SaveFileDialog({"Publication figure", formats[format]}, (std::string("figure.")+formats[format]).c_str(), JFMPlotExportDirectory());
                     if (destination) {
                         auto result = ExportJFMPlot(*doc.Snapshot(), destination->Utf8(), formats[format], dpi);
                         if (result.at("ok").get<bool>()) { doc.exportJob = result.at("job_id"); status = "Export queued"; }

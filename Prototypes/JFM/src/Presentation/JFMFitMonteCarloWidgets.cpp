@@ -89,12 +89,12 @@ namespace SST::Prototypes::JFM
 
 		if (showParameterBounds) ImGui::TextWrapped("Bounds retain the fitted voltage/current (or current-density) column units.");
 		const auto &names = JFMModelParameterNames(modelId);
-		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
+		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings, ImVec2(0.0f, (names.size()+2)*ImGui::GetFrameHeightWithSpacing()+ImGui::GetStyle().ScrollbarSize+8.0f)))
 		{
-			ImGui::TableSetupColumn("Parameter");
-			ImGui::TableSetupColumn("Free", ImGuiTableColumnFlags_WidthFixed, 44.0f);
-			ImGui::TableSetupColumn("Minimum");
-			ImGui::TableSetupColumn("Maximum");
+			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, std::max(190.0f, 14.0f*ImGui::GetFontSize()));
+			ImGui::TableSetupColumn("Free", ImGuiTableColumnFlags_WidthFixed, std::max(44.0f, ImGui::CalcTextSize("Free").x+2*ImGui::GetStyle().CellPadding.x));
+			ImGui::TableSetupColumn("Minimum", ImGuiTableColumnFlags_WidthFixed, std::max(220.0f, 16.0f*ImGui::GetFontSize()));
+			ImGui::TableSetupColumn("Maximum", ImGuiTableColumnFlags_WidthFixed, std::max(220.0f, 16.0f*ImGui::GetFontSize()));
 			ImGui::TableHeadersRow();
 			for (std::string_view nameView : names)
 			{
@@ -211,7 +211,7 @@ namespace SST::Prototypes::JFM
 		return changed;
 	}
 
-	bool RenderJFMCovariancePlot(const JFMMonteCarloResult &result, JFMMonteCarloScatterPlotOptions &options, const char *id, float height, JFMPlotDocument &document)
+	bool RenderJFMCovariancePlot(const JFMMonteCarloResult &result, JFMMonteCarloScatterPlotOptions &options, const char *id, float height, JFMPlotDocument &document, const JFMCharacteristicInfo *characteristic)
 	{
 		bool changed = false;
 		if (result.parameterNames.size() < 2 || result.samples.size() < 3)
@@ -227,10 +227,11 @@ namespace SST::Prototypes::JFM
 
 		ImGui::PushID(id);
 		const auto &classLabels = JFMSigmaLabels;
-		if (ImGui::BeginChild("##scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 1.8f), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
+		if (ImGui::BeginChild("##scatter_controls", ImVec2(0.0f, ImGui::GetFrameHeightWithSpacing() * 2.0f + 2.0f*ImGui::GetStyle().WindowPadding.y), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar))
 		{
-			ImGui::SetNextItemWidth(120.0f);
-			if (ImGui::BeginCombo("X", result.parameterNames[options.xParameter].c_str()))
+			ImGui::TextUnformatted("X"); ImGui::SameLine();
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::BeginCombo("##x", result.parameterNames[options.xParameter].c_str()))
 			{
 				for (int index = 0; index < count; ++index)
 					if (ImGui::Selectable(result.parameterNames[index].c_str(), index == options.xParameter))
@@ -241,8 +242,9 @@ namespace SST::Prototypes::JFM
 				ImGui::EndCombo();
 			}
 			SameLineIfFits(160.0f);
-			ImGui::SetNextItemWidth(120.0f);
-			if (ImGui::BeginCombo("Y", result.parameterNames[options.yParameter].c_str()))
+			ImGui::TextUnformatted("Y"); ImGui::SameLine();
+            ImGui::SetNextItemWidth(120.0f);
+            if (ImGui::BeginCombo("##y", result.parameterNames[options.yParameter].c_str()))
 			{
 				for (int index = 0; index < count; ++index)
 					if (ImGui::Selectable(result.parameterNames[index].c_str(), index == options.yParameter))
@@ -268,14 +270,17 @@ namespace SST::Prototypes::JFM
 				ImGui::PopID();
 				SameLineIfFits(170.0f);
 			}
-			changed |= ImGui::Checkbox("Auto-fit", &options.autoFit);
+			ImGui::TextUnformatted("Auto-fit"); ImGui::SameLine();
+            changed |= ImGui::Checkbox("##auto_fit", &options.autoFit);
 			SameLineIfFits(190.0f);
-			ImGui::SetNextItemWidth(120.0f);
-			changed |= ImGui::SliderFloat("Zoom-out", &options.zoomOut, 0.0f, 1.0f, "%.2f");
+			ImGui::TextUnformatted("Zoom-out"); ImGui::SameLine();
+            ImGui::SetNextItemWidth(120.0f);
+            changed |= ImGui::SliderFloat("##zoom_out", &options.zoomOut, 0.0f, 1.0f, "%.2f");
 			SameLineIfFits(130.0f);
 			ImGui::SetNextItemWidth(100.0f);
 			static constexpr const char *markers[] = {"Circle", "Square", "Diamond", "Cross", "Plus", "Asterisk"};
-			changed |= ImGui::Combo("Marker", &options.marker, markers, IM_ARRAYSIZE(markers));
+			ImGui::TextUnformatted("Marker"); ImGui::SameLine();
+            changed |= ImGui::Combo("##marker", &options.marker, markers, IM_ARRAYSIZE(markers));
 		}
 		ImGui::EndChild();
 
@@ -289,11 +294,15 @@ namespace SST::Prototypes::JFM
 
         JFMPlotExportControls(document);
         const bool plotFont = BeginJFMPlotFrame(document);
-        const auto bounds = PopulateJFMMonteCarloPlot(document, *statistics, options,
-            result.parameterNames[options.xParameter], result.parameterNames[options.yParameter]);
-		if (plotFont && ImPlot::BeginPlot("##Covariance", ImVec2(-1.0f, height), ImPlotFlags_NoTitle))
+        const auto xLabel = JFMParameterLabel(result.parameterNames[options.xParameter], characteristic);
+        const auto yLabel = JFMParameterLabel(result.parameterNames[options.yParameter], characteristic);
+        const auto bounds = PopulateJFMMonteCarloPlot(document, *statistics, options, xLabel, yLabel);
+		if (plotFont && ImPlot::BeginPlot("##Covariance", ImVec2(-1.0f, std::min(height, std::max(1.0f, ImGui::GetContentRegionAvail().y))), ImPlotFlags_NoTitle))
 		{
-			ImPlot::SetupAxes(result.parameterNames[options.xParameter].c_str(), result.parameterNames[options.yParameter].c_str());
+			ImPlot::SetupAxes(xLabel.c_str(), yLabel.c_str());
+            ImPlot::SetupAxisFormat(ImAxis_X1, "%.6g");
+            ImPlot::SetupAxisFormat(ImAxis_Y1, "%.6g");
+            ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside);
             if (options.autoFit)
                 ImPlot::SetupAxesLimits(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, ImGuiCond_Always);
             for (const auto &[plotId, label] : document.rendered) {
@@ -307,8 +316,11 @@ namespace SST::Prototypes::JFM
 			options.yMaximum = limits.Y.Max;
 			options.hasAxisLimits = true;
 			sst::ui::plot::PlotSpec figureSpec;
-			figureSpec.x.label = result.parameterNames[options.xParameter];
-			figureSpec.y.label = result.parameterNames[options.yParameter];
+			figureSpec.x.label = xLabel;
+			figureSpec.y.label = yLabel;
+            figureSpec.legend.outside = true;
+            figureSpec.x.labels.format = figureSpec.y.labels.format = sst::ui::plot::LabelFormat::Custom;
+            figureSpec.x.labels.formatString = figureSpec.y.labels.formatString = "%.6g";
 			EndJFMPlot(document, figureSpec);
 		}
 		if (plotFont) ImGui::PopFont();

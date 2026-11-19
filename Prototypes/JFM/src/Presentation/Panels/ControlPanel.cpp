@@ -380,12 +380,12 @@ namespace SST::Prototypes::JFM
 
 			const std::string model = activeInfo.fit ? activeInfo.fit->modelId : activeInfo.prefit ? activeInfo.prefit->modelId : "SD-RsRsh";
 			const auto &names = JFMModelParameterNames(model);
-			if (!names.empty() && ImGui::BeginTable("##jfm_control_solver_params", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
+			if (!names.empty() && ImGui::BeginTable("##jfm_control_solver_params", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings, ImVec2(0.0f, (names.size()+2)*ImGui::GetFrameHeightWithSpacing()+ImGui::GetStyle().ScrollbarSize+8.0f)))
 			{
-				ImGui::TableSetupColumn("Parameter");
-				ImGui::TableSetupColumn("Optimize", ImGuiTableColumnFlags_WidthFixed, 76.0f);
-				ImGui::TableSetupColumn("Minimum");
-				ImGui::TableSetupColumn("Maximum");
+				ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, std::max(190.0f, 14.0f*ImGui::GetFontSize()));
+				ImGui::TableSetupColumn("Optimize", ImGuiTableColumnFlags_WidthFixed, std::max(76.0f, ImGui::CalcTextSize("Optimize").x+2*ImGui::GetStyle().CellPadding.x));
+				ImGui::TableSetupColumn("Minimum", ImGuiTableColumnFlags_WidthFixed, std::max(220.0f, 16.0f*ImGui::GetFontSize()));
+				ImGui::TableSetupColumn("Maximum", ImGuiTableColumnFlags_WidthFixed, std::max(220.0f, 16.0f*ImGui::GetFontSize()));
 				ImGui::TableHeadersRow();
 				bool changed = false;
 				for (std::string_view nameView : names)
@@ -607,7 +607,7 @@ namespace SST::Prototypes::JFM
 
 		if (ImGui::BeginTable("##jfm_control_tuned_params", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
-			ImGui::TableSetupColumn("Parameter");
+			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 190.0f);
 			ImGui::TableSetupColumn("Fix", ImGuiTableColumnFlags_WidthFixed, 44.0f);
 			ImGui::TableSetupColumn("Mantissa");
 			ImGui::TableSetupColumn("Exponent", ImGuiTableColumnFlags_WidthFixed, 104.0f);
@@ -709,7 +709,7 @@ namespace SST::Prototypes::JFM
 		if (ImGui::BeginTable("##jfm_control_parameters", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_Resizable))
 		{
 			ImGui::TableSetupColumn("Stage");
-			ImGui::TableSetupColumn("Parameter");
+			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, 190.0f);
 			ImGui::TableSetupColumn("Value");
 			ImGui::TableSetupColumn("Std. error");
 			ImGui::TableSetupColumn("Source");

@@ -21,10 +21,14 @@ namespace SST::Prototypes::JFM
             return info && index < info->columns.size() && !info->columns[index].unit.empty()
                 ? info->columns[index].unit : std::string(fallback);
         };
-        const auto voltage = unitAt(columnIndex("voltage", 0), "input V");
-        const auto current = unitAt(columnIndex("current_density", columnIndex("current", 1)), "input I");
+        const auto voltage = unitAt(columnIndex("voltage", 0), "V");
+        const auto current = unitAt(columnIndex("current_density", columnIndex("current", 1)), "A");
+        const auto resistance = voltage == "V" && current == "A" ? std::string("Ω")
+            : voltage == "V" && (current == "A/cm2" || current == "A/cm^2") ? std::string("Ω·cm²")
+            : voltage == "V" && (current == "A/m2" || current == "A/m^2") ? std::string("Ω·m²")
+            : "(" + voltage + ")/(" + current + ")";
         const auto unit = name == "I0" || name == "I_ph" ? current
-            : name == "Rs" || name == "Rsh" ? "(" + voltage + ")/(" + current + ")"
+            : name == "Rs" || name == "Rsh" ? resistance
             : name == "Rsh2" ? "(" + voltage + ")^alpha/(" + current + ")" : std::string("1");
         return std::string(name) + " [" + unit + "]";
     }
@@ -62,5 +66,5 @@ namespace SST::Prototypes::JFM
 		const JFMMonteCarloResult &result,
 		JFMMonteCarloScatterPlotOptions &options,
 		const char *id,
-		float height, JFMPlotDocument &document);
+		float height, JFMPlotDocument &document, const JFMCharacteristicInfo *characteristic = nullptr);
 } // namespace SST::Prototypes::JFM

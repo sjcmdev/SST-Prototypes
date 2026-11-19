@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstring>
 #include <tuple>
+#include <sst/ui/Plot/Axis.hpp>
 
 namespace SST::Prototypes::JFM
 {
@@ -87,12 +88,28 @@ namespace SST::Prototypes::JFM
         }
         const auto &old = std::get<pl::Layer>(project.object(layer).data).spec;
         if (old.x.label != spec.x.label || old.y.label != spec.y.label || old.x.scale != spec.x.scale
-            || old.y.scale != spec.y.scale || old.legend.visible != spec.legend.visible
+            || old.y.scale != spec.y.scale || old.x.labels.format != spec.x.labels.format || old.y.labels.format != spec.y.labels.format
+            || old.x.labels.formatString != spec.x.labels.formatString || old.y.labels.formatString != spec.y.labels.formatString
+            || old.legend.visible != spec.legend.visible
             || old.legend.outside != spec.legend.outside || old.legend.interactive != spec.legend.interactive)
             changes.push_back({layer, graph, "Axes", 0, pl::Layer{std::move(spec)}});
         if (!changes.empty()) project.change("Refresh JFM figure", std::move(changes)).apply(project);
     }
-    std::shared_ptr<const pl::GraphSnapshot> JFMPlotDocument::Snapshot() const { return pl::snapshotGraph(project, graph, view); }
+    std::shared_ptr<const pl::GraphSnapshot> JFMPlotDocument::Snapshot() const
+    {
+        auto exportView = view;
+        const auto &spec = std::get<pl::Layer>(project.object(layer).data).spec;
+        if (exportView.viewport) {
+            const auto &b = *exportView.viewport;
+            auto ticks = [](const auto &axis, double lo, double hi, auto &out) {
+                if (out.empty()) for (const auto &tick : plot::BuildTickPlan(axis, lo, hi).ticks)
+                    out.push_back({tick.value, tick.label, tick.major});
+            };
+            ticks(spec.x, b.minX, b.maxX, exportView.xTicks);
+            ticks(spec.y, b.minY, b.maxY, exportView.yTicks);
+        }
+        return pl::snapshotGraph(project, graph, exportView);
+    }
     plot::Bounds PopulateJFMMonteCarloPlot(JFMPlotDocument &doc, const JFMMonteCarloScatterStatistics &statistics,
         const JFMMonteCarloScatterPlotOptions &options, const std::string &xLabel, const std::string &yLabel)
     {
@@ -110,18 +127,27 @@ namespace SST::Prototypes::JFM
         const auto &labels = JFMSigmaLabels;
         for (int group = 4; group >= 0; --group) {
             plot::SeriesStyle style;
-            style.color = style.markerFill = options.sigmaColors[group];
+            style.color = style.markerFill = style.markerOutline = options.sigmaColors[group];
             style.marker = static_cast<plot::Marker>(1 + std::clamp(options.marker, 0, 5));
-            style.markerSizePt = 3;
+            style.markerSizePt = 0.75f;
+            style.lineWidthPt = 0.35f;
             doc.SetSeries({labels[group], {x[group].data(), y[group].data(), x[group].size()},
                 plot::SeriesKind::Scatter, style, options.showSigmaClasses[group] && !x[group].empty()});
         }
         plot::PlotSpec spec; spec.x.label = xLabel; spec.y.label = yLabel;
+        spec.legend.outside = true;
+        spec.x.labels.format = spec.y.labels.format = plot::LabelFormat::Custom;
+        spec.x.labels.formatString = spec.y.labels.formatString = "%.6g";
         doc.EndFrame(spec);
-        const double spanX = std::max(bounds.maxX-bounds.minX, std::max(std::abs(bounds.maxX),1.0)*1e-9);
-        const double spanY = std::max(bounds.maxY-bounds.minY, std::max(std::abs(bounds.maxY),1.0)*1e-9);
-        return {bounds.minX-spanX*options.zoomOut, bounds.maxX+spanX*options.zoomOut,
-                bounds.minY-spanY*options.zoomOut, bounds.maxY+spanY*options.zoomOut};
+        auto padded = [&](double lo, double hi) {
+            // Physical values can be far below one ampere; never impose an absolute span.
+            const double span = hi > lo ? hi-lo : (lo != 0 ? std::abs(lo)*0.1 : 1.0);
+            const double padding = span * (hi > lo ? options.zoomOut : std::max(options.zoomOut, 0.5f));
+            return std::pair{lo-padding, hi+padding};
+        };
+        const auto [minX, maxX] = padded(bounds.minX, bounds.maxX);
+        const auto [minY, maxY] = padded(bounds.minY, bounds.maxY);
+        return {minX, maxX, minY, maxY};
     }
 
 }

@@ -237,16 +237,8 @@ namespace SST::Prototypes::JFM
 
 	Path MonteCarloScatterPanel::OutputDirectory(JFMCharacteristicRef ref) const
 	{
-		if (m_Store != nullptr)
-		{
-			const auto state = m_Store->GetMonteCarloState(ref);
-			if (state && !state->outputPath.Empty())
-				return state->outputPath;
-		}
-		Path root = m_Settings != nullptr ? m_Settings->GetDefaultProjectsDirectory() : Path::FromResolved(FileSystem::CurrentPath());
-		return root / std::filesystem::path("monte-carlo")
-			/ std::filesystem::path("project-" + std::to_string(ref.project))
-			/ std::filesystem::path("characteristic-" + std::to_string(ref.characteristic));
+        (void)ref;
+        return JFMPlotExportDirectory();
 	}
 
 	std::string MonteCarloScatterPanel::PlotWindowTitle(const PlotState &plot, const JFMMonteCarloResult &result) const
@@ -385,7 +377,8 @@ namespace SST::Prototypes::JFM
                 auto statistics = CalculateJFMMonteCarloScatterStatistics(*result, xParameter, yParameter);
                 if (!statistics) throw std::runtime_error("Too few accepted samples");
                 auto bounds = PopulateJFMMonteCarloPlot(*plot.document, *statistics, plot.options,
-                    result->parameterNames[xParameter], result->parameterNames[yParameter]);
+                    JFMParameterLabel(result->parameterNames[xParameter], record ? &record->info : nullptr),
+                    JFMParameterLabel(result->parameterNames[yParameter], record ? &record->info : nullptr));
                 if (plot.options.hasAxisLimits)
                     bounds = {plot.options.xMinimum,plot.options.xMaximum,plot.options.yMinimum,plot.options.yMaximum};
                 plot.document->view.viewport = bounds;
@@ -579,7 +572,8 @@ namespace SST::Prototypes::JFM
 			plot.remove = true;
 		}
 		const float height = std::max(360.0f, ImGui::GetContentRegionAvail().y - 8.0f);
-		(void)RenderJFMCovariancePlot(*result, plot.options, "plot", height, *plot.document);
+		const auto record = m_Store->FindCharacteristicRecord(plot.ref);
+        (void)RenderJFMCovariancePlot(*result, plot.options, "plot", height, *plot.document, record ? &record->info : nullptr);
 		});
 	}
 
@@ -636,7 +630,7 @@ namespace SST::Prototypes::JFM
 			};
 			ImGui::SameLine();
 			if (ImGui::Button("Save all MC data"))
-				if (std::vector<Path> paths = PickFoldersDialog(false, m_Settings != nullptr ? m_Settings->GetDefaultProjectsDirectory() : Path{}); !paths.empty())
+				if (std::vector<Path> paths = PickFoldersDialog(false, OutputDirectory({project, InvalidCharacteristicId})); !paths.empty())
 				{
 					const JFMProject snapshot = m_Store->GetProjectSnapshot(project);
 					int saved = 0;
@@ -669,7 +663,7 @@ namespace SST::Prototypes::JFM
 				}
 			ImGui::SameLine();
 			if (ImGui::Button("Save all MC plots"))
-				if (std::vector<Path> paths = PickFoldersDialog(false, m_Settings != nullptr ? m_Settings->GetDefaultProjectsDirectory() : Path{}); !paths.empty())
+				if (std::vector<Path> paths = PickFoldersDialog(false, OutputDirectory({project, InvalidCharacteristicId})); !paths.empty())
 				{
 					std::vector<PlotGroup> previousGroups = m_Groups;
 					std::size_t previousActiveGroup = m_ActiveGroup;

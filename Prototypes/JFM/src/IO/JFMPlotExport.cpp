@@ -4,6 +4,10 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include <cmath>
+#ifdef _WIN32
+#include <shlobj.h>
+#undef GetJob // Winspool macro conflicts with Core job queries.
+#endif
 
 namespace SST::Prototypes::JFM
 {
@@ -45,6 +49,18 @@ namespace SST::Prototypes::JFM
             Result<void> Execute(CommandContext &) override { *id = jobs.Submit(job); return {}; }
             std::string Description() const override { return "Export JFM figure"; }
         };
+    }
+    Path JFMPlotExportDirectory()
+    {
+#ifdef _WIN32
+        PWSTR documents = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Documents, 0, nullptr, &documents))) {
+            const Path result = Path::FromResolved(documents);
+            CoTaskMemFree(documents);
+            return result;
+        }
+#endif
+        return Path::FromResolved(FileSystem::TempDirectoryPath());
     }
     void ConfigureJFMPlotServices(WeakRef<CommandRegistry> commands, WeakRef<JobSystem> jobs)
     { appCommands = std::move(commands); appJobs = std::move(jobs); }

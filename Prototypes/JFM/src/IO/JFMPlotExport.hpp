@@ -2,9 +2,11 @@
 #include <sst/plotlab/GraphSnapshot.hpp>
 #include <nlohmann/json.hpp>
 #include "Core/Utils/Memory.hpp"
+#include "Core/Utils/Path.hpp"
 namespace SST { class CommandRegistry; class JobSystem; }
 namespace SST::Prototypes::JFM
 {
+    Path JFMPlotExportDirectory();
     void ConfigureJFMPlotServices(WeakRef<CommandRegistry>, WeakRef<JobSystem>);
     // JSON boundary shared by embedded Python and the GUI export controls.
     nlohmann::json RunJFMPlotRequest(const nlohmann::json &request);

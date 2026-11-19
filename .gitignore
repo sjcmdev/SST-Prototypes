@@ -49,6 +49,8 @@ Core-Copy/
 Hazel/
 
 # Local JFM measurement datasets
+MCPlots/
+MCData/
 Prototypes/JFM/example-data/**
 
 # JFM solver integration reference drop

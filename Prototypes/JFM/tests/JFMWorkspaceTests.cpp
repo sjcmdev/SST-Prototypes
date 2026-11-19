@@ -4,6 +4,7 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
+#include "Analysis/JFMFitEngine.hpp"
 
 namespace SST::Prototypes::JFM
 {
@@ -523,4 +524,27 @@ namespace SST::Prototypes::JFM
 		EXPECT_EQ(store.GetFitCurve(ref), nullptr);
 		EXPECT_EQ(store.GetMonteCarloResult(ref), nullptr);
 	}
+    TEST(JFMWorkspaceStoreTests, RestoresSavedPrefitAndFitCurvesWithoutRefittingOrDirtyingProject)
+    {
+        JFMWorkspaceStore store;
+        auto project = store.GetProjectSnapshot();
+        JFMCharacteristicInfo info; info.id = 77; info.temperatureK = 181;
+        info.prefit = JFMPrefitState{}; info.prefit->modelId = "SD-0"; info.prefit->status = "completed";
+        info.prefit->parameters["I0"].value = 1e-12; info.prefit->parameters["A"].value = 1.7;
+        info.fit = JFMFitState{}; info.fit->modelId = "SD-0"; info.fit->status = "completed";
+        info.fit->parameters = info.prefit->parameters; info.fit->parameters["A"].value = 1.8;
+        project.characteristics.push_back(info);
+        auto data = CreateRef<JFMCharacteristicData>(); data->voltage = {.1,.2,.3}; data->current = {1e-8,2e-8,3e-8};
+        JFMProjectBundleSnapshot saved; saved.project = project; saved.characteristics.push_back({info,data});
+        const auto handle = store.AttachProjectBundle(std::move(saved), std::nullopt);
+        const JFMCharacteristicRef ref{handle,77}; const auto revision = store.GetProjectRevision(handle);
+        const auto pre = store.GetPrefitCurve(ref); const auto fit = store.GetFitCurve(ref);
+        ASSERT_TRUE(pre); ASSERT_TRUE(fit); EXPECT_EQ(pre->voltage, data->voltage);
+        EXPECT_DOUBLE_EQ(pre->current[1], EvaluateJFMCurrent("SD-0",.2,181,{{"I0",1e-12},{"A",1.7}}));
+        EXPECT_NE(pre->current[1], fit->current[1]);
+        EXPECT_EQ(pre,store.GetPrefitCurve(ref)); EXPECT_EQ(fit,store.GetFitCurve(ref));
+        EXPECT_EQ(revision,store.GetProjectRevision(handle)); EXPECT_FALSE(store.IsDirty(handle));
+        EXPECT_EQ(store.GetFitState(ref)->converged, info.fit->converged);
+    }
+
 } // namespace SST::Prototypes::JFM

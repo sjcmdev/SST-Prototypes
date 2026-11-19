@@ -657,7 +657,6 @@ namespace SST::Prototypes::JFM
 
 	void RawPlotPanel::RenderContent()
 	{
-        m_Windows.BeginFrame();
 		if (m_Store == nullptr)
 		{
 			ImGui::TextDisabled("Workspace unavailable");
@@ -675,9 +674,20 @@ namespace SST::Prototypes::JFM
 		if (ImGui::Button("Plot Group"))
 			PlotSelectedGroup();
 		ImGui::TextDisabled("Plot windows: %d", static_cast<int>(m_PlotAreas.size()));
+        RenderPlots();
+    }
 
-		if (m_PlotAreas.empty())
-			m_PlotAreas.emplace_back(CreatePlotArea());
+    void RawPlotPanel::OnContentSkipped()
+    {
+        // Closing the controls must not stop rendering independent plot windows.
+        RenderPlots();
+    }
+
+    void RawPlotPanel::RenderPlots()
+    {
+        m_Windows.BeginFrame();
+        if (m_Store == nullptr) { m_Windows.EndFrame(); return; }
+
 
 		for (std::size_t areaIndex = 0; areaIndex < m_PlotAreas.size();)
 		{
@@ -1000,10 +1010,11 @@ namespace SST::Prototypes::JFM
 			area.groupTreeOpenRequest = 0;
 
 			const std::string plotId = "##jfm_raw_plot_" + std::to_string(area.id);
-			const float plotHeight = std::max(420.0f, ImGui::GetContentRegionAvail().y);
+
 			const ImPlotFlags plotFlags = area.showLegend ? ImPlotFlags_None : ImPlotFlags_NoLegend;
 			JFMPlotExportControls(*area.document);
 			const bool plotFont = BeginJFMPlotFrame(*area.document);
+            const float plotHeight = std::max(1.0f, ImGui::GetContentRegionAvail().y);
 			if (plotFont && ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, plotHeight), plotFlags))
 			{
 				ImPlot::SetupAxes("Voltage (V)", "Current (A)");
@@ -1095,33 +1106,6 @@ namespace SST::Prototypes::JFM
 						const std::string curveLabel = group.title + " / " + shortName(characteristic->second.info)
 							+ "###curve_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 						AddJFMPlotSeries(*area.document, {curveLabel.c_str(), {x.data(), rawY.data(), static_cast<std::size_t>(count)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(rawSpec)}, area.scale == PlotScale::SemiLog);
-						const auto curve = m_Store->GetPrefitCurve({area.project, id});
-						if (plotSettings.showPrefitCurves && curve)
-						{
-							std::optional<JFMPrefitState> prefitState;
-							if (plotSettings.prefitCurvesFitRangeOnly)
-								prefitState = m_Store->GetPrefitState({area.project, id});
-							std::vector<double> fitRangeX;
-							std::vector<double> fitRangeY;
-							const std::vector<double> *prefitX = &curve->voltage;
-							const std::vector<double> *prefitY = &curve->current;
-							if (prefitState && prefitState->fitRange.upperVoltage > prefitState->fitRange.lowerVoltage)
-							{
-								copyFitRange(*curve, prefitState->fitRange, fitRangeX, fitRangeY);
-								prefitX = &fitRangeX;
-								prefitY = &fitRangeY;
-							}
-							const std::size_t curveCount = std::min(prefitX->size(), prefitY->size());
-							if (curveCount > 0)
-							{
-								ImPlotSpec prefitSpec;
-								prefitSpec.LineColor = toVec4(plotSettings.prefitCurveColor);
-								prefitSpec.LineWeight = area.hoveredCharacteristicId == id ? plotSettings.hoveredCurveLineWeight : plotSettings.prefitCurveLineWeight;
-								prefitSpec.Flags = ImPlotItemFlags_NoLegend;
-								const std::string prefitLabel = "##jfm_raw_prefit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
-								AddJFMPlotSeries(*area.document, {prefitLabel.c_str(), {prefitX->data(), prefitY->data(), static_cast<std::size_t>(curveCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)}, area.scale == PlotScale::SemiLog);
-							}
-						}
 						const auto fitCurve = m_Store->GetFitCurve({area.project, id});
 						if (plotSettings.showFitCurves && fitCurve)
 						{
@@ -1177,6 +1161,34 @@ namespace SST::Prototypes::JFM
 								tunedSpec.Flags = ImPlotItemFlags_NoLegend;
 								const std::string tunedLabel = "##jfm_raw_tuned_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
 								AddJFMPlotSeries(*area.document, {tunedLabel.c_str(), {tunedX.data(), tunedY.data(), static_cast<std::size_t>(tunedCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(tunedSpec)}, area.scale == PlotScale::SemiLog);
+							}
+						}
+                        // Keep the thinner prefit visible when fit and prefit coincide.
+						const auto curve = m_Store->GetPrefitCurve({area.project, id});
+						if (plotSettings.showPrefitCurves && curve)
+						{
+							std::optional<JFMPrefitState> prefitState;
+							if (plotSettings.prefitCurvesFitRangeOnly)
+								prefitState = m_Store->GetPrefitState({area.project, id});
+							std::vector<double> fitRangeX;
+							std::vector<double> fitRangeY;
+							const std::vector<double> *prefitX = &curve->voltage;
+							const std::vector<double> *prefitY = &curve->current;
+							if (prefitState && prefitState->fitRange.upperVoltage > prefitState->fitRange.lowerVoltage)
+							{
+								copyFitRange(*curve, prefitState->fitRange, fitRangeX, fitRangeY);
+								prefitX = &fitRangeX;
+								prefitY = &fitRangeY;
+							}
+							const std::size_t curveCount = std::min(prefitX->size(), prefitY->size());
+							if (curveCount > 0)
+							{
+								ImPlotSpec prefitSpec;
+								prefitSpec.LineColor = toVec4(plotSettings.prefitCurveColor);
+								prefitSpec.LineWeight = area.hoveredCharacteristicId == id ? plotSettings.hoveredCurveLineWeight : plotSettings.prefitCurveLineWeight;
+								prefitSpec.Flags = ImPlotItemFlags_NoLegend;
+								const std::string prefitLabel = "##jfm_raw_prefit_" + std::to_string(area.project) + "_" + group.key + "_" + std::to_string(id);
+								AddJFMPlotSeries(*area.document, {prefitLabel.c_str(), {prefitX->data(), prefitY->data(), static_cast<std::size_t>(curveCount)}, sst::ui::plot::SeriesKind::Line, sst::ui::plot::FromImPlotStyle(prefitSpec)}, area.scale == PlotScale::SemiLog);
 							}
 						}
 					}
