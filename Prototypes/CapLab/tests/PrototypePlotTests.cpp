@@ -26,6 +26,8 @@ TEST(CapLabPlot, SelectionLabelsUseNamesAndEmptyHints) {
     auto p=FixtureProject();
     EXPECT_EQ(SelectionLabel(p,p.samples.front().id),"cf_100K_7");
     EXPECT_EQ(SelectionLabel(p,p.sweeps.front().id),"cf_100K_7, T = 100.0 K");
+    p.samples.front().name="Renamed sample";
+    EXPECT_EQ(SelectionLabel(p,p.sweeps.front().id),"cf_100K_7, T = 100.0 K");
     const auto measurement=p.engine->reserveId(), defect=p.engine->reserveId();
     p.measurements.push_back({{"id",measurement},{"metadata",{{"source","lab_cv.dat"},{"temperature_K",300.0}}}});
     p.defects.push_back({{"id",defect},{"name","E1"}});

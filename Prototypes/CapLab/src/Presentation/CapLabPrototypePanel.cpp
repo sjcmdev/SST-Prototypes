@@ -206,7 +206,18 @@ void CapLabPrototypePanel::RenderTree() {
 void CapLabPrototypePanel::RenderPlot() {
     auto &doc = state->document;
     if (doc.project.graph) {
+        for (const auto& a : doc.project.analyses) if (a.at("type")=="Circuit") {
+            const auto& graphs=a.at("graphs");
+            if (std::find(graphs.begin(),graphs.end(),Json(doc.project.graph))!=graphs.end()) {
+                RenderISTabs(doc.project,a,state->view);
+                if (ImGui::Button("Export CSV / XLSX / PNG...")) (void)commands->Execute(CommandID{"caplab.export"});
+                return;
+            }
+        }
         const auto &p = *doc.project.engine;
+        auto window=GetState();
+        const auto& title=p.object(doc.project.graph).name;
+        if (window.shortName!=title) {window.shortName=title; window.longName=title; ApplyState(window);}
         const auto layer = p.children(doc.project.graph).at(0);
         std::vector<sst::ui::plot::SeriesEntryView> series;
         for (auto id : p.children(layer)) {

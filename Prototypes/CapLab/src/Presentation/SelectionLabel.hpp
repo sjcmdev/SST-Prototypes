@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Storage/CapLabDocument.hpp"
 
 namespace SST::Prototypes::CapLab {
@@ -17,6 +17,9 @@ inline std::string SelectionLabel(const Project &p, pl::Id id,
     }
     for (const auto &m : p.sweeps) if (m.id == id) {
         name = p.engine->object(m.sample_id).name;
+        const auto& source=std::get<pl::Worksheet>(p.engine->object(m.id).data).source;
+        if (const auto path=source.find("path"); path!=source.end() && !path->second.empty())
+            name = Path::FromResolved(std::filesystem::u8path(path->second).stem()).Utf8();
         temperature = Nullable(m.temperature_K);
         break;
     }

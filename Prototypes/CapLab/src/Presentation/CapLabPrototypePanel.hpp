@@ -2,7 +2,7 @@
 #include <map>
 #include "Presentation/Panels/EditorWindow.hpp"
 #include "CapLabCommands.hpp"
-#include "SchematicEditor.h"
+#include "Presentation/CapLabSchematicEditor.hpp"
 namespace SST::Prototypes::CapLab {
 class CapLabPrototypePanel final : public EditorWindow {
 public:
@@ -28,12 +28,16 @@ private:
     void RenderImport();
     void RenderTree();
     void RenderPlot();
+    void RenderISTabs(Project& project, const Json& analysis, sst::ui::plot::PlotViewState& viewState);
     View view;
     std::map<pl::Id, double> areaDraft;
-    sst::ui::plot::PlotViewState fitView;
+    sst::ui::plot::PlotViewState fitView, bodePhaseView;
     Json isParameters=Json::array();
     pl::Id fitCircuit=0;
-    ccui::SchematicEditor circuitEditor;
+    ccui::CapLabSchematicEditor circuitEditor;
+    pl::Id isPlotAnalysis=0, isPlotGraph=0;
+    bool residualOverlay=true, circuitRecalc=false, circuitAutoReady=false;
+    std::string circuitDocument;
     pl::Id selectedCircuit=0, circuitMeasurement=0;
     pl::Id selectedDefect=0;
     CapLabWorkflow *state;

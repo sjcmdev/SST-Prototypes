@@ -164,6 +164,7 @@ end
 project "CapLabTests"
     files {
         _SST_ROOT .. "/Prototypes/CapLab/src/CapLabCommands.cpp",
+        _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabSchematicEditor.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/IO/PrototypeWorkflow.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp"
     }
@@ -184,5 +185,5 @@ for _, target in ipairs { "CapLab", "CapLabTests" } do
         _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/AnalysisRunner.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/Domain/CapLabIS.cpp" }
 end
-project "CapLab"
-    files { _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/SchematicEditor.cpp" }
+project "CapLabTests"
+    includedirs { _SST_ROOT .. "/Vendor/ImGui", _SST_ROOT .. "/Vendor/implot" }
