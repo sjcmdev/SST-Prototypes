@@ -6,6 +6,8 @@
 #include <charconv>
 #include <limits>
 #include <set>
+#include <chrono>
+#include <thread>
 #include <stdexcept>
 #include <nlohmann/json.hpp>
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
@@ -17,6 +19,27 @@ namespace SST::Prototypes::PlotLab
 {
     namespace
     {
+        class DataJob final : public IJob {
+        public:
+            std::unique_ptr<pl::Project> snapshot;
+            std::string request;
+            std::optional<pl::Operation> operation;
+            Ref<pl::Project> base;
+            std::uint64_t revision = 0;
+            double elapsedMs = 0;
+            std::string GetName() const override {return "PlotLab data operation";}
+            std::string GetType() const override {return "plotlab.data";}
+            void Execute(JobContext& context) override {
+                context.ThrowIfCancellationRequested();
+                // shortcut: published jobs need a fresh owner-thread snapshot; resubmit commands before supporting Core Retry.
+                if(!snapshot) throw std::invalid_argument("Resubmit the worksheet command to retry with a fresh snapshot");
+                const auto start=std::chrono::steady_clock::now();
+                operation=snapshot->dataOperation(request);
+                snapshot->prepareOperation(*operation);
+                elapsedMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+                context.ThrowIfCancellationRequested();context.SetProgress(1,1);
+            }
+        };
         void StopWorker(pl::Project& project) {
 #if DS_PYTHON_CAPI_AVAILABLE
             std::optional<nanobind::gil_scoped_release> release;
@@ -83,8 +106,8 @@ namespace SST::Prototypes::PlotLab
             return Error(e);
         }
     }
-    Document::Document(Ref<CommandRegistry> registry, Ref<UndoStack> history, Ref<EventBus> events)
-        : commands(std::move(registry)), undo(std::move(history)), bus(std::move(events))
+    Document::Document(Ref<CommandRegistry> registry, Ref<UndoStack> history, Ref<EventBus> events, Ref<JobSystem> jobs)
+        : commands(std::move(registry)), undo(std::move(history)), bus(std::move(events)), dataJobs(std::move(jobs))
     {
         commands->SetUndoStack(undo);
         if (!commands->HasCommand(CommandID{"plotlab.edit"}))
@@ -106,6 +129,8 @@ namespace SST::Prototypes::PlotLab
     }
     Document::~Document()
     {
+        if(ownsDataJobs) dataJobs->Shutdown(true);
+        else if(dataJob) (void)dataJobs->RequestCancel(dataJob);
         StopWorker(*project);
         project->unsubscribe(*this);
     }
@@ -330,6 +355,26 @@ namespace SST::Prototypes::PlotLab
         project->select(std::move(selected));
     }
 
+    void Document::PollDataOperation() {
+        if(!dataJob) return;
+        const auto status=dataJobs->GetJob(dataJob);
+        if(!status || status->status==JobStatus::Queued || status->status==JobStatus::Running) return;
+        auto work=std::static_pointer_cast<DataJob>(dataWork);
+        try {
+            if(status->status!=JobStatus::Completed) throw std::runtime_error(status->errorMessage);
+            if(project!=work->base || project->revision()!=work->revision) throw std::runtime_error("Project changed while data job was running; retry operation");
+            std::vector<pl::Id> created;
+            const auto request=nlohmann::json::parse(work->request);
+            const auto parent=project->object(request.at("worksheet_id").get<pl::Id>()).parent;
+            const auto before=project->children(parent);
+            project->acceptOperationSnapshot(*work->snapshot);
+            Execute(std::move(*work->operation));
+            for(auto id:project->children(parent)) if(std::find(before.begin(),before.end(),id)==before.end()) created.push_back(id);
+            dataResult=nlohmann::json{{"ok",true},{"result",{{"job_id",dataJob},{"elapsed_ms",work->elapsedMs},{"state","completed"},{"worksheet_ids",created}}}}.dump();
+        } catch(const std::exception& e) {dataResult=nlohmann::json{{"ok",false},{"error",{{"type",status->status==JobStatus::Completed?"conflict":"validation"},{"message",e.what()}}}}.dump();}
+        work->operation.reset();work->snapshot.reset();work->base.reset();std::string{}.swap(work->request);
+        dataJob=0;dataWork.reset();
+    }
     std::string Document::WorksheetCommand(const std::string& requestJson)
     {
         using Json = nlohmann::json;
@@ -342,7 +387,24 @@ namespace SST::Prototypes::PlotLab
                     throw std::invalid_argument("Expected positive integer ID");
             }
             Json result = Json::object();
-            if (action == "snapshot") result = Json::parse(project->toJson());
+            if(action=="data_status") { PollDataOperation(); return dataJob?Json{{"ok",true},{"result",{{"state","running"},{"job_id",dataJob}}}}.dump():dataResult.empty()?Json{{"ok",true},{"result",{{"state","idle"}}}}.dump():dataResult; }
+            static const std::set<std::string> dataActions={"sort","filter","mask","find_replace","transpose","stack","unstack","split","join","extract","reduce","normalize","interpolate","statistics"};
+            if(dataActions.contains(action)) {
+                PollDataOperation(); if(dataJob) throw std::invalid_argument("A data operation is running");
+                if(!dataJobs) {dataJobs=CreateRef<JobSystem>(bus,1);ownsDataJobs=true;}
+                auto work=CreateRef<DataJob>(); work->snapshot=project->operationSnapshot(); work->base=project; work->revision=project->revision(); work->request=request.dump();
+                dataWork=work;dataResult.clear();dataJob=dataJobs->Submit(work);
+                if(!dataJob) throw std::runtime_error("Could not submit data job");
+                if(!request.value("wait",true)) return Json{{"ok",true},{"result",{{"job_id",dataJob},{"state","running"}}}}.dump();
+                while(dataJob) {PollDataOperation();if(dataJob) std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+                return dataResult;
+            }
+            if(action=="analysis_column") {
+                const auto id=request.at("column_id").get<pl::Id>();
+                result["values_column_units"]=project->analysisValues(id,request.value("exclude_filtered",false));
+                const auto& o=project->object(id);result["units"]=std::get<pl::Column>(o.data).units;
+                result["row_ids"]=std::get<pl::Worksheet>(project->object(o.parent).data).rows;
+            } else if (action == "snapshot") result = Json::parse(project->toJson());
             else if (action == "load_project") Open(CreateRef<pl::Project>(pl::Project::fromJson(request.at("project").dump())), {});
             else if (action == "undo" || action == "redo") {
                 auto changed = action == "undo" ? undo->Undo() : undo->Redo();

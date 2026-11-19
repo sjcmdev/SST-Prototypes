@@ -845,3 +845,80 @@ TEST(WindowMigration, OlderWorkspaceDoesNotOverrideMigratedPanelIni)
     EXPECT_FLOAT_EQ(gui->SizeFull.x, 777);
     EXPECT_FLOAT_EQ(gui->SizeFull.y, 555);
 }
+
+TEST_F(PlotLabApp, DataCommandsUseCoreHistoryAndPublishCreatedSheetIds) {
+    using J=nlohmann::json;
+    auto command=[&](J request) {auto response=J::parse(doc.WorksheetCommand(request.dump()));EXPECT_TRUE(response.at("ok").get<bool>())<<response;return response;};
+    command({{"action","sort"},{"worksheet_id",sheet},{"keys",J::array({{{"column_id",x},{"descending",true}}})}});
+    EXPECT_EQ(Values(y),(std::vector<double>{6,4,2}));EXPECT_EQ(undo->GetUndoDepth(),1u);ASSERT_TRUE(undo->Undo());EXPECT_EQ(Values(y),(std::vector<double>{2,4,6}));ASSERT_TRUE(undo->Redo());
+    auto result=command({{"action","reduce"},{"worksheet_id",sheet},{"every_n",2}});
+    auto output=result.at("result").at("worksheet_ids").at(0).get<pl::Id>();EXPECT_EQ(std::get<pl::Worksheet>(doc.project->object(output).data).rows.size(),2u);
+    EXPECT_EQ(undo->GetUndoDepth(),2u);ASSERT_TRUE(undo->Undo());EXPECT_FALSE(doc.project->objects().contains(output));ASSERT_TRUE(undo->Redo());EXPECT_TRUE(doc.project->objects().contains(output));
+}
+TEST_F(PlotLabApp, DataJobRejectsStaleProjectWithoutPublishing) {
+    using J=nlohmann::json;
+    auto result=J::parse(doc.WorksheetCommand(J{{"action","sort"},{"worksheet_id",sheet},{"wait",false},{"keys",J::array({{{"column_id",x},{"descending",true}}})}}.dump()));ASSERT_TRUE(result.at("ok").get<bool>())<<result;
+    doc.Rename(sheet,"New name");
+    do {std::this_thread::sleep_for(std::chrono::milliseconds(1));result=J::parse(doc.WorksheetCommand("{\"action\":\"data_status\"}"));} while(result.at("ok").get<bool>() && result.at("result").at("state")=="running");
+    EXPECT_FALSE(result.at("ok").get<bool>());EXPECT_EQ(Values(x),(std::vector<double>{1,2,3}));EXPECT_EQ(doc.project->object(sheet).name,"New name");
+}
+TEST(PlotLabDataJobs, MillionRowsSortFilterWorkerBenchmark) {
+    using J=nlohmann::json;
+    Document doc{CreateRef<CommandRegistry>(),CreateRef<UndoStack>(),CreateRef<EventBus>()};
+    pl::Table table;table.names={"X","Y"};table.columns.resize(2);std::vector<double> x(1000000),y(1000000);
+    for(std::size_t r=0;r<x.size();++r) {x[r]=static_cast<double>(x.size()-r);y[r]=x[r]*2;}
+    table.columns[0].values=std::move(x);table.columns[1].values=std::move(y);doc.Execute(pl::importTable(*doc.project,doc.project->root(),"Benchmark",table));
+    auto book=doc.project->children(doc.project->root()).front(),sheet=doc.project->children(book).front(),column=doc.project->children(sheet).front();
+    for(auto request:std::vector<J>{
+        {{"action","sort"},{"keys",J::array({{{"column_id",column}}})}},
+        {{"action","filter"},{"filters",J::array({{{"column_id",column},{"kind","range"},{"minimum_column_units",250000},{"maximum_column_units",750000}}})}}
+    }) {
+        request["worksheet_id"]=sheet;request["wait"]=false;
+        auto start=std::chrono::steady_clock::now();auto response=J::parse(doc.WorksheetCommand(request.dump()));ASSERT_TRUE(response.at("ok").get<bool>())<<response;
+        double submit=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+        ASSERT_EQ(response.at("result").at("state"),"running");
+        do {std::this_thread::sleep_for(std::chrono::milliseconds(1));response=J::parse(doc.WorksheetCommand("{\"action\":\"data_status\"}"));} while(response.at("ok").get<bool>() && response.at("result").at("state")=="running");
+        ASSERT_TRUE(response.at("ok").get<bool>())<<response;
+        std::cout<<"P6c 1e6 "<<request.at("action")<<": submit="<<submit<<" ms worker="<<response.at("result").at("elapsed_ms")<<" ms total="<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<" ms\n";
+    }
+    const auto& values=std::get<std::vector<double>>(std::get<pl::Column>(doc.project->object(column).data).values);EXPECT_DOUBLE_EQ(values.front(),1);EXPECT_DOUBLE_EQ(values.back(),1000000);
+    EXPECT_EQ(std::get<pl::Worksheet>(doc.project->object(sheet).data).visibleRows.size(),500001u);
+}
+TEST_F(PlotLabApp, EmbeddedPythonDataOperations) {
+#if DS_PYTHON_CAPI_AVAILABLE
+    auto& interpreter=TestPython();ASSERT_TRUE(interpreter.Start());InstallWorksheetPython();
+    const auto gil=PythonInterpreter::AcquireRuntimeGil();
+    const auto code=std::string("exec(open(")+nlohmann::json(std::string(SST_PLOTLAB_PYTHON_ROOT)+"/tests/data_headless.py").dump()+", encoding='utf-8').read())\n";
+    const int result=PyRun_SimpleString(code.c_str());PythonInterpreter::ReleaseRuntimeGil(gil);EXPECT_EQ(result,0);
+#endif
+}
+
+TEST_F(PlotLabApp, LinkedRowStatisticsFollowInsertedRowsAndUndo) {
+    using J=nlohmann::json;
+    const auto response=J::parse(doc.WorksheetCommand(J{{"action","statistics"},{"worksheet_id",sheet},{"axis","row"}}.dump()));ASSERT_TRUE(response.at("ok").get<bool>())<<response;
+    const auto output=response.at("result").at("worksheet_ids").at(0).get<pl::Id>();
+    const auto before=std::get<pl::Worksheet>(doc.project->object(output).data).rows;
+    doc.ResizeRows(sheet);doc.project->recompute().wait();EXPECT_EQ(std::get<pl::Worksheet>(doc.project->object(output).data).rows.size(),4u);
+    ASSERT_TRUE(undo->Undo());doc.project->recompute().wait();EXPECT_EQ(std::get<pl::Worksheet>(doc.project->object(output).data).rows,before);
+    ASSERT_TRUE(undo->Redo());doc.project->recompute().wait();EXPECT_EQ(std::get<pl::Worksheet>(doc.project->object(output).data).rows.size(),4u);
+}
+
+TEST(PlotLabDataJobs, SharedCorePoolSurvivesDocumentAndPublishedJobPayloadIsReleased) {
+    using J=nlohmann::json;auto bus=CreateRef<EventBus>();auto jobs=CreateRef<JobSystem>(bus,1);
+    SST::JobId id=0;std::weak_ptr<pl::Project> project;
+    {
+        Document doc{CreateRef<CommandRegistry>(),CreateRef<UndoStack>(),bus,jobs};project=doc.project;
+        doc.Execute(pl::importTable(*doc.project,doc.project->root(),"Shared",pl::CsvImporter{}.read("X,Y\n1,2\n2,4\n")));
+        auto book=doc.project->children(doc.project->root()).front(),sheet=doc.project->children(book).front(),column=doc.project->children(sheet).front();
+        auto result=J::parse(doc.WorksheetCommand(J{{"action","sort"},{"worksheet_id",sheet},{"keys",J::array({{{"column_id",column}}})}}.dump()));ASSERT_TRUE(result.at("ok").get<bool>())<<result;
+        id=result.at("result").at("job_id").get<SST::JobId>();ASSERT_TRUE(jobs->GetJob(id));
+    }
+    EXPECT_TRUE(project.expired());
+    ASSERT_TRUE(jobs->Retry(id));
+    std::optional<JobSnapshot> status;
+    do {std::this_thread::sleep_for(std::chrono::milliseconds(1));status=jobs->GetJob(id);} while(status && (status->status==JobStatus::Queued || status->status==JobStatus::Running));
+    ASSERT_TRUE(status);EXPECT_EQ(status->status,JobStatus::Failed);EXPECT_NE(status->errorMessage.find("fresh snapshot"),std::string::npos);
+    auto open=CreateRef<OpenJob>(Path::FromResolved("Prototypes/PlotLab/examples/demo.csv"));auto next=jobs->Submit(open);ASSERT_NE(next,0u);
+    do {std::this_thread::sleep_for(std::chrono::milliseconds(1));status=jobs->GetJob(next);} while(status && (status->status==JobStatus::Queued || status->status==JobStatus::Running));
+    ASSERT_TRUE(status);EXPECT_EQ(status->status,JobStatus::Completed);
+}

@@ -1,4 +1,4 @@
-﻿"""Headless publication export from an owning PlotLab graph snapshot."""
+﻿"""Headless PlotLab Core commands, worksheet operations and publication export."""
 def __getattr__(name):
     if name == "export_graph":
         from .exporter import export_graph
@@ -12,7 +12,9 @@ __all__ = ["export_graph"]
 class WorksheetSession:
     """Embedded worksheet commands with JSON-compatible dict inputs and outputs.
 
-    Stable project IDs; zero-based row_index; date_time uses Unix seconds in UTC.
+    Stable project IDs; data-operation ranges are zero-based and half-open.
+    Physical values use explicitly named *_column_units fields.
+    Masked analysis samples are JSON null; date_time uses Unix seconds in UTC.
     Failures return {ok: False, error: {type, message}}.
     """
 

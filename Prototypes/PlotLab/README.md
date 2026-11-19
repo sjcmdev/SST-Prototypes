@@ -193,3 +193,30 @@ click, and expands its function library. With `--open examples/p6b-formulas.plot
 --screenshot <path.png> --screenshot-after-frames 60 --exit-after-screenshot`,
 this captures the actual panel without desktop automation. The preset only sets
 view state; data operations continue through the shared Core/Python commands.
+
+
+### P6c data operations
+
+The worksheet's **Sort, filter and data operations** section uses the shared left-label controls and Core commands/jobs. Python uses `sst_plotlab.WorksheetSession().command(request)`, the same nanobind entry point and undo stack. All mutating data requests accept `worksheet_id`; `wait` defaults to true headlessly. With `wait=False`, poll `{"action":"data_status"}` on the model owner thread. Results contain a stable `job_id`, `elapsed_ms` (worker preparation and validation), and `worksheet_ids` for created sheets. Concurrent changes reject the prepared result; retry against the new project revision. Core cancellation discards unfinished results. The GUI uses the application Core JobSystem; isolated headless sessions lazily create one worker. Published jobs release their snapshots; use a new worksheet command (not Core Retry) for a fresh snapshot.
+
+Rows/ranges in data operations are zero-based, `[row_from,row_to)`. Formula ranges retain their existing one-based inclusive convention. Physical values use the referenced column's units; fields explicitly name `minimum_column_units`, `maximum_column_units`, `new_x_column_units`, `x_value_column_units`. Source row/object IDs survive edits, sort, undo, redo and project persistence (format 6, reads formats 1?5).
+
+| action | Fields beyond worksheet_id |
+|---|---|
+| sort | `keys=[{column_id,descending}]`; stable multi-key order; optional `column_only=True` requires `confirm_break_rows=True`; NaNs last |
+| filter | `filters=[{column_id,kind,...}]`, one condition per column, combined with AND; range: `minimum_column_units,maximum_column_units`; equality/contains: `value`; top_n: `count,descending` (largest by default); empty array clears |
+| mask | optional `column_id` (omitted = row mask); `row_from,row_to,masked,color_rgba` (ImGui packed ABGR uint32) |
+| find_replace | optional `column_ids,row_from,row_to`; exact typed `find,replace` values |
+| transpose, stack | optional `column_ids,name`; homogeneous numeric or text columns |
+| unstack | `key_column_id` (text), `value_column_id`; first-seen group order, ragged numeric groups padded with NaN (text with empty strings) |
+| split | `at_row`; creates two sheets |
+| join | `other_worksheet_id`; appends rows by column position; matching types and units required |
+| extract | `filters` as above; creates a new sheet |
+| reduce | `mode=every_nth` or `group_average`, `every_n`, optional `offset` for sampling; final partial average group retained |
+| normalize | `column_id,mode=max/range/area/value_at_x`; area/value_at_x also `x_column_id`, latter `x_value_column_units`; range maps to 0..1; area output has reciprocal X units |
+| interpolate | `column_id,x_column_id,new_x_column_units`; linear, strictly increasing usable source X, NaN outside source range; creates a sheet |
+| statistics | `axis=column/row`, optional `column_ids,exclude_filtered,name`; linked mean/sum/min/max/sample std/count producers |
+
+Filters never change source arrays and hide rows in worksheets, graphs and exports. Raw edits refresh filter visibility. Formula requests explicitly opt in with `exclude_filtered=True`; default false. Masks follow row IDs, colour cells and appear as cross markers in graph previews. Statistics always omit masks. `analysis_column` with `column_id` returns `values_column_units,units,row_ids`, with masked samples represented by JSON null, for future fit adapters; it optionally excludes filters. No fit engine is registered in PlotLab yet.
+
+Normalization, interpolation and group averaging omit masked/nonfinite input samples. Derived transformations create independent sheets with their source operation recorded in worksheet metadata; statistics alone stay linked and automatically recompute. Worksheet sort supports automatic full-range producers; frozen/ranged producers retain the engine's existing detach guard. Transpose/stack require homogeneous column types; join is row append, not a relational key join. Undo restores source value bytes (including signed zero and NaN payloads); commit/revision and ID reservation counters intentionally remain monotonic.

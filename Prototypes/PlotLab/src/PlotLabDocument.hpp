@@ -4,6 +4,7 @@
 #include "Core/Undo/UndoStack.hpp"
 #include <sst/plotlab/Extensions.hpp>
 #include "Core/JobSystem/JobSystemTypes.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Utils/Path.hpp"
 
 namespace SST::Prototypes::PlotLab
@@ -51,11 +52,12 @@ namespace SST::Prototypes::PlotLab
     class Document final : public pl::Observer
     {
       public:
-        Document(Ref<CommandRegistry>, Ref<UndoStack>, Ref<EventBus>);
+        Document(Ref<CommandRegistry>, Ref<UndoStack>, Ref<EventBus>, Ref<JobSystem> jobs = {});
         ~Document() override;
         void changed(const pl::Event &) noexcept override;
         void Execute(pl::Operation);
         std::string WorksheetCommand(const std::string& requestJson);
+        void PollDataOperation();
         void New();
         void Open(const std::filesystem::path &);
         void Open(Ref<pl::Project>, const std::filesystem::path &);
@@ -82,6 +84,11 @@ namespace SST::Prototypes::PlotLab
         Ref<EventBus> bus;
         pl::Id correlation = 0;
         void Replace(Ref<pl::Project>);
+        Ref<JobSystem> dataJobs;
+        bool ownsDataJobs = false;
+        Ref<IJob> dataWork;
+        JobId dataJob = 0;
+        std::string dataResult;
     };
     void InstallWorksheetPython(Document* active = nullptr, const std::filesystem::path& pythonRoot = {});
 } // namespace SST::Prototypes::PlotLab

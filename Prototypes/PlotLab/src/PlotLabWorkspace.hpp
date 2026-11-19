@@ -60,8 +60,8 @@ namespace SST::Prototypes::PlotLab
     class WorkspacePanel final : public IPanel
     {
       public:
-        explicit WorkspacePanel(Ref<Session> session, pl::Id previewColumn = 0)
-            : IPanel("Project Explorer"), state(std::move(session)), previewColumn(previewColumn) {}
+        explicit WorkspacePanel(Ref<Session> session, pl::Id previewColumn = 0, int dataPreview = 0)
+            : IPanel("Project Explorer"), state(std::move(session)), previewColumn(previewColumn), dataAction(dataPreview) {}
         Ref<IPanel> Clone() const override
         {
             auto copy = CreateRef<WorkspacePanel>(state);
@@ -86,6 +86,8 @@ namespace SST::Prototypes::PlotLab
         std::string importText, importName, importPath;
         pl::ImportOptions importOptions;
         std::optional<pl::Table> preview;
+        struct MaskPreview { std::weak_ptr<pl::Project> owner; std::uint64_t revision=0; std::vector<double> x,y; };
+        std::map<pl::Id,MaskPreview> maskPreviews;
         std::map<pl::Id, int> columnPages;
         std::map<std::string, ImFont *> graphFonts;
         std::map<pl::Id, std::string> fontErrors;
@@ -93,6 +95,15 @@ namespace SST::Prototypes::PlotLab
         int dpi = 300;
         void Tree(pl::Id);
         void Worksheet(pl::Id);
+        void DataOperations(pl::Id);
+        int dataAction=0, filterKind=0, dataColumn=0, dataSecondColumn=0, everyN=2, topN=10, operationMode=0, maskFirst=0, maskEnd=1;
+        bool descending=false, columnOnly=false, maskRows=false, confirmBreak=false, excludeFiltered=false;
+        double filterMinimum=0,filterMaximum=10, replaceNumber=0, normalizationX=0;
+        pl::Id joinSheet=0;
+        std::vector<std::pair<pl::Id,bool>> nestedKeys;
+        std::set<pl::Id> operationColumns;
+        ImVec4 maskTint{1,.35f,.35f,.6f};
+        std::string filterText, replacement, operationName="Result";
         void Graph(pl::Id);
         void Dialogs();
         void EditColumn(pl::Id);

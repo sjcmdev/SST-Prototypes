@@ -159,6 +159,9 @@ namespace SST::Prototypes::PlotLab
     void WorkspaceLayer::OnUpdate(float)
     {
         state->document->project->pollRecompute();
+        state->document->PollDataOperation();
+        const auto dataStatus=nlohmann::json::parse(state->document->WorksheetCommand("{\"action\":\"data_status\"}"));
+        if(!dataStatus.at("ok").get<bool>()) state->status=dataStatus.at("error").at("message").get<std::string>();
         if (state->openJob) {
             const auto job = state->jobs->GetJob(state->openJob);
             if (job && job->status != JobStatus::Queued && job->status != JobStatus::Running) {
@@ -283,6 +286,7 @@ namespace SST::Prototypes::PlotLab
         rowFrom=col.formula?static_cast<int>(col.formula->rowFrom):1;
         rowTo=col.formula?static_cast<int>(col.formula->rowTo):0;
         beforeScript=col.formula?col.formula->beforeScript:"";
+        excludeFiltered=col.formula && col.formula->excludeFiltered;
         recalculate=col.formula?static_cast<int>(col.formula->recalculate):1;
     }
     void WorkspacePanel::Render()
@@ -383,6 +387,86 @@ namespace SST::Prototypes::PlotLab
         Dialogs();
         windows.EndFrame();
     }
+    void WorkspacePanel::DataOperations(pl::Id sheet) {
+        namespace widgets=sst::ui::widgets;
+        if(!ImGui::CollapsingHeader("Sort, filter and data operations",ImGuiTreeNodeFlags_DefaultOpen)) return;
+        auto& doc=*state->document;auto& p=*doc.project;auto columns=p.children(sheet);if(columns.empty()) return;
+        ImGui::PushID("data_operations");
+        static const char* actions[]={"Sort","Filter","Mask","Find and replace","Transpose","Stack","Unstack","Split","Join","Extract","Reduce rows","Normalize","Interpolate","Linked statistics"};
+        widgets::Combo("Operation",&dataAction,actions,IM_ARRAYSIZE(actions));
+        dataColumn=std::clamp(dataColumn,0,static_cast<int>(columns.size()-1));
+        dataSecondColumn=std::clamp(dataSecondColumn,0,static_cast<int>(columns.size()-1));
+        if(widgets::BeginCombo("Column",p.object(columns[dataColumn]).name.c_str())) {for(int i=0;i<static_cast<int>(columns.size());++i) {ImGui::PushID(std::to_string(columns[i]).c_str());if(ImGui::Selectable(p.object(columns[i]).name.c_str(),i==dataColumn)) dataColumn=i;ImGui::PopID();}widgets::EndCombo();}
+        if(dataAction==0) {
+            widgets::Checkbox("Descending",&descending); widgets::Checkbox("Column only",&columnOnly);
+            if(columnOnly) {ImGui::TextWrapped("Warning: sorting one column breaks row correspondence.");widgets::Checkbox("Confirm breaking row correspondence",&confirmBreak);}
+            if(widgets::BeginCombo("Next sort key",p.object(columns[dataSecondColumn]).name.c_str())) {for(int i=0;i<static_cast<int>(columns.size());++i) {ImGui::PushID(std::to_string(columns[i]).c_str());if(ImGui::Selectable(p.object(columns[i]).name.c_str(),i==dataSecondColumn)) dataSecondColumn=i;ImGui::PopID();}widgets::EndCombo();}
+            if(ImGui::SmallButton("Add nested key")) nestedKeys.emplace_back(columns[dataSecondColumn],descending);
+            ImGui::SameLine();if(ImGui::SmallButton("Clear nested keys")) nestedKeys.clear();
+            for(const auto& [key,desc]:nestedKeys) if(p.objects().contains(key)) ImGui::Text("Then %s (%s)",p.object(key).name.c_str(),desc?"descending":"ascending");
+        }
+        if(dataAction==1 || dataAction==9) {
+            widgets::Combo("Condition",&filterKind,"Range\0Equality\0Contains\0Top-N\0");
+            if(filterKind==0) {widgets::Double("Minimum (column units)",&filterMinimum);widgets::Double("Maximum (column units)",&filterMaximum);}
+            else if(filterKind==3) widgets::Int("Top-N rows",&topN,1,1,1000000);
+            else if(filterKind==1 && std::get<pl::Column>(p.object(columns[dataColumn]).data).values.index()==0) widgets::Double("Equal value (column units)",&filterMinimum);
+            else widgets::Text("Match text",&filterText);
+            ImGui::TextWrapped("Filters hide rows in worksheets and graphs. Source values are preserved. Formula exclusion is an explicit formula option.");
+        }
+        if(dataAction==2) {widgets::Int("First row (zero-based)",&maskFirst,1,0,1000000);widgets::Int("End row (exclusive)",&maskEnd,1,0,1000000);widgets::Checkbox("Whole rows",&maskRows);
+            if(widgets::BeginLabelledRow("Mask colour")) {ImGui::ColorEdit4("##colour",&maskTint.x);widgets::EndLabelledRow();}}
+        if(dataAction==3) {
+            if(std::get<pl::Column>(p.object(columns[dataColumn]).data).values.index()==0) {widgets::Double("Find value (column units)",&filterMinimum);widgets::Double("Replace value (column units)",&replaceNumber);}
+            else {widgets::Text("Find text",&filterText);widgets::Text("Replace text",&replacement);}
+        }
+        if(dataAction==4 || dataAction==5 || dataAction==9 || dataAction==10 || dataAction==13) {
+            std::erase_if(operationColumns,[&](auto id){return std::find(columns.begin(),columns.end(),id)==columns.end();});
+            if(widgets::BeginCombo("Columns to process",operationColumns.empty()?"All columns":"Selected columns")) {
+                if(ImGui::Selectable("Use all columns",operationColumns.empty())) operationColumns.clear();
+                for(auto id:columns) {ImGui::PushID(std::to_string(id).c_str());bool selected=operationColumns.contains(id);if(widgets::Checkbox(p.object(id).name.c_str(),&selected)) {if(selected) operationColumns.insert(id);else operationColumns.erase(id);}ImGui::PopID();}widgets::EndCombo();
+            }
+        }
+        if(dataAction>=4 && dataAction!=11) widgets::Text("Output worksheet name",&operationName);
+        if(dataAction==6 || dataAction==11 || dataAction==12) {
+            if(widgets::BeginCombo(dataAction==6?"Group column":"X column",p.object(columns[dataSecondColumn]).name.c_str())) {for(int i=0;i<static_cast<int>(columns.size());++i) {ImGui::PushID(std::to_string(columns[i]).c_str());if(ImGui::Selectable(p.object(columns[i]).name.c_str(),i==dataSecondColumn)) dataSecondColumn=i;ImGui::PopID();}widgets::EndCombo();}
+        }
+        if(dataAction==7) widgets::Int("Split before row (zero-based)",&maskEnd,1,1,1000000);
+        if(dataAction==8 && widgets::BeginCombo("Append worksheet",joinSheet && p.objects().contains(joinSheet)?p.object(joinSheet).name.c_str():"Choose worksheet")) {for(const auto& [key,o]:p.objects()) if(std::holds_alternative<pl::Worksheet>(o->data) && key!=sheet) {ImGui::PushID(std::to_string(key).c_str());if(ImGui::Selectable(o->name.c_str(),key==joinSheet)) joinSheet=key;ImGui::PopID();}widgets::EndCombo();}
+        if(dataAction==12) widgets::Text("New X values (comma-separated)",&filterText);
+        if(dataAction==10) {operationMode=std::clamp(operationMode,0,1);widgets::Combo("Reduction",&operationMode,"Every n-th row\0Group average\0");widgets::Int("Every n rows",&everyN,1,1,1000000);}
+        if(dataAction==11) {operationMode=std::clamp(operationMode,0,3);widgets::Combo("Normalization",&operationMode,"Max\0Range\0Area\0Value at X\0");if(operationMode==3) widgets::Double("Normalize at X (X units)",&normalizationX);}
+        if(dataAction==13) {operationMode=std::clamp(operationMode,0,1);widgets::Combo("Statistics axis",&operationMode,"Column\0Row\0");widgets::Checkbox("Exclude filtered rows",&excludeFiltered);}
+        auto submit=[&](bool clear) {
+            using Json=nlohmann::json; static const char* ids[]={"sort","filter","mask","find_replace","transpose","stack","unstack","split","join","extract","reduce","normalize","interpolate","statistics"};
+            Json request={{"action",ids[dataAction]},{"worksheet_id",sheet},{"column_id",columns[dataColumn]},{"name",operationName}};
+            if(!operationColumns.empty()) request["column_ids"]=operationColumns;
+            if(dataAction==0) {Json keys=Json::array({{{"column_id",columns[dataColumn]},{"descending",descending}}});for(const auto& [key,desc]:nestedKeys) keys.push_back({{"column_id",key},{"descending",desc}});request["keys"]=keys;request["column_only"]=columnOnly;request["confirm_break_rows"]=confirmBreak;request["wait"]=false;}
+            if(dataAction==1 || dataAction==9) {
+                static const char* kinds[]={"range","equality","contains","top_n"};Json filter={{"column_id",columns[dataColumn]},{"kind",kinds[filterKind]}};
+                if(filterKind==0) {filter["minimum_column_units"]=filterMinimum;filter["maximum_column_units"]=filterMaximum;}
+                else if(filterKind==3) filter["count"]=topN;
+                else filter["value"]=std::get<pl::Column>(p.object(columns[dataColumn]).data).values.index()==0?Json(filterMinimum):Json(filterText);
+                auto filters=clear?Json::array():Json::parse(std::get<pl::Worksheet>(p.object(sheet).data).filters);
+                std::erase_if(filters.get_ref<Json::array_t&>(),[&](const auto& f){return f.at("column_id")==columns[dataColumn];});if(!clear) filters.push_back(filter);request["filters"]=filters;request["wait"]=false;
+            }
+            if(dataAction==2) {request["row_from"]=maskFirst;request["row_to"]=maskEnd;request["masked"]=!clear;request["color_rgba"]=ImGui::ColorConvertFloat4ToU32(maskTint);if(maskRows) request.erase("column_id");}
+            if(dataAction==3) {const bool numeric=std::get<pl::Column>(p.object(columns[dataColumn]).data).values.index()==0;request["find"]=numeric?Json(filterMinimum):Json(filterText);request["replace"]=numeric?Json(replaceNumber):Json(replacement);request["column_ids"]={columns[dataColumn]};}
+            if(dataAction==6) {request["key_column_id"]=columns[dataSecondColumn];request["value_column_id"]=columns[dataColumn];}
+            if(dataAction==7) request["at_row"]=maskEnd;
+            if(dataAction==8) request["other_worksheet_id"]=joinSheet;
+            if(dataAction==11 || dataAction==12) request["x_column_id"]=columns[dataSecondColumn];
+            if(dataAction==11) request["x_value_column_units"]=normalizationX;
+            if(dataAction==12) request["new_x_column_units"]=Json::parse("["+filterText+"]");
+            if(dataAction==10) {request["every_n"]=everyN;request["mode"]=operationMode==1?"group_average":"every_nth";}
+            if(dataAction==11) {static const char* modes[]={"max","range","area","value_at_x"};request["mode"]=modes[std::clamp(operationMode,0,3)];}
+            if(dataAction==13) {request["axis"]=operationMode==1?"row":"column";request["exclude_filtered"]=excludeFiltered;}
+            auto response=Json::parse(doc.WorksheetCommand(request.dump()));if(!response.at("ok").get<bool>()) throw std::runtime_error(response.at("error").at("message").get<std::string>());
+            if(response.at("result").contains("worksheet_ids")) for(const auto& id:response.at("result").at("worksheet_ids")) state->Show(id.get<pl::Id>());
+        };
+        if(ImGui::Button("Apply operation")) Attempt([&]{submit(false);});
+        if(dataAction==1 || dataAction==2) {ImGui::SameLine();if(ImGui::Button(dataAction==1?"Clear all filters":"Unmask range")) Attempt([&]{submit(true);});}
+        ImGui::PopID();
+    }
     void WorkspacePanel::Worksheet(pl::Id id)
     {
         auto &doc = *state->document;
@@ -427,6 +511,7 @@ namespace SST::Prototypes::PlotLab
                 (void)p.recompute();
             ImGui::TextUnformatted(
                 "Header: column settings. Double-click a number to edit; Enter commits. Right-click to copy full precision.");
+            DataOperations(id);
             auto columns = p.children(id);
             if (columns.size() > 64)
             {
@@ -473,8 +558,11 @@ namespace SST::Prototypes::PlotLab
                                                             ImGuiTableFlags_ScrollY | ImGuiTableFlags_Resizable,
                                                         {0, 0}))
             {
+                float rowLabelWidth=ImGui::CalcTextSize("Row").x;
+                for(const auto* header:pl::headerNames) rowLabelWidth=std::max(rowLabelWidth,ImGui::CalcTextSize(header).x);
+                for(const auto& parameter:sheet.parameters) rowLabelWidth=std::max(rowLabelWidth,ImGui::CalcTextSize(parameter.name.c_str()).x);
                 ImGui::TableSetupColumn("Row", ImGuiTableColumnFlags_WidthFixed,
-                                        ImGui::CalcTextSize("Sparklines").x);
+                                        rowLabelWidth+2*ImGui::GetStyle().CellPadding.x);
                 for (auto column : columns)
                 {
                     const auto &o = p.object(column);
@@ -548,13 +636,15 @@ namespace SST::Prototypes::PlotLab
                 for(const auto* h:pl::headerNames) if(std::find(sheet.hiddenHeaders.begin(),sheet.hiddenHeaders.end(),h)==sheet.hiddenHeaders.end()) headerRow(h,0);
                 for(const auto& row:sheet.parameters) if(row.visible) headerRow(row.name,row.id);
                 ImGuiListClipper clipper;
-                clipper.Begin(static_cast<int>(rows.size()));
+                const bool filtering=sheet.filters!="[]";
+                clipper.Begin(static_cast<int>(filtering?sheet.visibleRows.size():rows.size()));
                 while (clipper.Step())
-                    for (int r = clipper.DisplayStart; r < clipper.DisplayEnd; ++r)
+                    for (int visibleRow = clipper.DisplayStart; visibleRow < clipper.DisplayEnd; ++visibleRow)
                     {
+                        const auto r=filtering?sheet.visibleRows[visibleRow]:static_cast<std::size_t>(visibleRow);
                         ImGui::TableNextRow();
                         ImGui::TableSetColumnIndex(0);
-                        ImGui::PushID(r);
+                        ImGui::PushID(static_cast<int>(r));
                         auto selection = p.selection();
                         bool selected =
                             selection.worksheet == id &&
@@ -568,6 +658,7 @@ namespace SST::Prototypes::PlotLab
                             ImGui::TableSetColumnIndex(static_cast<int>(c + 1));
                             ImGui::PushID(static_cast<int>(c));
                             const auto &col = std::get<pl::Column>(p.object(columns[c]).data);
+                            if(auto color=p.maskColor(columns[c],r)) ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg,color);
                             ImGui::SetNextItemWidth(-1);
                             if (col.values.index() == 0)
                             {
@@ -773,6 +864,22 @@ namespace SST::Prototypes::PlotLab
                     entries.push_back(h);
                 }
             }
+            for(auto series:plots) {
+                const auto& source=std::get<pl::Plot>(p.object(series).data);auto e=p.series(series);
+                auto& mask=maskPreviews[series];
+                if(mask.owner.lock()!=doc.project || mask.revision!=p.revision()+1) {
+                    mask.x.clear();mask.y.clear();
+                    const auto& sx=std::get<pl::Column>(p.object(source.x).data);const auto& sy=std::get<pl::Column>(p.object(source.y).data);
+                    const auto& sheet=std::get<pl::Worksheet>(p.object(source.worksheet).data);
+                    if(!sx.masks.empty() || !sy.masks.empty() || !sheet.masks.empty()) for(std::size_t r=0;r<e.data.count;++r) if(p.rowVisible(source.worksheet,r) && (p.maskColor(source.x,r) || p.maskColor(source.y,r))) {mask.x.push_back(e.data.x[r]);mask.y.push_back(e.data.y[r]);}
+                    mask.owner=doc.project;mask.revision=p.revision()+1;
+                }
+                if(!mask.x.empty()) {
+                    plot::SeriesEntryView overlay{"##masked"+std::to_string(series),{mask.x.data(),mask.y.data(),mask.x.size()}};
+                    overlay.kind=plot::SeriesKind::Scatter;overlay.style.color={1,.3f,.3f,1};overlay.style.marker=plot::Marker::Cross;overlay.style.markerSizePt=6;overlay.style.legend=false;
+                    overlay.visible=e.visible && (!view.visibility.contains(std::to_string(series)) || view.visibility.at(std::to_string(series)));entries.push_back(overlay);
+                }
+            }
             if (!view.fitted)
                 spec.autoFit = plot::AutoFit::Once;
             // pt to logical pixels at 96 DPI; ImGui applies the display DPI scale.
@@ -910,6 +1017,7 @@ namespace SST::Prototypes::PlotLab
             ImGui::Text("Result: %s%s",states[static_cast<int>(info.state)],info.stale?" (previous values retained)":"");
             if(!info.diagnostic.empty()) ImGui::TextWrapped("%s",info.diagnostic.c_str());
             sst::ui::widgets::Text("Expression", &formula, 0, "Definition: column formula. Unit: output column units. Range: supported expressions and stable column references.");
+            sst::ui::widgets::Checkbox("Exclude filtered rows from this formula", &excludeFiltered);
             sst::ui::widgets::Int("From row (1-based)", &rowFrom, 1, 0, 0, "Definition: first evaluated row. Unit: row index. Range: 1 through the worksheet row count.");
             sst::ui::widgets::Int("To row (0 = last)", &rowTo, 1, 0, 0, "Definition: last evaluated row. Unit: row index. Range: 0 for the last row, or a worksheet row at/after From row.");
             sst::ui::widgets::Combo("Recalculate", &recalculate, "None\0Auto\0Manual\0");
@@ -924,7 +1032,7 @@ namespace SST::Prototypes::PlotLab
                 ImGui::TreePop();
             }
             if (ImGui::Button("Set Column Values")) Attempt([&] {
-                auto response=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{"action","set_column_values"},{"column_id",metadata},{"expression",formula},{"row_from",rowFrom},{"row_to",rowTo},{"before_script",beforeScript},{"recalculate",pl::recalculateModes[recalculate]}}.dump()));
+                auto response=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{"action","set_column_values"},{"column_id",metadata},{"expression",formula},{"row_from",rowFrom},{"row_to",rowTo},{"before_script",beforeScript},{"exclude_filtered",excludeFiltered},{"recalculate",pl::recalculateModes[recalculate]}}.dump()));
                 if(!response.at("ok").get<bool>()) throw std::runtime_error(response.at("error").at("message").get<std::string>());
             });
             ImGui::SameLine();
