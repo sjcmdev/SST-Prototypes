@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 from scipy.stats import theilslopes
 
@@ -10,7 +12,7 @@ from .types import PhotoDetectionOptions, PhotoDetectionResult, Sample
 def _detection_window(sample: Sample, options: PhotoDetectionOptions) -> np.ndarray:
     voltage = sample.voltage
     count = voltage.size
-    delta_v0 = max(
+    delta_v0 = min(
         options.voltage_window_thermal_factor * thermal_voltage(sample.temperature_k),
         options.voltage_window_range_fraction * (voltage[-1] - voltage[0]),
     )
@@ -66,6 +68,10 @@ def detect_photo_branch(
         and flatness <= options.flatness_max
         and sign_coherence >= options.sign_coherence_min
     )
+
+    if not is_light and n0 > options.min_points:
+        # A series-limited illuminated curve need not be flat over the wide window.
+        return detect_photo_branch(sample, replace(options, max_fraction=options.min_points / voltage.size))
 
     covers_zero = bool(voltage[0] <= 0.0 <= voltage[-1])
     if not covers_zero:

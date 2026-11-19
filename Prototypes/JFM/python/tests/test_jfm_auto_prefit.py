@@ -26,10 +26,7 @@ from jfm_prefit.types import (
 
 
 def _add_noise(current: np.ndarray, seed: int) -> np.ndarray:
-    # A tiny bit of relative noise randomizes residual signs like real
-    # measurements would; a noiseless curve produces a smooth, deterministic
-    # (long same-sign-run) residual pattern that the model-adequacy check in
-    # residual_diagnostics is deliberately meant to flag as suspicious.
+    # Relative noise exercises the same residual checks as real measurements.
     generator = np.random.Generator(np.random.MT19937(seed))
     return current + generator.normal(size=current.size) * np.abs(current) * 0.003
 
@@ -128,3 +125,44 @@ def test_auto_prefit_characteristic_adapter_runs_end_to_end() -> None:
     assert result["branch"] == "dark"
     assert result["selected"] is not None
     assert len(result["voltage"]) == len(result["prefit_current"])
+
+
+def test_residual_runs_require_resolved_amplitude() -> None:
+    from jfm_prefit.residual_diagnostics import _longest_same_sign_run_fraction
+    assert _longest_same_sign_run_fraction(np.full(100, .01), .75) == 0.
+    assert _longest_same_sign_run_fraction(np.ones(100), .75) == 1.
+    assert _longest_same_sign_run_fraction(np.zeros(100)) == 0.
+    assert _longest_same_sign_run_fraction(np.array([1., 1., 0., 1.]), .75) == .5
+
+
+def test_smooth_local_diode_fit_is_valid() -> None:
+    voltage = np.linspace(.2, .4, 81)
+    current = evaluate_current(voltage, 300., "SD-0", {"I0": 2.e-10, "A": 1.88})
+    sample, _ = prepare_sample(voltage, current, 300.)
+    candidate = fit_and_diagnose(sample, "SD-0", RangeWindow(0, 81, "smooth"), {}, AutoPrefitOptions())
+    assert candidate.is_valid
+    assert candidate.parameters["A"].value == pytest.approx(1.88, rel=1.e-6)
+
+
+def test_scaps_light_keeps_wide_five_parameter_fit() -> None:
+    with np.load(ROOT.parent / "tests/fixtures/scaps-gold1/curves.npz") as curves:
+        values = curves["phase-4-light-rs1-rsh100"].copy()
+    # Phase 4 declares the same 1 cm2 normalization as the golden tests.
+    result = auto_prefit_characteristic(values[:, 0], values[:, 1]*1.e-4, 300.)
+    selected = result["selected"]
+    assert selected is not None and selected["is_valid"]
+    assert selected["model_id"] == "SD-RsRsh-I_ph"
+    lo, hi = selected["fit_range"]["lo"], selected["fit_range"]["hi"]
+    assert values[hi-1, 0]-values[lo, 0] >= .95*values[-1, 0]
+
+
+@pytest.mark.parametrize("rs_ohm_cm2", [1, 10])
+def test_scaps_dark_search_continues_past_short_diode_patch(rs_ohm_cm2) -> None:
+    with np.load(ROOT.parent / "tests/fixtures/scaps-gold1/curves.npz") as curves:
+        values = curves[f"phase-4-dark-rs{rs_ohm_cm2}-rsh100"].copy()
+    result = auto_prefit_characteristic(values[:, 0], values[:, 1]*1.e-4, 300.)
+    selected = result["selected"]
+    assert selected is not None and selected["is_valid"]
+    assert selected["model_id"] == "SD-RsRsh"
+    lo, hi = selected["fit_range"]["lo"], selected["fit_range"]["hi"]
+    assert values[hi-1, 0]-values[lo, 0] >= .95*values[-1, 0]

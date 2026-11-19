@@ -119,7 +119,7 @@ def fit_and_diagnose(
     parameters = {name: context.estimates[name] for name in spec.parameter_names}
     values = {name: estimate.value for name, estimate in parameters.items()}
     parameters_plausible = all(
-        math.isfinite(value) and (name not in _POSITIVE_PARAMETERS or value > 0.0)
+        math.isfinite(value) and (name not in _POSITIVE_PARAMETERS or value > 0.0 or (name == "Rs" and value == 0.0))
         for name, value in values.items()
     ) and (
         "A" not in values
@@ -330,7 +330,7 @@ def optimize_range_for_model(
     # boundary from the original bracket and keep it if it's wider and
     # still valid -- this also recovers the case where the primary path
     # never validates at all.
-    for side in ("hi", "lo"):
+    for side in (() if result.is_valid and (lo, hi) == (lo0, hi0) else ("hi", "lo")):
         alt_lo, alt_hi, alt_result = _search_bound(
             sample, model_id, lo0, hi0, side, initial_parameters, options
         )

@@ -119,7 +119,9 @@ def test_sorting_mapping_candidates_and_smoothing():
     a=sweep([1,2,4,8,16,32,64],[10,9,7,3,2,1,0])
     r=analyze_as(a,dict(type='AS',smoothing={'method':'none'}))
     # Central slope at f=4 is (3-9)/(2*ln(2)); it is the deepest minimum.
-    assert r['candidates'][0]['row_id']==13 and r['candidates'][0]['frequency_Hz']==4
+    assert r['candidates'][0]['row_id']==13
+    assert r['candidates'][0]['frequency_Hz']==pytest.approx(4*2**.25)
+    assert r['candidates'][0]['D_F']==pytest.approx(-3.0625/math.log(2))
     assert r['candidates'][0]['measurement_id']==1
     # Candidate series wins screen-picking ties with overlapping raw points.
     assert r['plots'][1]['curves'][0]['candidates'] is True

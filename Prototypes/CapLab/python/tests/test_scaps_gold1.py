@@ -71,9 +71,8 @@ def test_as_arrhenius(model,level):
 
 @pytest.mark.parametrize('model,level', [
     ('phase3',None),('single','0.35'),('gaussian','0.35'),('double','0.28'),
-    pytest.param('double','0.43',marks=pytest.mark.xfail(strict=True,
-        reason='CapLab grid-only inflection shifts double 0.43 eV Ea by +3.158 meV; no sub-bin peak refinement'))])
-def test_default_as_grid_arrhenius(model,level):
+    ('double','0.43')])
+def test_default_as_arrhenius(model,level):
     r=extraction(model,level,refine=False)
     assert r['Ea_eV']==pytest.approx(r['reference_eV'],abs=.002)
 

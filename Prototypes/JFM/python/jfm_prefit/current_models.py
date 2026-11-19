@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Callable
 
 import numpy as np
-from scipy.special import lambertw
+from scipy.special import lambertw, wrightomega
 
 from .constants import thermal_voltage
 
@@ -30,6 +30,10 @@ def _series_diode_current(
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
         argument = (i0 * rs / vt_a) * np.exp(voltage / vt_a)
         I_LW = np.real(lambertw(argument, k=0)) * vt_a / rs
+    overflow = ~np.isfinite(I_LW)
+    if np.any(overflow):
+        log_argument = np.log(i0) + np.log(rs / vt_a) + voltage[overflow] / vt_a
+        I_LW[overflow] = wrightomega(log_argument) * vt_a / rs
     return I_LW, voltage - I_LW * rs
 
 

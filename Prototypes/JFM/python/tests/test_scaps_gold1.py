@@ -23,18 +23,13 @@ PHASE4=np.load(FIX/'curves.npz')
 TSVS=sorted(p.name for p in FIX.glob('*.tsv'))
 AREA_M2=1e-4  # Declared normalization; phase-4 params.json has no area.
 AUTO_FAILURES = {
-    'phase-4-dark-rs0-rsh100',
     'phase-4-dark-rs0-rsh10000',
-    'phase-4-dark-rs0-rshoff',
-    'phase-4-dark-rs1-rsh100',
-    'phase-4-dark-rs1-rsh10000',
     'phase-4-dark-rs1-rshoff',
-    'phase-4-dark-rs10-rsh100',
-    'phase-4-dark-rs10-rsh10000',
     'phase-4-dark-rs10-rshoff',
     'phase-4-light-rs0-rsh100',
     'phase-4-light-rs0-rsh10000',
     'phase-4-light-rs0-rshoff',
+    'phase-4-light-rs1-rsh100',
     'phase-4-light-rs1-rsh10000',
     'phase-4-light-rs1-rshoff',
     'phase-4-light-rs10-rsh100',
@@ -42,14 +37,6 @@ AUTO_FAILURES = {
     'phase-4-light-rs10-rshoff',
 }
 RECOVERY_FAILURES = {
-    'phase-4-dark-rs0-rsh10000',
-    'phase-4-dark-rs0-rshoff',
-    'phase-4-dark-rs1-rsh100',
-    'phase-4-dark-rs1-rsh10000',
-    'phase-4-dark-rs1-rshoff',
-    'phase-4-dark-rs10-rsh100',
-    'phase-4-dark-rs10-rsh10000',
-    'phase-4-dark-rs10-rshoff',
     'phase-4-light-rs0-rsh100',
     'phase-4-light-rs0-rsh10000',
     'phase-4-light-rs1-rsh100',
@@ -59,48 +46,11 @@ RECOVERY_FAILURES = {
     'phase-4-light-rs10-rsh10000',
     'phase-4-light-rs10-rshoff',
 }
-BRANCH_FAILURES = {
-    'phase-4-light-rs10-rsh100',
-    'phase-4-light-rs10-rsh10000',
-    'phase-4-light-rs10-rshoff',
-}
+BRANCH_FAILURES = set()
 N_FAILURES = {
-    'cdte',
     'cigs',
 }
-PHASE9_FAILURES = {
-    'cdte-dark-T200K.tsv',
-    'cdte-dark-T220K.tsv',
-    'cdte-dark-T240K.tsv',
-    'cdte-dark-T260K.tsv',
-    'cdte-dark-T280K.tsv',
-    'cdte-dark-T300K.tsv',
-    'cdte-dark-T320K.tsv',
-    'cdte-dark-T340K.tsv',
-    'cdte-light-T200K.tsv',
-    'cdte-light-T220K.tsv',
-    'cdte-light-T240K.tsv',
-    'cdte-light-T260K.tsv',
-    'cdte-light-T280K.tsv',
-    'cdte-light-T300K.tsv',
-    'cdte-light-T320K.tsv',
-    'cdte-light-T340K.tsv',
-    'cigs-dark-T200K.tsv',
-    'cigs-dark-T220K.tsv',
-    'cigs-dark-T240K.tsv',
-    'cigs-dark-T260K.tsv',
-    'cigs-dark-T280K.tsv',
-    'cigs-dark-T300K.tsv',
-    'cigs-dark-T320K.tsv',
-    'cigs-dark-T340K.tsv',
-    'cigs-light-T200K.tsv',
-    'cigs-light-T220K.tsv',
-    'cigs-light-T240K.tsv',
-    'cigs-light-T260K.tsv',
-    'cigs-light-T280K.tsv',
-    'cigs-light-T300K.tsv',
-    'cigs-light-T340K.tsv',
-}
+PHASE9_FAILURES = set()
 RESULTS={}
 
 
@@ -128,6 +78,8 @@ def automatic():
 
 
 def case(name,failures,reason):
+    if failures is AUTO_FAILURES and name == 'phase-4-light-rs1-rsh100':
+        reason = 'Historical 7p target; owner rule selects valid 5p over 97% of positive voltage span'
     return pytest.param(name,marks=pytest.mark.xfail(strict=True,reason=reason)) if name in failures else name
 
 
@@ -151,8 +103,10 @@ def test_phase4_resistance(name):
     # zero-Rs absolute tolerance is 0.01 ohm cm2; off-shunt is a lower bound.
     assert p['Rs']['value']*area_cm2==pytest.approx(REF[name]['Rs_Ohm_cm2'],rel=.05,abs=.01)
     shunt=REF[name]['Rsh_Ohm_cm2']
-    if shunt is None or isinstance(shunt,str):assert p['Rsh']['value']*area_cm2>=1e8
-    else:assert p['Rsh']['value']*area_cm2==pytest.approx(shunt,rel=.05)
+    recovered_shunt=(p['Rsh']['value']-p['Rs']['value'])*area_cm2
+    if shunt is None or isinstance(shunt,str):assert recovered_shunt>=1e8
+    # Inverse Drobiazg mapping keeps the original external-Rsh 5% tolerance.
+    else:assert recovered_shunt==pytest.approx(shunt,rel=.05)
 
 
 @pytest.mark.parametrize('name',[case(n,PHASE9_FAILURES,'SCAPS phase9: default auto search returns no valid candidate; REPORT.md') for n in TSVS])

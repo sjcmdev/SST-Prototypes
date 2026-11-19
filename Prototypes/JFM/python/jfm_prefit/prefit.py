@@ -50,6 +50,7 @@ def run_auto_prefit(
         branch = "light" if photo.is_light else "dark"
 
     branch_sample = replace(sample, characteristic_type=branch)
+    eligible_range = detect_fit_range(branch_sample, options.range_options).fit_range
     current_model: str | None = "SD-0-I_ph" if branch == "light" else "SD-0"
     initial_parameters: dict[str, float] = {}
     if branch == "light":
@@ -67,7 +68,10 @@ def run_auto_prefit(
             best = choose_better_candidate(best, candidate, options.adaptive_range)
 
         next_model = select_child_model(current_model, structural_problem)
-        if next_model is None and not candidate.is_valid:
+        # A valid narrow patch must still compete with a wider child fit.
+        if next_model is None and (not candidate.is_valid
+                or candidate.fit_range.lo > eligible_range.lo
+                or candidate.fit_range.hi < eligible_range.hi):
             next_model = fallback_next_model(current_model)
         if next_model is None:
             break

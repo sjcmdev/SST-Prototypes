@@ -37,6 +37,17 @@ def preprocess(m, smoothing=None):
         raise ValueError('Unknown smoothing method')
     d = np.gradient(processed, np.log(f), edge_order=1)
     indices = find_peaks(-d, distance=2)[0]
+    candidates = []
+    log_f = np.log(f)
+    for i in indices:
+        # Refine within the bracketing bins; the row ID keeps the source anchor.
+        a, b, c0 = np.polyfit(log_f[i-1:i+2] - log_f[i], d[i-1:i+2], 2)
+        offset = -b / (2*a) if a > 0 else 0.
+        if not log_f[i-1] - log_f[i] <= offset <= log_f[i+1] - log_f[i]:
+            offset = 0.
+        candidates.append(dict(measurement_id=m['id'], row_id=rows[i], temperature_K=m.get('temperature_K'),
+            frequency_Hz=float(np.exp(log_f[i] + offset)), D_F=float(a*offset**2+b*offset+c0),
+            provenance='AS candidate; three-point log-frequency refinement'))
     diagnostic = []
     name, unit = ('Rp', 'Ohm') if m['variant'] == 'Cp_Rp' else ('G', 'S')
     if m['units'][m['names'].index(name)] != unit:
@@ -52,8 +63,7 @@ def preprocess(m, smoothing=None):
     return dict(frequency_Hz=f.tolist(), capacitance_F=c.tolist(), processed_capacitance_F=processed.tolist(),
         D_F=d.tolist(), raw_D_F=raw.tolist(), row_ids=rows, smoothing=smooth,
         G_over_omega_F=[float(v) if math.isfinite(v) else None for v in go], diagnostics=diagnostic,
-        candidates=[dict(measurement_id=m['id'], row_id=rows[i], temperature_K=m.get('temperature_K'),
-                         frequency_Hz=float(f[i]), D_F=float(d[i]), provenance='AS candidate') for i in indices])
+        candidates=candidates)
 
 
 def analyze_as(m, options, cancelled=lambda: False, progress=lambda v: None):

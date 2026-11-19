@@ -54,19 +54,20 @@ def compute_local_error_profile(
     return error, bias
 
 
-def _longest_same_sign_run_fraction(residuals: np.ndarray) -> float:
+def _longest_same_sign_run_fraction(residuals: np.ndarray, tolerance: float = 0.0) -> float:
     n = residuals.size
     if n == 0:
         return 0.0
-    signs = np.sign(residuals)
-    signs[signs == 0.0] = 1.0
-    longest = current = 1
+    # Sub-noise residuals break a run: smooth solver error is not missing physics.
+    signs = np.where(np.abs(residuals) > tolerance, np.sign(residuals), 0.)
+    longest = current = int(signs[0] != 0.)
     for i in range(1, n):
-        if signs[i] == signs[i - 1]:
+        if signs[i] != 0. and signs[i] == signs[i - 1]:
             current += 1
             longest = max(longest, current)
         else:
-            current = 1
+            current = int(signs[i] != 0.)
+            longest = max(longest, current)
     return longest / n
 
 
@@ -95,7 +96,7 @@ def compute_region_scores(
         low_bias=_mean_or_zero(bias, low),
         high_bias=_mean_or_zero(bias, high),
         interior_bias=_mean_or_zero(bias, interior),
-        max_same_sign_run_fraction=_longest_same_sign_run_fraction(residuals),
+        max_same_sign_run_fraction=_longest_same_sign_run_fraction(residuals, options.local_bias_threshold),
     )
 
 
