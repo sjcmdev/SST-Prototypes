@@ -6,10 +6,10 @@
     {
       "id": "new-device",
       "target": {
-        "window": "scapslab.Devices",
+        "window": "scapslab.Project",
         "item": "new"
       },
-      "instruction": "Click New (template) in Devices, then name the device Tutorial: First device.",
+      "instruction": "Click New device in the Project tree, then name the device Tutorial: First device.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: First device"

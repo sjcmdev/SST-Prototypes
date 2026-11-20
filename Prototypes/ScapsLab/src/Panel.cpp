@@ -14,8 +14,9 @@
 #include <tuple>
 #include <imgui_internal.h>
 #include "Core/Platform/NativeFileDialog.hpp"
+#include "Vendor/ImGuiNotify/win32Example/fonts/IconsFontAwesome6.h"
 namespace SST::ScapsLab {
-static const char *names[]={"Project","Layers","Contacts","Solver","Run","Results","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","Devices","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
+static const char *names[]={"Project","Layers","Contacts","Solver","Run","Results","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
 Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.")+names[v],names[v],true),w(w),view(v),gallery(gallery) {
     auto s=GetState(); s.x=gallery?25.f:10.f+float(v%3)*415.f; s.y=gallery?50.f:45.f+float(v/3)*335.f;
     if(gallery) s.mode=WindowMode::Maximized;
@@ -166,7 +167,7 @@ void DrawHistory(Workflow &w,bool global) {
                     const auto pos=ImGui::GetCursorScreenPos();
                     if(ImGui::InvisibleButton("##pin",ImVec2(size,size),ImGuiButtonFlags_EnableNav)){update["pinned"]=!pin;changed=true;}
                     if(ImGui::IsItemHovered())ImGui::SetTooltip(pin?"Unpin run":"Keep / Pin run");
-                    if(run.at("run_id")==device->selectedRun)w.tutorialOverlay.Item("scapslab.Devices","keep");
+                    if(run.at("run_id")==device->selectedRun)w.tutorialOverlay.Item("scapslab.History","keep");
                     auto *draw=ImGui::GetWindowDrawList();const auto ink=ImGui::GetColorU32(pin?ImGuiCol_CheckMark:ImGuiCol_TextDisabled);
                     const float x=pos.x+size*.5f,y=pos.y+size*.25f;
                     draw->AddRectFilled(ImVec2(x-3,y),ImVec2(x+3,y+6),ink);draw->AddLine(ImVec2(x-5,y+6),ImVec2(x+5,y+6),ink,2);draw->AddLine(ImVec2(x,y+6),ImVec2(x,y+13),ink,1.5f);
@@ -291,32 +292,15 @@ void Panel::RenderContent() {
     if(view==16) {Batch();return;}
     if(view==17) {Recorder();return;}
     if(view==18) {BatchPlots();return;}
-    if(view==15) {Devices();return;}
+    if(view==0) {Devices();return;}
+    if(view==15) {DrawHistory(*w);return;}
     if(view==10) {Compare();return;}
     if(view==5) {Results();return;}
     if(view==22) {GenerationRecombination();return;}
     if(view>=6 && view<10) {AC();return;}
     const bool replacing=w->pending && (w->pending->request.at("operation")=="project_load" || w->pending->request.at("operation")=="load" || w->pending->request.at("operation")=="layer");
     ImGui::BeginDisabled(replacing);
-    if(view==0) {
-        char name[256];std::snprintf(name,sizeof(name),"%s",w->project.name.c_str());
-        BeginRow("Project name");if(ImGui::InputText("##name",name,sizeof(name),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) Send({{"operation","project_edit"},{"name",name}});EndRow();
-        ImGui::TextWrapped("%s",w->path.c_str());
-        if(w->dirty) ImGui::TextColored(ImVec4(1,.7f,.3f,1),"Unsaved changes *");
-        if(ImGui::Button("Open")) w->fileAction="open";ImGui::SameLine();
-        if(ImGui::Button("Save")) w->fileAction="save";ImGui::SameLine();
-        if(ImGui::Button("Save As")) w->fileAction="save_as";
-        ImGui::TextWrapped("%s",w->status.c_str());
-        if(ImGui::Button("Undo")) Send({{"operation","undo"}});w->tutorialOverlay.Item("scapslab.Project","undo");ImGui::SameLine();
-        if(ImGui::Button("Redo")) Send({{"operation","redo"}});w->tutorialOverlay.Item("scapslab.Project","redo");
-        ImGui::Text("%d devices | active: %s",int(w->project.devices.size()),w->Current().name.c_str());
-        if(!w->Current().document.is_null()) {
-            ImGui::Text("Case: %s",w->Current().document.at("case_id").get<std::string>().c_str());
-            ImGui::Text("Layers: %d",int(w->Current().document.at("layers").size()));
-            ImGui::TextWrapped("Full YAML mapping is retained, including defects, interfaces, illumination and external elements. Layer IDs persist in scapslab_id.");
-            ImGui::TextDisabled("Ctrl+click sliders for exact values. Ctrl+A selects all text.");
-        }
-    } else if(w->Current().document.is_object()) {
+    if(w->Current().document.is_object()) {
         auto draft=w->Current().document;
         if(!w->edits.empty()) draft=w->edits.back().at("document");
         else if(w->pending && w->pendingDevice==w->project.active_device && w->pending->request.value("operation",std::string{})=="edit" && w->pending->request.contains("document")) draft=w->pending->request.at("document");
@@ -1015,40 +999,170 @@ void Panel::AC() {
     }
 }
 void Panel::Devices() {
-    if(ImGui::CollapsingHeader("Run history",ImGuiTreeNodeFlags_DefaultOpen)) DrawHistory(*w);
+    // Project tree: Project > Devices > device > (Layers, Interfaces, Contacts, Illumination, Results). One line per item.
     ImGui::BeginDisabled(w->Busy());
-    if(ImGui::Button("New (template)")) Send({{"operation","device_add"}});w->tutorialOverlay.Item("scapslab.Devices","new");ImGui::SameLine();
-    if(ImGui::Button("Duplicate")) Send({{"operation","device_duplicate"}});ImGui::SameLine();
-    ImGui::BeginDisabled(w->project.devices.size()==1);
-    if(ImGui::Button("Delete")) Send({{"operation","device_remove"}});ImGui::EndDisabled();
-    if(ImGui::Button("Import YAML")) {try {if(const auto path=OpenFileDialog({"Device YAML","yaml,yml"})) Send({{"operation","device_add"},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}}
-    ImGui::SameLine();if(ImGui::Button("Undo delete")) {w->preferProjectUndo=true;Send({{"operation","undo"}});}
-    ImGui::TextWrapped("Import YAML here, or use File / Import SCAPS .def. Unsupported items are reported as warnings.");
+    if(ImGui::Button(ICON_FA_PLUS " New device")) Send({{"operation","device_add"}});w->tutorialOverlay.Item("scapslab.Project","new");ImGui::SameLine();
+    if(ImGui::Button(ICON_FA_FILE_IMPORT " Import device")) {try {if(const auto path=OpenFileDialog({"Device YAML","yaml,yml"})) Send({{"operation","device_add"},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}}
+    if(ImGui::IsItemHovered()) ImGui::SetTooltip("Import a device YAML (or use File / Import SCAPS .def). Unsupported items are reported as warnings.");
+    if(ImGui::Button("Undo")) Send({{"operation","undo"}});w->tutorialOverlay.Item("scapslab.Project","undo");
+    if(ImGui::IsItemHovered()) ImGui::SetTooltip("Undo (also restores a deleted device)");
+    ImGui::SameLine();if(ImGui::Button("Redo")) Send({{"operation","redo"}});w->tutorialOverlay.Item("scapslab.Project","redo");
     ImGui::EndDisabled();
-    if(ImGui::BeginTable("Device list",3,ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
-        ImGui::TableSetupColumn("Device",ImGuiTableColumnFlags_WidthStretch,1.8f);ImGui::TableSetupColumn("Status");ImGui::TableSetupColumn("Compare",ImGuiTableColumnFlags_WidthFixed,75);ImGui::TableHeadersRow();
-        for(const auto &d:w->project.devices) {
-            ImGui::PushID(d->id.c_str());ImGui::TableNextRow();ImGui::TableNextColumn();
-            const auto c=d->colour.get<std::vector<float>>();ImGui::ColorButton("##colour",ImVec4(c[0],c[1],c[2],c[3]),ImGuiColorEditFlags_NoTooltip,ImVec2(12,12));ImGui::SameLine();
-            if(ImGui::Selectable((d->name+(d->dirty?" *":"")+"##select").c_str(),w->project.active_device==d->id)) Send({{"operation","device_select"},{"device_id",d->id}});
-            if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_DEVICE",d->id.c_str(),d->id.size()+1);ImGui::TextUnformatted(d->name.c_str());ImGui::EndDragDropSource();}
-            if(ImGui::BeginDragDropTarget()) {if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_DEVICE")) Send({{"operation","device_move"},{"device_id",static_cast<const char*>(payload->Data)},{"index",int(&d-&w->project.devices[0])}});ImGui::EndDragDropTarget();}
-            ImGui::TableNextColumn();ImGui::TextUnformatted(d->status.c_str());ImGui::TableNextColumn();
-            bool compare=w->project.compare_set.contains(d->id);ImGui::TextUnformatted("Show");ImGui::SameLine();ImGui::BeginDisabled(w->Busy());if(ImGui::Checkbox("##compare",&compare)) Send({{"operation","device_update"},{"device_id",d->id},{"compare",compare}});ImGui::EndDisabled();
-            ImGui::PopID();
-        }ImGui::EndTable();
-    }
-    ImGui::BeginDisabled(w->Busy());
-    char name[256];std::snprintf(name,sizeof(name),"%s",w->Current().name.c_str());BeginRow("Rename active");
-    if(ImGui::InputText("##rename",name,sizeof(name),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) Send({{"operation","device_update"},{"name",name}});EndRow();
-    BeginRow("Colour");auto c=w->Current().colour.get<std::vector<float>>();if(ImGui::ColorEdit4("##value",c.data(),ImGuiColorEditFlags_NoInputs)) Send({{"operation","device_update"},{"colour",c}});EndRow();
-    ImGui::TextWrapped("%s",w->Current().description.c_str());
-    if(ImGui::Button("Run all checked")) Send({{"operation","run_all"}});ImGui::EndDisabled();
+    ImGui::SameLine();if(ImGui::Button(ICON_FA_PLAY " Run all checked") && !w->Busy()) Send({{"operation","run_all"}});
+    ImGui::SameLine();ImGui::TextDisabled("Compare: show in plots");
     if(w->Busy()) {
-        if(w->batchTotal) {ImGui::ProgressBar(float(w->batchCompleted)/float(w->batchTotal));ImGui::Text("Devices: %d / %d",int(w->batchCompleted),int(w->batchTotal));}
-        const auto job=w->jobs->GetJob(w->active);if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0);ImGui::TextWrapped("%s",job->currentStage.c_str());}
-        if(ImGui::Button("Cancel")) Send({{"operation","cancel"}});
+        const auto job=w->jobs->GetJob(w->active);
+        if(w->batchTotal) ImGui::ProgressBar(float(w->batchCompleted)/float(w->batchTotal),ImVec2(-90,0),(std::to_string(w->batchCompleted)+" / "+std::to_string(w->batchTotal)+" devices").c_str());
+        else ImGui::ProgressBar(job && job->totalWork>0?float(job->completedWork/job->totalWork):0.f,ImVec2(-90,0),job?job->currentStage.c_str():"");
+        ImGui::SameLine();if(ImGui::Button("Cancel")) Send({{"operation","cancel"}});
+    } else if(w->dirty || !w->status.empty()) ImGui::TextDisabled("%s%s",w->dirty?"* unsaved  ":"",w->status.c_str());
+    ImGui::Separator();
+    const auto select=[&](const DeviceState &d) {if(w->project.active_device!=d.id) Send({{"operation","device_select"},{"device_id",d.id}});};
+    const auto go=[&](int target) {w->focusView=target;};
+    // Tree node with room for inline decoration; returns {open, clicked (not the arrow)}.
+    const auto node=[&](const char *id,ImGuiTreeNodeFlags flags,bool selected) {
+        const bool open=ImGui::TreeNodeEx(id,flags|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_AllowOverlap|ImGuiTreeNodeFlags_OpenOnArrow|(selected?ImGuiTreeNodeFlags_Selected:0));
+        return std::pair{open,ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen()};
+    };
+    const auto text=[&](const std::string &label,const std::string &dim={}) {ImGui::SameLine(0,4);ImGui::TextUnformatted(label.c_str());if(!dim.empty()){ImGui::SameLine(0,8);ImGui::TextDisabled("%s",dim.c_str());}};
+    static std::string renameId;static char renameBuf[256]{};
+    const auto devices=w->project.devices; // commands replace device state: iterate a snapshot
+    if(ImGui::TreeNodeEx("##project",ImGuiTreeNodeFlags_DefaultOpen|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow)) {
+        text(ICON_FA_FOLDER_OPEN " "+w->project.name+(w->dirty?" *":""));
+        if(ImGui::BeginPopupContextItem("project-menu")) {
+            if(ImGui::MenuItem("Rename project...")) {renameId="";std::snprintf(renameBuf,sizeof(renameBuf),"%s",w->project.name.c_str());ImGui::CloseCurrentPopup();ImGui::OpenPopup("Rename##dialog");}
+            if(ImGui::MenuItem("Save")) w->fileAction="save";
+            if(ImGui::MenuItem("Open...")) w->fileAction="open";
+            ImGui::EndPopup();
+        }
+        if(ImGui::TreeNodeEx("##devices",ImGuiTreeNodeFlags_DefaultOpen|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow)) {
+            text("Devices ("+std::to_string(devices.size())+")");
+            for(const auto &dp:devices) {
+                const auto &d=*dp;const bool active=w->project.active_device==d.id;
+                ImGui::PushID(d.id.c_str());
+                const float rowRight=ImGui::GetCursorPosX()+ImGui::GetContentRegionAvail().x,box=ImGui::GetFrameHeight();
+                const auto [open,clicked]=node("##device",ImGuiTreeNodeFlags_DefaultOpen,active);
+                if(clicked) {select(d);go(14);}
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nStatus: %s",d.name.c_str(),d.status.c_str());
+                if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_DEVICE",d.id.c_str(),d.id.size()+1);ImGui::TextUnformatted(d.name.c_str());ImGui::EndDragDropSource();}
+                if(ImGui::BeginDragDropTarget()) {if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_DEVICE")) Send({{"operation","device_move"},{"device_id",static_cast<const char*>(payload->Data)},{"index",int(&dp-&devices[0])}});ImGui::EndDragDropTarget();}
+                if(ImGui::BeginPopupContextItem("device-menu")) {
+                    select(d);
+                    if(ImGui::MenuItem("Rename...")) {renameId=d.id;std::snprintf(renameBuf,sizeof(renameBuf),"%s",d.name.c_str());ImGui::CloseCurrentPopup();ImGui::OpenPopup("Rename##dialog");}
+                    if(ImGui::MenuItem("Duplicate")) Send({{"operation","device_duplicate"},{"device_id",d.id}});
+                    if(ImGui::MenuItem("Delete",nullptr,false,devices.size()>1)) Send({{"operation","device_remove"},{"device_id",d.id}});
+                    ImGui::Separator();
+                    if(ImGui::MenuItem("Add layer")) {Send({{"operation","layer"},{"action","add"}});go(1);}
+                    if(ImGui::MenuItem("Add defect")) {AddDefectTo(false,w->Current().selectedLayer);go(11);}
+                    if(ImGui::MenuItem("Add interface defect")) {AddDefectTo(true,w->Current().selectedLayer);go(12);}
+                    ImGui::Separator();
+                    if(ImGui::MenuItem("Export SCAPS .def...")) w->fileAction="export_def";
+                    ImGui::EndPopup();
+                }
+                const auto c=d.colour.get<std::vector<float>>();bool compare=w->project.compare_set.contains(d.id);
+                ImGui::SameLine(0,4);ImGui::ColorButton("##colour",ImVec4(c[0],c[1],c[2],c[3]),ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(box*.6f,box*.6f));
+                ImGui::SameLine(0,4);
+                if(compare) ImGui::TextUnformatted((d.name+(d.dirty?" *":"")).c_str());else ImGui::TextDisabled("%s",(d.name+(d.dirty?" *":"")).c_str());
+                if(w->Busy() && w->pendingDevice==d.id) {
+                    const auto job=w->jobs->GetJob(w->active);ImGui::SameLine(0,6);
+                    ImGui::ProgressBar(job && job->totalWork>0?float(job->completedWork/job->totalWork):0.f,ImVec2(48,box*.35f),"");
+                }
+                ImGui::SameLine();ImGui::SetCursorPosX(rowRight-box);
+                ImGui::BeginDisabled(w->Busy());if(ImGui::Checkbox("##compare",&compare)) Send({{"operation","device_update"},{"device_id",d.id},{"compare",compare}});ImGui::EndDisabled();
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("Compare: show in plots");
+                if(open) {
+                    const auto &doc=d.document;
+                    const auto layers=doc.is_object() && doc.contains("layers")?doc.at("layers"):Json::array();
+                    const auto sheets=doc.is_object()?doc.value("interface_defects",Json::array()):Json::array();
+                    if(ImGui::TreeNodeEx("##layers",ImGuiTreeNodeFlags_DefaultOpen|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow)) {
+                        text(ICON_FA_LAYER_GROUP " Layers ("+std::to_string(layers.size())+")");
+                        for(int i=0;i<int(layers.size());++i) {
+                            const auto &l=layers[i];const auto &defects=l.value("defects",Json::array());ImGui::PushID(i);
+                            const auto [lopen,lclick]=node("##layer",defects.empty()?ImGuiTreeNodeFlags_Leaf:ImGuiTreeNodeFlags_None,active && d.selectedLayer==i && d.selectedInterface<0);
+                            if(lclick) {select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;go(1);}
+                            if(ImGui::BeginPopupContextItem("layer-menu")) {
+                                select(d);w->Current().selectedLayer=i;
+                                if(ImGui::MenuItem("Add defect")) {AddDefectTo(false,i);go(11);}
+                                if(ImGui::MenuItem("Add layer")) {Send({{"operation","layer"},{"action","add"}});go(1);}
+                                ImGui::EndPopup();
+                            }
+                            char thickness[48];std::snprintf(thickness,sizeof(thickness),"%.3g um",l.value("thickness_m",0.)*1e6);
+                            text(l.value("name",std::string("layer")),thickness);
+                            if(lopen) {
+                                for(int k=0;k<int(defects.size());++k) {
+                                    ImGui::PushID(k);const auto [dopen,dclick]=node("##defect",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)dopen;
+                                    if(dclick) {select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;selectedDefect=k;go(11);}
+                                    text(ICON_FA_CIRCLE_DOT " "+defects[k].value("scapslab_id",std::string("defect")));ImGui::PopID();
+                                }
+                                ImGui::TreePop();
+                            }
+                            ImGui::PopID();
+                        }
+                        ImGui::TreePop();
+                    }
+                    if(layers.size()>1 && ImGui::TreeNodeEx("##interfaces",ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow)) {
+                        text("Interfaces ("+std::to_string(layers.size()-1)+")");
+                        for(int i=0;i+1<int(layers.size());++i) {
+                            int count=0;for(const auto &s:sheets) count+=s.value("left_layer_index",-1)==i;
+                            ImGui::PushID(i);const auto [iopen,iclick]=node("##interface",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,active && d.selectedInterface==i);(void)iopen;
+                            if(iclick) {select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;go(12);}
+                            if(ImGui::BeginPopupContextItem("interface-menu")) {select(d);if(ImGui::MenuItem("Add interface defect")) {AddDefectTo(true,i);go(12);}ImGui::EndPopup();}
+                            text(layers[i].value("name",std::string{})+" / "+layers[i+1].value("name",std::string{}),count?std::to_string(count)+" defect(s)":"");ImGui::PopID();
+                        }
+                        ImGui::TreePop();
+                    }
+                    for(const auto &[label,target]:{std::pair<const char*,int>{ICON_FA_PLUG " Contacts",2},{ICON_FA_SUN " Illumination",19}}) {
+                        ImGui::PushID(target);const auto [lopen,lclick]=node("##leaf",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)lopen;
+                        if(lclick) {select(d);go(target);}
+                        text(label);ImGui::PopID();
+                    }
+                    const auto &history=d.history;
+                    if(ImGui::TreeNodeEx("##results",ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow|(active?ImGuiTreeNodeFlags_DefaultOpen:0))) {
+                        text(ICON_FA_CHART_LINE " Results ("+std::to_string(history.size())+")");
+                        for(int r=int(history.size())-1;r>=0;--r) {
+                            const auto &run=history[r];const auto id=run.at("run_id").get<std::string>();
+                            ImGui::PushID(id.c_str());
+                            const auto [ropen,rclick]=node("##run",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,active && d.selectedRun==id);(void)ropen;
+                            const std::string kind=run.value("kind",std::string{});
+                            if(rclick) {(void)w->Dispatch({{"operation","history_select"},{"device_id",d.id},{"run_id",id}});go(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:5);}
+                            const auto rc=run.at("colour").get<std::vector<float>>();
+                            ImGui::SameLine(0,4);ImGui::ColorButton("##rc",ImVec4(rc[0],rc[1],rc[2],rc[3]),ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(box*.5f,box*.5f));
+                            const std::time_t seconds=run.value("time_unix_ms",std::int64_t(0))/1000;std::tm local{};localtime_s(&local,&seconds);char time[32];std::strftime(time,sizeof(time),"%H:%M:%S",&local);
+                            text(RunLabel(run),time);ImGui::PopID();
+                        }
+                        ImGui::TreePop();
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            ImGui::TreePop();
+        }
+        ImGui::TreePop();
     }
+    if(ImGui::BeginPopupModal("Rename##dialog",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted(renameId.empty()?"Rename project":"Rename device");
+        if(ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        const bool entered=ImGui::InputText("##name",renameBuf,sizeof(renameBuf),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
+        if(ImGui::Button("OK") || entered) {
+            if(renameId.empty()) Send({{"operation","project_edit"},{"name",renameBuf}});else Send({{"operation","device_update"},{"device_id",renameId},{"name",renameBuf}});
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();if(ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+}
+void Panel::AddDefectTo(bool sheet,int layer) {
+    auto draft=w->Current().document;if(!draft.is_object() || !draft.contains("layers") || layer<0 || layer>=int(draft["layers"].size()) || (sheet && layer+1>=int(draft["layers"].size()))) return;
+    auto d=NewDefect(sheet);unsigned n=1;std::set<std::string> ids;
+    if(sheet) for(const auto &v:draft.value("interface_defects",Json::array())) ids.insert(v.at("id"));
+    else for(const auto &l:draft["layers"]) for(const auto &v:l["defects"]) ids.insert(v.at("scapslab_id"));
+    const std::string prefix=sheet?"interface-defect-":"defect-";
+    while(ids.contains(prefix+std::to_string(n))) ++n;
+    d[sheet?"id":"scapslab_id"]=prefix+std::to_string(n);
+    if(sheet) {d["left_layer_index"]=layer;if(!draft.contains("interface_defects") || !draft["interface_defects"].is_array()) draft["interface_defects"]=Json::array();draft["interface_defects"].push_back(d);selectedDefect=int(draft["interface_defects"].size())-1;}
+    else {draft["layers"][layer]["defects"].push_back(d);selectedDefect=int(draft["layers"][layer]["defects"].size())-1;}
+    Send({{"operation","edit"},{"document",draft}});
 }
 void Panel::Compare() {
     absoluteLog=w->project.ui.value("iv_absolute_log",true);
@@ -1056,7 +1170,7 @@ void Panel::Compare() {
     if(Toggle("Log |J|",absoluteLog)) {auto ui=w->project.ui;ui["iv_absolute_log"]=absoluteLog;Send({{"operation","project_edit"},{"ui",ui}});}
     ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Run all checked")) Send({{"operation","run_all"}});ImGui::EndDisabled();
     bool any=false;for(const auto &d:w->project.devices) any|=w->project.compare_set.contains(d->id) && (!d->result.empty() || !d->history.empty());
-    if(!any) {ImGui::TextWrapped("Check devices in Devices, then Run all checked to compare their I-V curves.");return;}
+    if(!any) {ImGui::TextWrapped("Tick 'Compare' on devices in the Project tree to overlay them.");return;}
     bool light=false;for(const auto &d:w->project.devices) light|=w->project.compare_set.contains(d->id) && d->result.contains("photovoltaic");
     if(light && ImGui::BeginTable("Solar metrics",5,ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH)) {
         for(const auto *label:{"Device","Voc [V]","Jsc [mA/cm^2]","FF [%]","Efficiency [%]"}) ImGui::TableSetupColumn(label);ImGui::TableHeadersRow();

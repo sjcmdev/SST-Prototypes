@@ -67,7 +67,8 @@ public:
             if(!w.commands->SetMenu(CommandID{std::string("scapslab.")+op},path,shortcut,std::move(enabled))) throw std::runtime_error("Cannot configure menu");
         };
         menu("scapslab.file.new","File/New",[&w]{w.fileAction="new";},"Ctrl+N",idle);
-        (void)w.commands->SetMenu(CommandID{"app.layout.reset"},"View/Reset layout");
+        (void)w.commands->SetMenu(CommandID{"app.layout.reset"},"");
+        menu("scapslab.view.reset","View/Reset layout",[&w]{w.resetLayout=true;});
         for(const auto &[action,label,shortcut]:{std::tuple{"open","Open...","Ctrl+O"},std::tuple{"save","Save","Ctrl+S"},std::tuple{"save_as","Save As...","Ctrl+Shift+S"},
             std::tuple{"export_results","Export results...",""},std::tuple{"import_def","Import SCAPS .def...",""},std::tuple{"export_def","Export SCAPS .def...",""}})
             menu(std::string("scapslab.file.")+action,std::string("File/")+label,[&w,action]{w.fileAction=action;},shortcut,idle);

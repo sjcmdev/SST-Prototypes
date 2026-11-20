@@ -41,6 +41,7 @@ private:
     Json grBias={{"voltage_V",0.0}};
     std::set<std::string> grHidden;
     void Devices();
+    void AddDefectTo(bool sheet,int layer);
     void Compare();
 };
 void InstallTutorialUi(Application &app,Workflow &w,const std::vector<Ref<Panel>> &panels);

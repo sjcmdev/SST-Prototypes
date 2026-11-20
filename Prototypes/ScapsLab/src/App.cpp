@@ -22,24 +22,29 @@ public:
         // The deferred Core settings payload must load before the default layout is built.
         if(ImGui::GetFrameCount()<3) return;
         if(done) {
-            if(panels[0]->GetWorkflow()->focusLayers) {auto *w=panels[0]->GetWorkflow();ImGui::SetWindowFocus(panels[w->Current().selectedInterface>=0?12:1]->ImGuiName().c_str());w->focusLayers=false;}
-            if(focus) {ImGui::SetWindowFocus(panels[1]->ImGuiName().c_str());ImGui::SetWindowFocus(panels[5]->ImGuiName().c_str());focus=false;}return;} done=true;
-        const auto &ini=ImGui::GetCurrentContext()->SettingsIniData;
-        if(!force && ini.size()>0 && std::string(ini.c_str()).find("[Window][sst-window-"+std::to_string(panels[15]->GetId())+"]")!=std::string::npos) return;
+            auto *w=panels[0]->GetWorkflow();
+            if(w->focusLayers) {ImGui::SetWindowFocus(panels[w->Current().selectedInterface>=0?12:1]->ImGuiName().c_str());w->focusLayers=false;}
+            if(w->focusView>=0 && w->focusView<int(panels.size())) {auto &p=panels[w->focusView];p->SetVisible(true);ImGui::SetWindowFocus(p->ImGuiName().c_str());w->focusView=-1;}
+            if(w->resetLayout) {w->resetLayout=false;(void)w->commands->Execute(CommandID{"app.layout.reset"});force=true;done=false;}
+            else if(focus) {ImGui::SetWindowFocus(panels[1]->ImGuiName().c_str());ImGui::SetWindowFocus(panels[5]->ImGuiName().c_str());focus=false;}return;} done=true;
+        // SettingsIniData is only filled by a save, so it is empty right after the loaded layout; serialize the live settings instead.
+        const std::string ini=ImGui::SaveIniSettingsToMemory();
+        // Live windows always get a section, so require a saved dock assignment for a known panel.
+        const auto section=ini.find("[Window][sst-window-"+std::to_string(panels[15]->GetId())+"]");
+        if(!force && section!=std::string::npos && ini.substr(section,ini.find("\n[",section+1)-section).find("DockId=")!=std::string::npos) return;
         const auto *vp=ImGui::GetMainViewport(); const auto root=vp->ID;
         ImGui::DockBuilderRemoveNode(root); ImGui::DockBuilderAddNode(root,ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodePos(root,vp->WorkPos); ImGui::DockBuilderSetNodeSize(root,vp->WorkSize);
-        ImGuiID center=root,left,right,topLeft,bottomLeft,topRight,bottomRight,iv,devices;
+        ImGuiID center=root,left,right,bottomLeft,topRight,bottomRight,iv,tree;
         ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.24f,&left,&center);
         ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.25f,&right,&center);
-        ImGui::DockBuilderSplitNode(left,ImGuiDir_Up,0.42f,&devices,&bottomLeft);
-        ImGui::DockBuilderSplitNode(bottomLeft,ImGuiDir_Up,0.25f,&topLeft,&bottomLeft);
+        ImGui::DockBuilderSplitNode(left,ImGuiDir_Up,0.55f,&tree,&bottomLeft);
         ImGui::DockBuilderSplitNode(right,ImGuiDir_Up,0.62f,&topRight,&bottomRight);
         ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.38f,&iv,&center);
         for(std::size_t i=0;i<panels.size();++i) {
             auto &panel=panels[i]; auto state=panel->GetState();
             state.visible=true;state.mode=WindowMode::Normal;
-            state.dockId=i==15?devices:i==0?topLeft:i==1 || i==2 || i==11 || i==12 || i==13 || i==20 || i==21?bottomLeft:i==3?bottomRight:i==4?topRight:i==10?iv:center;
+            state.dockId=i==0?tree:i==15 || i==1 || i==2 || i==11 || i==12 || i==13 || i==20 || i==21?bottomLeft:i==3?bottomRight:i==4?topRight:i==10?iv:center;
             panel->ApplyState(state); ImGui::DockBuilderDockWindow(panel->ImGuiName().c_str(),state.dockId);
         }
         ImGui::DockBuilderFinish(root); focus=true;
