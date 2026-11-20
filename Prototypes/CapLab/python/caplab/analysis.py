@@ -168,6 +168,10 @@ def analyze(m, options, xd_measurement=None, cancelled=lambda: False, progress=l
                       covariance_scaling='relative residual variance; null when dof=0')
         # This estimate belongs to the regression, not to the selected measured width.
         target = options.get('as_bias_V', 0.)
+        if target is None:
+            target = 0.
+        if not math.isfinite(target):
+            raise ValueError('Invalid AS bias')
         fit_y = intercept+slope*target
         fit_width = epsilon*math.sqrt(fit_y) if min(vx) <= target <= max(vx) and fit_y > 0 else None
         result['x_d_fit'] = dict(bias_V=target, value_m=fit_width,

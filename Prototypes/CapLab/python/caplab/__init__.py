@@ -28,6 +28,13 @@ def project_from_preview(preview, temperature=None):
 def execute(project, request):
     """Headless Core command/job operation; JSON values in/out, typed error envelope.
 
+    Analysis results report one standard error from residual covariance:
+    CV V_b_standard_error_V, N_standard_error_m3, x_d_fit.standard_error_m;
+    raw DLCP group N_DL_standard_error_m3 and x_e_standard_error_m;
+    Arrhenius E_a_standard_error_eV and prefactor_standard_error (prefactor_unit).
+    Missing covariance is null; sigma_cm2 is the capture cross-section.
+    Walter quantity is apparent DOS; historical_limits describes W1-W3 coverage.
+
     operation=walter: settings select measurement_id or measurement_ids, optional
     cv_fit_id / arrhenius_fit_id, model (default Walter1996-linear-field),
     zeta_s_1_K_2 or explicit compat B_s_1/emission_source, V_b_V/E_F_eV,
