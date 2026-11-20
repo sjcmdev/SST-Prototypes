@@ -148,7 +148,6 @@ void FitWhenChanged(const std::string &plot,ImAxis axis,double key,double lo,dou
     static std::map<std::string,double> last;auto &k=last[plot+std::to_string(int(axis))];
     ImPlot::SetupAxisLimits(axis,lo,hi,k!=key?ImPlotCond_Always:ImPlotCond_Once);k=key;
 }
-void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,const char *xkey,const char *ykey,bool absolute=false) {
 // Live vs pinned: toolbar with "Single shot" (Ctrl+P) and the "Shots" list of the active device.
 void ShotBar(Workflow &w,const std::string &kind) {
     ImGui::PushID("shotbar");
