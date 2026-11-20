@@ -381,24 +381,33 @@ void CapLabPrototypePanel::RenderBrowser() {
         }
         sst::ui::widgets::Text("Filter sample / source / result",&compareFilter);
         ImGui::BeginChild("Compare sources",ImVec2(0,180),ImGuiChildFlags_Borders);
+        std::set<pl::Id> measurements,graphs;
         auto choose=[&](pl::Id id,const std::string &label,std::set<pl::Id> &selection) {
             if (!compareFilter.empty() && label.find(compareFilter)==std::string::npos) return;
             ImGui::PushID(std::to_string(id).c_str());
             bool selected=selection.contains(id);
-            if (sst::ui::widgets::Checkbox(label.c_str(),&selected)) {if (selected) selection.insert(id); else selection.erase(id);}
+            if (sst::ui::widgets::BeginLabelledRow(label.c_str(),("Source ID: "+std::to_string(id)).c_str())) {
+                if (ImGui::Checkbox("##selected",&selected)) {if (selected) selection.insert(id); else selection.erase(id);}
+                auto color=sst::ui::plot::ScientificColor(id);
+                if (measurements.contains(id)) {const auto m=AnalysisMeasurement(p,id); color=SampleTemperatureColor(m.at("sample_id"),m.value("temperature_K",Json(nullptr)));}
+                const auto key=std::to_string(id);
+                if (compareColors.contains(key)) color=compareColors.at(key).get<sst::ui::plot::Color>();
+                ImGui::SameLine();
+                if (ImGui::ColorEdit4("##colour",color.data(),ImGuiColorEditFlags_NoInputs|ImGuiColorEditFlags_NoLabel)) compareColors[key]=color;
+                sst::ui::widgets::EndLabelledRow();
+            }
             ImGui::PopID();
         };
-        std::set<pl::Id> measurements,graphs;
         for (const auto &sample:p.samples) {
             auto measurement=[&](pl::Id id) {
                 measurements.insert(id);
-                choose(id,sample.name+" / "+SelectionLabel(p,id)+" ["+std::to_string(id)+"]",compareMeasurements);
+                choose(id,sample.name+" / "+SelectionLabel(p,id),compareMeasurements);
             };
             for (const auto &m:p.sweeps) if (m.sample_id==sample.id) measurement(m.id);
             for (const auto &m:p.measurements) if (m.at("sample_id")==sample.id) measurement(m.at("id"));
             for (const auto &a:p.analyses) if (AnalysisSample(a)==sample.id) for (const auto &g:a.at("graphs")) {
                 const auto id=g.get<pl::Id>(); graphs.insert(id);
-                choose(id,sample.name+" / "+p.engine->object(id).name+" / "+a.at("status").get<std::string>()+" ["+std::to_string(id)+"]",compareGraphs);
+                choose(id,sample.name+" / "+p.engine->object(id).name+" / "+a.at("status").get<std::string>(),compareGraphs);
             }
         }
         std::erase_if(compareMeasurements,[&](auto id) {return !measurements.contains(id);});
@@ -407,8 +416,11 @@ void CapLabPrototypePanel::RenderBrowser() {
         ImGui::TextWrapped(asMap ? "AS maps use selected measurements only; clear any analysis graph selections." : "Analysis graphs include Arrhenius defects, Walter spectra and IS. Only identical quantities and scales can share axes.");
         const bool invalidGrid=asMap && asMapGrid && (!std::isfinite(asMapMinHz) || !std::isfinite(asMapMaxHz) || asMapMinHz<=0 || asMapMaxHz<=asMapMinHz || asMapPoints<2 || asMapPoints>1201);
         ImGui::BeginDisabled((compareMeasurements.empty() && compareGraphs.empty()) || invalidGrid || (asMap && (!compareGraphs.empty() || compareMeasurements.size()<2)));
-        if (ImGui::Button("Build comparison (Undo)")) {
+        if (ImGui::Button("Build comparison")) {
             state->analysisOptions={{"plot_type",types[compareType]},{"measurement_ids",compareMeasurements},{"graph_ids",compareGraphs}};
+            auto colors=Json::object();
+            for (const auto &[key,color]:compareColors.items()) if (compareMeasurements.contains(std::stoull(key)) || compareGraphs.contains(std::stoull(key))) colors[key]=color;
+            state->analysisOptions["source_colors"]=colors;
             if (asMap) {
                 state->analysisOptions["view_kind"]=asMapView==0?"lines":asMapView==1?"surface":"heatmap";
                 state->analysisOptions["grid_policy"]=asMapGrid?"interpolate_log_f":"measured";
@@ -441,6 +453,14 @@ void CapLabPrototypePanel::RenderBrowser() {
         const auto plots=p.engine->children(p.engine->children(p.graph).at(0));
         if (!plots.empty() && sst::ui::plot::IsGrid(p.engine->series(plots.front()).kind)) {
             const char *maps[]={"Viridis","Plasma","Greys"};
+            bool zero=layer.spec.z.range && (*layer.spec.z.range)[0]<=0 && (*layer.spec.z.range)[1]>=0;
+            if (sst::ui::widgets::Checkbox("Include zero (Z / colour)",&zero)) {
+                auto automatic=layer.spec; automatic.colorRange.reset();
+                auto limits=sst::ui::plot::ColorLimits(p.engine->series(plots.front()).data,automatic);
+                limits[0]=std::min(0.,limits[0]); limits[1]=std::max(0.,limits[1]);
+                state->analysisOptions={{"action","view"},{"graph_id",p.graph},{"z_range_F",zero?Json(limits):Json(nullptr)},{"color_range_F",zero?Json(limits):Json(nullptr)}};
+                (void)commands->Execute(CommandID{"caplab.plot"});
+            }
             int cmap=layer.spec.colormap=="Plasma"?1:layer.spec.colormap=="Greys"?2:0;
             bool colorChanged=sst::ui::widgets::Combo("Colour map",&cmap,maps,3);
             bool automatic=!layer.spec.colorRange;
@@ -512,7 +532,7 @@ void CapLabPrototypePanel::RenderPlot() {
 void CapLabPrototypePanel::RenderContent() {
     if (shownProject!=state->workspace.active) {
         savedFormat.clear();
-        shownProject=state->workspace.active; areaDraft.clear(); treeMeasurements.clear(); compareMeasurements.clear(); compareGraphs.clear(); selectedExportGraphs.clear(); detailsSample=moveTarget=0; selectionSeen=UINT64_MAX;
+        shownProject=state->workspace.active; compareColors=Json::object(); areaDraft.clear(); treeMeasurements.clear(); compareMeasurements.clear(); compareGraphs.clear(); selectedExportGraphs.clear(); detailsSample=moveTarget=0; selectionSeen=UINT64_MAX;
         selectedCircuit=circuitMeasurement=selectedDefect=fitCircuit=isPlotAnalysis=isPlotGraph=0;
         circuitDocument.clear(); circuitEditor.reset(); modelAutoReady=circuitAutoReady=circuitRecalc=false; isParameters=Json::array(); fitView={}; bodePhaseView={};
     }

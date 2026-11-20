@@ -249,7 +249,7 @@ namespace SST
 			m_LogRegistry != nullptr ? m_LogRegistry : application.GetLogRegistry(),
 			config.paths.exportsDirectory / Path("event-log-export.csv"),
 			"Logging Panel",
-			true);
+			false);
 		m_SettingsPanelId = RegisterPanel<SettingsPanel>(
 			eventBus,
 			m_JobSystem,

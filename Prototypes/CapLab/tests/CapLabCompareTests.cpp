@@ -58,7 +58,7 @@ TEST(CapLabCompare, StableColorsAndNumericTemperatureLegendOrder) {
     BuildCompareGraph(p,request);
     auto layer=p.engine->children(p.graph).at(0); auto plots=p.engine->children(layer);
     ASSERT_EQ(plots.size(),2);
-    EXPECT_NE(p.engine->object(plots[0]).name.find("20.0 K"),std::string::npos);
+    EXPECT_EQ(p.engine->object(plots[0]).name,p.samples[1].name+", 20 K");
     const auto color=p.engine->series(plots[0]).style.color;
     BuildCompareGraph(p,Json{{"plot_type","C-f"},{"measurement_ids",{b,a}}});
     layer=p.engine->children(p.graph).at(0); plots=p.engine->children(layer);

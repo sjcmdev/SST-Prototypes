@@ -69,6 +69,8 @@ def execute(project, request):
     analysis_ids with plot_index (default 0) select the same result plot across
     several analyses. graph_ids allow individual plot choices.
     Optional name; returns graph_id. Uses stored SI columns/results without a fit.
+    source_colors maps measurement/analysis graph ID strings to RGBA arrays in
+    [0, 1]; stored curve styles retain these colours through save and export.
     AS C(f,T) / AS G/omega(f,T) take a temperature series from one sample/bias,
     view_kind=lines/surface/heatmap, grid_policy=measured (default) or explicit
     interpolate_log_f with increasing frequency_Hz. Unequal measured grids use
@@ -80,6 +82,8 @@ def execute(project, request):
     x_scale/y_scale (linear/log10). View changes use the same job and Undo path.
     Spatial views also retain camera; colormap and color_range_F (or null for
     automatic limits) set the shared surface/heatmap colour scale.
+    z_range_F (two increasing finite limits, or null for automatic) controls the
+    3D Z range; set both ranges to [0, maximum_F] to include zero explicitly.
     operation=select, selection={kind: graph, id: graph_id} selects a saved graph.
     Export accepts graphs=[{graph_id: ...}, ...] or graph_id for one figure;
     saved views supply ranges/visibility/ticks unless explicitly overridden.

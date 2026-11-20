@@ -10,7 +10,7 @@ inline sst::ui::plot::Color SampleTemperatureColor(std::uint64_t sample, const n
 }
 inline void FormatCompareAxes(sst::ui::plot::PlotSpec &spec) {
     spec.customAxes=true;
-    for (auto *axis:{&spec.x,&spec.y})
+    for (auto *axis:{&spec.x,&spec.y,&spec.z})
         axis->labels.format=axis->scale==sst::ui::plot::AxisScale::Log10 ?
             sst::ui::plot::LabelFormat::Power10 : sst::ui::plot::LabelFormat::Engineering;
 }

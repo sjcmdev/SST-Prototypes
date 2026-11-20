@@ -154,6 +154,27 @@ def test_cancel_leaves_no_map():
     assert failed["project"] == p
 
 
+def test_explicit_z_and_colour_limits_use_existing_view_command(tmp_path):
+    result = build(series_project(), view_kind='surface')
+    p, graph = result['project'], result['graph_id']
+    result = run(p, 'plot', action='view', graph_id=graph, z_range_F=[0, 8e-9], color_range_F=[0, 8e-9])
+    layer = children(result['project'], graph)[0]
+    assert layer['spec']['z']['range'] == [0, 8e-9]
+    path = str(tmp_path/'include-zero.caplab.json')
+    run(result['project'], 'save', path=path)
+    p = run(p, 'open', path=path)['project']
+    result = run(p, 'plot', action='view', graph_id=graph, z_range_F=None, color_range_F=None)
+    assert children(result['project'], graph)[0]['spec']['z'].get('range') is None
+    failed = execute(p, dict(operation='plot', action='view', graph_id=graph, z_range_F=[1, 0]))
+    assert not failed['ok'] and failed['project'] == p
+    for key in ('z_range_F', 'color_range_F'):
+        failed = execute(p, dict(operation='plot', action='view', graph_id=graph, **{key: [0, 1, 2]}))
+        assert not failed['ok'] and failed['project'] == p
+    failed = execute(p, dict(operation='plot', plot_type='AS C(f,T)', view_kind='lines',
+        measurement_ids=[m['id'] for m in p['measurements']], source_colors={str(p['measurements'][0]['id']): [0, 0, 0, 1, 1]}))
+    assert not failed['ok'] and failed['project'] == p
+
+
 def test_sorted_frequency_view_and_duplicate_frequency_rejection():
     p = series_project()
     measurement = p["measurements"][0]

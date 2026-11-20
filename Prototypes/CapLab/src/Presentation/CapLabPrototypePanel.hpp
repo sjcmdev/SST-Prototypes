@@ -37,6 +37,7 @@ private:
     int exportFormat = 0;
     std::set<pl::Id> selectedExportGraphs;
     std::set<pl::Id> compareMeasurements, compareGraphs;
+    Json compareColors=Json::object();
     int compareType=0;
     int asMapView=0, asMapGrid=0, asMapPoints=101;
     double asMapMinHz=100, asMapMaxHz=1e6;

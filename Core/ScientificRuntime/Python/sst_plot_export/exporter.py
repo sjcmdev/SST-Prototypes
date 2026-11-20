@@ -10,7 +10,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties, findfont
 from matplotlib.ft2font import FT2Font
-from matplotlib.ticker import FixedLocator, FixedFormatter
+from matplotlib.ticker import FixedLocator, FixedFormatter, FuncFormatter
 import numpy as np
 from .colormaps import COLORS
 
@@ -43,6 +43,11 @@ def axis_label(config):
     return config["label"] + (f" ({unit})" if unit else "")
 
 
+def _spatial_coordinate(values, config):
+    # Project logarithmic geometry explicitly; mplot3d's log axes distort surfaces.
+    return np.log10(values) if config["log"] else values
+
+
 def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     kind = series["kind"]
     if kind == 7 and snapshot["z_axis"]["log"]: raise ValueError("Heatmap logarithmic colour scale is unsupported")
@@ -59,6 +64,8 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     if kind in (5, 6):
         style = series["style"]
         xx, yy, zz = (np.where(valid, v, np.nan) for v in (x, y, z))
+        xx, yy, zz = (_spatial_coordinate(v, snapshot[key]) for v, key in
+                      zip((xx, yy, zz), ("x_axis", "y_axis", "z_axis")))
         label = series["label"] if style["legend"] else "_nolegend_"
         marker = ("", "o", "s", "D", "x", "+", "*")[style["marker"]]
         if kind == 5:
@@ -86,7 +93,7 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         values = z[color_valid]
         lo, hi = (float(values.min()), float(values.max())) if values.size else (0, 1)
         if lo == hi:
-            padding = max(1, abs(lo))*.05
+            padding = (abs(lo) if lo else 1)*.05
             lo, hi = lo-padding, hi+padding
     else:
         if len(color_range) != 2 or not all(math.isfinite(v) for v in color_range) or color_range[0] >= color_range[1]:
@@ -106,6 +113,8 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         corners = np.stack((xx, yy, zz), axis=-1)
         quads = np.stack((corners[:-1, :-1], corners[:-1, 1:], corners[1:, 1:], corners[1:, :-1]), axis=2)[good]
         colors = cmap(norm(quads[:, :, 2])).mean(axis=1)
+        for i, key in enumerate(("x_axis", "y_axis", "z_axis")):
+            quads[:, :, i] = _spatial_coordinate(quads[:, :, i], snapshot[key])
         ax.add_collection3d(Poly3DCollection(quads, facecolors=colors, edgecolors="none", zsort="average"))
         artist = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     else:
@@ -119,7 +128,14 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         artist = ax.pcolormesh(xe, ye, np.ma.masked_invalid(zz), cmap=cmap, norm=norm, shading="flat")
     if snapshot.get("color_scale", True):
         bar = fig.colorbar(artist, ax=ax, pad=.14 if three else .04, fraction=.05)
-        bar.set_label(axis_label(snapshot["z_axis"]), fontproperties=font)
+        z_axis = snapshot["z_axis"]
+        magnitude = max(abs(lo), abs(hi))
+        exponent = max(-24, min(24, 3 * math.floor(math.log10(magnitude) / 3))) if magnitude else 0
+        scale = 10.0 ** exponent
+        prefix = ("y", "z", "a", "f", "p", "n", "µ", "m", "", "k", "M", "G", "T", "P", "E", "Z", "Y")[exponent // 3 + 8]
+        bar.formatter = FuncFormatter(lambda value, _: f"{value / scale:.4g}")
+        bar.update_ticks()
+        bar.set_label(axis_label(dict(z_axis, unit=prefix + z_axis.get("unit", ""))), fontproperties=font)
         for tick in bar.ax.get_yticklabels(): tick.set_fontproperties(font)
 
 
@@ -166,15 +182,15 @@ def build_figure(snapshot, dpi=300):
             roll = np.arctan2(-right @ v, right @ u)
             ax.view_init(*np.degrees([elev, azim, roll]))
             limits = ranges[:4]
-            ax.set_zlim(ranges[4:])
+            ax.set_zlim(_spatial_coordinate(ranges[4:], snapshot["z_axis"]))
         z_axis = snapshot["z_axis"]
-        ax.set_zscale("log" if z_axis["log"] else "linear")
+        ax.set_zscale("linear")
         ax.set_zlabel(axis_label(z_axis), fontproperties=font)
         ax.grid(any(snapshot[k]["grid"] for k in ("x_axis", "y_axis", "z_axis")))
     axes = [(ax.xaxis, snapshot["x_axis"]), (ax.yaxis, snapshot["y_axis"])]
     if three: axes.append((ax.zaxis, snapshot["z_axis"]))
     for axis, config in axes:
-        scale = "log" if config["log"] else "linear"
+        scale = "log" if config["log"] and not three else "linear"
         (ax.set_xscale if axis is ax.xaxis else ax.set_yscale if axis is ax.yaxis else ax.set_zscale)(scale)
         if axis is not getattr(ax, "zaxis", None) and config["log"] and limits[0 if axis is ax.xaxis else 2] <= 0:
             raise ValueError("Log ranges must be positive")
@@ -182,7 +198,8 @@ def build_figure(snapshot, dpi=300):
             ticks = [t for t in config["ticks"] if t["major"] == major]
             setter = axis.set_major_locator if major else axis.set_minor_locator
             formatter = axis.set_major_formatter if major else axis.set_minor_formatter
-            setter(FixedLocator([t["value"] for t in ticks]))
+            positions = [t["value"] for t in ticks]
+            setter(FixedLocator(_spatial_coordinate(positions, config) if three else positions))
             formatter(FixedFormatter([t["label"] for t in ticks]))
         if not three: axis.grid(config["grid"])
         axis.label.set_fontproperties(font)
@@ -223,7 +240,9 @@ def build_figure(snapshot, dpi=300):
         else:
             ax.plot(x, y, **args)
     # Set AFTER ticks/series; disable autoscale, including on later draw/save.
-    ax.set_xlim(limits[:2]); ax.set_ylim(limits[2:]); ax.set_autoscale_on(False)
+    ax.set_xlim(_spatial_coordinate(limits[:2], snapshot["x_axis"]) if three else limits[:2])
+    ax.set_ylim(_spatial_coordinate(limits[2:], snapshot["y_axis"]) if three else limits[2:])
+    ax.set_autoscale_on(False)
     if snapshot.get("equal_aspect") and not three: ax.set_aspect("equal", adjustable="box")
     legend = snapshot["legend"]
     if legend["visible"] and ax.get_legend_handles_labels()[0]:
@@ -253,7 +272,7 @@ def export_graph(snapshot, destination, format, dpi=300):
                 fig.savefig(stream, format=format, dpi=dpi, bbox_inches=None)
                 stream.flush(); os.fsync(stream.fileno())
             os.replace(temporary, destination)
-            limits = (*fig.axes[0].get_xlim(), *fig.axes[0].get_ylim())
+            limits = tuple(snapshot["ranges"]) if fig.axes[0].name == "3d" else (*fig.axes[0].get_xlim(), *fig.axes[0].get_ylim())
         finally:
             if temporary is not None: temporary.unlink(missing_ok=True)
             fig.clear()

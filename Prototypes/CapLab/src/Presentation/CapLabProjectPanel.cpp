@@ -76,8 +76,8 @@ void CapLabPrototypePanel::RenderTree() {
                     for (const auto &m:p.sweeps) if (m.sample_id==sample.id) group(m.id);
                     for (const auto &[key,ids]:groups) {
                         const auto &[kind,t,f,bias]=key;
-                        auto number=[](double v) {if (!std::isfinite(v)) return std::string("?"); char text[40]; std::snprintf(text,sizeof(text),"%.6g",v); return std::string(text);};
-                        const auto label=kind+" | "+number(t)+" K | "+number(f)+" Hz | "+number(bias)+" V";
+                        auto number=[](double v,const char *unit) {if (!std::isfinite(v)) return std::string("\u2014"); char text[40]; std::snprintf(text,sizeof(text),"%.6g %s",v,unit); return std::string(text);};
+                        const auto label=kind+" | "+number(t,"K")+" | "+number(f,"Hz")+" | "+number(bias,"V");
                         ImGui::PushID(std::to_string(ids.front()).c_str());
                         ImGui::SetNextItemOpen(true,ImGuiCond_Once);
                         if (ImGui::TreeNode(label.c_str())) {

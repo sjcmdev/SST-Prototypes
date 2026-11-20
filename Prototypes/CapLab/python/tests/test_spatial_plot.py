@@ -41,6 +41,24 @@ def project(kind):
     return p,view
 
 
+def test_logarithmic_3d_export_projects_coordinates_without_changing_units(tmp_path):
+    import numpy as np
+    from sst_plot_export.exporter import build_figure
+    p, view = project(6)
+    layer = next(o for o in p['engine']['objects'] if o['parent'] == p['graph'])
+    layer['spec']['x']['scale'] = 1
+    result = execute(p, dict(operation='export', path=str(tmp_path/'log.png'), view=view, ranges=view['ranges']))
+    assert result['ok'], result
+    snapshot = result['export']
+    figure = build_figure(snapshot)
+    ax = figure.axes[0]
+    assert ax.get_xlim() == pytest.approx([1.698970004336, 2.544068044350])
+    x = np.asarray(ax.lines[0].get_data_3d()[0])
+    assert x[[0, 2, 3, 5]] == pytest.approx([2, 2.477121254720, 2, 2.477121254720])
+    assert snapshot['x_axis']['unit'] == 'Hz' and snapshot['ranges'] == view['ranges']
+    figure.clear()
+
+
 @pytest.mark.parametrize('kind',[4,5,6,7])
 @pytest.mark.parametrize('format',['png','svg','pdf'])
 @pytest.mark.parametrize('batch',[False,True])

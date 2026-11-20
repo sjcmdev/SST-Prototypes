@@ -77,9 +77,20 @@ inline void BuildCompareGraph(Project &p, const Json &request) {
         if (request.contains("color_range_F")) {
             if (request.at("color_range_F").is_null()) data.spec.colorRange.reset();
             else {
+                if (!request.at("color_range_F").is_array() || request.at("color_range_F").size()!=2) throw std::runtime_error("Expected two color_range_F limits.");
                 auto range=request.at("color_range_F").get<std::array<double,2>>();
                 if (!std::isfinite(range[0]) || !std::isfinite(range[1]) || range[0]>=range[1]) throw std::runtime_error("Expected increasing finite color_range_F.");
                 data.spec.colorRange=range;
+            }
+        }
+        if (request.contains("z_range_F")) {
+            if (request.at("z_range_F").is_null()) {data.spec.z.range.reset();data.view.camera.reset();}
+            else {
+                if (!request.at("z_range_F").is_array() || request.at("z_range_F").size()!=2) throw std::runtime_error("Expected two z_range_F limits.");
+                const auto range=request.at("z_range_F").get<std::array<double,2>>();
+                if (!std::isfinite(range[0]) || !std::isfinite(range[1]) || range[0]>=range[1]) throw std::runtime_error("Expected increasing finite z_range_F.");
+                data.spec.z.range=range;
+                if (data.view.camera) {data.view.camera->limits[4]=range[0];data.view.camera->limits[5]=range[1];}
             }
         }
         if (request.value("refit",false)) data.view={};
@@ -100,14 +111,22 @@ inline void BuildCompareGraph(Project &p, const Json &request) {
             if (spec.at(key)!=value) throw std::runtime_error("Incompatible comparison axes; select graphs with the same quantities and scales.");
         spec.update(config);
     };
-    auto append=[&](pl::Id sample,Json temperature,pl::Id id,Json curve,const std::string &suffix) {
+    auto append=[&](pl::Id sample,Json temperature,pl::Id id,Json curve,const std::string &suffix,pl::Id source=0) {
         const auto s=std::find_if(p.samples.begin(),p.samples.end(),[&](const auto &s) {return s.id==sample;});
         if (s==p.samples.end()) throw std::runtime_error("Missing comparison sample.");
-        std::string label=s->name+" ["+std::to_string(sample)+"]";
-        if (temperature.is_number()) label+=", T = "+temperature.dump()+" K";
-        curve["name"]=label+" / "+suffix+" ["+std::to_string(id)+"]";
+        std::string label=s->name;
+        if (temperature.is_number()) {char text[40]; std::snprintf(text,sizeof(text),", %.6g K",temperature.get<double>()); label+=text;}
+        curve["name"]=label+(source ? " / "+suffix : "");
         curve["temperature_K"]=temperature;
-        curves.push_back({s->name,temperature.is_number() ? temperature.get<double>() : -1.,id,std::move(curve),SampleTemperatureColor(sample,temperature)});
+        auto color=SampleTemperatureColor(sample,temperature);
+        const auto colors=request.value("source_colors",Json::object());
+        if (!colors.is_object()) throw std::runtime_error("source_colors must map source IDs to RGBA arrays.");
+        if (colors.contains(std::to_string(source ? source : id))) {
+            if (colors.at(std::to_string(source ? source : id)).size()!=4) throw std::runtime_error("Expected four RGBA channels.");
+            color=colors.at(std::to_string(source ? source : id)).get<sst::ui::plot::Color>();
+            for (auto channel:color) if (!std::isfinite(channel) || channel<0 || channel>1) throw std::runtime_error("RGBA channels must be finite and between 0 and 1.");
+        }
+        curves.push_back({s->name,temperature.is_number() ? temperature.get<double>() : -1.,id,std::move(curve),color});
     };
     for (const auto &value:request.value("measurement_ids",Json::array())) {
         const auto id=value.get<pl::Id>();
@@ -216,7 +235,7 @@ inline void BuildCompareGraph(Project &p, const Json &request) {
             const auto sheet=std::get<pl::Plot>(p.engine->object(plot).data).worksheet;
             const auto &metadata=std::get<pl::Worksheet>(p.engine->object(sheet).data).source;
             if (metadata.contains("temperature_K")) temperature=Json::parse(metadata.at("temperature_K"));
-            append(AnalysisSample(*analysis),temperature,plot,std::move(curve),p.engine->object(plot).name+" / "+analysis->at("status").get<std::string>());
+            append(AnalysisSample(*analysis),temperature,plot,std::move(curve),p.engine->object(plot).name+" / "+analysis->at("status").get<std::string>(),id);
             ++curveIndex;
         }
     }

@@ -1,20 +1,23 @@
-# CapLab ? M8 v1 workflow and export
+# CapLab — laboratory analysis and circuit simulation
 
 Core owns commands, EventBus, Undo, jobs, progress, diagnostics and embedded
 Python. PlotLab-Engine owns tables, row/object IDs and graphs. No dependencies
 were added. M4 reuses the Arrhenius fit and adds only the explicit historical
 cross-section conversion in SST-Physics.
 
-Run from the SST-Prototypes root, with one build/test at a time:
+Hold the global build lock separately for Premake, one MSBuild invocation, and
+each test suite. See the claccept1 section for embedded Python test setup.
+
+Run from the SST-Prototypes root:
 
 ```powershell
-bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py CapLab --app --configuration Debug
-bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py CapLab --require-embedding
-bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py PlotLab --require-embedding
-bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh python Prototypes/CapLab/check.py JFM --require-embedding
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh Vendor/Binaries/Premake/Windows/premake5.exe --scaps-core=D:/SJCM/01_SemiconductorStudio/scaps_core-wt/ui vs2022
+$msbuild = & 'C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe' -latest -requires Microsoft.Component.MSBuild -find 'MSBuild/**/Bin/MSBuild.exe' | Select-Object -First 1
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh "$msbuild" build/generated/vs2022/SSTPrototypes.sln -p:Configuration=Debug -p:Platform=x64 -nr:false -m:1 -p:CL_MPCount=6
+bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh build/bin/Debug-windows-x86_64/CapLabTests/CapLabTests.exe
 ```
 
-The runner builds in root `build/`, with MSBuild `-nr:false -m:1`.
+Outputs are in root `build/`, with MSBuild `-nr:false -m:1`.
 The app is `build/bin/Debug-windows-x86_64/CapLab/CapLab.exe`.
 
 Choose an import profile, set input columns/units and read the preview.
@@ -705,3 +708,52 @@ actually used in the laboratory? Provide one valid and one damaged export per
 format before adding adapters. The current adapters cover the repository's
 Lab AS/CV/DLCP/IS, ProPho and SCAPS text/JSON fixtures; no instrument-specific
 support is inferred from a compatible column layout.
+
+## Integrated acceptance (claccept1, 2026-11-20)
+
+The existing embedded `caplab.execute(project, request)` surface is the batch
+interface; no separate CLI or server is needed. `python/tests/test_owner_workflow.py`
+opens two projects, imports a folder into an existing sample, compares stored
+curves, runs CV/DLCP/AS/defect/Arrhenius/apparent Walter analysis, creates AS maps,
+saves/closes/reopens/exports, then simulates a circuit on an explicit model grid
+and fits/accepts its measured spectrum. It reuses the established command/job path.
+Pass the returned `workspace` on every subsequent workspace operation; its active
+project is authoritative. SI values and IDs are JSON serializable; failures retain
+stable error codes. See `caplab.execute.__doc__` for the complete request contract.
+
+The real AS folder is `tests/fixtures/m2/data_Cd/#133_Ann250C_10.7mm2/AS`:
+34 acquisitions, 33 distinct temperatures, 40 frequencies. The acceptance test
+explicitly excludes the repeated `140K_REL_1.dat` acquisition from the map while
+retaining every imported measurement. It does not average or synthesize data.
+
+Plot labels use compact SI notation (`800 pF`), including 3D axes and colour scales.
+Raw comparison legends default to sample and temperature; source/series IDs are
+available in tooltips. The source list has a checkbox and a colour picker.
+`plot.source_colors` maps source ID strings to RGBA arrays with channels in [0,1].
+AS lines also accept measurement colours; surfaces and heatmaps use the colormap.
+Styles persist in the engine and use the existing save/export path.
+
+3D Z and colour ranges fit the measured values by default. **Include zero (Z /
+colour)** is explicit. Python uses `plot`, `action="view"`, `graph_id`, and
+`z_range_F` / `color_range_F` (two increasing finite limits or null for automatic).
+Existing view camera/ranges remain authoritative when reopening a saved graph.
+Headless views without captured ticks obtain labels from the same C++ axis
+formatter. Export consumes the saved font, colormap, camera, ranges and labels.
+It uses the existing Matplotlib vector/raster exporter, so rasterization and
+3D text placement are not pixel-identical to ImPlot3D.
+
+Logging starts hidden and remains available from Window. Unchecked controls have
+a visible shared frame border. Build comparison and Edit / Undo are separate.
+The broader standard menu bar and the Origin-like import redesign remain planned.
+
+Builds use MSVC Debug x64 in this worktree's `build/`, with sibling library outputs
+in `../SST-Libraries/build/`. Generate with the vendored Premake and an explicit
+`--scaps-core` checkout, then build `build/generated/vs2022/SSTPrototypes.sln` with
+`-p:Configuration=Debug -p:Platform=x64 -nr:false -m:1 -p:CL_MPCount=6`.
+Each command and each test executable must have its own `build-lock.sh` call.
+For Python suites, use the embedded GTest host with `SST_REQUIRE_EMBEDDING=1`,
+`SST_ROOT_PYTHON_PATHS` set to JSON-encoded environment `sys.path`, and
+`SST_RUN_PYTEST` pointing at the application's Python test directory. Set
+`PYTEST_ADDOPTS=--basetemp=build/<unique-suite-directory>` (forward slashes).
+Set `SST_CAPLAB_ACCEPTANCE_OUTPUT` to retain the workflow projects and figures.
+Current counts and evidence are in VALIDATION.md.

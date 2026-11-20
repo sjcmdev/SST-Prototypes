@@ -1116,3 +1116,107 @@ Desktop capture and Computer Use were not used.
 Manual owner workflow remains untested. Additional instrument adapters remain
 an owner question: identify the actual export formats and supply valid/damaged
 fixtures before extending the existing Lab/ProPho/SCAPS adapters.
+
+## claccept1 — integrated acceptance — 2026-11-20
+
+This job used the fresh `wt-cl/claccept1` worktree pair. All targets were built
+from scratch with MSVC Debug x64; final solution rebuilds returned 0. Outputs:
+`SST-Prototypes/build/` and sibling `SST-Libraries/build/`; standalone library
+checks are in `SST-Libraries/build/claccept1-tests/`. No TEMP build fallback was
+needed. Premake, every build, each test suite and each GPU capture had its own
+`tools/agents/build-lock.sh` call. MSBuild used `-nr:false -m:1 -p:CL_MPCount=6`.
+No Git commands, commits or edits to `Prototypes/PlotLab` application sources.
+
+Changes:
+- CapLab compare/browser: readable raw legends, source ID tooltips, explicit
+  checkbox/colour swatch, JSON-callable RGBA overrides, separate Edit / Undo.
+- Shared axis renderer: compact SI labels (including legacy bracketed units),
+  no trailing zeros, the same formatter for 2D/heatmap/3D, measured 3D limits,
+  a larger 3D box, relative padding for constant small-valued colour data.
+- Explicit include-zero view via `z_range_F` and `color_range_F`; axis ranges
+  persist in PlotLab-Engine and reject malformed JSON. RGBA requires four
+  channels and range requests require exactly two finite increasing limits.
+- Shared export: native tick-label fallback for headless views; SI colour
+  scales; explicit logarithmic 3D coordinates, fixing distorted mplot3d geometry.
+- Core: visible frame borders and Logging hidden on a fresh layout.
+- Inherited build fixes: ScapsCore excludes the standalone batch/illumination
+  Python extension translation units; Core hosts receive Python link paths.
+  ScapsLab retains an omitted optional contact `flat_band` field on YAML load.
+  Existing round-trip coverage caught and now verifies that regression.
+
+| Gate actually run in claccept1 | Result |
+|---|---|
+| Clean MSVC solution build, all generated targets | Passed; final rebuild returned 0 |
+| Full CapLab C++ | 87/87 passed |
+| Full embedded CapLab Python | 353/353 passed |
+| Additional JSON boundary retest | 2 passed, 351 deselected; enclosing 87/87 C++ passed |
+| Full JFM C++ | 105/105 passed |
+| Full embedded JFM Python | 222 passed, 24 existing xfailed; 1377 existing numerical warnings |
+| Full ScapsLab C++ including embedded Python/headless parity | 25/25 passed |
+| SST-Libraries C++ | 158/158 passed |
+| Additional standalone PlotLab-Engine / UI-Library suites | 58/58 and 52/52 passed; overlap with the library suite |
+| Shared exporter Python, using the active ScientificRuntime package | 65/65 passed |
+
+The full CapLab Python run preceded the final strict array-length checks; the
+modified range/RGBA tests were then repeated through the embedded execute path,
+including malformed 2D/AS-line colours and excess range elements. The full
+CapLab C++ and SST-Libraries suites passed again after those checks. Embedded
+pytest host invocations are not added again to the C++ case counts.
+
+`python/tests/test_owner_workflow.py` exercised two open projects, activation,
+folder preview/import into an existing sample, compare, CV/DLCP/AS, approved
+defect points, Arrhenius, apparent Walter DOS, surface/heatmap, PNG/SVG/PDF,
+save/close/reopen, model-grid circuit simulation, fit and explicit acceptance.
+The independent Randles target is R0=20 Ohm, R1=500 Ohm, C1=20 microfarad;
+accepted values must match within relative 1e-3. Model-grid rows remain separate
+from optional same-sample measurement overlays.
+
+The real ProPho/lab AS folder contains 34 acquisitions, 33 distinct temperatures
+and 40 frequencies. The duplicate `140K_REL_1.dat` is explicitly excluded from
+the map, with every imported measurement retained. The 33 x 40 map has 1320
+measured cells; no interpolation or averaging is enabled. The saved projects,
+six exported figures and `workflow.json` are in `build/claccept1-final-artifacts/`.
+Both final PNG figures were visually reviewed. Surface geometry, logarithmic f,
+SI labels and colour range agree with the measured inputs.
+
+Reviewed offscreen application captures are under
+`D:/SJCM/01_SemiconductorStudio/tools/agents/runs/claccept1/shots/`:
+`AS-surface.png`, `AS-heatmap.png`, `compare.png`, `compare-plot.png`.
+The reference before images were the owner-supplied clplots1/clplots2 captures;
+they are not claimed to use the same real-data fixture. The new captures show
+nonblack framebuffers, hidden Logging, visible checkbox borders/colour swatches,
+compact pF/nF ticks, a legend without internal IDs and the real AS map. Each
+capture used `--screenshot --exit-after-screenshot`; shutdown logs were reviewed,
+no ID-conflict diagnostics were found, and no GUI mutex or launched app remains.
+
+The `gui` MCP tools were absent. Interactive native-picker, mouse/circuit-editor,
+Save/Discard/Cancel dialog and UI-07 restart/layout acceptance remain an owner
+retest; offscreen capture is not a substitute. The Vault plan
+`50_Development/UI Testing/CapLab.md` now has concrete CL-02..09 / UI-07 cases.
+The original ProPho `AS_3d_plot.png` was not found in its source checkout, so
+interactive ProPho parity is not claimed. The existing A7 source discrepancy
+remains documented in the science acceptance records above.
+
+GUI/export share font, colormap, units, camera and ranges; captured ticks take
+precedence. Headless views without ticks use the shared C++ formatter. The
+Matplotlib vector/raster backend uses different text placement, rasterization
+and flat quad colouring from ImPlot3D, so pixel identity is not claimed.
+
+`uv sync --frozen --offline` could not provision the cache. The local `.venv`
+uses installed CPython 3.13.2 packages: NumPy 2.5.0, SciPy 1.18.0, Matplotlib 3.8.4,
+pytest 8.3.5. These are the versions actually tested, not a claim of frozen-lock
+reproduction. Ignored JFM measurement files were restored read-only from the
+main checkout; 144 local files and source SHA-256 values are recorded in
+`build/claccept1-fixture-sources.json`.
+
+Evidence: `build/claccept1-build-json-validation.log`,
+`claccept1-caplab-final.log/.xml`, `claccept1-json-validation.log/.xml`,
+`claccept1-jfm.log`, `claccept1-jfm-cpp-final.log/.xml`,
+`claccept1-scapslab-final.log/.xml`, `claccept1-exporter.log/.xml`;
+ sibling `build/claccept1-libraries-json-validation.log/.xml`.
+Graphify AST updates ran in both repositories; logs are
+`build/claccept1-graphify-complete.log`. Missing optional MATLAB/SQL extractors
+were reported by graphify; no semantic/API extraction was requested.
+The root graphify command returned 1 after reporting a completed rebuild
+(77,720 nodes / 152,953 edges); graph.json and GRAPH_REPORT.md were refreshed.
+The sibling library graph was also rebuilt (9,413 nodes / 12,718 edges).

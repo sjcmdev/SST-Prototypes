@@ -130,6 +130,7 @@ namespace SST
 			style.ScrollbarRounding = appearance.scrollbarRounding;
 			style.TabRounding = appearance.tabRounding;
 			style.WindowBorderSize = 1.0f;
+            style.FrameBorderSize = 1.0f;
             style.ChildBorderSize = 1.0f;
             style.DockingSeparatorSize = 3.0f;
             style.GrabMinSize = std::max(14.0f, style.GrabMinSize);

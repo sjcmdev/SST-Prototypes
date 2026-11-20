@@ -17,6 +17,22 @@ def children(p, parent):
     return sorted((o for o in p['engine']['objects'] if o['parent'] == parent), key=lambda o: (o['order'], o['id']))
 
 
+def test_readable_legend_and_source_colour(project, tmp_path):
+    mid = project['measurements'][0]['id']
+    colour = [.2, .4, .6, 1.]
+    result = run(project, 'plot', plot_type='C-f', measurement_ids=[mid], source_colors={str(mid): colour})
+    p = result['project']
+    curve = children(p, children(p, result['graph_id'])[0]['id'])[0]
+    assert curve['name'] == project['samples'][0]['name'] + ', 300 K'
+    assert curve['style']['color'] == pytest.approx(colour)
+    path = str(tmp_path/'colour.caplab.json')
+    run(p, 'save', path=path)
+    assert run(p, 'open', path=path)['project'] == p
+    for color in [[-1, 0, 0, 1], [0, 0, 2, 1], [0, 0, 1], [0, 0, 0, 1, 1]]:
+        failed = execute(project, dict(operation='plot', plot_type='C-f', measurement_ids=[mid], source_colors={str(mid): color}))
+        assert not failed['ok'] and failed['project'] == project
+
+
 @pytest.mark.parametrize('plot_type', ['C-V', 'Mott-Schottky'])
 def test_cv_direct_without_analysis(project, plot_type):
     p = copy.deepcopy(project)

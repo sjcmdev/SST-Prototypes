@@ -205,6 +205,8 @@ Json ReadProject(const std::string &path) {
     auto raw=FromYaml(YAML::LoadFile(path)); const auto p=Model(raw);
     Temporary t; scaps_core::save_device_project_yaml(p,t.path);
     auto full=FromYaml(YAML::LoadFile(t.path.string())); full.update(raw,true);
+    for (const auto *side:{"left","right"})
+        if (!raw.value("contacts",Json::object()).value(side,Json::object()).contains("flat_band")) full["contacts"][side].erase("flat_band");
     full["mesh"]["adaptivity_level"]=p.mesh.adaptivity_level;
     std::set<std::string> ids;
     for(const auto &l:full["layers"]) if(l.contains("scapslab_id")) ids.insert(l.at("scapslab_id"));

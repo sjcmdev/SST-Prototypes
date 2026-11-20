@@ -114,6 +114,7 @@ inline void BuildASMapGraph(Project &p, const Json &request) {
     axes.spec.x.label="Frequency"; axes.spec.x.unit="Hz"; axes.spec.x.scale=plot::AxisScale::Log10;
     axes.spec.y.label="Temperature"; axes.spec.y.unit="K";
     axes.spec.z.label=conductance?"G/omega":"Capacitance"; axes.spec.z.unit="F";
+    FormatCompareAxes(axes.spec);
     std::vector<pl::Object> objects{{graph,p.engine->root(),name,0,pl::Graph{130,100}},{layer,graph,name,0,axes}};
     auto append=[&](const std::string &label,std::vector<double> x,std::vector<double> y,std::vector<double> z,std::size_t columns,plot::Color color) {
         const auto sheet=p.engine->reserveId(),cx=p.engine->reserveId(),cy=p.engine->reserveId(),cz=p.engine->reserveId();
@@ -130,8 +131,18 @@ inline void BuildASMapGraph(Project &p, const Json &request) {
         objects.push_back({cz,sheet,axes.spec.z.label,0,std::move(c)});
         objects.push_back({p.engine->reserveId(),layer,label,0,std::move(curve)});
     };
-    if (view=="lines") for (const auto &row:rows)
-        append("T = "+std::to_string(row.temperature)+" K ["+std::to_string(row.id)+"]",row.f,std::vector<double>(row.f.size(),row.temperature),row.z,0,SampleTemperatureColor(sample,row.temperature));
+    if (view=="lines") for (const auto &row:rows) {
+        char label[64];std::snprintf(label,sizeof(label),"%.6g K",row.temperature);
+        auto color=SampleTemperatureColor(sample,row.temperature);
+        const auto colors=request.value("source_colors",Json::object());
+        if (!colors.is_object()) throw std::runtime_error("source_colors must map source IDs to RGBA arrays.");
+        if (colors.contains(std::to_string(row.id))) {
+            if (colors.at(std::to_string(row.id)).size()!=4) throw std::runtime_error("Expected four RGBA channels.");
+            color=colors.at(std::to_string(row.id)).get<plot::Color>();
+            for (auto channel:color) if (!std::isfinite(channel) || channel<0 || channel>1) throw std::runtime_error("RGBA channels must be finite and between 0 and 1.");
+        }
+        append(label,row.f,std::vector<double>(row.f.size(),row.temperature),row.z,0,color);
+    }
     else {
         std::vector<double> x,y,z;
         for (const auto &row:rows) for (std::size_t i=0;i<row.f.size();++i) {x.push_back(row.f[i]); y.push_back(row.temperature); z.push_back(row.z[i]);}

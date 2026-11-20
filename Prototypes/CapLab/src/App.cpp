@@ -182,6 +182,13 @@ void SetupApplication(Application &application) {
             ImGui::EndDisabled();
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Edit")) {
+            ImGui::BeginDisabled(state->activeJob!=0);
+            if (ImGui::MenuItem("Undo","Ctrl+Z")) (void)registry->Execute(CommandID{"edit.undo"});
+            if (ImGui::MenuItem("Redo","Ctrl+Y")) (void)registry->Execute(CommandID{"edit.redo"});
+            ImGui::EndDisabled();
+            ImGui::EndMenu();
+        }
         if (gallery) sst::ui::plot::ShowPlotGallery();
     });
     for (auto view : {CapLabPrototypePanel::View::Project, CapLabPrototypePanel::View::Plot,

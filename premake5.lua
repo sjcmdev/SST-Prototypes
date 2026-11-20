@@ -397,6 +397,13 @@ group ""
 workspace "SSTPrototypes"
     filter "kind:ConsoleApp or WindowedApp"
         sst_link_hdf5()
+        if _SST_PYTHON_EMBED_AVAILABLE then
+            libdirs { _SST_PYTHON_LIB_DIR }
+            links { "nanobind", _SST_PYTHON_LIB_NAME }
+            if _SST_PYTHON_DLL_PATH ~= "" then
+                postbuildcommands { '{COPYFILE} "' .. _SST_PYTHON_DLL_PATH .. '" "%{cfg.targetdir}"' }
+            end
+        end
     filter {}
 
 
