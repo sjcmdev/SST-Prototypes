@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import math
 from pathlib import Path
 import subprocess
@@ -123,3 +123,131 @@ fresh = scapslab.Session()
 assert fresh.device_list()['ok']
 assert fresh.device_add(name='Template device')['ok']
 assert len(fresh.device_list()['devices']) == 2
+
+# The same request was submitted by clicking Run batch in the real ImGui panel.
+batch_session = scapslab.Session(ui_document)
+python_batch = batch_session.run_batch(spec=ui_spec)
+assert python_batch['ok'], python_batch
+for actual, expected in zip(python_batch['batch_result']['rows'], ui_batch['rows'], strict=True):
+    for key in ('id', 'parameters', 'status', 'error_type', 'project_hash', 'curves', 'values', 'statuses'):
+        assert actual.get(key) == expected.get(key), key
+assert len(python_batch['batch_result']['rows']) == 3
+assert batch_session.record_batch([dict(id='Voc', quantity='Voc')])['batch_result']['rows'][0]['statuses']['Voc'] == 'pending st6'
+with tempfile.TemporaryDirectory(prefix='scapslab-batch-') as folder:
+    path = Path(folder) / 'recorder.csv'
+    assert batch_session.export_batch(path)['ok']
+    rows = list(csv.DictReader(path.open()))
+    assert len(rows) == 3 and 'Voc status' in rows[0]
+    assert batch_session.export_batch(path, 'point_1')['ok']
+    assert len(list(csv.DictReader(path.open()))) == 1
+    assert batch_session.send_to_plotlab(Path(folder) / 'recorder.plotlab')['ok']
+print('UI Run batch == Python run_batch: parameters, status, curves and Recorder bitwise equal', flush=True)
+
+# GUI button and Python use the identical illuminated command/job path.
+light_session = scapslab.Session(ui_light['document'])
+light = light_session.execute({'operation': 'run'})
+assert light['ok'], light
+assert light['result']['points'] == ui_light['result']['points']
+assert light['result']['photovoltaic'] == ui_light['result']['photovoltaic']
+assert light['result']['optics'] == ui_light['result']['optics']
+for mode in ('constant_flux', 'constant_power'):
+    qe = light_session.execute(dict(operation='qe', start_nm=590., stop_nm=610., points=3,
+                                    probe_mode=mode, probe_photon_flux_m2_s=1e16, probe_power_W_m2=1e-3))
+    assert qe['ok'], qe
+    assert qe['ac_results']['qe']['probe_mode'] == mode
+    assert all(p['EQE'] is not None for p in qe['ac_results']['qe']['points'])
+print('Light I-V GUI/Python: bitwise points, PV and optics; both QE probe modes PASS', flush=True)
+
+am15 = light_session.execute(dict(operation='edit', patch={'illumination': {'scapslab_spectrum': 'AM1.5G'}}))
+assert am15['ok'], am15
+assert am15['document']['illumination']['mode'] == 'spectrum'
+assert len(am15['document']['illumination']['spectrum_nm_W_m2']) > 100
+preview = light_session.execute(dict(operation='band', voltage_V=0.))
+assert preview['ok'], preview
+assert preview['band_result']['optics']['incident_power_W_m2'] > 900.
+
+zero = light_session.execute(dict(operation='edit', patch={'illumination': {'intensity_multiplier': 0.}}))
+assert zero['ok'], zero
+zero = light_session.execute(dict(operation='run'))
+assert zero['ok'], zero
+assert zero['result']['photovoltaic']['efficiency_fraction'] is None
+
+# File menu operations also run through the embedded command/job API.
+def_session = scapslab.Session()
+# The package path is supplied by the C++ host and is independent of the engine checkout.
+fixture = Path(scapslab.__file__).resolve().parents[2] / 'tests' / 'stage05-gaussian.def'
+imported = def_session.import_def(fixture)
+assert imported['ok'], imported
+assert 'warnings' in imported['operation_result']
+with tempfile.TemporaryDirectory(prefix='scapslab-def-') as folder:
+    exported = def_session.export_def(Path(folder) / 'roundtrip.def')
+    assert exported['ok'], exported
+    assert (Path(folder) / 'roundtrip.def').stat().st_size > 0
+    assert def_session.import_def(Path(folder) / 'roundtrip.def')['ok']
+print('Python .def import/export and unsupported-items warnings PASS', flush=True)
+
+# G/R uses the same command/job path and immutable working-point snapshot.
+with tempfile.TemporaryDirectory(prefix='scapslab-gr-') as output:
+    result = session.execute({'operation': 'run'})
+    assert result['ok'], result
+    for format in ('json', 'csv'):
+        path = Path(output) / ('gr.' + format)
+        exported = session.execute({'operation': 'export_gr', 'format': format, 'path': str(path), 'point_index': 0})
+        assert exported['ok'], exported
+        assert path.stat().st_size > 0
+        if format == 'csv':
+            with path.open(newline='') as f:
+                rows = list(csv.DictReader(f))
+            assert rows and all(None not in row for row in rows)
+            assert all(row['terminal_budget_valid'] in ('true', 'false') for row in rows)
+            assert all('terminal_budget_relative_error' in row for row in rows)
+            assert all(row['bias_id'] == 'bias-0' for row in rows)
+
+# slio: public aliases use the same native command -> job path as the GUI.
+# Lossless profile/curve JSON fields can exceed Python csv's default 128 KiB field limit.
+csv.field_size_limit(64 * 1024 * 1024)
+with tempfile.TemporaryDirectory(prefix='scapslab-io-') as output:
+    io_session = scapslab.Session(loaded['document'])
+    assert io_session.execute(dict(operation='run'))['ok']
+    before = io_session.execute(dict(operation='inspect'))
+    path = Path(output) / 'project.scapslab'
+    saved = io_session.save_project(path)
+    assert saved['ok'] and saved['operation_result']['size_bytes'] == path.stat().st_size, saved
+    reloaded = io_session.load_project(path)
+    assert reloaded['ok'] and reloaded['document'] == before['document'], reloaded
+    runs = io_session.result_runs()['runs']
+    selected = [runs[0]['run_id']]
+    for format in ('json', 'csv', 'png', 'svg', 'pdf'):
+        destination = Path(output) / f'results.{format}'
+        exported = io_session.export_results(destination, format=format, run_ids=selected)
+        assert exported['ok'], exported
+        assert destination.stat().st_size > 100
+        if format == 'csv':
+            with destination.open(newline='', encoding='utf-8') as stream:
+                rows = list(csv.DictReader(stream))
+            expected = before['result']['points']
+            assert [json.loads(r['point_json']) for r in rows] == expected
+            for row, point in zip(rows, expected):
+                assert float(row['terminal_voltage_V']) == point['voltage_V']
+                assert float(row['internal_voltage_V']) == point['internal_voltage_V']
+                assert json.loads(row['settings_json']) == before['document']
+                assert json.loads(row['provenance_json']) == before['result']['provenance']
+    after = io_session.execute(dict(operation='inspect'))
+    assert after['document'] == before['document'] and after['result'] == before['result']
+    assert not io_session.export_results(Path(output), all=True)['ok']
+    assert io_session.execute(dict(operation='inspect'))['result'] == before['result']
+    print('slio Python load/save/export: CSV exact reread, JSON, PNG/SVG/PDF, failure isolation PASS', flush=True)
+    batch_run = io_session.run_batch(spec=ui_spec)
+    assert batch_run['ok'], batch_run
+    for format in ('csv', 'json', 'svg'):
+        destination = Path(output) / f'all-runs.{format}'
+        exported = io_session.export_results(destination, format=format, all=True)
+        assert exported['ok'], exported
+        assert len(exported['operation_result']['files']) >= 1
+        if format == 'csv':
+            with destination.open(newline='', encoding='utf-8') as stream:
+                rows = list(csv.DictReader(stream))
+            batch_rows = [r for r in rows if r['kind'] == 'batch']
+            assert [json.loads(r['point_json']) for r in batch_rows] == batch_run['batch_result']['rows']
+            assert all(json.loads(r['batch_spec_json']) == batch_run['batch_result']['spec'] for r in batch_rows)
+    print('slio selected/all: mixed I-V + batch/Recorder one-sheet CSV/JSON and retained batch plots PASS', flush=True)

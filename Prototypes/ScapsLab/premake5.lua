@@ -14,6 +14,7 @@ project "ScapsCore"
     targetdir (_SST_ROOT .. "/build/bin/" .. outputdir .. "/%{prj.name}")
     objdir (_SST_ROOT .. "/build/bin-int/" .. outputdir .. "/%{prj.name}")
     files { scaps .. "/src/**.cpp", scaps .. "/src/**.hpp", scaps .. "/include/**.hpp" }
+    removefiles { scaps .. "/src/*_python.cpp" }
     includedirs { scaps .. "/include", _SST_ROOT .. "/Vendor/yaml-cpp/include" }
     defines { "YAML_CPP_STATIC_DEFINE" }
     links { "yaml-cpp" }
@@ -41,7 +42,11 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         _SST_ROOT .. "/Vendor/thread-pool/include", _SST_ROOT .. "/Vendor/json/include",
         _SST_ROOT .. "/Vendor/yaml-cpp/include", _SST_ROOT .. "/Vendor/GoogleTest/googletest/include" }
     links { "Core", "ScapsCore" }
-    if name ~= "ScapsLabHeadless" then sst_link_ui() end
+    if name ~= "ScapsLabHeadless" then
+        sst_link_ui(); sst_link_plotlab()
+        files { _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabExport.cpp" }
+        defines { 'SCAPSLAB_PLOTLAB_PYTHON="' .. _SST_ROOT .. '/Prototypes/PlotLab/python"' }
+    end
     defines { 'SCAPSLAB_HEADLESS="' .. _SST_ROOT .. '/build/bin/' .. outputdir .. '/ScapsLabHeadless/ScapsLabHeadless.exe"', "YAML_CPP_STATIC_DEFINE", 'SCAPSLAB_EXAMPLES="' .. root .. '/examples"', 'SCAPSLAB_SOLVER_VERSION="scaps_core-ui-' .. solverStamp .. '"', 'SCAPSLAB_PROJECT="' .. scaps .. '/device_project.yaml"', 'SCAPSLAB_PYTHON="' .. root .. '/python"', 'SCAPSLAB_PYTHON_TEST="' .. root .. '/tests/test_headless.py"' }
     if name == "ScapsLab" then
         files { root .. "/src/**.cpp", root .. "/src/**.hpp" }
@@ -49,7 +54,7 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         debugdir ("%{cfg.targetdir}")
         postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/PrototypeTemplate/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/python" "%{cfg.targetdir}/python"', '{COPYDIR} "' .. root .. '/examples" "%{cfg.targetdir}/examples"' }
     elseif name == "ScapsLabTests" then
-        files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Workspace.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp" }
+        files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Workspace.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp", root .. "/src/Batch.cpp", root .. "/src/ResultsIO.cpp" }
         links { "GoogleTest", "GoogleTestMain" }
     else
         files { scaps .. "/apps/scaps_headless.cpp" }

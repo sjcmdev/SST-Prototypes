@@ -80,19 +80,30 @@ DeviceState &Workflow::Current() {return Device(project.active_device);}
 Json Workflow::Workspace() const {
     Json devices=Json::array();
     for(const auto &d:project.devices) devices.push_back({{"id",d->id},{"name",d->name},{"colour",d->colour},{"description",d->description},
-        {"document",d->document},{"result",d->result},{"band_result",d->bandResult},{"ac_results",d->acResults},{"status",d->status}});
+        {"actions",d->actions},{"document",d->document},{"result",d->result},{"band_result",d->bandResult},{"ac_results",d->acResults},{"batch_result",d->batchResult},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",d->status}});
     return {{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}};
 }
 void Workflow::SetWorkspace(const Json &value) {
-    if(value.at("schema_version")!=1) throw std::invalid_argument("Unsupported ScapsLab schema_version");
+    if(value.value("schema_version",0)<0 || value.value("schema_version",0)>2) throw std::invalid_argument("Unsupported ScapsLab schema_version");
     const auto &devices=value.at("devices");if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::invalid_argument("Expected 1..1000 devices");
     Project checked;checked.name=value.at("name").get<std::string>();if(checked.name.empty()) throw std::invalid_argument("Project name is empty");
-    checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.at("ui");
+    checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
     if(!checked.ui.is_object()) throw std::invalid_argument("ui must be an object");
     std::set<std::string> ids;
     for(const auto &item:devices) {
         const auto id=item.at("id").get<std::string>();if(id.empty() || !ids.insert(id).second) throw std::invalid_argument("Invalid or duplicate device_id");
         (void)Model(item.at("document"));
+        if(item.contains("actions")) {
+            const auto &actions=item.at("actions");if(!actions.is_object())throw std::invalid_argument("actions must be an object");
+            for(auto a=actions.begin();a!=actions.end();++a) {
+                if(!a->is_object())throw std::invalid_argument("Each action must be an object");
+                const auto expected=a.key()=="iv"?"run":a.key();
+                if(a->contains("operation") && a->at("operation")!=expected)throw std::invalid_argument("Action operation does not match its technique");
+                for(const auto *key:{"temperature_K","voltage_V","start_V","stop_V","step_V","frequency_Hz","start_Hz","stop_Hz","points","start_nm","stop_nm","probe_photon_flux_m2_s","probe_power_W_m2"})
+                    if(a->contains(key) && (!a->at(key).is_number() || !std::isfinite(a->at(key).get<double>())))throw std::invalid_argument("Invalid numeric action setting");
+                if(a->contains("probe_mode") && a->at("probe_mode")!="constant_flux" && a->at("probe_mode")!="constant_power")throw std::invalid_argument("Invalid QE probe mode");
+            }
+        }
         if(item.at("name").get<std::string>().empty()) throw std::invalid_argument("Device name is empty");
         const auto &colour=item.at("colour");if(!colour.is_array() || colour.size()!=4) throw std::invalid_argument("colour must contain four RGBA values");
         for(const auto &c:colour) if(!c.is_number() || !std::isfinite(c.get<double>()) || c.get<double>()<0 || c.get<double>()>1) throw std::invalid_argument("Invalid RGBA colour");
@@ -106,10 +117,28 @@ void Workflow::SetWorkspace(const Json &value) {
             if(!r.at("mesh_x_m").is_array() || (!ac && (!r.at("contact_phi_eV").is_array() || r.at("contact_phi_eV").size()!=2))) throw std::invalid_argument("Invalid result mesh/contacts");
             for(const auto &point:r.at("points")) {
                 if(!point.is_object() || !point.at("status").is_string() || !point.at("valid").is_boolean() || !point.at("voltage_V").is_number()) throw std::invalid_argument("Invalid result point");
-                if(ac) {for(const auto *key:{"frequency_Hz","temperature_K","capacitance_F","conductance_S","G_over_omega_F","inverse_C2_F_minus2","conservation_relative"}) if(!point.at(key).is_number() && !point.at(key).is_null()) throw std::invalid_argument("Invalid AC result value");}
+                if(r.value("kind",std::string{})=="qe") {for(const auto *key:{"wavelength_nm","EQE","incident_photon_flux_m2_s","probe_power_W_m2"}) if(!point.at(key).is_number() && !point.at(key).is_null()) throw std::invalid_argument("Invalid QE result value");}
+                else if(ac) {for(const auto *key:{"frequency_Hz","temperature_K","capacitance_F","conductance_S","G_over_omega_F","inverse_C2_F_minus2","conservation_relative"}) if(!point.at(key).is_number() && !point.at(key).is_null()) throw std::invalid_argument("Invalid AC result value");}
                 else {if(!point.at("J_A_m2").is_number() && !point.at("J_A_m2").is_null()) throw std::invalid_argument("Invalid current value");for(const auto *key:{"x_m","Ec_eV","Ev_eV","EFn_eV","EFp_eV","n_m3","p_m3"}) if(!point.at(key).is_array()) throw std::invalid_argument("Invalid profile array");}
             }
         };
+        if(item.contains("batch_result") && !item.at("batch_result").empty()) {
+            const auto &table=item.at("batch_result");
+            if(!table.at("provenance").value("solver_version",Json()).is_string() || !table.at("provenance").value("time_unix_ms",Json()).is_number_integer()) throw std::invalid_argument("Invalid batch provenance");
+            if(table.at("provenance").at("device_hash")!=DocumentHash(item.at("document"))) throw std::invalid_argument("Batch device hash does not match document");
+            const auto plan=BatchPreview(item.at("document"),table.at("spec"));
+            if(!table.at("columns").is_array() || !table.at("rows").is_array() || table.at("rows").size()!=plan.at("member_count").get<std::size_t>()) throw std::invalid_argument("Invalid batch worksheet");
+            std::set<std::string> members;
+            for(std::size_t i=0;i<table.at("rows").size();++i) {
+                const auto &row=table.at("rows")[i];const auto member=row.at("id").get<std::string>();
+                if(member.empty() || !members.insert(member).second || !row.at("status").is_string() || !row.at("elapsed_s").is_number() || row.at("parameters")!=plan.at("combinations")[i]) throw std::invalid_argument("Invalid batch member");
+                for(const auto &column:table.at("columns")) {
+                    const auto id=column.at("id").get<std::string>();const auto &value=row.at("values").at(id);
+                    if(!column.at("unit").is_string() || (!value.is_number() && !value.is_null()) || !row.at("statuses").at(id).is_string()) throw std::invalid_argument("Invalid recorder cell");
+                }
+                if(row.contains("curves") && (!row.at("curves").at("iv").is_array() || !row.at("curves").at("ac").is_array())) throw std::invalid_argument("Invalid batch curves");
+            }
+        }
         validate(item.value("result",Json::object()));validate(item.value("band_result",Json::object()));
         for(const auto &r:item.value("ac_results",Json::object())) validate(r);
     }
@@ -120,7 +149,9 @@ void Workflow::SetWorkspace(const Json &value) {
         const auto id=item.at("id").get<std::string>();Ref<DeviceState> state;
         for(const auto &existing:project.devices) if(existing->id==id) state=existing;
         if(!state) state=CreateRef<DeviceState>();
+        state->actions=item.value("actions",Json::object());
         state->id=id;state->name=item.at("name");state->colour=item.at("colour");state->description=item.value("description",std::string{});
+        state->batchResult=item.value("batch_result",Json::object());state->batchSpec=item.value("batch_spec",BatchDefaults());state->recorderColumns=item.value("recorder_columns",RecorderDefaults());
         state->document=item.at("document");state->result=item.value("result",Json::object());state->bandResult=item.value("band_result",Json::object());state->acResults=item.value("ac_results",Json::object());state->status=item.value("status",std::string("no results"));
         checked.devices.push_back(state);
     }
@@ -130,7 +161,7 @@ void Workflow::RefreshDirty() {for(auto &d:project.devices) d->dirty=d->metadata
 Json Workflow::Snapshot() const {
     const auto &d=*std::find_if(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==project.active_device;});
     Json list=Json::array();for(const auto &item:project.devices) list.push_back({{"device_id",item->id},{"name",item->name},{"description",item->description},{"colour",item->colour},{"status",item->status},{"dirty",item->dirty},{"compare",project.compare_set.contains(item->id)}});
-    return {{"ok",true},{"document",d->document},{"result",d->result},{"band_result",d->bandResult},{"ac_results",d->acResults},
-        {"devices",list},{"active_device",project.active_device},{"project",Workspace()},{"dirty",dirty},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"error",nullptr}};
+    return {{"ok",true},{"actions",d->actions},{"document",d->document},{"result",d->result},{"band_result",d->bandResult},{"ac_results",d->acResults},{"batch_result",d->batchResult},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},
+        {"devices",list},{"active_device",project.active_device},{"project",Workspace()},{"runs",Runs()},{"dirty",dirty},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"error",nullptr}};
 }
 }

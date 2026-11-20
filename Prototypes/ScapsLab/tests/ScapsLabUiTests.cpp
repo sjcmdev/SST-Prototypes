@@ -5,6 +5,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <implot.h>
+#include <implot_internal.h>
 #include <thread>
 #include <bit>
 #include <scaps_core/api.hpp>
@@ -93,10 +94,28 @@ TEST(ScapsLab,AllEditorControlsHaveUniqueIdsAtNarrowWidth) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     auto second=w.Current().document["layers"][0];second["scapslab_id"]="test-layer";w.Current().document["layers"].push_back(second);
     w.Current().document["layers"][0]["defects"]=Json::array({NewDefect()});w.Current().document["interface_defects"]=Json::array({NewDefect(true)});
-    for(int view:{1,2,3,4,11,12,13,14,15}) {
+    for(int view:{1,2,3,4,11,12,13,14,15,16,17,18,19,20,21}) {
         Panel panel(&w,view);
         auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(340,1500));ImGui::Begin("Editor IDs");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1)<<view;};
         frame();frame();for(float y=35;y<900;y+=9) for(float x=160;x<330;x+=36) {io.AddMousePosEvent(x,y);frame();frame();}
+    }
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}
+
+TEST(ScapsLab,StructureShowsEveryEditorGradingLaw) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,800);
+    io.Fonts->AddFontDefault();io.Fonts->Build();Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);Panel panel(&w,14);
+    int expected=0;
+    for(const auto *law:{"linear","uniform","parabolic","logarithmic","exponential"}) {
+        w.Current().document["layers"][0]["grading"]={{"Eg_eV",{{"law",law},{"left",1.12},{"right",1.15},{"bowing",.5}}}};
+        int green=0;
+        for(int frame=0;frame<2;++frame) {
+            io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1000,700));ImGui::Begin("Grading laws");panel.RenderContent();
+            green=0;for(const auto &v:ImGui::GetWindowDrawList()->VtxBuffer) if(v.col==IM_COL32(140,235,170,255)) ++green;
+            ImGui::End();ImGui::Render();
+        }
+        if(!expected) expected=green;
+        EXPECT_GT(green,100)<<law;EXPECT_EQ(green,expected)<<law;
     }
     ImPlot::DestroyContext();ImGui::DestroyContext();
 }
@@ -113,4 +132,59 @@ TEST(ScapsLab,StructureThicknessDragIsUndoable) {
     EXPECT_TRUE(w.Dispatch({{"operation","undo"}}).at("ok").get<bool>());
     while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().document,original);ImPlot::DestroyContext();ImGui::DestroyContext();
+}
+
+Json RunBatchViaUi(const Json &document,const Json &spec) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,1100);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=document;w.Current().batchSpec=spec;Panel panel(&w,16);
+    auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1100,1050));ImGui::Begin("Batch parity");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);};
+    frame();frame();const auto button=ImGui::FindWindowByName("Batch parity")->GetID("Run batch");bool found=false;
+    for(float y=40;y<1000 && !found;y+=4) {io.AddMousePosEvent(40,y);frame();frame();if(GImGui->HoveredId==button) {found=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
+    EXPECT_TRUE(found);while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();
+    auto result=w.Current().batchResult;ImPlot::DestroyContext();ImGui::DestroyContext();return result;
+}
+
+Json RunLightViaUi() {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,1100);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string());Panel panel(&w,19);
+    auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1100,1050));ImGui::Begin("Light parity");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);};
+    frame();frame();
+    // Select the actual I-V tab, then its Calculate button.
+    auto click=[&](const char *label,float x,float first,float last) {
+        const auto id=ImHashStr(label,0,ImHashStr("Light I-V",0,ImGui::FindWindowByName("Light parity")->GetID("Optical views")));bool found=false;
+        for(float y=first;y<last && !found;y+=2) {io.AddMousePosEvent(x,y);frame();frame();if(GImGui->HoveredId==id) {found=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
+        return found;
+    };
+    // Tab IDs are scoped by the tab bar; position is obtained from the rendered item.
+    const auto tabId=ImHashStr("Light I-V",0,ImGui::FindWindowByName("Light parity")->GetID("Optical views"));
+    bool tab=false;
+    for(float y=45;y<150 && !tab;y+=2) for(float x=100;x<250 && !tab;x+=3) {io.AddMousePosEvent(x,y);frame();frame();if(GImGui->HoveredId==tabId) {tab=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
+    EXPECT_TRUE(tab);EXPECT_TRUE(click("Calculate light I-V",75,60,220));
+    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();
+    frame();frame();
+    bool pvPlot=false;
+    for(int i=0;i<GImPlot->Plots.GetBufSize();++i) if(auto *plot=GImPlot->Plots.GetByIndex(i);plot && plot->HasTitle() && std::string(plot->GetTitle())=="Light I-V") {
+        pvPlot=true;const double jsc=w.Current().result.at("photovoltaic").at("Jsc_A_m2").get<double>()*.1;
+        EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Min,-1.2*jsc,1e-10);EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Max,jsc,1e-10);
+        EXPECT_STREQ(plot->GetAxisLabel(plot->Axes[ImAxis_Y1]),"J [mA/cm^2]");
+        for(const auto *label:{"Voc","Jsc","MPP"}) {
+            bool found=false;for(int item=0;item<plot->Items.GetLegendCount();++item)found|=std::string(plot->Items.GetLegendLabel(item))==label;
+            EXPECT_TRUE(found)<<label;
+        }
+    }
+    EXPECT_TRUE(pvPlot);
+    Json result={{"document",w.Current().document},{"result",w.Current().result}};
+    ImPlot::DestroyContext();ImGui::DestroyContext();return result;
+}
+
+TEST(ScapsLab,GenerationRecombinationPanelHasNoConflictingIds) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string());
+    ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).at("ok").get<bool>());
+    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.response.at("ok").get<bool>())<<w.response.dump();w.Current().result=w.Current().bandResult;
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1500,1600);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
+    Panel panel(&w,22);
+    auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(io.DisplaySize);ImGui::Begin("G/R UI");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);};
+    frame();frame();for(float y=10;y<1500;y+=14) {io.AddMousePosEvent(450,y);frame();frame();}
+    ImPlot::DestroyContext();ImGui::DestroyContext();
 }

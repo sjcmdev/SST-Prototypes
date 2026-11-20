@@ -1,13 +1,17 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include <scaps_core/api.hpp>
+#include <scaps_core/illumination.hpp>
+#include <scaps_core/device_project_def.hpp>
 #include <scaps_core/physics.hpp>
+#include <scaps_core/grading.hpp>
 #include <scaps_core/device_project_yaml.hpp>
 #include <yaml-cpp/yaml.h>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <set>
 #include <sstream>
 #include <iomanip>
@@ -113,7 +117,7 @@ public:
             const auto gesture=edit.value("gesture_id",std::string{});
             if(!gesture.empty() && !w.edits.empty() && w.edits.back().value("gesture_id",std::string{})==gesture) w.edits.back()=std::move(edit);
             else w.edits.push_back(std::move(edit));
-            if(w.active && (w.pending->request.at("operation")=="run" || w.pending->request.at("operation")=="band" || w.pending->request.at("operation")=="cv" || w.pending->request.at("operation")=="cf")) (void)w.jobs->RequestCancel(w.active);
+            if(w.active && (w.pending->request.at("operation")=="run" || w.pending->request.at("operation")=="band" || w.pending->request.at("operation")=="cv" || w.pending->request.at("operation")=="cf" || w.pending->request.at("operation")=="qe")) (void)w.jobs->RequestCancel(w.active);
             w.Current().changedAt=std::chrono::steady_clock::now(); return {};
         }
         if (w.Busy()) return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","A job is still active","Wait or cancel","ScapsLab","busy"};
@@ -200,10 +204,56 @@ void ChangeSheetDistribution(Json &d,const std::string &shape,const std::string 
     const bool integrated=shape=="single" || convention=="integrated_sheet";
     d["Nt_m2"]=integrated?total:0.;d["peak_density_m2_eV"]=integrated?0.:total/width(shape);
 }
+Json AM15Spectrum() {
+    return Json::array({
+#include "AM15.inc"
+    });
+}
+Json SelfContained(Json j) {
+    auto embed=[](Json &object,const char *file,const char *table,auto reader) {
+        if(object.contains(file) && object.at(file).is_string() && !object.at(file).get<std::string>().empty()) {
+            object[table]=reader(object.at(file).get<std::string>());object[file]="";
+        }
+    };
+    if(j.contains("illumination")) {
+        auto &l=j["illumination"];
+        embed(l,"spectrum_file","spectrum_nm_W_m2",scaps_core::read_scaps_spectrum);
+        embed(l,"generation_file","generation_m_m3s",scaps_core::read_scaps_generation);
+        embed(l,"front_filter_file","front_filter_nm_fraction",scaps_core::read_scaps_filter);
+        embed(l,"back_filter_file","back_filter_nm_fraction",scaps_core::read_scaps_filter);
+    }
+    for(auto &l:j["layers"]) {
+        if(l.contains("absorption")) embed(l["absorption"],"file","table_nm_m1",scaps_core::read_scaps_absorption);
+        if(l.contains("grading")) for(auto it=l["grading"].begin();it!=l["grading"].end();++it) if(it->contains("file")) {
+            auto &g=it.value();const auto key=it.key();
+            const auto profile=scaps_core::read_grading_file(g.at("file").get<std::string>(),key=="Nd_m3" || key=="Na_m3" || key=="Nc_ref_m3" || key=="Nv_ref_m3");
+            if(!g.contains("position_relative"))g["position_relative"]=profile.position_relative;
+            if(!g.contains("interpolation_logarithmic"))g["interpolation_logarithmic"]=profile.interpolation_logarithmic;
+            if(!g.contains("shared_range"))g["shared_range"]=profile.shared_range;
+            if(!g.contains("composition_dependent"))g["composition_dependent"]=profile.composition_dependent;
+            g.erase("file");g["law"]="table";g["coordinate"]=profile.coordinate;g["value"]=profile.value;
+        }
+    }
+    return j;
+}
 Json ReadProject(const std::string &path) {
-    auto raw=FromYaml(YAML::LoadFile(path)); const auto p=Model(raw);
+    auto raw=FromYaml(YAML::LoadFile(path));
+    if(raw.value("schema_version",0)==0) raw["schema_version"]=1;
+    const auto base=std::filesystem::absolute(path).parent_path();
+    auto anchor=[&](Json &object,const char *key) {if(object.contains(key) && object[key].is_string() && !object[key].get<std::string>().empty()) object[key]=(base/std::filesystem::path(object[key].get<std::string>())).lexically_normal().string();};
+    if(raw.contains("illumination")) for(const auto *key:{"spectrum_file","generation_file","front_filter_file","back_filter_file"}) anchor(raw["illumination"],key);
+    for(auto &layer:raw["layers"]) {anchor(layer,"material_file");if(layer.contains("absorption")) anchor(layer["absorption"],"file");if(layer.contains("grading")) for(auto &profile:layer["grading"]) anchor(profile,"file");}
+    if(raw.contains("mesh")) anchor(raw["mesh"],"scaps_numerical_definition");
+    raw=SelfContained(std::move(raw));
+    const auto p=Model(raw);
     Temporary t; scaps_core::save_device_project_yaml(p,t.path);
-    auto full=FromYaml(YAML::LoadFile(t.path.string())); full.update(raw,true);
+    auto full=FromYaml(YAML::LoadFile(t.path.string()));
+    // JSON array updates replace layers; retain the core defaults within each layer.
+    for(auto &l:raw["layers"]) l.erase("material_file");
+    if(raw.contains("mesh")) raw["mesh"].erase("scaps_numerical_definition");
+    for(std::size_t i=0;i<raw["layers"].size();++i) full["layers"][i].update(raw["layers"][i],true);
+    raw["layers"]=full["layers"];full.update(raw,true);
+    for(const auto *side:{"left","right"}) if(!raw["contacts"][side].contains("flat_band")) full["contacts"][side].erase("flat_band");
     full["mesh"]["adaptivity_level"]=p.mesh.adaptivity_level;
     std::set<std::string> ids;
     for(const auto &l:full["layers"]) if(l.contains("scapslab_id")) ids.insert(l.at("scapslab_id"));
@@ -303,31 +353,115 @@ Json DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const 
     }
     return curves;
 }
+Json GenerationRecombination(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::Device1D &device,const scaps_core::DeviceState &state) {
+    using namespace scaps_core;
+    const auto mesh=mesh_from_coordinates(device,state.x_m);
+    const auto pc=physical_constants(p.constants_mode);
+    const auto generation=generation_integrals_m2s(device,mesh,pc);
+    Json out={{"channels",Json::array()},{"layers",Json::array()},{"x_m",state.x_m},{"generation_m3_s",Json::array()}};
+    double generated=0,recombined=0;
+    for(std::size_t l=0;l<p.layers.size();++l) out["layers"].push_back({{"layer_id",document.at("layers")[l].at("scapslab_id")},{"generation_current_A_m2",0.},{"recombination_current_A_m2",0.},{"mechanisms",Json::object()}});
+    for(std::size_t i=0;i<generation.size();++i) {
+        const double dx=.5*((i?mesh.edges[i-1].h_m:0)+(i+1<mesh.size()?mesh.edges[i].h_m:0));
+        out["generation_m3_s"].push_back(dx>0?generation[i]/dx:0.);
+        const double j=pc.q_C*generation[i];generated+=j;
+        auto &value=out["layers"][mesh.nodes[i].layer_index]["generation_current_A_m2"];value=value.get<double>()+j;
+    }
+    for(const auto &channel:state.recombination) {
+        std::string id=channel.id;int layer=-1,defect=-1;
+        if(channel.mechanism=="srh_bulk" && std::sscanf(id.c_str(),"layer:%d/defect:%d",&layer,&defect)==2 && layer>=0 && defect>=0 && layer<int(p.layers.size()) && defect<int(document.at("layers")[layer].at("defects").size()))
+            id=document.at("layers")[layer].at("defects")[defect].at("scapslab_id");
+        Json byLayer=Json::array();double sum=0;
+        for(std::size_t l=0;l<p.layers.size();++l) {
+            double value=0;
+            for(std::size_t i=0;i<channel.R_m3_s.size();++i) if(mesh.nodes[i].layer_index==l) {
+                const double dx=.5*((i?mesh.edges[i-1].h_m:0)+(i+1<mesh.size()?mesh.edges[i].h_m:0));
+                value+=pc.q_C*dx*channel.R_m3_s[i];
+            }
+            if(channel.mechanism=="interface") {
+                // Sheet loss belongs to the left layer; never count it twice.
+                for(std::size_t i=0;i+1<mesh.size();++i) if(mesh.x_m[i]==channel.x_m.front() && mesh.edges[i].h_m==0 && mesh.nodes[i].layer_index==l) value+=channel.integrated_current_A_m2;
+            }
+            sum+=value;byLayer.push_back({{"layer_id",document.at("layers")[l].at("scapslab_id")},{"current_A_m2",value}});
+            auto &row=out["layers"][l];row["recombination_current_A_m2"]=row["recombination_current_A_m2"].get<double>()+value;
+            auto &mechanisms=row["mechanisms"];mechanisms[channel.mechanism]=mechanisms.value(channel.mechanism,0.)+value;
+        }
+        recombined+=channel.integrated_current_A_m2;
+        out["channels"].push_back({{"id",id},{"engine_id",channel.id},{"mechanism",channel.mechanism},{"x_m",channel.x_m.empty()?state.x_m:channel.x_m},
+            {"R_m3_s",channel.R_m3_s},{"R_sheet_m2_s",channel.R_sheet_m2_s},{"integrated_current_A_m2",channel.integrated_current_A_m2},{"by_layer",byLayer},
+            {"layer_sum_relative_error",std::abs(sum-channel.integrated_current_A_m2)/std::max(1e-30,std::abs(channel.integrated_current_A_m2))}});
+    }
+    out["generation_current_A_m2"]=generated;out["recombination_current_A_m2"]=recombined;out["net_generation_current_A_m2"]=generated-recombined;
+    out["sheet_layer_convention"]="interface assigned to left layer";
+    return out;
+}
+
 }
 void Operation::Execute(JobContext &ctx) {
     using namespace scaps_core;
     const auto started=std::chrono::steady_clock::now();
     ctx.ThrowIfCancellationRequested(); const std::string op=request.at("operation");
-    if(op=="project_load" || op=="load") {
+    if(op=="export_results") output=ExportResults(workspace,request);
+    else if(BatchOperation(*this,ctx)) {}
+    else if(op=="export_gr") {
+        if(!workspace.contains("points") || workspace.at("points").empty()) throw std::invalid_argument("No G/R snapshot; calculate a working point first");
+        if(request.contains("point_index") && !request.at("point_index").is_number_integer()) throw std::invalid_argument("point_index must be an integer");
+        const auto index=request.value<std::int64_t>("point_index",0);
+        if(index<0 || std::uint64_t(index)>=workspace.at("points").size()) throw std::invalid_argument("Invalid point_index");
+        const auto &point=workspace.at("points")[index];
+        if(!point.contains("generation_recombination")) throw std::invalid_argument("Snapshot has no G/R; recalculate");
+        output={{"schema_version",1},{"device_id",request.at("device_id")},{"point",point},{"provenance",workspace.at("provenance")},{"project_snapshot",workspace.at("project_snapshot")}};
+        const auto format=request.value("format",std::string("json"));
+        std::string text;
+        if(format=="json") text=output.dump(2);
+        else if(format=="csv") {
+            std::ostringstream csv;csv<<std::setprecision(17);
+            csv<<"device_id,bias_id,voltage_V,internal_voltage_V,temperature_K,valid,validity_status,illumination_json,provenance_json,channel_id,engine_id,mechanism,layer_id,x_m,rate_m3_s,sheet_rate_m2_s,integrated_current_A_m2,curve_valid,curve_validity_status,terminal_budget_valid,terminal_budget_relative_error\n";
+            auto quoted=[](const std::string &v){std::string out="\"";for(char c:v){out+=c;if(c=='"')out+='"';}return out+"\"";};
+            const auto &gr=point.at("generation_recombination");
+            auto row=[&](const std::string &id,const std::string &engine,const std::string &mechanism,const std::string &layer,const Json &x,const Json &rate,const Json &sheet,const Json &integral,const Json &health) {
+                csv<<quoted(request.at("device_id"))<<','<<quoted(point.at("bias_id"))<<','<<point.at("voltage_V")<<','<<point.at("internal_voltage_V")<<','<<workspace.at("project_snapshot").at("temperature_K")<<','<<point.at("valid")<<','<<quoted(point.at("validity_status"))<<','<<quoted(workspace.at("project_snapshot").value("illumination",Json::object()).dump())<<','<<quoted(workspace.at("provenance").dump())<<','<<quoted(id)<<','<<quoted(engine)<<','<<quoted(mechanism)<<','<<quoted(layer)<<',';
+                int column=0;for(const auto &v:{x,rate,sheet,integral}) {if(column++)csv<<',';if(v.is_number())csv<<v;}csv<<','<<health.at("valid")<<','<<quoted(health.at("validity_status"))<<','<<gr.at("terminal_budget_valid")<<',';if(gr.at("terminal_budget_relative_error").is_number())csv<<gr.at("terminal_budget_relative_error");csv<<'\n';
+            };
+            for(std::size_t i=0;i<gr.at("x_m").size();++i) row("generation","","generation","",gr.at("x_m")[i],gr.at("generation_m3_s")[i],nullptr,nullptr,point);
+            for(const auto &c:gr.at("channels")) {
+                const bool sheet=!c.at("R_sheet_m2_s").empty();
+                for(std::size_t i=0;i<c.at("x_m").size();++i) row(c.at("id"),c.at("engine_id"),c.at("mechanism"),"",c.at("x_m")[i],sheet?Json(nullptr):c.at("R_m3_s")[i],sheet?c.at("R_sheet_m2_s")[i]:Json(nullptr),nullptr,c);
+                for(const auto &l:c.at("by_layer")) row(c.at("id"),c.at("engine_id"),c.at("mechanism"),l.at("layer_id"),nullptr,nullptr,nullptr,l.at("current_A_m2"),c);
+            }
+            text=csv.str();
+        } else throw std::invalid_argument("format must be csv or json");
+        SaveText(Path{request.at("path").get<std::string>()}.Native(),text);
+    }
+    else if(op=="import_def") {
+        Temporary temporary; const auto imported=import_def(request.at("path").get<std::string>(),request.value("scaps_root",std::string{}));
+        save_device_project_yaml(imported,temporary.path);document=ReadProject(temporary.path.string());
+        output={{"warnings",imported.scaps_native.warnings}};
+    } else if(op=="export_def") {export_def(Model(document),request.at("path").get<std::string>());output={{"warnings",Model(document).scaps_native.warnings}};}
+    else if(op=="project_load" || op=="load") {
         const auto file=request.at("path").get<std::string>();
         std::string source,error;if(!TextFileIO::Load(Path{file},source,error)) throw std::runtime_error(error);
         auto raw=source.find_first_not_of(" \t\r\n")!=std::string::npos && source[source.find_first_not_of(" \t\r\n")]=='{'?Json::parse(source):FromYaml(YAML::Load(source));
-        if(raw.contains("devices")) workspace=UnpackResults(raw);
+        if(raw.contains("devices")) {workspace=UnpackResults(raw);workspace["schema_version"]=raw.value("schema_version",0);}
         else { Workflow loaded(CreateRef<JobSystem>(nullptr,1));loaded.Current().document=ReadProject(file);loaded.Current().name=loaded.Current().document.value("case_id",std::string("Device"));workspace=loaded.Workspace();workspace["name"]=std::filesystem::path(file).stem().string(); }
         Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
     }
     else if(op=="project_save" || (op=="save" && std::filesystem::path(request.at("path").get<std::string>()).extension()==".scapslab")) {
         Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
-        ctx.ThrowIfCancellationRequested();SaveText(Path{request.at("path").get<std::string>()}.Native(),WorkspaceText(PackResults(workspace)));
+        if(!request.value("include_results",true)) for(auto &d:workspace["devices"]) for(const auto *key:{"result","band_result","ac_results","batch_result"}) d[key]=Json::object();
+        if(!request.value("include_results",true)) for(auto &d:workspace["devices"]) d["status"]="no results";
+        const auto text=WorkspaceText(PackResults(workspace));
+        ctx.ThrowIfCancellationRequested();SaveText(Path{request.at("path").get<std::string>()}.Native(),text);
+        output={{"path",std::filesystem::absolute(request.at("path").get<std::string>()).string()},{"size_bytes",text.size()},{"save_status","saved"}};
     }
-    else if(op.starts_with("device_") || op=="project_edit") {
+    else if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {
         auto &devices=workspace.at("devices");
         const std::string id=request.value("device_id",workspace.at("active_device").get<std::string>());
         auto at=std::find_if(devices.begin(),devices.end(),[&](const Json &d){return d.at("id")==id;});
         if(op=="device_add" || op=="device_duplicate") {
             Json d;
             if(op=="device_duplicate") {if(at==devices.end()) throw std::invalid_argument("Unknown device_id");d=*at;}
-            else { const auto doc=request.contains("path")?ReadProject(request.at("path").get<std::string>()):request.contains("document")?request.at("document"):ReadProject(SCAPSLAB_PROJECT);
+            else { const auto doc=request.contains("path")?ReadProject(request.at("path").get<std::string>()):request.contains("document")?SelfContained(request.at("document")):ReadProject(SCAPSLAB_PROJECT);
                 d={{"document",doc},{"name",doc.value("case_id",std::string("Device"))},{"description",request.value("description",std::string{})}}; }
             static std::atomic_uint64_t sequence{0};
             d["id"]="device-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"-"+std::to_string(sequence++);
@@ -335,6 +469,9 @@ void Operation::Execute(JobContext &ctx) {
             static const double colours[][4]={{.25,.65,.95,1},{.95,.55,.25,1},{.4,.8,.45,1},{.8,.45,.85,1},{.9,.8,.3,1}};
             d["colour"]=colours[devices.size()%5];d["result"]=Json::object();d["band_result"]=Json::object();d["ac_results"]=Json::object();d["status"]="no results";
             devices.push_back(d);workspace["active_device"]=d.at("id");workspace["compare_set"].push_back(d.at("id"));
+        } else if(op=="action_settings") {
+            if(at==devices.end() || !request.at("actions").is_object()) throw std::invalid_argument("Invalid action list");
+            (*at)["actions"]=request.at("actions");
         } else if(op=="project_edit") {
             if(request.contains("name")) workspace["name"]=request.at("name");
             if(request.contains("ui")) workspace["ui"]=request.at("ui");
@@ -357,7 +494,11 @@ void Operation::Execute(JobContext &ctx) {
     else if (op=="save") WriteProject(document,request.at("path").get<std::string>());
     else if (op=="edit") { auto candidate=document; const auto &patch=request.contains("document")?request.at("document"):request.at("patch");
         if (!patch.is_object()) throw std::invalid_argument("patch must be an object");
-        if(request.contains("document")) candidate=patch; else candidate.update(patch,true); (void)Model(candidate); document=std::move(candidate);
+        if(request.contains("document")) candidate=patch; else candidate.update(patch,true);
+        if(patch.contains("illumination") && patch.at("illumination").value("scapslab_spectrum",std::string{})=="AM1.5G") {
+            auto &light=candidate["illumination"];light["mode"]="spectrum";light["spectrum_file"]="";light["spectrum_nm_W_m2"]=AM15Spectrum();
+        }
+        candidate=SelfContained(std::move(candidate));(void)Model(candidate); document=std::move(candidate);
     } else if (op=="layer") {
         auto &layers=document["layers"]; const std::string action=request.at("action");
         if(action!="add" && !document.value("interface_defects",Json::array()).empty()) throw std::invalid_argument("Remove interface defects before removing or reordering layers; interface attachment must be preserved");
@@ -375,7 +516,7 @@ void Operation::Execute(JobContext &ctx) {
                 auto l=*it; layers.erase(it); layers.insert(layers.begin()+index,l);
             } else throw std::invalid_argument("Unknown layer action");
         }
-        (void)Model(document);
+        document=SelfContained(std::move(document));(void)Model(document);
     } else if (op=="export_ac") {
         const auto kind=request.at("kind").get<std::string>();
         if ((kind!="cv" && kind!="cf") || !acResults.contains(kind)) throw std::invalid_argument("No AC result for kind");
@@ -392,7 +533,7 @@ void Operation::Execute(JobContext &ctx) {
         }
         ctx.ThrowIfCancellationRequested(); SaveText(Path{request.at("path").get<std::string>()}.Native(),csv.str());
     } else if (op=="cv" || op=="cf") {
-        const auto p=Model(document);if(p.illumination.enabled) throw std::invalid_argument("This scaps_core snapshot has no illuminated solve API; disable illumination for a dark solve"); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        const auto p=Model(document);const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         const double T=request.at("temperature_K"); Positive(T,"temperature_K");
         std::vector<double> volts, frequencies;
         if(op=="cv") {
@@ -429,13 +570,47 @@ void Operation::Execute(JobContext &ctx) {
             }
             ctx.ThrowIfCancellationRequested();
             const auto ac=solve_ac_spectrum(device,mesh,dc,{frequencies[op=="cv"?0:i]},1e-3,pc).front();
-            output["points"].push_back({{"point_id",op+"-"+std::to_string(i)},{"voltage_V",-ac.voltage_V},{"frequency_Hz",ac.frequency_Hz},{"temperature_K",T},
+            output["points"].push_back({{"point_id",op+"-"+std::to_string(i)},{"voltage_V",-ac.voltage_V},{"terminal_voltage_V",-dc.voltage_V},{"internal_voltage_V",-dc.state.applied_voltage_V},{"frequency_Hz",ac.frequency_Hz},{"temperature_K",T},
                 {"capacitance_F",finite(ac.C_F)},{"conductance_S",finite(ac.G_S)},{"G_over_omega_F",finite(ac.G_S/(2*std::numbers::pi*ac.frequency_Hz))},
                 {"inverse_C2_F_minus2",finite(1/(ac.C_F*ac.C_F))},{"status",to_string(ac.status)},{"conservation_relative",finite(ac.current_conservation_relative)}});
             ctx.SetProgress(float(i+1),float(total));
         }
+    } else if(op=="qe") {
+        const auto p=Model(document);auto device=make_device_from_project(p);const auto pc=physical_constants(p.constants_mode);
+        const double first=request.value("start_nm",350.),last=request.value("stop_nm",1100.);
+        const auto countValue=request.value("points",Json(31));if(!countValue.is_number_integer() || countValue.get<double>()<2 || countValue.get<double>()>1001) throw std::invalid_argument("QE points must be an integer in 2..1001");
+        const int count=countValue.get<int>();const double probe=request.value(request.value("probe_mode",std::string("constant_flux"))=="constant_flux"?"probe_photon_flux_m2_s":"probe_power_W_m2",request.value("probe_mode",std::string("constant_flux"))=="constant_flux"?1e16:1e-3);
+        const auto mode=request.value("probe_mode",std::string("constant_flux"));
+        if(!std::isfinite(first) || !std::isfinite(last) || first<=0 || last<=first || count<2 || count>1001) throw std::invalid_argument("Invalid QE wavelength range (2..1001 points)");
+        Positive(probe,"probe_value");if(mode!="constant_flux" && mode!="constant_power") throw std::invalid_argument("Unknown QE probe_mode");
+        const auto mesh=prepare_mesh(device,p.mesh,{0.},{p.temperature_K},p.solver,pc);
+        auto dark=device;dark.illumination.enabled=false;
+        output={{"request",request},{"kind","qe"},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"probe_mode",mode},{mode=="constant_flux"?"probe_photon_flux_m2_s":"probe_power_W_m2",probe},{"temperature_K",p.temperature_K},{"voltage_V",0.},{"background","dark"}};
+        OpticalTable response;
+        for(int i=0;i<count;++i) {
+            ctx.ThrowIfCancellationRequested();ctx.SetStage("QE wavelength "+std::to_string(i+1)+" / "+std::to_string(count));
+            const double wavelength=first+(last-first)*i/(count-1);
+            const auto q=solve_qe(dark,mesh,{wavelength},mode,probe,0.,p.temperature_K,p.solver,pc).front();
+            output["points"].push_back({{"point_id","qe-"+std::to_string(i)},{"voltage_V",0.},{"temperature_K",p.temperature_K},{"wavelength_nm",q.wavelength_nm},{"EQE",std::isfinite(q.EQE)?Json(q.EQE):Json(nullptr)},
+                {"incident_photon_flux_m2_s",q.incident_photon_flux_m2_s},{"probe_power_W_m2",q.probe_power_W_m2},{"status",to_string(q.status)}});
+            response.emplace_back(wavelength,q.EQE);ctx.SetProgress(float(i+1),float(count));
+        }
+        bool covered=true;double integrated=0;
+        auto add=[&](double wavelength,double power) {
+            if(wavelength<device.illumination.wavelength_min_nm || wavelength>device.illumination.wavelength_max_nm) return;
+            if(wavelength<first || wavelength>last) {if(power>0) covered=false;return;}
+            integrated+=pc.q_C*power*wavelength*(pc.q_C==1.602e-19?5.035e15:1e-9/(6.62607015e-34*299792458.))*optical_interpolate(response,wavelength,false);
+        };
+        const auto &light=device.illumination;
+        if(light.enabled && light.mode=="spectrum") for(const auto &[w,power]:light.spectrum_nm_W_m2) add(w,power*light.intensity_multiplier);
+        else if(light.enabled && light.mode=="monochromatic") add(light.wavelength_nm,light.monochromatic_power_W_m2*light.intensity_multiplier);
+        else covered=false;
+        const auto sc=solve_iv(device,mesh,{0.},p.temperature_K,p.solver,pc).front();
+        output["integrated_Jsc_A_m2"]=covered && std::isfinite(integrated)?Json(integrated):Json(nullptr);
+        output["light_Jsc_A_m2"]=sc.status==SolverStatus::Converged?Json(-sc.J_total_Am2):Json(nullptr);
+        output["integration_note"]="Dark differential EQE weighted by incident spectrum bins; full spectral coverage required. Finite-light nonlinear response can differ.";
     } else if (op=="run" || op=="band") {
-        const auto p=Model(document);if(p.illumination.enabled) throw std::invalid_argument("This scaps_core snapshot has no illuminated solve API; disable illumination for a dark solve"); const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        const auto p=Model(document);const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         auto volts=op=="band"?std::vector<double>{request.at("voltage_V").get<double>()}:make_voltage_list(p.voltage);
         for(auto &v:volts) {if(!std::isfinite(v)) throw std::invalid_argument("Invalid voltage_V");v=-v;}
         ctx.SetStage("Preparing mesh (cancel checked after preparation)");
@@ -446,8 +621,8 @@ void Operation::Execute(JobContext &ctx) {
         for(std::size_t i=0;i<volts.size();++i) {
             ctx.ThrowIfCancellationRequested(); ctx.SetStage("I-V point "+std::to_string(i+1)+" / "+std::to_string(volts.size()));
             IVPoint pt;
-            if (p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2)) {
-                // shortcut: external networks replay continuation prefixes; use a core step API when exposed.
+            if (p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2)) {
+                // shortcut: light/external networks replay continuation prefixes; use a core step API when exposed.
                 pt=solve_iv(device,mesh,std::vector<double>(volts.begin(),volts.begin()+i+1),p.temperature_K,p.solver,pc).back();
             } else {
                 const auto r=volts[i]==0 ? eq : solve_bias(device,mesh,previous,volts[i],p.temperature_K,p.solver,pc);
@@ -459,15 +634,39 @@ void Operation::Execute(JobContext &ctx) {
             }
             const auto &s=pt.state;
             const auto curves=DefectCurves(document,p,s);
-            const bool external=p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
+            auto gr=GenerationRecombination(document,p,device,s);
+            const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
             const double terminalJ=pt.status!=SolverStatus::Converged ? NAN : external ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
-            output["points"].push_back({{"defect_previews",curves},{"bias_id","bias-"+std::to_string(i)},{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(terminalJ)?Json(terminalJ):Json(nullptr)},
+            const double net=gr.at("net_generation_current_A_m2");
+            const double budgetError=std::abs(net+terminalJ)/std::max({1e-30,std::abs(net),std::abs(terminalJ)});
+            gr["terminal_budget_relative_error"]=std::isfinite(budgetError)?Json(budgetError):Json(nullptr);
+            gr["terminal_budget_valid"]=std::isfinite(budgetError) && budgetError<=1e-6;
+            output["points"].push_back({{"generation_recombination",gr},{"defect_previews",curves},{"bias_id","bias-"+std::to_string(i)},{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(terminalJ)?Json(terminalJ):Json(nullptr)},
                 {"conservation_error_A_m2",pt.J_conservation_error_Am2},{"status",to_string(pt.status)},{"iterations",pt.iterations},{"residual",pt.final_residual_norm},
                 {"internal_voltage_V",-s.applied_voltage_V},{"terminal_voltage_V",external?-pt.voltage_V:-volts[i]},{"trap_occupation",s.trap_occupation},{"interface_occupation",s.interface_occupation},{"x_m",s.x_m.empty()?mesh.x_m:s.x_m},{"Ec_eV",s.Ec_eV},{"Ev_eV",s.Ev_eV},{"EFn_eV",s.EFn_eV},{"EFp_eV",s.EFp_eV},{"n_m3",s.n_m3},{"p_m3",s.p_m3}});
             ctx.SetProgress(float(i+1),float(volts.size()));
         }
+        const auto generation=generation_integrals_m2s(device,mesh,pc);std::vector<double> density;
+        for(std::size_t i=0;i<generation.size();++i) {
+            const double width=(i?std::max(0.,mesh.x_m[i]-mesh.x_m[i-1])*.5:0)+(i+1<mesh.x_m.size()?std::max(0.,mesh.x_m[i+1]-mesh.x_m[i])*.5:0);
+            density.push_back(width>0?generation[i]/width:0.);
+        }
+        output["optics"]={{"x_m",mesh.x_m},{"generation_m3_s",density},{"absorption",Json::array()},{"incident_power_W_m2",incident_power_W_m2(device)}};
+        for(std::size_t i=0;i<device.layers.size();++i) {
+            auto layer=device.layers[i];std::vector<double> wavelengths,alpha,baseline;
+            for(int n=0;n<=200;++n) {const double wavelength=300.+n*6.;wavelengths.push_back(wavelength);alpha.push_back(absorption_m1(layer,wavelength,pc));auto plain=layer;plain.absorption.urbach_enabled=false;baseline.push_back(absorption_m1(plain,wavelength,pc));}
+            output["optics"]["absorption"].push_back({{"layer_id",document.at("layers")[i].value("scapslab_id",std::string("layer-")+std::to_string(i+1))},{"wavelength_nm",wavelengths},{"alpha_m1",alpha},{"without_tail_m1",baseline}});
+        }
+        if(op=="run" && p.illumination.enabled) {
+            ctx.ThrowIfCancellationRequested();ctx.SetStage("Refining photovoltaic metrics");
+            PhotovoltaicResult pv;const double power=incident_power_W_m2(device);
+            if(power>0) pv=solve_photovoltaic(device,mesh,-p.voltage.stop_V,p.temperature_K,power,p.solver,pc);
+            else pv.message="Photovoltaic metrics require a positive, known incident power [W/m^2]";
+            auto finite=[](double v)->Json{return std::isfinite(v)?Json(v):Json(nullptr);};
+            output["photovoltaic"]={{"status",to_string(pv.status)},{"message",pv.message},{"Voc_V",finite(-pv.Voc_V)},{"Jsc_A_m2",finite(-pv.Jsc_Am2)},{"FF_fraction",finite(pv.FF)},{"efficiency_fraction",finite(pv.eta)},{"Pmax_W_m2",finite(pv.Pmax_Wm2)},{"Vmpp_V",finite(-pv.Vmpp_V)},{"Jmpp_A_m2",finite(pv.Jmpp_Am2)}};
+        }
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
-    if(op=="run" || op=="band" || op=="cv" || op=="cf") {
+    if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
         output["project_snapshot"]=document;
         output["provenance"]={{"device_hash",DocumentHash(document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},
             {"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}};
@@ -480,15 +679,26 @@ void Operation::Execute(JobContext &ctx) {
                 const double current=point.at("J_A_m2").is_number()?std::abs(point.at("J_A_m2").get<double>()):0;
                 physical=physical && point.at("J_A_m2").is_number() && point.at("conservation_error_A_m2").is_number() && point.at("conservation_error_A_m2").get<double>()<=std::max(1e-10,current*0.01);
             }
+            if(point.contains("EQE")) physical=physical && point.at("EQE").is_number();
             if(point.contains("capacitance_F")) physical=physical && point.at("capacitance_F").is_number() && point.at("conductance_S").is_number();
             point["valid"]=physical;point["validity_status"]=!converged?"solver_failed":physical?"valid":"current_unresolved";
+            if(point.contains("generation_recombination")) {
+                auto &gr=point["generation_recombination"];
+                for(auto &channel:gr["channels"]) {
+                    bool finite=channel["integrated_current_A_m2"].is_number() && std::isfinite(channel["integrated_current_A_m2"].get<double>());
+                    for(const auto *key:{"R_m3_s","R_sheet_m2_s"}) for(const auto &v:channel[key]) finite &= v.is_number() && std::isfinite(v.get<double>());
+                    const bool curveValid=physical && finite && channel["layer_sum_relative_error"].get<double>()<=1e-6;
+                    channel["valid"]=curveValid;channel["validity_status"]=curveValid?"valid":!physical?point["validity_status"].get<std::string>():"channel_budget_unresolved";
+                }
+                gr["valid"]=physical;
+            }
             valid &= physical;
         }
         output["valid"]=valid;output["validity_status"]=valid?"valid":"contains_invalid_points";
         output["compute_time_ms"]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
         output["mesh_node_count"]=output.at("mesh_x_m").size();
     }
-    if(op!="save" && op!="export_ac") ctx.ThrowIfCancellationRequested();
+    if(op!="save" && op!="project_save" && !op.starts_with("export_")) ctx.ThrowIfCancellationRequested();
 }
 namespace {
 class ProjectRecord final : public ICommand {
@@ -504,8 +714,8 @@ public:
 }
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()) {
     auto initial=CreateRef<DeviceState>();initial->id="device-1";initial->name="Device";project.devices.push_back(initial);project.active_device=initial->id;project.compare_set.insert(initial->id);
-    for(const auto *op:{"load","save","edit","layer","run","cv","cf","export_ac","inspect","cancel","undo","redo","auto_recalculate","band",
-        "project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all"}) {
+    for(const auto *op:{"load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
+        "project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def"}) {
         const auto registered=commands->Register({CommandID{std::string("scapslab.")+op},std::string("ScapsLab ")+op,"ScapsLab","",{},CommandFlags::AsyncCapable},
             [this](CommandContext &){return CreateUnique<Command>(*this);});
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
@@ -513,10 +723,11 @@ Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsL
 }
 Workflow::~Workflow() { runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
 void Workflow::StartOperation(const Json &r,const std::string &id) {
-    auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);pending->acResults=d.acResults;
+    auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);pending->acResults=d.acResults;pending->batchResult=d.batchResult;pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
     const std::string op=r.at("operation");
-    if(op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load") pending->workspace=Workspace();
-    if(op=="run" || op=="band" || op=="cv" || op=="cf") d.status="running";
+    if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?d.bandResult:d.result;}
+    if(op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load" || op=="export_results" || op=="action_settings") pending->workspace=Workspace();
+    if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status="running";
     if(op=="run") {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
     active=jobs->Submit(pending);status="Running: "+d.name;response=Json();
 }
@@ -529,9 +740,12 @@ Json Workflow::Dispatch(const Json &r) {
 }
 void Workflow::Changed() {
     auto &d=Current();d.needsRecalculate=true;d.needsBand=true;d.bandResult=Json::object();d.changedAt=std::chrono::steady_clock::now();
-    d.result=Json::object();d.acResults=Json::object();d.status="no results";
+    d.result=Json::object();d.acResults=Json::object();d.batchResult=Json::object();d.status="no results";
 }
 void Workflow::OnUpdate(float) {
+    if(!Busy() && dirty && !recoveryPath.empty() && std::chrono::steady_clock::now()-autosavedAt>=std::chrono::seconds(30)) {
+        autosavedAt=std::chrono::steady_clock::now();(void)Dispatch({{"operation","project_save"},{"path",recoveryPath},{"autosave",true}});
+    }
     if(!active) {
         if(!edits.empty()) {auto edit=std::move(edits.front());edits.pop_front();StartOperation(edit,edit.value("device_id",project.active_device));}
         else if(!runQueue.empty()) {const auto id=runQueue.front();runQueue.pop_front();StartOperation({{"operation","run"},{"batch",true}},id);}
@@ -554,37 +768,47 @@ void Workflow::OnUpdate(float) {
             path=pending->request.at("path");
             if(std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
             for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();device->needsBand=false;device->needsRecalculate=false;device->selectedLayer=0;device->selectedInterface=-1;device->selectedBias=0;device->biasVoltage_V=0;}
-        } else if(op.starts_with("device_") || op=="project_edit") {
+        } else if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {
             const auto before=project;SetWorkspace(pending->workspace);
             if(op!="device_list") projectDirty=true;
             if(op=="device_add" || op=="device_duplicate") Current().metadataDirty=true;
             if(op=="device_update") Device(pending->request.value("device_id",project.active_device)).metadataDirty=true;
             if(op=="device_remove") {(void)projectUndo.PushExecuted(CreateUnique<ProjectRecord>(*this,before,project));preferProjectUndo=true;}
         } else if(op=="project_save" || (op=="save" && std::filesystem::path(pending->request.at("path").get<std::string>()).extension()==".scapslab")) {
-            path=pending->request.at("path");projectDirty=false;
-            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();}
+            if(!pending->request.value("autosave",false)) {path=pending->request.at("path");projectDirty=false;
+            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();}}
         } else {
-            if((op=="edit" || op=="layer") && !pending->request.value("history",false) && d.document!=pending->document) {
+            if((op=="edit" || op=="layer" || op=="import_def") && !pending->request.value("history",false) && d.document!=pending->document) {
                 (void)d.undo.PushExecuted(CreateUnique<EditRecord>(*this,d.document,pending->document,pending->request.value("gesture_id",std::string{})));preferProjectUndo=false;
             }
             d.document=pending->document;
+            if(op=="batch_select") d.selectedMember=pending->request.at("index");
+            if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
+            if(op=="run_batch" || op=="retry_batch" || op=="record_batch") {d.batchResult=pending->output;projectDirty=true;}
             if(op=="run") {d.result=pending->output;d.bandResult=Json::object();}
             if(op=="band") d.bandResult=pending->output;
-            if(op=="cv" || op=="cf") d.acResults[op]=pending->output;
-            if(op=="run" || op=="band" || op=="cv" || op=="cf") {d.status=pending->output.value("valid",false)?"solved":"failed";projectDirty=true;}
-            if(op=="edit" || op=="layer") {
-                d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.result=Json::object();d.bandResult=Json::object();d.acResults=Json::object();d.status="no results";d.dirty=!d.undo.IsClean();
+            if(op=="cv" || op=="cf" || op=="qe") d.acResults[op]=pending->output;
+            if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=pending->output.value("valid",false)?"solved":"failed";projectDirty=true;}
+            if(op=="edit" || op=="layer" || op=="import_def") {
+                if(op=="import_def") {d.selectedLayer=0;d.selectedInterface=-1;}
+                d.batchResult=Json::object();d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.result=Json::object();d.bandResult=Json::object();d.acResults=Json::object();d.status="no results";d.dirty=!d.undo.IsClean();
             }
             if(op=="save" && project.devices.size()==1) {d.dirty=false;d.metadataDirty=false;d.undo.MarkClean();}
         }
-        if(op=="load" || op=="project_load" || op=="save" || op=="project_save") {
+        if((op=="load" || op=="project_load" || op=="save" || op=="project_save") && !pending->request.value("autosave",false)) {
             const auto file=pending->request.at("path");recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
         }
         RefreshDirty();status="Completed: "+op;response=Snapshot();
+        if(pending->output.contains("size_bytes")) status="Saved "+pending->output.at("path").get<std::string>()+" ("+std::to_string(pending->output.at("size_bytes").get<std::size_t>())+" bytes)";
+        if(op=="project_load" && !recoveryPath.empty() && pending->request.at("path")==recoveryPath) {path.clear();projectDirty=true;RefreshDirty();response=Snapshot();status="Recovered unsaved project; use Save As";}
+        if(op=="project_save" && !pending->request.value("autosave",false) && !recoveryPath.empty()) {std::error_code ec;if(!std::filesystem::equivalent(path,recoveryPath,ec))std::filesystem::remove(recoveryPath,ec);}
+        if(!pending->output.empty()) response["operation_result"]=pending->output;
     } else {
-        if(op=="run" || op=="band" || op=="cv" || op=="cf") d.status=snapshot->status==JobStatus::Cancelled?(d.result.empty()?"no results":"solved"):"failed";
+        if((op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {d.batchResult=pending->output;projectDirty=true;}
+        if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status=snapshot->status==JobStatus::Cancelled?(d.result.empty()?"no results":"solved"):"failed";
         status=snapshot->errorMessage;response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);
     }
+    if((op=="run_batch" || op=="retry_batch") && response.is_object()) response["batch_result"]=d.batchResult;
     if(pending->request.value("batch",false)) {
         ++batchCompleted;batchResponse.push_back({{"device_id",pendingDevice},{"ok",response.at("ok")},{"error",response.at("error")}});
         if(snapshot->status==JobStatus::Cancelled) runQueue.clear();

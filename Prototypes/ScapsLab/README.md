@@ -1,4 +1,4 @@
-﻿# ScapsLab multi-device projects
+# ScapsLab multi-device projects
 
 Core application for the read-only sibling `scaps_core` checkout. The old viewer remains independent. No solver sources are copied. `ScapsCore` is a static library compiled with MSVC `/fp:precise`, sharing SST's yaml-cpp target.
 
@@ -14,7 +14,7 @@ File offers Open / Save / Save As / Recent files / Examples. Open and close guar
 
 Seven examples are in `examples/`: pn 270/300/350 K; diffusion/SRH; baseline/deep-defect pn; two-layer pn; C-V/C-f-ready diode; finite-S contact playground; pn compare with stored results. Descriptions identify validation sources and decks. The first six contain no results. Tests solve every device, preserve document dumps and result points through save/load, and solve again bitwise. `SCAPSLAB_WRITE_STORED_EXAMPLE=1` materializes engine defaults in fixtures and refreshes the stored-results example through normal commands.
 
-This ui snapshot exposes neither `.def` import nor a generation-aware illuminated solve. YAML import is available. Illuminated run/AC requests fail explicitly. No thin-film/light example or calculated solar metrics are claimed. The compare table consumes `solar_metrics` (`Voc_V`, `Jsc_A_m2`, dimensionless `FF`, `efficiency`) when a future light result provides them. Engine needs: illuminated solve, public version identifier and finer cancellation inside Newton/mesh preparation.
+File imports/exports SCAPS `.def` through the integrated engine. Unsupported native items remain visible as warnings in every panel. The sl5 single-device light/QE path is described below. The batch engine still rejects illumination and reports solar Recorder metrics as null with `pending st6`; no dark approximation is substituted. Engine cancellation remains between member solves.
 
 Additional JSON operations through nanobind and the same Core commands/jobs: `project_load`, `project_save` (`path`), `device_list`, `device_add` (optional `document`, `path`, `name`, `description`), `device_duplicate`, `device_remove`, `device_select` (`device_id`), `device_update` (`name`, RGBA `colour` 0..1, `description`, `compare`), `device_move` (`index`), `project_edit` (`name`, `ui`), `run_all`. Headless callers explicitly decide whether to save before `project_load`. Responses add `devices`, `active_device`, `project`, `dirty`; polling adds `batch_progress`. Python methods expose the eight requested session operations.
 
@@ -82,7 +82,7 @@ Gallery: set `SCAPSLAB_GALLERY_PANEL=default` for the docked layout, or 0..10 fo
 
 Validation: `ScapsLabTests` also checks undo gesture merging, distinct queued edits, auto-recalculate cancellation/debounce, band snapshots, masked failed bias points, and floating/docked Project title IDs with conflict highlighting enabled. Existing checks cover C/G against `solve_cv`/`solve_cf` on `device_project.yaml` at relative tolerance 1e-12, mesh/conventions, CSV, invalid requests, snapshot preservation/cancellation, and embedded Python AC/export commands. Existing I-V and YAML roundtrip tests remain.
 
-Next: illumination/QE; temperature sweep; adaptive-mesh visualization.
+Batch supports temperature and other numeric project parameters; adaptive-mesh visualization remains separate.
 
 
 Defect/structure editors (slf): `Defects` selects a layer and an explicit list of stable defect IDs; `Interfaces` selects a boundary and its list of sheet defects. Bulk distributions are discrete, uniform, Gaussian, CB/VB tails, plus the current core's correlated/independent amphoteric single transitions. Energy references and both capture cross sections are explicit. Sheet distributions are single/uniform/Gaussian, with SCAPS references 3..9, independent left/right electron/hole cross sections and peak/integrated density conventions. The core does not support sheet tails or amphoteric sheets. Gaussian Echar is sigma times sqrt(2); the editor states this convention.
@@ -110,3 +110,84 @@ Results carry independent solver `status`, `valid`, `validity_status`, and immut
 Gallery indices 11..14 select Defects, Interfaces, Rs-Rsh and Structure. These gallery views use a synthetic two-layer fixture with Gaussian plus both tails and a Gaussian interface sheet, submitted through `edit`; normal startup continues to load the checkout example. Required slf images are under `../tools/agents/runs/slf/shots/`. Index 4 is Run. Window titles retain the shared EditorWindow icon before the title.
 
 Validation and handoff for slproj: [SLPROJ-REPORT.md](SLPROJ-REPORT.md). Final MSVC Release build and all 25 tests passed in `build/slproj/`; screenshots and engine limitations are listed in the report.
+
+
+Illumination, absorption and grading (sl5): gallery panels 19/20/21. Illumination selects bundled SCAPS AM1.5G (Hulstrom/Bird/Riordan 1985 bin powers), an absolute SCAPS spectrum file, or monochromatic power; intensity, side, transmission, reflections and front/back filter files use canonical core fields. File selection uses the native picker; Enter applies an edited path. Optical files remain external dependencies. Relative paths in loaded YAML are anchored to its directory.
+
+`run` and `band` now support light through the integrated core. Both expose `optics.x_m`, box-averaged `generation_m3_s`, incident power and per-layer absorption samples (`layer_id`, `wavelength_nm`, `alpha_m1`, `without_tail_m1`). `run.photovoltaic` contains refined Voc in consumer volts, delivered Jsc in A/m^2, FF/efficiency fractions and Pmax in W/m^2, with an independent core status/message; unbracketed or failed metrics are null. Choose a sweep stop beyond Voc. Absorption supports none/sqrt/SCAPS/file and the distinct Eg-joint Urbach extension, off by default; a pure sqrt with alpha(Eg)=0 cannot produce that tail. Imported SCAPS power terms are retained.
+
+```python
+session.execute(dict(operation='edit', patch={'illumination': {'enabled': True, 'scapslab_spectrum': 'AM1.5G'}}))
+qe = session.execute(dict(operation='qe', start_nm=300., stop_nm=4100., points=61,
+                          probe_mode='constant_flux', probe_photon_flux_m2_s=1e16))
+# Alternative: probe_mode='constant_power', probe_power_W_m2=1e-3.
+result = qe['ac_results']['qe']
+```
+
+QE is dark differential EQE at terminal 0 V and the device temperature, retaining optical losses and filters. Every point includes effective wavelength, flux, power, solver status and validity; the request and effective mode are retained. Integrated Jsc sums incident bin photon flux times linearly interpolated EQE and requires coverage of all active spectral bins (otherwise null). It is compared with a separate finite-light short-circuit solve; nonlinear illumination response and wavelength sampling can cause differences. There is no extrapolation or forced agreement. Failed/cancelled operations preserve previous results; edits invalidate QE. Cancellation is checked between wavelengths, not within a core solve.
+
+All editors use existing `edit` commands, undo and auto I-V/band recalculation. QE uses its Calculate button, like the AC sweeps. Grading exposes uniform/linear/parabolic/logarithmic/exponential laws and endpoints for Eg, chi, permittivity, doping, density of states and mobility, plotted in canonical SI/eV units and marked in Structure. More complex imported profiles remain in the YAML; the simple editor is intended for position-dependent analytic profiles. The example `08-pn-illumination.yaml` is synthetic, not a calibrated solar cell.
+
+Screenshot mode: `SCAPSLAB_GALLERY_PANEL=19`, `SCAPSLAB_OPTICAL_TAB=0/1/2` selects G(x), light I-V or QE. Panels 20/21 show Urbach absorption and grading/Structure. Run with `--reset-layout --screenshot <absolute.png> --exit-after-screenshot`.
+
+
+ScapsLab v4 batch/Recorder (sl4): panels 16/17/18 select Batch, Recorder and Batch overlay in screenshot mode. Batch chooses numeric parameters from a searchable project tree, with stable layer/defect IDs, explicit units and list/linear/log values. One axis, two nested axes and Together are supported (at most 10,000 members). Draft settings may be temporarily invalid; the preview explains the error and Run remains disabled. Run/Stop use Core jobs, report member progress and preserve failed/cancelled rows. Retry updates only the chosen member. A member solve cannot be interrupted inside the engine. Preview shows combinations, bias/frequency samples, polarity and a time estimate after a previous run.
+
+Recorder selects J@V, C/G@V,f, Vbi and the engine's solar columns before or after a run. Re-extract uses retained curves without solving; a quantity absent from the retained samples has a typed missing status and null value. The Run range supplies bias samples; requested Recorder biases inside that range and requested AC frequencies are added explicitly to the preview before solving. Values outside the range remain missing. Configure quantities before batch to acquire their data. Solar columns remain null (`pending st6`) in the current batch engine, even though the separate single-device light workflow supports them. The worksheet retains status, errors, time, attempt count, parameter values and unit-bearing columns. CSV exports all or a selected member. Send to PlotLab writes a native workbook with parameter/scalar/status columns and provenance; failed values are NaN in numeric workbook columns with separate status columns. Overlay uses a Viridis map by axis 1, parameter values/units in an outside legend, and member selection from list or curve samples. Recorder plots one-dimensional scalars or a family of curves grouped by axis 2. Editing a device invalidates its batch results; `.scapslab` persists batch snapshots and settings, with provenance and worksheet validation on load.
+
+```python
+spec = {'mode': 'nested', 'axes': [
+    {'parameter_id': 'temperature_K', 'start': 270., 'stop': 330., 'count': 3, 'spacing': 'linear'}],
+    'voltages_V': [0., .05], 'frequencies_Hz': [1e4]}
+session.batch_parameters()  # operation_result: stable IDs, tree labels, units, current values
+session.batch_settings(spec, [{'id': 'C0', 'quantity': 'C', 'voltage_V': 0., 'frequency_Hz': 1e4}])
+session.preview_batch()
+session.run_batch()  # start({'operation': 'run_batch'}) + poll() for asynchronous use
+session.record_batch()  # re-extract, no solver
+session.retry_batch('point_1')
+session.export_batch('recorder.csv')
+session.send_to_plotlab('recorder.plotlab')
+session.import_def('device.def')  # operation_result.warnings also retained in document.scaps_native
+session.export_def('device.def')  # engine also writes a numerical-settings .act companion
+```
+
+Stage-05 gate uses `tests/stage05-gaussian.def` and an independent YAML mapped by the established stage-05 validator. Numerical settings are aligned to the def1 audit: 201 mesh nodes/layer and 63-level Gauss-Legendre defect quadrature, 300 K, 0/.05/.1 V. Native import's original quadrature is otherwise preserved. Tests compare current points bitwise, test Python/File operations, actual UI Run batch vs Python, failed/cancelled members, retry isolation, workbook load and workspace persistence. Final logs and reviewed screenshots: `tools/agents/runs/sl4/` in the workspace root's sibling tools directory.
+
+
+Generation-recombination (slgr): panel 22 follows the I-V point selection or automatically solves an explicit terminal voltage through `band`. Voc uses the refined metric; Vmp selects the valid sampled point with maximum delivered power and solves that voltage again. G and each engine R channel use a logarithmic bulk-rate axis; interface sheets are markers on a separate logarithmic sheet-rate axis. Zero/negative rates are gaps on log axes; signed values remain in tables/export. Legend labels retain stable defect IDs and the engine IDs remain in export. The structure bar and plot boundaries use the snapshot's layer geometry. Tables contain per-channel/per-layer signed currents and layer totals; sheets belong to the left layer exactly once.
+
+Each DC/band point now carries `generation_recombination`: `generation_m3_s`, channels (`id`, `engine_id`, `mechanism`, `R_m3_s`, `R_sheet_m2_s`, `integrated_current_A_m2`, `by_layer`, validity), layer budgets, and generation/recombination/net currents in A/m^2. Profiles and channel integrals are engine outputs, not reconstructed SRH formulas. G and per-layer sums use the engine finite-volume half-box widths on the actual point mesh. This retains contact half boxes and signed thermal generation. The terminal comparison reports `terminal_budget_relative_error` and `terminal_budget_valid` at 1e-6 against extracted current `-J_A_m2`; it is independent of the convergence/current-uniformity validity flag. A converged profile must not imply that the terminal identity passed: injection, contact losses and external shunts are not bulk R channels.
+
+```python
+session.execute(dict(operation='band', voltage_V=0.2))
+session.execute(dict(operation='export_gr', source='band', point_index=0,
+                     format='json', path='gr.json'))
+# source='iv' exports the selected zero-based I-V point; format='csv' is also supported.
+```
+
+`export_gr` runs through the existing Core command/job and nanobind Session. It captures the immutable source snapshot and device ID when submitted, validates the requested point and format, and writes atomically through TextFileIO. JSON includes the full point, project snapshot (illumination, IDs, temperature), model hash, solver stamp and timestamp. CSV contains spatial rows and per-layer integral rows, with working-point IDs/voltages, effective illumination JSON and provenance JSON repeated per row; empty numeric fields distinguish sheet/bulk/integral rows. Invalid raw data retain validity flags. Model edits clear both snapshots, so a previous model cannot be exported. Gallery: `SCAPSLAB_GALLERY_PANEL=22`, existing `--screenshot` options.
+
+The slgr terminal-budget acceptance gate remains open; see `tools/agents/runs/slgr-report.md` in the sibling tools repository. Channel integration parity and solver convergence do not establish terminal-budget closure. CSV repeats both terminal-budget fields on every row.
+
+## slio: project files and reproducible exports
+
+The workspace writer now emits schema 2 `.scapslab` JSON. Versions 0/1 workspace mappings and legacy v0/v1 device YAML migrate in memory; future versions are rejected before changing the live project. Device schema remains owned by scaps_core. Each device retains its full device/numerics/working-condition mapping, action requests (`actions`, with `iv`, `cv`, `cf`, `qe` keys), batch specification and Recorder columns. AC/QE drafts persist before calculation. Results are optional: File > Include results in project or `save_project(path, include_results=False)`. UI layout and plot preferences live in `ui`; neither is needed to solve. Optical spectra, generation, filters, absorption tables and imported grading files become inline SI tables when imported/edited; material/numerical definition imports are materialized through the existing core YAML codec.
+
+Core `TextFileIO` already writes an exclusive sibling temporary file and replaces the destination atomically. ScapsLab reuses it, returns absolute `path` and `size_bytes`, and displays them in Project status. A killed-writer test interrupts that exact writer before replacement and reloads the previous project. File > Save As / Recent files and the dirty native/panel title remain available. Every 30 seconds, an idle dirty GUI session saves a complete recovery snapshot in the existing config directory (`scapslab-recovery.scapslab`), without clearing dirty state or changing its save path. File > Recover autosave opens it with unsaved status and a new Save As destination. A successful explicit save removes recovery. Autosave waits for the current job and is not a mid-solve checkpoint.
+
+A measured 100,000-point, ten-field scalar terminal-result fixture is **31,459,714 bytes as rows** and **9,059,990 bytes as compact columns**. The assert-based GTest packs/unpacks the actual data and counts the actual serialized strings; `tools/agents/runs/slio/storage-size.json` contains the measurement. Inline columns avoid sidecar coordination and keep a project portable as one file. Spatial profiles add their full array sizes; serialization remains in memory. This scalar measurement is not a stress test of 100,000 full spatial profiles.
+
+File > Export results opens a nonmodal window with format, selected run/all saved runs, and destination. Run IDs combine stable device ID, technique and retained run timestamp; a new calculation replaces that technique's current snapshot. CSV is a single rectangular sheet with explicit SI suffixes, terminal/internal voltage, calculation index, solver/validity status, settings, effective conditions and provenance. Batch/Recorder values, units, parameters and per-cell statuses share that sheet. `point_json` preserves raw profiles and batch curves for lossless rereading. Python's default CSV field limit is 128 KiB; use `csv.field_size_limit(64 * 1024 * 1024)` for these structured fields. JSON retains the complete snapshots as compact columns, plus explicit voltage columns and effective conditions. QE records its effective dark background and probe request; unavailable QE internal voltages are null, never substituted with terminal voltage.
+
+PNG/SVG/PDF reuse `Prototypes/PlotLab/src/PlotLabExport.cpp` and the existing `sst_plotlab.exporter` backend, fonts, physical sizing and atomic output. Multiple curves produce numbered files; retained batch I-V members include parameter values in their legend. Invalid points are gaps. Export jobs copy saved snapshots and never call a solver, change device settings or request a compute-path modal. Write/backend failures return the existing typed job error and preserve snapshots.
+
+```python
+session = scapslab.Session()
+loaded = session.load_project('device.scapslab')
+saved = session.save_project('copy.scapslab', include_results=True)
+runs = session.result_runs()['runs']
+exported = session.export_results('selected.csv', run_ids=[runs[0]['run_id']])
+all_runs = session.export_results('all.json', format='json', all=True)
+```
+
+These package methods all use the existing embedded nanobind Session and Core command/job path (`project_load`, `project_save`, `inspect`, `export_results`). Errors retain `ok=False` and `error.code/message`. No engine sources or Git metadata are changed. Engine schema request: expose internal voltage for each QE probe sample if it must be included numerically in exports; AC terminal/internal voltages are captured from the already-computed DC state.
