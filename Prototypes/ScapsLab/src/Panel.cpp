@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <map>
 #include <set>
 #include <tuple>
 #include <imgui_internal.h>
@@ -67,6 +68,56 @@ const Json &HistoryResult(const DeviceState &device,const Json &run) {
 bool Archived(const DeviceState &device,const Json &result,const std::string &kind) {
     return !result.empty() && std::any_of(device.history.begin(),device.history.end(),[&](const Json &run){return run.at("kind")==kind && run.at("provenance")==result.at("provenance");});
 }
+// Colour scheme for all plots versus x (one table; Ec/n blue, Ev/p red, G green, one colour per recombination mechanism).
+ImVec4 XColour(const std::string &key,int shade=0) {
+    static const std::pair<const char*,ImVec4> table[]={
+        {"Ec_eV",{.35f,.62f,1.f,1.f}},{"EFn_eV",{.35f,.62f,1.f,1.f}},{"n_m3",{.35f,.62f,1.f,1.f}},
+        {"Ev_eV",{1.f,.38f,.38f,1.f}},{"EFp_eV",{1.f,.38f,.38f,1.f}},{"p_m3",{1.f,.38f,.38f,1.f}},
+        {"generation_m3_s",{.30f,.80f,.35f,1.f}},{"G",{.30f,.80f,.35f,1.f}},
+        {"srh_bulk",{.75f,.50f,.95f,1.f}},{"interface",{1.f,.65f,.15f,1.f}},{"radiative",{.20f,.80f,.80f,1.f}},{"auger",{.95f,.45f,.75f,1.f}}};
+    ImVec4 c{.8f,.8f,.8f,1.f};
+    for(const auto &[k,v]:table) if(key==k) c=v;
+    const float t=std::min(.6f,.25f*shade);  // lighter tint for extra channels of the same mechanism
+    return {c.x+(1-c.x)*t,c.y+(1-c.y)*t,c.z+(1-c.z)*t,1.f};
+}
+// Dashed polyline drawn on the plot draw list (ImPlot has no dashed style). Call between PushPlotClipRect/PopPlotClipRect.
+void DashedLine(const std::vector<double> &x,const std::vector<double> &y,ImVec4 c,float dash=7.f,float gap=4.f) {
+    auto *draw=ImPlot::GetPlotDrawList();const ImU32 col=ImGui::ColorConvertFloat4ToU32(c);float acc=0;
+    for(std::size_t i=0;i+1<x.size() && i+1<y.size();++i) {
+        const ImVec2 a=ImPlot::PlotToPixels(x[i],y[i]),b=ImPlot::PlotToPixels(x[i+1],y[i+1]);
+        const float len=std::hypot(b.x-a.x,b.y-a.y);if(!(len>0))continue;
+        for(float t=0;t<len;) {
+            const float period=dash+gap,pos=std::fmod(acc+t,period);
+            const float seg=pos<dash?std::min(dash-pos,len-t):std::min(period-pos,len-t);
+            if(pos<dash)draw->AddLine({a.x+(b.x-a.x)*t/len,a.y+(b.y-a.y)*t/len},{a.x+(b.x-a.x)*(t+seg)/len,a.y+(b.y-a.y)*(t+seg)/len},col,1.8f);
+            t+=seg;
+        }
+        acc=std::fmod(acc+len,dash+gap);
+    }
+}
+// Layer type from net doping Nd-Na (graded doping: base value; ponytail: grading ignored, upgrade via ProfileSamples mean).
+// Shaded band + boundary line + name per layer; x in um. Call inside a plot after the data.
+void DrawLayerRegions(const Json &layers) {
+    const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();ImPlot::PushPlotClipRect();
+    double x0=0;
+    for(std::size_t i=0;i<layers.size();++i) {
+        const auto &l=layers[i];const double x1=x0+l.at("thickness_m").get<double>()*1e6;
+        const double net=l.value("doping",Json::object()).value("Nd_m3",0.)-l.value("doping",Json::object()).value("Na_m3",0.);
+        const ImU32 fill=std::abs(net)<1e15?IM_COL32(160,160,160,24):net>0?IM_COL32(90,150,255,28):IM_COL32(255,90,90,28);
+        const auto a=ImPlot::PlotToPixels(x0,limits.Y.Max),b=ImPlot::PlotToPixels(x1,limits.Y.Min);
+        draw->AddRectFilled(a,b,fill);
+        if(i+1<layers.size())draw->AddLine({b.x,a.y},{b.x,b.y},IM_COL32(210,210,220,150));
+        const std::string name=l.value("name",std::string{});
+        if(!name.empty())draw->AddText({a.x+4,a.y+2},IM_COL32(220,220,230,200),name.c_str());
+        x0=x1;
+    }
+    ImPlot::PopPlotClipRect();
+}
+// Fit an axis to [lo,hi] whenever `key` changes; user zoom/pan is kept otherwise.
+void FitWhenChanged(const std::string &plot,ImAxis axis,double key,double lo,double hi) {
+    static std::map<std::string,double> last;auto &k=last[plot+std::to_string(int(axis))];
+    ImPlot::SetupAxisLimits(axis,lo,hi,k!=key?ImPlotCond_Always:ImPlotCond_Once);k=key;
+}
 void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,const char *xkey,const char *ykey,bool absolute=false) {
     for(const auto &run:device.history) {
         if(!run.at("visible").get<bool>() || (run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="batch")))continue;
@@ -88,7 +139,7 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
         if(auto *item=ImPlot::GetItem(name.c_str());item && !item->Show && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",device.id},{"run_id",run.at("run_id")},{"visible",false}});
     }
 }
-void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false) {
+void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false,bool dashed=false) {
     const auto &device=w.Current();
     for(const auto &run:device.history) {
         if(!run.at("visible").get<bool>() || (run.at("kind")!="iv" && run.at("kind")!="band") || !HistoryResult(device,run).contains("points"))continue;
@@ -99,9 +150,11 @@ void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false
         if(!profile.contains("x_m") || !profile.contains(field))continue;
         auto x=profile.at("x_m").get<std::vector<double>>(),y=profile.at(field).get<std::vector<double>>();if(x.size()!=y.size())continue;
         for(auto &v:x)v*=1e6;for(auto &v:y){v*=scale;if(gr && v<=0)v=NAN;}
-        const auto c=run.at("colour").get<std::vector<float>>();
+        const auto c=run.at("colour").get<std::vector<float>>();const bool sel=run.at("run_id")==device.selectedRun;
+        const ImVec4 colour=sel?XColour(field):ImVec4(c[0],c[1],c[2],c[3]);  // selected run uses the physics colours, others their run colour
         const auto label=std::string(field)+" / "+RunLabel(run)+"##"+run.at("run_id").get<std::string>();
-        ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,run.at("run_id")==device.selectedRun?3.f:1.f});
+        ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(colour.x,colour.y,colour.z,dashed?.6f:1.f),ImPlotProp_LineWeight,sel?3.f:1.f});
+        if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,colour);ImPlot::PopPlotClipRect();}
     }
 }
 bool BeginSavedPlot(Workflow &w,const char *title,ImVec2 size) {
@@ -921,10 +974,10 @@ void Panel::Results() {
     if(x.empty()) return;
     const float h=std::max(120.f,(ImGui::GetContentRegionAvail().y-10)/2);
     if(BeginSavedPlot(*w,"Bands / contacts",ImVec2(-1,h))) {
-        ImPlot::SetupAxes("Position [um]","Energy [eV]");ImPlot::SetupLegend(ImPlotLocation_NorthEast,ImPlotLegendFlags_Horizontal);
-        const double end=total*1e6,metal=end*.08;
-        ImPlot::SetupAxisLimits(ImAxis_X1,-metal,end+metal,ImGuiCond_Once);
-        for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {HistoryProfiles(*w,key);if(Archived(w->Current(),result,profileKind))continue;const auto y=p.at(key).get<std::vector<double>>();if(y.size()==x.size())ImPlot::PlotLine(key,x.data(),y.data(),int(x.size()));}
+        ImPlot::SetupAxes("Position [um]","Energy [eV]");ImPlot::SetupLegend(ImPlotLocation_SouthEast,ImPlotLegendFlags_Horizontal);
+        const double end=total*1e6,metal=end*.04;
+        FitWhenChanged("bands",ImAxis_X1,end,-metal,end+metal);
+        for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(Archived(w->Current(),result,profileKind))continue;const auto y=p.at(key).get<std::vector<double>>();if(y.size()==x.size()){const auto c=XColour(key);ImPlot::PlotLine(key,x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c.x,c.y,c.z,dashed?.6f:1.f),ImPlotProp_LineWeight,2.f});if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,c);ImPlot::PopPlotClipRect();}}}
         const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();
         ImPlot::PushPlotClipRect();
         for(int side=0;side<2;++side) {
@@ -940,18 +993,14 @@ void Panel::Results() {
                 ImPlot::Annotation((lo+hi)/2,ef,ImVec4(1,.8f,.4f,1),ImVec2(side?-90.f:5.f,-28.f),true,"EFm / phi %.3f eV",phi);
             }
         }
-        double boundary=0;
-        for(std::size_t i=0;i+1<layers.size();++i) {
-            boundary+=layers[i].at("thickness_m").get<double>()*1e6;
-            draw->AddLine(ImPlot::PlotToPixels(boundary,limits.Y.Min),ImPlot::PlotToPixels(boundary,limits.Y.Max),IM_COL32(210,210,220,130));
-        }
-        ImPlot::PopPlotClipRect();EndSavedPlot(*w,"Bands / contacts");
+        ImPlot::PopPlotClipRect();DrawLayerRegions(layers);EndSavedPlot(*w,"Bands / contacts");
     }
     if(BeginSavedPlot(*w,"Carriers",ImVec2(-1,h))) {
         ImPlot::SetupAxes("Position [um]","Density [cm^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupAxisFormat(ImAxis_Y1,[](double value,char *buffer,int size,void*) {return std::snprintf(buffer,size,"1e%.0f",std::log10(value));});
-        for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;auto y=p.at(key).get<std::vector<double>>();for(auto &value:y)value*=1e-6;if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()));}
-        EndSavedPlot(*w,"Carriers");
+        ImPlot::SetupLegend(ImPlotLocation_SouthEast,ImPlotLegendFlags_Horizontal);FitWhenChanged("carriers",ImAxis_X1,total*1e6,0,total*1e6);
+        for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;auto y=p.at(key).get<std::vector<double>>();for(auto &value:y)value*=1e-6;if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
+        DrawLayerRegions(layers);EndSavedPlot(*w,"Carriers");
     }
 }
 void Panel::AC() {
@@ -1239,9 +1288,13 @@ void Panel::GenerationRecombination() {
     const auto &point=snapshot.at("points")[index];
     if(!point.contains("generation_recombination")) {ImGui::TextUnformatted("Recalculate this snapshot to obtain G/R.");return;}
     const auto &gr=point.at("generation_recombination");
+    if(ImGui::CollapsingHeader("Details")) {
     ImGui::TextWrapped("%s | terminal %.6g V | internal %.6g V | %.5g K | solver %s | profile validity %s",point.at("bias_id").get<std::string>().c_str(),point.at("terminal_voltage_V").get<double>(),point.at("internal_voltage_V").get<double>(),snapshot.at("project_snapshot").at("temperature_K").get<double>(),point.at("status").get<std::string>().c_str(),point.at("validity_status").get<std::string>().c_str());
     ImGui::TextWrapped("%s | illumination %s | %s",device.id.c_str(),snapshot.at("project_snapshot").value("illumination",Json::object()).value("enabled",false)?"on":"off",w->status.c_str());
     ImGui::TextWrapped("Terminal budget: %s | relative error %.5g",gr.value("terminal_budget_valid",false)?"valid <= 1e-6":"NOT VALID",gr.at("terminal_budget_relative_error").is_number()?gr.at("terminal_budget_relative_error").get<double>():NAN);
+    for(const auto &c:gr.at("channels")) ImGui::TextWrapped("%s / %s: %s",c.at("mechanism").get<std::string>().c_str(),c.at("id").get<std::string>().c_str(),c.at("validity_status").get<std::string>().c_str());
+    ImGui::TextWrapped("Log plot shows positive rates only; signed rates and integrals are retained in export. Sheets use the right axis [m^-2 s^-1].");
+    }
     ImGui::BeginDisabled(w->Busy());
     for(const auto *format:{"csv","json"}) {
         if(ImGui::Button((std::string("Export G/R ")+format).c_str())) {
@@ -1254,22 +1307,32 @@ void Panel::GenerationRecombination() {
     const bool budgetShot=gallery && std::getenv("SCAPSLAB_GR_TAB") && std::string(std::getenv("SCAPSLAB_GR_TAB"))=="1";
     if(ImGui::BeginTabItem("Profiles",nullptr,(gallery && !budgetShot) || (restoreTab && savedTab==0)?ImGuiTabItemFlags_SetSelected:0)) {grTab=0;w->project.ui["gr_tab"]=0;
     bool showGeneration=!grHidden.contains("generation");
-    if(ImGui::CollapsingHeader("Visible mechanisms")) {if(Toggle("Generation",showGeneration)) {if(showGeneration)grHidden.erase("generation");else grHidden.insert("generation");}
-    for(const auto *mechanism:{"srh_bulk","interface","radiative","auger"}) {bool show=!grHidden.contains(mechanism);if(Toggle(mechanism,show)){if(show)grHidden.erase(mechanism);else grHidden.insert(mechanism);}}
-    for(const auto &c:gr.at("channels")) ImGui::TextWrapped("%s / %s: %s",c.at("mechanism").get<std::string>().c_str(),c.at("id").get<std::string>().c_str(),c.at("validity_status").get<std::string>().c_str());
-    }
+    if(ImGui::Checkbox("Generation",&showGeneration)) {if(showGeneration)grHidden.erase("generation");else grHidden.insert("generation");}
+    for(const auto *mechanism:{"srh_bulk","interface","radiative","auger"}) {bool show=!grHidden.contains(mechanism);ImGui::SameLine();if(ImGui::Checkbox(mechanism,&show)){if(show)grHidden.erase(mechanism);else grHidden.insert(mechanism);}}
     w->project.ui["gr_hidden"]=grHidden;
     if(!valid) ImGui::TextWrapped("Invalid working point: profiles are masked; raw values remain available in export.");
-    ImGui::TextWrapped("Log plot shows positive rates only; signed rates and integrals are retained in export. Sheets use the right axis [m^-2 s^-1].");
-    if(BeginSavedPlot(*w,"G(x), R(x)",ImVec2(-1,280))) {
+    // data windows: left axis 12 decades below the max visible bulk rate; right axis only when a sheet channel is visible
+    double bulkMax=0,sheetMax=0;
+    if(valid) {
+        if(showGeneration) for(double v:gr.at("generation_m3_s").get<std::vector<double>>()) if(std::isfinite(v))bulkMax=std::max(bulkMax,v);
+        for(const auto &c:gr.at("channels")) if(!grHidden.contains(c.at("mechanism").get<std::string>()) && c.value("valid",false)) {
+            const bool sh=!c.at("R_sheet_m2_s").empty();for(double v:c.at(sh?"R_sheet_m2_s":"R_m3_s").get<std::vector<double>>()) if(std::isfinite(v))(sh?sheetMax:bulkMax)=std::max(sh?sheetMax:bulkMax,v);
+        }
+    }
+    const double totalUm=[&]{double t=0;for(const auto &l:snapshot.at("project_snapshot").at("layers"))t+=l.at("thickness_m").get<double>()*1e6;return t;}();
+    if(BeginSavedPlot(*w,"G(x), R(x)",ImVec2(-1,-1))) {
         ImPlot::SetupAxes("Position [um]","Bulk rate [m^-3 s^-1]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
         ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
-        ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);
-        auto plot=[&](const std::string &name,const Json &xx,const Json &yy,bool sheet,bool curveValid) {
+        ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
+        FitWhenChanged("gr",ImAxis_X1,totalUm,0,totalUm);
+        if(bulkMax>0)FitWhenChanged("gr",ImAxis_Y1,bulkMax,bulkMax*1e-12,bulkMax*5);
+        if(sheetMax>0){ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);FitWhenChanged("gr",ImAxis_Y2,sheetMax,sheetMax*1e-8,sheetMax*5);}
+        auto plot=[&](const std::string &name,const Json &xx,const Json &yy,bool sheet,bool curveValid,int shade=0) {
             auto x=xx.get<std::vector<double>>(),y=yy.get<std::vector<double>>();if(x.size()!=y.size())return;
             for(auto &v:x)v*=1e6;for(auto &v:y)if(!curveValid || !std::isfinite(v) || v<=0)v=NAN;
-            ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
-            if(sheet)ImPlot::PlotScatter(name.c_str(),x.data(),y.data(),int(x.size()));else ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()));
+            if(sheet && sheetMax<=0)return;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
+            const auto mech=name.substr(0,name.find(' '));const ImPlotSpec style(ImPlotProp_LineColor,XColour(mech,shade),ImPlotProp_LineWeight,2.f,ImPlotProp_MarkerFillColor,XColour(mech,shade),ImPlotProp_MarkerLineColor,XColour(mech,shade));
+            if(sheet)ImPlot::PlotScatter(name.c_str(),x.data(),y.data(),int(x.size()),style);else ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),style);
         };
         if(showGeneration)HistoryProfiles(*w,"generation_m3_s",1.,true);
         if(showGeneration && !Archived(device,snapshot,grFollow?"iv":"band"))plot("G",gr.at("x_m"),gr.at("generation_m3_s"),false,valid);
@@ -1278,23 +1341,23 @@ void Panel::GenerationRecombination() {
             const auto &points=HistoryResult(device,run).at("points");if(points.empty())continue;
             const auto &p=points[std::clamp(device.selectedBias,0,int(points.size())-1)];
             if(!p.contains("generation_recombination"))continue;
-            const auto colour=run.at("colour").get<std::vector<float>>();
+            const auto colour=run.at("colour").get<std::vector<float>>();const bool selectedRun=run.at("run_id")==device.selectedRun;std::map<std::string,int> shadeOf;
             for(const auto &channel:p.at("generation_recombination").at("channels")) {
                 if(grHidden.contains(channel.at("mechanism").get<std::string>()))continue;
                 const bool sheet=!channel.at("R_sheet_m2_s").empty();
                 auto x=channel.at("x_m").get<std::vector<double>>(),y=channel.at(sheet?"R_sheet_m2_s":"R_m3_s").get<std::vector<double>>();if(x.size()!=y.size())continue;
                 for(auto &v:x)v*=1e6;for(auto &v:y)if(!channel.value("valid",false) || v<=0)v=NAN;
                 const auto label=channel.at("mechanism").get<std::string>()+" / "+channel.at("id").get<std::string>()+" / "+RunLabel(run)+"##"+run.at("run_id").get<std::string>();
-                ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
-                ImPlotSpec style(ImPlotProp_LineColor,ImVec4(colour[0],colour[1],colour[2],colour[3]),ImPlotProp_LineWeight,run.at("run_id")==device.selectedRun?3.f:1.f);
+                if(sheet && sheetMax<=0)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
+                const auto mechName=channel.at("mechanism").get<std::string>();const ImVec4 lc=selectedRun?XColour(mechName,shadeOf[mechName]++):ImVec4(colour[0],colour[1],colour[2],colour[3]);ImPlotSpec style(ImPlotProp_LineColor,lc,ImPlotProp_LineWeight,selectedRun?2.5f:1.f,ImPlotProp_MarkerFillColor,lc,ImPlotProp_MarkerLineColor,lc);
                 if(sheet)ImPlot::PlotScatter(label.c_str(),x.data(),y.data(),int(x.size()),style);else ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),style);
             }
         }
+        std::map<std::string,int> curShade;
         for(const auto &c:gr.at("channels")) if(!Archived(device,snapshot,grFollow?"iv":"band") && !grHidden.contains(c.at("mechanism").get<std::string>())) {
-            const bool sheet=!c.at("R_sheet_m2_s").empty();plot(c.at("mechanism").get<std::string>()+" / "+c.at("id").get<std::string>(),c.at("x_m"),c.at(sheet?"R_sheet_m2_s":"R_m3_s"),sheet,c.value("valid",false));
+            const bool sheet=!c.at("R_sheet_m2_s").empty();plot(c.at("mechanism").get<std::string>()+" / "+c.at("id").get<std::string>(),c.at("x_m"),c.at(sheet?"R_sheet_m2_s":"R_m3_s"),sheet,c.value("valid",false),curShade[c.at("mechanism").get<std::string>()]++);
         }
-        ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);double boundary=0;
-        for(const auto &l:snapshot.at("project_snapshot").at("layers")) {boundary+=l.at("thickness_m").get<double>()*1e6;ImPlot::PlotInfLines((l.at("scapslab_id").get<std::string>()+" boundary").c_str(),&boundary,1);}
+        ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);DrawLayerRegions(snapshot.at("project_snapshot").at("layers"));
         EndSavedPlot(*w,"G(x), R(x)");
     }
     ImGui::EndTabItem();
@@ -1317,7 +1380,7 @@ void Panel::GenerationRecombination() {
         ImGui::EndTable();
     }
     ImGui::TextUnformatted("Loss breakdown | signed A/m^2 | sheets assigned to left layer");
-    if(BeginSavedPlot(*w,"Integrated loss breakdown",ImVec2(-1,150))) {
+    if(BeginSavedPlot(*w,"Integrated loss breakdown",ImVec2(-1,std::max(150.f,ImGui::GetContentRegionAvail().y-4)))) {
         ImPlot::SetupAxes("Mechanism index","J_R [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
         ImPlot::SetupLegend(ImPlotLocation_North,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
         int i=0;for(const auto &c:gr.at("channels")) {const double x=i++,y=valid?c.at("integrated_current_A_m2").get<double>():NAN;ImPlot::PlotBars((c.at("mechanism").get<std::string>()+" / "+c.at("id").get<std::string>()).c_str(),&x,&y,1,.7);}

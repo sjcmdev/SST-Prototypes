@@ -179,7 +179,7 @@ void SetupApplication(Application &app) {
         while(w->Busy()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         w->Current().selectedInterface=0;
     }
-    if(gallery && std::atoi(gallery)>=19 && startupFile.empty()) {
+    if(gallery && (std::atoi(gallery)>=19 || std::getenv("SCAPSLAB_GALLERY_PN")) && startupFile.empty()) {
         (void)w->Dispatch({{"operation","edit"},{"document",ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string())}});
         while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
