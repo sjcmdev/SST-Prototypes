@@ -16,13 +16,6 @@ namespace SST::Prototypes::JFM
 {
 	namespace WorkspaceDetail
 	{
-		std::filesystem::path normalizedPath(const Path &path)
-		{
-			std::error_code error;
-			std::filesystem::path normalized = std::filesystem::weakly_canonical(path.Native(), error);
-			return (error ? path.Native() : normalized).lexically_normal();
-		}
-
         template <typename Curve, typename State>
         Ref<const Curve> restoreCurve(const State &state, const JFMCharacteristicInfo &info,
             const Ref<const JFMCharacteristicData> &data)
@@ -71,8 +64,8 @@ namespace SST::Prototypes::JFM
 	{
 		std::scoped_lock lock(m_Mutex);
 		std::vector<JFMProjectDocumentInfo> projects;
-		projects.reserve(m_Projects.size());
-		for (const ProjectDocument &document : m_Projects)
+		projects.reserve(m_Workspace.projects.size());
+		for (const ProjectDocument &document : m_Workspace.projects)
 		{
 			if (document.hidden)
 				continue;
@@ -81,8 +74,8 @@ namespace SST::Prototypes::JFM
 				document.project.name,
 				document.path,
 				document.status,
-				document.handle == m_ActiveProject,
-				document.revision != document.savedRevision,
+				document.handle == m_Workspace.active,
+				document.IsDirty(),
 				document.importRunning});
 		}
 		return projects;
@@ -91,7 +84,7 @@ namespace SST::Prototypes::JFM
 	ProjectHandle JFMWorkspaceStore::GetActiveProjectHandle() const
 	{
 		std::scoped_lock lock(m_Mutex);
-		return m_ActiveProject;
+		return m_Workspace.active;
 	}
 
 	bool JFMWorkspaceStore::SetActiveProject(ProjectHandle handle)
@@ -100,65 +93,51 @@ namespace SST::Prototypes::JFM
 		const auto document = findDocumentLocked(handle);
 		if (!document || document->get().hidden)
 			return false;
-		m_ActiveProject = handle;
-		return true;
+		return m_Workspace.Activate(handle);
 	}
 
 	ProjectHandle JFMWorkspaceStore::CreateProject(std::string name)
 	{
 		std::scoped_lock lock(m_Mutex);
 		ProjectDocument document;
-		document.handle = m_NextProjectHandle++;
 		document.project = MakeDefaultProject(std::move(name));
 		document.revision = m_NextRevision++;
 		document.savedRevision = document.revision;
 		ensureSelectionLocked(document);
-		m_Projects.push_back(std::move(document));
-		m_ActiveProject = m_Projects.back().handle;
-		return m_ActiveProject;
+		return m_Workspace.Open(std::move(document));
 	}
 
 	ProjectHandle JFMWorkspaceStore::CreateTransientProject(std::string name)
 	{
 		std::scoped_lock lock(m_Mutex);
 		ProjectDocument document;
-		document.handle = m_NextProjectHandle++;
 		document.project = MakeDefaultProject(std::move(name));
 		document.hidden = true;
 		document.status = "Import staging.";
 		document.revision = m_NextRevision++;
 		document.savedRevision = document.revision;
 		ensureSelectionLocked(document);
-		m_Projects.push_back(std::move(document));
-		return m_Projects.back().handle;
+		return m_Workspace.Open(std::move(document), false);
 	}
 
 	ProjectHandle JFMWorkspaceStore::AttachProject(JFMProject project, std::optional<Path> path, bool activate)
 	{
 		std::scoped_lock lock(m_Mutex);
-		if (path && !path->Empty())
-		{
-			const std::filesystem::path requested = normalizedPath(*path);
-			for (ProjectDocument &existing : m_Projects)
-			{
-				if (existing.path && normalizedPath(*existing.path) == requested)
-				{
-					if (activate)
-						m_ActiveProject = existing.handle;
-					return existing.handle;
-				}
-			}
-		}
+		if (path) {
+            if (const auto existing = m_Workspace.FindByPath(*path)) {
+                if (activate) (void)m_Workspace.Activate(*existing);
+                return *existing;
+            }
+        }
 
         // A pristine startup document is a placeholder, not a second open project.
-        if (m_Projects.size() == 1 && !m_Projects.front().path &&
-            m_Projects.front().project.characteristics.empty() &&
-            m_Projects.front().revision == m_Projects.front().savedRevision)
-            m_Projects.clear();
+        if (m_Workspace.projects.size() == 1 && !m_Workspace.projects.front().path &&
+            m_Workspace.projects.front().project.characteristics.empty() &&
+            m_Workspace.projects.front().revision == m_Workspace.projects.front().savedRevision)
+            m_Workspace.projects.clear();
         if (path && (project.name.empty() || project.name == "Untitled JFM Project"))
             project.name = path->filename().Utf8();
 		ProjectDocument document;
-		document.handle = m_NextProjectHandle++;
 		document.project = std::move(project);
 		document.project.schemaVersion = JFMProjectSchemaVersion;
 		document.path = std::move(path);
@@ -167,31 +146,20 @@ namespace SST::Prototypes::JFM
 		document.savedRevision = document.revision;
 		updateNextCharacteristicIdLocked(document);
 		ensureSelectionLocked(document);
-		m_Projects.push_back(std::move(document));
-		if (activate || m_ActiveProject == InvalidProjectHandle)
-			m_ActiveProject = m_Projects.back().handle;
-		return m_Projects.back().handle;
+		return m_Workspace.Open(std::move(document), activate);
 	}
 
 	ProjectHandle JFMWorkspaceStore::AttachProjectBundle(JFMProjectBundleSnapshot snapshot, std::optional<Path> path, bool activate)
 	{
 		std::scoped_lock lock(m_Mutex);
-		if (path && !path->Empty())
-		{
-			const std::filesystem::path requested = normalizedPath(*path);
-			for (ProjectDocument &existing : m_Projects)
-			{
-				if (existing.path && normalizedPath(*existing.path) == requested)
-				{
-					if (activate)
-						m_ActiveProject = existing.handle;
-					return existing.handle;
-				}
-			}
-		}
+		if (path) {
+            if (const auto existing = m_Workspace.FindByPath(*path)) {
+                if (activate) (void)m_Workspace.Activate(*existing);
+                return *existing;
+            }
+        }
 
 		ProjectDocument document;
-		document.handle = m_NextProjectHandle++;
 		document.project = std::move(snapshot.project);
 		document.project.schemaVersion = JFMProjectSchemaVersion;
 		document.path = std::move(path);
@@ -212,10 +180,7 @@ namespace SST::Prototypes::JFM
 		}
 		updateNextCharacteristicIdLocked(document);
 		ensureSelectionLocked(document);
-		m_Projects.push_back(std::move(document));
-		if (activate || m_ActiveProject == InvalidProjectHandle)
-			m_ActiveProject = m_Projects.back().handle;
-		return m_Projects.back().handle;
+		return m_Workspace.Open(std::move(document), activate);
 	}
 
 	std::optional<ProjectHandle> JFMWorkspaceStore::FindProjectByPath(const Path &path) const
@@ -223,13 +188,7 @@ namespace SST::Prototypes::JFM
 		if (path.Empty())
 			return std::nullopt;
 		std::scoped_lock lock(m_Mutex);
-		const std::filesystem::path requested = normalizedPath(path);
-		for (const ProjectDocument &document : m_Projects)
-		{
-			if (document.path && normalizedPath(*document.path) == requested)
-				return document.handle;
-		}
-		return std::nullopt;
+		return m_Workspace.FindByPath(path);
 	}
 
 	JFMProject JFMWorkspaceStore::GetProjectSnapshot() const
@@ -288,7 +247,7 @@ namespace SST::Prototypes::JFM
 	{
 		std::scoped_lock lock(m_Mutex);
 		auto document = findDocumentLocked(handle);
-		return document && document->get().revision != document->get().savedRevision;
+		return document && document->get().IsDirty();
 	}
 
 	std::uint64_t JFMWorkspaceStore::GetProjectRevision(ProjectHandle handle) const
@@ -376,7 +335,7 @@ namespace SST::Prototypes::JFM
 		updateNextCharacteristicIdLocked(value);
 		ensureSelectionLocked(value);
 		if (activate && !value.hidden)
-			m_ActiveProject = handle;
+			m_Workspace.active = handle;
 		return true;
 	}
 
@@ -1879,8 +1838,7 @@ namespace SST::Prototypes::JFM
 		auto document = findDocumentLocked(handle);
 		if (!document)
 			return;
-		document->get().path = std::move(path);
-		document->get().savedRevision = revision == 0 ? document->get().revision : revision;
+		document->get().MarkSaved(std::move(path), revision == 0 ? document->get().revision : revision);
 	}
 
 	void JFMWorkspaceStore::SetStatusMessage(std::string message)
@@ -2045,26 +2003,26 @@ namespace SST::Prototypes::JFM
 
 	JFMWorkspaceStore::OptionalRef<JFMWorkspaceStore::ProjectDocument> JFMWorkspaceStore::findDocumentLocked(ProjectHandle handle)
 	{
-		const auto it = std::find_if(m_Projects.begin(), m_Projects.end(), [handle](const ProjectDocument &document) { return document.handle == handle; });
-		return it == m_Projects.end() ? std::nullopt : OptionalRef<ProjectDocument>{std::ref(*it)};
+		auto *document = m_Workspace.Find(handle);
+		return document ? OptionalRef<ProjectDocument>{std::ref(*document)} : std::nullopt;
 	}
 
 	JFMWorkspaceStore::OptionalRef<const JFMWorkspaceStore::ProjectDocument> JFMWorkspaceStore::findDocumentLocked(ProjectHandle handle) const
 	{
-		const auto it = std::find_if(m_Projects.begin(), m_Projects.end(), [handle](const ProjectDocument &document) { return document.handle == handle; });
-		return it == m_Projects.end() ? std::nullopt : OptionalRef<const ProjectDocument>{std::cref(*it)};
+		const auto *document = m_Workspace.Find(handle);
+		return document ? OptionalRef<const ProjectDocument>{std::cref(*document)} : std::nullopt;
 	}
 
 	JFMWorkspaceStore::ProjectDocument &JFMWorkspaceStore::activeDocumentLocked()
 	{
-		auto document = findDocumentLocked(m_ActiveProject);
-		return document ? document->get() : m_Projects.front();
+		auto document = findDocumentLocked(m_Workspace.active);
+		return document ? document->get() : m_Workspace.projects.front();
 	}
 
 	const JFMWorkspaceStore::ProjectDocument &JFMWorkspaceStore::activeDocumentLocked() const
 	{
-		auto document = findDocumentLocked(m_ActiveProject);
-		return document ? document->get() : m_Projects.front();
+		auto document = findDocumentLocked(m_Workspace.active);
+		return document ? document->get() : m_Workspace.projects.front();
 	}
 
 	std::string JFMWorkspaceStore::nextId(ProjectDocument &document, const char *prefix) const

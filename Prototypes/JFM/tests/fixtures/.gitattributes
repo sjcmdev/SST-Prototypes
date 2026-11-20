@@ -1,0 +1,2 @@
+# Frozen inputs are checked by byte hash; preserve their original bytes.
+* -text

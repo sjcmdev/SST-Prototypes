@@ -28,6 +28,14 @@ def project_from_preview(preview, temperature=None):
 def execute(project, request):
     """Headless Core command/job operation; JSON values in/out, typed error envelope.
 
+    Workspace operations: new, activate (project_id), close (optional application),
+    close_decision (decision=save/discard/cancel, explicit path for an unsaved
+    project), workspace and save_as (path). Pass the previous response's workspace
+    in request["workspace"] to retain open projects, active_project_id, paths,
+    revisions, dirty state and recent_projects between calls. File save/open still
+    use Core jobs. A failed close-save returns the unchanged open workspace.
+    Undo history remains in the live C++ workspace, not in the JSON transport.
+
     operation=walter: settings select measurement_id or measurement_ids, optional
     cv_fit_id / arrhenius_fit_id, model (default Walter1996-linear-field),
     zeta_s_1_K_2 or explicit compat B_s_1/emission_source, V_b_V/E_F_eV,

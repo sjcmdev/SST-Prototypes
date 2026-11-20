@@ -139,9 +139,8 @@ for _, target in ipairs { "CapLab", "CapLabTests" } do
         postbuildcommands { '{COPYFILE} "' .. _SST_ROOT .. '/../SST-Libraries/SST-Physics/data/' .. name .. '" "%{cfg.targetdir}/' .. name .. '"' }
     end
     sst_link_plotlab()
-    includedirs { _SST_ROOT .. "/Prototypes/PlotLab/src" }
-    files { _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabExport.cpp" }
-    defines { 'SST_PROTOTYPE_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/CapLab/python"', 'SST_PLOTLAB_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/PlotLab/python"' }
+    defines { 'SST_PLOT_EXPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/ScientificRuntime/Python"' }
+    defines { 'SST_PROTOTYPE_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/CapLab/python"' }
     filter "configurations:Debug"
         runtime "Debug"
     filter "configurations:Release or Dist"
@@ -175,7 +174,7 @@ project "CapLab"
     postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/CapLab/python" "%{cfg.targetdir}/python"' }
 
 project "CapLab"
-    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/PlotLab/python/sst_plotlab" "%{cfg.targetdir}/python/sst_plotlab"' }
+    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Core/ScientificRuntime/Python/sst_plot_export" "%{cfg.targetdir}/python/sst_plot_export"' }
 
 -- Embed only the reusable CircuitCore-UI model/widget/runner, without its host.
 for _, target in ipairs { "CapLab", "CapLabTests" } do

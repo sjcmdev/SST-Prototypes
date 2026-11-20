@@ -157,28 +157,38 @@ NB_MODULE(sst_caplab, module)
             auto jobs=CreateRef<SST::JobSystem>(nullptr,1);
             auto bus=CreateRef<SST::EventBus>(); auto undo=CreateRef<SST::UndoStack>();
             auto commands=CreateRef<SST::CommandRegistry>();
-            CapLabWorkflow state(jobs,bus,undo); state.document.project=Parse(project);
+            CapLabWorkflow state(jobs,bus,undo); state.Document().project=Parse(project);
             RegisterCommands(commands,bus,state);
-            const auto analysisCount=state.document.project.analyses.size();
+            if (r.contains("workspace")) state.RestoreWorkspace(r.at("workspace"));
+            const auto analysisCount=state.Document().project.analyses.size();
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target);});
-            if (operation=="export" || operation=="save" || operation=="open" || operation=="import") {
+            if (operation=="new" || operation=="activate" || operation=="close" || operation=="close_decision" || operation=="workspace") {
+                CommandContext context; context.Set("request",r);
+                const auto result=commands->Execute(CommandID{"caplab.workspace"},std::move(context));
+                if (!result) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(Serialize(state.Document().project))},
+                    {"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}}.dump();
+                if (state.activeJob) { jobs->Shutdown(); state.OnUpdate(0); }
+                if (state.failure) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(Serialize(state.Document().project))},
+                    {"error",{{"code",state.failure->code},{"message",state.status}}}}.dump();
+            } else if (operation=="export" || operation=="save" || operation=="save_as" || operation=="open" || operation=="import") {
                 const auto path=Path{r.at("path").get<std::string>()};
+                if (path.Empty()) throw std::runtime_error("An explicit nonempty path is required.");
                 if (operation=="import" && r.contains("options")) state.importOptions=r.at("options").dump();
-                if (r.contains("graph_id")) state.document.project.graph=r.at("graph_id").get<pl::Id>();
-                Validate(state.document.project);
+                if (r.contains("graph_id")) state.Document().project.graph=r.at("graph_id").get<pl::Id>();
+                Validate(state.Document().project);
                 if (operation=="export" && path.Native().extension()==".png") {
                     const auto b=r.at("ranges").get<std::vector<double>>();
                     if (b.size()!=4) throw std::runtime_error("PNG requires four resolved preview ranges");
                     state.view.viewport=sst::ui::plot::Bounds{b[0],b[1],b[2],b[3]};
-                    if (r.contains("visibility")) for (const auto &v : r.at("visibility")) state.view.visibility[state.document.project.engine->series(v.at("plot_id").get<pl::Id>()).id]=v.at("visible").get<bool>();
+                    if (r.contains("visibility")) for (const auto &v : r.at("visibility")) state.view.visibility[state.Document().project.engine->series(v.at("plot_id").get<pl::Id>()).id]=v.at("visible").get<bool>();
                 }
-                const auto result=commands->Execute(CommandID{operation=="export" ? "caplab.export" : operation=="save" ? "caplab.save" : operation=="import" ? "app.open" : "caplab.open"},[&] { CommandContext c; c.Set("path",path); return c; }());
+                const auto result=commands->Execute(CommandID{operation=="export" ? "caplab.export" : operation=="save_as" ? "caplab.save_as" : operation=="save" ? "caplab.save" : operation=="import" ? "app.open" : "caplab.open"},[&] { CommandContext c; c.Set("path",path); return c; }());
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
                 bus->ProcessQueue(); const auto id=state.activeJob;
                 jobs->Shutdown(); state.OnUpdate(0);
                 const auto job=jobs->GetJob(id);
-                if (!job || job->status!=JobStatus::Completed)
-                    return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",operation+"_failed"},{"message",state.status}}}}.dump();
+                if ((!job && state.failure) || (job && job->status!=JobStatus::Completed))
+                    return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(project)},{"error",{{"code",operation+"_failed"},{"message",state.status}}}}.dump();
                 if (state.preview) {
                     // A filename is a suggestion; headless callers confirm metadata through options.
                     if (!state.preview->contains("samples")) state.temperature=Optional(state.preview->at("temperature_K"));
@@ -199,9 +209,9 @@ NB_MODULE(sst_caplab, module)
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
             } else if (operation=="accept_fit") {
                 const auto &draft=r.at("draft");
-                if (Json::parse(Serialize(state.document.project))!=draft.at("base_project")) throw std::runtime_error("Stale fit draft");
+                if (Json::parse(Serialize(state.Document().project))!=draft.at("base_project")) throw std::runtime_error("Stale fit draft");
                 state.analysisDraft=Parse(draft.at("project").dump());
-                state.analysisRevision=state.document.revision;
+                state.analysisRevision=state.Document().revision;
                 const auto result=commands->Execute(SST::CommandID{"caplab.accept_analysis"});
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
             } else if (operation=="simulate" || operation=="fit" || operation=="walter" || operation=="integrate_saved_walter" || operation=="analyze") {
@@ -225,13 +235,14 @@ NB_MODULE(sst_caplab, module)
                 }
                 state.OnUpdate(0);
                 const auto job=jobs->GetJob(id);
-                if (!job || job->status!=SST::JobStatus::Completed || (!state.analysisDraft && state.document.project.analyses.size()!=analysisCount+1))
+                if (!job || job->status!=SST::JobStatus::Completed || (!state.analysisDraft && state.Document().project.analyses.size()!=analysisCount+1))
                     return Json{{"ok",false},{"project",Json::parse(project)},
                         {"error",{{"code",job && job->status==SST::JobStatus::Cancelled ? "cancelled" : operation=="analyze" ? "analysis_failed" : operation=="fit" ? "fit_failed" : (operation=="walter" || operation=="integrate_saved_walter") ? "walter_failed" : "simulation_failed"},{"message",state.status}}}}.dump();
             } else throw std::runtime_error("Unknown CapLab operation");
             response["draft"]=state.analysisDraft ? Json{{"base_project",Json::parse(project)},
                 {"project",Json::parse(Serialize(*state.analysisDraft))}} : Json(nullptr);
-            response.update(Json{{"ok",true},{"project",Json::parse(Serialize(state.document.project))},{"error",nullptr}});
+            response["workspace"]=state.WorkspaceJson();
+            response.update(Json{{"ok",true},{"project",Json::parse(Serialize(state.Document().project))},{"error",nullptr}});
         } catch (const std::exception &e) {
             response={{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}};
         }

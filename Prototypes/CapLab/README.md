@@ -63,7 +63,7 @@ The ambiguous legacy SCAPS `Rp` field requires explicit C/G confirmation.
 `Ea_eV` remains source metadata and never becomes Eg.
 
 Ctrl+S atomically saves a self-contained `*.caplab.json`; Ctrl+O validates
-before replacing the document. Old M1 projects remain readable.
+and adds the project to the workspace. Old M1 projects remain readable.
 The Python entry points are `caplab.import_preview`, `parse_measurement`,
 `parse_lab_as` (M1 compatibility) and the real embedded
 `project_from_preview` / `sst_caplab.roundtrip` bindings.
@@ -453,3 +453,44 @@ per-parameter `sigma` in the accompanying `unit`. The estimate is
 for the weighted complex residual Jacobian at the optimum. Unidentifiable parameters
 or insufficient degrees of freedom give null covariance and an explicit
 `covariance_status`; fixed parameters have null sigma. Saved older fits remain readable.
+
+
+## Shared document lifecycle (clshare1)
+
+Core `App/DocumentState.hpp` tracks path and saved revision. Core
+`App/ProjectWorkspace.hpp` keeps stable project handles and document addresses;
+JFM retains its domain store, selection and analysis data. `IO/RecentFiles.hpp`
+implements the shared newest-first, deduplicated, ten-file list used by JFM,
+ScapsLab and CapLab without changing their existing settings formats.
+
+The CapLab menu provides New/Open/Save/Save As/Close and Recent projects.
+The Project control switches among open documents; each retains its own data,
+dirty state and Undo history. Opening another project keeps existing documents.
+Application close reviews every dirty project with Save/Discard/Cancel. Active
+jobs block destructive actions. Save failures keep the project open; a completed
+save only marks its snapshot revision as saved, so later edits stay dirty.
+Recent projects persist as `recent_projects` in `caplab-recent.json` beside the
+application configuration. Autosave/recovery is outside this change.
+
+Headless operations use `caplab.execute(project, request)` and the same Core
+commands/jobs. Requests can include the previous response's `workspace` to retain
+multiple documents across calls. Operations: `workspace`, `new`, `activate`
+(`project_id`), `close` (`application` optional), `close_decision`
+(`decision`: `save`, `discard`, `cancel`; `path` required for unsaved documents),
+and `save_as` (`path`). Responses include stable `active_project_id`, each
+project's data/path/revision/saved_revision/dirty, recent projects and a typed
+error envelope. Live Undo command objects are not serialized into JSON.
+
+For full Python regression with the built-in nanobind modules, set
+`SST_RUN_PYTEST` to the app's `python/tests` directory and run the embedded
+GTest host: CapLab `PrototypePython.EmbeddedRoundtrip`, JFM
+`JFMProjectJobsTests.NanobindFitAcceptsJsonAndMethodKeyword`.
+`SST_ROOT_PYTHON_PATHS` carries the repository environment's JSON `sys.path`.
+
+The inherited plotting dependency mismatch was repaired with the existing shared
+axis implementation and Core `ScientificRuntime/PlotExport` adapter plus the
+PlotLab-Engine snapshot serializer. JFM and CapLab use that adapter; paused
+PlotLab app sources were not modified. Frozen fixture bytes were restored only
+when they matched the existing SHA256 after undoing checkout CRLF conversion;
+fixture attributes now prevent that conversion. Scientific expected values were
+not changed.

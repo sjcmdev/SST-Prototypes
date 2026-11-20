@@ -1,5 +1,6 @@
 #pragma once
 #include "Core/Layer.hpp"
+#include "Core/App/ProjectWorkspace.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
@@ -11,7 +12,7 @@
 #include <sst/plotlab/GraphSnapshot.hpp>
 namespace SST::Prototypes::CapLab
 {
-    enum class Operation { Preview, Open, OpenOrImport, Save, Export, Analyze };
+    enum class Operation { Preview, Open, OpenOrImport, Save, SaveAs, New, Close, Export, Analyze };
     struct DocumentRequested : BusEvent { Operation operation = Operation::Preview; Path target; };
     struct DocumentChanged : BusEvent { pl::Id project; std::uint64_t revision; };
     class DocumentJob final : public IJob
@@ -39,11 +40,23 @@ namespace SST::Prototypes::CapLab
         Json pendingCandidate;
         explicit CapLabWorkflow(Ref<JobSystem> jobs, Ref<EventBus> bus = {}, Ref<UndoStack> undo = {})
             : Layer("CapLabWorkflow"), jobs(std::move(jobs)), bus(std::move(bus)), undo(std::move(undo))
-        { templates.add(std::make_shared<CFTemplate>()); importers.add(labImporter); }
+        { templates.add(std::make_shared<CFTemplate>()); importers.add(labImporter); (void)workspace.Open(CapLabDocument{}); }
         void Start(Operation operation, Path target = {});
         void OnUpdate(float) override;
         void Changed();
-        CapLabDocument document;
+        ProjectWorkspace<CapLabDocument> workspace;
+        CapLabDocument &Document() { return *workspace.Find(workspace.active); }
+        const CapLabDocument &Document() const { return *workspace.Find(workspace.active); }
+        bool Activate(std::uint64_t handle);
+        bool CloseProject(bool discard = false);
+        bool RequestClose(bool application = false);
+        void ResolveClose(const std::string &decision, Path target = {});
+        bool IsDirty() const;
+        bool closeRequested = false, closeApplication = false, closeReady = false;
+        std::vector<Path> recent;
+        Json WorkspaceJson() const;
+        void RestoreWorkspace(const Json &value);
+        Result<void> WorkspaceRequest(const Json &request);
         Ref<JobSystem> jobs;
         Ref<EventBus> bus;
         Ref<UndoStack> undo;
@@ -67,5 +80,8 @@ namespace SST::Prototypes::CapLab
     private:
         Ref<DocumentJob> pending;
         std::uint64_t pendingRevision = 0;
+        std::uint64_t pendingProject = 0;
+        bool saveBeforeClose = false;
+        void ResetProjectUI();
     };
 }

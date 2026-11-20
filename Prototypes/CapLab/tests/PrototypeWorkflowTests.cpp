@@ -10,9 +10,9 @@ static Path Temp(const char *name) { return Path{FileSystem::TempDirectoryPath()
 TEST(CapLabDocument, OlderSaveAndStaleOpenKeepNewerRevision) {
     CapLabDocument d; d.project=FixtureProject(); d.Changed(); const auto revision=d.revision;
     d.Changed(); d.Saved(Temp("caplab-saved.json"),revision);
-    EXPECT_TRUE(d.dirty);
+    EXPECT_TRUE(d.IsDirty());
     EXPECT_FALSE(d.Opened(Project{},Temp("caplab-open.json"),revision)); EXPECT_EQ(d.project.sweeps.size(),1);
-    d.Saved(d.path,d.revision); EXPECT_FALSE(d.dirty);
+    d.Saved(*d.path,d.revision); EXPECT_FALSE(d.IsDirty());
 }
 TEST(CapLabWorkflow, SaveOpenRoundtripWithoutSource) {
     const auto path=Temp("caplab-roundtrip.json");
@@ -48,13 +48,13 @@ TEST(CapLabWorkflow, NewerSchemaCannotBeOverwritten) {
 }
 TEST(CapLabWorkflow, FailedOpenLeavesDocumentAndUndoUnchanged) {
     auto jobs=CreateRef<JobSystem>(nullptr,1); auto undo=CreateRef<UndoStack>();
-    CapLabWorkflow w(jobs,{},undo); w.document.project=FixtureProject();
-    const auto before=Serialize(w.document.project);
+    CapLabWorkflow w(jobs,{},undo); w.Document().project=FixtureProject();
+    const auto before=Serialize(w.Document().project);
     const auto path=Temp("caplab-bad-open.json"); std::string error;
     ASSERT_TRUE(TextFileIO::Save(path,"bad json",error));
     w.Start(Operation::Open,path); ASSERT_NE(w.activeJob,0);
     jobs->Shutdown(); w.OnUpdate(0);
-    EXPECT_EQ(Serialize(w.document.project),before); EXPECT_FALSE(w.status.empty()); EXPECT_TRUE(w.document.path.Empty());
+    EXPECT_EQ(Serialize(w.Document().project),before); EXPECT_FALSE(w.status.empty()); EXPECT_TRUE(!w.Document().path.has_value());
     ASSERT_TRUE(w.failure); EXPECT_EQ(w.failure->code,"caplab.document");
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
@@ -62,20 +62,20 @@ TEST(CapLabWorkflow, StaleOpenIsRejectedOnMainThread) {
     const auto path=Temp("caplab-stale-open.json"); std::string error;
     ASSERT_TRUE(TextFileIO::Save(path,Serialize(FixtureProject()),error));
     auto jobs=CreateRef<JobSystem>(nullptr,1); ASSERT_TRUE(jobs->PauseAllJobs());
-    CapLabWorkflow w(jobs); const auto before=w.document.project.engine->id();
+    CapLabWorkflow w(jobs); const auto before=w.Document().project.engine->id();
     w.Start(Operation::Open,path); ASSERT_NE(w.activeJob,0); w.Changed();
     ASSERT_TRUE(jobs->ResumeAllJobs()); jobs->Shutdown(); w.OnUpdate(0);
-    EXPECT_EQ(w.document.project.engine->id(),before); EXPECT_TRUE(w.document.dirty);
+    EXPECT_EQ(w.Document().project.engine->id(),before); EXPECT_TRUE(w.Document().IsDirty());
     EXPECT_NE(w.status.find("Stale"),std::string::npos);
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
 TEST(CapLabWorkflow, SaveUsesSnapshotAndDoesNotClearLaterEdit) {
     auto jobs=CreateRef<JobSystem>(nullptr,1); ASSERT_TRUE(jobs->PauseAllJobs());
-    CapLabWorkflow w(jobs); w.document.project=FixtureProject(); w.Changed();
+    CapLabWorkflow w(jobs); w.Document().project=FixtureProject(); w.Changed();
     const auto path=Temp("caplab-save-snapshot.json");
     w.Start(Operation::Save,path); ASSERT_NE(w.activeJob,0); w.Changed();
     ASSERT_TRUE(jobs->ResumeAllJobs()); jobs->Shutdown(); w.OnUpdate(0);
-    EXPECT_TRUE(w.document.dirty); EXPECT_EQ(w.document.path,path);
+    EXPECT_TRUE(w.Document().IsDirty()); EXPECT_EQ(w.Document().path,path);
     std::string text,error; ASSERT_TRUE(TextFileIO::Load(path,text,error)); EXPECT_EQ(Parse(text).sweeps.size(),1);
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
@@ -90,21 +90,21 @@ TEST(CapLabCommands, ConfirmImportUsesCoreUndoAndRejectsStalePreview) {
     CapLabWorkflow w(CreateRef<JobSystem>(nullptr,1),bus,undo); RegisterCommands(registry,bus,w);
     w.preview=FixturePreview(); w.temperature=100;
     ASSERT_TRUE(registry->Execute(CommandID{"caplab.import"}));
-    EXPECT_EQ(w.document.project.sweeps.size(),1); EXPECT_TRUE(undo->CanUndo());
-    ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(w.document.project.sweeps.empty());
-    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(w.document.project.sweeps.size(),1);
+    EXPECT_EQ(w.Document().project.sweeps.size(),1); EXPECT_TRUE(undo->CanUndo());
+    ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(w.Document().project.sweeps.empty());
+    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(w.Document().project.sweeps.size(),1);
     w.preview=FixturePreview(); w.previewRevision=0;
-    EXPECT_FALSE(registry->Execute(CommandID{"caplab.import"})); EXPECT_EQ(w.document.project.sweeps.size(),1);
+    EXPECT_FALSE(registry->Execute(CommandID{"caplab.import"})); EXPECT_EQ(w.Document().project.sweeps.size(),1);
 }
 TEST(CapLabWorkflow, QueuedCancelDoesNotPublishOpen) {
     const auto path=Temp("caplab-queued-open.json"); std::string error;
     ASSERT_TRUE(TextFileIO::Save(path,Serialize(FixtureProject()),error));
     auto jobs=CreateRef<JobSystem>(nullptr,1); ASSERT_TRUE(jobs->PauseAllJobs());
-    CapLabWorkflow w(jobs); const auto id=w.document.project.engine->id();
+    CapLabWorkflow w(jobs); const auto id=w.Document().project.engine->id();
     w.Start(Operation::Open,path); ASSERT_NE(w.activeJob,0);
     ASSERT_TRUE(jobs->RequestCancel(w.activeJob));
     ASSERT_TRUE(jobs->ResumeAllJobs()); jobs->Shutdown(); w.OnUpdate(0);
-    EXPECT_EQ(w.document.project.engine->id(),id); EXPECT_EQ(w.status,"Cancelled.");
+    EXPECT_EQ(w.Document().project.engine->id(),id); EXPECT_EQ(w.status,"Cancelled.");
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
 TEST(CapLabWorkflow, CompletionWaitsForUpdateAndReportsProgress) {
@@ -113,10 +113,10 @@ TEST(CapLabWorkflow, CompletionWaitsForUpdateAndReportsProgress) {
     auto jobs=CreateRef<JobSystem>(nullptr,1); CapLabWorkflow w(jobs);
     w.Start(Operation::Open,path); const auto job=w.activeJob; ASSERT_NE(job,0);
     jobs->Shutdown();
-    EXPECT_TRUE(w.document.project.sweeps.empty());
+    EXPECT_TRUE(w.Document().project.sweeps.empty());
     const auto progress=jobs->GetJob(job); ASSERT_TRUE(progress);
     EXPECT_EQ(progress->totalWork,1); EXPECT_EQ(progress->completedWork,1);
-    w.OnUpdate(0); EXPECT_EQ(w.document.project.sweeps.size(),1); EXPECT_FALSE(w.document.dirty);
+    w.OnUpdate(0); EXPECT_EQ(w.Document().project.sweeps.size(),1); EXPECT_FALSE(w.Document().IsDirty());
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
 
@@ -125,8 +125,8 @@ TEST(CapLabDefects, CommandsUndoValidationAndPersistentReferences) {
     auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>();
     auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
     CapLabWorkflow state(jobs,bus,undo); RegisterCommands(commands,bus,state);
-    state.document.project=FixtureProject();
-    auto &p=state.document.project;
+    state.Document().project=FixtureProject();
+    auto &p=state.Document().project;
     auto execute=[&](Json edit) {CommandContext c; c.Set("edit",std::move(edit)); return commands->Execute(CommandID{"caplab.defect"},std::move(c));};
     const auto sample=p.samples[0].id, mid=p.sweeps[0].id;
     ASSERT_TRUE(execute({{"action","create"},{"sample_id",sample},{"name","D1"}}));
@@ -191,4 +191,91 @@ TEST(CapLabWorkflow, MissingExportRuntimeIsExplicit) {
         EXPECT_NE(std::string(error.what()).find("Embedded Python unavailable"),std::string::npos);
     }
 }
+}
+
+namespace SST::Prototypes::CapLab {
+TEST(CapLabWorkspace, ProjectsKeepTheirOwnDataDirtyStateAndUndo) {
+    auto undo=CreateRef<UndoStack>(); auto bus=CreateRef<EventBus>(); auto commands=CreateRef<CommandRegistry>();
+    CapLabWorkflow w(CreateRef<JobSystem>(nullptr,1),bus,undo); RegisterCommands(commands,bus,w);
+    w.Document().project=FixtureProject(); const auto first=w.workspace.active;
+    const auto sample=w.Document().project.samples[0].id;
+    CommandContext area; area.Set("sample_id",sample); area.Set("area_m2",2e-6);
+    ASSERT_TRUE(commands->Execute(CommandID{"caplab.area"},std::move(area)));
+    w.Start(Operation::New); const auto second=w.workspace.active;
+    EXPECT_NE(first,second); EXPECT_TRUE(w.Document().project.samples.empty()); EXPECT_FALSE(undo->CanUndo());
+    ASSERT_TRUE(w.Activate(first)); EXPECT_TRUE(w.Document().IsDirty()); EXPECT_TRUE(undo->CanUndo());
+    ASSERT_TRUE(undo->Undo()); EXPECT_NE(w.Document().project.samples[0].area_m2,2e-6);
+    ASSERT_TRUE(w.Activate(second)); EXPECT_TRUE(w.Document().project.samples.empty());
+}
+TEST(CapLabWorkspace, CancelAndFailedSaveDoNotCloseAndOlderSaveKeepsDirty) {
+    auto jobs=CreateRef<JobSystem>(nullptr,1); CapLabWorkflow w(jobs); w.Document().project=FixtureProject(); w.Changed();
+    const auto id=w.workspace.active;
+    EXPECT_FALSE(w.RequestClose()); w.ResolveClose("cancel"); EXPECT_FALSE(w.closeRequested); EXPECT_EQ(w.workspace.active,id);
+    EXPECT_FALSE(w.RequestClose()); w.ResolveClose("save",Temp(""));
+    jobs->Shutdown(); w.OnUpdate(0);
+    EXPECT_EQ(w.workspace.active,id); EXPECT_TRUE(w.closeRequested); EXPECT_TRUE(w.Document().IsDirty()); ASSERT_TRUE(w.failure);
+    w.ResolveClose("discard"); EXPECT_NE(w.workspace.active,id); EXPECT_FALSE(w.IsDirty());
+}
+TEST(CapLabWorkspace, SaveBeforeCloseWaitsForSnapshotAndJobs) {
+    auto jobs=CreateRef<JobSystem>(nullptr,1); ASSERT_TRUE(jobs->PauseAllJobs());
+    CapLabWorkflow w(jobs); w.Document().project=FixtureProject(); w.Changed(); const auto id=w.workspace.active;
+    EXPECT_FALSE(w.RequestClose()); const auto path=Temp("caplab-close-snapshot.json"); w.ResolveClose("save",path);
+    EXPECT_NE(w.activeJob,0); EXPECT_FALSE(w.CloseProject(true)); w.Changed();
+    ASSERT_TRUE(jobs->ResumeAllJobs()); jobs->Shutdown(); w.OnUpdate(0);
+    EXPECT_EQ(w.workspace.active,id); EXPECT_TRUE(w.Document().IsDirty()); EXPECT_TRUE(w.closeRequested);
+    EXPECT_TRUE(FileSystem::Remove(path.Native()));
+}
+TEST(CapLabWorkspace, ApplicationCloseReviewsEveryDirtyProject) {
+    CapLabWorkflow w(CreateRef<JobSystem>(nullptr,1)); w.Changed(); const auto first=w.workspace.active;
+    w.Start(Operation::New); w.Changed(); const auto second=w.workspace.active;
+    EXPECT_FALSE(w.RequestClose(true)); w.ResolveClose("discard");
+    EXPECT_FALSE(w.closeReady); EXPECT_TRUE(w.closeRequested); EXPECT_EQ(w.workspace.active,first);
+    w.ResolveClose("cancel"); EXPECT_FALSE(w.closeReady); EXPECT_TRUE(w.Document().IsDirty());
+    EXPECT_FALSE(w.RequestClose(true)); w.ResolveClose("discard"); EXPECT_TRUE(w.closeReady);
+    EXPECT_NE(w.workspace.active,second);
+}
+TEST(CapLabWorkspace, SnapshotRoundtripPreservesStableIdsAndRevisions) {
+    CapLabWorkflow w(CreateRef<JobSystem>(nullptr,1)); w.Document().project=FixtureProject(); w.Changed();
+    w.Start(Operation::New); const auto value=w.WorkspaceJson();
+    CapLabWorkflow restored(CreateRef<JobSystem>(nullptr,1)); restored.RestoreWorkspace(value);
+    EXPECT_EQ(restored.WorkspaceJson(),value);
+    auto invalid=value; invalid["projects"][1]["project_id"]=invalid["projects"][0]["project_id"];
+    EXPECT_THROW(restored.RestoreWorkspace(invalid),std::exception); EXPECT_EQ(restored.WorkspaceJson(),value);
+    invalid=value; invalid["recent_projects"]=Json::array({42});
+    EXPECT_THROW(restored.RestoreWorkspace(invalid),std::exception); EXPECT_EQ(restored.WorkspaceJson(),value);
+    invalid=value; invalid["projects"][0]["revision"]=-1;
+    EXPECT_THROW(restored.RestoreWorkspace(invalid),std::exception); EXPECT_EQ(restored.WorkspaceJson(),value);
+}
+TEST(CapLabWorkspace, SuccessfulSaveClosesOnlyRequestedProjectAndTouchesRecent) {
+    auto jobs=CreateRef<JobSystem>(nullptr,1); CapLabWorkflow w(jobs); w.Document().project=FixtureProject(); w.Changed();
+    const auto id=w.workspace.active; EXPECT_FALSE(w.RequestClose());
+    const auto path=Temp("caplab-close-success.json"); w.ResolveClose("save",path); jobs->Shutdown(); w.OnUpdate(0);
+    EXPECT_NE(w.workspace.active,id); EXPECT_FALSE(w.closeRequested); ASSERT_EQ(w.recent.size(),1); EXPECT_EQ(w.recent.front(),path);
+    EXPECT_TRUE(FileSystem::Remove(path.Native()));
+}
+
+TEST(CapLabWorkspace, JobsBlockSwitchAndCancelledSaveNeverCloses) {
+    auto jobs=CreateRef<JobSystem>(nullptr,1); CapLabWorkflow w(jobs); w.Document().project=FixtureProject();
+    const auto first=w.workspace.active; w.Start(Operation::New); const auto second=w.workspace.active;
+    w.Document().project=FixtureProject(); w.Changed();
+    ASSERT_TRUE(jobs->PauseAllJobs()); EXPECT_FALSE(w.RequestClose());
+    const auto path=Temp("caplab-cancel-close.json"); w.ResolveClose("save",path);
+    ASSERT_NE(w.activeJob,0); EXPECT_FALSE(w.Activate(first)); EXPECT_EQ(w.workspace.active,second);
+    ASSERT_TRUE(jobs->RequestCancel(w.activeJob)); ASSERT_TRUE(jobs->ResumeAllJobs()); jobs->Shutdown(); w.OnUpdate(0);
+    EXPECT_EQ(w.workspace.active,second); EXPECT_TRUE(w.closeRequested); EXPECT_TRUE(w.Document().IsDirty());
+    EXPECT_FALSE(FileSystem::Exists(path.Native()));
+}
+TEST(CapLabWorkspace, OpeningKeepsDirtyDocumentAndItsUndo) {
+    const auto path=Temp("caplab-open-second.json"); std::string error;
+    ASSERT_TRUE(TextFileIO::Save(path,Serialize(FixtureProject()),error));
+    auto jobs=CreateRef<JobSystem>(nullptr,1); auto undo=CreateRef<UndoStack>(); auto bus=CreateRef<EventBus>(); auto commands=CreateRef<CommandRegistry>();
+    CapLabWorkflow w(jobs,bus,undo); RegisterCommands(commands,bus,w); w.Document().project=FixtureProject();
+    const auto first=w.workspace.active; CommandContext context; context.Set("sample_id",w.Document().project.samples[0].id); context.Set("area_m2",3e-6);
+    ASSERT_TRUE(commands->Execute(CommandID{"caplab.area"},std::move(context)));
+    w.Start(Operation::Open,path); jobs->Shutdown(); w.OnUpdate(0);
+    EXPECT_NE(w.workspace.active,first); EXPECT_EQ(w.workspace.projects.size(),2); EXPECT_FALSE(undo->CanUndo());
+    ASSERT_TRUE(w.Activate(first)); EXPECT_TRUE(w.Document().IsDirty()); EXPECT_TRUE(undo->CanUndo());
+    EXPECT_TRUE(FileSystem::Remove(path.Native()));
+}
+
 }

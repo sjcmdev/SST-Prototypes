@@ -12,9 +12,9 @@ void CapLabPrototypePanel::RenderIS() {
         ImGui::SetNextItemOpen(std::string_view(gallery) == "IS", ImGuiCond_Once);
     if (!ImGui::CollapsingHeader("IS / CircuitCore schematic")) return;
     ImGui::PushID("IS");
-    auto &p=state->document.project;
-    if (circuitDocument!=state->document.path.Utf8()) {
-        circuitDocument=state->document.path.Utf8();
+    auto &p=state->Document().project;
+    if (circuitDocument!=std::to_string(state->workspace.active)) {
+        circuitDocument=std::to_string(state->workspace.active);
         circuitAutoReady=circuitRecalc=false;
     }
     if (std::getenv("SST_CAPLAB_GALLERY_SECTION") && !selectedCircuit && !p.circuits.empty())
@@ -30,6 +30,8 @@ void CapLabPrototypePanel::RenderIS() {
         sst::ui::widgets::Text("Circuit name", name, sizeof(name));
         sst::ui::widgets::Text("Topology", topology, sizeof(topology));
         static pl::Id sample=0;
+        static std::uint64_t selectionProject = 0;
+        if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; sample=0; }
         if (sst::ui::widgets::BeginCombo("Circuit sample", sample ? std::to_string(sample).c_str() : "Select sample")) {
             for (const auto &s : p.samples) if (ImGui::Selectable(s.name.c_str(),sample==s.id)) sample=s.id;
             sst::ui::widgets::EndCombo();
@@ -164,7 +166,7 @@ void CapLabPrototypePanel::RenderIS() {
                 ImGui::PushID("Draft plots");
                 RenderISTabs(draft,a,fitView);
                 ImGui::PopID();
-                ImGui::BeginDisabled(state->analysisRevision!=state->document.revision);
+                ImGui::BeginDisabled(state->analysisRevision!=state->Document().revision);
                 if (ImGui::Button("Accept fit (Undo)")) (void)commands->Execute(CommandID{"caplab.accept_analysis"});
                 ImGui::EndDisabled();
                 ImGui::SameLine(); if (ImGui::Button("Discard fit draft")) (void)commands->Execute(CommandID{"caplab.cancel"});
@@ -196,7 +198,7 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
     const auto& graphs=analysis.at("graphs");
     if (graphs.size()<7) return;
     const auto analysisId=analysis.at("id").get<pl::Id>();
-    ImGui::PushID(state->document.path.Utf8().c_str());
+    ImGui::PushID(std::to_string(state->workspace.active).c_str());
     ImGui::PushID(std::to_string(analysisId).c_str());
     const auto current=project.engine->object(project.graph).name;
     const bool selectTab=isPlotAnalysis!=analysisId || isPlotGraph!=project.graph;
@@ -257,7 +259,7 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
                 if (const auto temperature=measurementLabel.rfind(", T = "); temperature!=std::string::npos) measurementLabel.resize(temperature);
                 const std::string title=(measurementLabel==sample ? measurementLabel : sample+" / "+measurementLabel)+
                     ", T = "+analysis.at("temperature_K").dump()+" K \u2014 "+tab.label;
-                if (&project==&state->document.project) {
+                if (&project==&state->Document().project) {
                     auto window=GetState();
                     if (window.shortName!=title) {window.shortName=title; window.longName=title; ApplyState(window);}
                 } else ImGui::TextWrapped("%s — fit draft",title.c_str());

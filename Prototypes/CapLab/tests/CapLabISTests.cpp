@@ -140,44 +140,44 @@ TEST(CapLabIS, DiodeBiasTemperatureAndSpiceFCContinuation) {
 TEST(CapLabIS, CircuitCommandsPersistenceUndoAndLateJobRejection) {
     auto bus=CreateRef<EventBus>(); auto jobs=CreateRef<JobSystem>(nullptr,1);
     auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
-    CapLabWorkflow w(jobs,bus,undo); RegisterCommands(commands,bus,w); w.document.project=FixtureProject();
-    const auto sample=w.document.project.samples[0].id, mid=w.document.project.sweeps[0].id;
+    CapLabWorkflow w(jobs,bus,undo); RegisterCommands(commands,bus,w); w.Document().project=FixtureProject();
+    const auto sample=w.Document().project.samples[0].id, mid=w.Document().project.sweeps[0].id;
     auto edit=[&](Json value) {CommandContext c; c.Set("edit",value); return commands->Execute(CommandID{"caplab.circuit"},std::move(c));};
     ASSERT_TRUE(edit({{"action","create"},{"sample_id",sample},{"name","Randles"},{"topology","R0-p(R1,C1)"}}));
-    const auto cid=w.document.project.circuits[0].at("id");
-    const auto created=Serialize(w.document.project);
+    const auto cid=w.Document().project.circuits[0].at("id");
+    const auto created=Serialize(w.Document().project);
     EXPECT_EQ(Serialize(Parse(created)),created);
-    ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(w.document.project.circuits.empty());
-    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(w.document.project),created);
-    auto schematic=w.document.project.circuits[0].at("schematic"); schematic["elements"][0]["x"]=321.;
+    ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(w.Document().project.circuits.empty());
+    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(w.Document().project),created);
+    auto schematic=w.Document().project.circuits[0].at("schematic"); schematic["elements"][0]["x"]=321.;
     ASSERT_TRUE(edit({{"action","replace"},{"circuit_id",cid},{"schematic",schematic}}));
-    ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(w.document.project),created);
+    ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(w.Document().project),created);
     auto invalid=schematic; invalid["elements"][0]["value_unit"]="F";
-    EXPECT_FALSE(edit({{"action","replace"},{"circuit_id",cid},{"schematic",invalid}})); EXPECT_EQ(Serialize(w.document.project),created);
+    EXPECT_FALSE(edit({{"action","replace"},{"circuit_id",cid},{"schematic",invalid}})); EXPECT_EQ(Serialize(w.Document().project),created);
     invalid=schematic; invalid["port"]={999,0};
-    EXPECT_FALSE(edit({{"action","replace"},{"circuit_id",cid},{"schematic",invalid}})); EXPECT_EQ(Serialize(w.document.project),created);
+    EXPECT_FALSE(edit({{"action","replace"},{"circuit_id",cid},{"schematic",invalid}})); EXPECT_EQ(Serialize(w.Document().project),created);
     auto sub=bus->Subscribe<DocumentRequested>([&](const auto &e) {w.Start(e.operation,e.target);});
     w.analysisOptions={{"type","Circuit"},{"measurement_id",mid},{"circuit_id",cid},{"bias_V",0}};
     ASSERT_TRUE(jobs->PauseAllJobs());
     ASSERT_TRUE(commands->Execute(CommandID{"caplab.analyze"})); bus->ProcessQueue(); ASSERT_NE(w.activeJob,0);
     ASSERT_TRUE(edit({{"action","replace"},{"circuit_id",cid},{"schematic",schematic}}));
     ASSERT_TRUE(jobs->ResumeAllJobs()); jobs->Shutdown(); w.OnUpdate(0);
-    EXPECT_TRUE(w.document.project.analyses.empty()); EXPECT_NE(w.status.find("Stale"),std::string::npos);
+    EXPECT_TRUE(w.Document().project.analyses.empty()); EXPECT_NE(w.status.find("Stale"),std::string::npos);
     w.jobs=CreateRef<JobSystem>(nullptr,1);
     ASSERT_TRUE(commands->Execute(CommandID{"caplab.analyze"})); bus->ProcessQueue();
     w.jobs->Shutdown(); w.OnUpdate(0);
-    ASSERT_EQ(w.document.project.analyses.size(),1) << w.status;
-    EXPECT_EQ(w.document.project.analyses[0]["status"],"valid");
-    EXPECT_EQ(w.document.project.analyses[0]["circuit"],w.document.project.circuits[0]);
-    const auto analyzed=Serialize(w.document.project);
+    ASSERT_EQ(w.Document().project.analyses.size(),1) << w.status;
+    EXPECT_EQ(w.Document().project.analyses[0]["status"],"valid");
+    EXPECT_EQ(w.Document().project.analyses[0]["circuit"],w.Document().project.circuits[0]);
+    const auto analyzed=Serialize(w.Document().project);
     EXPECT_EQ(Serialize(Parse(analyzed)),analyzed);
-    ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(w.document.project.analyses.empty());
-    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(w.document.project),analyzed);
+    ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(w.Document().project.analyses.empty());
+    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(w.Document().project),analyzed);
     schematic["elements"][0]["value"]=200.;
     ASSERT_TRUE(edit({{"action","replace"},{"circuit_id",cid},{"schematic",schematic}}));
-    EXPECT_EQ(w.document.project.analyses[0]["status"],"stale");
-    ASSERT_TRUE(edit({{"action","delete"},{"circuit_id",cid}})); EXPECT_EQ(w.document.project.analyses[0]["status"],"missing_input");
-    ASSERT_TRUE(undo->Undo()); EXPECT_EQ(w.document.project.circuits.size(),1);
+    EXPECT_EQ(w.Document().project.analyses[0]["status"],"stale");
+    ASSERT_TRUE(edit({{"action","delete"},{"circuit_id",cid}})); EXPECT_EQ(w.Document().project.analyses[0]["status"],"missing_input");
+    ASSERT_TRUE(undo->Undo()); EXPECT_EQ(w.Document().project.circuits.size(),1);
 }
 }
 #include <random>
@@ -272,20 +272,20 @@ TEST(CapLabISFit, InvalidSettingsPointsNoFreeAndCancellationLeaveCircuitUntouche
 }
 TEST(CapLabISFit, DraftRequiresAcceptanceUndoRedoStaleAndCancel) {
     auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>(); auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
-    CapLabWorkflow w(jobs,bus,undo); RegisterCommands(commands,bus,w); w.document.project=FixtureProject();
-    CommandContext edit; edit.Set("edit",Json{{"action","create"},{"sample_id",w.document.project.samples[0].id},{"name","R"},{"topology","R0"}});
+    CapLabWorkflow w(jobs,bus,undo); RegisterCommands(commands,bus,w); w.Document().project=FixtureProject();
+    CommandContext edit; edit.Set("edit",Json{{"action","create"},{"sample_id",w.Document().project.samples[0].id},{"name","R"},{"topology","R0"}});
     ASSERT_TRUE(commands->Execute(CommandID{"caplab.circuit"},std::move(edit)));
-    w.analysisOptions={{"type","Circuit"},{"fit",true},{"circuit_id",w.document.project.circuits[0]["id"]},
-        {"measurement_id",w.document.project.sweeps[0].id},{"bias_V",0},{"Z_floor_Ohm",1.},{"max_iterations",1},
+    w.analysisOptions={{"type","Circuit"},{"fit",true},{"circuit_id",w.Document().project.circuits[0]["id"]},
+        {"measurement_id",w.Document().project.sweeps[0].id},{"bias_V",0},{"Z_floor_Ohm",1.},{"max_iterations",1},
         {"parameters",Json::array({{{"element","R0"},{"field","value"},{"unit","ohm"},{"free",true},{"min",1.},{"max",1e9}}})}};
-    const auto before=Serialize(w.document.project);
+    const auto before=Serialize(w.Document().project);
     w.Start(Operation::Analyze); jobs->Shutdown(); w.OnUpdate(0);
-    ASSERT_TRUE(w.analysisDraft) << w.status; EXPECT_EQ(Serialize(w.document.project),before);
+    ASSERT_TRUE(w.analysisDraft) << w.status; EXPECT_EQ(Serialize(w.Document().project),before);
     ASSERT_TRUE(commands->Execute(CommandID{"caplab.accept_analysis"})) << w.status;
-    const auto accepted=Serialize(w.document.project); EXPECT_NE(accepted,before);
-    EXPECT_EQ(w.document.project.analyses.back()["status"],"valid");
-    ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(w.document.project),before);
-    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(w.document.project),accepted);
+    const auto accepted=Serialize(w.Document().project); EXPECT_NE(accepted,before);
+    EXPECT_EQ(w.Document().project.analyses.back()["status"],"valid");
+    ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(w.Document().project),before);
+    ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(w.Document().project),accepted);
     EXPECT_EQ(Serialize(Parse(accepted)),accepted);
     for (const auto &key : {"score","Z_floor_Ohm","covariance","stop_status"}) {
         auto broken=Json::parse(accepted); broken["analyses"].back()[key]=nullptr;
@@ -294,12 +294,12 @@ TEST(CapLabISFit, DraftRequiresAcceptanceUndoRedoStaleAndCancel) {
     }
     w.jobs=CreateRef<JobSystem>(nullptr,1); w.Start(Operation::Analyze); w.jobs->Shutdown(); w.OnUpdate(0);
     ASSERT_TRUE(w.analysisDraft); w.Changed();
-    EXPECT_FALSE(commands->Execute(CommandID{"caplab.accept_analysis"})); EXPECT_EQ(Serialize(w.document.project),accepted);
+    EXPECT_FALSE(commands->Execute(CommandID{"caplab.accept_analysis"})); EXPECT_EQ(Serialize(w.Document().project),accepted);
     ASSERT_TRUE(commands->Execute(CommandID{"caplab.cancel"})); EXPECT_FALSE(w.analysisDraft);
     w.jobs=CreateRef<JobSystem>(nullptr,1); ASSERT_TRUE(w.jobs->PauseAllJobs()); w.Start(Operation::Analyze);
     ASSERT_TRUE(commands->Execute(CommandID{"caplab.cancel"}));
     ASSERT_TRUE(w.jobs->ResumeAllJobs()); w.jobs->Shutdown(); w.OnUpdate(0);
-    EXPECT_EQ(Serialize(w.document.project),accepted); EXPECT_FALSE(w.analysisDraft); EXPECT_EQ(w.status,"Cancelled.");
+    EXPECT_EQ(Serialize(w.Document().project),accepted); EXPECT_FALSE(w.analysisDraft); EXPECT_EQ(w.status,"Cancelled.");
 }
 }
 namespace SST::Prototypes::CapLab {

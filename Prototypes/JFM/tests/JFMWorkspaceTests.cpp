@@ -1,3 +1,4 @@
+#include "Core/IO/RecentFiles.hpp"
 #include <gtest/gtest.h>
 
 #include "App/JFMCommands.hpp"
@@ -548,3 +549,19 @@ namespace SST::Prototypes::JFM
     }
 
 } // namespace SST::Prototypes::JFM
+
+TEST(SharedDocumentLifecycle, WorkspaceAndRecentFiles) {
+    struct Document : SST::DocumentState { std::uint64_t handle = 0; int value = 0; };
+    SST::ProjectWorkspace<Document> workspace;
+    const auto first=workspace.Open(Document{}); auto *stable=workspace.Find(first); stable->value=42;
+    const auto second=workspace.Open(Document{}); EXPECT_EQ(stable,workspace.Find(first));
+    stable->revision=2; stable->MarkSaved(SST::Path{"shared-project.json"},1); EXPECT_TRUE(stable->IsDirty());
+    stable->MarkSaved(*stable->path,2); EXPECT_FALSE(stable->IsDirty());
+    EXPECT_EQ(workspace.FindByPath(SST::Path{"./shared-project.json"}),first);
+    EXPECT_TRUE(workspace.Activate(first)); EXPECT_FALSE(workspace.Close(999)); EXPECT_TRUE(workspace.Close(first));
+    EXPECT_EQ(workspace.active,second); EXPECT_EQ(workspace.Find(first),nullptr);
+    std::vector<std::string> recent;
+    for (int i=0;i<15;++i) SST::TouchRecent(recent,std::to_string(i));
+    EXPECT_EQ(recent.size(),10); SST::TouchRecent(recent,recent.back()); EXPECT_EQ(recent.front(),"5");
+    SST::TouchRecent(recent,std::string{}); EXPECT_EQ(recent.size(),10);
+}
