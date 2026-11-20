@@ -1,0 +1,381 @@
+{
+  "active_device": "device-1",
+  "compare_set": ["device-1"],
+  "devices": [
+    {
+      "ac_results": {},
+      "actions": {},
+      "band_result": {},
+      "batch_result": {},
+      "batch_spec": {
+        "axes": [
+          {
+            "count": 3,
+            "parameter_id": "temperature_K",
+            "spacing": "linear",
+            "start": 270.0,
+            "stop": 330.0
+          }
+        ],
+        "include_curves": true,
+        "mode": "nested"
+      },
+      "colour": [0.25,0.65,0.95,1.0],
+      "description": "CIGS / CdS / ZnO thin-film cell (2 um absorber, Eg 1.27 eV) under AM1.5G, 300 K. Run Calculate light I-V for Voc, Jsc, FF and efficiency, then QE(lambda). Parameters from the Aissat 2018 SCAPS deck.",
+      "document": {
+        "carrier_statistics": "boltzmann",
+        "case_id": "scaps_import",
+        "constants_mode": "scaps_compat",
+        "contacts": {
+          "left": {
+            "Sn_m_s": 0.01,
+            "Sp_m_s": 100000,
+            "flat_band": true,
+            "label": "left contact",
+            "phi_m_eV": 4.5
+          },
+          "right": {
+            "Sn_m_s": 100000,
+            "Sp_m_s": 0.01,
+            "flat_band": true,
+            "label": "right contact",
+            "phi_m_eV": 4.5
+          }
+        },
+        "external": {
+          "area_m2": 1,
+          "series_ohm_m2": 0,
+          "shunt_ohm_m2": ".inf"
+        },
+        "illumination": {
+          "back_filter_file": "",
+          "back_filter_nm_fraction": [],
+          "back_reflection": 0,
+          "enabled": true,
+          "from_right": false,
+          "front_filter_file": "",
+          "front_filter_nm_fraction": [],
+          "front_internal_reflection": 0,
+          "front_transmission": 1,
+          "generation_file": "",
+          "generation_m_m3s": [],
+          "generation_quadrature": "exact_box",
+          "intensity_multiplier": 1,
+          "mode": "spectrum",
+          "monochromatic_power_W_m2": 1000,
+          "scapslab_spectrum": "AM1.5G",
+          "spectrum_file": "",
+          "spectrum_nm_W_m2": [[305.0,0.048],[310.0,0.23238],[315.0,0.5445],[320.0,0.90135],[325.0,1.28742],[330.0,1.88289],[335.0,1.98457],[340.0,2.15306],[345.0,2.22299],[350.0,3.65008],[360.0,5.34591],[370.0,6.54581],[380.0,7.08628],[390.0,7.5717],[400.0,9.95916],[410.0,11.4467],[420.0,11.68187],[430.0,11.15997],[440.0,13.02812],[450.0,15.09041],[460.0,15.89996],[470.0,15.91177],[480.0,16.13227],[490.0,15.53414],[500.0,15.54154],[510.0,15.70997],[520.0,15.10392],[530.0,15.60647],[540.0,15.56661],[550.0,23.28738],[570.0,29.95176],[590.0,28.43396],[610.0,29.38973],[630.0,28.80925],[650.0,28.39838],[670.0,27.29172],[690.0,23.75072],[710.0,17.68235],[718.0,7.41233],[724.0,11.801],[740.0,17.21923],[753.0,10.77465],[758.0,5.56304],[763.0,3.79513],[768.0,8.67959],[780.0,17.84488],[800.0,19.15106],[816.0,10.61303],[824.0,6.53929],[832.0,7.26152],[840.0,13.45886],[860.0,19.43966],[880.0,20.55956],[905.0,13.59171],[915.0,6.81306],[925.0,4.97575],[930.0,2.47678],[937.0,2.53067],[948.0,4.77279],[965.0,8.2099],[980.0,9.33587],[994.0,21.93074],[1040.0,26.39676],[1070.0,18.50298],[1100.0,10.41107],[1120.0,2.49641],[1130.0,1.45884],[1137.0,2.72242],[1161.0,6.96365],[1180.0,8.60153],[1200.0,12.00256],[1235.0,20.93583],[1290.0,17.42957],[1320.0,7.30847],[1350.0,1.86257],[1395.0,0.57198],[1443.0,1.69503],[1463.0,1.66614],[1477.0,1.98705],[1497.0,3.96003],[1520.0,5.31758],[1539.0,5.191],[1558.0,5.29055],[1578.0,4.24367],[1592.0,3.9157],[1610.0,4.43194],[1630.0,4.34685],[1646.0,5.60431],[1678.0,10.05307],[1740.0,9.79486],[1800.0,2.66783],[1860.0,0.32569],[1920.0,0.16752],[1960.0,0.80785],[1985.0,1.67246],[2005.0,1.10419],[2035.0,2.56887],[2065.0,2.2378],[2100.0,3.53577],[2148.0,4.00654],[2198.0,4.42194],[2270.0,5.61576],[2360.0,5.22307],[2450.0,1.86556],[2494.0,0.73717],[2537.0,0.85958],[2941.0,0.90637],[2973.0,0.22564],[3005.0,0.25458],[3056.0,0.24642],[3132.0,0.29146],[3156.0,0.54884],[3204.0,0.17814],[3245.0,0.2612],[3317.0,0.52581],[3344.0,0.38099],[3450.0,1.36829],[3573.0,1.85006],[3765.0,2.277],[4045.0,1.12998]],
+          "uniform_generation_m3_s": 0,
+          "wavelength_max_nm": ".inf",
+          "wavelength_min_nm": 0,
+          "wavelength_nm": 800
+        },
+        "interface_defects": [
+          {
+            "Nt_m2": 1e+18,
+            "characteristic_energy_eV": 0.05,
+            "charge_type": "neutral",
+            "density_convention": "scaps_peak",
+            "energy_distribution": "single",
+            "energy_levels": 7,
+            "energy_offset_eV": 0.64,
+            "energy_quadrature": "scaps_trapezoid",
+            "energy_reference": 7,
+            "gaussian_width": 6,
+            "id": "interface/0/defect/0",
+            "left_layer_index": 0,
+            "peak_density_m2_eV": 0,
+            "sigma_n_left_m2": 1e-19,
+            "sigma_n_right_m2": 1e-19,
+            "sigma_p_left_m2": 1e-19,
+            "sigma_p_right_m2": 1e-19,
+            "tail_width": 7
+          }
+        ],
+        "layers": [
+          {
+            "absorption": {
+              "A_m1_eV_half": 10000000.0,
+              "B_m1_eV_minus_half": 0.0,
+              "background_m1": 0,
+              "file": "",
+              "model": "sqrt",
+              "powers": [],
+              "sqrt_alpha_m1": 0,
+              "sqrt_beta_m1": 0,
+              "step_m1": 0,
+              "table_nm_m1": [],
+              "urbach_enabled": false,
+              "urbach_energy_eV": 0.025
+            },
+            "defects": [
+              {
+                "Nt_m3": 2e+21,
+                "amphoteric": false,
+                "characteristic_energy_eV": 0.1,
+                "charge_type": "neutral",
+                "correlated": true,
+                "distribution_normalization": "scaps",
+                "energy_distribution": "single",
+                "energy_levels": 7,
+                "energy_offset_eV": 0.64,
+                "energy_quadrature": "scaps_trapezoid",
+                "energy_reference": "relative_to_Ev",
+                "gaussian_width": 6,
+                "label": "layer/0/defect/0",
+                "scapslab_id": "defect-1",
+                "second_energy_offset_eV": 0,
+                "second_sigma_n_m2": 1e-19,
+                "second_sigma_p_m2": 1e-19,
+                "sigma_n_m2": 1e-19,
+                "sigma_p_m2": 1e-19,
+                "tail_width": 7
+              }
+            ],
+            "doping": {
+              "Na_m3": 8e+22,
+              "Nd_m3": 0
+            },
+            "material": {
+              "Eg_eV": 1.2726,
+              "Nc_ref_m3": 2.2e+24,
+              "Nv_ref_m3": 1.8e+25,
+              "T_ref_K": 300,
+              "chi_eV": 3.89,
+              "eps_r": 13.4,
+              "mu_n_m2_V_s": 0.03,
+              "mu_p_m2_V_s": 0.001,
+              "vth_n_ref_m_s": 100000,
+              "vth_p_ref_m_s": 100000
+            },
+            "name": "CIGS",
+            "recombination": {
+              "auger_n_cm6_s": 0,
+              "auger_p_cm6_s": 0,
+              "radiative_cm3_s": 0
+            },
+            "scapslab_id": "layer-1",
+            "thickness_m": 2.0000000000000003e-06
+          },
+          {
+            "absorption": {
+              "A_m1_eV_half": 10000000.0,
+              "B_m1_eV_minus_half": 0.0,
+              "background_m1": 0,
+              "file": "",
+              "model": "sqrt",
+              "powers": [],
+              "sqrt_alpha_m1": 0,
+              "sqrt_beta_m1": 0,
+              "step_m1": 0,
+              "table_nm_m1": [],
+              "urbach_enabled": false,
+              "urbach_energy_eV": 0.025
+            },
+            "defects": [],
+            "doping": {
+              "Na_m3": 0,
+              "Nd_m3": 5e+23
+            },
+            "material": {
+              "Eg_eV": 2.4,
+              "Nc_ref_m3": 2.2e+24,
+              "Nv_ref_m3": 1.8e+25,
+              "T_ref_K": 300,
+              "chi_eV": 3.75,
+              "eps_r": 10,
+              "mu_n_m2_V_s": 0.001,
+              "mu_p_m2_V_s": 0.0001,
+              "vth_n_ref_m_s": 100000,
+              "vth_p_ref_m_s": 100000
+            },
+            "name": "CdS",
+            "recombination": {
+              "auger_n_cm6_s": 0,
+              "auger_p_cm6_s": 0,
+              "radiative_cm3_s": 0
+            },
+            "scapslab_id": "layer-2",
+            "thickness_m": 5.0000000000000004e-08
+          },
+          {
+            "absorption": {
+              "A_m1_eV_half": 10000000.0,
+              "B_m1_eV_minus_half": 0.0,
+              "background_m1": 0,
+              "file": "",
+              "model": "sqrt",
+              "powers": [],
+              "sqrt_alpha_m1": 0,
+              "sqrt_beta_m1": 0,
+              "step_m1": 0,
+              "table_nm_m1": [],
+              "urbach_enabled": false,
+              "urbach_energy_eV": 0.025
+            },
+            "defects": [],
+            "doping": {
+              "Na_m3": 0,
+              "Nd_m3": 5e+23
+            },
+            "material": {
+              "Eg_eV": 3.3,
+              "Nc_ref_m3": 2.2e+24,
+              "Nv_ref_m3": 1.8e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4,
+              "eps_r": 9,
+              "mu_n_m2_V_s": 0.005,
+              "mu_p_m2_V_s": 0.0005,
+              "vth_n_ref_m_s": 100000,
+              "vth_p_ref_m_s": 100000
+            },
+            "name": "ZnO",
+            "recombination": {
+              "auger_n_cm6_s": 0,
+              "auger_p_cm6_s": 0,
+              "radiative_cm3_s": 0
+            },
+            "scapslab_id": "layer-3",
+            "thickness_m": 5.5e-08
+          }
+        ],
+        "mesh": {
+          "adaptive_delta_log_carrier": 0.5,
+          "adaptive_delta_psi_Vt": 0.5,
+          "adaptive_max_bias": false,
+          "adaptive_max_layer_fraction": 0.25,
+          "adaptive_target_profile_error_eV": null,
+          "adaptive_target_relative_J_error": 0.001,
+          "adaptivity_level": "0",
+          "clustering_beta": 0,
+          "points_per_layer": 60,
+          "recalculate_generation_limit_uA_cm2": 1,
+          "recalculate_max_adaptions_per_voltage": 10,
+          "recalculate_max_ratio": 1.6,
+          "recalculate_mesh": false,
+          "recalculate_min_ratio": 1.05,
+          "recalculate_points": 10,
+          "recalculate_recombination_limit_uA_cm2": 0.001,
+          "solution_adaptive": false,
+          "thermionic_homojunctions": true
+        },
+        "mobility_temperature_model": "sqrt_T",
+        "radiative_limit_mode": "never",
+        "scaps_native": {
+          "action_lines": ["Temperature : 300 K","dark : 1","IV_startV : -0.3 V","IV_stopV : 0.6 V","IV_increment : 0.02 V"],
+          "optics": [
+            {
+              "id": "layer/0",
+              "kind": "absorption",
+              "model": 100000.0,
+              "parameters": ["A : 10000000.0 [/(m*sqrt(eV))]","B : 0.0 [sqrt(eV)/m]","absorption model A, value of parameter 1 : 100000.0","pure B material (y=1), A : 10000000.0 [/(m*sqrt(eV))]"],
+              "resolved_path": "",
+              "source_path": ""
+            },
+            {
+              "id": "layer/1",
+              "kind": "absorption",
+              "model": 100000.0,
+              "parameters": ["A : 10000000.0 [/(m*sqrt(eV))]","B : 0.0 [sqrt(eV)/m]","absorption model A, value of parameter 1 : 100000.0","pure B material (y=1), A : 10000000.0 [/(m*sqrt(eV))]"],
+              "resolved_path": "",
+              "source_path": ""
+            },
+            {
+              "id": "layer/2",
+              "kind": "absorption",
+              "model": 100000.0,
+              "parameters": ["A : 10000000.0 [/(m*sqrt(eV))]","B : 0.0 [sqrt(eV)/m]","absorption model A, value of parameter 1 : 100000.0","pure B material (y=1), A : 10000000.0 [/(m*sqrt(eV))]"],
+              "resolved_path": "",
+              "source_path": ""
+            }
+          ],
+          "sections": [
+            {
+              "lines": ["recalculate mesh :  0 (0: fixed mesh, 1: adaptive mesh)"],
+              "name": "convergence"
+            },
+            {
+              "lines": ["flatband : 1 (1: flatband contact imposed; 0: fixed Phi_m value)","recalculate : 1 (1 = do or 0 = do not recalculate phi_m to set flatband in each batch step)","Sn :  1.000e-02 [m/s]","Sp :  1.000e+05 [m/s]","Tunneling to contact: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00"],
+              "name": "back contact"
+            },
+            {
+              "lines": ["name : CIGS","d : 2.0000000000000003e-06 [m]","v_th_n : 100000.0 [m/s]","v_th_p : 100000.0 [m/s]","eps : 13.4 [-]","chi : 3.89 [eV]","Eg : 1.2726 [eV]","Nc : 2.2e+24 [/m^3]","Nv : 1.8e+25 [/m^3]","mu_n : 0.03 [m^2/Vs]","mu_p : 0.001 [m^2/Vs]","K_rad : 0.0 [m^3/s]","c_n_auger : 0.0 [m^6/s]","c_p_auger : 0.0 [m^6/s]","Na(y) : 8e+22 [/m^3]","Nd(y) : 0.0 [/m^3]","A : 10000000.0 [/(m*sqrt(eV))]","B : 0.0 [sqrt(eV)/m]","absorption model A, value of parameter 1 : 100000.0","pure B material (y=1), A : 10000000.0 [/(m*sqrt(eV))]"],
+              "name": "layer"
+            },
+            {
+              "lines": ["type : neutral","energy distribution : single","Reference for defect energy : 0","Ekar : 0.1 [eV]","Nt(y) : 2e+21 [/m^3]","sigma_n : 1e-19 [m^2]","sigma_p : 1e-19 [m^2]","Et : 0.64 [eV]"],
+              "name": "srhrecombination"
+            },
+            {
+              "lines": [],
+              "name": "interface properties"
+            },
+            {
+              "lines": ["type : neutral","sigma_nleft : 1e-19 [m^2]","sigma_nright : 1e-19 [m^2]","sigma_pleft : 1e-19 [m^2]","sigma_pright : 1e-19 [m^2]","energy distribution : single","Reference for defect energy : 7","Et : 0.64 [eV]","N :\t1e+18\t[/m^2.eV]"],
+              "name": "interface recombination"
+            },
+            {
+              "lines": ["name : CdS","d : 5.0000000000000004e-08 [m]","v_th_n : 100000.0 [m/s]","v_th_p : 100000.0 [m/s]","eps : 10.0 [-]","chi : 3.75 [eV]","Eg : 2.4 [eV]","Nc : 2.2e+24 [/m^3]","Nv : 1.8e+25 [/m^3]","mu_n : 0.001 [m^2/Vs]","mu_p : 0.0001 [m^2/Vs]","K_rad : 0.0 [m^3/s]","c_n_auger : 0.0 [m^6/s]","c_p_auger : 0.0 [m^6/s]","Na(y) : 0.0 [/m^3]","Nd(y) : 5e+23 [/m^3]","A : 10000000.0 [/(m*sqrt(eV))]","B : 0.0 [sqrt(eV)/m]","absorption model A, value of parameter 1 : 100000.0","pure B material (y=1), A : 10000000.0 [/(m*sqrt(eV))]"],
+              "name": "layer"
+            },
+            {
+              "lines": [],
+              "name": "interface properties"
+            },
+            {
+              "lines": ["name : ZnO","d : 5.5e-08 [m]","v_th_n : 100000.0 [m/s]","v_th_p : 100000.0 [m/s]","eps : 9.0 [-]","chi : 4.0 [eV]","Eg : 3.3 [eV]","Nc : 2.2e+24 [/m^3]","Nv : 1.8e+25 [/m^3]","mu_n : 0.005 [m^2/Vs]","mu_p : 0.0005 [m^2/Vs]","K_rad : 0.0 [m^3/s]","c_n_auger : 0.0 [m^6/s]","c_p_auger : 0.0 [m^6/s]","Na(y) : 0.0 [/m^3]","Nd(y) : 5e+23 [/m^3]","A : 10000000.0 [/(m*sqrt(eV))]","B : 0.0 [sqrt(eV)/m]","absorption model A, value of parameter 1 : 100000.0","pure B material (y=1), A : 10000000.0 [/(m*sqrt(eV))]"],
+              "name": "layer"
+            },
+            {
+              "lines": ["flatband : 1 (1: flatband contact imposed; 0: fixed Phi_m value)","recalculate : 1 (1 = do or 0 = do not recalculate phi_m to set flatband in each batch step)","Sn : 1.000e+05 [m/s]","Sp : 1.000e-02 [m/s]","Tunneling to contact: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00"],
+              "name": "front contact"
+            },
+            {
+              "lines": ["illuminated from : right","internal Rfront :   0.00000000","internal Tfront :  1.0000e+00","voltage V applied to : -1 (+1: right contact; -1: left contact)","cell reference system :  1 (1: as a consumer (consumed power = +VJ; 0: as a generator (generated power = +VJ) )"],
+              "name": "working point"
+            }
+          ],
+          "warnings": ["unsupported, ignored in solve: layer/0 optical data (TODO st6 integration)","unsupported, ignored in solve: layer/1 optical data (TODO st6 integration)","unsupported, ignored in solve: layer/2 optical data (TODO st6 integration)"]
+        },
+        "schema_version": 1,
+        "solver": {
+          "max_line_search_backtracks": 12,
+          "max_newton_iterations": 100,
+          "max_step_multiple_of_Vt": 4,
+          "residual_tolerance": 1e-10
+        },
+        "temperature_K": 300.0,
+        "voltage": {
+          "start_V": 0.0,
+          "step_V": 0.02,
+          "stop_V": 0.8
+        }
+      },
+      "history": [],
+      "id": "device-1",
+      "name": "CIGS solar cell",
+      "recorder_columns": [
+        {
+          "id": "J_at_0V",
+          "quantity": "J",
+          "voltage_V": 0.0
+        }
+      ],
+      "result": {},
+      "selected_run": "",
+      "selection": {
+        "bias": 0,
+        "interface": -1,
+        "layer": 0,
+        "member": 0,
+        "voltage_V": 0.0
+      },
+      "status": "no results"
+    }
+  ],
+  "name": "CIGS / CdS / ZnO solar cell (AM1.5G)",
+  "schema_version": 3,
+  "ui": {}
+}

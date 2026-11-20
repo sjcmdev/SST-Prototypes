@@ -30,6 +30,16 @@ TEST(TutorialEngine,LearnObservesStateWithoutExecutingAndResumes) {
     value=2;t.Tick(predicates,execute,true,{{"ok",true}});EXPECT_TRUE(t.Active());
     t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_EQ(executions,0);EXPECT_EQ(t.Report().at("status"),"passed");
 }
+TEST(TutorialEngine,LearnNeverAutoAdvancesOnAlreadyTrueStepAndSupportsBackSkipShowMe) {
+    int value=2,executions=0;Tutorial t;Tutorial::Predicates predicates{{"value",[&]{return Json(value);}}};
+    auto execute=[&](const Json &){++executions;return Json{{"ok",true}};};
+    t.Start(Definition(2),"learn",predicates);
+    t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_TRUE(t.Active());EXPECT_TRUE(t.AlreadyDone());EXPECT_EQ(t.Report().at("step_index"),0);
+    t.Skip();EXPECT_EQ(t.Report().at("step_index"),1);t.Back();EXPECT_EQ(t.Report().at("step_index"),0);EXPECT_FALSE(t.CanGoBack());
+    value=0;t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_FALSE(t.AlreadyDone());
+    t.ShowMe();t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_EQ(executions,1);
+    value=2;t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_EQ(t.Report().at("step_index"),1);
+}
 TEST(TutorialEngine,VerifyWaitsForJobThenChecksAndReportsSkippedSteps) {
     int value=0,executions=0;Tutorial t;Tutorial::Predicates predicates{{"value",[&]{return Json(value);}}};
     auto execute=[&](const Json &){++executions;return Json{{"ok",true}};};
@@ -88,15 +98,17 @@ TEST_P(ScapsLabTutorialVerify,LearnAndDemoUseTheSameCommandsAndPassEveryStep) {
         while(w.tutorial.Active() || w.Busy()) {
             ASSERT_LT(++ticks,120000)<<w.tutorial.Report().dump();
             if(std::string(mode)=="learn" && !w.Busy() && w.tutorial.Active()) {
+                if(w.tutorial.AlreadyDone()) w.tutorial.Skip(); // condition held at step start: learn waits for the user's Next
+                else {
                 auto command=w.tutorial.Step()->at("command");
                 if(command.value("run_id",std::string{})=="$selected_run")command["run_id"]=w.Current().selectedRun;
-                ASSERT_TRUE(w.Dispatch(command).value("ok",false))<<w.response.dump();
+                ASSERT_TRUE(w.Dispatch(command).value("ok",false))<<w.response.dump();}
             }
             w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         const auto report=w.tutorial.Report();
         EXPECT_EQ(report.at("status"),"passed")<<mode<<report.dump();
-        for(const auto &step:report.at("steps"))EXPECT_EQ(step.at("status"),"PASS");
+        for(const auto &step:report.at("steps"))EXPECT_TRUE(step.at("status")=="PASS" || (std::string(mode)=="learn" && step.at("status")=="SKIP"));
     }
 }
 TEST(ScapsLabTutorial,StopRestoresAutomaticSettingsAndInvalidInputIsTyped) {
@@ -112,8 +124,9 @@ TEST(ScapsLabTutorial,LearnPersistsProgressAndVerifyDoesNotWriteUserConfig) {
     std::filesystem::create_directories(path.parent_path());
     std::error_code ec;std::filesystem::remove(path,ec);
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    w.tutorialProgressPath=path.string();w.Current().name="Tutorial: First device";
+    w.tutorialProgressPath=path.string();
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","first-device"}}).value("ok",false));
+    w.OnUpdate(0);w.Current().name="Tutorial: First device"; // the user finishes step 1 after the lesson started
     w.OnUpdate(0);ASSERT_TRUE(std::filesystem::exists(path));
     const auto progress=w.tutorialProgress;EXPECT_EQ(progress.at("first-device").at("step_index"),1);
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_stop"}}).value("ok",false));
@@ -307,9 +320,11 @@ TEST_P(ScapsLabTutorialUi,EveryStepTargetIsVisibleAndArrowTipClearsIt) {
             const auto path=std::filesystem::path(shotRoot)/lesson/(stepId+".png");std::filesystem::create_directories(path.parent_path());
             CommandContext context;context.Set("path",Path{path});EXPECT_TRUE(registry->Execute(CommandID{"app.screenshot"},context));
         }
+        if(w.tutorial.AlreadyDone()) w.tutorial.Skip();
+        else {
         auto command=step.at("command");
         if(command.value("run_id",std::string{})=="$selected_run")command["run_id"]=w.Current().selectedRun;
-        ASSERT_TRUE(w.Dispatch(command).value("ok",false))<<w.response.dump();
+        ASSERT_TRUE(w.Dispatch(command).value("ok",false))<<w.response.dump();}
         int ticks=0;
         while(w.tutorial.Active() && (w.Busy() || w.tutorial.Step()->at("id").get<std::string>()==stepId)) {
             ASSERT_LT(++ticks,120000)<<lesson<<"/"<<stepId<<" never completed";

@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "light-iv-qe",
   "title": "Light I-V and QE",
+  "description": "Illuminate a p-n cell, read Voc, Jsc and FF, then calculate QE.",
+  "minutes": 5,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Devices",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: Light I-V and QE. Your other devices remain in the project.",
+      "instruction": "In Devices click New (template) and name the device: Tutorial: Light I-V and QE. Your other devices stay in the project.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: Light I-V and QE"
@@ -26,7 +28,7 @@
       "target": {
         "window": "scapslab.Illumination"
       },
-      "instruction": "Open the 08-pn-illumination example as a device (Import YAML), or configure a p-n device with 600 nm illumination at 100 W/m^2. Enable Light.",
+      "instruction": "In Illumination tick Light enabled (or import the 08-pn-illumination example as a device).",
       "command": {
         "operation": "edit",
         "example": "08-pn-illumination.yaml"
@@ -44,7 +46,7 @@
         "window": "scapslab.Illumination",
         "item": "light-iv"
       },
-      "instruction": "On Light I-V, click Calculate light I-V. Read Voc [V], Jsc [A/m^2] and FF [fraction]. This solar device must have positive Voc, Jsc and FF.",
+      "instruction": "On Light I-V click Calculate light I-V. A working solar cell has positive Voc, Jsc and FF.",
       "command": {
         "operation": "run"
       },
@@ -60,7 +62,7 @@
       "target": {
         "window": "scapslab.Illumination"
       },
-      "instruction": "Read the positive short-circuit current density Jsc [A/m^2].",
+      "instruction": "Look at Jsc [A/m^2], the short-circuit current density. It should be positive.",
       "command": {
         "operation": "inspect"
       },
@@ -76,7 +78,7 @@
       "target": {
         "window": "scapslab.Illumination"
       },
-      "instruction": "Read the fill factor FF [fraction]. It must be positive.",
+      "instruction": "Look at FF [fraction], the fill factor. It should be positive.",
       "command": {
         "operation": "inspect"
       },
@@ -93,7 +95,7 @@
         "window": "scapslab.Illumination",
         "item": "qe"
       },
-      "instruction": "On QE(lambda), set 590 to 610 nm with 3 samples and click Calculate QE. Inspect EQE and integrated Jsc.",
+      "instruction": "On QE(lambda) set 590 to 610 nm with 3 points and click Calculate QE. Check EQE and the integrated Jsc.",
       "command": {
         "operation": "qe",
         "start_nm": 590.0,

@@ -71,7 +71,7 @@ Json TutorialCatalog() {
     Json catalog = Json::array();
     for (const auto *id : {"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile", "filter-optical-files", "material-file", "table-undo-redo", "menus-tour"}) {
         const auto definition = TutorialDefinition(id);
-        catalog.push_back({{"tutorial_id", id}, {"title", definition.at("title")}, {"step_count", definition.at("steps").size()}});
+        catalog.push_back({{"tutorial_id", id}, {"title", definition.at("title")}, {"step_count", definition.at("steps").size()}, {"description", definition.value("description", std::string{})}, {"minutes", definition.value("minutes", 0)}});
     }
     return catalog;
 }

@@ -1,0 +1,238 @@
+{
+  "active_device": "device-1",
+  "compare_set": ["device-1"],
+  "devices": [
+    {
+      "ac_results": {},
+      "actions": {},
+      "band_result": {},
+      "batch_result": {},
+      "batch_spec": {
+        "axes": [
+          {
+            "count": 3,
+            "parameter_id": "temperature_K",
+            "spacing": "linear",
+            "start": 270.0,
+            "stop": 330.0
+          }
+        ],
+        "include_curves": true,
+        "mode": "nested"
+      },
+      "colour": [0.25,0.65,0.95,1.0],
+      "description": "n-type semiconductor with a Schottky back contact, dark, 300 K. Use C-V and Mott-Schottky to read the doping and built-in voltage; I-V shows the rectifying curve. From the validated a5-schottky deck.",
+      "document": {
+        "carrier_statistics": "boltzmann",
+        "case_id": "scaps_import",
+        "constants_mode": "scaps_compat",
+        "contacts": {
+          "left": {
+            "Sn_m_s": 1000,
+            "Sp_m_s": 100000,
+            "flat_band": false,
+            "label": "left contact",
+            "phi_m_eV": 5.2
+          },
+          "right": {
+            "Sn_m_s": 100000,
+            "Sp_m_s": 1000,
+            "flat_band": true,
+            "label": "right contact",
+            "phi_m_eV": 4.5
+          }
+        },
+        "external": {
+          "area_m2": 1,
+          "series_ohm_m2": 0,
+          "shunt_ohm_m2": ".inf"
+        },
+        "illumination": {
+          "back_filter_file": "",
+          "back_filter_nm_fraction": [],
+          "back_reflection": 0,
+          "enabled": false,
+          "from_right": false,
+          "front_filter_file": "",
+          "front_filter_nm_fraction": [],
+          "front_internal_reflection": 0,
+          "front_transmission": 1,
+          "generation_file": "",
+          "generation_m_m3s": [],
+          "generation_quadrature": "exact_box",
+          "intensity_multiplier": 1,
+          "mode": "uniform",
+          "monochromatic_power_W_m2": 1000,
+          "spectrum_file": "",
+          "spectrum_nm_W_m2": [],
+          "uniform_generation_m3_s": 0,
+          "wavelength_max_nm": ".inf",
+          "wavelength_min_nm": 0,
+          "wavelength_nm": 800
+        },
+        "interface_defects": [],
+        "layers": [
+          {
+            "absorption": {
+              "A_m1_eV_half": 0,
+              "B_m1_eV_minus_half": 0,
+              "background_m1": 0,
+              "file": "",
+              "model": "none",
+              "powers": [],
+              "sqrt_alpha_m1": 0,
+              "sqrt_beta_m1": 0,
+              "step_m1": 0,
+              "table_nm_m1": [],
+              "urbach_enabled": false,
+              "urbach_energy_eV": 0.025
+            },
+            "defects": [],
+            "doping": {
+              "Na_m3": 100000000000000,
+              "Nd_m3": 1e+21
+            },
+            "material": {
+              "Eg_eV": 1.2,
+              "Nc_ref_m3": 1e+25,
+              "Nv_ref_m3": 1e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.5,
+              "eps_r": 10,
+              "mu_n_m2_V_s": 0.005,
+              "mu_p_m2_V_s": 0.005,
+              "vth_n_ref_m_s": 100000,
+              "vth_p_ref_m_s": 100000
+            },
+            "name": "layer 1",
+            "recombination": {
+              "auger_n_cm6_s": 0,
+              "auger_p_cm6_s": 0,
+              "radiative_cm3_s": 0
+            },
+            "scapslab_id": "layer-1",
+            "thickness_m": 2e-06
+          }
+        ],
+        "mesh": {
+          "adaptive_delta_log_carrier": 0.5,
+          "adaptive_delta_psi_Vt": 0.5,
+          "adaptive_max_bias": false,
+          "adaptive_max_layer_fraction": 0.25,
+          "adaptive_target_profile_error_eV": null,
+          "adaptive_target_relative_J_error": 0.001,
+          "adaptivity_level": "0",
+          "clustering_beta": 0,
+          "points_per_layer": 60,
+          "recalculate_generation_limit_uA_cm2": 1,
+          "recalculate_max_adaptions_per_voltage": 10,
+          "recalculate_max_ratio": 1.6,
+          "recalculate_mesh": true,
+          "recalculate_min_ratio": 1.05,
+          "recalculate_points": 10,
+          "recalculate_recombination_limit_uA_cm2": 0.001,
+          "solution_adaptive": false,
+          "thermionic_homojunctions": true
+        },
+        "mobility_temperature_model": "sqrt_T",
+        "radiative_limit_mode": "never",
+        "scaps_native": {
+          "action_lines": ["Temperature :   300.00 K","Voltage :     0.0000 V","Frequency :   1.0000e+06 Hz","Number of points :   5","dark :  1","incident illumination specified","incident spectrum from file :AM1_5G 1 sun.spe","spectrum cut off :  0","short wavelength cut off :   200.00 nm","long wavelength cut off :  4000.00 nm","neutral density :     0.0000","transmission :   100.0000 %","attenuation :   100.0000 %","Secondworkpoint Temperature :   300.00 K","Secondworkpoint Voltage :     0.0000 V","Secondworkpoint Number of points :   5","Secondworkpoint dark :  1","Secondworkpoint incident illumination specified","Secondworkpoint incident spectrum from file :AM1_5G 1 sun.spe","Secondworkpoint spectrum cut off :  0","Secondworkpoint short wavelength cut off :     0.00 nm","Secondworkpoint long wavelength cut off :  2000.00 nm","Secondworkpoint neutral density :     0.0000","Secondworkpoint transmission :   100.0000 %","Secondworkpoint attenuation :   100.0000 %","pause :  0","IV_startV :    -0.5000 V","IV_stopV :     0.8000 V","IV_points : 200","IV_increment :     0.006533 V","IV_calculate :  1","stop after Voc :  0","CV_startV :    -0.8000 V","CV_stopV :     0.8000 V","CV_points :  81","CV_increment :     0.020000 V","CV_calculate :  0","MIS CV_calculate :  0","Cf_startf :    1.000e+02 Hz","Cf_stopf :    1.000e+06 Hz","Cf_total points :  21","Cf_points per decade :   5","Cf_calculate :  0","QE_startlambda :   300.00 nm","QE_stoplambda :   900.00 nm","QE_points :  61","QE_increment :    10.00 nm","QE_calculate :  0"],
+          "optics": [
+            {
+              "id": "actions/0/incident spectrum from file",
+              "kind": "spectrum",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "",
+              "source_path": "AM1_5G 1 sun.spe"
+            },
+            {
+              "id": "actions/0/Secondworkpoint incident spectrum from file",
+              "kind": "spectrum",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "",
+              "source_path": "AM1_5G 1 sun.spe"
+            },
+            {
+              "id": "actions/0",
+              "kind": "spectrum",
+              "model": "",
+              "parameters": ["incident spectrum from file :AM1_5G 1 sun.spe","spectrum cut off :  0","short wavelength cut off :   200.00 nm","long wavelength cut off :  4000.00 nm","neutral density :     0.0000","transmission :   100.0000 %","attenuation :   100.0000 %","Secondworkpoint incident spectrum from file :AM1_5G 1 sun.spe","Secondworkpoint spectrum cut off :  0","Secondworkpoint short wavelength cut off :     0.00 nm","Secondworkpoint long wavelength cut off :  2000.00 nm"],
+              "resolved_path": "",
+              "source_path": ""
+            },
+            {
+              "id": "layer/0",
+              "kind": "absorption",
+              "model": 0.0,
+              "parameters": ["absorption grading :\t 1033.31\t 1033.31\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 7\t 0\t[nm]","absorptionmodel pure A material (y=0) : coefficients A and B (line inserted for compatibility with SCAPS until 3.3.06)","A : 9.129e+06 [/(m*sqrt(eV))] (line inserted for compatibility with SCAPS until 3.3.06)","B : 0.000e+00 [sqrt(eV)/m] (line inserted for compatibility with SCAPS until 3.3.06)","absorptionmodel pure A material (y=0) : from model","absorption model A, model : sqrt(hv-Eg) law (SCAPS traditional)","absorption model A, value of parameter 1 :   1.000000e+05","absorption model A, value of parameter 2 :   0.000000e+00","absorption pure B material (y=1), model : coefficients A and B (line inserted for compatibility with SCAPS until 3.3.06)","pure B material (y=1), A : 9.129e+06 [/(m*sqrt(eV))] (line inserted for compatibility with SCAPS until 3.3.06)","pure B material (y=1), B : 0.000e+00 [sqrt(eV)/m] (line inserted for compatibility with SCAPS until 3.3.06)","absorptionmodel pure B material (y=1) : from model","absorption model B, model : sqrt(hv-Eg) law (SCAPS traditional)","absorption model B, value of parameter 1 :   1.000000e+05","absorption model B, value of parameter 2 :   0.000000e+00"],
+              "resolved_path": "",
+              "source_path": ""
+            }
+          ],
+          "sections": [
+            {
+              "lines": ["clamp_psi :  5.00e-01 units kT","clamp_n :  5.00e-01 units kT","clamp_p :  5.00e-01 units kT","termination_psi :  1.00e-03 units kT","termination_Fn :  1.00e-03 units kT","termination_Fp :  1.00e-03 units kT","termination_Meta_full :  1.00e-03 (rel.)","maxmetaiter_full :   250","clamp_meta :  1.00e-02 (rel.)","usemetaclamping : 0","maxiter :  1000","defectdiscretisations :     7","Shockley-Queisser limit :     0 (0: never; 1: if necessary; 2: always)","widthtail :  7.00e+00","widthgauss :  6.00e+00","QE calculation mode:  1 (0: cst. # of photons, 1: cst. incident power)","number of photons :  3.00e+22","incident power :  1.00e+00","recalculate mesh :  1 (0: fixed mesh, 1: adaptive mesh)","maximum mesh changes per iteration step :  10","maximum ratio between neighbouring points :  1.60e+00","minimum ratio between neighbouring points :  1.05e+00","generation limit :  1.00e+00 microA/cm2","recombination limit :  1.00e-03 microA/cm2","Mott-Schottky analysis epsilon of layer number : -1","Mott-Schottky analysis epsilon of sheet side :  0\t(left side = -1; right side = +1)","Mott-Schottky analysis number of points :  3\t(3 or 5 as of december 2008)","Mott-Schottky analysis polynomial order middle :  2\t(1 or 2 as of december 2008)","Mott-Schottky analysis polynomial order edges:  1\t(1 or 2 as of december 2008)","Mott-Schottky analysis defect number :  0","Mott-Schottky analysis level number :  0","Mott-Schottky analysis eh type :  1","Mott-Schottky analysis constant epsilon :   10.00000000","Mott-Schottky analysis epsilon(x) mode for NW :  0","Mott-Schottky analysis smooth epsilon for NW :  0","Include charge in defects in the calculation of the flatband condition :  1\t(1=yes, 0=no)"],
+              "name": "convergence"
+            },
+            {
+              "lines": ["flatband : 0 (1: flatband contact imposed; 0: fixed Phi_m value)","recalculate : 0 (1 = do or 0 = do not recalculate phi_m to set flatband in each batch step)","Fi_m :   5.200000 [eV]","Sn :  1.000e+03 [m/s]","Sp :  1.000e+05 [m/s]","Tunneling to contact: 0","Relative electron mass :   1.0000e+00","Relative hole mass :   1.0000e+00"],
+              "name": "back contact"
+            },
+            {
+              "lines": ["name : layer 1","d : 2.000e-06 [m]","Tunneling in layer: 0","Relative electron mass :\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t 0\t 0\t[-]","Relative hole mass :\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t  1.0000e+00\t 0\t 0\t[-]","composition grading :\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t 0\t 1\t[-]","v_th_n :\t 1.000e+05\t 1.000e+05\t 1.000e+01\t 1.000e+01\t 1.000e+01\t 1.000e+05\t 1.000e+05\t 0\t 0\t[m/s]","v_th_p :\t 1.000e+05\t 1.000e+05\t 1.000e+01\t 1.000e+01\t 1.000e+01\t 1.000e+05\t 1.000e+05\t 0\t 0\t[m/s]","eps :\t    10.000000\t    10.000000\t    10.000000\t    10.000000\t    10.000000\t    10.000000\t    10.000000\t 0\t 0\t[-]","chi :\t  4.500000\t  4.500000\t  1.000000\t  1.000000\t  1.000000\t  4.500000\t  4.500000\t 0\t 0\t[eV]","Eg :\t  1.200000\t  1.200000\t  0.500000\t  1.000000\t  1.000000\t  1.200000\t  1.200000\t 0\t 0\t[eV]","Nc :\t 1.000000e+25\t 1.000000e+25\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 1.000000e+25\t 1.000000e+25\t 0\t 0\t[/m^3]","Nv :\t 1.000000e+25\t 1.000000e+25\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 1.000000e+25\t 1.000000e+25\t 0\t 0\t[/m^3]","mu_n :\t 5.000000e-03\t 5.000000e-03\t 1.000000e-03\t 1.000000e+00\t 1.000000e+00\t 5.000000e-03\t 5.000000e-03\t 0\t 0\t[m^2/Vs]","mu_p :\t 5.000000e-03\t 5.000000e-03\t 1.000000e-03\t 1.000000e+00\t 1.000000e+00\t 5.000000e-03\t 5.000000e-03\t 0\t 0\t[m^2/Vs]","K_rad :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^3/s]","c_n_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","c_p_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","Na(uniform) :\t 1.000000e+14\t 1.000000e+14\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 1.000000e+14\t 1.000000e+14\t 0\t 2\t[/m^3]","Nd(uniform) :\t 1.000000e+21\t 1.000000e+21\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 1.000000e+21\t 1.000000e+21\t 0\t 2\t[/m^3]","absorption grading :\t 1033.31\t 1033.31\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 7\t 0\t[nm]","absorptionmodel pure A material (y=0) : coefficients A and B (line inserted for compatibility with SCAPS until 3.3.06)","A : 9.129e+06 [/(m*sqrt(eV))] (line inserted for compatibility with SCAPS until 3.3.06)","B : 0.000e+00 [sqrt(eV)/m] (line inserted for compatibility with SCAPS until 3.3.06)","absorptionmodel pure A material (y=0) : from model","absorption model A, model : sqrt(hv-Eg) law (SCAPS traditional)","absorption model A, value of parameter 1 :   1.000000e+05","absorption model A, value of parameter 2 :   0.000000e+00","absorption pure B material (y=1), model : coefficients A and B (line inserted for compatibility with SCAPS until 3.3.06)","pure B material (y=1), A : 9.129e+06 [/(m*sqrt(eV))] (line inserted for compatibility with SCAPS until 3.3.06)","pure B material (y=1), B : 0.000e+00 [sqrt(eV)/m] (line inserted for compatibility with SCAPS until 3.3.06)","absorptionmodel pure B material (y=1) : from model","absorption model B, model : sqrt(hv-Eg) law (SCAPS traditional)","absorption model B, value of parameter 1 :   1.000000e+05","absorption model B, value of parameter 2 :   0.000000e+00"],
+              "name": "layer"
+            },
+            {
+              "lines": ["flatband : 1 (1: flatband contact imposed; 0: fixed Phi_m value)","recalculate : 1 (1 = do or 0 = do not recalculate phi_m to set flatband in each batch step)","Sn : 1.000e+05 [m/s]","Sp : 1.000e+03 [m/s]","Tunneling to contact: 0","Relative electron mass :   1.0000e+00","Relative hole mass :   1.0000e+00"],
+              "name": "front contact"
+            },
+            {
+              "lines": ["illuminated from : right","internal Rfront :   0.00000000","internal Tfront :  1.0000e+00","voltage V applied to : -1 (+1: right contact; -1: left contact)","cell reference system :  1 (1: as a consumer (consumed power = +VJ; 0: as a generator (generated power = +VJ) )"],
+              "name": "working point"
+            }
+          ],
+          "warnings": ["unsupported, ignored in solve: actions/0 optical data (TODO st6 integration)","unsupported, ignored in solve: convergence/-1/termination_Meta_full","unsupported, ignored in solve: layer/0 optical data (TODO st6 integration)"]
+        },
+        "schema_version": 1,
+        "solver": {
+          "max_line_search_backtracks": 12,
+          "max_newton_iterations": 100,
+          "max_step_multiple_of_Vt": 4,
+          "residual_tolerance": 1e-10
+        },
+        "temperature_K": 300.0,
+        "voltage": {
+          "start_V": -0.5,
+          "step_V": 0.025,
+          "stop_V": 0.5
+        }
+      },
+      "history": [],
+      "id": "device-1",
+      "name": "Schottky diode (n-type)",
+      "recorder_columns": [
+        {
+          "id": "J_at_0V",
+          "quantity": "J",
+          "voltage_V": 0.0
+        }
+      ],
+      "result": {},
+      "selected_run": "",
+      "selection": {
+        "bias": 0,
+        "interface": -1,
+        "layer": 0,
+        "member": 0,
+        "voltage_V": 0.0
+      },
+      "status": "no results"
+    }
+  ],
+  "name": "Schottky diode C-V",
+  "schema_version": 3,
+  "ui": {}
+}

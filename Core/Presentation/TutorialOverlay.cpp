@@ -14,7 +14,7 @@ void TutorialOverlay::Item(const std::string &window, const std::string &id) {
         targets[window + "/" + id] = {min, max, ImVec2(pos.x, min.y), ImVec2(pos.x + size.x, max.y), ImGui::GetFrameCount()};
     }
 }
-bool TutorialOverlay::Draw(const Tutorial &tutorial, HostedWindows *windows) {
+bool TutorialOverlay::Draw(Tutorial &tutorial, HostedWindows *windows) {
     highlighted = false;
     geometry = {};
     const auto *step = tutorial.Step();
@@ -35,7 +35,7 @@ bool TutorialOverlay::Draw(const Tutorial &tutorial, HostedWindows *windows) {
         if (sideRoom >= 14 * ImGui::GetFontSize()) width = std::min(width, sideRoom);
     }
     const float height = ImGui::CalcTextSize(step->at("instruction").get_ref<const std::string &>().c_str(), nullptr, false, width - 2 * style.WindowPadding.x).y
-        + 4 * ImGui::GetFrameHeightWithSpacing() + 2 * style.WindowPadding.y;
+        + 5 * ImGui::GetFrameHeightWithSpacing() + 2 * style.WindowPadding.y;
     ImVec2 position(std::max(lo.x, hi.x - width), lo.y);
     if (highlighted) {
         const auto &rect = found->second;
@@ -57,10 +57,23 @@ bool TutorialOverlay::Draw(const Tutorial &tutorial, HostedWindows *windows) {
     ImGui::SetNextWindowSizeConstraints(ImVec2(width, std::min(height, std::max(1.f, hi.y-lo.y))), ImVec2(std::max(width, hi.x-lo.x), std::max(1.f, hi.y-lo.y)));
     bool stop = false;
     const auto content = [&] {
-        ImGui::Text("%s | %zu / %zu", report.at("mode").get<std::string>().c_str(), report.at("step_index").get<std::size_t>() + 1, report.at("step_count").get<std::size_t>());
+        const bool learn = report.at("mode") == "learn";
+        ImGui::Text("%s%zu / %zu", learn ? "Step " : (report.at("mode").get<std::string>() + " | ").c_str(), report.at("step_index").get<std::size_t>() + 1, report.at("step_count").get<std::size_t>());
         ImGui::TextWrapped("%s", step->at("instruction").get<std::string>().c_str());
         if (!highlighted) ImGui::TextWrapped("Open %s to see the highlighted control.", target.at("window").get<std::string>().c_str());
-        stop = ImGui::Button("Stop tutorial");
+        if (learn && tutorial.AlreadyDone()) ImGui::TextDisabled("This is already the case. Press Next.");
+        if (learn) {
+            ImGui::BeginDisabled(!tutorial.CanGoBack());
+            if (ImGui::Button("< Back")) tutorial.Back();
+            ImGui::EndDisabled();
+            ImGui::SameLine();
+            if (ImGui::Button(tutorial.AlreadyDone() ? "Next >" : "Skip >")) tutorial.Skip();
+            ImGui::SameLine();
+            if (ImGui::Button("Show me")) tutorial.ShowMe();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Performs this one step for you");
+            ImGui::SameLine();
+        }
+        stop = ImGui::Button("Exit");
         if (highlighted) {
             const auto &rect = found->second;
             const ImVec2 min(rect.min.x - 3, rect.min.y - 3), max(rect.max.x + 3, rect.max.y + 3);

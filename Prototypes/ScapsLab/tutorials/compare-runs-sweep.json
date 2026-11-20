@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "compare-runs-sweep",
   "title": "Compare two runs, then Sweep",
+  "description": "Compare two runs at different temperatures, then run a Sweep.",
+  "minutes": 5,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Devices",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: Compare runs.",
+      "instruction": "In Devices click New (template) and name the device: Tutorial: Compare runs.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: Compare runs",
@@ -28,7 +30,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "Click Calculate I-V to store the first run in Run history.",
+      "instruction": "In Run click Calculate I-V. The first run is stored in Run history.",
       "command": {
         "operation": "run"
       },
@@ -45,7 +47,7 @@
         "window": "scapslab.Run",
         "item": "temperature"
       },
-      "instruction": "Change Temperature [K] to 350 (drag the slider).",
+      "instruction": "Set Temperature [K] to 350 (drag the slider).",
       "command": {
         "operation": "edit",
         "example": "08-pn-illumination.yaml",
@@ -66,7 +68,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "Calculate I-V again. In Devices > Run history both runs appear with their own colours and are overlaid; toggle their visibility to compare.",
+      "instruction": "Click Calculate I-V again. Both runs now overlay in Devices > Run history; use the eye toggles to compare.",
       "command": {
         "operation": "run"
       },
@@ -83,7 +85,7 @@
         "window": "scapslab.Run",
         "item": "temperature"
       },
-      "instruction": "Right-click Temperature [K], choose Sweep..., set delta 10 K with 3 points and run. Inspect the converged rows in Batch.",
+      "instruction": "Right-click Temperature [K], choose Sweep..., set delta 10 K, 3 points, and run. See the rows in Batch.",
       "command": {
         "operation": "quick_sweep",
         "parameter_id": "temperature_K",

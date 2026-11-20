@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "first-device",
   "title": "First device",
+  "description": "Create a device, add a second layer and calculate a dark I-V curve.",
+  "minutes": 3,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Devices",
         "item": "new"
       },
-      "instruction": "Click New (template) in Devices, then name the device Tutorial: First device.",
+      "instruction": "In Devices click New (template) and name the device: Tutorial: First device.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: First device"
@@ -27,7 +29,7 @@
         "window": "scapslab.Layers",
         "item": "add-layer"
       },
-      "instruction": "Click Add in Layers. The device needs at least two layers.",
+      "instruction": "In Layers click Add. A solar cell needs at least two layers (for example p and n).",
       "command": {
         "operation": "layer",
         "action": "add"
@@ -44,7 +46,7 @@
       "target": {
         "window": "scapslab.Illumination"
       },
-      "instruction": "Disable Light enabled. This calculation uses dark conditions.",
+      "instruction": "In Illumination untick Light enabled. A dark I-V needs no light.",
       "command": {
         "operation": "edit",
         "patch": {
@@ -71,7 +73,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "Click Calculate I-V. Wait for a valid dark I-V curve.",
+      "instruction": "In Run click Calculate I-V and wait for the dark I-V curve.",
       "command": {
         "operation": "run"
       },

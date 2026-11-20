@@ -6,7 +6,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.25,0.65,0.95,1],
-      "description": "Source: scaps_core-wt/ui/validation/cases/a4-pn-270K/device_project.yaml. Deck: validation/cases/a4-pn-270K/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Dark I-V of a 2-layer Si p-n junction at 270 K, 0 to 0.5 V. The three devices differ only in temperature: Run all and compare - the current rises with T. Results are already stored, so Compare works without recalculating.",
       "document": {
         "case_id": "a4-pn-270K",
         "constants_mode": "codata",
@@ -115,7 +115,7 @@
         }
       },
       "id": "device-1",
-      "name": "pn 270 K",
+      "name": "Si p-n 270 K",
       "result": {
         "compute_time_ms": 69.4888,
         "contact_phi_eV": [5.3,4.05],
@@ -269,7 +269,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.95,0.55,0.25,1],
-      "description": "Source: scaps_core-wt/ui/validation/cases/a4-pn-300K/device_project.yaml. Deck: validation/cases/a4-pn-300K/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Dark I-V of a 2-layer Si p-n junction at 300 K, 0 to 0.5 V. The three devices differ only in temperature: Run all and compare - the current rises with T. Results stored.",
       "document": {
         "case_id": "a4-pn-300K",
         "constants_mode": "codata",
@@ -378,7 +378,7 @@
         }
       },
       "id": "device-2",
-      "name": "pn 300 K",
+      "name": "Si p-n 300 K",
       "result": {
         "compute_time_ms": 74.3864,
         "contact_phi_eV": [5.3,4.05],
@@ -532,7 +532,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.4,0.8,0.45,1],
-      "description": "Source: scaps_core-wt/ui/validation/cases/a4-pn-T350/device_project.yaml. Deck: validation/cases/a4-pn-T350/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Dark I-V of a 2-layer Si p-n junction at 350 K, 0 to 0.6 V. The three devices differ only in temperature: Run all and compare - the current rises with T. Results stored.",
       "document": {
         "case_id": "a4-pn-T350",
         "constants_mode": "codata",
@@ -641,7 +641,7 @@
         }
       },
       "id": "device-3",
-      "name": "pn 350 K",
+      "name": "Si p-n 350 K",
       "result": {
         "compute_time_ms": 41.2706,
         "contact_phi_eV": [5.3,4.05],
@@ -792,7 +792,7 @@
       "status": "solved"
     }
   ],
-  "name": "pn compare (stored results)",
+  "name": "Si p-n diode: stored results to compare",
   "schema_version": 1,
   "ui": {}
 }

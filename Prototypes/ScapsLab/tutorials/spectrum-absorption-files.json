@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "spectrum-absorption-files",
   "title": "Spectrum and absorption files",
+  "description": "Load a spectrum (.spe) and an absorption file (.abs), then calculate light I-V.",
+  "minutes": 4,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Devices",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: Spectrum and absorption.",
+      "instruction": "In Devices click New (template) and name the device: Tutorial: Spectrum and absorption.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: Spectrum and absorption",
@@ -49,7 +51,7 @@
         "window": "scapslab.Absorption",
         "item": "model"
       },
-      "instruction": "In Absorption set the model to File and load examples/profiles/absorption.abs (nm, m^-1). The preview plots alpha(lambda).",
+      "instruction": "In Absorption set the model to File and load examples/profiles/absorption.abs (nm, 1/m). The preview shows alpha(lambda).",
       "command": {
         "operation": "edit",
         "example": "08-pn-illumination.yaml",

@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "table-undo-redo",
   "title": "Undo and Redo of a table edit",
+  "description": "Undo and redo a loaded table; every device has its own history.",
+  "minutes": 3,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Devices",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: Undo and Redo.",
+      "instruction": "In Devices click New (template) and name the device: Tutorial: Undo and Redo.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: Undo and Redo",
@@ -28,7 +30,7 @@
         "window": "scapslab.Grading",
         "item": "parameter"
       },
-      "instruction": "In Grading choose Na_m3, enable Grade parameter and load examples/profiles/doping.grd as From file.",
+      "instruction": "In Grading choose Na_m3, tick Grade parameter and load examples/profiles/doping.grd with From file.",
       "command": {
         "operation": "load_profile",
         "layer_id": "layer-1",
@@ -48,7 +50,7 @@
         "window": "scapslab.Project",
         "item": "undo"
       },
-      "instruction": "In Project press Undo (or Edit > Undo). The table disappears; each device has its own undo history.",
+      "instruction": "Press Undo in Project (or Edit > Undo). The table disappears.",
       "command": {
         "operation": "undo"
       },
@@ -65,7 +67,7 @@
         "window": "scapslab.Project",
         "item": "redo"
       },
-      "instruction": "Press Redo (or Edit > Redo) to bring the loaded table back.",
+      "instruction": "Press Redo (or Edit > Redo). The table comes back.",
       "command": {
         "operation": "redo"
       },

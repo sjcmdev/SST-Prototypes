@@ -346,7 +346,7 @@ TEST(ScapsLab,EveryExampleSolvesAndRoundtripsBitwise) {
         for(std::size_t i=0;i<w.project.devices.size();++i) EXPECT_EQ(w.project.devices[i]->result.at("points").dump(),solved[i].dump())<<entry.path();
         std::filesystem::remove(target);
     }
-    EXPECT_EQ(projects,7u);EXPECT_GE(devices,10u);
+    EXPECT_EQ(projects,10u);EXPECT_GE(devices,10u);
 }
 TEST(ScapsLab,LegacyMigrationAndInvalidWorkspaceAreTransactional) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",SCAPSLAB_PROJECT}}).at("ok").get<bool>());
