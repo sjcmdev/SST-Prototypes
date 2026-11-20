@@ -282,8 +282,6 @@ project "JFMTests"
 for _, target in ipairs { "JFM", "JFMTests" } do
     project(target)
     sst_link_plotlab()
-    files { _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabExport.cpp" }
-    defines { 'SST_PLOTLAB_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/PlotLab/python"' }
 end
 project "JFMTests"
     files {
@@ -293,8 +291,8 @@ project "JFMTests"
     }
 project "JFM"
     postbuildcommands {
-        '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/PlotLab/python/sst_plotlab" "%{cfg.targetdir}/python/sst_plotlab"',
-        '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/PlotLab/install/app/assets/fonts" "%{cfg.targetdir}/install/app/assets/fonts"'
+        '{COPYDIR} "' .. _SST_ROOT .. '/Core/ScientificRuntime/python/sst_plot_export" "%{cfg.targetdir}/python/sst_plot_export"',
+        '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/JFM/install/app/assets/fonts" "%{cfg.targetdir}/install/app/assets/fonts"'
     }
 
 for _, target in ipairs { "JFM", "JFMTests" } do

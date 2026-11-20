@@ -166,11 +166,33 @@ NB_MODULE(sst_caplab, module)
                 if (operation=="import" && r.contains("options")) state.importOptions=r.at("options").dump();
                 if (r.contains("graph_id")) state.document.project.graph=r.at("graph_id").get<pl::Id>();
                 Validate(state.document.project);
-                if (operation=="export" && path.Native().extension()==".png") {
-                    const auto b=r.at("ranges").get<std::vector<double>>();
-                    if (b.size()!=4) throw std::runtime_error("PNG requires four resolved preview ranges");
-                    state.view.viewport=sst::ui::plot::Bounds{b[0],b[1],b[2],b[3]};
-                    if (r.contains("visibility")) for (const auto &v : r.at("visibility")) state.view.visibility[state.document.project.engine->series(v.at("plot_id").get<pl::Id>()).id]=v.at("visible").get<bool>();
+                const auto extension=path.Native().extension();
+                if (operation=="export" && (extension==".png" || extension==".svg" || extension==".pdf")) {
+                    state.exportDpi=r.value("dpi",300.0);
+                    auto view = [&](const Json& request, pl::Id graph) {
+                        const auto b=request.at("ranges").get<std::vector<double>>();
+                        if (b.size()!=4) throw std::runtime_error("Plot export requires four resolved preview ranges");
+                        sst::ui::plot::PlotViewState out;
+                        out.viewport=sst::ui::plot::Bounds{b[0],b[1],b[2],b[3]};
+                        for (const auto& v : request.value("visibility",Json::array())) {
+                            const auto id=v.at("plot_id").get<pl::Id>();
+                            const auto layer=state.document.project.engine->object(id).parent;
+                            if (state.document.project.engine->object(layer).parent!=graph) throw std::runtime_error("Visibility plot_id belongs to another graph");
+                            out.visibility[state.document.project.engine->series(id).id]=v.at("visible").get<bool>();
+                        }
+                        auto ticks=[&](const char* key, auto& values) {
+                            for (const auto& t : request.value(key,Json::array())) values.push_back({t.at("value"),t.value("label",""),t.value("major",true)});
+                        };
+                        ticks("x_ticks",out.xTicks); ticks("y_ticks",out.yTicks);
+                        return out;
+                    };
+                    if (r.contains("graphs")) {
+                        if (!r.at("graphs").is_array() || r.at("graphs").empty()) throw std::runtime_error("Select graphs for batch export");
+                        for (const auto& graph : r.at("graphs")) {
+                            const auto id=graph.at("graph_id").get<pl::Id>();
+                            state.exportGraphs.push_back(id); state.graphViews[id]=view(graph,id);
+                        }
+                    } else state.view=view(r,state.document.project.graph);
                 }
                 const auto result=commands->Execute(CommandID{operation=="export" ? "caplab.export" : operation=="save" ? "caplab.save" : operation=="import" ? "app.open" : "caplab.open"},[&] { CommandContext c; c.Set("path",path); return c; }());
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
@@ -282,6 +304,7 @@ namespace SST::Prototypes::CapLab
                 data["measurement_data"].push_back(std::move(measurement));
             }
             std::function<bool()> cancel=[&] {return context.IsCancellationRequested();};
+            if (!nb::cast<bool>(paths.attr("__contains__")(SST_PLOT_EXPORT_PYTHON_ROOT))) paths.attr("append")(SST_PLOT_EXPORT_PYTHON_ROOT);
             const auto result=nb::module_::import_("caplab.exporter").attr("export_json")(data.dump(),path.Utf8(),cancel);
             return Json::parse(nb::cast<std::string>(result));
         } catch (const nb::python_error &e) {context.ThrowIfCancellationRequested(); throw std::runtime_error(e.what());}

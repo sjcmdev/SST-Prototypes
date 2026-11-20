@@ -210,14 +210,54 @@ void CapLabPrototypePanel::RenderTree() {
         }
     }
 }
+void CapLabPrototypePanel::RenderExport() {
+    if (!ImGui::CollapsingHeader("Export data and figures",ImGuiTreeNodeFlags_DefaultOpen)) return;
+    const char* formats[]={"PNG","SVG","PDF"};
+    sst::ui::widgets::Combo("Figure format",&exportFormat,formats,IM_ARRAYSIZE(formats));
+    if (exportFormat==0) sst::ui::widgets::Double("Resolution (dpi)",&state->exportDpi,1,"%.0f");
+    auto exportToFile=[&](bool batch, bool data=false) {
+        state->exportFormat=data ? "csv" : exportFormat==0 ? "png" : exportFormat==1 ? "svg" : "pdf";
+        state->exportGraphs.clear();
+        if (batch) state->exportGraphs.assign(selectedExportGraphs.begin(),selectedExportGraphs.end());
+        (void)commands->Execute(CommandID{"caplab.export"});
+    };
+    ImGui::BeginDisabled(state->activeJob || !state->view.viewport);
+    if (ImGui::Button("Export selected graph...")) exportToFile(false);
+    ImGui::EndDisabled();
+    ImGui::BeginDisabled(state->activeJob!=0);
+    ImGui::SameLine(); if (ImGui::Button("Export CSV / XLSX tables...")) exportToFile(false,true);
+    ImGui::EndDisabled();
+    if (ImGui::TreeNode("Batch graphs")) {
+        ImGui::TextWrapped("Open each graph first to capture its current ranges and visibility.");
+        const auto& engine=*state->document.project.engine;
+        bool ready=!selectedExportGraphs.empty();
+        std::set<pl::Id> graphs;
+        for (auto id : engine.children(engine.root())) if (std::holds_alternative<pl::Graph>(engine.object(id).data)) {
+            graphs.insert(id);
+            ImGui::PushID(std::to_string(id).c_str());
+            bool selected=selectedExportGraphs.contains(id);
+            if (sst::ui::widgets::Checkbox(engine.object(id).name.c_str(),&selected)) {
+                if (selected) selectedExportGraphs.insert(id); else selectedExportGraphs.erase(id);
+            }
+            ImGui::PopID();
+        }
+        std::erase_if(selectedExportGraphs,[&](auto id) { return !graphs.contains(id); });
+        for (auto id : selectedExportGraphs) ready &= state->graphViews.contains(id) && state->graphViews.at(id).viewport.has_value();
+        ImGui::BeginDisabled(state->activeJob || !ready || selectedExportGraphs.empty());
+        if (ImGui::Button("Export selected graphs...")) exportToFile(true);
+        ImGui::EndDisabled();
+        ImGui::TreePop();
+    }
+}
 void CapLabPrototypePanel::RenderPlot() {
     auto &doc = state->document;
     if (doc.project.graph) {
+        RenderExport();
         for (const auto& a : doc.project.analyses) if (a.at("type")=="Circuit") {
             const auto& graphs=a.at("graphs");
             if (std::find(graphs.begin(),graphs.end(),Json(doc.project.graph))!=graphs.end()) {
                 RenderISTabs(doc.project,a,state->view);
-                if (ImGui::Button("Export CSV / XLSX / PNG...")) (void)commands->Execute(CommandID{"caplab.export"});
+                state->graphViews[doc.project.graph]=state->view;
                 return;
             }
         }
@@ -240,7 +280,7 @@ void CapLabPrototypePanel::RenderPlot() {
                 {state->pendingCandidate=a.at("candidates").at(state->view.picked->point); state->pendingCandidate["analysis_id"]=a.at("id");}
             state->view.picked.reset();
         }
-        if (ImGui::Button("Export CSV / XLSX / PNG...")) (void)commands->Execute(CommandID{"caplab.export"});
+        state->graphViews[doc.project.graph]=state->view;
     }
 }
 void CapLabPrototypePanel::RenderContent() {

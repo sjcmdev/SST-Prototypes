@@ -139,7 +139,7 @@ void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWo
         std::tuple{"caplab.analyze", "Analyze CapLab data", Operation::Analyze},
         std::tuple{"caplab.preview", "Import measurements", Operation::Preview},
         std::tuple{"caplab.open", "Open CapLab project", Operation::Open},
-        std::tuple{"caplab.export", "Export CSV / XLSX / PNG", Operation::Export}}) {
+        std::tuple{"caplab.export", "Export CSV / XLSX / PNG / SVG / PDF", Operation::Export}}) {
         auto result = registry->Register({CommandID{id}, name, "CapLab"},
             [bus, operation](CommandContext &) { return CreateUnique<RequestCommand>(bus, operation); });
         if (!result) throw std::runtime_error(result.Error().technicalDetails);

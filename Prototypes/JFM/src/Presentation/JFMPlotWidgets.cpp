@@ -1,8 +1,9 @@
 #include "Presentation/JFMPlotWidgets.hpp"
 #include "IO/JFMPlotExport.hpp"
-#include "Prototypes/PlotLab/src/PlotLabExport.hpp"
+#include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include <imgui.h>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 #include <implot.h>
 #include <implot_internal.h>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
@@ -21,7 +22,7 @@ namespace SST::Prototypes::JFM
             auto &font = fonts[key];
             auto *atlas = ImGui::GetIO().Fonts;
             if (!font || !atlas->Fonts.contains(font)) {
-                auto resolved = SST::Prototypes::PlotLab::ResolveFont(g.fontFamily, g.fontFile, SST_PLOTLAB_PYTHON_ROOT);
+                auto resolved = ResolvePlotFont(g.fontFamily, g.fontFile);
                 ImFontConfig config; config.Flags |= ImFontFlags_NoLoadError;
                 font = atlas->AddFontFromFileTTF(resolved.first.c_str(), 0, &config);
                 if (!font) throw std::runtime_error("Cannot load graph font");
@@ -63,29 +64,31 @@ namespace SST::Prototypes::JFM
     {
         ImGui::PushID(&doc);
         if (ImGui::Button("Export SVG/PDF/PNG...")) ImGui::OpenPopup("Publication export");
+        // Stretch columns need a resolved width inside an auto-sized popup.
+        ImGui::SetNextWindowSize({30 * ImGui::GetFontSize(), 0});
         if (ImGui::BeginPopup("Publication export")) {
             auto o = doc.project.object(doc.graph);
             auto &g = std::get<pl::Graph>(o.data);
-            bool changed = ImGui::InputDouble("Width (mm)", &g.widthMm);
-            changed |= ImGui::InputDouble("Height (mm)", &g.heightMm);
-            changed |= ImGui::InputDouble("Font (pt)", &g.fontSizePt);
-            if (ImGui::BeginCombo("Family", g.fontFamily.c_str())) {
+            bool changed = sst::ui::widgets::Double("Width (mm)", &g.widthMm);
+            changed |= sst::ui::widgets::Double("Height (mm)", &g.heightMm);
+            changed |= sst::ui::widgets::Double("Font (pt)", &g.fontSizePt);
+            if (sst::ui::widgets::BeginCombo("Family", g.fontFamily.c_str())) {
                 for (const char *family : {"DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono"})
                     if (ImGui::Selectable(family, g.fontFamily == family)) { g.fontFamily = family; g.fontFile.clear(); changed = true; }
-                ImGui::EndCombo();
+                sst::ui::widgets::EndCombo();
             }
             if (ImGui::Button("Load font (.ttf/.otf)...")) {
                 try {
                     if (auto file = OpenFileDialog({"Font", "ttf,otf"})) {
-                        auto resolved = SST::Prototypes::PlotLab::ResolveFont("", file->Utf8(), SST_PLOTLAB_PYTHON_ROOT);
+                        auto resolved = ResolvePlotFont("", file->Utf8());
                         g.fontFile = resolved.first; g.fontFamily = resolved.second; changed = true;
                     }
                 } catch (const std::exception &e) { ImGui::TextWrapped("%s", e.what()); }
             }
             static int dpi = 300, format = 0;
             auto &status = doc.exportStatus;
-            ImGui::InputInt("DPI", &dpi);
-            ImGui::Combo("Format", &format, "SVG\0PDF\0PNG\0");
+            sst::ui::widgets::Int("Resolution (dpi)", &dpi);
+            sst::ui::widgets::Combo("Format", &format, "SVG\0PDF\0PNG\0");
             try {
                 if (changed) doc.project.change("Publication settings", {o}).apply(doc.project);
                 if (ImGui::Button("Export")) {

@@ -135,6 +135,36 @@ namespace SST::Prototypes::CapLab
         ASSERT_NO_THROW(exportJob.Execute(context));
         EXPECT_GT(std::filesystem::file_size(exportJob.path.Native()),1000);
         EXPECT_TRUE(FileSystem::Remove(exportJob.path.Native()));
+        // Render the export controls and exercise GUI commands with the same shared job adapter.
+        {
+            auto* gui=ImGui::CreateContext(); auto* plot=ImPlot::CreateContext();
+            auto& io=ImGui::GetIO(); io.IniFilename=nullptr; io.DisplaySize={1600,1200}; io.DeltaTime=1.f/60;
+            io.ConfigDebugHighlightIdConflicts=true;
+            unsigned char* pixels; int width,height; io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+            CapLabPrototypePanel panel(&workflow,commands,CapLabPrototypePanel::View::Plot);
+            for (int frame=0;frame<3;++frame) {
+                ImGui::NewFrame(); ImGui::SetNextWindowSize({1200,1000}); ImGui::Begin("Export controls");
+                panel.RenderContent(); ImGui::End(); ImGui::Render();
+                EXPECT_EQ(gui->DebugDrawIdConflictsCount,0);
+            }
+            ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
+        }
+        for (const auto* format : {"png","svg","pdf"}) {
+            workflow.jobs=CreateRef<JobSystem>(nullptr,1);
+            workflow.exportGraphs={workflow.document.project.graph};
+            workflow.graphViews[workflow.document.project.graph]=workflow.view;
+            const auto destination=FileSystem::TempDirectoryPath()/(std::string("caplab-gui-batch.")+format);
+            CommandContext request; request.Set("path",Path::FromResolved(destination));
+            ASSERT_TRUE(commands->Execute(CommandID{"caplab.export"},std::move(request)));
+            bus->ProcessQueue(); ASSERT_NE(workflow.activeJob,0) << workflow.status;
+            workflow.jobs->Shutdown(); workflow.OnUpdate(0);
+            ASSERT_TRUE(workflow.exportResult.contains("graphs")) << workflow.status;
+            const Path output{workflow.exportResult.at("graphs").at(0).at("path").get<std::string>()};
+            EXPECT_GT(std::filesystem::file_size(output.Native()),500);
+            EXPECT_TRUE(FileSystem::Remove(output.Native()));
+        }
+        workflow.exportGraphs.clear();
+
         auto bundleJobs=CreateRef<JobSystem>(nullptr,1);
         auto bundleUndo=CreateRef<UndoStack>(); auto bundleCommands=CreateRef<CommandRegistry>();
         auto bundleBus=CreateRef<EventBus>();

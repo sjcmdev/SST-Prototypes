@@ -32,6 +32,8 @@ namespace SST::Prototypes::CapLab
         std::string importOptions;
         bool saveCommitted = false;
         std::shared_ptr<const pl::GraphSnapshot> snapshot;
+        std::vector<std::shared_ptr<const pl::GraphSnapshot>> snapshots;
+        double dpi = 300;
     };
     class CapLabWorkflow final : public Layer
     {
@@ -64,6 +66,10 @@ namespace SST::Prototypes::CapLab
         char decimal = '.';
         std::string importOptions;
         sst::ui::plot::PlotViewState view;
+        std::map<pl::Id, sst::ui::plot::PlotViewState> graphViews;
+        std::vector<pl::Id> exportGraphs;
+        double exportDpi = 300;
+        std::string exportFormat = "png";
     private:
         Ref<DocumentJob> pending;
         std::uint64_t pendingRevision = 0;

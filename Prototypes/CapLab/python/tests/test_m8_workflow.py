@@ -81,7 +81,7 @@ def test_p1_complete_pipeline_save_open_and_exports(tmp_path):
         assert [c.find("s:is/s:t",ns).text for c in header] == ["row_id","source_row","f [Hz]","C [F]","Rp [Ohm]"]
         raw_row = sheet.find("s:sheetData", ns)[1]
         assert [float(c.find("s:v",ns).text) for c in list(raw_row)[2:]] == [100,3e-12,1e6]
-        assert len(ET.fromstring(book.read("xl/workbook.xml")).find("s:sheets",ns)) == 4
+        assert len(ET.fromstring(book.read("xl/workbook.xml")).find("s:sheets",ns)) == 5
 
 
 def test_p2_deletion_area_point_undo_redo_and_no_rebinding():
@@ -150,8 +150,8 @@ def test_frozen_m8_manifest():
 
 
 def test_png_snapshot_parity_every_module_and_missing_dependency(tmp_path, monkeypatch):
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[3]/"PlotLab/python"))
-    import sst_plotlab.exporter as renderer
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[4]/"Core/ScientificRuntime/python"))
+    import sst_plot_export.exporter as renderer
     from test_m6_fit import fixture
     p = pipeline()
     is_project, settings = fixture()
@@ -168,7 +168,7 @@ def test_png_snapshot_parity_every_module_and_missing_dependency(tmp_path, monke
                 path=tmp_path/(str(graph)+a["type"]+".png")
                 r=run(project,"export",graph_id=graph,path=str(path),ranges=[1,10,-1,1])
                 if a["type"] == "Circuit" and graph == a["graphs"][0]:
-                    assert seen[-1].get("custom_axes") is True
+                    assert seen[-1].get("equal_aspect") is True
                     figure = renderer.build_figure(seen[-1])
                     figure.canvas.draw()
                     box = figure.axes[0].get_window_extent()
@@ -179,13 +179,8 @@ def test_png_snapshot_parity_every_module_and_missing_dependency(tmp_path, monke
                 assert path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
                 # The emitted figure consumes the exact series/ranges/styles captured by the worker.
                 fig=renderer.build_figure(r["export"])
-                custom = r["export"].get("custom_axes", False)
-                assert list(fig.axes[0].get_xlim()) == ([0,1] if custom else [1,10])
-                assert list(fig.axes[0].get_ylim()) == ([0,1] if custom else [-1,1])
-                if custom:
-                    for line, series in zip(fig.axes[0].lines, r["export"]["series"]):
-                        assert list(line.get_xdata()) == pytest.approx([(x-1)/9 for x in series["x"]])
-                        assert list(line.get_ydata()) == pytest.approx([(y+1)/2 for y in series["y"]])
+                assert list(fig.axes[0].get_xlim()) == [1,10]
+                assert list(fig.axes[0].get_ylim()) == [-1,1]
                 fig.clear()
     # Visibility uses stable plot IDs, not series positions.
     project=p
