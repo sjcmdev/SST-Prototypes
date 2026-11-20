@@ -1,6 +1,11 @@
 ﻿#pragma once
 #include "Storage/CapLabDocument.hpp"
 namespace SST::Prototypes::CapLab {
+inline pl::Id AnalysisSample(const Json &a) {
+    if (a.contains("sample_id")) return a.at("sample_id");
+    if (a.contains("defect")) return a.at("defect").at("sample_id");
+    return a.at("inputs").at(0).at("sample_id");
+}
 inline Json AnalysisMeasurement(const Project &p, pl::Id id) {
     for (const auto &m : p.measurements) if (m.at("id") == id) {
         auto data = m.at("metadata"); data["id"] = id; data["columns"] = Json::array();
@@ -80,7 +85,11 @@ inline void RefreshAnalyses(Project &p) {
     for (auto &a : p.analyses) {
         bool missing = false, stale = false;
         for (const auto &input : a.at("inputs")) {
-            try { stale |= AnalysisMeasurement(p,input.at("id").get<pl::Id>()) != input; }
+            try {
+                const auto current=AnalysisMeasurement(p,input.at("id").get<pl::Id>());
+                missing |= current.at("sample_id")!=input.at("sample_id");
+                stale |= current!=input;
+            }
             catch (const std::exception &) { missing = true; }
         }
         if (a.contains("circuit")) {

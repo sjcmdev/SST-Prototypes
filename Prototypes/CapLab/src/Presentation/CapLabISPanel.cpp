@@ -29,14 +29,14 @@ void CapLabPrototypePanel::RenderIS() {
         ImGui::SeparatorText("Create circuit");
         sst::ui::widgets::Text("Circuit name", name, sizeof(name));
         sst::ui::widgets::Text("Topology", topology, sizeof(topology));
-        static pl::Id sample=0;
+        auto &sample=state->Document().selectedSample;
         static std::uint64_t selectionProject = 0;
-        if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; sample=0; }
+        if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; }
         static char sampleName[128]="Simulation";
         if (sample && std::none_of(p.samples.begin(),p.samples.end(),[&](const auto &s) {return s.id==sample;})) sample=0;
         if (sst::ui::widgets::BeginCombo("Circuit sample", sample ? SelectionLabel(p,sample).c_str() : "New sample")) {
             if (ImGui::Selectable("New sample",!sample)) sample=0;
-            for (const auto &s : p.samples) if (ImGui::Selectable((s.name+"##"+std::to_string(s.id)).c_str(),sample==s.id)) sample=s.id;
+            for (const auto &s : p.samples) if (ImGui::Selectable((s.name+"##"+std::to_string(s.id)).c_str(),sample==s.id)) SelectObject("sample",s.id);
             sst::ui::widgets::EndCombo();
         }
         if (!sample) sst::ui::widgets::Text("New sample name",sampleName,sizeof(sampleName));
@@ -45,14 +45,14 @@ void CapLabPrototypePanel::RenderIS() {
             Json request{{"action","create"},{"name",name},{"topology",topology}};
             if (sample) request["sample_id"]=sample; else request["sample_name"]=sampleName;
             edit(std::move(request));
-            if (p.circuits.size()>old) { selectedCircuit=p.circuits.back().at("id"); circuitMeasurement=0; circuitRecalc=false; circuitAutoReady=false; circuitEditor.reset(); }
+            if (p.circuits.size()>old) { selectedCircuit=p.circuits.back().at("id"); SelectObject("circuit",selectedCircuit); circuitMeasurement=0; circuitRecalc=false; circuitAutoReady=false; circuitEditor.reset(); }
         }
         ImGui::Spacing(); ImGui::SeparatorText("Schematic and parameters");
         auto selected=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==selectedCircuit;});
         if (sst::ui::widgets::BeginCombo("Schematic", selected==p.circuits.end() ? "Select circuit" : selected->at("name").get<std::string>().c_str())) {
             for (const auto &c : p.circuits) {
                 ImGui::PushID(std::to_string(c.at("id").get<pl::Id>()).c_str());
-                if (ImGui::Selectable(c.at("name").get<std::string>().c_str(),c.at("id")==selectedCircuit)) { selectedCircuit=c.at("id"); circuitMeasurement=0; circuitRecalc=false; circuitAutoReady=false; circuitEditor.reset(); }
+                if (ImGui::Selectable(c.at("name").get<std::string>().c_str(),c.at("id")==selectedCircuit)) { selectedCircuit=c.at("id"); SelectObject("circuit",selectedCircuit); circuitMeasurement=0; circuitRecalc=false; circuitAutoReady=false; circuitEditor.reset(); }
                 ImGui::PopID();
             }
             sst::ui::widgets::EndCombo();
@@ -90,22 +90,22 @@ void CapLabPrototypePanel::RenderIS() {
             sst::ui::widgets::Double("Model bias [V]",&modelBias,.01f);
             ImGui::TextWrapped("1..1201 points. Same-sample measurements overlay on their own grids and retain their T / bias.");
             ImGui::BeginDisabled(state->activeJob!=0);
-            if (ImGui::Button("Simulate model IS")) {
+            const bool simulateModel=ImGui::Button("Preview model IS");
+            if (simulateModel) {modelAutoReady=true; circuitRecalc=false; circuitAutoReady=false;}
+            ImGui::EndDisabled();
+            if (modelAutoReady) {
                 Json settings{{"type","Circuit"},{"circuit_id",selectedCircuit},{"temperature_K",modelTemperature},{"bias_V",modelBias}};
                 if (gridMode==0) settings["frequency_sweep"]={{"start_Hz",startHz},{"stop_Hz",stopHz},{"points_per_decade",density}};
                 else settings["frequency_Hz"]=Json::parse(explicitHz);
-                circuitRecalc=false; circuitAutoReady=false;
-                state->analysisOptions=std::move(settings);
-                (void)commands->Execute(CommandID{"caplab.analyze"});
+                PreviewAfterEdit(settings,simulateModel);
             }
-            ImGui::EndDisabled();
             ImGui::Spacing(); ImGui::SeparatorText("Measurement and simulation");
             if (sst::ui::widgets::BeginCombo("IS measurement", circuitMeasurement ? std::to_string(circuitMeasurement).c_str() : "Select sweep")) {
                 auto item=[&](pl::Id id) {
                     const auto m=AnalysisMeasurement(p,id);
                     if (m.at("kind")!="FrequencySweep" || m.at("sample_id")!=selected->at("sample_id")) return;
                     const auto label=std::to_string(id)+" / "+m.at("temperature_K").dump()+" K";
-                    if (ImGui::Selectable(label.c_str(),id==circuitMeasurement)) {circuitMeasurement=id; circuitRecalc=true; circuitAutoReady=false;}
+                    if (ImGui::Selectable(label.c_str(),id==circuitMeasurement)) {SelectObject("measurement",id); circuitMeasurement=id; circuitRecalc=true; circuitAutoReady=false;}
                 };
                 for (const auto &m : p.sweeps) item(m.id);
                 for (const auto &m : p.measurements) item(m.at("id").get<pl::Id>());
@@ -113,7 +113,7 @@ void CapLabPrototypePanel::RenderIS() {
             }
             if (circuitMeasurement) {
                 const auto m=AnalysisMeasurement(p,circuitMeasurement);
-                Json settings{{"type","Circuit"},{"measurement_id",circuitMeasurement},{"circuit_id",selectedCircuit}};
+                Json settings{{"preview",true},{"type","Circuit"},{"measurement_id",circuitMeasurement},{"circuit_id",selectedCircuit}};
                 if (!m.contains("temperature_K") || m.at("temperature_K").is_null()) {
                     if (sst::ui::widgets::Double("Confirm measurement temperature [K]", &confirmedTemperature, .01f, "%.6g")) circuitRecalc=true;
                     settings["temperature_K"]=confirmedTemperature;
@@ -131,7 +131,7 @@ void CapLabPrototypePanel::RenderIS() {
                     circuitRecalc=false; state->analysisOptions=settings;
                     (void)commands->Execute(CommandID{"caplab.analyze"});
                 }
-                if (ImGui::Button("Simulate IS")) {circuitAutoReady=true; circuitRecalc=false; state->analysisOptions=settings; (void)commands->Execute(CommandID{"caplab.analyze"});}
+                if (ImGui::Button("Simulate IS")) {modelAutoReady=false; circuitAutoReady=true; circuitRecalc=false; state->analysisOptions=settings; (void)commands->Execute(CommandID{"caplab.analyze"});}
                 ImGui::EndDisabled();
                 ImGui::Spacing(); ImGui::SeparatorText("Fit parameters and bounds");
                 if (fitCircuit!=selectedCircuit || ImGui::Button("Reset fit parameters from schematic")) {
@@ -201,7 +201,7 @@ void CapLabPrototypePanel::RenderIS() {
                 ImGui::SameLine(); if (ImGui::Button("Discard fit draft")) (void)commands->Execute(CommandID{"caplab.cancel"});
             }
         }
-        for (const auto &a : p.analyses) if (a.at("type")=="Circuit") {
+        for (const auto &a : p.analyses) if (a.at("type")=="Circuit" && AnalysisSample(a)==state->Document().selectedSample) {
             ImGui::PushID(std::to_string(a.at("id").get<pl::Id>()).c_str());
             ImGui::Text("IS %llu: %s / T=%s K / bias=%s V",a.at("id").get<pl::Id>(),a.at("status").get<std::string>().c_str(),a.at("temperature_K").dump().c_str(),a.at("bias_V").dump().c_str());
             if (a.contains("score")) ImGui::Text("Score %.9g / %s",a.at("score").get<double>(),a.at("stop_status").get<std::string>().c_str());
@@ -272,9 +272,9 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
         }
         ImGui::PushID(static_cast<int>(index));
         if (refitPlot) ImPlot::SetNextAxesToFit();
-        const auto scale=RenderISPlot("##IS",spec,series.data(),series.size(),index==2 ? bodePhaseView : viewState,ImVec2(-1,height));
+        RenderISPlot("##IS",spec,series.data(),series.size(),index==2 ? bodePhaseView : viewState,ImVec2(-1,height));
         if (&project==&state->Document().project) state->graphViews[graphs.at(index).get<pl::Id>()]=index==2 ? bodePhaseView : viewState;
-        if (spec.equalAspect) ImGui::Text("Equal scale: X %.9g px/Ohm | Y %.9g px/Ohm",scale.xPixelsPerOhm,scale.yPixelsPerOhm);
+        
         ImGui::PopID();
     };
     if (ImGui::BeginTabBar("IS views")) {

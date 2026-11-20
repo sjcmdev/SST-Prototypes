@@ -160,9 +160,15 @@ NB_MODULE(sst_caplab, module)
             CapLabWorkflow state(jobs,bus,undo); state.Document().project=Parse(project);
             RegisterCommands(commands,bus,state);
             if (r.contains("workspace")) state.RestoreWorkspace(r.at("workspace"));
+            if (operation!="select" && r.contains("selection")) state.Select(r.at("selection"));
             const auto analysisCount=state.Document().project.analyses.size();
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target,event.sources,event.recursive);});
-            if (operation=="new" || operation=="activate" || operation=="close" || operation=="close_decision" || operation=="workspace") {
+            if (operation=="tree" || operation=="select") {
+                CommandContext context; context.Set("edit",operation=="tree" ? r.at("edit") : r.at("selection"));
+                const auto result=commands->Execute(CommandID{operation=="tree" ? "caplab.tree" : "caplab.select"},std::move(context));
+                if (!result) return Json{{"ok",false},{"project",Json::parse(Serialize(state.Document().project))},
+                    {"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}}.dump();
+            } else if (operation=="new" || operation=="activate" || operation=="close" || operation=="close_decision" || operation=="workspace") {
                 CommandContext context; context.Set("request",r);
                 const auto result=commands->Execute(CommandID{"caplab.workspace"},std::move(context));
                 if (!result) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(Serialize(state.Document().project))},
@@ -244,6 +250,7 @@ NB_MODULE(sst_caplab, module)
                         {"root",item.source.root.Utf8()},{"preview",item.value ? *item.value : Json(nullptr)},{"error",error}});
                 }
                 if (operation=="import" && !state.sourcePreviews.empty()) {
+                    state.importTargetSample=r.value("target_sample_id",pl::Id{0});
                     if (r.contains("source_ids")) {
                         if (!r.at("source_ids").is_array()) throw std::runtime_error("source_ids must be an array of strings");
                         state.selectedSources.clear(); std::set<std::string> seen;
@@ -283,7 +290,7 @@ NB_MODULE(sst_caplab, module)
                 SST::CommandContext context; context.Set("edit",r.at("edit"));
                 const auto result=commands->Execute(SST::CommandID{"caplab.circuit"},std::move(context));
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
-            } else if (operation=="accept_fit") {
+            } else if (operation=="accept_fit" || operation=="accept_preview") {
                 const auto &draft=r.at("draft");
                 if (Json::parse(Serialize(state.Document().project))!=draft.at("base_project")) throw std::runtime_error("Stale fit draft");
                 state.analysisDraft=Parse(draft.at("project").dump());
@@ -318,6 +325,7 @@ NB_MODULE(sst_caplab, module)
             response["draft"]=state.analysisDraft ? Json{{"base_project",Json::parse(project)},
                 {"project",Json::parse(Serialize(*state.analysisDraft))}} : Json(nullptr);
             response["workspace"]=state.WorkspaceJson();
+            response["selection"]=state.SelectionJson();
             response.update(Json{{"ok",true},{"project",Json::parse(Serialize(state.Document().project))},{"error",nullptr}});
         } catch (const std::exception &e) {
             response={{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}};

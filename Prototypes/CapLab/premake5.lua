@@ -165,6 +165,11 @@ project "CapLabTests"
         _SST_ROOT .. "/Prototypes/CapLab/src/CapLabCommands.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabSchematicEditor.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabPrototypePanel.cpp",
+        _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabProjectPanel.cpp",
+        _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabCVPanel.cpp",
+        _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabASPanel.cpp",
+        _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabWalterPanel.cpp",
+
         _SST_ROOT .. "/Prototypes/CapLab/src/Presentation/CapLabISPanel.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/IO/PrototypeWorkflow.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp"

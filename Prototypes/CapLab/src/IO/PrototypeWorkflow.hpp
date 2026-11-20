@@ -51,7 +51,12 @@ namespace SST::Prototypes::CapLab
         void SelectPreview(int index);
         void ClearPreview();
         void OnUpdate(float) override;
-        void Changed();
+        void Changed(bool inputsChanged = true);
+        Project EditSnapshot() const;
+        void Select(const Json &request);
+        void ReconcileSelection();
+        Json SelectionJson() const;
+        pl::Id importTargetSample = 0;
         ProjectWorkspace<CapLabDocument> workspace;
         CapLabDocument &Document() { return *workspace.Find(workspace.active); }
         const CapLabDocument &Document() const { return *workspace.Find(workspace.active); }
@@ -75,6 +80,7 @@ namespace SST::Prototypes::CapLab
         std::string status;
         std::optional<StructuredError> failure;
         Json analysisOptions = Json::object();
+        bool analysisQueued = false;
         Json exportResult;
         std::optional<Project> analysisDraft;
         std::uint64_t analysisRevision = 0;
@@ -102,6 +108,7 @@ namespace SST::Prototypes::CapLab
         std::uint64_t pendingRevision = 0;
         std::uint64_t pendingGeneration = 0;
         std::uint64_t pendingProject = 0;
+        std::uint64_t pendingSelectionRevision = 0;
         bool saveBeforeClose = false;
         void ResetProjectUI();
     };

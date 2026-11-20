@@ -12,6 +12,7 @@
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include <imgui_internal.h>
 #include <implot.h>
+#include "TestProject.hpp"
 
 namespace SST::Prototypes::CapLab
 {
@@ -54,6 +55,23 @@ namespace SST::Prototypes::CapLab
                 "pytest_result = pytest.main([os.environ['SST_RUN_PYTEST'], '-q', '-p', 'no:cacheprovider'])\n"
                 "sys.stdout.flush(); sys.stderr.flush()\n"
                 "assert pytest_result == 0\n"), 0);
+        }
+        // Preview jobs never replace accepted results before the explicit command.
+        {
+            auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>();
+            auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
+            CapLabWorkflow preview(jobs,bus,undo); RegisterCommands(commands,bus,preview);
+            preview.Document().project=FixtureProject(); preview.Document().project.samples[0].area_m2=1e-6;
+            preview.analysisOptions={{"type","AS"},{"measurement_id",preview.Document().project.sweeps[0].id},{"preview",true}};
+            auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &e) {preview.Start(e.operation,e.target);});
+            ASSERT_TRUE(commands->Execute(CommandID{"caplab.analyze"})); bus->ProcessQueue();
+            jobs->Shutdown(); preview.OnUpdate(0);
+            ASSERT_TRUE(preview.analysisDraft) << preview.status;
+            EXPECT_TRUE(preview.Document().project.analyses.empty()); EXPECT_FALSE(undo->CanUndo());
+            ASSERT_TRUE(commands->Execute(CommandID{"caplab.accept_analysis"}));
+            ASSERT_EQ(preview.Document().project.analyses.size(),1);
+            ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(preview.Document().project.analyses.empty());
+            ASSERT_TRUE(undo->Redo()); EXPECT_EQ(preview.Document().project.analyses.size(),1);
         }
         // CL-02: render the actual import panel around the GUI command/job path.
         {

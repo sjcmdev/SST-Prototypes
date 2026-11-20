@@ -49,6 +49,21 @@ def execute(project, request):
     Missing covariance is null; sigma_cm2 is the capture cross-section.
     Walter quantity is apparent DOS; historical_limits describes W1-W3 coverage.
 
+    analyze settings may include preview=True to return an uncommitted draft;
+    accept_preview(draft) uses the same acceptance command as the GUI.
+
+    operation=tree: edit={action, ...}. Actions: create_sample(name),
+    rename_sample(sample_id, name), duplicate_sample(sample_id, name),
+    delete_sample(sample_id), sample_metadata(sample_id, optional area_m2/material/notes),
+    move_measurements(measurement_ids, target_sample_id), merge_samples(sample_id,
+    target_sample_id), delete_analysis(analysis_id), delete_circuit(circuit_id).
+    merge_samples moves all measurements, defects and circuits; source metadata
+    and historical/accepted results retain their identity. Every edit uses Core Undo.
+    import accepts target_sample_id (0 creates samples); historical bundles retain
+    their own samples. select accepts selection={kind, id}, where kind is sample,
+    measurement, defect, analysis, circuit or clear (id=0). The response includes
+    selection with stable IDs. No selection falls back to another object after deletion.
+
     operation=walter: settings select measurement_id or measurement_ids, optional
     cv_fit_id / arrhenius_fit_id, model (default Walter1996-linear-field),
     zeta_s_1_K_2 or explicit compat B_s_1/emission_source, V_b_V/E_F_eV,

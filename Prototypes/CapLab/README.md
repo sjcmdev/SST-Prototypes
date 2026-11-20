@@ -582,3 +582,36 @@ PlotLab app sources were not modified. Frozen fixture bytes were restored only
 when they matched the existing SHA256 after undoing checkout CRLF conversion;
 fixture attributes now prevent that conversion. Scientific expected values were
 not changed.
+
+## Project tree and module windows (clproj1)
+
+Each open project retains its own selection and Undo history. The tree groups
+measurements by kind, temperature [K], frequency [Hz] and bias [V]; unknown
+conditions are shown as `?`. Select an object to update details and the plot.
+CV/DLCP, AS/Arrhenius, Walter and IS have separate Core windows and share this
+selection. WindowWorkspace persists their docking and tab layout.
+
+Context actions and details use Core commands: create/rename/duplicate/delete
+sample, edit area/material/notes, move selected measurements (Ctrl+click for
+several), merge all measurements into another sample, delete analyses/circuits.
+Merging preserves the source sample metadata and historical/accepted results.
+Moving a measurement out of a defect's sample disables its old point and keeps
+its original measurement/row IDs in `moved_from`; no point is rebound.
+Deletion preserves engine snapshots used by saved results. Undo restores the
+same IDs; a deleted selection remains empty after Undo until explicitly selected.
+
+The import window offers an explicit target sample or creation of new samples.
+Historical bundles keep their own samples; their measurements can be moved
+after import. No filename-derived condition becomes confirmed metadata.
+
+Analysis edits recalculate a preview after editing ends, in cancellable Core
+jobs. In AS/Arrhenius, the selected measurement or defect determines the preview.
+Accepted results retain their own status (`valid`, `stale`, `missing_input`).
+Accept preview is a separate Undo command; discard leaves accepted data intact.
+IS simulation previews and fit drafts use the same acceptance path.
+
+Headless parity: `caplab.execute(project, {"operation":"tree", "edit":...})`
+exposes the actions documented in `python/caplab/__init__.py`; `operation=select`
+uses `{kind, id}`. `operation=import` accepts `target_sample_id`. Responses return
+stable selection IDs and a workspace that retains each project's selection.
+No schema version change or additional dependency is required.
