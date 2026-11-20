@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/IO/ImportPreview.hpp"
 #include "Core/Layer.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -11,8 +12,8 @@
 #include <sst/plotlab/GraphSnapshot.hpp>
 namespace SST::Prototypes::CapLab
 {
-    enum class Operation { Preview, Open, OpenOrImport, Save, Export, Analyze };
-    struct DocumentRequested : BusEvent { Operation operation = Operation::Preview; Path target; };
+    enum class Operation { Preview, PreviewFolder, Open, OpenOrImport, Save, Export, Analyze };
+    struct DocumentRequested : BusEvent { Operation operation = Operation::Preview; Path target; std::vector<Path> sources; bool recursive = false; };
     struct DocumentChanged : BusEvent { pl::Id project; std::uint64_t revision; };
     class DocumentJob final : public IJob
     {
@@ -25,6 +26,9 @@ namespace SST::Prototypes::CapLab
         std::string input;
         Path path;
         Json preview;
+        std::vector<Path> sources;
+        bool recursive = false;
+        std::vector<ImportPreviewItem<Json>> sourcePreviews;
         Json analysisOptions;
         std::shared_ptr<const pl::Importer> importer = std::make_shared<LabASImporter>();
         std::optional<Project> opened;
@@ -42,7 +46,9 @@ namespace SST::Prototypes::CapLab
         explicit CapLabWorkflow(Ref<JobSystem> jobs, Ref<EventBus> bus = {}, Ref<UndoStack> undo = {})
             : Layer("CapLabWorkflow"), jobs(std::move(jobs)), bus(std::move(bus)), undo(std::move(undo))
         { templates.add(std::make_shared<CFTemplate>()); importers.add(labImporter); }
-        void Start(Operation operation, Path target = {});
+        void Start(Operation operation, Path target = {}, std::vector<Path> sources = {}, bool recursive = false);
+        void SelectPreview(int index);
+        void ClearPreview();
         void OnUpdate(float) override;
         void Changed();
         CapLabDocument document;
@@ -61,6 +67,14 @@ namespace SST::Prototypes::CapLab
         std::uint64_t analysisRevision = 0;
         Ref<CommandRegistry> commands;
         std::optional<Json> preview;
+        std::vector<ImportPreviewItem<Json>> sourcePreviews;
+        std::vector<int> selectedSources;
+        std::vector<std::optional<double>> sourceTemperatures;
+        int previewSourceIndex = -1;
+        bool recursiveImport = false;
+        std::vector<Path> previewInputs;
+        bool previewRecursive = false;
+        PreviewGeneration previewGeneration;
         std::uint64_t previewRevision = 0;
         std::optional<double> temperature;
         char decimal = '.';
@@ -73,5 +87,6 @@ namespace SST::Prototypes::CapLab
     private:
         Ref<DocumentJob> pending;
         std::uint64_t pendingRevision = 0;
+        std::uint64_t pendingGeneration = 0;
     };
 }

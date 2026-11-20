@@ -5,6 +5,8 @@
 #include <cmath>
 #include <cstring>
 #include <tuple>
+#include <implot.h>
+#include <implot_internal.h>
 #include <cstdio>
 
 namespace SST::Prototypes::JFM
@@ -101,13 +103,17 @@ namespace SST::Prototypes::JFM
         if (exportView.viewport) {
             const auto &b = *exportView.viewport;
             auto ticks = [](const auto &axis, double lo, double hi, auto &out) {
-                if (!out.empty()) return;
-                const bool log=axis.scale==plot::AxisScale::Log10;
-                if(log) {lo=std::log10(lo);hi=std::log10(hi);}
-                for(int i=0;i<=5;++i) {
-                    const auto value=log?std::pow(10.,lo+(hi-lo)*i/5):lo+(hi-lo)*i/5;
-                    char label[64];std::snprintf(label,sizeof(label),"%.6g",value);
-                    out.push_back({value,label,true});
+                if (!out.empty() || !std::isfinite(lo) || !std::isfinite(hi) || lo >= hi) return;
+                const bool log = axis.scale == plot::AxisScale::Log10;
+                if (log && lo <= 0) return;
+                if (log) { lo = std::log10(lo); hi = std::log10(hi); }
+                const double step = ImPlot::NiceNum((hi - lo) / 5, true);
+                if (!std::isfinite(step) || step <= 0) return;
+                const double start = std::ceil(lo / step) * step;
+                for (int i = 0; i < 10 && start + i * step <= hi; ++i) {
+                    const double value = log ? std::pow(10., start + i * step) : start + i * step;
+                    char label[64]; std::snprintf(label, sizeof(label), "%.6g", value);
+                    out.push_back({value, label, true});
                 }
             };
             ticks(spec.x, b.minX, b.maxX, exportView.xTicks);

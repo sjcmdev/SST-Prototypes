@@ -1,4 +1,6 @@
 #include "Core/dspch.hpp"
+#include "Core/Presentation/Panels/ImportSourceList.hpp"
+#include <sst/ui/Widgets/LabelledControls.hpp>
 
 #include "Presentation/Panels/JFMImportDialogPanel.hpp"
 
@@ -1509,12 +1511,12 @@ namespace SST::Prototypes::JFM
 			return;
 		m_PreviewLoading = true;
 		m_PreviewError.clear();
-		m_EventBus->Queue(ImportPreviewRequested{++m_PreviewGeneration, m_Request.paths, m_Request.recursive, buildOptions()});
+		m_EventBus->Queue(ImportPreviewRequested{m_PreviewGeneration.Next(), m_Request.paths, m_Request.recursive, buildOptions()});
 	}
 
 	void JFMImportDialogPanel::handlePreviewCompleted(const ImportPreviewCompleted &event)
 	{
-		if (event.generation != m_PreviewGeneration)
+		if (!m_PreviewGeneration.IsCurrent(event.generation))
 			return;
 		m_PreviewPayload = event.payload;
 		m_PreviewLoading = false;
@@ -1524,7 +1526,7 @@ namespace SST::Prototypes::JFM
 
 	void JFMImportDialogPanel::handlePreviewFailed(const ImportPreviewFailed &event)
 	{
-		if (event.generation != m_PreviewGeneration)
+		if (!m_PreviewGeneration.IsCurrent(event.generation))
 			return;
 		m_PreviewLoading = false;
 		m_PreviewError = event.error;
@@ -1740,37 +1742,17 @@ namespace SST::Prototypes::JFM
 			return;
 		}
 
-		ImGui::BeginChild("##jfm_preview_files", ImVec2(360.0f, 0.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
-		ImGui::Separator();
-		for (std::size_t index = 0; index < m_PreviewFiles.size(); ++index)
-		{
-			const int itemIndex = static_cast<int>(index);
-			const bool selected = ContainsIndex(m_SelectedPreviewFileIndices, itemIndex);
-			const JFMImportPreviewItem *item = previewItem(m_PreviewFiles[index]);
-			const std::string visibleLabel = item != nullptr && !item->relativePath.empty() ? item->relativePath : m_PreviewFiles[index].filename().Utf8();
-			const std::string label = visibleLabel + "##preview_file_" + std::to_string(index);
-			if (ImGui::Selectable(label.c_str(), selected))
-			{
-				const bool append = ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyShift;
-				if (!append)
-					m_SelectedPreviewFileIndices.clear();
-				if (selected && append)
-					m_SelectedPreviewFileIndices.erase(std::remove(m_SelectedPreviewFileIndices.begin(), m_SelectedPreviewFileIndices.end(), itemIndex), m_SelectedPreviewFileIndices.end());
-				else if (!ContainsIndex(m_SelectedPreviewFileIndices, itemIndex))
-					m_SelectedPreviewFileIndices.push_back(itemIndex);
-				m_PreviewFileIndex = itemIndex;
-			}
-			if (ImGui::IsItemHovered())
-				ImGui::SetTooltip("%s", m_PreviewFiles[index].Utf8().c_str());
+		std::vector<ImportSourceRow> rows;
+		for (const auto &path : m_PreviewFiles) {
+			const auto *item = previewItem(path);
+			rows.push_back({item && !item->relativePath.empty() ? item->relativePath : path.filename().Utf8(),
+				path.Utf8(), item ? item->warning : std::string{}});
 		}
-		ImGui::EndChild();
-		ImGui::SameLine();
-
-		ImGui::BeginChild("##jfm_preview_plot_and_text", ImVec2(0.0f, 0.0f), false);
+		RenderImportSources(rows, m_SelectedPreviewFileIndices, m_PreviewFileIndex, [&](int) {
 		if (m_PreviewFolders.size() > 1)
 		{
 			ImGui::SetNextItemWidth(320.0f);
-			if (ImGui::BeginCombo("Folder", m_PreviewFolderLabels[static_cast<std::size_t>(m_PreviewFolderIndex)].c_str()))
+			if (sst::ui::widgets::BeginCombo("Folder", m_PreviewFolderLabels[static_cast<std::size_t>(m_PreviewFolderIndex)].c_str()))
 			{
 				for (std::size_t index = 0; index < m_PreviewFolderLabels.size(); ++index)
 				{
@@ -1784,7 +1766,7 @@ namespace SST::Prototypes::JFM
 					if (ImGui::IsItemHovered() && index < m_PreviewFolders.size())
 						ImGui::SetTooltip("%s", m_PreviewFolders[index].c_str());
 				}
-				ImGui::EndCombo();
+				sst::ui::widgets::EndCombo();
 			}
 		}
 		ImGui::RadioButton("Linear", &m_PreviewScale, 0);
@@ -1811,7 +1793,7 @@ namespace SST::Prototypes::JFM
 			ImGui::TextWrapped("Warning: %s", selectedItem->warning.c_str());
 		ImGui::TextUnformatted(selectedItem == nullptr || selectedItem->text.empty() ? "No preview" : selectedItem->text.c_str());
 		ImGui::EndChild();
-		ImGui::EndChild();
+		});
         });
 	}
 

@@ -21,6 +21,7 @@ namespace SST::Prototypes::JFM
 		const std::vector<Path> &paths,
 		bool recursive,
 		JFMImportPlacement placement,
-		const std::string &targetSeriesId);
+		const std::string &targetSeriesId,
+		std::vector<std::string> *warnings = nullptr);
 	[[nodiscard]] std::vector<Path> CollectImportSourcePaths(const std::vector<Path> &paths, bool recursive);
 } // namespace SST::Prototypes::JFM

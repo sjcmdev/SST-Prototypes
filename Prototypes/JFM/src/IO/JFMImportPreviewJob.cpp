@@ -3,6 +3,7 @@
 #include "IO/JFMImportPreviewJob.hpp"
 
 #include "Core/JobSystem/JobContext.hpp"
+#include "Core/IO/ImportPreview.hpp"
 #include "Events/JFMEvents.hpp"
 #include "IO/JFMImportSources.hpp"
 #include "IO/JFMPythonImportBridge.hpp"
@@ -69,25 +70,13 @@ namespace SST::Prototypes::JFM::Detail
 		return {std::move(characteristic.info), CreateRef<const JFMCharacteristicData>(std::move(data))};
 	}
 
-	void SetRelativeLabels(JFMImportPreviewItem &item, const std::vector<Path> &roots)
+	void SetRelativeLabels(JFMImportPreviewItem &item, const ImportSource &source)
 	{
-		for (const Path &root : roots)
-		{
-			std::error_code error;
-			if (!std::filesystem::is_directory(root.Native(), error))
-				continue;
-			const std::filesystem::path relative = std::filesystem::relative(item.path.Native(), root.Native(), error);
-			if (error || relative.empty() || *relative.begin() == "..")
-				continue;
-			item.relativePath = Path::FromResolved(relative).Utf8();
-			item.folderKey = item.path.parent_path().Utf8();
-			const std::filesystem::path parent = relative.parent_path();
-			item.folderLabel = parent.empty() ? root.filename().Utf8() : Path::FromResolved(parent).Utf8();
-			return;
-		}
-		item.relativePath = item.path.filename().Utf8();
+		item.relativePath = ImportSourceLabel(source);
 		item.folderKey = item.path.parent_path().Utf8();
-		item.folderLabel = item.path.parent_path().filename().Utf8();
+		const auto parent = source.root.Empty() ? std::filesystem::path{} :
+			item.path.Native().lexically_relative(source.root.Native()).parent_path();
+		item.folderLabel = parent.empty() ? item.path.parent_path().filename().Utf8() : Path::FromResolved(parent).Utf8();
 	}
 } // namespace SST::Prototypes::JFM::Detail
 
@@ -126,37 +115,32 @@ namespace SST::Prototypes::JFM
 
 	void JFMImportPreviewJob::Execute(JobContext &context) try
 	{
-		context.SetStage("Import preview");
-		std::vector<Path> paths = CollectImportSourcePaths(m_Paths, m_Recursive);
-		auto payload = CreateRef<JFMImportPreviewPayload>();
-		payload->items.reserve(paths.size());
+		const auto sources = CollectSources(m_Paths, m_Recursive, IsJFMDataFile);
 		JFMPythonImportBridge bridge(m_PythonRoot);
-
-		for (std::size_t index = 0; index < paths.size(); ++index)
-		{
-			context.ThrowIfCancellationRequested();
-			context.SetProgress(static_cast<float>(index), static_cast<float>(paths.size()));
+		auto previews = PreviewSources<JFMImportPreviewItem>(context, sources, [&](const ImportSource &source) -> Result<JFMImportPreviewItem> {
 			JFMImportPreviewItem item;
-			item.path = paths[index];
-			Detail::SetRelativeLabels(item, m_Paths);
+			item.path = source.path;
+			Detail::SetRelativeLabels(item, source);
 			item.text = Detail::ReadPreviewText(item.path);
 			auto imported = bridge.ImportFiles({item.path}, m_Options, {});
-			if (!imported)
-			{
-				item.warning = imported.Error().technicalDetails;
+			if (!imported) return imported.Error();
+			for (JFMCharacteristic &characteristic : imported->characteristics)
+				item.characteristics.emplace_back(Detail::MakePreviewRecord(std::move(characteristic)));
+			if (!imported->warnings.empty()) item.warning = imported->warnings.front();
+			return item;
+		});
+		auto payload = CreateRef<JFMImportPreviewPayload>();
+		for (auto &preview : previews) {
+			if (preview.value) payload->items.push_back(std::move(*preview.value));
+			else {
+				JFMImportPreviewItem item;
+				item.path = preview.source.path;
+				Detail::SetRelativeLabels(item, preview.source);
+				item.text = Detail::ReadPreviewText(item.path);
+				item.warning = preview.error->technicalDetails;
+				payload->items.push_back(std::move(item));
 			}
-			else
-			{
-				item.characteristics.reserve(imported->characteristics.size());
-				for (JFMCharacteristic &characteristic : imported->characteristics)
-					item.characteristics.emplace_back(Detail::MakePreviewRecord(std::move(characteristic)));
-				if (!imported->warnings.empty())
-					item.warning = imported->warnings.front();
-			}
-			payload->items.emplace_back(std::move(item));
 		}
-
-		context.SetProgress(static_cast<float>(paths.size()), static_cast<float>(paths.size()));
 		if (m_EventBus != nullptr)
 			m_EventBus->Queue(ImportPreviewCompleted{m_Generation, std::move(payload)});
 	}

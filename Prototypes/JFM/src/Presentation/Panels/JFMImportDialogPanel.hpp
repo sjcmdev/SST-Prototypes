@@ -1,4 +1,5 @@
 #pragma once
+#include "Core/IO/ImportPreview.hpp"
 #include "Presentation/Panels/HostedWindows.hpp"
 #include <sst/ui/Plot/RangeSelector.hpp>
 
@@ -167,7 +168,7 @@ namespace SST::Prototypes::JFM
 		int m_PreviewFileIndex = 0;
 		int m_PreviewScale = 0;
 		int m_PreviewFolderIndex = 0;
-		std::uint64_t m_PreviewGeneration = 0;
+		PreviewGeneration m_PreviewGeneration;
 		bool m_PreviewLoading = false;
 		std::string m_PreviewError;
 		std::string m_LastPreviewOptionsKey;

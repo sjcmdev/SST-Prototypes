@@ -160,10 +160,21 @@ NB_MODULE(sst_caplab, module)
             CapLabWorkflow state(jobs,bus,undo); state.document.project=Parse(project);
             RegisterCommands(commands,bus,state);
             const auto analysisCount=state.document.project.analyses.size();
-            auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target);});
-            if (operation=="export" || operation=="save" || operation=="open" || operation=="import") {
-                const auto path=Path{r.at("path").get<std::string>()};
-                if (operation=="import" && r.contains("options")) state.importOptions=r.at("options").dump();
+            auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target,event.sources,event.recursive);});
+            if (operation=="export" || operation=="save" || operation=="open" || operation=="import" || operation=="preview") {
+                const auto path=r.contains("path") ? Path::FromResolved(std::filesystem::u8path(r.at("path").get<std::string>())) : Path{};
+                std::vector<Path> sources;
+                if (r.contains("paths")) {
+                    if (!r.at("paths").is_array()) throw std::runtime_error("paths must be an array of strings");
+                    for (const auto &p : r.at("paths")) {
+                        const auto value=p.get<std::string>();
+                        if (value.empty()) throw std::runtime_error("Source paths must not be empty");
+                        sources.push_back(Path::FromResolved(std::filesystem::u8path(value)));
+                    }
+                }
+                if (operation!="import" && operation!="preview" && path.Empty()) throw std::runtime_error("Provide path");
+                if (path.Empty() && sources.empty()) throw std::runtime_error("Provide path or paths");
+                if ((operation=="import" || operation=="preview") && r.contains("options")) state.importOptions=r.at("options").dump();
                 if (r.contains("graph_id")) state.document.project.graph=r.at("graph_id").get<pl::Id>();
                 Validate(state.document.project);
                 const auto extension=path.Native().extension();
@@ -194,18 +205,62 @@ NB_MODULE(sst_caplab, module)
                         }
                     } else state.view=view(r,state.document.project.graph);
                 }
-                const auto result=commands->Execute(CommandID{operation=="export" ? "caplab.export" : operation=="save" ? "caplab.save" : operation=="import" ? "app.open" : "caplab.open"},[&] { CommandContext c; c.Set("path",path); return c; }());
+                if (r.contains("decimal")) {
+                    const auto decimal=r.at("decimal").get<std::string>();
+                    if (decimal!="." && decimal!=",") throw std::runtime_error("decimal must be . or ,");
+                    state.decimal=decimal[0];
+                }
+                if (r.value("cancel",false)) (void)jobs->PauseAllJobs();
+                const auto result=commands->Execute(CommandID{operation=="export" ? "caplab.export" : operation=="save" ? "caplab.save" : operation=="preview" || operation=="import" ? "caplab.preview" : "caplab.open"},[&] {
+                    CommandContext c; c.Set("path",path); c.Set("paths",sources); c.Set("recursive",r.value("recursive",false)); return c;
+                }());
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
                 bus->ProcessQueue(); const auto id=state.activeJob;
-                jobs->Shutdown(); state.OnUpdate(0);
+                if (r.value("cancel",false)) {
+                    (void)commands->Execute(CommandID{"caplab.cancel"}); (void)jobs->ResumeAllJobs();
+                }
+                {
+                    RunningOperation running(operationId,[&] { return bool(commands->Execute(CommandID{"caplab.cancel"})); });
+                    jobs->Shutdown();
+                }
+                state.OnUpdate(0);
                 const auto job=jobs->GetJob(id);
                 if (!job || job->status!=JobStatus::Completed)
-                    return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",operation+"_failed"},{"message",state.status}}}}.dump();
-                if (state.preview) {
+                    return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",job && job->status==JobStatus::Cancelled ? "cancelled" : operation+"_failed"},{"message",state.status}}}}.dump();
+                response["sources"]=Json::array();
+                for (const auto &item : state.sourcePreviews) {
+                    Json error=nullptr;
+                    if (item.error) error={{"code",item.error->code},{"message",item.error->technicalDetails}};
+                    response["sources"].push_back({{"source_id",item.source.path.Utf8()},{"path",item.source.path.Utf8()},
+                        {"root",item.source.root.Utf8()},{"preview",item.value ? *item.value : Json(nullptr)},{"error",error}});
+                }
+                if (operation=="import" && !state.sourcePreviews.empty()) {
+                    if (r.contains("source_ids")) {
+                        if (!r.at("source_ids").is_array()) throw std::runtime_error("source_ids must be an array of strings");
+                        state.selectedSources.clear(); std::set<std::string> seen;
+                        for (const auto &id : r.at("source_ids")) {
+                            const auto key=id.get<std::string>(); bool found=false;
+                            if (!seen.insert(key).second) throw std::runtime_error("Duplicate source_id");
+                            for (int i=0;i<static_cast<int>(state.sourcePreviews.size());++i)
+                                if (state.sourcePreviews[i].source.path.Utf8()==key) { state.selectedSources.push_back(i); found=true; break; }
+                            if (!found) throw std::runtime_error("Unknown source_id");
+                        }
+                    } else for (const auto &item : state.sourcePreviews) if (item.error) {
+                        response.update(Json{{"ok",false},{"project",Json::parse(project)},
+                            {"error",{{"code","import_failed"},{"message",item.error->technicalDetails}}}});
+                        return response.dump();
+                    }
                     // A filename is a suggestion; headless callers confirm metadata through options.
-                    if (!state.preview->contains("samples")) state.temperature=Optional(state.preview->at("temperature_K"));
+                    for (int i=0;i<static_cast<int>(state.sourcePreviews.size());++i) {
+                        const auto &value=state.sourcePreviews[i].value;
+                        if (value && !value->contains("samples")) state.sourceTemperatures[i]=Optional(value->at("temperature_K"));
+                    }
+                    if (state.preview && !state.preview->contains("samples")) state.temperature=Optional(state.preview->at("temperature_K"));
                     const auto imported=commands->Execute(CommandID{"caplab.import"});
-                    if (!imported) return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code","caplab.import"},{"message",state.status}}}}.dump();
+                    if (!imported) {
+                        response.update(Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code","caplab.import"},{"message",state.status}}}});
+                        return response.dump();
+                    }
                 }
                 response["export"]=state.exportResult;
             } else if (operation=="edit_defect" || operation=="area" || operation=="delete_measurement") {
