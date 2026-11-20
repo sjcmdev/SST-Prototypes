@@ -91,6 +91,14 @@ std::string RunLabel(const Json &run) {
     }
     return label.empty()?run.at("label").get<std::string>():label;
 }
+std::string DiffLabel(const Json &previous,const Json &document) {
+    std::string label;
+    for(const auto &parameter:BatchParameters(document)) {
+        const Json::json_pointer pointer(parameter.at("pointer").get<std::string>());
+        if(previous.contains(pointer) && previous.at(pointer)!=parameter.at("value")) {if(!label.empty()) label+=", ";label+=ParameterLabel(parameter.at("path"),parameter.at("unit"),parameter.at("value"),previous.at(pointer));}
+    }
+    return label;
+}
 void StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group) {
     static std::atomic_uint64_t sequence{0};
     const auto id="run-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"-"+std::to_string(sequence++);

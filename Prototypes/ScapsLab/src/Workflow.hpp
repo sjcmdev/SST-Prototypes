@@ -34,6 +34,7 @@ Json RecorderDefaults();
 Json BatchParameters(const Json &document);
 std::string ParameterLabel(const std::string &path,const std::string &unit,const Json &value,const Json &before=nullptr);
 std::string RunLabel(const Json &run);
+std::string DiffLabel(const Json &previous,const Json &document);
 Json BatchPreview(const Json &document,const Json &spec);
 Json QuickSweep(const Json &document,const Json &request);
 void TrimHistory(Json &history,int retention);
