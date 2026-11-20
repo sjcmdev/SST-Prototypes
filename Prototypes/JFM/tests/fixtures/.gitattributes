@@ -1,1 +1,2 @@
-** -text
+# Preserve original bytes in frozen fixtures and checksum manifests.
+* -text

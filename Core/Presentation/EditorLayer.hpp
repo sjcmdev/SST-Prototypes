@@ -23,6 +23,7 @@ namespace SST
 	class KeymapResolver;
 	class LogRegistry;
 	class ProgressTracker;
+	class ViewHost;
 	struct ApplicationConfig;
 	struct CommandID;
 	class Event;
@@ -75,6 +76,7 @@ namespace SST
 		void RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer);
 		void RegisterSettingsTab(SettingsTabExtension extension);
 		[[nodiscard]] Ref<WindowWorkspace> GetWindows() const { return m_Windows; }
+		[[nodiscard]] Ref<ViewHost> GetViews() const { return m_Views; }
 		WindowId RegisterWindow(Ref<EditorWindow> window, WindowId savedId = 0)
 		{
 			initializePanelsIfNeeded();
@@ -107,6 +109,7 @@ namespace SST
 
 		PanelRegistry m_Panels;
 		Ref<WindowWorkspace> m_Windows;
+		Ref<ViewHost> m_Views;
 		std::vector<MenuRendererEntry> m_MenuRenderers;
 		std::vector<SettingsTabExtension> m_SettingsTabs;
 		Ref<EditorUiState> m_UiState;

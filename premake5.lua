@@ -380,6 +380,7 @@ project "Core"
     filter "files:Core/IO/Hdf5/**.cpp"
         flags { "NoPCH" }
     filter {}
+    sst_link_ui()
 
     group "Prototypes"
 local selectedPrototypes = os.getenv("SST_BUILD_PROTOTYPES")
