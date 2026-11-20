@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <future>
 #include <thread>
 #include <chrono>
@@ -864,7 +865,16 @@ bad=dict(q,parameters=dict(I0=1e-10,A=1.5))
 assert sst_jfm.fit(bad)["error"]["code"] == "jfm.fit.validation"
 
 )PY");
-        PythonInterpreter::ReleaseRuntimeGil(gil); EXPECT_EQ(status,0);
+        EXPECT_EQ(status,0);
+        if (std::getenv("SST_RUN_PYTEST"))
+            EXPECT_EQ(PyRun_SimpleString(
+                "import json, os, sys\n"
+                "sys.path.extend(json.loads(os.environ['SST_ROOT_PYTHON_PATHS']))\n"
+                "import pytest\n"
+                "pytest_result = pytest.main([os.environ['SST_RUN_PYTEST'], '-q', '-p', 'no:cacheprovider'])\n"
+                "sys.stdout.flush(); sys.stderr.flush()\n"
+                "assert pytest_result == 0\n"), 0);
+        PythonInterpreter::ReleaseRuntimeGil(gil);
 #endif
     }
 

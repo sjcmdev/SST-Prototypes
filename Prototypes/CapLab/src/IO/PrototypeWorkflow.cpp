@@ -7,6 +7,7 @@
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "PlotLabExport.hpp"
+#include <cctype>
 namespace SST::Prototypes::CapLab
 {
     void DocumentJob::Execute(JobContext &context)
@@ -36,7 +37,8 @@ namespace SST::Prototypes::CapLab
                     if (!TextFileIO::Load(source.path, content, readError)) throw std::runtime_error(readError);
                     std::string parserOptions = importOptions;
                     if (parserOptions.empty()) {
-                        const auto extension = source.path.extension().Utf8();
+                        auto extension = source.path.extension().Utf8();
+                        std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
                         if (extension == ".json") parserOptions=R"({"profile":"propho_json"})";
                         else if (extension == ".cf") parserOptions=R"({"profile":"scaps_cf"})";
                         else if (extension == ".cv") parserOptions=R"({"profile":"scaps_cv"})";
@@ -212,7 +214,7 @@ namespace SST::Prototypes::CapLab
             if (!activeJob) throw std::runtime_error("Job submission failed.");
             pending = std::move(job); status.clear(); failure.reset();
             if (operation==Operation::Analyze) analysisDraft.reset();
-            if (operation == Operation::Preview) {
+            if (operation == Operation::Preview || operation == Operation::OpenOrImport) {
                 pendingGeneration=previewGeneration.Next();
                 preview.reset(); sourcePreviews.clear(); selectedSources.clear(); sourceTemperatures.clear(); previewSourceIndex=-1;
             }

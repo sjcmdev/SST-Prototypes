@@ -164,10 +164,13 @@ NB_MODULE(sst_caplab, module)
             if (operation=="export" || operation=="save" || operation=="open" || operation=="import" || operation=="preview") {
                 const auto path=r.contains("path") ? Path::FromResolved(std::filesystem::u8path(r.at("path").get<std::string>())) : Path{};
                 std::vector<Path> sources;
-                if (r.contains("paths")) for (const auto &p : r.at("paths")) {
-                    const auto value=p.get<std::string>();
-                    if (value.empty()) throw std::runtime_error("Source paths must not be empty");
-                    sources.push_back(Path::FromResolved(std::filesystem::u8path(value)));
+                if (r.contains("paths")) {
+                    if (!r.at("paths").is_array()) throw std::runtime_error("paths must be an array of strings");
+                    for (const auto &p : r.at("paths")) {
+                        const auto value=p.get<std::string>();
+                        if (value.empty()) throw std::runtime_error("Source paths must not be empty");
+                        sources.push_back(Path::FromResolved(std::filesystem::u8path(value)));
+                    }
                 }
                 if (operation!="import" && operation!="preview" && path.Empty()) throw std::runtime_error("Provide path");
                 if (path.Empty() && sources.empty()) throw std::runtime_error("Provide path or paths");
@@ -211,6 +214,7 @@ NB_MODULE(sst_caplab, module)
                 }
                 if (operation=="import" && !state.sourcePreviews.empty()) {
                     if (r.contains("source_ids")) {
+                        if (!r.at("source_ids").is_array()) throw std::runtime_error("source_ids must be an array of strings");
                         state.selectedSources.clear(); std::set<std::string> seen;
                         for (const auto &id : r.at("source_ids")) {
                             const auto key=id.get<std::string>(); bool found=false;

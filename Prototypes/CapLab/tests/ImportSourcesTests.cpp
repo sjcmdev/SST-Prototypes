@@ -6,6 +6,7 @@
 #include "CapLabCommands.hpp"
 #include "TestProject.hpp"
 #include <chrono>
+#include <imgui_internal.h>
 #ifdef _WIN32
 #include <Windows.h>
 #endif
@@ -71,6 +72,29 @@ namespace SST::Prototypes::CapLab
         }),JobCancelledException);
         PreviewGeneration generation; const auto old=generation.Next();
         EXPECT_TRUE(generation.IsCurrent(old)); generation.Next(); EXPECT_FALSE(generation.IsCurrent(old));
+        int calls=0;
+        EXPECT_THROW(PreviewSources<int>(context,sources,[&](const ImportSource &) -> Result<int> {
+            ++calls; return 1;
+        }),JobCancelledException);
+        EXPECT_EQ(calls,0);
+    }
+
+    TEST(ImportSourceList, DuplicateNamesHaveDistinctIdsAndErrorsRemainVisible)
+    {
+        auto *gui=ImGui::CreateContext();
+        auto &io=ImGui::GetIO(); io.IniFilename=nullptr; io.DisplaySize={1200,800}; io.DeltaTime=1.f/60;
+        io.ConfigDebugHighlightIdConflicts=true;
+        unsigned char *pixels; int width,height; io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+        const std::vector<ImportSourceRow> rows={{"a.dat","first/a.dat",{}},{"a.dat","second/a.dat","unreadable"}};
+        std::vector<int> selected={0}; int focused=1,details=0;
+        for (int frame=0;frame<2;++frame) {
+            ImGui::NewFrame(); ImGui::SetNextWindowSize({1100,700}); ImGui::Begin("Sources");
+            RenderImportSources(rows,selected,focused,[&](int index) { EXPECT_EQ(index,1); ++details; });
+            ImGui::End(); ImGui::Render();
+            EXPECT_EQ(gui->DebugDrawIdConflictsCount,0);
+        }
+        EXPECT_EQ(details,2); EXPECT_EQ(selected,std::vector<int>{0});
+        ImGui::DestroyContext(gui);
     }
 
     TEST_F(ImportSourcesTest, BatchCommitIsAtomicAndOneUndoStep)
@@ -129,5 +153,16 @@ namespace SST::Prototypes::CapLab
             EXPECT_FALSE(state.preview); EXPECT_TRUE(state.sourcePreviews.empty());
             EXPECT_NE(state.status.find("Stale"),std::string::npos);
         }
+    }
+
+    TEST_F(ImportSourcesTest, OpenOrImportStartsANewPreviewGenerationAfterDiscard)
+    {
+        auto jobs=CreateRef<JobSystem>(nullptr,1);
+        CapLabWorkflow state(jobs); state.labImporter=std::make_shared<FixtureImporter>();
+        state.ClearPreview();
+        state.Start(Operation::OpenOrImport,Write("a.dat")); ASSERT_NE(state.activeJob,0);
+        jobs->Shutdown(); state.OnUpdate(0);
+        ASSERT_TRUE(state.preview) << state.status;
+        ASSERT_EQ(state.sourcePreviews.size(),1);
     }
 }

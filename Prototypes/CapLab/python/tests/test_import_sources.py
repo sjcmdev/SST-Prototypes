@@ -10,7 +10,7 @@ def test_unicode_folder_preview_import_and_explicit_error_selection(tmp_path):
     root = tmp_path / "źródła_測定"
     root.mkdir()
     (root / "sub").mkdir()
-    for path in [root / "a.dat", root / "sub" / "b.dat"]:
+    for path in [root / "a.DAT", root / "sub" / "b.dat"]:
         path.write_text("100 1e-9 1e6\n1000 2e-9 1e6", encoding="utf-8")
     (root / "bad.dat").write_text("invalid", encoding="utf-8")
     (root / "ignore.bin").write_text("ignored", encoding="utf-8")
@@ -25,6 +25,7 @@ def test_unicode_folder_preview_import_and_explicit_error_selection(tmp_path):
     assert len(tree["sources"]) == 3
     assert sum(s["error"] is not None for s in tree["sources"]) == 1
     assert all(s["root"] == str(root) for s in tree["sources"])
+    assert all(s["preview"]["source"] == s["path"] for s in tree["sources"] if s["error"] is None)
     ids = [s["source_id"] for s in tree["sources"] if s["error"] is None]
     failed = execute(p, dict(operation="import", recursive=True, **request))
     assert not failed["ok"] and failed["project"] == p
@@ -47,5 +48,8 @@ def test_missing_source_cancel_and_multi_file_deduplication(tmp_path):
     assert missing["sources"][1]["error"]["code"] == "import.source_unreadable"
     invalid = execute(p, dict(operation="preview", paths=[""]))
     assert not invalid["ok"] and invalid["error"]["code"] == "invalid_request"
+    for paths in (str(a), {"source": str(a)}, [1]):
+        invalid = execute(p, dict(operation="preview", paths=paths))
+        assert not invalid["ok"] and invalid["error"]["code"] == "invalid_request"
     cancelled = execute(p, dict(request, cancel=True))
     assert not cancelled["ok"] and cancelled["project"] == p
