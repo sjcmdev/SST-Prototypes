@@ -97,7 +97,8 @@ public:
     Ref<CommandRegistry> commands;
     JobId active = 0;
     Ref<Operation> pending;
-    bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false;
+    bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false, resetLayout = false;
+    int focusView = -1;
     bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true;
     UndoStack projectUndo;
     std::deque<Json> edits;

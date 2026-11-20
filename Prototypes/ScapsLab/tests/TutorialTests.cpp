@@ -144,12 +144,12 @@ TEST(ScapsLabTutorial,OffscreenHighlightedActualControlScreenshot) {
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","first-device"}}).value("ok",false));
     ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.device_add"},"File/New","Ctrl+N"));
     ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.run"},"Simulate/Calculate I-V"));
-    Panel panel(&w,15);
+    Panel panel(&w,0);
     for(int frame=0;frame<3;++frame) {
         ImGui_ImplOpenGL3_NewFrame();io.DeltaTime=1.f/60;ImGui::NewFrame();
         if(ImGui::BeginMainMenuBar()){RenderCommandMenu(*w.commands,"Simulate");ImGui::EndMainMenuBar();}
         ImGui::SetNextWindowPos(ImVec2(25,45));ImGui::SetNextWindowSize(ImVec2(650,650));
-        ImGui::Begin("ScapsLab / Devices");panel.RenderContent();ImGui::End();
+        ImGui::Begin("ScapsLab / Project");panel.RenderContent();ImGui::End();
         EXPECT_FALSE(w.tutorialOverlay.Draw(w.tutorial));EXPECT_TRUE(w.tutorialOverlay.Highlighted());
         glViewport(0,0,1200,740);
         ui.Render();glFinish();
@@ -262,7 +262,7 @@ TEST(ScapsLabTutorial,CoachAvoidsTargetRowAndArrowAvoidsButtonAtViewportEdges) {
 // Every step of every lesson: the target resolves to a visible widget, the coach does not cover it and the arrow tip stays outside it.
 class ScapsLabTutorialUi:public testing::TestWithParam<const char *> {};
 TEST_P(ScapsLabTutorialUi,EveryStepTargetIsVisibleAndArrowTipClearsIt) {
-    static const char *names[]={"Project","Layers","Contacts","Solver","Run","Results","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","Devices","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
+    static const char *names[]={"Project","Layers","Contacts","Solver","Run","Results","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
     const std::string lesson=GetParam();
     const char *shotRoot=std::getenv("SCAPSLAB_TUTORIAL_SHOTS");
     Threading::SetMainThread();ASSERT_TRUE(glfwInit());

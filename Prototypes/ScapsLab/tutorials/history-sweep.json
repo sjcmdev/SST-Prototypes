@@ -6,7 +6,7 @@
     {
       "id": "new-device",
       "target": {
-        "window": "scapslab.Devices",
+        "window": "scapslab.Project",
         "item": "new"
       },
       "instruction": "Create a device named Tutorial: History and Sweep.",
@@ -41,10 +41,10 @@
     {
       "id": "keep",
       "target": {
-        "window": "scapslab.Devices",
+        "window": "scapslab.History",
         "item": "keep"
       },
-      "instruction": "Select the saved run in Devices > Run history and enable Keep / Pin. Pinned runs survive retention.",
+      "instruction": "Select the saved run in History and enable Keep / Pin. Pinned runs survive retention.",
       "command": {
         "operation": "history_update",
         "run_id": "$selected_run",

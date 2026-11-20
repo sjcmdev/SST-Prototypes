@@ -6,7 +6,7 @@
     {
       "id": "new-device",
       "target": {
-        "window": "scapslab.Devices",
+        "window": "scapslab.Project",
         "item": "new"
       },
       "instruction": "Create a device named Tutorial: Material file.",
