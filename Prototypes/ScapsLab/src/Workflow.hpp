@@ -85,7 +85,7 @@ public:
     Project project;
     DeviceState &Current();
     DeviceState &Device(const std::string &id);
-    Json Workspace() const;
+    Json Workspace(bool withResults=true) const;
     void SetWorkspace(const Json &value);
     Json Snapshot() const;
     Json Runs() const;
@@ -98,7 +98,7 @@ public:
     JobId active = 0;
     Ref<Operation> pending;
     bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false;
-    bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true;
+    bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true, lightResponse = false;
     UndoStack projectUndo;
     std::deque<Json> edits;
     Json queuedProject;

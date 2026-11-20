@@ -8,6 +8,8 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <cstdlib>
+#include <cstdio>
+#include <chrono>
 #include <iostream>
 #include <thread>
 namespace {std::string startupFile;}
@@ -82,6 +84,11 @@ public:
     }
     void OnImGuiRender() override {
         w.interacting=ImGui::IsAnyItemActive();
+        if(std::getenv("SCAPSLAB_PERF")) { // frame-time log: avg/max over 2 s windows
+            static double sum=0,mx=0;static int n=0;static auto last=std::chrono::steady_clock::now();
+            const double ms=ImGui::GetIO().DeltaTime*1000.;sum+=ms;mx=std::max(mx,ms);++n;
+            if(std::chrono::steady_clock::now()-last>std::chrono::seconds(2)) {std::fprintf(stderr,"[perf] frames %d avg %.2f ms max %.2f ms\n",n,sum/n,mx);sum=mx=0;n=0;last=std::chrono::steady_clock::now();}
+        }
         const auto savedPanels=w.project.ui.value("panels",ScapsLab::Json::object());
         if(savedPanels!=appliedPanels) for(auto &panel:panels) if(savedPanels.contains(panel->GetTitle()))panel->SetVisible(savedPanels.at(panel->GetTitle()).get<bool>());
         appliedPanels=ScapsLab::Json::object();for(const auto &panel:panels)appliedPanels[panel->GetTitle()]=panel->GetState().visible;
@@ -159,6 +166,7 @@ void SetupApplication(Application &app) {
     w->Current().document=ReadProject(SCAPSLAB_PROJECT); w->Current().name=w->Current().document.at("case_id");w->path="";
     if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}
     const char *gallery=std::getenv("SCAPSLAB_GALLERY_PANEL");
+    w->lightResponse=true;
     w->autoRecalculateBand=true;
     w->autoRecalculate=true;
     ImGui::GetIO().ConfigDebugHighlightIdConflicts=true;
