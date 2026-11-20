@@ -306,7 +306,13 @@ void CapLabPrototypePanel::RenderImport() {
     }
 }
 void CapLabPrototypePanel::RenderExport() {
-    if (!ImGui::CollapsingHeader("Export data and figures",ImGuiTreeNodeFlags_DefaultOpen)) return;
+    const auto& project=state->Document().project;
+    bool spatial=false;
+    for(auto id:project.engine->children(project.engine->children(project.graph).at(0))) {
+        const auto kind=project.engine->series(id).kind;
+        spatial |= sst::ui::plot::Is3D(kind) || sst::ui::plot::IsGrid(kind);
+    }
+    if (!ImGui::CollapsingHeader("Export data and figures",spatial ? ImGuiTreeNodeFlags_None : ImGuiTreeNodeFlags_DefaultOpen)) return;
     const char* formats[]={"PNG","SVG","PDF"};
     sst::ui::widgets::Combo("Figure format",&exportFormat,formats,IM_ARRAYSIZE(formats));
     if (exportFormat==0) sst::ui::widgets::Double("Resolution (dpi)",&state->exportDpi,1,"%.0f");
@@ -357,9 +363,22 @@ void CapLabPrototypePanel::RenderBrowser() {
     }
     if (const auto section=std::getenv("SST_CAPLAB_GALLERY_SECTION"))
         ImGui::SetNextItemOpen(std::string_view(section)=="Compare",ImGuiCond_Once);
-    if (ImGui::CollapsingHeader("Compare stored data (2D)")) {
-        const char *types[]={"C-V","Mott-Schottky","N_CV(W)","N_DLCP(W)","C-f","G/omega-f","Nyquist","Bode magnitude","Bode phase"};
+    if (ImGui::CollapsingHeader("Compare stored data / AS maps")) {
+        const char *types[]={"C-V","Mott-Schottky","N_CV(W)","N_DLCP(W)","C-f","G/omega-f","Nyquist","Bode magnitude","Bode phase","AS C(f,T)","AS G/omega(f,T)"};
         sst::ui::widgets::Combo("Measurement plot",&compareType,types,IM_ARRAYSIZE(types));
+        const bool asMap=compareType>=9;
+        const char *mapViews[]={"Per-temperature 3D lines","3D surface","Heatmap"};
+        const char *gridPolicies[]={"Measured grids (no interpolation)","Interpolate in log f (explicit grid)"};
+        if (asMap) {
+            sst::ui::widgets::Combo("AS view",&asMapView,mapViews,3);
+            sst::ui::widgets::Combo("Frequency grid policy",&asMapGrid,gridPolicies,2);
+            if (asMapGrid) {
+                sst::ui::widgets::LogValue("Grid minimum f (Hz)",&asMapMinHz);
+                sst::ui::widgets::LogValue("Grid maximum f (Hz)",&asMapMaxHz);
+                sst::ui::widgets::Int("Grid frequency count",&asMapPoints,1,2,1201);
+            }
+            ImGui::TextWrapped("One sample and bias, distinct confirmed temperatures. Unequal measured grids use 3D lines. Interpolation never extrapolates or fills missing cells.");
+        }
         sst::ui::widgets::Text("Filter sample / source / result",&compareFilter);
         ImGui::BeginChild("Compare sources",ImVec2(0,180),ImGuiChildFlags_Borders);
         auto choose=[&](pl::Id id,const std::string &label,std::set<pl::Id> &selection) {
@@ -385,10 +404,21 @@ void CapLabPrototypePanel::RenderBrowser() {
         std::erase_if(compareMeasurements,[&](auto id) {return !measurements.contains(id);});
         std::erase_if(compareGraphs,[&](auto id) {return !graphs.contains(id);});
         ImGui::EndChild();
-        ImGui::TextWrapped("Analysis graphs include Arrhenius defects, Walter spectra and IS. Only identical quantities and scales can share axes.");
-        ImGui::BeginDisabled(compareMeasurements.empty() && compareGraphs.empty());
+        ImGui::TextWrapped(asMap ? "AS maps use selected measurements only; clear any analysis graph selections." : "Analysis graphs include Arrhenius defects, Walter spectra and IS. Only identical quantities and scales can share axes.");
+        const bool invalidGrid=asMap && asMapGrid && (!std::isfinite(asMapMinHz) || !std::isfinite(asMapMaxHz) || asMapMinHz<=0 || asMapMaxHz<=asMapMinHz || asMapPoints<2 || asMapPoints>1201);
+        ImGui::BeginDisabled((compareMeasurements.empty() && compareGraphs.empty()) || invalidGrid || (asMap && (!compareGraphs.empty() || compareMeasurements.size()<2)));
         if (ImGui::Button("Build comparison (Undo)")) {
             state->analysisOptions={{"plot_type",types[compareType]},{"measurement_ids",compareMeasurements},{"graph_ids",compareGraphs}};
+            if (asMap) {
+                state->analysisOptions["view_kind"]=asMapView==0?"lines":asMapView==1?"surface":"heatmap";
+                state->analysisOptions["grid_policy"]=asMapGrid?"interpolate_log_f":"measured";
+                if (asMapGrid) {
+                    std::vector<double> grid;
+                    for (int i=0;i<asMapPoints;++i) grid.push_back(std::exp(std::lerp(std::log(asMapMinHz),std::log(asMapMaxHz),static_cast<double>(i)/(asMapPoints-1))));
+                    grid.front()=asMapMinHz; grid.back()=asMapMaxHz;
+                    state->analysisOptions["frequency_Hz"]=grid;
+                }
+            }
             (void)commands->Execute(CommandID{"caplab.plot"});
         }
         ImGui::EndDisabled(); ImGui::SameLine();
@@ -408,7 +438,26 @@ void CapLabPrototypePanel::RenderBrowser() {
             state->analysisOptions={{"action","view"},{"graph_id",p.graph},{"refit",true}};
             (void)commands->Execute(CommandID{"caplab.plot"});
         }
+        const auto plots=p.engine->children(p.engine->children(p.graph).at(0));
+        if (!plots.empty() && sst::ui::plot::IsGrid(p.engine->series(plots.front()).kind)) {
+            const char *maps[]={"Viridis","Plasma","Greys"};
+            int cmap=layer.spec.colormap=="Plasma"?1:layer.spec.colormap=="Greys"?2:0;
+            bool colorChanged=sst::ui::widgets::Combo("Colour map",&cmap,maps,3);
+            bool automatic=!layer.spec.colorRange;
+            colorChanged |= sst::ui::widgets::Checkbox("Automatic colour range",&automatic);
+            auto range=layer.spec.colorRange.value_or(sst::ui::plot::ColorLimits(p.engine->series(plots.front()).data,layer.spec));
+            if (!automatic) {
+                colorChanged |= sst::ui::widgets::Double("Colour minimum (F)",&range[0],1e-12f,"%.6g");
+                colorChanged |= sst::ui::widgets::Double("Colour maximum (F)",&range[1],1e-12f,"%.6g");
+            }
+            if (colorChanged) {
+                state->analysisOptions={{"action","view"},{"graph_id",p.graph},{"colormap",maps[cmap]},
+                    {"color_range_F",automatic?Json(nullptr):Json(range)}};
+                (void)commands->Execute(CommandID{"caplab.plot"});
+            }
+        }
         ImGui::TextWrapped("Drag to pan; wheel to zoom; click legend to hide a curve. Engineering units and logarithmic tick labels are retained in export.");
+        ImGui::TextWrapped("3D: drag to rotate the camera; wheel to zoom. Camera and colour range are saved with the graph.");
     }
     ImGui::EndDisabled();
 }
@@ -421,8 +470,10 @@ void CapLabPrototypePanel::RenderPlot() {
         else ImGui::TextUnformatted("Preview plot; accepted results remain in the project tree.");
         for (const auto &a:project.analyses) if (std::find(a.at("graphs").begin(),a.at("graphs").end(),Json(project.graph))!=a.at("graphs").end())
             ImGui::Text("%s result: %s",state->analysisDraft ? "Preview" : "Accepted",a.at("status").get<std::string>().c_str());
-        for (const auto &c:project.comparisons) if (c.at("graph_id")==project.graph)
+        for (const auto &c:project.comparisons) if (c.at("graph_id")==project.graph) {
             ImGui::Text("Stored comparison: %s",CompareStatus(project,c).c_str());
+            for (const auto &d:c.value("diagnostics",Json::array())) ImGui::TextWrapped("%s",d.get<std::string>().c_str());
+        }
         for (const auto& a : project.analyses) if (a.at("type")=="Circuit") {
             const auto& graphs=a.at("graphs");
             if (std::find(graphs.begin(),graphs.end(),Json(project.graph))!=graphs.end()) {

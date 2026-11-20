@@ -1,11 +1,13 @@
 #include <gtest/gtest.h>
 #include "Domain/CapLabCompare.hpp"
 #include "Domain/CapLabBundleImport.hpp"
+#include "Domain/CapLabProjectTree.hpp"
 #include "CapLabCommands.hpp"
 #include "TestProject.hpp"
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include <imgui_internal.h>
 #include <implot.h>
+#include <implot3d.h>
 #include <cstdlib>
 
 namespace SST::Prototypes::CapLab {
@@ -164,5 +166,33 @@ TEST(CapLabCompare, BrowserAndDirectActionsRenderWithoutIdConflicts) {
 #else
     if (previous.empty()) unsetenv("SST_CAPLAB_GALLERY_SECTION"); else setenv("SST_CAPLAB_GALLERY_SECTION",previous.c_str(),1);
 #endif
+}
+TEST(CapLabCompare, ASMapCommandIsUndoableAndSpatialPanelsHaveNoIdConflicts) {
+    auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>();
+    auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
+    CapLabWorkflow w(jobs,bus,undo); w.Document().project=FixtureProject();
+    {ImportChange second(w.Document().project,FixturePreview(),230,CFTemplate{});}
+    MoveMeasurements(w.Document().project,{w.Document().project.sweeps[1].id},w.Document().project.samples[0].id);
+    RegisterCommands(commands,bus,w);
+    const auto before=Serialize(w.Document().project);
+    auto sub=bus->Subscribe<DocumentRequested>([&](const auto &e) {w.Start(e.operation,e.target);});
+    const auto &p=w.Document().project;
+    w.analysisOptions={{"plot_type","AS C(f,T)"},{"view_kind","surface"},{"measurement_ids",{p.sweeps[1].id,p.sweeps[0].id}}};
+    ASSERT_TRUE(commands->Execute(CommandID{"caplab.plot"}));bus->ProcessQueue();jobs->Shutdown();w.OnUpdate(0);
+    ASSERT_EQ(w.Document().project.comparisons.size(),1) << w.status;
+    ASSERT_TRUE(undo->Undo());EXPECT_EQ(Serialize(w.Document().project),before);
+    ASSERT_TRUE(undo->Redo());
+    auto* gui=ImGui::CreateContext();auto* plot=ImPlot::CreateContext();auto* spatial=ImPlot3D::CreateContext();
+    auto& io=ImGui::GetIO();io.DisplaySize={1400,1200};io.DeltaTime=1.f/60;io.IniFilename=nullptr;io.ConfigDebugHighlightIdConflicts=true;
+    unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+    CapLabPrototypePanel panel(&w,commands,CapLabPrototypePanel::View::Plot);
+    for(int frame=0;frame<3;++frame) {
+        ImGui::NewFrame();ImGui::SetNextWindowSize({1000,1100},ImGuiCond_Always);ImGui::Begin("AS map");
+        panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_EQ(gui->DebugDrawIdConflictsCount,0);
+    }
+    EXPECT_TRUE(w.view.camera);EXPECT_TRUE(w.view.viewport);
+    const auto layer=w.Document().project.engine->children(w.Document().project.graph).at(0);
+    EXPECT_TRUE(std::get<pl::Layer>(w.Document().project.engine->object(layer).data).view.camera);
+    ImPlot3D::DestroyContext(spatial);ImPlot::DestroyContext(plot);ImGui::DestroyContext(gui);
 }
 }
