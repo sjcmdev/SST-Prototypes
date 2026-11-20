@@ -237,6 +237,7 @@ void CapLabPrototypePanel::RenderPlot() {
         const auto& title=p.object(doc.project.graph).name;
         if (window.shortName!=title) {window.shortName=title; window.longName=title; ApplyState(window);}
         const auto layer = p.children(doc.project.graph).at(0);
+        if (!state->view.viewport) state->view=std::get<pl::Layer>(p.object(layer).data).view;
         std::vector<sst::ui::plot::SeriesEntryView> series;
         for (auto id : p.children(layer)) {
             auto entry = p.series(id);

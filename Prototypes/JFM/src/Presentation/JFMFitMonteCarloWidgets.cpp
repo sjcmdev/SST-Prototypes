@@ -319,8 +319,6 @@ namespace SST::Prototypes::JFM
 			figureSpec.x.label = xLabel;
 			figureSpec.y.label = yLabel;
             figureSpec.legend.outside = true;
-            figureSpec.x.labels.format = figureSpec.y.labels.format = sst::ui::plot::LabelFormat::Custom;
-            figureSpec.x.labels.formatString = figureSpec.y.labels.formatString = "%.6g";
 			EndJFMPlot(document, figureSpec);
 		}
 		if (plotFont) ImGui::PopFont();

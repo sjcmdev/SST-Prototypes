@@ -120,6 +120,20 @@ project "ImPlot"
     filter {}
 
 include "Vendor/thread-pool"
+project "ImPlot3D"
+    location (_SST_ROOT .. "/build/generated/%{_ACTION}/%{prj.name}")
+    kind "StaticLib"
+    language "C++"
+    cppdialect "C++17"
+    staticruntime "off"
+    targetdir (_SST_ROOT .. "/build/bin/" .. outputdir .. "/%{prj.name}")
+    objdir (_SST_ROOT .. "/build/bin-int/" .. outputdir .. "/%{prj.name}")
+    files { "Vendor/implot3d/implot3d*.h", "Vendor/implot3d/implot3d.cpp", "Vendor/implot3d/implot3d_items.cpp", "Vendor/implot3d/implot3d_meshes.cpp" }
+    includedirs { "Vendor/ImGui", "Vendor/implot3d" }
+    filter { "system:windows", "action:vs2022" }
+        buildoptions { "/utf-8" }
+    filter {}
+
 include "Vendor/json"
 include "Vendor/yaml-cpp"
 include "Vendor/ImGuiNotify"
@@ -146,6 +160,7 @@ end
 applyDependencyRuntimeFilters("GLAD")
 applyDependencyRuntimeFilters("ImGui")
 applyDependencyRuntimeFilters("ImPlot")
+applyDependencyRuntimeFilters("ImPlot3D")
 applyDependencyRuntimeFilters("yaml-cpp")
 applyDependencyRuntimeFilters("Tracy")
 applyDependencyRuntimeFilters("GoogleTest")
@@ -273,6 +288,7 @@ project "Core"
         "Vendor/ImGui",
         "Vendor/ImGui/backends",
         "Vendor/implot",
+        "Vendor/implot3d",
         "Vendor/imgui-command-palette",
         "Vendor/ImGuiNotify/win32Example/backends",
         "Vendor/ImGuiNotify/win32Example/fonts",
@@ -300,6 +316,7 @@ project "Core"
         "GLAD",
         "ImGui",
         "ImPlot",
+        "ImPlot3D",
         "nfd",
         "yaml-cpp"
     }
@@ -356,8 +373,12 @@ project "Core"
 include (_SST_ROOT .. "/../SST-Libraries/sst_libraries.lua")
 
     group "Prototypes"
+local selectedPrototypes = os.getenv("SST_BUILD_PROTOTYPES")
 for _, projectScript in ipairs(os.matchfiles("Prototypes/*/premake5.lua")) do
-    include(projectScript)
+    local name = path.getname(path.getdirectory(projectScript))
+    if not selectedPrototypes or ("," .. selectedPrototypes .. ","):find("," .. name .. ",", 1, true) then
+        include(projectScript)
+    end
 end
 group ""
 

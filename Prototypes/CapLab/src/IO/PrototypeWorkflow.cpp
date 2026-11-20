@@ -6,7 +6,8 @@
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
-#include "PlotLabExport.hpp"
+#include "Core/PlotExport/PlotExport.hpp"
+
 namespace SST::Prototypes::CapLab
 {
     void DocumentJob::Execute(JobContext &context)
@@ -140,23 +141,14 @@ namespace SST::Prototypes::CapLab
             if (format==".csv" || format==".xlsx") {
                 preview=ExportData(Parse(input),path,context);
             } else {
-            if (format!=".png") throw std::runtime_error("Choose CSV, XLSX or PNG export.");
+            if (format!=".png" && format!=".svg" && format!=".pdf") throw std::runtime_error("Choose CSV, XLSX, PNG, SVG or PDF export.");
             if (!snapshot) throw std::runtime_error("No current graph snapshot.");
             const auto executable = Platform::CurrentExecutablePath();
             if (!executable) throw std::runtime_error(executable.Error().technicalDetails);
             const auto local = executable.Value().parent_path().Join("python").Native();
-            const auto pythonRoot = FileSystem::Exists(local / "sst_plotlab") ? local : std::filesystem::path(SST_PLOTLAB_PYTHON_ROOT);
-            if (snapshot->spec.equalAspect) {
-                auto equal=*snapshot;
-                const double ratio=(equal.ranges.maxX-equal.ranges.minX)/(equal.ranges.maxY-equal.ranges.minY);
-                if (!std::isfinite(ratio) || ratio<=0 || equal.widthMm<=0 || equal.heightMm<=0)
-                    throw std::runtime_error("Export page is too small for equal-scale axes and labels.");
-                // The current exporter allocates the same fractional span (0.72) on both axes.
-                if (ratio>equal.widthMm/equal.heightMm) equal.widthMm=equal.heightMm*ratio;
-                else equal.heightMm=equal.widthMm/ratio;
-                preview=Json::parse(PlotLab::SnapshotJson(equal));
-                PlotLab::ExportGraph(equal,path.Native(),"png",300,pythonRoot);
-            } else {preview=Json::parse(PlotLab::SnapshotJson(*snapshot)); PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot); }
+            const auto pythonRoot = FileSystem::Exists(local / "sst_plot_export") ? local : std::filesystem::path(SST_PLOT_EXPORT_PYTHON_ROOT);
+            preview=Json::parse(PlotExport::SnapshotJson(*snapshot));
+            PlotExport::ExportGraph(*snapshot,path.Native(),format.substr(1),300,pythonRoot);
             }
         }
         if (!saveCommitted && operation!=Operation::Export) context.ThrowIfCancellationRequested();
@@ -173,17 +165,23 @@ namespace SST::Prototypes::CapLab
                 if (operation == Operation::Save) target = document.path;
                 if (target.Empty())
                 {
-                    const NativeFileDialogFilter filter{operation == Operation::Preview ? "CapLab measurements / ProPho" : operation == Operation::Export ? "CapLab export (choose extension)" : "CapLab project", operation == Operation::Preview ? "dat,txt,csv,cf,cv,json" : operation == Operation::Export ? "csv,xlsx,png" : "json"};
+                    const NativeFileDialogFilter filter{operation == Operation::Preview ? "CapLab measurements / ProPho" : operation == Operation::Export ? "CapLab export (choose extension)" : "CapLab project", operation == Operation::Preview ? "dat,txt,csv,cf,cv,json" : operation == Operation::Export ? "csv,xlsx,png,svg,pdf" : "json"};
                     const auto selected = operation == Operation::Save || operation == Operation::Export
                         ? SaveFileDialog(filter,operation == Operation::Save ? "project.caplab.json" : "cf.png") : OpenFileDialog(filter);
                     if (!selected) { status = "Dialog cancelled."; return; }
                     target = *selected;
                 }
             }
+            if (operation==Operation::Save && document.project.graph && view.viewport) {
+                auto& engine=*document.project.engine;
+                auto layer=engine.object(engine.children(document.project.graph).at(0));
+                std::get<pl::Layer>(layer.data).view=view;
+                engine.change("Save graph view",{std::move(layer)}).apply(engine);
+            }
             auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save || operation == Operation::Analyze || operation == Operation::Export ? Serialize(document.project) : "",target);
             job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
-            if (operation == Operation::Export && target.Native().extension()==".png") job->snapshot = pl::snapshotGraph(*document.project.engine,document.project.graph,view);
+            if (operation == Operation::Export && (target.Native().extension()==".png" || target.Native().extension()==".svg" || target.Native().extension()==".pdf")) job->snapshot = pl::snapshotGraph(*document.project.engine,document.project.graph,view);
             pendingRevision = document.revision;
             activeJob = jobs->Submit(job);
             if (!activeJob) throw std::runtime_error("Job submission failed.");
@@ -225,6 +223,7 @@ namespace SST::Prototypes::CapLab
                 if (undo) undo->Clear();
                 document.Opened(std::move(*pending->opened),pending->path,pendingRevision);
                 preview.reset(); view = {};
+                if(document.project.graph) {const auto& p=*document.project.engine;view=std::get<pl::Layer>(p.object(p.children(document.project.graph).at(0)).data).view;}
                 if (bus) { DocumentChanged e; e.project = document.project.engine->id(); e.revision = document.revision; bus->Queue(e); }
             }
             else if (pending->operation == Operation::Preview)

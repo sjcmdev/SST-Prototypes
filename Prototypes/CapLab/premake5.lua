@@ -140,8 +140,8 @@ for _, target in ipairs { "CapLab", "CapLabTests" } do
     end
     sst_link_plotlab()
     includedirs { _SST_ROOT .. "/Prototypes/PlotLab/src" }
-    files { _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabExport.cpp" }
-    defines { 'SST_PROTOTYPE_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/CapLab/python"', 'SST_PLOTLAB_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/PlotLab/python"' }
+    files { _SST_ROOT .. "/Core/PlotExport/PlotExport.cpp" }
+    defines { 'SST_PROTOTYPE_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/CapLab/python"', 'SST_PLOT_EXPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/PlotExport/python"' }
     filter "configurations:Debug"
         runtime "Debug"
     filter "configurations:Release or Dist"
@@ -175,16 +175,17 @@ project "CapLab"
     postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/CapLab/python" "%{cfg.targetdir}/python"' }
 
 project "CapLab"
-    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/PlotLab/python/sst_plotlab" "%{cfg.targetdir}/python/sst_plotlab"' }
+    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Core/PlotExport/python/sst_plot_export" "%{cfg.targetdir}/python/sst_plot_export"' }
 
 -- Embed only the reusable CircuitCore-UI model/widget/runner, without its host.
+local circuitRoot = os.getenv("SST_CIRCUITCORE_ROOT") or (_SST_ROOT .. "/../CircuitCore")
+local circuitUiRoot = os.getenv("SST_CIRCUIT_UI_ROOT") or (_SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src")
 for _, target in ipairs { "CapLab", "CapLabTests" } do
     project(target)
-    includedirs { _SST_ROOT .. "/../CircuitCore/include", _SST_ROOT .. "/../CircuitCore/src",
-        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src" }
-    files { _SST_ROOT .. "/../CircuitCore/src/**.cpp",
-        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/CircuitDocument.cpp",
-        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/AnalysisRunner.cpp",
+    includedirs { circuitRoot .. "/include", circuitRoot .. "/src", circuitUiRoot }
+    files { circuitRoot .. "/src/**.cpp",
+        circuitUiRoot .. "/CircuitDocument.cpp",
+        circuitUiRoot .. "/AnalysisRunner.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/Domain/CapLabIS.cpp" }
 end
 project "CapLabTests"

@@ -1,6 +1,6 @@
 #include "Presentation/JFMPlotWidgets.hpp"
 #include "IO/JFMPlotExport.hpp"
-#include "Prototypes/PlotLab/src/PlotLabExport.hpp"
+#include "Core/PlotExport/PlotExport.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include <imgui.h>
 #include <implot.h>
@@ -21,7 +21,7 @@ namespace SST::Prototypes::JFM
             auto &font = fonts[key];
             auto *atlas = ImGui::GetIO().Fonts;
             if (!font || !atlas->Fonts.contains(font)) {
-                auto resolved = SST::Prototypes::PlotLab::ResolveFont(g.fontFamily, g.fontFile, SST_PLOTLAB_PYTHON_ROOT);
+                auto resolved = SST::PlotExport::ResolveFont(g.fontFamily, g.fontFile, SST_PLOT_EXPORT_PYTHON_ROOT);
                 ImFontConfig config; config.Flags |= ImFontFlags_NoLoadError;
                 font = atlas->AddFontFromFileTTF(resolved.first.c_str(), 0, &config);
                 if (!font) throw std::runtime_error("Cannot load graph font");
@@ -77,7 +77,7 @@ namespace SST::Prototypes::JFM
             if (ImGui::Button("Load font (.ttf/.otf)...")) {
                 try {
                     if (auto file = OpenFileDialog({"Font", "ttf,otf"})) {
-                        auto resolved = SST::Prototypes::PlotLab::ResolveFont("", file->Utf8(), SST_PLOTLAB_PYTHON_ROOT);
+                        auto resolved = SST::PlotExport::ResolveFont("", file->Utf8(), SST_PLOT_EXPORT_PYTHON_ROOT);
                         g.fontFile = resolved.first; g.fontFamily = resolved.second; changed = true;
                     }
                 } catch (const std::exception &e) { ImGui::TextWrapped("%s", e.what()); }

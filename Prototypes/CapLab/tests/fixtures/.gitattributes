@@ -1,5 +1,2 @@
-# Frozen source SHA-256 manifests require the original LF bytes on every checkout.
-*.dat text eol=lf
-*.json text eol=lf
-*.cf text eol=lf
-*.cv text eol=lf
+# Frozen manifests hash the source bytes, including line endings.
+* -text
