@@ -332,7 +332,8 @@ project "Core"
         systemversion "latest"
         defines {
             "DS_PLATFORM_WINDOWS",
-            "TRACY_ENABLE"
+            "TRACY_ENABLE",
+            "TRACY_ONLY_LOCALHOST" -- loopback only: no Windows Firewall prompt per new exe path
         }
         links { "opengl32", "dwmapi", "gdi32", "user32", "shell32", "Tracy" }
 
