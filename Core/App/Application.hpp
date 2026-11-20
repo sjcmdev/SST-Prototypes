@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <set>
 #include <optional>
 #include <filesystem>
 
@@ -155,6 +156,8 @@ namespace SST
 		void processPendingEvents();
 
 	private:
+		void handleLayerException(const Layer &layer,const std::string &message);
+		std::set<const Layer *> m_FailedLayers;
 		EventQueue m_EventQueue;
 		Ref<EventBus> m_EventBus;
 		Unique<ApplicationEventController> m_EventController;

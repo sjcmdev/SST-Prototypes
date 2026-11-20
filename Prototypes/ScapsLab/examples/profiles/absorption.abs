@@ -1,0 +1,4 @@
+wavelength [nm] alpha [m^-1]
+300 1e6
+600 5e5
+1200 1e2

@@ -410,15 +410,27 @@ namespace SST
 		if (m_PendingBlockingError.has_value())
 			ImGui::OpenPopup("Fatal Error##blocking");
 
+        if(m_PendingBlockingError) {
+            const auto *viewport=ImGui::GetMainViewport();
+            ImGui::SetNextWindowViewport(viewport->ID);
+            ImGui::SetNextWindowPos(viewport->GetCenter(),ImGuiCond_Appearing,ImVec2(.5f,.5f));
+            ImGui::SetNextWindowSizeConstraints(ImVec2(500,0),ImVec2(750,1000));
+        }
 		if (ImGui::BeginPopupModal("Fatal Error##blocking", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
 		{
 			ImGui::TextUnformatted(m_PendingBlockingError->userMessage.c_str());
+            if(!m_PendingBlockingError->technicalDetails.empty()) ImGui::TextWrapped("%s",m_PendingBlockingError->technicalDetails.c_str());
 			if (!m_PendingBlockingError->suggestion.empty())
 			{
 				ImGui::Separator();
 				ImGui::TextWrapped("%s", m_PendingBlockingError->suggestion.c_str());
 			}
 			ImGui::Spacing();
+            const bool recoverable=m_PendingBlockingError->severity!=Severity::Fatal;
+            if(recoverable && ImGui::Button("Continue to save project")) {
+                m_PendingBlockingError.reset();ImGui::CloseCurrentPopup();ImGui::EndPopup();return;
+            }
+            if(recoverable)ImGui::SameLine();
 			if (ImGui::Button("Quit Application"))
 			{
 				m_PendingBlockingError.reset();

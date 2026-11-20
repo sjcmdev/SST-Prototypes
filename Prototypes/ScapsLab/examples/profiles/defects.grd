@@ -1,0 +1,6 @@
+position: relative
+interpolation: logarithmic
+range: this layer only
+0 1e19
+0.5 2e19
+1 3e19

@@ -1,0 +1,6 @@
+position: relative
+interpolation: linear
+range: this layer only
+0 1e20
+0.5 2e20
+1 3e20

@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 #include "Panel.hpp"
+#include "Core/App/Application.hpp"
+#include "Core/Threading/ThreadAffinity.hpp"
 #include "Core/Presentation/Panels/PanelRegistry.hpp"
 #include "Core/Presentation/Panels/WindowWorkspace.hpp"
 #include <imgui.h>
@@ -284,5 +286,46 @@ TEST(ScapsLab,CompactHistoryRowsEditAndCollapseWithoutChangingTheSchema) {
     }
     ASSERT_TRUE(deviceHeader);click();frame();
     EXPECT_LT(table()->LastFrameActive,ImGui::GetFrameCount());EXPECT_EQ(w.Workspace(),edited);
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}
+
+TEST(ScapsLab,MainLoopPreservesProjectAndReportsLayerExceptions) {
+    Threading::SetMainThread();
+    class Broken final:public Layer {
+        int &calls;bool render;
+    public:Broken(int &count,bool draw):Layer(draw?"Broken profile panel":"Broken update"),calls(count),render(draw){}
+        void OnUpdate(float) override {if(!render){++calls;throw std::runtime_error("regression update failure");}}
+        void OnImGuiRender() override {if(render){++calls;ImGui::Begin("Interrupted profile");throw std::runtime_error("regression profile failure");}}
+    };
+    class Probe final:public Layer {
+        bool &seen;
+    public:explicit Probe(bool &value):Layer("Error dialog probe"),seen(value){}
+        void OnImGuiRender() override {if(const auto *popup=ImGui::FindWindowByName("Fatal Error##blocking"))seen|=popup->Active && !popup->Hidden;}
+    };
+    bool dialogSeen=false;
+    const auto file=std::filesystem::path(SCAPSLAB_TUTORIAL_ARTIFACTS)/"recovered-error.png";std::filesystem::create_directories(file.parent_path());
+    std::string exe="ScapsLabRecoveryTest",shot="--screenshot",target=file.string(),frames="--screenshot-after-frames",count="4",exit="--exit-after-screenshot";
+    char *argv[]={exe.data(),shot.data(),target.data(),frames.data(),count.data(),exit.data()};
+    const auto previousDirectory=std::filesystem::current_path();
+    struct RestoreDirectory {std::filesystem::path path;~RestoreDirectory(){std::filesystem::current_path(path);}} restore{previousDirectory};
+    std::filesystem::current_path(std::filesystem::path(SCAPSLAB_HEADLESS).parent_path().parent_path()/"ScapsLab");
+    int updates=0,renders=0;Workflow project(CreateRef<JobSystem>(nullptr,1));project.Current().document=ReadProject(SCAPSLAB_PROJECT);project.projectDirty=true;const auto before=project.Workspace();
+    auto app=Application::Create(6,argv,[&](Application &application){application.PushLayer(CreateUnique<Broken>(updates,false));application.PushLayer(CreateUnique<Broken>(renders,true));application.PushLayer(CreateUnique<Probe>(dialogSeen));});
+    EXPECT_EQ(app.Run(),0);EXPECT_EQ(updates,1);EXPECT_EQ(renders,1);EXPECT_TRUE(dialogSeen);EXPECT_EQ(project.Workspace(),before);EXPECT_TRUE(project.projectDirty);EXPECT_TRUE(std::filesystem::exists(file));
+}
+
+TEST(ScapsLab,ProfilePreviewRightClickOpensExportMenu) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1100,1000);io.Fonts->AddFontDefault();io.Fonts->Build();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    w.Current().document["layers"][0]["grading"]["Eg_eV"]={{"law","linear"},{"left",1.1},{"right",1.2}};
+    Panel panel(&w,21);
+    auto frame=[&]{io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(io.DisplaySize);ImGui::Begin("Profile export test");panel.RenderContent();ImGui::End();ImGui::Render();};
+    frame();frame();ImVec2 at;bool found=false;
+    for(int i=0;i<GImPlot->Plots.GetBufSize();++i)if(auto *plot=GImPlot->Plots.GetByIndex(i);plot && plot->HasTitle() && std::string(plot->GetTitle())=="Profile preview"){at=plot->PlotRect.GetCenter();found=true;}
+    EXPECT_TRUE(found);
+    if(found){io.AddMousePosEvent(at.x,at.y);frame();frame();io.AddMouseButtonEvent(1,true);frame();io.AddMouseButtonEvent(1,false);frame();
+        const auto expected=ImHashStr("Export profile",0,ImGui::FindWindowByName("Profile export test")->GetID("Eg_eV"));
+        bool opened=false;for(const auto &popup:GImGui->OpenPopupStack)opened|=popup.PopupId==expected;EXPECT_TRUE(opened)<<"Right-click must expose the product's CSV/.grd export menu";
+    }
     ImPlot::DestroyContext();ImGui::DestroyContext();
 }

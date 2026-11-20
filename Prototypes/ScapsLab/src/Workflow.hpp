@@ -14,6 +14,12 @@
 namespace SST::ScapsLab {
 using Json = nlohmann::json;
 Json ReadProject(const std::string &path);
+Json NormalizeDocument(Json document);
+scaps_core::Profile ProfileFromJson(const Json &spec, bool logarithmic=false);
+Json ProfileFromFile(const std::string &path, bool logarithmic=false);
+Json ProfileSamples(const Json &spec, double thickness_m, const Json &composition=Json::object());
+Json ResolveSharedProfile(Json spec,const Json &document,const std::string &layerId,const std::string &parameter);
+void ExportProfile(const Json &samples, const std::string &path);
 scaps_core::DeviceProject Model(const Json &document);
 void WriteProject(const Json &document, const std::string &path);
 Json AM15Spectrum();
@@ -95,6 +101,7 @@ public:
     bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true;
     UndoStack projectUndo;
     std::deque<Json> edits;
+    Json queuedProject;
     std::deque<std::string> runQueue;
     Json batchResponse;
     std::size_t batchTotal = 0, batchCompleted = 0;
@@ -114,7 +121,7 @@ public:
     Json Dispatch(const Json &request);
     void OnUpdate(float) override;
     void UpdateOperation();
-    bool Busy() const { return active != 0 || !edits.empty() || !runQueue.empty(); }
+    bool Busy() const { return active != 0 || !queuedProject.empty() || !edits.empty() || !runQueue.empty(); }
 };
 void RegisterPython();
 Json TutorialDefinition(const std::string &id);

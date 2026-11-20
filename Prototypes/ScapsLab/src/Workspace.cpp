@@ -260,7 +260,7 @@ void Workflow::SetWorkspace(const Json &value) {
         state->actions=item.value("actions",Json::object());
         state->id=id;state->name=item.at("name");state->colour=item.at("colour");state->description=item.value("description",std::string{});
         state->batchResult=item.value("batch_result",Json::object());state->batchSpec=item.value("batch_spec",BatchDefaults());state->recorderColumns=item.value("recorder_columns",RecorderDefaults());
-        state->document=item.at("document");state->result=item.value("result",Json::object());state->bandResult=item.value("band_result",Json::object());state->acResults=item.value("ac_results",Json::object());state->status=item.value("status",std::string("no results"));
+        state->document=NormalizeDocument(item.at("document"));state->result=item.value("result",Json::object());state->bandResult=item.value("band_result",Json::object());state->acResults=item.value("ac_results",Json::object());state->status=item.value("status",std::string("no results"));
         checked.devices.push_back(state);
     }
     project=std::move(checked);

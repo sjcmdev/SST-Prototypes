@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "id": "load-grading-profile",
+  "title": "Load a grading profile from file",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a template device named Tutorial: Grading profile.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Grading profile"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Grading profile"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "load-profile",
+      "target": {
+        "window": "scapslab.Grading",
+        "item": "load-profile"
+      },
+      "instruction": "In Grading select layer 1 and Na_m3, enable Grade parameter, then choose From file and load examples/profiles/doping.grd. The preview shows x in nm and density in cm^-3.",
+      "command": {
+        "operation": "load_profile",
+        "layer_id": "layer-1",
+        "parameter_id": "Na_m3",
+        "profile_example": "doping.grd"
+      },
+      "condition": {
+        "predicate": "profile.loaded",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

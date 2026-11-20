@@ -284,7 +284,7 @@ with tempfile.TemporaryDirectory(prefix='scapslab-io-') as output:
     print('slhist1 Python history, Keep/Pin, clear/Undo and batch sweep PASS', flush=True)
 
     tutorial_session = scapslab.Session()
-    assert len(tutorial_session.tutorials()['tutorials']) == 3
+    assert len(tutorial_session.tutorials()['tutorials']) == 4
     assert not tutorial_session.tutorial_start('../unknown')['ok']
     assert tutorial_session.tutorial_start('first-device')['tutorial']['status'] == 'running'
     assert tutorial_session.tutorial_state()['tutorial']['mode'] == 'learn'
@@ -293,3 +293,19 @@ with tempfile.TemporaryDirectory(prefix='scapslab-io-') as output:
     assert report['ok'], report
     assert all(step['status'] == 'PASS' for step in report['tutorial']['steps'])
     print('sltut1 embedded Python tutorial catalog, learn/stop and verify PASS', flush=True)
+
+profile_session = scapslab.Session()
+profile_doc = profile_session.execute({'operation':'inspect'})['document']
+layer_id = profile_doc['layers'][0]['scapslab_id']
+profile_file = Path(examples_path) / 'profiles' / 'doping.grd'
+request = {'operation':'load_profile','layer_id':layer_id,'parameter_id':'Na_m3','path':str(profile_file)}
+assert profile_session.execute(request)['ok']
+preview = profile_session.execute(dict(request, operation='preview_profile'))
+assert preview['ok'], preview
+assert len(preview['operation_result']['x_m']) == 201
+assert preview['operation_result']['value_SI'][0] == 1e20
+assert profile_session.execute({'operation':'undo'})['document'] == profile_doc
+assert profile_session.execute({'operation':'redo'})['ok']
+report = profile_session.tutorial_start('load-grading-profile', mode='verify')
+assert report['ok'], report
+print('slprof1 Python command/job profiles, preview, Undo/Redo and tutorial verify PASS', flush=True)

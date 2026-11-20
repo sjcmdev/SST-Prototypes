@@ -97,6 +97,7 @@ public:
                 std::pair{ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S,"scapslab.file.save_as"},std::pair{ImGuiMod_Ctrl | ImGuiKey_O,"scapslab.file.open"}})
                 if(ImGui::Shortcut(chord) && w.commands->CanExecute(CommandID{id}))(void)w.commands->Execute(CommandID{id});
         }
+        if((!w.openRequest.empty() || !w.fileAction.empty()) && w.Busy()) w.status="Project action queued; waiting for the current calculation or pending edits";
         if(!w.fileAction.empty() && !w.Busy()) {
             const auto action=std::exchange(w.fileAction,std::string{});
             if(action=="new") {creating=true;closing=false;if(w.dirty)requested=true;else Proceed();}

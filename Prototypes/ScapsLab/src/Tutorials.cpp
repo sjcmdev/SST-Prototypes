@@ -11,12 +11,16 @@ std::filesystem::path Directory() {
 }
 }
 Json TutorialDefinition(const std::string &id) {
-    if (id != "first-device" && id != "light-iv-qe" && id != "history-sweep") throw std::invalid_argument("Unknown tutorial_id: " + id);
+    if (id != "first-device" && id != "light-iv-qe" && id != "history-sweep" && id != "load-grading-profile") throw std::invalid_argument("Unknown tutorial_id: " + id);
     std::ifstream stream(Directory() / (id + ".json"));
     if (!stream) throw std::runtime_error("Cannot read tutorial: " + id);
     auto definition = Json::parse(stream);
     for (auto &step : definition.at("steps")) {
         auto &command = step.at("command");
+        if(command.contains("profile_example")) {
+            if(command.at("profile_example")!="doping.grd")throw std::invalid_argument("Unknown tutorial profile");
+            command["path"]=(ExamplesDirectory()/"profiles/doping.grd").string();command.erase("profile_example");
+        }
         if (command.contains("example")) {
             const auto example = command.at("example").get<std::string>();
             if (example != "08-pn-illumination.yaml") throw std::invalid_argument("Unknown tutorial example");
@@ -28,7 +32,7 @@ Json TutorialDefinition(const std::string &id) {
 }
 Json TutorialCatalog() {
     Json catalog = Json::array();
-    for (const auto *id : {"first-device", "light-iv-qe", "history-sweep"}) {
+    for (const auto *id : {"first-device", "light-iv-qe", "history-sweep", "load-grading-profile"}) {
         const auto definition = TutorialDefinition(id);
         catalog.push_back({{"tutorial_id", id}, {"title", definition.at("title")}, {"step_count", definition.at("steps").size()}});
     }
@@ -36,6 +40,7 @@ Json TutorialCatalog() {
 }
 Tutorial::Predicates Workflow::TutorialPredicates() {
     return {
+        {"profile.loaded", [this] {const auto &layer=Current().document.at("layers")[0];return Json(layer.contains("grading") && layer.at("grading").contains("Na_m3") && layer.at("grading").at("Na_m3").value("law",std::string{})=="table");}},
         {"device.name", [this] { return Json(Current().name); }},
         {"device.layer_count", [this] { return Json(Current().document.at("layers").size()); }},
         {"device.dark", [this] { return Json(!Current().document.value("illumination", Json::object()).value("enabled", false)); }},

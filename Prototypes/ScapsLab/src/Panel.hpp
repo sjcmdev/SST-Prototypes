@@ -19,7 +19,9 @@ private:
     void AC();
     bool Illumination(Json &draft);
     bool Absorption(Json &draft);
+    bool OpticalFile(Json &object,const char *file,const char *table,const char *extension,const char *label);
     bool Grading(Json &draft);
+    bool ProfileEditor(Json &profile,double thickness_m,const std::string &parameter,const Json &composition=Json::object(),bool diffusion=false);
     Json qeRequest={{"operation","qe"},{"start_nm",300.},{"stop_nm",4100.},{"points",61},{"probe_mode","constant_flux"},{"probe_photon_flux_m2_s",1e16},{"probe_power_W_m2",1e-3}};
     std::string gradingParameter="Eg_eV";
     void Batch();

@@ -25,6 +25,7 @@
 #include <GLFW/glfw3.h>
 #include <glad/gl.h>
 #include <imgui.h>
+#include <imgui_internal.h>
 
 namespace SST
 {
@@ -377,16 +378,38 @@ namespace SST
 		onUpdate(deltaTime);
 
 		beginFrame();
-		for (const auto &layer : m_LayerStack)
-			layer->OnImGuiRender();
+        for (const auto &layer : m_LayerStack) {
+            if(m_FailedLayers.contains(layer.get())) continue;
+            ImGuiErrorRecoveryState saved;ImGui::ErrorRecoveryStoreState(&saved);
+            try {layer->OnImGuiRender();}
+            catch(const std::exception &error) {
+                const bool assertRecovery=io.ConfigErrorRecoveryEnableAssert;io.ConfigErrorRecoveryEnableAssert=false;
+                ImGui::ErrorRecoveryTryToRecoverState(&saved);io.ConfigErrorRecoveryEnableAssert=assertRecovery;
+                handleLayerException(*layer,error.what());
+            }
+        }
 		onRender(clearColor, io.Framerate);
 	}
 
 
+    void Application::handleLayerException(const Layer &layer,const std::string &message) {
+        m_FailedLayers.insert(&layer);
+        const auto details=layer.GetName()+": "+message;
+        DS_LOG_CRITICAL("Unhandled layer exception: {}",details);Logger::Flush();
+        ApplicationDetail::AppendCrashMarker(details.c_str());
+        if(auto ui=m_LayerStack.FindLayerAs<ImGuiLayer>(LayerId::ImGui).lock())
+            ui->SetBlockingError(StructuredError{ErrorCategory::Internal,Severity::Error,
+                "An application component failed. Your project is still in memory.",details,
+                "The failing component has been disabled. Save your project and restart the application.",layer.GetName(),"layer_exception"});
+    }
+
 	void Application::onUpdate(float deltaTime)
 	{
-		for (const auto &layer : m_LayerStack)
-			layer->OnUpdate(deltaTime);
+        for (const auto &layer : m_LayerStack) {
+            if(m_FailedLayers.contains(layer.get())) continue;
+            try {layer->OnUpdate(deltaTime);}
+            catch(const std::exception &error) {handleLayerException(*layer,error.what());}
+        }
 
 		m_Graphics.window->PollEvents();
 		processPendingEvents();

@@ -5,6 +5,7 @@
 #include <scaps_core/device_project_def.hpp>
 #include <scaps_core/physics.hpp>
 #include <scaps_core/grading.hpp>
+#include <scaps_core/scaps_material.hpp>
 #include <scaps_core/device_project_yaml.hpp>
 #include <yaml-cpp/yaml.h>
 #include <algorithm>
@@ -15,6 +16,7 @@
 #include <set>
 #include <sstream>
 #include <iomanip>
+#include <fstream>
 #include <numbers>
 #include <thread>
 namespace SST::ScapsLab {
@@ -92,6 +94,15 @@ public:
             return {};
         }
         const std::string op=r->at("operation");
+        if((op=="load" || op=="project_load") && w.active) {
+            const std::string running=w.pending->request.at("operation");
+            if(running=="run" || running=="band" || running=="cv" || running=="cf" || running=="qe" || running=="run_batch") {
+                w.queuedProject=*r;w.runQueue.clear();
+                (void)w.jobs->RequestCancel(w.active);
+                w.status="Cancelling calculation; project will open after pending edits finish";
+                return {};
+            }
+        }
         if(op.starts_with("tutorial_")) {w.TutorialRequest(*r);return {};}
         if(op=="device_select") {
             if(w.active) {const std::string pending=w.pending->request.at("operation");if(pending!="run" && pending!="band" && pending!="cv" && pending!="cf") throw std::invalid_argument("Wait for the project operation before selecting a device");}
@@ -144,6 +155,15 @@ public:
     }
 };
 }
+namespace {
+Json SolverDocument(Json document) {
+    for(auto &layer:document["layers"]) {
+        if(layer.contains("grading"))for(auto &profile:layer["grading"])profile.erase("scapslab_warnings");
+        for(auto &defect:layer["defects"])if(defect.contains("density_profile_m3"))defect["density_profile_m3"].erase("scapslab_warnings");
+    }
+    return document;
+}
+}
 scaps_core::DeviceProject Model(const Json &j) {
     if(j.contains("constants_mode") && j.at("constants_mode")!="codata" && j.at("constants_mode")!="scaps_compat") throw std::invalid_argument("Unknown constants_mode");
     if(j.contains("mobility_temperature_model") && j.at("mobility_temperature_model")!="constant" && j.at("mobility_temperature_model")!="sqrt_T" && j.at("mobility_temperature_model")!="caughey_thomas_T") throw std::invalid_argument("Unknown mobility_temperature_model");
@@ -153,7 +173,7 @@ scaps_core::DeviceProject Model(const Json &j) {
         if(!std::set<std::string>{"relative_to_Ei","relative_to_Ec","relative_to_Ev"}.contains(d.value("energy_reference",std::string("relative_to_Ei")))) throw std::invalid_argument("Unknown defect energy_reference");
         if(!std::set<std::string>{"neutral","donor_like","acceptor_like"}.contains(d.value("charge_type",std::string("neutral")))) throw std::invalid_argument("Unknown defect charge_type");
     }
-    Temporary t; SaveText(t.path,Text(j)); auto p=scaps_core::load_device_project_yaml(t.path);
+    Temporary t; SaveText(t.path,Text(SolverDocument(j))); auto p=scaps_core::load_device_project_yaml(t.path);
     if (p.schema_version!=1) throw std::invalid_argument("Unsupported project schema_version");
     Positive(p.temperature_K,"temperature_K"); Positive(p.solver.residual_tolerance,"residual_tolerance");
     if (p.layers.empty() || p.layers.size()>100) throw std::invalid_argument("Expected 1..100 layers");
@@ -215,7 +235,7 @@ Json AM15Spectrum() {
 Json SelfContained(Json j) {
     auto embed=[](Json &object,const char *file,const char *table,auto reader) {
         if(object.contains(file) && object.at(file).is_string() && !object.at(file).get<std::string>().empty()) {
-            object[table]=reader(object.at(file).get<std::string>());object[file]="";
+            const auto points=reader(object.at(file).get<std::string>());object[std::string("scapslab_")+file]=object.at(file);object[table]=points;object[file]="";
         }
     };
     if(j.contains("illumination")) {
@@ -226,7 +246,16 @@ Json SelfContained(Json j) {
         embed(l,"back_filter_file","back_filter_nm_fraction",scaps_core::read_scaps_filter);
     }
     for(auto &l:j["layers"]) {
-        if(l.contains("absorption")) embed(l["absorption"],"file","table_nm_m1",scaps_core::read_scaps_absorption);
+        for(auto &d:l["defects"]) {
+            if(d.contains("density_profile_m3") && d["density_profile_m3"].contains("file")) {
+                auto &g=d["density_profile_m3"];const auto previous=g;g=ProfileFromFile(g.at("file"),true);for(const auto &[key,value]:previous.items())if(key!="file")g[key]=value;
+            }
+            if(d.contains("optical")){auto &o=d["optical"];embed(o,"electron_file","electron_table_nm_m2",scaps_core::read_scaps_absorption);embed(o,"hole_file","hole_table_nm_m2",scaps_core::read_scaps_absorption);}
+        }
+        if(l.contains("absorption")) {
+            embed(l["absorption"],"file","table_nm_m1",scaps_core::read_scaps_absorption);
+            if(l["absorption"].contains("composition")){auto &c=l["absorption"]["composition"];embed(c,"file_a","table_a_nm_m1",scaps_core::read_scaps_absorption);embed(c,"file_b","table_b_nm_m1",scaps_core::read_scaps_absorption);}
+        }
         if(l.contains("grading")) for(auto it=l["grading"].begin();it!=l["grading"].end();++it) if(it->contains("file")) {
             auto &g=it.value();const auto key=it.key();
             const auto profile=scaps_core::read_grading_file(g.at("file").get<std::string>(),key=="Nd_m3" || key=="Na_m3" || key=="Nc_ref_m3" || key=="Nv_ref_m3");
@@ -234,10 +263,64 @@ Json SelfContained(Json j) {
             if(!g.contains("interpolation_logarithmic"))g["interpolation_logarithmic"]=profile.interpolation_logarithmic;
             if(!g.contains("shared_range"))g["shared_range"]=profile.shared_range;
             if(!g.contains("composition_dependent"))g["composition_dependent"]=profile.composition_dependent;
-            g.erase("file");g["law"]="table";g["coordinate"]=profile.coordinate;g["value"]=profile.value;
+            if(!g.contains("source_file"))g["source_file"]=g.at("file");g.erase("file");g["law"]="table";g["coordinate"]=profile.coordinate;g["value"]=profile.value;
         }
     }
     return j;
+}
+scaps_core::Profile ProfileFromJson(const Json &spec,bool logarithmic) {
+    auto p=spec.contains("file")?scaps_core::read_grading_file(spec.at("file"),logarithmic):scaps_core::Profile{};
+    p.law=scaps_core::grading_law_from_string(spec.value("law",std::string(spec.contains("file")?"table":"uniform")));
+    for(const auto &[key,field]:std::initializer_list<std::pair<const char*,double scaps_core::Profile::*>>{
+        {"left",&scaps_core::Profile::left},{"right",&scaps_core::Profile::right},{"bowing",&scaps_core::Profile::bowing},
+        {"midpoint",&scaps_core::Profile::midpoint},{"middle",&scaps_core::Profile::middle},{"background",&scaps_core::Profile::background},
+        {"length_left",&scaps_core::Profile::length_left},{"length_right",&scaps_core::Profile::length_right},
+        {"beta_a",&scaps_core::Profile::beta_a},{"beta_b",&scaps_core::Profile::beta_b},{"power",&scaps_core::Profile::power},
+        {"gaussian_center",&scaps_core::Profile::gaussian_center},{"gaussian_width",&scaps_core::Profile::gaussian_width},
+        {"diffusion_depth_m",&scaps_core::Profile::diffusion_depth_m},{"projected_range_m",&scaps_core::Profile::projected_range_m},
+        {"dose_m2",&scaps_core::Profile::dose_m2},{"surface_density_m3",&scaps_core::Profile::surface_density_m3}}) p.*field=spec.value(key,p.*field);
+    p.coordinate=spec.value("coordinate",p.coordinate);p.value=spec.value("value",p.value);
+    p.position_relative=spec.value("position_relative",p.position_relative);p.interpolation_logarithmic=spec.value("interpolation_logarithmic",p.interpolation_logarithmic);
+    p.shared_range=spec.value("shared_range",p.shared_range);p.composition_dependent=spec.value("composition_dependent",p.composition_dependent);
+    p.shared_offset_m=spec.value("shared_offset_m",0.);p.shared_thickness_m=spec.value("shared_thickness_m",0.);
+    scaps_core::validate_profile(p);return p;
+}
+Json ProfileFromFile(const std::string &path,bool logarithmic) {
+    const auto p=scaps_core::read_grading_file(path,logarithmic);
+    std::ifstream input(path);std::string line;std::vector<double> coordinates;
+    while(std::getline(input,line)){std::istringstream row(line);double x,y;if(row>>x>>y)coordinates.push_back(x);}
+    Json warnings=Json::array();if(!std::is_sorted(coordinates.begin(),coordinates.end()) || coordinates.size()!=p.coordinate.size())warnings.push_back("Sorted profile points; kept the first occurrence of duplicate coordinates.");
+    return {{"scapslab_warnings",warnings},{"law","table"},{"coordinate",p.coordinate},{"value",p.value},{"position_relative",p.position_relative},
+        {"interpolation_logarithmic",p.interpolation_logarithmic},{"shared_range",p.shared_range},{"source_file",path}};
+}
+Json ProfileSamples(const Json &spec,double thickness,const Json &composition) {
+    Positive(thickness,"thickness_m");const auto p=ProfileFromJson(spec);
+    const auto c=composition.empty()?scaps_core::Profile{}:ProfileFromJson(composition);
+    Json x=Json::array(),y=Json::array();
+    for(int i=0;i<=200;++i) {
+        const double at=thickness*i/200.;x.push_back(at);
+        const double coordinate=!composition.empty()?scaps_core::evaluate_position_profile(c,at,thickness):at/thickness;
+        y.push_back(p.composition_dependent?scaps_core::evaluate_profile(p,coordinate):scaps_core::evaluate_position_profile(p,at,thickness));
+    }
+    return {{"x_m",x},{"value_SI",y},{"source_file",spec.value("source_file",std::string{})},{"source_point_count",spec.value("coordinate",Json::array()).size()}};
+}
+Json ResolveSharedProfile(Json spec,const Json &document,const std::string &layerId,const std::string &parameter) {
+    if(!spec.value("shared_range",false))return spec;
+    const auto device=scaps_core::make_device_from_project(Model(document));
+    for(std::size_t i=0;i<device.layers.size();++i)if(document.at("layers")[i].at("scapslab_id")==layerId && device.layers[i].grading) {
+        const auto &g=*device.layers[i].grading;
+        const auto &p=parameter=="composition"?g.composition:parameter=="Na_m3"?g.Na_m3:g.Nd_m3;
+        if(p){spec["left"]=p->left;spec["right"]=p->right;spec["shared_range"]=false;spec["shared_offset_m"]=p->shared_offset_m;spec["shared_thickness_m"]=p->shared_thickness_m;}
+    }
+    return spec;
+}
+void ExportProfile(const Json &samples,const std::string &path) {
+    const bool grd=std::filesystem::path(path).extension()==".grd";
+    std::ostringstream out;out<<std::setprecision(17);
+    if(grd)out<<"position: absolute\ninterpolation: linear\nrange: this layer only\n";
+    else out<<"x_m,"<<samples.value("parameter_id",std::string("value_SI"))<<'\n';
+    for(std::size_t i=0;i<samples.at("x_m").size();++i) out<<samples.at("x_m")[i].get<double>()*(grd?1e6:1.)<<(grd?" ":",")<<samples.at("value_SI")[i].get<double>()<<'\n';
+    SaveText(path,out.str());
 }
 Json ReadProject(const std::string &path) {
     auto raw=FromYaml(YAML::LoadFile(path));
@@ -246,6 +329,11 @@ Json ReadProject(const std::string &path) {
     auto anchor=[&](Json &object,const char *key) {if(object.contains(key) && object[key].is_string() && !object[key].get<std::string>().empty()) object[key]=(base/std::filesystem::path(object[key].get<std::string>())).lexically_normal().string();};
     if(raw.contains("illumination")) for(const auto *key:{"spectrum_file","generation_file","front_filter_file","back_filter_file"}) anchor(raw["illumination"],key);
     for(auto &layer:raw["layers"]) {anchor(layer,"material_file");if(layer.contains("absorption")) anchor(layer["absorption"],"file");if(layer.contains("grading")) for(auto &profile:layer["grading"]) anchor(profile,"file");}
+    for(auto &layer:raw["layers"])if(layer.contains("absorption") && layer["absorption"].contains("composition")) {anchor(layer["absorption"]["composition"],"file_a");anchor(layer["absorption"]["composition"],"file_b");}
+    for(auto &layer:raw["layers"])for(auto &d:layer["defects"]) {
+        if(d.contains("density_profile_m3"))anchor(d["density_profile_m3"],"file");
+        if(d.contains("optical")){anchor(d["optical"],"electron_file");anchor(d["optical"],"hole_file");}
+    }
     if(raw.contains("mesh")) anchor(raw["mesh"],"scaps_numerical_definition");
     raw=SelfContained(std::move(raw));
     const auto p=Model(raw);
@@ -274,7 +362,19 @@ Json ReadProject(const std::string &path) {
     }
     return full;
 }
-void WriteProject(const Json &j,const std::string &path) { (void)Model(j); SaveText(Path{path}.Native(),Text(j)); }
+Json NormalizeDocument(Json document) {
+    // Older workspace documents bypass ReadProject's Core defaults.
+    if(!document.contains("illumination") || !document.at("illumination").contains("mode") ||
+        !document.at("illumination").contains("intensity_multiplier") || !document.at("illumination").contains("uniform_generation_m3_s") ||
+        !document.at("illumination").contains("front_transmission") || !document.at("illumination").contains("wavelength_nm")) {
+        const auto model=Model(document);Temporary t;scaps_core::save_device_project_yaml(model,t.path);
+        auto light=FromYaml(YAML::LoadFile(t.path.string())).at("illumination");
+        if(document.contains("illumination")) light.update(document.at("illumination"),true);
+        document["illumination"]=std::move(light);
+    }
+    return document;
+}
+void WriteProject(const Json &j,const std::string &path) { (void)Model(j); SaveText(Path{path}.Native(),Text(SolverDocument(j))); }
 namespace {
 Json DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::DeviceState &state) {
     using namespace scaps_core;
@@ -406,6 +506,70 @@ void Operation::Execute(JobContext &ctx) {
     using namespace scaps_core;
     const auto started=std::chrono::steady_clock::now();
     ctx.ThrowIfCancellationRequested(); const std::string op=request.at("operation");
+    if(op=="load_material" || op=="save_material") {
+        auto model=Model(document);std::size_t index=0;
+        while(index<document.at("layers").size() && document.at("layers")[index].at("scapslab_id")!=request.at("layer_id"))++index;
+        if(index==model.layers.size())throw std::invalid_argument("Unknown layer_id");
+        const auto selected=request.value("selection",std::string("both"));
+        if(selected!="both" && selected!="A" && selected!="B")throw std::invalid_argument("selection must be A, B or both");
+        const auto selection=selected=="A"?MaterialSelection::PureA:selected=="B"?MaterialSelection::PureB:MaterialSelection::Both;
+        if(op=="save_material")write_scaps_material(make_scaps_material(model.layers[index]),request.at("path").get<std::string>(),selection);
+        else {
+            apply_scaps_material(read_scaps_material(request.at("path").get<std::string>()),model.layers[index],selection);
+            Temporary t;save_device_project_yaml(model,t.path);const auto full=FromYaml(YAML::LoadFile(t.path.string()));
+            auto candidate=document;auto &layer=candidate["layers"][index];
+            for(const auto *key:{"material","grading","absorption","recombination"}){layer.erase(key);if(full.at("layers")[index].contains(key))layer[key]=full.at("layers")[index].at(key);}
+            (void)Model(candidate);document=std::move(candidate);
+        }
+        output={{"path",request.at("path")},{"selection",selected}};return;
+    }
+    if(op=="set_profile" || op=="load_profile" || op=="preview_profile" || op=="export_profile") {
+        auto candidate=document;Json *target=nullptr;Json composition=Json::object();double thickness=0.;
+        const auto parameter=request.at("parameter_id").get<std::string>();
+        if(parameter=="generation_m3_s") {
+            for(const auto &l:candidate.at("layers"))thickness+=l.at("thickness_m").get<double>();
+            target=&candidate["illumination"];
+        } else {
+            for(auto &layer:candidate["layers"]) if(layer.at("scapslab_id")==request.at("layer_id")) {
+                thickness=layer.at("thickness_m");composition=layer.value("grading",Json::object()).value("composition",Json::object());
+                if(parameter=="Nt_m3") {
+                    for(auto &d:layer["defects"])if(d.at("scapslab_id")==request.at("defect_id"))target=&d["density_profile_m3"];
+                } else {
+                    const std::set<std::string> supported={"composition","Eg_eV","chi_eV","eps_r","Nd_m3","Na_m3","Nc_ref_m3","Nv_ref_m3","mu_n_m2_V_s","mu_p_m2_V_s","vth_n_ref_m_s","vth_p_ref_m_s"};
+                    if(!supported.contains(parameter))throw std::invalid_argument("Unsupported parameter_id");
+                    target=&layer["grading"][parameter];
+                }
+            }
+        }
+        if(!target)throw std::invalid_argument("Unknown layer_id or defect_id");
+        if(op=="set_profile" || op=="load_profile") {
+            if(parameter=="generation_m3_s") {
+                (*target)["mode"]="generation_file";
+                (*target)["generation_m_m3s"]=op=="load_profile"?Json(read_scaps_generation(request.at("path"))):request.at("generation_m_m3s");
+                (*target)["generation_file"]="";
+                if(op=="load_profile")(*target)["scapslab_generation_file"]=request.at("path");
+            } else *target=op=="load_profile"?ProfileFromFile(request.at("path"),parameter.find("_m3")!=std::string::npos):request.at("profile");
+            if(op=="load_profile" && target->contains("source_file") && !request.value("project_path",std::string{}).empty()) {
+                std::error_code ec;const auto relative=std::filesystem::relative(request.at("path").get<std::string>(),std::filesystem::path(request.at("project_path").get<std::string>()).parent_path(),ec);if(!ec)(*target)["source_file"]=relative.generic_string();
+            }
+            candidate=SelfContained(std::move(candidate));(void)Model(candidate);document=std::move(candidate);output={{"parameter_id",parameter}};
+        } else {
+            if(parameter=="generation_m3_s") {
+                Json spec={{"law","table"},{"position_relative",false},{"coordinate",Json::array()},{"value",Json::array()}};
+                for(const auto &point:target->at("generation_m_m3s")){spec["coordinate"].push_back(point[0].get<double>()*1e6);spec["value"].push_back(point[1]);}
+                output=ProfileSamples(spec,thickness);
+            } else {
+                if(target->is_null())throw std::invalid_argument("Profile is not active");auto spec=*target;
+                if(parameter!="composition" && parameter!="Nd_m3" && parameter!="Na_m3" && parameter!="Nt_m3")spec["composition_dependent"]=true;
+                output=ProfileSamples(ResolveSharedProfile(spec,document,request.at("layer_id"),parameter),thickness,ResolveSharedProfile(composition,document,request.at("layer_id"),"composition"));
+            }
+            output["parameter_id"]=parameter;
+            output["value_unit"]=parameter=="generation_m3_s"?"m^-3 s^-1":parameter.find("_m3")!=std::string::npos?"m^-3":parameter.find("_eV")!=std::string::npos?"eV":parameter.find("_m2_V_s")!=std::string::npos?"m^2/(V s)":parameter.find("vth_")==0?"m/s":"1";
+            if(op=="export_profile")ExportProfile(output,request.at("path"));
+        }
+        return;
+    }
+
     if(op=="export_results") output=ExportResults(workspace,request);
     else if(BatchOperation(*this,ctx)) {}
     else if(op=="export_gr") {
@@ -547,7 +711,7 @@ void Operation::Execute(JobContext &ctx) {
         if(patch.contains("illumination") && patch.at("illumination").value("scapslab_spectrum",std::string{})=="AM1.5G") {
             auto &light=candidate["illumination"];light["mode"]="spectrum";light["spectrum_file"]="";light["spectrum_nm_W_m2"]=AM15Spectrum();
         }
-        candidate=SelfContained(std::move(candidate));(void)Model(candidate); document=std::move(candidate);
+        candidate=NormalizeDocument(SelfContained(std::move(candidate)));(void)Model(candidate); document=std::move(candidate);
     } else if (op=="layer") {
         auto &layers=document["layers"]; const std::string action=request.at("action");
         if(action!="add" && !document.value("interface_defects",Json::array()).empty()) throw std::invalid_argument("Remove interface defects before removing or reordering layers; interface attachment must be preserved");
@@ -781,7 +945,7 @@ public:
 }
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()) {
     auto initial=CreateRef<DeviceState>();initial->id="device-1";initial->name="Device";project.devices.push_back(initial);project.active_device=initial->id;project.compare_set.insert(initial->id);
-    for(const auto *op:{"tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
+    for(const auto *op:{"load_material","save_material","set_profile","load_profile","preview_profile","export_profile","tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
         "history_list","history_update","history_select","history_clear","quick_sweep","project_new","project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def"}) {
         const auto registered=commands->Register({CommandID{std::string("scapslab.")+op},std::string("ScapsLab ")+op,"ScapsLab","",{},CommandFlags::AsyncCapable},
             [this,op](CommandContext &){
@@ -792,10 +956,11 @@ Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsL
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
     }
 }
-Workflow::~Workflow() { tutorial.Stop();runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
+Workflow::~Workflow() { tutorial.Stop();queuedProject.clear();runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
 void Workflow::StartOperation(const Json &r,const std::string &id) {
     auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);pending->acResults=d.acResults;pending->batchResult=d.batchResult;pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
     const std::string op=r.at("operation");
+    if(op=="load_profile")pending->request["project_path"]=path;
     if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?d.bandResult:d.result;}
     if(op.starts_with("history_") || op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load" || op=="export_results" || op=="action_settings") pending->workspace=Workspace();
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status="running";
@@ -823,6 +988,7 @@ void Workflow::UpdateOperation() {
     }
     if(!active) {
         if(!edits.empty()) {auto edit=std::move(edits.front());edits.pop_front();StartOperation(edit,edit.value("device_id",project.active_device));}
+        else if(!queuedProject.empty()) {auto request=std::move(queuedProject);queuedProject=Json();StartOperation(request,project.active_device);}
         else if(!runQueue.empty()) {const auto id=runQueue.front();runQueue.pop_front();StartOperation({{"operation","run"},{"batch",true}},id);}
         else {
             auto &d=Current();
@@ -869,7 +1035,7 @@ void Workflow::UpdateOperation() {
             if(!pending->request.value("autosave",false)) {path=pending->request.at("path");projectDirty=false;
             for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();}}
         } else {
-            if((op=="edit" || op=="layer" || op=="import_def") && !pending->request.value("history",false) && d.document!=pending->document) {
+            if((op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") && !pending->request.value("history",false) && d.document!=pending->document) {
                 (void)d.undo.PushExecuted(CreateUnique<EditRecord>(*this,d.document,pending->document,pending->request.value("gesture_id",std::string{})));preferProjectUndo=false;
             }
             d.document=pending->document;
@@ -885,7 +1051,7 @@ void Workflow::UpdateOperation() {
                 StoreRun(d.history,op=="run"?"iv":op,pending->output,d.document,pending->request,retention);
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
             }
-            if(op=="edit" || op=="layer" || op=="import_def") {
+            if(op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") {
                 if(op=="import_def") {d.selectedLayer=0;d.selectedInterface=-1;}
                 d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";d.dirty=!d.undo.IsClean();
             }

@@ -3,6 +3,7 @@
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include <scaps_core/api.hpp>
+#include <scaps_core/grading.hpp>
 #include <sst/plotlab/Engine.hpp>
 #include <scaps_core/device_project_yaml.hpp>
 #include <thread>
@@ -98,7 +99,7 @@ TEST(ScapsLab,EmbeddedPythonRunAndHeadlessCsv) {
     const auto uiLight=RunLightViaUi();
     RegisterPython(); PythonInterpreter python; ASSERT_TRUE(python.Start());
     const auto gil=PythonInterpreter::AcquireRuntimeGil();
-    const auto code=std::string("import json\nui_light=json.loads(")+Json(uiLight.dump()).dump()+")\nui_batch=json.loads("+Json(uiBatch.dump()).dump()+")\nui_document=json.loads("+Json(uiDocument.dump()).dump()+")\nui_spec=json.loads("+Json(uiSpec.dump()).dump()+")\nimport sys\nsys.path.insert(0, "+Json(SCAPSLAB_PYTHON).dump()+")\nproject_path="+Json(SCAPSLAB_PROJECT).dump()+"\nheadless_path="+Json(SCAPSLAB_HEADLESS).dump()+"\nexec(compile(open("+Json(SCAPSLAB_PYTHON_TEST).dump()+", encoding='utf-8-sig').read(), 'test_headless.py', 'exec'))\n";
+    const auto code=std::string("import json\nui_light=json.loads(")+Json(uiLight.dump()).dump()+")\nui_batch=json.loads("+Json(uiBatch.dump()).dump()+")\nui_document=json.loads("+Json(uiDocument.dump()).dump()+")\nui_spec=json.loads("+Json(uiSpec.dump()).dump()+")\nimport sys\nsys.path.insert(0, "+Json(SCAPSLAB_PYTHON).dump()+")\nproject_path="+Json(SCAPSLAB_PROJECT).dump()+"\nexamples_path="+Json(ExamplesDirectory().string()).dump()+"\nheadless_path="+Json(SCAPSLAB_HEADLESS).dump()+"\nexec(compile(open("+Json(SCAPSLAB_PYTHON_TEST).dump()+", encoding='utf-8-sig').read(), 'test_headless.py', 'exec'))\n";
     const int result=PyRun_SimpleString(code.c_str());
     PythonInterpreter::ReleaseRuntimeGil(gil); EXPECT_EQ(result,0);
 #else
@@ -748,4 +749,99 @@ TEST(ScapsLab,QuickSweepUsesBatchAndHistoryValidation) {
     const auto before=w.Workspace();request["spacing"]="log";request["delta_native_units"]=400.;EXPECT_FALSE(Execute(w,request).value("ok",true));EXPECT_EQ(w.Workspace(),before);
     const auto id=w.Current().history.front().at("run_id");EXPECT_FALSE(Execute(w,{{"operation","history_update"},{"run_id",id},{"colour",{2.,0.,0.,1.}}}).value("ok",true));EXPECT_EQ(w.Workspace(),before);
     auto ui=w.project.ui;ui["history_retention"]=1;ASSERT_TRUE(Execute(w,{{"operation","project_edit"},{"ui",ui}}).value("ok",false));EXPECT_EQ(w.Current().history.size(),1);
+}
+
+TEST(ScapsLab,LegacyWorkspaceIlluminationDefaultsAndLoadDuringCalculation) {
+    for(const auto *operation:{"load","project_load"}) {
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+        auto legacy=w.Workspace();legacy["devices"][0]["document"]["illumination"]={{"enabled",false}};
+        EXPECT_THROW(legacy["devices"][0]["document"].at("illumination").at("mode"),Json::out_of_range);
+        const auto file=Temp("scapslab-legacy-mode.scapslab");{std::ofstream out(file);out<<legacy.dump();}
+        w.Current().document["voltage"]={{"start_V",0.},{"stop_V",0.1},{"step_V",0.01}};
+        ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok"));ASSERT_NE(w.active,0u);
+        ASSERT_TRUE(w.Dispatch({{"operation",operation},{"path",file.string()}}).at("ok"));
+        EXPECT_NE(w.status.find("Cancelling"),std::string::npos);
+        while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        ASSERT_TRUE(w.response.value("ok",false))<<w.response.dump();
+        EXPECT_EQ(w.Current().document.at("illumination").at("mode"),"uniform");
+        EXPECT_FALSE(w.Current().document.at("illumination").at("enabled").get<bool>());
+        const auto kept=w.Current().document;
+        EXPECT_FALSE(Execute(w,{{"operation",operation},{"path",file.string()+".missing"}}).value("ok",true));
+        EXPECT_EQ(w.Current().document,kept);std::filesystem::remove(file);
+    }
+}
+TEST(ScapsLab,ProfilesCommandJobsUndoPersistenceAndExport) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    const auto layer=w.Current().document.at("layers")[0].at("scapslab_id");
+    const auto initial=w.Current().document;
+    Json request={{"operation","load_profile"},{"layer_id",layer},{"parameter_id","Na_m3"},{"path",(ExamplesDirectory()/"profiles/doping.grd").string()}};
+    ASSERT_TRUE(Execute(w,request).value("ok",false))<<w.response.dump();
+    const auto loaded=w.Current().document;
+    EXPECT_EQ(loaded["layers"][0]["grading"]["Na_m3"]["coordinate"].size(),3);
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).value("ok",false));EXPECT_EQ(w.Current().document,initial);
+    ASSERT_TRUE(Execute(w,{{"operation","redo"}}).value("ok",false));EXPECT_EQ(w.Current().document,loaded);
+    request["operation"]="preview_profile";ASSERT_TRUE(Execute(w,request).value("ok",false));
+    const auto sample=w.response.at("operation_result");EXPECT_EQ(sample.at("x_m").size(),201);
+    EXPECT_DOUBLE_EQ(sample["value_SI"].front(),1e20);EXPECT_DOUBLE_EQ(sample["value_SI"].back(),3e20);
+    const auto output=Temp("scapslab-profile-export.grd");request["operation"]="export_profile";request["path"]=output.string();
+    ASSERT_TRUE(Execute(w,request).value("ok",false));const auto exported=ProfileFromFile(output.string());
+    EXPECT_EQ(exported.at("coordinate").size(),201);EXPECT_DOUBLE_EQ(exported.at("value").front(),1e20);std::filesystem::remove(output);
+    const auto saved=Temp("scapslab-profiles.scapslab");ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",saved.string()}}).value("ok",false));
+    ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",saved.string()}}).value("ok",false));EXPECT_EQ(w.Current().document,loaded);std::filesystem::remove(saved);
+    request["operation"]="load_profile";request["path"]="does-not-exist.grd";EXPECT_FALSE(Execute(w,request).value("ok",true));EXPECT_EQ(w.Current().document,loaded);
+    request["operation"]="load_profile";request["parameter_id"]="generation_m3_s";request["path"]=(ExamplesDirectory()/"profiles/generation.gen").string();
+    ASSERT_TRUE(Execute(w,request).value("ok",false));EXPECT_EQ(w.Current().document.at("illumination").at("generation_m_m3s").size(),3);
+    auto doc=w.Current().document;auto defect=NewDefect();defect["scapslab_id"]="profile-defect";doc["layers"][0]["defects"]=Json::array({defect});
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"document",doc}}).value("ok",false));
+    request["parameter_id"]="Nt_m3";request["defect_id"]="profile-defect";request["path"]=(ExamplesDirectory()/"profiles/defects.grd").string();
+    ASSERT_TRUE(Execute(w,request).value("ok",false))<<w.response.dump();
+    EXPECT_TRUE(Model(w.Current().document).layers[0].defects[0].density_profile_m3.has_value());
+    request["operation"]="set_profile";request["parameter_id"]="composition";request["profile"]={{"law","linear"},{"left",.2},{"right",.8}};
+    ASSERT_TRUE(Execute(w,request).value("ok",false));
+    request["parameter_id"]="Eg_eV";request["profile"]={{"law","linear"},{"left",1.1},{"right",1.5},{"composition_dependent",false}};
+    ASSERT_TRUE(Execute(w,request).value("ok",false));request["operation"]="preview_profile";
+    ASSERT_TRUE(Execute(w,request).value("ok",false));EXPECT_DOUBLE_EQ(w.response.at("operation_result").at("value_SI").back(),1.42);
+}
+TEST(ScapsLab,ProfilePreviewUsesEveryCoreLawAndPhysicalCoordinates) {
+    for(const auto *law:{"uniform","linear","parabolic","parabolic2","logarithmic","exponential","beta","power","effective_medium","gaussian","gauss_diffusion","erfc_diffusion"}) {
+        Json spec={{"law",law},{"left",1.},{"right",2.},{"middle",1.5},{"midpoint",.5},{"beta_a",2.},{"beta_b",3.},{"power",2.},{"gaussian_width",.2},{"diffusion_depth_m",-1e-6},{"dose_m2",1e14},{"surface_density_m3",1e20}};
+        const auto p=ProfileFromJson(spec);const auto samples=ProfileSamples(spec,2e-6);
+        for(int i:{0,40,100,200})EXPECT_DOUBLE_EQ(samples.at("value_SI")[i],scaps_core::evaluate_position_profile(p,2e-6*i/200.,2e-6))<<law;
+    }
+}
+
+TEST(ScapsLab,SharedProfilePreviewWarningsAndMaterialUseCoreConventions) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    auto &layers=w.Current().document["layers"];layers=Json::array({layers.front()});
+    layers[0]["thickness_m"]=1e-6;auto second=layers[0];second["scapslab_id"]="shared-second";layers.push_back(second);
+    Json shared={{"law","table"},{"coordinate",{0.,1.}},{"value",{1e20,3e20}},{"position_relative",true},{"shared_range",true},{"source_file","shared.grd"}};
+    for(auto &layer:layers)layer["grading"]["Na_m3"]=shared;
+    const auto response=Execute(w,{{"operation","preview_profile"},{"layer_id","shared-second"},{"parameter_id","Na_m3"}});
+    ASSERT_TRUE(response.value("ok",false))<<response.dump();EXPECT_DOUBLE_EQ(response.at("operation_result").at("value_SI").front(),2e20);
+    const auto file=Temp("scapslab-duplicate.grd");{std::ofstream out(file);out<<"position: relative\n1 3\n0 1\n0 9\n";}
+    const auto profile=ProfileFromFile(file.string());EXPECT_FALSE(profile.at("scapslab_warnings").empty());EXPECT_EQ(profile.at("value").front(),1);std::filesystem::remove(file);
+    // Round-trip an ordinary supported material through the product command/job path.
+    auto ordinary=ReadProject(SCAPSLAB_PROJECT);ordinary["layers"]=Json::array({ordinary["layers"].front()});
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"document",ordinary}}).value("ok",false));
+    const auto material=Temp("scapslab-roundtrip.material");const auto layerId=w.Current().document["layers"][0]["scapslab_id"];
+    const auto saved=Execute(w,{{"operation","save_material"},{"layer_id",layerId},{"path",material.string()}});
+    ASSERT_TRUE(saved.value("ok",false))<<saved.dump();
+    const auto loaded=Execute(w,{{"operation","load_material"},{"layer_id",layerId},{"path",material.string()},{"selection","A"}});
+    ASSERT_TRUE(loaded.value("ok",false))<<loaded.dump();EXPECT_EQ(w.Current().document["layers"][0]["scapslab_id"],layerId);std::filesystem::remove(material);
+}
+
+TEST(ScapsLab,OpticalFileTablesRemainUsableWithoutOriginalFiles) {
+    auto doc=ReadProject(SCAPSLAB_PROJECT);const auto profiles=ExamplesDirectory()/"profiles";
+    auto &light=doc["illumination"];light["mode"]="spectrum";light["spectrum_file"]=(profiles/"spectrum.spe").string();light["front_filter_file"]=(profiles/"filter.ftr").string();
+    auto &layer=doc["layers"][0];layer["grading"]["composition"]={{"law","linear"},{"left",0.},{"right",1.}};
+    auto &absorption=layer["absorption"];absorption["model"]="file";absorption["file"]=(profiles/"absorption.abs").string();
+    absorption["composition"]={{"file_a",absorption["file"]},{"file_b",absorption["file"]},{"Eg_a_eV",1.1},{"Eg_b_eV",1.2},{"uv_a_nm",200.},{"uv_b_nm",200.}};
+    auto defect=NewDefect();defect["scapslab_id"]="optical-profile-defect";defect["optical"]={{"enabled",true},{"electron_file",(profiles/"capture.opt").string()}};layer["defects"]=Json::array({defect});
+    const auto embedded=SelfContained(doc);EXPECT_TRUE(embedded["illumination"]["spectrum_file"].get<std::string>().empty());
+    EXPECT_EQ(embedded["layers"][0]["absorption"]["composition"]["table_b_nm_m1"].size(),3);
+    EXPECT_EQ(embedded["layers"][0]["defects"][0]["optical"]["electron_table_nm_m2"].size(),3);
+    EXPECT_NO_THROW((void)Model(embedded));
+    const auto file=Temp("scapslab-all-optical-profiles.yaml");WriteProject(embedded,file.string());const auto restored=ReadProject(file.string());
+    EXPECT_EQ(restored["layers"][0]["absorption"]["composition"]["table_b_nm_m1"],embedded["layers"][0]["absorption"]["composition"]["table_b_nm_m1"]);
+    EXPECT_EQ(restored["layers"][0]["defects"][0]["optical"]["electron_table_nm_m2"],embedded["layers"][0]["defects"][0]["optical"]["electron_table_nm_m2"]);std::filesystem::remove(file);
 }
