@@ -40,20 +40,43 @@ void TextInput(const char *label,char *text,std::size_t size) {
 }
 }
 namespace {
+// New defect with a unique id; bulk default = SCAPS-like single neutral level at mid-gap (Ei), Nt 1e14 cm^-3, sigma 1e-15 cm^2.
+int AddDefectTo(Json &draft,int layer,bool sheet) {
+    auto &layers=draft["layers"];auto &defects=sheet?draft["interface_defects"]:layers[layer]["defects"];
+    if(!defects.is_array()) defects=Json::array();
+    auto d=NewDefect(sheet);unsigned n=1;std::set<std::string> ids;
+    if(sheet) for(const auto &v:defects) ids.insert(v.at("id"));
+    else for(const auto &l:layers) for(const auto &v:l["defects"]) ids.insert(v.at("scapslab_id"));
+    const std::string prefix=sheet?"interface-defect-":"defect-";
+    while(ids.contains(prefix+std::to_string(n))) ++n;
+    d[sheet?"id":"scapslab_id"]=prefix+std::to_string(n);
+    if(sheet) d["left_layer_index"]=layer;else {d["Nt_m3"]=1e20;d["sigma_n_m2"]=1e-19;d["sigma_p_m2"]=1e-19;}
+    defects.push_back(d);return int(defects.size())-1;
+}
+}
+namespace {
 Workflow *numericWorkflow=nullptr;
 Json *numericDocument=nullptr;
-void SweepMenu(Json &object,const char *key) {
-    if(!numericWorkflow || !numericDocument || !ImGui::BeginPopupContextItem("Sweep"))return;
+void SweepMenu(Json &object,const char *key,double scale=1,const char *title="") {
+    if(!numericWorkflow || !numericDocument)return;
+    const ImVec2 itemMin=ImGui::GetItemRectMin(),itemMax=ImGui::GetItemRectMax();
+    const auto *vp=ImGui::GetWindowViewport();const float popupWidth=380.f;
+    ImGui::SetNextWindowSizeConstraints(ImVec2(360,0),ImVec2(FLT_MAX,FLT_MAX));
+    ImGui::SetNextWindowPos(ImVec2(std::clamp(itemMin.x,vp->WorkPos.x,std::max(vp->WorkPos.x,vp->WorkPos.x+vp->WorkSize.x-popupWidth)),std::clamp(itemMax.y,vp->WorkPos.y,std::max(vp->WorkPos.y,vp->WorkPos.y+vp->WorkSize.y-230.f))),ImGuiCond_Appearing);
+    if(!ImGui::BeginPopupContextItem("Sweep"))return;
     const auto parameters=BatchParameters(*numericDocument);
     for(const auto &p:parameters) {
         const auto pointer=Json::json_pointer(p.at("pointer").get<std::string>());
         if(&numericDocument->at(pointer)!=&object.at(key))continue;
-        ImGui::TextUnformatted("Sweep...");ImGui::TextWrapped("%s [%s]",p.at("label").get<std::string>().c_str(),p.at("unit").get<std::string>().c_str());
+        // Range is edited in the control's display units (scale = display/native); the request stays native.
+        ImGui::Text("Sweep: %s",*title?title:p.at("label").get<std::string>().c_str());ImGui::Separator();
         static double delta=1.;static int points=5;static bool logarithmic=false;
-        if(ImGui::IsWindowAppearing())delta=std::max(1e-30,std::abs(p.at("value").get<double>())*.1);
-        BeginRow("Range +/- (native units)");ImGui::DragScalar("##delta",ImGuiDataType_Double,&delta,float(std::max(1e-30,delta*.01)),nullptr,nullptr,"%.6g");EndRow();
-        BeginRow("Points");ImGui::SliderInt("##points",&points,2,100);EndRow();Toggle("Log spacing",logarithmic);
-        Json request={{"operation","quick_sweep"},{"parameter_id",p.at("id")},{"delta_native_units",delta},{"points",points},{"spacing",logarithmic?"log":"linear"}};
+        if(ImGui::IsWindowAppearing())delta=std::max(1e-30,std::abs(p.at("value").get<double>())*.1*scale);
+        const auto row=[](const char *label){ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);ImGui::SameLine(150.f);ImGui::SetNextItemWidth(-1);};
+        row("Range +/-");ImGui::DragScalar("##delta",ImGuiDataType_Double,&delta,float(std::max(1e-30,delta*.01)),nullptr,nullptr,"%.6g");
+        row("Points");ImGui::SliderInt("##points",&points,2,100);
+        row("Log spacing");ImGui::Checkbox("##log",&logarithmic);
+        Json request={{"operation","quick_sweep"},{"parameter_id",p.at("id")},{"delta_native_units",delta/scale},{"points",points},{"spacing",logarithmic?"log":"linear"}};
         std::string error;try{(void)QuickSweep(*numericDocument,request);}catch(const std::exception &e){error=e.what();}
         if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
         ImGui::BeginDisabled(numericWorkflow->Busy() || !error.empty());
@@ -324,7 +347,7 @@ static bool Number(const char *label,Json &j,const char *key,double scale=1) {
         changed=ImGui::SliderScalar("##value",ImGuiDataType_Double,&value,&lo,&hi,"%.4g");TrackGesture();
     }
     if(ImGui::IsItemHovered()) ImGui::SetTooltip("Ctrl+click to enter an exact value. Values are validated before applying.");
-    ImGui::EndGroup();SweepMenu(j,key);EndRow();
+    ImGui::EndGroup();SweepMenu(j,key,scale,label);EndRow();
     if(changed) j[key]=(k=="points_per_layer" || k=="points" || k=="max_newton_iterations")?Json(std::int64_t(value/scale)):Json(value/scale);
     return changed;
 }
@@ -394,6 +417,32 @@ void Panel::RenderContent() {
             if(ImGui::Button("Up") && selected>0) Send({{"operation","layer"},{"action","move"},{"layer_id",id},{"index",selected-1}}); ImGui::SameLine();
             if(ImGui::Button("Down") && selected+1<int(layers.size())) Send({{"operation","layer"},{"action","move"},{"layer_id",id},{"index",selected+1}});
             ImGui::TextDisabled("Stable ID: %s",id.get<std::string>().c_str());
+            {   // Defects / interface shortcuts: edit through the Defects and Interfaces panels.
+                static std::string picked;const bool last=selected+1>=int(layers.size());
+                if(ImGui::Button("Add defect")) {w->pendingDefect=AddDefectTo(draft,selected,false);w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;picked=draft["layers"][selected]["defects"].back().at("scapslab_id");changed=true;++gesture;}
+                ImGui::SameLine();ImGui::BeginDisabled(last);
+                if(ImGui::Button("Add interface")) {w->pendingDefect=AddDefectTo(draft,selected,true);w->pendingSheet=true;w->Current().selectedInterface=selected;w->focusPanel=12;picked=draft["interface_defects"].back().at("id");changed=true;++gesture;}
+                ImGui::EndDisabled();if(last&&ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("The last layer has no next layer to form an interface with.");
+                ImGui::SameLine();
+                if(ImGui::Button("Remove##defect")&&!picked.empty()) {
+                    auto &bulk=draft["layers"][selected]["defects"];auto &sheets=draft["interface_defects"];
+                    const auto bi=std::find_if(bulk.begin(),bulk.end(),[&](const Json &v){return v.at("scapslab_id")==picked;});
+                    if(bi!=bulk.end()) {bulk.erase(bi);changed=true;++gesture;picked.clear();}
+                    else if(sheets.is_array()) {const auto si=std::find_if(sheets.begin(),sheets.end(),[&](const Json &v){return v.at("id")==picked;});if(si!=sheets.end()) {sheets.erase(si);changed=true;++gesture;picked.clear();}}
+                }
+                const auto &bulk=draft["layers"][selected]["defects"];
+                for(int i=0;i<int(bulk.size());++i) {
+                    const auto &d=bulk[i];const std::string idv=d.at("scapslab_id");
+                    const char *type=d.value("amphoteric",false)?"amphoteric":d.value("charge_type",std::string("neutral"))=="donor_like"?"donor":d.value("charge_type",std::string("neutral"))=="acceptor_like"?"acceptor":"neutral";
+                    char row[160];std::snprintf(row,sizeof(row),"%s | Et %+.3g eV | Nt %.3g cm^-3##d%d",type,d.value("energy_offset_eV",0.0),d.value("Nt_m3",0.0)*1e-6,i);
+                    if(ImGui::Selectable(row,picked==idv)) {picked=idv;w->pendingDefect=i;w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;}
+                }
+                if(draft.contains("interface_defects")&&draft["interface_defects"].is_array()) for(int i=0;i<int(draft["interface_defects"].size());++i) {
+                    const auto &d=draft["interface_defects"][i];if(d.at("left_layer_index")!=selected)continue;const std::string idv=d.at("id");
+                    char row[160];std::snprintf(row,sizeof(row),"interface | Et %+.3g eV | Nt %.3g cm^-2##i%d",d.value("energy_offset_eV",0.0),d.value("Nt_m2",0.0)*1e-4,i);
+                    if(ImGui::Selectable(row,picked==idv)) {picked=idv;w->pendingDefect=i;w->pendingSheet=true;w->Current().selectedInterface=selected;w->focusPanel=12;}
+                }
+            }
             static int materialSelection=0;BeginRow("Material selection");ImGui::Combo("##material_selection",&materialSelection,"Both A/B\0Pure A\0Pure B\0");EndRow();
             const char *selection=materialSelection==1?"A":materialSelection==2?"B":"both";
             BeginRow("SCAPS material [.material]");
@@ -448,13 +497,12 @@ void Panel::RenderContent() {
             changed|=Number("Start [V]",draft["voltage"],"start_V"); changed|=Number("Stop [V]",draft["voltage"],"stop_V");
             changed|=Number("Step [V]",draft["voltage"],"step_V"); changed|=Number("T [K]",draft,"temperature_K");w->tutorialOverlay.Item("scapslab.Run","temperature");
             ImGui::TextWrapped("Applied voltage: left minus right. Signed J follows the scaps_core terminal-current convention.");
-            bool automatic=w->autoRecalculate;
-            if(Toggle("Auto I-V",automatic)) Send({{"operation","auto_recalculate"},{"enabled",automatic}});
+            bool automatic=w->autoRecalculate,bandAutomatic=w->autoRecalculateBand;
+            if(ImGui::Checkbox("Auto##iv",&automatic)) Send({{"operation","auto_recalculate"},{"enabled",automatic}});TrackGesture();ImGui::SameLine();
             ImGui::BeginDisabled(w->Busy());
             if(ImGui::Button("Calculate I-V")) Send({{"operation","run"}});w->tutorialOverlay.Item("scapslab.Run","run");
-            ImGui::EndDisabled();
-            bool bandAutomatic=w->autoRecalculateBand;
-            if(Toggle("Auto band",bandAutomatic)) Send({{"operation","auto_recalculate"},{"enabled",w->autoRecalculate},{"band_enabled",bandAutomatic}});
+            ImGui::EndDisabled();ImGui::SameLine(0,24);
+            if(ImGui::Checkbox("Auto##band",&bandAutomatic)) Send({{"operation","auto_recalculate"},{"enabled",w->autoRecalculate},{"band_enabled",bandAutomatic}});TrackGesture();ImGui::SameLine();
             ImGui::BeginDisabled(w->Busy());
             if(ImGui::Button("Recalculate band")) Send({{"operation","band"},{"voltage_V",w->Current().biasVoltage_V}});
             ImGui::EndDisabled();
@@ -748,15 +796,8 @@ bool Panel::Defects(Json &draft,bool sheet) {
     }EndRow();
     auto &defects=sheet?draft["interface_defects"]:layers[selected]["defects"];
     if(!defects.is_array()) defects=Json::array();
-    if(ImGui::Button("Add defect")) {
-        auto d=NewDefect(sheet);unsigned n=1;std::set<std::string> ids;
-        if(sheet) for(const auto &v:defects) ids.insert(v.at("id"));
-        else for(const auto &l:layers) for(const auto &v:l["defects"]) ids.insert(v.at("scapslab_id"));
-        const std::string prefix=sheet?"interface-defect-":"defect-";
-        while(ids.contains(prefix+std::to_string(n))) ++n;
-        d[sheet?"id":"scapslab_id"]=prefix+std::to_string(n);if(sheet) d["left_layer_index"]=selected;
-        defects.push_back(d);selectedDefect=int(defects.size())-1;changed=true;++gesture;
-    }
+    if(w->pendingDefect>=0 && w->pendingSheet==sheet) {selectedDefect=w->pendingDefect;w->pendingDefect=-1;}
+    if(ImGui::Button("Add defect")) {selectedDefect=AddDefectTo(draft,selected,sheet);changed=true;++gesture;}
     std::vector<int> indices;for(int i=0;i<int(defects.size());++i) if(!sheet || defects[i].at("left_layer_index")==selected) indices.push_back(i);
     if(indices.empty()) {ImGui::TextUnformatted("No defects on this object.");return changed;}
     if(std::find(indices.begin(),indices.end(),selectedDefect)==indices.end()) selectedDefect=indices.front();

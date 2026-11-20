@@ -22,6 +22,7 @@ public:
         // The deferred Core settings payload must load before the default layout is built.
         if(ImGui::GetFrameCount()<3) return;
         if(done) {
+            if(auto *fw=panels[0]->GetWorkflow();fw->focusPanel>=0) {ImGui::SetWindowFocus(panels[fw->focusPanel]->ImGuiName().c_str());fw->focusPanel=-1;}
             auto *w=panels[0]->GetWorkflow();
             if(w->focusLayers) {ImGui::SetWindowFocus(panels[w->Current().selectedInterface>=0?12:1]->ImGuiName().c_str());w->focusLayers=false;}
             if(w->focusView>=0 && w->focusView<int(panels.size())) {auto &p=panels[w->focusView];p->SetVisible(true);ImGui::SetWindowFocus(p->ImGuiName().c_str());w->focusView=-1;}
