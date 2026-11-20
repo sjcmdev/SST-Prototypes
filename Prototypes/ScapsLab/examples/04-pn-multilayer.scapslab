@@ -6,7 +6,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.25,0.65,0.95,1],
-      "description": "Source: scaps_core-wt/ui/validation/cases/a2-pn-equilibrium/device_project.yaml. Deck: validation/cases/a2-pn-equilibrium/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Equilibrium-style Si p-n junction (2 layers). Run for the band diagram; use Calculate I-V for a dark curve.",
       "document": {
         "case_id": "a2-pn-equilibrium",
         "constants_mode": "codata",
@@ -111,11 +111,11 @@
         "voltage": {
           "start_V": 0,
           "step_V": 0.02,
-          "stop_V": 0
+          "stop_V": 0.6
         }
       },
       "id": "device-1",
-      "name": "Two-layer pn",
+      "name": "Two-layer p-n junction",
       "result": {},
       "status": "no results"
     }

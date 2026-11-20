@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "filter-optical-files",
   "title": "Filters .ftr and optical capture .opt",
+  "description": "Load a front filter (.ftr) and a defect optical capture file (.opt).",
+  "minutes": 3,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Project",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: Filter and capture.",
+      "instruction": "Click New device at the top of the Project tree and name the device Tutorial: Filter and capture.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: Filter and capture",
@@ -31,7 +33,7 @@
         "window": "scapslab.Illumination",
         "item": "front_filter_file"
       },
-      "instruction": "In Illumination press Browse next to Front transmission [.ftr] and load examples/profiles/filter.ftr (nm, percent). The preview plots the transmission fraction.",
+      "instruction": "In Illumination press Browse next to Front transmission [.ftr] and load examples/profiles/filter.ftr (nm, percent).",
       "command": {
         "operation": "edit",
         "example": "08-pn-illumination.yaml",
@@ -53,7 +55,7 @@
         "window": "scapslab.Defects",
         "item": "optical-capture"
       },
-      "instruction": "In Defects open Optical capture / IPV, enable it and load examples/profiles/capture.opt as Electron capture (nm, m^2).",
+      "instruction": "In Defects open Optical capture / IPV, tick Enabled and load examples/profiles/capture.opt as Electron capture (nm, m^2).",
       "command": {
         "operation": "edit",
         "example": "08-pn-illumination.yaml",

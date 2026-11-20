@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "menus-tour",
   "title": "Tour of the standard menus",
+  "description": "Open each standard menu once to see what it offers.",
+  "minutes": 2,
   "steps": [
     {
       "id": "file",
@@ -9,7 +11,7 @@
         "window": "scapslab.Menu",
         "item": "File"
       },
-      "instruction": "File: New, Open, Save, recent projects, Export. Open the File menu.",
+      "instruction": "File: New, Open, Save, recent projects, export. Open the File menu.",
       "command": {
         "operation": "tutorial_state",
         "menu": "File"
@@ -45,7 +47,7 @@
         "window": "scapslab.Menu",
         "item": "View"
       },
-      "instruction": "View: panel visibility and Reset layout. Open the View menu.",
+      "instruction": "View: show or hide panels, Reset layout. Open the View menu.",
       "command": {
         "operation": "tutorial_state",
         "menu": "View"
@@ -81,7 +83,7 @@
         "window": "scapslab.Menu",
         "item": "Tools"
       },
-      "instruction": "Tools: screenshots and utilities. Open the Tools menu.",
+      "instruction": "Tools: Preferences and utilities. Open the Tools menu.",
       "command": {
         "operation": "tutorial_state",
         "menu": "Tools"
@@ -99,7 +101,7 @@
         "window": "scapslab.Menu",
         "item": "Tutorials"
       },
-      "instruction": "Tutorials: every lesson in learn, demo and verify mode. Open the Tutorials menu.",
+      "instruction": "Tutorials: the lesson list and Stop tutorial. Open the Tutorials menu.",
       "command": {
         "operation": "tutorial_state",
         "menu": "Tutorials"

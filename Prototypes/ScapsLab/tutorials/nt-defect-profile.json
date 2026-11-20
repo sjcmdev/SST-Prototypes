@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "nt-defect-profile",
   "title": "Defect profile Nt(x): Gauss, erfc, file",
+  "description": "Give a defect a depth profile Nt(x): Gauss, erfc or from a file.",
+  "minutes": 4,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Project",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: Nt(x) profile.",
+      "instruction": "Click New device at the top of the Project tree and name the device Tutorial: Nt(x) profile.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: Nt(x) profile",
@@ -31,7 +33,7 @@
         "window": "scapslab.Defects",
         "item": "diffusion-gauss"
       },
-      "instruction": "In Defects select the defect, enable Spatial Nt(x), then press Gauss under Diffusion law. Set dose and projected range; the preview shows Nt(x) in cm^-3.",
+      "instruction": "In Defects select the defect, tick Spatial Nt(x) and press Gauss under Diffusion law. The preview shows Nt(x) in cm^-3.",
       "command": {
         "operation": "set_profile",
         "layer_id": "layer-1",
@@ -57,7 +59,7 @@
         "window": "scapslab.Defects",
         "item": "diffusion-erfc"
       },
-      "instruction": "Press erfc under Diffusion law and set the surface density. Compare the preview with the Gauss shape.",
+      "instruction": "Press erfc under Diffusion law and compare the preview with the Gauss shape.",
       "command": {
         "operation": "set_profile",
         "layer_id": "layer-1",
@@ -82,7 +84,7 @@
         "window": "scapslab.Defects",
         "item": "law"
       },
-      "instruction": "Choose From file under Profile law and load examples/profiles/defects.grd (x/d, m^-3). Use Undo to return to the previous law.",
+      "instruction": "Under Profile law choose From file and load examples/profiles/defects.grd. Undo returns to the previous law.",
       "command": {
         "operation": "load_profile",
         "layer_id": "layer-1",

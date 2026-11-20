@@ -6,7 +6,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.25,0.65,0.95,1],
-      "description": "Source: scaps_core-wt/ui/validation/nl1/project.yaml. Deck: validation/stages/01-contacts/n-low-s/n-low-s-effective.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Si layer with a flat-band left contact and a right contact with finite Sn = 100 m/s, -0.2 to 0.4 V. Change Sn/Sp or the metal work function in Contacts and watch the I-V.",
       "document": {
         "case_id": "n-low-s",
         "constants_mode": "scaps_compat",
@@ -100,7 +100,7 @@
       "status": "no results"
     }
   ],
-  "name": "Contact playground",
+  "name": "Contacts: finite surface recombination",
   "schema_version": 1,
   "ui": {}
 }

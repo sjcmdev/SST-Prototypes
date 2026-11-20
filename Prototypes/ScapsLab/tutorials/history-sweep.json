@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "history-sweep",
   "title": "History and Sweep",
+  "description": "Store a run in the run history, keep it, then sweep the temperature.",
+  "minutes": 4,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Project",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: History and Sweep.",
+      "instruction": "Click New device at the top of the Project tree and name the device Tutorial: History and Sweep.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: History and Sweep"
@@ -27,7 +29,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "Click Calculate I-V to store a result in Run history.",
+      "instruction": "In Run click Calculate I-V. The result is stored in Run history.",
       "command": {
         "operation": "run"
       },
@@ -63,7 +65,7 @@
       "target": {
         "window": "scapslab.Run"
       },
-      "instruction": "Right-click Temperature [K], choose Sweep..., set delta 10 K with 3 points and run. Inspect the three converged rows in Batch.",
+      "instruction": "Right-click Temperature [K], choose Sweep..., set delta 10 K, 3 points, and run. The converged rows appear in Batch.",
       "command": {
         "operation": "quick_sweep",
         "parameter_id": "temperature_K",

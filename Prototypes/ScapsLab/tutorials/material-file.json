@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "material-file",
   "title": "Save and load a .material file",
+  "description": "Save a layer as a SCAPS .material file and load it back.",
+  "minutes": 3,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Project",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: Material file.",
+      "instruction": "Click New device at the top of the Project tree and name the device Tutorial: Material file.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: Material file",
@@ -48,7 +50,7 @@
         "window": "scapslab.Layers",
         "item": "material-load"
       },
-      "instruction": "Change the layer's band gap Eg to 1.5 eV in the Layers material table.",
+      "instruction": "In the Layers material table change the band gap Eg to 1.5 eV.",
       "command": {
         "operation": "edit",
         "example": "08-pn-illumination.yaml",
@@ -69,7 +71,7 @@
         "window": "scapslab.Layers",
         "item": "material-load"
       },
-      "instruction": "Press Load... and choose the .material file you saved. The band gap returns to 1.12 eV; one Undo restores 1.5 eV.",
+      "instruction": "Press Load... and choose the .material file you saved. Eg returns to 1.12 eV; one Undo brings back 1.5 eV.",
       "command": {
         "operation": "load_material",
         "layer_id": "layer-1",

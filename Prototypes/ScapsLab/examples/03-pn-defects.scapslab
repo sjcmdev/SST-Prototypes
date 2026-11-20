@@ -6,7 +6,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.25,0.65,0.95,1],
-      "description": "Source: scaps_core-wt/ui/validation/s11b/projects/baseline.yaml. Deck: phase-11-numerics/baseline/baseline.def (conversion documented in validation/s11b/run.py). SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Dark I-V with a neutral midgap defect, Nt 1e20 m^-3 in the p layer (low recombination).",
       "document": {
         "case_id": "s11b-baseline",
         "constants_mode": "scaps_compat",
@@ -128,7 +128,7 @@
         }
       },
       "id": "device-1",
-      "name": "baseline",
+      "name": "Low defect density",
       "result": {},
       "status": "no results"
     },
@@ -136,7 +136,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.95,0.55,0.25,1],
-      "description": "Source: scaps_core-wt/ui/validation/s11b/projects/deep.yaml. Deck: phase-11-numerics/deep/deep.def (conversion documented in validation/s11b/run.py). SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Same device with Nt 1e25 m^-3: much more SRH recombination, so the dark current is higher. Compare with the other device.",
       "document": {
         "case_id": "s11b-deep",
         "constants_mode": "scaps_compat",
@@ -258,12 +258,12 @@
         }
       },
       "id": "device-2",
-      "name": "deep",
+      "name": "High defect density",
       "result": {},
       "status": "no results"
     }
   ],
-  "name": "pn defect comparison",
+  "name": "Si p-n diode: effect of a deep defect",
   "schema_version": 1,
   "ui": {}
 }

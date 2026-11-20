@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "id": "contacts",
+  "title": "Contacts",
+  "description": "Change the work function and surface recombination of a contact: ohmic versus Schottky behaviour.",
+  "minutes": 4,
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Project",
+        "item": "new"
+      },
+      "instruction": "Click New device at the top of the Project tree and name the device Tutorial: Contacts.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Contacts"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Contacts"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "work-function",
+      "target": {
+        "window": "scapslab.Contacts"
+      },
+      "instruction": "In Contacts untick Flat band for the left contact and set its work function to 5.3 eV. A work function far from the semiconductor makes a Schottky barrier.",
+      "command": {
+        "operation": "edit",
+        "patch": {},
+        "pointer_set": [
+          {
+            "path": "/contacts/left/flat_band",
+            "value": false
+          },
+          {
+            "path": "/contacts/left/phi_m_eV",
+            "value": 5.3
+          }
+        ]
+      },
+      "condition": {
+        "predicate": "contact.left_phi_eV",
+        "op": "ge",
+        "value": 5.3
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "surface",
+      "target": {
+        "window": "scapslab.Contacts"
+      },
+      "instruction": "Set the right contact electron recombination velocity Sn to 100 m/s. A low S limits the current at that contact.",
+      "command": {
+        "operation": "edit",
+        "patch": {},
+        "pointer_set": [
+          {
+            "path": "/contacts/right/Sn_m_s",
+            "value": 100.0
+          }
+        ]
+      },
+      "condition": {
+        "predicate": "contact.right_Sn_m_s",
+        "op": "lt",
+        "value": 1000
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "run",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Calculate I-V in Run and read the curve in I-V.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

@@ -6,7 +6,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.25,0.65,0.95,1],
-      "description": "Source: scaps_core-wt/ui/validation/sref1/device_project.yaml. Deck: validation/sref1/b-default.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Single-layer diode (Na 1e14, Nd 1e21 m^-3), dark, 300 K, -0.5 to 0.8 V. Open C-V or Mott-Schottky and press Calculate, or run C-f at a fixed bias.",
       "document": {
         "case_id": "viewer_project",
         "constants_mode": "scaps_compat",
@@ -95,12 +95,12 @@
         }
       },
       "id": "device-1",
-      "name": "C-V / C-f diode",
+      "name": "Diode for C-V and C-f",
       "result": {},
       "status": "no results"
     }
   ],
-  "name": "C-V and C-f workspace",
+  "name": "Diode for C-V and C-f",
   "schema_version": 1,
   "ui": {}
 }

@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "id": "interface-defect",
+  "title": "Interface defect",
+  "description": "Place a defect at the junction between two layers and see how it changes the I-V.",
+  "minutes": 5,
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Project",
+        "item": "new"
+      },
+      "instruction": "Click New device at the top of the Project tree and name the device Tutorial: Interface defect.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Interface defect"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Interface defect"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "add-layer",
+      "target": {
+        "window": "scapslab.Layers",
+        "item": "add-layer"
+      },
+      "instruction": "In Layers click Add. An interface needs two layers.",
+      "command": {
+        "operation": "layer",
+        "action": "add"
+      },
+      "condition": {
+        "predicate": "device.layer_count",
+        "op": "ge",
+        "value": 2
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "add-interface",
+      "target": {
+        "window": "scapslab.Interfaces"
+      },
+      "instruction": "In Interfaces select interface 1 and press Add defect.",
+      "command": {
+        "operation": "edit",
+        "patch": {},
+        "pointer_set": [
+          {
+            "path": "/interface_defects",
+            "value": [
+              {
+                "energy_distribution": "single",
+                "energy_offset_eV": 0.0,
+                "charge_type": "neutral",
+                "characteristic_energy_eV": 0.05,
+                "gaussian_width": 6.0,
+                "energy_levels": 63,
+                "energy_quadrature": "gauss_legendre",
+                "id": "interface-defect",
+                "left_layer_index": 0,
+                "energy_reference": 7,
+                "Nt_m2": 1000000000000000.0,
+                "sigma_n_left_m2": 1e-19,
+                "sigma_p_left_m2": 1e-19,
+                "sigma_n_right_m2": 1e-19,
+                "sigma_p_right_m2": 1e-19,
+                "density_convention": "integrated_sheet",
+                "peak_density_m2_eV": 0.0
+              }
+            ]
+          }
+        ]
+      },
+      "condition": {
+        "predicate": "interface_defect.count",
+        "op": "ge",
+        "value": 1
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "set-n",
+      "target": {
+        "window": "scapslab.Interfaces"
+      },
+      "instruction": "Set the sheet density N to 1e15 m^-2 (neutral, single level, sigma 1e-19 m^2).",
+      "command": {
+        "operation": "edit",
+        "patch": {},
+        "pointer_set": [
+          {
+            "path": "/interface_defects/0/Nt_m2",
+            "value": 1000000000000000.0
+          }
+        ]
+      },
+      "condition": {
+        "predicate": "interface_defect.Nt_m2",
+        "op": "ge",
+        "value": 1000000000000000.0
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "run",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Calculate I-V in Run and read the curve in I-V.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

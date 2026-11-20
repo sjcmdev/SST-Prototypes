@@ -10,7 +10,7 @@ class TutorialOverlay {
 public:
     void Window(const std::string &id);
     void Item(const std::string &window, const std::string &id);
-    bool Draw(const Tutorial &tutorial, HostedWindows *windows = nullptr); // Returns true when the user requests Stop.
+    bool Draw(Tutorial &tutorial, HostedWindows *windows = nullptr); // Returns true when the user presses Exit. Back / Skip / Show me act on the tutorial directly.
     bool Highlighted() const { return highlighted; }
     // Last drawn geometry (screen space): the target widget, the coach window and the arrow tip.
     struct Geometry { bool arrow = false; ImVec2 tip, targetMin, targetMax, coachMin, coachMax; };

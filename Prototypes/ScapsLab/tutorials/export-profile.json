@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "export-profile",
   "title": "Export a profile to CSV and .grd",
+  "description": "Export a doping profile as .csv and .grd.",
+  "minutes": 3,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Project",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: Export profile.",
+      "instruction": "Click New device at the top of the Project tree and name the device Tutorial: Export profile.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: Export profile",
@@ -28,7 +30,7 @@
         "window": "scapslab.Grading",
         "item": "parameter"
       },
-      "instruction": "In Grading select layer 1 and Na_m3, enable Grade parameter and press erfc under Diffusion law.",
+      "instruction": "In Grading select layer 1 and Na_m3, tick Grade parameter and press erfc under Diffusion law.",
       "command": {
         "operation": "set_profile",
         "layer_id": "layer-1",
@@ -52,7 +54,7 @@
         "window": "scapslab.Grading",
         "item": "export-profile"
       },
-      "instruction": "Right-click the Profile preview and choose Export .csv (columns x_m and the parameter ID, SI units).",
+      "instruction": "Right-click the Profile preview and choose Export .csv (x [m] and the parameter, SI units).",
       "command": {
         "operation": "export_profile",
         "layer_id": "layer-1",
@@ -72,7 +74,7 @@
         "window": "scapslab.Grading",
         "item": "export-profile"
       },
-      "instruction": "Right-click the preview again and choose Export .grd (absolute um, SI values), readable by From file.",
+      "instruction": "Right-click the preview again and choose Export .grd (x in um, SI values). It can be loaded with From file.",
       "command": {
         "operation": "export_profile",
         "layer_id": "layer-1",

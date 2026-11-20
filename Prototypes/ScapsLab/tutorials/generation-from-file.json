@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "generation-from-file",
   "title": "Generation G(x) from a .gen file",
+  "description": "Use a measured generation profile G(x) from a .gen file.",
+  "minutes": 3,
   "steps": [
     {
       "id": "new-device",
@@ -9,7 +11,7 @@
         "window": "scapslab.Project",
         "item": "new"
       },
-      "instruction": "Create a device named Tutorial: G(x) from file.",
+      "instruction": "Click New device at the top of the Project tree and name the device Tutorial: G(x) from file.",
       "command": {
         "operation": "device_add",
         "name": "Tutorial: G(x) from file",
@@ -28,7 +30,7 @@
         "window": "scapslab.Illumination",
         "item": "source"
       },
-      "instruction": "In Illumination (Spectrum / G(x)) choose Generation profile from file and browse to examples/profiles/generation.gen. The preview shows G in cm^-3 s^-1 versus x in nm.",
+      "instruction": "In Illumination choose Generation profile from file and load examples/profiles/generation.gen. The preview shows G [cm^-3 s^-1] versus x [nm].",
       "command": {
         "operation": "load_profile",
         "parameter_id": "generation_m3_s",
@@ -47,7 +49,7 @@
         "window": "scapslab.Illumination",
         "item": "light-iv"
       },
-      "instruction": "Click Calculate light I-V with the file generation profile.",
+      "instruction": "Click Calculate light I-V. The result uses your G(x).",
       "command": {
         "operation": "run"
       },

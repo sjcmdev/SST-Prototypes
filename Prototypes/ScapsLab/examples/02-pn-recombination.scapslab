@@ -6,7 +6,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.25,0.65,0.95,1],
-      "description": "Source: scaps_core-wt/ui/validation/cases/a3-pn-diffusion/device_project.yaml. Deck: validation/cases/a3-pn-diffusion/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Dark I-V of a Si p-n junction without defects: diffusion current only (ideality 1).",
       "document": {
         "case_id": "a3-pn-diffusion",
         "constants_mode": "codata",
@@ -115,7 +115,7 @@
         }
       },
       "id": "device-1",
-      "name": "diffusion",
+      "name": "Diffusion only",
       "result": {},
       "status": "no results"
     },
@@ -123,7 +123,7 @@
       "ac_results": {},
       "band_result": {},
       "colour": [0.95,0.55,0.25,1],
-      "description": "Source: scaps_core-wt/ui/validation/cases/a3-pn-srh/device_project.yaml. Deck: validation/cases/a3-pn-srh/input.def. SCAPS verification: adjacent validation reports. Unchanged device parameters.",
+      "description": "Same junction with a neutral midgap SRH defect (Nt 1e23 m^-3) in both layers: recombination adds a current with ideality near 2 at low voltage.",
       "document": {
         "case_id": "a3-pn-srh",
         "constants_mode": "codata",
@@ -254,12 +254,12 @@
         }
       },
       "id": "device-2",
-      "name": "srh",
+      "name": "With SRH defect",
       "result": {},
       "status": "no results"
     }
   ],
-  "name": "pn recombination",
+  "name": "Si p-n diode: diffusion vs SRH recombination",
   "schema_version": 1,
   "ui": {}
 }

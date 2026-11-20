@@ -26,7 +26,7 @@ class TutorialUi final : public Layer {
     std::vector<Ref<Panel>> panels;
     std::string focusedStep;
     HostedWindows tutorialWindows;
-    bool about=false,clear=false,reportOpen=true;
+    bool about=false,clear=false,reportOpen=true,lessons=false;
     Json savedRecent;
     const Json catalog=TutorialCatalog();
 public:
@@ -89,9 +89,10 @@ public:
             menu("scapslab.preferences","Tools/Preferences...",[panel]{panel->SetVisible(true);});break;
         }
         menu("scapslab.about","Help/About ScapsLab",[this]{about=true;});
-        for(const auto &lesson:catalog) for(const auto *mode:{"learn","demo","verify"}) {
+        menu("scapslab.lessons","Tutorials/Lessons...",[this]{lessons=true;},"",[&w]{return !w.Busy() && !w.tutorial.Active();});
+        for(const auto &lesson:catalog) { // automated self-check, for developers only
             const std::string id=lesson.at("tutorial_id"),title=lesson.at("title");
-            menu("scapslab.lesson."+id+"."+mode,"Tutorials/"+title+"/"+mode,[&w,id,mode]{w.TutorialRequest({{"operation","tutorial_start"},{"tutorial_id",id},{"mode",mode}});},"",[&w]{return !w.Busy() && !w.tutorial.Active();});
+            menu("scapslab.lesson."+id+".verify","Help/Developer/Verify tutorials/"+title,[&w,id]{w.TutorialRequest({{"operation","tutorial_start"},{"tutorial_id",id},{"mode","verify"}});},"",[&w]{return !w.Busy() && !w.tutorial.Active();});
         }
         operation("tutorial_stop","Tutorials/Stop tutorial","",[&w]{return w.tutorial.Active();});
     }
@@ -104,11 +105,32 @@ public:
             }
             savedRecent=w.recent;
         }
-        for(const auto &lesson:catalog) {
-            const std::string id=lesson.at("tutorial_id"),title=lesson.at("title");
-            const auto progress=w.tutorialProgress.value(id,Json::object());
-            const auto suffix=progress.value("status",std::string{})=="passed"?" (complete)":" ("+std::to_string(progress.value("step_index",std::size_t(0)))+"/"+std::to_string(lesson.at("step_count").get<std::size_t>())+")";
-            for(const auto *mode:{"learn","demo","verify"}) (void)w.commands->SetMenu(CommandID{"scapslab.lesson."+id+"."+mode},"Tutorials/"+title+suffix+"/"+mode,"",[this]{return !w.Busy() && !w.tutorial.Active();});
+        if(lessons) {
+            ImGui::SetNextWindowSize(ImVec2(520,0),ImGuiCond_Appearing);
+            if(ImGui::Begin("Tutorials###sst-lessons",&lessons,ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::TextWrapped("Pick a lesson. ScapsLab highlights each control; you do the step yourself. Lessons add a tutorial device and never replace your project.");
+                ImGui::Separator();
+                for(const auto &lesson:catalog) {
+                    const std::string id=lesson.at("tutorial_id"),title=lesson.at("title");
+                    const auto progress=w.tutorialProgress.value(id,Json::object());
+                    const auto steps=lesson.at("step_count").get<std::size_t>();
+                    ImGui::PushID(id.c_str());
+                    ImGui::BeginGroup();
+                    ImGui::TextUnformatted(title.c_str());
+                    ImGui::TextDisabled("%d min, %zu steps%s",lesson.value("minutes",0),steps,progress.value("status",std::string{})=="passed"?", completed":"");
+                    ImGui::PushTextWrapPos(ImGui::GetContentRegionAvail().x-90);
+                    ImGui::TextWrapped("%s",lesson.value("description",std::string{}).c_str());
+                    ImGui::PopTextWrapPos();
+                    ImGui::EndGroup();
+                    ImGui::SameLine(ImGui::GetContentRegionMax().x-70);
+                    if(ImGui::Button("Start",ImVec2(70,0)) && !w.Busy() && !w.tutorial.Active()) {
+                        (void)w.Dispatch({{"operation","tutorial_start"},{"tutorial_id",id},{"mode","learn"}});lessons=false;
+                    }
+                    ImGui::Separator();
+                    ImGui::PopID();
+                }
+            }
+            ImGui::End();
         }
         if(const auto *step=w.tutorial.Step()) {
             reportOpen=true;
@@ -127,7 +149,7 @@ public:
             focusedStep.clear();
             const auto report=w.tutorial.Report();
             if(reportOpen && (report.at("status")=="failed" || report.at("status")=="passed")) {
-                tutorialWindows.Render("Tutorial report###sst-tutorial-report",reportOpen,0,[&] {ImGui::TextUnformatted(report.at("status")=="passed"?"Tutorial PASS":"Tutorial FAIL");for(const auto &step:report.at("steps")) {ImGui::Text("%s: %s",step.at("step_id").get<std::string>().c_str(),step.at("status").get<std::string>().c_str());if(!step.at("error").is_null())ImGui::TextWrapped("%s",step.at("error").dump().c_str());}},true);
+                tutorialWindows.Render("Tutorial report###sst-tutorial-report",reportOpen,0,[&] {ImGui::TextUnformatted(report.at("status")=="passed"?(report.at("mode")=="learn"?"Lesson complete.":"Tutorial PASS"):"Tutorial FAIL");if(report.at("mode")!="learn")for(const auto &step:report.at("steps")) {ImGui::Text("%s: %s",step.at("step_id").get<std::string>().c_str(),step.at("status").get<std::string>().c_str());if(!step.at("error").is_null())ImGui::TextWrapped("%s",step.at("error").dump().c_str());}},true);
             }
         }
         tutorialWindows.EndFrame();

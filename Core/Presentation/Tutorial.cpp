@@ -44,10 +44,22 @@ void Tutorial::Start(Json data, const std::string &newMode, const Predicates &pr
         ValidateCondition(step.at("condition"), predicates);
     }
     definition = std::move(data); mode = newMode; index = resume; state = "running";
-    submitted = false; results = Json::array(); started = std::chrono::steady_clock::now();
+    submitted = false; showMe = false; results = Json::array(); started = std::chrono::steady_clock::now();
+    preds = predicates; entryMet = Check(definition.at("steps").at(index).at("condition"), predicates);
 }
 const Tutorial::Json *Tutorial::Step() const { return Active() ? &definition.at("steps").at(index) : nullptr; }
 void Tutorial::Stop() { if (Active()) state = "stopped"; }
+void Tutorial::Back() {
+    if (!CanGoBack()) return;
+    --index; if (results.size() > index) results.erase(results.begin() + index, results.end());
+    submitted = false; showMe = false; entryMet = Check(definition.at("steps").at(index).at("condition"), preds);
+}
+void Tutorial::Skip() {
+    if (!Active() || mode != "learn") return;
+    results.push_back({{"step_id", definition.at("steps")[index].at("id")}, {"status", "SKIP"}, {"error", nullptr}});
+    if (++index == definition.at("steps").size()) state = "passed";
+    submitted = false; showMe = false; entryMet = state == "running" && Check(definition.at("steps").at(index).at("condition"), preds);
+}
 void Tutorial::FinishStep(bool pass, const std::string &code, const std::string &message) {
     results.push_back({{"step_id", definition.at("steps")[index].at("id")}, {"status", pass ? "PASS" : "FAIL"},
         {"error", pass ? Json(nullptr) : Json{{"code", code}, {"message", message}}}});
@@ -57,13 +69,21 @@ void Tutorial::FinishStep(bool pass, const std::string &code, const std::string 
         state = "failed"; return;
     }
     if (++index == definition.at("steps").size()) state = "passed";
-    submitted = false; started = std::chrono::steady_clock::now();
+    submitted = false; showMe = false; started = std::chrono::steady_clock::now();
+    entryMet = state == "running" && Check(definition.at("steps").at(index).at("condition"), preds);
 }
 void Tutorial::Tick(const Predicates &predicates, const std::function<Json(const Json &)> &execute, bool busy, const Json &response) {
     if (!Active()) return;
     try {
         const auto &step = *Step();
-        if (mode == "learn") { if (!busy && Check(step.at("condition"), predicates)) FinishStep(true); return; }
+        if (mode == "learn") {
+            if (busy) return;
+            if (showMe) { showMe = false; (void)execute(step.at("command")); return; }
+            // A condition that already held when the step began needs the user's Next; it never auto-advances.
+            if (!Check(step.at("condition"), predicates)) entryMet = false;
+            else if (!entryMet) FinishStep(true);
+            return;
+        }
         if (std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count() > step.value("timeout_s", 120.)) {
             FinishStep(false, "tutorial.timeout", "Step exceeded timeout_s"); return;
         }
