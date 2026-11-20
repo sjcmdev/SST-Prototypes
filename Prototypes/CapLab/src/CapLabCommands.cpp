@@ -1,6 +1,7 @@
 #include "Domain/CapLabBundleImport.hpp"
 #include "CapLabCommands.hpp"
 #include "Domain/CapLabIS.hpp"
+#include "Domain/CapLabProjectTree.hpp"
 namespace SST::Prototypes::CapLab {
 namespace {
 class RequestCommand final : public ICommand {
@@ -42,6 +43,29 @@ public:
 private:
     CapLabWorkflow &state;
 };
+class TreeCommand final : public ICommand {
+public:
+    TreeCommand(CapLabWorkflow &state, bool selection) : state(state), selection(selection) {}
+    Result<void> Execute(CommandContext &context) override {
+        try {
+            const auto *edit=context.TryGet<Json>("edit");
+            if (!edit) throw std::runtime_error("Missing tree request.");
+            if (selection) {state.Select(*edit); return {};}
+            if (state.closeRequested) throw std::runtime_error("Resolve pending close first.");
+            before=state.Document().project;
+            auto draft=state.EditSnapshot(); EditProjectTree(draft,*edit); after=std::move(draft);
+            state.Document().project=after; state.Changed(); return {};
+        } catch (const std::exception &e) {
+            state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,"Project tree operation failed",e.what(),"Check stable IDs and metadata.","CapLab",selection ? "caplab.selection" : "caplab.tree"};
+        }
+    }
+    Result<void> Undo(CommandContext &) override {state.Document().project=before; state.Changed(); return {};}
+    Result<void> Redo(CommandContext &) override {state.Document().project=after; state.Changed(); return {};}
+    bool IsUndoable() const noexcept override {return !selection;}
+    std::string Description() const override {return selection ? "Select CapLab object" : "Edit CapLab project tree";}
+private:
+    CapLabWorkflow &state; bool selection; Project before,after;
+};
 class AnalysisChange final : public ICommand {
 public:
     AnalysisChange(CapLabWorkflow &state, bool area) : state(state), area(area) {}
@@ -49,7 +73,7 @@ public:
         try {
             before = state.Document().project;
             if (area) {
-                auto draft = Parse(Serialize(before));
+                auto draft = state.EditSnapshot();
                 const auto *id = context.TryGet<pl::Id>("sample_id"); const auto *value = context.TryGet<double>("area_m2");
                 if (!id || !value) throw std::runtime_error("Missing area settings.");
                 Optional(Json(*value)); bool found = false;
@@ -65,13 +89,13 @@ public:
                 if (!state.analysisDraft || state.analysisRevision != state.Document().revision) throw std::runtime_error("Stale analysis discarded.");
                 after = *state.analysisDraft; Validate(after);
             }
-            state.Document().project = after; state.Changed(); state.analysisDraft.reset(); return {};
+            state.Document().project = after; state.Changed(area); state.analysisDraft.reset(); return {};
         } catch (const std::exception &e) {
             state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,"Analysis failed",e.what(),"Check analysis settings.","CapLab","caplab.analysis"};
         }
     }
-    Result<void> Undo(CommandContext &) override { state.Document().project=before; state.Changed(); return {}; }
-    Result<void> Redo(CommandContext &) override { state.Document().project=after; state.Changed(); return {}; }
+    Result<void> Undo(CommandContext &) override { state.Document().project=before; state.Changed(area); return {}; }
+    Result<void> Redo(CommandContext &) override { state.Document().project=after; state.Changed(area); return {}; }
     bool IsUndoable() const noexcept override { return true; }
     std::string Description() const override { return area ? "Change sample area" : "Accept analysis"; }
 private:
@@ -85,7 +109,7 @@ public:
             const auto *edit=context.TryGet<Json>("edit");
             if (!edit) throw std::runtime_error("Missing defect edit.");
             before=state.Document().project;
-            auto draft=Parse(Serialize(before));
+            auto draft=state.EditSnapshot();
             if (measurement) DeleteMeasurement(draft,edit->at("measurement_id").get<pl::Id>()); else if (circuit) EditCircuit(draft,*edit); else EditDefect(draft,*edit); RefreshAnalyses(draft); after=std::move(draft);
             state.Document().project=after; state.Changed(); return {};
         } catch (const std::exception &e) {
@@ -102,15 +126,29 @@ private:
 class ImportCommand final : public ICommand {
 public:
     explicit ImportCommand(CapLabWorkflow &state) : state(state) {}
-    Result<void> Execute(CommandContext &) override {
+    Result<void> Execute(CommandContext &context) override {
         try {
             if (state.previewRevision != state.Document().revision)
                 throw std::runtime_error("Preview is stale; import the file again.");
             before=state.Document().project;
-            auto draft=Parse(Serialize(before));
+            auto draft=state.EditSnapshot();
+            const auto *requestedTarget=context.TryGet<pl::Id>("target_sample_id");
+            const auto target=requestedTarget ? *requestedTarget : state.importTargetSample;
+            if (target) FindSample(draft,target);
             auto append = [&](const Json &preview, std::optional<double> temperature) {
+                std::set<pl::Id> original;
+                for (const auto &s:draft.samples) original.insert(s.id);
                 if (preview.contains("samples")) { BundleChange change(draft,preview); }
                 else { ImportChange change(draft,preview,temperature,state.templates.find("caplab.cf",1)); }
+                if (target) {
+                    if (preview.contains("samples") && !preview.value("historical",Json::array()).empty())
+                        throw std::runtime_error("Historical bundles retain their own samples; move measurements explicitly after import.");
+                    std::vector<pl::Id> measurements;
+                    for (const auto &m:draft.measurements) if (!original.contains(m.at("sample_id").get<pl::Id>())) measurements.push_back(m.at("id"));
+                    for (const auto &m:draft.sweeps) if (!original.contains(m.sample_id)) measurements.push_back(m.id);
+                    if (!measurements.empty()) MoveMeasurements(draft,measurements,target);
+                    std::erase_if(draft.samples,[&](const auto &s) {return !original.contains(s.id);});
+                }
             };
             if (state.sourcePreviews.empty()) {
                 if (!state.preview) throw std::runtime_error("No import preview.");
@@ -146,6 +184,11 @@ private:
 }
 void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWorkflow &state) {
     registry->SetUndoStack(state.undo); state.commands = registry;
+    for (bool selection:{false,true}) {
+        const auto result=registry->Register({CommandID{selection ? "caplab.select" : "caplab.tree"},selection ? "Select CapLab object" : "Edit project tree","CapLab","",{},selection ? CommandFlags::None : CommandFlags::Undoable},
+            [&state,selection](CommandContext &) {return CreateUnique<TreeCommand>(state,selection);});
+        if (!result) throw std::runtime_error(result.Error().technicalDetails);
+    }
     const auto workspace=registry->Register({CommandID{"caplab.workspace"},"CapLab workspace","CapLab"},
         [&state](CommandContext &) { return CreateUnique<WorkspaceCommand>(state); });
     if (!workspace) throw std::runtime_error(workspace.Error().technicalDetails);

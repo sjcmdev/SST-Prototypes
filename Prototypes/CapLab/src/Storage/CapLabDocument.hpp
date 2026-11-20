@@ -45,6 +45,7 @@ namespace SST::Prototypes::CapLab
             if (!samples.insert(s.id).second || !std::holds_alternative<pl::Workbook>(p.engine->object(s.id).data))
                 throw std::runtime_error("Invalid sample ID.");
             if (s.name != p.engine->object(s.id).name) throw std::runtime_error("Sample name mismatch.");
+            if (!s.metadata.is_object()) throw std::runtime_error("Sample metadata must be an object.");
             Optional(Nullable(s.area_m2));
         }
         for (const auto &s : p.sweeps)
@@ -407,6 +408,11 @@ namespace SST::Prototypes::CapLab
     {
         std::uint64_t handle = 0;
         Project project;
+        pl::Id selectedSample=0, selectedMeasurement=0, selectedDefect=0, selectedAnalysis=0, selectedCircuit=0;
+        std::uint64_t selectionRevision=0;
+        std::uint64_t inputRevision=0;
+        std::string selectionKind;
+        pl::Id identityHighWater=0;
         UndoStack history;
         void Changed() { ++revision; }
         void Saved(const Path &target, std::uint64_t expected) { MarkSaved(target, expected); }

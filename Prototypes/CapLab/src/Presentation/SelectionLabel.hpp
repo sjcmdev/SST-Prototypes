@@ -1,7 +1,17 @@
 #pragma once
 #include "Storage/CapLabDocument.hpp"
+#include <cstdio>
 
 namespace SST::Prototypes::CapLab {
+inline std::string WithStandardError(const Json& result, const char* value, const char* error) {
+    if (!result.contains(value) || !result.at(value).is_number()) return "unavailable";
+    char number[64]; std::snprintf(number,sizeof(number),"%.6g",result.at(value).get<double>());
+    std::string text=number;
+    if (!result.contains(error) || !result.at(error).is_number()) return text+" (SE unavailable)";
+    std::snprintf(number,sizeof(number),"%.3g",result.at(error).get<double>());
+    return text+" +/- "+number+" (SE)";
+}
+
 inline std::string MeasurementSourceName(std::string source) {
     // Conversion annotations may contain slashes; they are not part of the filename.
     const auto annotation=source.find(" (Cp/Rp -> C/G)");

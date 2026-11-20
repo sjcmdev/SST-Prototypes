@@ -998,3 +998,70 @@ Results from this integration job (all reports under `build/merge-clis2-*`):
 found no remaining conflict markers in either repository. No manual GUI smoke
 was performed; automated display/ID-conflict tests are included in CapLab C++.
 The merge index and commits remain for the owner/chain; no Git writes were run.
+
+## clproj1 - project tree and navigation (2026-11-20)
+
+Implemented in `Domain/CapLabProjectTree.hpp`, `CapLabCommands.cpp`,
+`IO/PrototypeWorkflow.*`, `IO/PrototypePythonBindings.cpp`, `Storage/CapLabDocument.hpp`,
+`Presentation/CapLabProjectPanel.cpp`, the separate CV/AS/Walter/IS panel files,
+`Presentation/CapLabPrototypePanel.*`, `App.cpp` and `premake5.lua`.
+Python contracts are documented in `python/caplab/__init__.py` and README.
+
+- Tree actions use Core commands and per-project Undo: sample creation, rename,
+  metadata, duplication, deletion, measurement move/merge and analysis/circuit deletion.
+- Stable object and row IDs survive Undo/Redo, save after Undo and reopen.
+  Deletion clears selection without selecting a replacement. Moved defect points
+  retain original IDs and are disabled; historical references become explicitly
+  unresolved, with originals retained in `moved_references`.
+- Each open project retains its selection; module windows share it. Measurements
+  are grouped by kind and explicit T/f/bias, including unknown conditions.
+- Analysis previews use cancellable jobs after editing ends. Accepted results
+  stay separate, show stale/missing-input status, and require an explicit acceptance.
+- Existing Core WindowWorkspace persists module windows. Existing app/Core window
+  IDs remain stable; startup reload reattaches saved dock nodes before rendering.
+
+Gates executed in this job, MSVC Debug, from scratch in this worktree:
+
+| Gate | Result |
+|---|---|
+| CapLab and linked Core/SST-Math/SST-Physics/UI/PlotLab-Engine/CircuitCore libraries | Build passed |
+| CapLabTests | Build passed; 69/69 GTest, 0 skipped |
+| Full embedded Python suite | 273/273 pytest; host GTest passed, 0 skipped |
+| GUI offscreen | Migration and restart captures reviewed; all 6 window IDs/types/dock IDs, sizes, modes and visibility preserved |
+| ImGui ID conflicts | 0 in render checks, including duplicate names and near-equal T group labels |
+
+Build directories: `SST-Prototypes/build` and sibling `SST-Libraries/build` under
+`D:/SJCM/01_SemiconductorStudio/wt-cl/clproj1/`. Every build, suite and GPU capture
+used `tools/agents/build-lock.sh`; MSBuild used `-nr:false -m:1`, with a 6-compile cap.
+Scientific packages came from the existing local CPython 3.13.2 environment
+(NumPy 2.5.1, SciPy 1.18.0, pytest 9.1.1), because network restrictions blocked
+`uv sync`. The gate runner supplies that environment to the embedded host.
+
+Inherited fixture failures: six files had LF while their frozen SHA-256 values
+required original CRLF bytes. Exact matching bytes were restored; no expected
+hash or numerical value was changed. `tests/fixtures/.gitattributes` prevents
+future text conversion. New coverage: 8 C++ tree tests and 6 Python parity tests,
+plus an embedded preview/acceptance check.
+
+Evidence: `tools/agents/runs/clproj1/` contains build logs, GTest XML, pytest log,
+`shots/before.png`, `shots/migration.png`, `shots/restart.png` and INI snapshots.
+The before capture used the earlier binary and captures only its main framebuffer;
+its detached viewports are excluded. The final captures show the freshly built
+worktree binary. Absolute desktop coordinates translate with the native window;
+relative layout, dimensions and docking remain unchanged.
+
+JFM and Core sources were not changed, so JFM suites were not run. Manual GUI
+interaction and the complete owner laboratory workflow remain for claccept1.
+
+Final navigation replay also covers result-to-circuit context, clearing a previous
+plot on empty-sample selection, and resetting the schematic editor when its
+circuit selection changes. Final GTest replay remains 69/69. An additional
+headless check duplicated a sample containing a circuit, its model-only IS result
+and measurement overlays: 1/1 pytest passed through `caplab.execute`.
+
+After the final navigation changes, all 6 `test_project_tree.py` JSON parity
+cases were replayed successfully. The supplementary model-only IS duplication
+check also passed. Frozen files restored byte-for-byte were
+`m2/#1_CF_test_200K.dat`, `m2/CV_test_230K_DL1e+03Hz_REL.dat`,
+`m2/samples_Cd_diffusion.json`, `m8/synthetic.json`,
+`scaps-gold1/reference.json` and `scaps-gold1/README.md`.

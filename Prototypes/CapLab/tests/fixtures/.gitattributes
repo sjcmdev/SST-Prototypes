@@ -1,2 +1,2 @@
-# Frozen manifests hash the source bytes, including line endings.
-** -text
+# Frozen fixture manifests hash exact bytes, including original line endings.
+* -text

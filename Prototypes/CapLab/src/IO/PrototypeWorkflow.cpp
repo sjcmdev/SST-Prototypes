@@ -195,6 +195,7 @@ namespace SST::Prototypes::CapLab
     }
     void CapLabWorkflow::Start(Operation operation, Path target, std::vector<Path> sources, bool recursive)
     {
+        if (operation==Operation::Analyze) analysisQueued=false;
         try
         {
             if (activeJob) throw std::runtime_error("Wait for the current job or cancel it.");
@@ -244,7 +245,7 @@ namespace SST::Prototypes::CapLab
                 std::get<pl::Layer>(layer.data).view=view;
                 engine.change("Save graph view",{std::move(layer)}).apply(engine);
             }
-            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save || operation == Operation::Analyze || operation == Operation::Export ? Serialize(document.project) : "",target);
+            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Analyze || operation == Operation::Save ? Serialize(EditSnapshot()) : operation == Operation::Export ? Serialize(document.project) : "",target);
             job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
             job->sources=std::move(sources); job->recursive=recursive;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
@@ -263,6 +264,7 @@ namespace SST::Prototypes::CapLab
                 }
             }
             pendingRevision = document.revision; pendingProject = workspace.active;
+            pendingSelectionRevision = document.selectionRevision;
             activeJob = jobs->Submit(job);
             if (!activeJob) throw std::runtime_error("Job submission failed.");
             pending = std::move(job); status.clear(); failure.reset();
@@ -294,10 +296,20 @@ namespace SST::Prototypes::CapLab
             temperature=sourceTemperatures.at(index);
         }
     }
-    void CapLabWorkflow::Changed()
+    Project CapLabWorkflow::EditSnapshot() const
+    {
+        auto value=Json::parse(Serialize(Document().project));
+        value["engine"]["nextId"]=std::max(Document().identityHighWater,value.at("engine").at("nextId").get<pl::Id>());
+        return Parse(value.dump());
+    }
+    void CapLabWorkflow::Changed(bool inputsChanged)
     {
         auto &document = Document();
+        if (inputsChanged) ++document.inputRevision;
+        auto engine=Json::parse(document.project.engine->toJson());
+        document.identityHighWater=std::max(document.identityHighWater,engine.at("nextId").get<pl::Id>());
         RefreshAnalyses(document.project);
+        ReconcileSelection();
         document.Changed(); view = {}; graphViews.clear(); exportGraphs.clear();
         if (bus) { DocumentChanged e; e.project = document.handle; e.revision = document.revision; bus->Queue(e); }
     }
@@ -315,11 +327,12 @@ namespace SST::Prototypes::CapLab
             status = "Completed.";
             if (pending->operation == Operation::Export) {status = "Exported."; exportResult=pending->preview;}
             else if (document.revision != pendingRevision ||
+                (pending->analysisOptions.value("preview",false) && document.selectionRevision!=pendingSelectionRevision) ||
                 (pending->operation==Operation::Preview && !previewGeneration.IsCurrent(pendingGeneration))) status = "Stale revision: result discarded.";
             else if (pending->operation == Operation::Analyze)
             {
                 analysisDraft = std::move(pending->opened); analysisRevision = pendingRevision;
-                if (pending->analysisOptions.value("fit",false)) status="Fit draft ready; review and accept or discard.";
+                if (pending->analysisOptions.value("fit",false) || pending->analysisOptions.value("preview",false)) status="Preview ready; review and accept or discard. Accepted results are unchanged.";
                 else if (commands) (void)commands->Execute(CommandID{"caplab.accept_analysis"});
             }
             else if (pending->operation == Operation::Open)
@@ -377,7 +390,7 @@ namespace SST::Prototypes::CapLab
 {
     void CapLabWorkflow::ResetProjectUI()
     {
-        ClearPreview(); graphViews.clear(); exportGraphs.clear();
+        ClearPreview(); graphViews.clear(); exportGraphs.clear(); importTargetSample=0;
         analysisDraft.reset(); pendingCandidate = nullptr;
         analysisOptions = Json::object(); view = {}; failure.reset(); status = "Ready.";
         const auto &p = Document().project;
@@ -386,7 +399,7 @@ namespace SST::Prototypes::CapLab
     }
     bool CapLabWorkflow::Activate(std::uint64_t handle)
     {
-        if (activeJob || !workspace.Find(handle)) return false;
+        if (activeJob || analysisQueued || !workspace.Find(handle)) return false;
         if (workspace.active == handle) return true;
         if (undo) std::swap(*undo, Document().history);
         (void)workspace.Activate(handle);
@@ -399,7 +412,7 @@ namespace SST::Prototypes::CapLab
     }
     bool CapLabWorkflow::CloseProject(bool discard)
     {
-        if (activeJob || (Document().IsDirty() && !discard)) return false;
+        if (activeJob || analysisQueued || (Document().IsDirty() && !discard)) return false;
         if (undo) undo->Clear();
         (void)workspace.Close(workspace.active);
         if (workspace.projects.empty()) (void)workspace.Open(CapLabDocument{});
@@ -436,7 +449,10 @@ namespace SST::Prototypes::CapLab
         Json projects = Json::array();
         for (const auto &d : workspace.projects) projects.push_back({{"project_id",d.handle},
             {"project",Json::parse(Serialize(d.project))},{"path",d.path ? Json(d.path->Utf8()) : Json(nullptr)},
-            {"revision",d.revision},{"saved_revision",d.savedRevision},{"dirty",d.IsDirty()}});
+            {"revision",d.revision},{"saved_revision",d.savedRevision},{"dirty",d.IsDirty()},
+            {"next_entity_id",d.identityHighWater},
+            {"selection",{{"kind",d.selectionKind},{"sample_id",d.selectedSample},{"measurement_id",d.selectedMeasurement},
+                {"defect_id",d.selectedDefect},{"analysis_id",d.selectedAnalysis},{"circuit_id",d.selectedCircuit}}}});
         Json files = Json::array(); for (const auto &path : recent) files.push_back(path.Utf8());
         return {{"projects",projects},{"active_project_id",workspace.active},{"next_project_id",workspace.nextHandle},
             {"recent_projects",files},{"close_requested",closeRequested},{"close_application",closeApplication},{"close_ready",closeReady}};
@@ -450,6 +466,14 @@ namespace SST::Prototypes::CapLab
             CapLabDocument d; d.handle = item.at("project_id").get<std::uint64_t>();
             if (!d.handle || d.handle == UINT64_MAX || restored.Find(d.handle)) throw std::runtime_error("Invalid or duplicate project_id.");
             d.project = Parse(item.at("project").dump());
+            if (item.contains("next_entity_id") && !item.at("next_entity_id").is_number_unsigned()) throw std::runtime_error("Invalid next_entity_id.");
+            d.identityHighWater=item.value("next_entity_id",pl::Id{0});
+            if (item.contains("selection")) {
+                const auto &s=item.at("selection");
+                d.selectionKind=s.value("kind",std::string{}); d.selectedSample=s.value("sample_id",pl::Id{0});
+                d.selectedMeasurement=s.value("measurement_id",pl::Id{0}); d.selectedDefect=s.value("defect_id",pl::Id{0});
+                d.selectedAnalysis=s.value("analysis_id",pl::Id{0}); d.selectedCircuit=s.value("circuit_id",pl::Id{0});
+            }
             if (!item.at("path").is_null()) d.path = Path{item.at("path").get<std::string>()};
             d.revision = item.at("revision"); d.savedRevision = item.at("saved_revision");
             if (d.revision == UINT64_MAX || (d.path && d.path->Empty()) || d.savedRevision > d.revision) throw std::runtime_error("Invalid saved revision.");
@@ -467,6 +491,7 @@ namespace SST::Prototypes::CapLab
         const bool requested=value.value("close_requested",false), application=value.value("close_application",false), ready=value.value("close_ready",false);
         workspace = std::move(restored); if (undo) undo->Clear(); recent=std::move(files);
         closeRequested=requested; closeApplication=application; closeReady=ready;
+        ReconcileSelection();
     }
     Result<void> CapLabWorkflow::WorkspaceRequest(const Json &request)
     {
@@ -480,7 +505,7 @@ namespace SST::Prototypes::CapLab
                 if (decision=="save" && target.Empty() && !Document().path) throw std::runtime_error("Save requires an explicit path.");
                 ResolveClose(decision,target);
             } else {
-                if (activeJob) throw std::runtime_error("Wait for the current job or cancel it.");
+                if (activeJob || analysisQueued) throw std::runtime_error("Wait for the current job or cancel it.");
                 if (closeRequested && operation != "workspace") throw std::runtime_error("Resolve the pending close request first.");
                 if (operation == "new") Start(Operation::New);
                 else if (operation == "activate") {
@@ -493,4 +518,98 @@ namespace SST::Prototypes::CapLab
             return StructuredError{ErrorCategory::Validation,Severity::Error,"Workspace operation failed",e.what(),"Check the project and active jobs.","CapLab","caplab.workspace"};
         }
     }
+}
+
+namespace SST::Prototypes::CapLab {
+Json CapLabWorkflow::SelectionJson() const {
+    const auto &d=Document();
+    return {{"sample_id",d.selectedSample},{"measurement_id",d.selectedMeasurement},{"defect_id",d.selectedDefect},
+        {"analysis_id",d.selectedAnalysis},{"circuit_id",d.selectedCircuit}};
+}
+void CapLabWorkflow::ReconcileSelection() {
+    auto &d=Document(); auto &p=d.project; const auto before=SelectionJson();
+    if (d.selectedSample && std::none_of(p.samples.begin(),p.samples.end(),[&](const auto &s) {return s.id==d.selectedSample;})) {
+        d.selectedSample=d.selectedMeasurement=d.selectedDefect=d.selectedAnalysis=d.selectedCircuit=0;
+        p.graph=0;
+    }
+    if (d.selectedMeasurement) {
+        try {d.selectedSample=AnalysisMeasurement(p,d.selectedMeasurement).at("sample_id");}
+        catch (const std::exception &) {d.selectedMeasurement=0; if (d.selectionKind=="measurement") p.graph=0;}
+    }
+    auto exists=[&](const Json &items,pl::Id id) {return std::any_of(items.begin(),items.end(),[&](const auto &v) {return v.at("id")==id;});};
+    if (!exists(p.defects,d.selectedDefect)) d.selectedDefect=0;
+    if (!exists(p.circuits,d.selectedCircuit)) d.selectedCircuit=0;
+    if (!exists(p.analyses,d.selectedAnalysis)) d.selectedAnalysis=0;
+    if (d.selectionKind=="analysis") for (const auto &a:p.analyses) if (a.at("id")==d.selectedAnalysis) d.selectedSample=AnalysisSample(a);
+    if (d.selectionKind=="circuit") for (const auto &c:p.circuits) if (c.at("id")==d.selectedCircuit) d.selectedSample=c.at("sample_id");
+    if (d.selectionKind=="defect") for (const auto &v:p.defects) if (v.at("id")==d.selectedDefect) d.selectedSample=v.at("sample_id");
+    if (d.selectedMeasurement && AnalysisMeasurement(p,d.selectedMeasurement).at("sample_id")!=d.selectedSample) d.selectedMeasurement=0;
+    for (const auto &c:p.circuits) if (c.at("id")==d.selectedCircuit && c.at("sample_id")!=d.selectedSample) d.selectedCircuit=0;
+    for (const auto &v:p.defects) if (v.at("id")==d.selectedDefect && v.at("sample_id")!=d.selectedSample) d.selectedDefect=0;
+    if (importTargetSample && std::none_of(p.samples.begin(),p.samples.end(),[&](const auto &s) {return s.id==importTargetSample;})) importTargetSample=0;
+    if (SelectionJson()!=before) ++d.selectionRevision;
+}
+void CapLabWorkflow::Select(const Json &request) {
+        auto &d=Document(); auto &p=d.project;
+    if (!request.at("id").is_number_integer() || (request.at("id").is_number_integer() && request.at("id").get<std::int64_t>()<0)) throw std::runtime_error("Selection ID must be a nonnegative integer.");
+    const std::string kind=request.at("kind"); const auto id=request.at("id").get<pl::Id>();
+    pl::Id sample=0, graph=0, measurement=0, defect=0, analysis=0, circuit=0;
+    if (kind=="clear") {if (id) throw std::runtime_error("Clear selection requires id=0.");}
+    else if (kind=="sample") {
+        for (const auto &s:p.samples) if (s.id==id) sample=id;
+    } else if (kind=="measurement") {
+        sample=AnalysisMeasurement(p,id).at("sample_id"); measurement=id;
+        for (auto it=p.analyses.rbegin();it!=p.analyses.rend();++it)
+            for (const auto &input:it->at("inputs")) if (input.at("id")==id && !graph && !it->at("graphs").empty()) graph=it->at("graphs").at(0);
+        if (!graph) for (const auto &[oid,o]:p.engine->objects()) if (const auto *plot=std::get_if<pl::Plot>(&o->data); plot && plot->worksheet==id) graph=p.engine->object(o->parent).parent;
+        if (!graph) {
+            std::vector<pl::Id> columns;
+            for (const auto &m:p.measurements) if (m.at("id")==id) columns=m.at("columns").get<std::vector<pl::Id>>();
+            for (const auto &m:p.sweeps) if (m.id==id) columns={m.frequency,m.capacitance};
+            if (columns.size()>=2) {
+                p.engine=EditSnapshot().engine;
+                graph=p.engine->reserveId(); const auto layer=p.engine->reserveId();
+                pl::Layer axes; const auto m=AnalysisMeasurement(p,id);
+                axes.spec.x.label=m.at("names").at(0).get<std::string>()+" ["+m.at("units").at(0).get<std::string>()+"]";
+                axes.spec.y.label=m.at("names").at(1).get<std::string>()+" ["+m.at("units").at(1).get<std::string>()+"]";
+                if (m.at("names").at(0)=="f") axes.spec.x.scale=sst::ui::plot::AxisScale::Log10;
+                auto op=p.engine->change("Measurement plot",{{graph,p.engine->root(),"Measurement "+std::to_string(id),0,pl::Graph{}},
+                    {layer,graph,"Measured",0,axes},{p.engine->reserveId(),layer,"Measured",0,pl::Plot{id,columns[0],columns[1]}}});
+                op.apply(*p.engine); d.Changed(); d.identityHighWater=Json::parse(p.engine->toJson()).at("nextId");
+            }
+        }
+    } else {
+        const auto &items=kind=="defect" ? p.defects : kind=="analysis" ? p.analyses : kind=="circuit" ? p.circuits : throw std::runtime_error("Unknown selection kind.");
+        for (const auto &item:items) if (item.at("id")==id) {
+            if (kind=="analysis") {
+                analysis=id;
+                if (item.contains("circuit")) circuit=item.at("circuit").at("id");
+                if (item.contains("defect")) defect=item.at("defect").at("id");
+                if (item.contains("sample_id")) sample=item.at("sample_id");
+                else if (item.contains("defect")) sample=item.at("defect").at("sample_id");
+                else sample=item.at("inputs").at(0).at("sample_id");
+                if (!item.at("graphs").empty()) graph=item.at("graphs").at(0);
+                if (!item.at("inputs").empty()) measurement=item.at("inputs").at(0).at("id");
+            } else {sample=item.at("sample_id"); if (kind=="defect") defect=id; else circuit=id;}
+        }
+    }
+    if (kind!="clear" && !sample) throw std::runtime_error("Missing selection ID.");
+    if (kind=="sample" || kind=="circuit" || kind=="defect") {
+        for (auto it=p.analyses.rbegin();it!=p.analyses.rend();++it) {
+            const bool matches=kind=="sample" ? AnalysisSample(*it)==sample : kind=="circuit" ?
+                it->contains("circuit") && it->at("circuit").at("id")==id :
+                it->contains("defect") && it->at("defect").at("id")==id;
+            if (matches && !it->at("graphs").empty()) {graph=it->at("graphs").at(0); break;}
+        }
+    }
+    const bool sameSample=d.selectedSample==sample;
+    d.selectionKind=kind;
+    d.selectedSample=sample; d.selectedMeasurement=measurement ? measurement : sameSample && kind!="sample" ? d.selectedMeasurement : 0;
+    d.selectedDefect=defect ? defect : sameSample && kind!="sample" ? d.selectedDefect : 0;
+    d.selectedCircuit=circuit ? circuit : sameSample && kind!="sample" ? d.selectedCircuit : 0;
+    d.selectedAnalysis=analysis;
+    if (graph!=p.graph) {graphViews[p.graph]=view; p.graph=graph; view=graph ? graphViews[graph] : sst::ui::plot::PlotViewState{};}
+    analysisDraft.reset();
+    ++d.selectionRevision; ReconcileSelection();
+}
 }

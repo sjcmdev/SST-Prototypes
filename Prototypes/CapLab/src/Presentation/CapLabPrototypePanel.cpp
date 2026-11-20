@@ -8,17 +8,16 @@
 #include <cstdlib>
 #include <cstdio>
 namespace SST::Prototypes::CapLab {
-namespace {
-std::string WithStandardError(const Json& result, const char* value, const char* error) {
-    if (!result.contains(value) || !result.at(value).is_number()) return "unavailable";
-    char number[64]; std::snprintf(number,sizeof(number),"%.6g",result.at(value).get<double>());
-    std::string text=number;
-    if (!result.contains(error) || !result.at(error).is_number()) return text+" (SE unavailable)";
-    std::snprintf(number,sizeof(number),"%.3g",result.at(error).get<double>());
-    return text+" +/- "+number+" (SE)";
-}
-}
 void CapLabPrototypePanel::RenderImport() {
+    if (sst::ui::widgets::BeginCombo("Target sample",SelectionLabel(state->Document().project,state->importTargetSample,"Create new samples").c_str())) {
+        if (ImGui::Selectable("Create new samples",!state->importTargetSample)) state->importTargetSample=0;
+        for (const auto &s:state->Document().project.samples) {
+            ImGui::PushID(std::to_string(s.id).c_str());
+            if (ImGui::Selectable(s.name.c_str(),s.id==state->importTargetSample)) state->importTargetSample=s.id;
+            ImGui::PopID();
+        }
+        sst::ui::widgets::EndCombo();
+    }
     auto &doc = state->Document();
     ImGui::Text("%s%s", !doc.path.has_value() ? "Untitled" : doc.path->Utf8().c_str(), doc.IsDirty() ? " (unsaved)" : "");
     ImGui::SeparatorText("Import settings and metadata");
@@ -202,63 +201,6 @@ void CapLabPrototypePanel::RenderImport() {
         });
     }
 }
-void CapLabPrototypePanel::RenderTree() {
-    auto &doc = state->Document();
-    ImGui::BeginDisabled(state->activeJob!=0 || state->closeRequested);
-    const auto activeLabel=doc.path ? doc.path->filename().Utf8() : "Untitled";
-    if (sst::ui::widgets::BeginCombo("Project",activeLabel.c_str())) {
-        for (const auto &project:state->workspace.projects) {
-            ImGui::PushID(std::to_string(project.handle).c_str());
-            const auto label=(project.path ? project.path->filename().Utf8() : "Untitled")+(project.IsDirty() ? " *" : "");
-            if (ImGui::Selectable(label.c_str(),project.handle==state->workspace.active)) {
-                CommandContext context; context.Set("request",Json{{"operation","activate"},{"project_id",project.handle}});
-                (void)commands->Execute(CommandID{"caplab.workspace"},std::move(context));
-            }
-            ImGui::PopID();
-        }
-        sst::ui::widgets::EndCombo();
-    }
-    ImGui::EndDisabled();
-    if (doc.handle!=state->workspace.active) return;
-    if (ImGui::Button("Save project")) (void)commands->Execute(CommandID{"project.save"});
-    for (const auto &sample : doc.project.samples) {
-        ImGui::PushID(static_cast<int>(sample.id));
-        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
-        if (ImGui::TreeNode(sample.name.c_str())) {
-            for (const auto &sweep : doc.project.sweeps) if (sweep.sample_id == sample.id)
-                ImGui::TextWrapped("Cp (F) / Rp (Ω): %zu points; T=%s K", std::get<pl::Worksheet>(doc.project.engine->object(sweep.id).data).rows.size(), Nullable(sweep.temperature_K).dump().c_str());
-            auto &areaMm2 = areaDraft.try_emplace(sample.id, sample.area_m2.value_or(0)*1e6).first->second;
-            sst::ui::widgets::Double("Sample area (mm2)", &areaMm2, .01f, "%.9g");
-            if (ImGui::IsItemDeactivatedAfterEdit()) {
-                CommandContext c; c.Set("sample_id",sample.id); c.Set("area_m2",areaMm2*1e-6);
-                (void)commands->Execute(CommandID{"caplab.area"},std::move(c));
-                ImGui::TreePop(); ImGui::PopID(); return;
-            }
-            if (!ImGui::IsItemActive()) areaMm2 = sample.area_m2.value_or(0)*1e6;
-            if (!sample.area_m2) ImGui::TextDisabled("unknown - enter sample area");
-            for (const auto &m : doc.project.measurements) if (m.at("sample_id") == sample.id)
-                ImGui::Text("%s / %s: %zu points; T=%s K",m.at("metadata").at("kind").get<std::string>().c_str(),
-                    m.at("metadata").at("variant").get<std::string>().c_str(),
-                    std::get<pl::Worksheet>(doc.project.engine->object(m.at("id").get<pl::Id>()).data).rows.size(),
-                    m.at("metadata").at("temperature_K").dump().c_str());
-            for (const auto &h : doc.project.historical) if (h.at("sample_id") == sample.id)
-                if (ImGui::TreeNode("Historical ProPho results and selections")) {
-                    ImGui::TextWrapped("%s",h.at("data").dump(2).c_str()); ImGui::TreePop();
-                }
-            ImGui::TreePop();
-        }
-        ImGui::PopID();
-    }
-    if (ImGui::CollapsingHeader("Delete measurement (Undo)")) {
-        std::vector<pl::Id> ids;
-        for (const auto &m : doc.project.measurements) ids.push_back(m.at("id").get<pl::Id>());
-        for (const auto &m : doc.project.sweeps) ids.push_back(m.id);
-        for (auto id : ids) if (ImGui::Button(("Delete measurement "+std::to_string(id)).c_str())) {
-            CommandContext c; c.Set("edit",Json{{"measurement_id",id}});
-            (void)commands->Execute(CommandID{"caplab.measurement"},std::move(c)); return;
-        }
-    }
-}
 void CapLabPrototypePanel::RenderExport() {
     if (!ImGui::CollapsingHeader("Export data and figures",ImGuiTreeNodeFlags_DefaultOpen)) return;
     const char* formats[]={"PNG","SVG","PDF"};
@@ -300,21 +242,25 @@ void CapLabPrototypePanel::RenderExport() {
 }
 void CapLabPrototypePanel::RenderPlot() {
     auto &doc = state->Document();
-    if (doc.project.graph) {
-        RenderExport();
-        for (const auto& a : doc.project.analyses) if (a.at("type")=="Circuit") {
+    auto &project=state->analysisDraft && state->analysisRevision==doc.revision ? *state->analysisDraft : doc.project;
+    if (project.graph) {
+        if (!state->analysisDraft) RenderExport();
+        else ImGui::TextUnformatted("Preview plot; accepted results remain in the project tree.");
+        for (const auto &a:project.analyses) if (std::find(a.at("graphs").begin(),a.at("graphs").end(),Json(project.graph))!=a.at("graphs").end())
+            ImGui::Text("%s result: %s",state->analysisDraft ? "Preview" : "Accepted",a.at("status").get<std::string>().c_str());
+        for (const auto& a : project.analyses) if (a.at("type")=="Circuit") {
             const auto& graphs=a.at("graphs");
-            if (std::find(graphs.begin(),graphs.end(),Json(doc.project.graph))!=graphs.end()) {
-                RenderISTabs(doc.project,a,state->view);
-                state->graphViews[doc.project.graph]=state->view;
+            if (std::find(graphs.begin(),graphs.end(),Json(project.graph))!=graphs.end()) {
+                RenderISTabs(project,a,state->view);
+                state->graphViews[project.graph]=state->view;
                 return;
             }
         }
-        const auto &p = *doc.project.engine;
+        const auto &p = *project.engine;
         auto window=GetState();
-        const auto& title=p.object(doc.project.graph).name;
+        const auto& title=p.object(project.graph).name;
         if (window.shortName!=title) {window.shortName=title; window.longName=title; ApplyState(window);}
-        const auto layer = p.children(doc.project.graph).at(0);
+        const auto layer = p.children(project.graph).at(0);
         if (!state->view.viewport) state->view=std::get<pl::Layer>(p.object(layer).data).view;
         std::vector<sst::ui::plot::SeriesEntryView> series;
         for (auto id : p.children(layer)) {
@@ -325,36 +271,50 @@ void CapLabPrototypePanel::RenderPlot() {
         sst::ui::plot::RenderPlot("##cf", std::get<pl::Layer>(p.object(layer).data).spec,
             series.data(), series.size(), state->view, {}, ImVec2(-1, std::max(200.0f, ImGui::GetContentRegionAvail().y - 40)));
         if (state->view.picked && state->view.picked->series==0) {
-            for (const auto &a : doc.project.analyses) if (a.at("type")=="AS" && a.at("status")=="valid" &&
-                a.at("graphs").at(1)==doc.project.graph && state->view.picked->point<a.at("candidates").size())
+            for (const auto &a : project.analyses) if (a.at("type")=="AS" && a.at("status")=="valid" &&
+                a.at("graphs").at(1)==project.graph && state->view.picked->point<a.at("candidates").size())
                 {state->pendingCandidate=a.at("candidates").at(state->view.picked->point); state->pendingCandidate["analysis_id"]=a.at("id");}
             state->view.picked.reset();
         }
-        state->graphViews[doc.project.graph]=state->view;
+        state->graphViews[project.graph]=state->view;
     }
 }
 void CapLabPrototypePanel::RenderContent() {
     if (shownProject!=state->workspace.active) {
-        shownProject=state->workspace.active; areaDraft.clear();
+        shownProject=state->workspace.active; areaDraft.clear(); treeMeasurements.clear(); detailsSample=moveTarget=0; selectionSeen=UINT64_MAX;
         selectedCircuit=circuitMeasurement=selectedDefect=fitCircuit=isPlotAnalysis=isPlotGraph=0;
-        circuitDocument.clear(); circuitEditor.reset(); circuitAutoReady=circuitRecalc=false; isParameters=Json::array(); fitView={}; bodePhaseView={};
+        circuitDocument.clear(); circuitEditor.reset(); modelAutoReady=circuitAutoReady=circuitRecalc=false; isParameters=Json::array(); fitView={}; bodePhaseView={};
+    }
+    state->ReconcileSelection();
+    auto &document=state->Document();
+    if (selectionSeen!=document.selectionRevision) {
+        selectionSeen=document.selectionRevision;
+        if (selectedCircuit!=document.selectedCircuit) {modelAutoReady=false; circuitEditor.reset(); fitCircuit=0;}
+        selectedCircuit=document.selectedCircuit; selectedDefect=document.selectedDefect; circuitMeasurement=document.selectedMeasurement;
+        previousPreviewOptions.clear(); previewPending.clear();
     }
     ImGui::PushID(std::to_string(state->workspace.active).c_str());
 
     switch (view) {
     case View::Project: RenderTree(); break;
     case View::Plot: RenderPlot(); break;
-    case View::Analysis:
-        ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,ImVec2(8,6));
-        RenderWalter(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
-        RenderIS(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
-        RenderAS(); ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing(); RenderAnalysis();
-        ImGui::PopStyleVar(); break;
+    case View::CV: RenderAnalysis(); break;
+    case View::AS: RenderAS(); break;
+    case View::Walter: ImGui::SetNextItemOpen(true,ImGuiCond_Once); RenderWalter(); break;
+    case View::IS: ImGui::SetNextItemOpen(true,ImGuiCond_Once); RenderIS(); break;
     case View::Import: RenderImport(); break;
     }
     ImGui::Spacing(); ImGui::SeparatorText("Status");
     if (state->failure) ImGui::TextWrapped("%s",state->failure->code.c_str());
     ImGui::TextWrapped("%s", state->status.c_str());
+    if (state->analysisDraft) {
+        const bool stale=state->analysisRevision!=document.revision;
+        ImGui::TextWrapped("Preview: %s. Accepted results retain their own status.",stale ? "stale" : "ready");
+        ImGui::BeginDisabled(stale || state->activeJob!=0);
+        if (ImGui::Button("Accept preview (Undo)")) (void)commands->Execute(CommandID{"caplab.accept_analysis"});
+        ImGui::EndDisabled(); ImGui::SameLine();
+        if (ImGui::Button("Discard preview")) (void)commands->Execute(CommandID{"caplab.cancel"});
+    }
     if (const auto job = state->jobs->GetJob(state->activeJob)) {
         ImGui::TextUnformatted(job->currentStage.c_str());
         ImGui::ProgressBar(job->totalWork > 0 ? job->completedWork / job->totalWork : 0);
@@ -363,333 +323,20 @@ void CapLabPrototypePanel::RenderContent() {
     ImGui::PopID();
 }
 
-}
-#include <sst/physics/materials.hpp>
-namespace SST::Prototypes::CapLab {
-void CapLabPrototypePanel::RenderAnalysis() {
-    if (!ImGui::CollapsingHeader("CV / raw DLCP analysis",ImGuiTreeNodeFlags_DefaultOpen)) return;
-    auto &p = state->Document().project;
-    static pl::Id selected = 0, xdSelected = 0, maskMeasurement = 0;
-    static std::set<pl::Id> masked;
-    static std::uint64_t selectionProject = 0;
-    if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; selected=xdSelected=maskMeasurement=0; masked.clear(); }
-    auto select = [&](const char *label, pl::Id &id, const char *empty = "none — select") {
-        if (sst::ui::widgets::BeginCombo(label, SelectionLabel(p,id,empty).c_str())) {
-            for (const auto &m : p.measurements) {
-                const auto mid=m.at("id").get<pl::Id>();
-                const std::string title=SelectionLabel(p,mid)+"##"+std::to_string(mid);
-                if (ImGui::Selectable(title.c_str(),id==mid)) id=mid;
-            }
-            sst::ui::widgets::EndCombo();
-        }
-    };
-    select("Measurement",selected);
-    if (!selected) return;
-    try {
-        const auto m = AnalysisMeasurement(p,selected);
-        static int type=0, degree=1, materialChoice=-1, band=0, source=0, policy=0;
-        static double lo=-.3, hi=.35, ampLo=0, ampHi=1, manual=1, bias=0, eps=0, ref=0;
-        static char description[256]="", materialSource[256]="";
-        if (maskMeasurement != selected) { masked.clear(); maskMeasurement=selected; }
-        sst::ui::widgets::Combo("Analysis", &type, "CV\0Raw DLCP\0");
-        Json options{{"measurement_id",selected},{"type",type ? "DLCPPolynomial" : "CV"}};
-        if (!type) {
-            sst::ui::widgets::Double("Fit minimum voltage (V)", &lo, .01f, "%.6g"); sst::ui::widgets::Double("Fit maximum voltage (V)", &hi, .01f, "%.6g");
-            options["range_V"]={lo,hi};
-        } else {
-            sst::ui::widgets::Combo("Polynomial degree", &degree, "1\0 2\0"); options["degree"]=degree+1;
-            sst::ui::widgets::Double("Minimum peak amplitude (V)", &ampLo, .01f, "%.6g"); sst::ui::widgets::Double("Maximum peak amplitude (V)", &ampHi, .01f, "%.6g");
-            options["range_amplitude_V"]={ampLo,ampHi};
-        }
-        const sst::physics::MaterialLibrary library;
-        std::vector<std::string> names{"ProPho-compat","project"};
-        for (const auto &v : library.list()) if (v.eps_r) names.push_back(v.name);
-        if (sst::ui::widgets::BeginCombo("Material", materialChoice < 0 ? "Select material" : names.at(materialChoice).c_str())) {
-            for (std::size_t i=0;i<names.size();++i) if (ImGui::Selectable(names[i].c_str(),materialChoice==static_cast<int>(i))) materialChoice=static_cast<int>(i);
-            sst::ui::widgets::EndCombo();
-        }
-        if (materialChoice>=0) {
-            options["material"]=names.at(materialChoice);
-            sst::ui::widgets::Combo("Reference band", &band, "Conduction\0Valence\0"); options["reference_band"]=band ? "valence" : "conduction";
-            if (materialChoice==0) ImGui::TextUnformatted("Owner preset: eps_r=10; N_ref=1.24e19 cm^-3 (constant)");
-            if (materialChoice==1) {
-                sst::ui::widgets::Double("Relative permittivity [1]###Relative permittivity", &eps, .01f, "%.6g"); sst::ui::widgets::LogValue("N_ref (cm^-3, 0 = unavailable)", &ref);
-                sst::ui::widgets::Text("Material source", materialSource, sizeof(materialSource));
-                options["project_material"]={{"eps_r",eps},{"N_ref_m3",ref>0 ? Json(ref*1e6) : Json(nullptr)},
-                    {"source",materialSource},{"reference_band",band ? "valence" : "conduction"}};
-            }
-        }
-        sst::ui::widgets::Combo("x_d source", &source, "CV at AS bias\0DLCP at V=0\0Manual\0");
-        sst::ui::widgets::Combo("Missing point policy", &policy, "Block\0Linear interpolation (no extrapolation)\0Nearest point (warning)\0");
-        options["xd_source"]=source==0 ? "CV" : source==1 ? "DLCP" : "manual";
-        options["xd_policy"]=policy==0 ? "block" : policy==1 ? "linear" : "nearest";
-        if (source==2) {
-            sst::ui::widgets::Double("Manual x_d (um)", &manual, .01f, "%.6g"); sst::ui::widgets::Text("x_d description", description, sizeof(description));
-            options["xd_manual_m"]=manual*1e-6; options["xd_description"]=description;
-        } else {
-            select("x_d measurement (0 = current)",xdSelected,"current measurement");
-            if (ImGui::Button("Use current measurement for x_d")) xdSelected=0;
-            if (xdSelected) options["xd_measurement_id"]=xdSelected;
-            if (source==0) { sst::ui::widgets::Double("AS bias (V)", &bias, .01f, "%.6g"); options["as_bias_V"]=bias; }
-        }
-        if (ImGui::TreeNode("Point mask (unchecked = excluded)")) {
-            for (const auto &row : m.at("row_ids")) {
-                const auto id=row.get<pl::Id>(); bool included=!masked.contains(id);
-                if (sst::ui::widgets::Checkbox(std::to_string(id).c_str(), &included)) { if (included) masked.erase(id); else masked.insert(id); }
-            }
-            ImGui::TreePop();
-        }
-        options["excluded_row_ids"]=masked;
-        if (ImGui::Button("Fit CV / DLCP")) {
-            state->analysisOptions=options; (void)commands->Execute(CommandID{"caplab.analyze"});
-        }
-        for (const auto &a : p.analyses) {
-            if (a.at("type")!="CV" && a.at("type")!="DLCPPolynomial") continue;
-            ImGui::PushID(static_cast<int>(a.at("id").get<pl::Id>()));
-            if (ImGui::TreeNode((a.at("model").get<std::string>()+" / "+a.at("status").get<std::string>()).c_str())) {
-                for (const auto &d : a.at("diagnostics")) ImGui::TextWrapped("%s",d.get<std::string>().c_str());
-                if (a.contains("V_b_V")) {
-                    ImGui::TextWrapped("V_b: %s V",WithStandardError(a,"V_b_V","V_b_standard_error_V").c_str());
-                    ImGui::TextWrapped("N: %s m^-3; E_F: %s eV",WithStandardError(a,"N_m3","N_standard_error_m3").c_str(),a.at("E_F_eV").dump().c_str());
-                }
-                if (a.contains("x_d_fit")) ImGui::TextWrapped("CV fit x_d at %s V: %s m",a.at("x_d_fit").at("bias_V").dump().c_str(),WithStandardError(a.at("x_d_fit"),"value_m","standard_error_m").c_str());
-                if (a.contains("groups")) for (const auto& group : a.at("groups")) {
-                    ImGui::TextWrapped("DLCP at %s V: x_e: %s m; N_DL: %s m^-3",group.at("bias_V").dump().c_str(),
-                        WithStandardError(group,"x_e_m","x_e_standard_error_m").c_str(),WithStandardError(group,"N_DL_m3","N_DL_standard_error_m3").c_str());
-                }
-                ImGui::TextWrapped("Selected x_d: %s m",WithStandardError(a.at("x_d"),"value_m","standard_error_m").c_str());
-                ImGui::TextWrapped("SE: residual covariance only; area, material and calibration held fixed. Null SE is unavailable.");
-                if (ImGui::TreeNode("Coefficients / covariance / residuals / provenance")) {
-                    auto detail=a; detail.erase("inputs"); ImGui::TextWrapped("%s",detail.dump(2).c_str()); ImGui::TreePop();
-                }
-                for (const auto &g : a.at("graphs")) {
-                    const auto id=g.get<pl::Id>();
-                    if (ImGui::Button((p.engine->object(id).name+"##"+std::to_string(id)).c_str())) { p.graph=id; state->view={}; state->Document().Changed(); }
-                }
-                ImGui::TreePop();
-            }
-            ImGui::PopID();
-        }
-    } catch (const std::exception &e) { ImGui::TextWrapped("%s",e.what()); }
-}
+void CapLabPrototypePanel::PreviewAfterEdit(const Json &options, bool calculate) {
+    const std::string type=options.at("type");
+    const Json inputs{{"options",options},{"revision",state->Document().inputRevision}};
+    if (previousPreviewOptions[type]!=inputs) {previousPreviewOptions[type]=inputs; previewPending.insert(type);}
+    if (calculate) previewPending.insert(type);
+    if (state->analysisQueued) return;
+    if (!previewPending.contains(type) || state->closeRequested || ImGui::IsAnyItemActive() || ImGui::IsMouseDown(ImGuiMouseButton_Left)) return;
+    if (state->activeJob) {
+        if (state->analysisOptions.value("preview",false) && state->analysisOptions.value("type",std::string{})==options.value("type",std::string{}))
+            (void)state->jobs->RequestCancel(state->activeJob);
+        return;
+    }
+    previewPending.erase(type); state->analysisOptions=options; state->analysisOptions["preview"]=true;
+    state->analysisQueued=bool(commands->Execute(CommandID{"caplab.analyze"}));
 }
 
-namespace SST::Prototypes::CapLab {
-void CapLabPrototypePanel::RenderAS() {
-    if (!ImGui::CollapsingHeader("AS / defects / Arrhenius",ImGuiTreeNodeFlags_DefaultOpen)) return;
-    auto &p=state->Document().project;
-    static pl::Id sample=0, measurement=0;
-    static std::uint64_t selectionProject = 0;
-    if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; sample=measurement=0; }
-    static char name[128]="Defect", provenance[256]="Manual point";
-    static double manualT=300, manualF=1000, gamma=0;
-    static char gammaSource[256]="";
-    static bool useGamma=false;
-    static bool smoothing=false, compare=true, compat=false;
-    static int window=5, degree=3;
-    auto edit=[&](Json value) {
-        CommandContext context; context.Set("edit",std::move(value));
-        (void)commands->Execute(CommandID{"caplab.defect"},std::move(context));
-    };
-    if (sst::ui::widgets::BeginCombo("AS sample", SelectionLabel(p,sample).c_str())) {
-        for (const auto &s : p.samples) if (ImGui::Selectable((SelectionLabel(p,s.id)+"##"+std::to_string(s.id)).c_str(),sample==s.id)) {sample=s.id; selectedDefect=0; state->pendingCandidate=nullptr;}
-        sst::ui::widgets::EndCombo();
-    }
-    sst::ui::widgets::Text("Defect name", name, sizeof(name));
-    if (ImGui::Button("Create defect")) {edit({{"action","create"},{"sample_id",sample},{"name",name}}); return;}
-    if (sst::ui::widgets::BeginCombo("AS measurement", SelectionLabel(p,measurement).c_str())) {
-        for (const auto &m : p.measurements) if (m.at("sample_id")==sample && m.at("metadata").at("kind")=="FrequencySweep") {
-            const auto id=m.at("id").get<pl::Id>();
-            if (ImGui::Selectable((SelectionLabel(p,id)+"##"+std::to_string(id)).c_str(),measurement==id)) measurement=id;
-        }
-        for (const auto &m : p.sweeps) if (m.sample_id==sample)
-            if (ImGui::Selectable((SelectionLabel(p,m.id)+"##"+std::to_string(m.id)).c_str(),measurement==m.id)) measurement=m.id;
-        sst::ui::widgets::EndCombo();
-    }
-    sst::ui::widgets::Checkbox("Savitzky-Golay smoothing", &smoothing);
-    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sample index; derivative uses ln f.");
-    if (smoothing) {sst::ui::widgets::Int("Smoothing window (odd)", &window); sst::ui::widgets::Int("Smoothing degree", &degree);}
-    if (ImGui::Button("Calculate AS derivative / candidates")) {
-        state->analysisOptions={{"type","AS"},{"measurement_id",measurement},
-            {"smoothing",smoothing ? Json{{"method","Savitzky-Golay"},{"window",window},{"degree",degree}} : Json{{"method","none"}}}};
-        (void)commands->Execute(CommandID{"caplab.analyze"});
-    }
-    if (sst::ui::widgets::BeginCombo("Active defect", SelectionLabel(p,selectedDefect,"no defects yet").c_str())) {
-        for (const auto &d : p.defects) if (d.at("sample_id")==sample)
-            if (ImGui::Selectable((SelectionLabel(p,d.at("id").get<pl::Id>())+"##"+std::to_string(d.at("id").get<pl::Id>())).c_str(),d.at("id")==selectedDefect)) selectedDefect=d.at("id").get<pl::Id>();
-        sst::ui::widgets::EndCombo();
-    }
-    if (selectedDefect) {
-        if (ImGui::Button("Rename defect")) {edit({{"action","rename"},{"defect_id",selectedDefect},{"name",name}}); return;}
-        ImGui::SameLine();
-        if (ImGui::Button("Delete defect")) {edit({{"action","delete"},{"defect_id",selectedDefect}}); selectedDefect=0; return;}
-        sst::ui::widgets::Double("Manual T (K)", &manualT, .01f, "%.6g"); sst::ui::widgets::LogValue("Manual f (Hz)", &manualF);
-        sst::ui::widgets::Text("Point provenance", provenance, sizeof(provenance));
-        if (ImGui::Button("Add manual point")) {
-            edit({{"action","add"},{"defect_id",selectedDefect},{"point",{{"measurement_id",nullptr},{"row_id",nullptr},
-                {"temperature_K",manualT},{"frequency_Hz",manualF},{"provenance",provenance}}}}); return;
-        }
-        if (!state->pendingCandidate.is_null()) {
-            ImGui::Text("Candidate: T=%s K, f=%s Hz",state->pendingCandidate.at("temperature_K").dump().c_str(),state->pendingCandidate.at("frequency_Hz").dump().c_str());
-            if (ImGui::Button("Assign candidate to active defect")) {
-                edit({{"action","add"},{"defect_id",selectedDefect},{"point",state->pendingCandidate}}); state->pendingCandidate=nullptr; return;
-            }
-        }
-        // Edits replace the document; return immediately to avoid invalidating iterators.
-        for (const auto &d : p.defects) if (d.at("id")==selectedDefect) for (const auto &point : d.at("points")) {
-            const auto id=point.at("id").get<pl::Id>(); ImGui::PushID(static_cast<int>(id));
-            bool enabled=point.at("enabled");
-            if (sst::ui::widgets::Checkbox("Enabled", &enabled)) {edit({{"action","enable"},{"defect_id",selectedDefect},{"point_id",id},{"enabled",enabled}}); ImGui::PopID(); return;}
-            ImGui::Text("%s K / %s Hz",point.at("temperature_K").dump().c_str(),point.at("frequency_Hz").dump().c_str());
-            ImGui::SameLine(); if (ImGui::Button("Remove")) {edit({{"action","remove"},{"defect_id",selectedDefect},{"point_id",id}}); ImGui::PopID(); return;}
-            ImGui::PopID();
-        }
-        sst::ui::widgets::Checkbox("Compare both Arrhenius models", &compare);
-        if (!compare) sst::ui::widgets::Checkbox("Use ProPho-compat ln(f)", &compat);
-        sst::ui::widgets::Checkbox("Explicit gamma for default-model sigma", &useGamma);
-        if (useGamma) {
-            sst::ui::widgets::LogValue("gamma (cm^-2 s^-1 K^-2)", &gamma);
-            sst::ui::widgets::Text("gamma source", gammaSource, sizeof(gammaSource));
-        }
-        if (ImGui::Button("Fit Arrhenius")) {
-            state->analysisOptions={{"type","Arrhenius"},{"defect_id",selectedDefect},
-                {"models",compare ? Json{"omega-T2","ProPho-compat"} : Json{compat ? "ProPho-compat" : "omega-T2"}}};
-            if (useGamma) {state->analysisOptions["gamma_cm_2_s_K_2"]=gamma; state->analysisOptions["gamma_source"]=gammaSource;}
-            (void)commands->Execute(CommandID{"caplab.analyze"});
-        }
-    }
-    ImGui::TextWrapped("Candidates require approval. Select a candidate below or Ctrl+click its marker on the D-f graph (screen distance, 10 px). Default fit uses omega=2*pi*f; sigma needs explicit gamma. ProPho-compat uses Ncv=2e18 cm^-3 and vth=1e7 cm/s.");
-    for (const auto &a : p.analyses) if (a.at("type")=="AS" || a.at("type")=="Arrhenius") {
-        ImGui::PushID(static_cast<int>(a.at("id").get<pl::Id>()));
-        if (ImGui::TreeNode((a.at("model").get<std::string>()+" / "+a.at("status").get<std::string>()).c_str())) {
-            if (a.at("type")=="AS") for (const auto &c : a.at("candidates")) {
-                ImGui::PushID(static_cast<int>(c.at("row_id").get<pl::Id>()));
-                if (a.at("status")=="valid" && ImGui::Selectable((c.at("temperature_K").dump()+" K / "+c.at("frequency_Hz").dump()+" Hz").c_str())) {state->pendingCandidate=c; state->pendingCandidate["analysis_id"]=a.at("id");}
-                ImGui::PopID();
-            }
-            if (a.contains("fits")) for (const auto &fit : a.at("fits")) {
-                ImGui::TextWrapped("%s: Ea: %s eV; dof=%d",fit.at("model").get<std::string>().c_str(),
-                    WithStandardError(fit,"E_a_eV","E_a_standard_error_eV").c_str(),fit.at("dof").get<int>());
-                ImGui::TextWrapped("Prefactor: %s %s",WithStandardError(fit,"prefactor","prefactor_standard_error").c_str(),fit.at("prefactor_unit").get<std::string>().c_str());
-                ImGui::TextWrapped("Capture cross-section sigma: %s cm^2. SE is standard error from residual covariance.",fit.at("sigma_cm2").dump().c_str());
-            }
-            for (const auto &d : a.at("diagnostics")) ImGui::TextWrapped("%s",d.get<std::string>().c_str());
-            for (const auto &g : a.at("graphs")) {
-                auto id=g.get<pl::Id>();
-                if (ImGui::Button((p.engine->object(id).name+"##"+std::to_string(id)).c_str())) {p.graph=id; state->view={}; state->Document().Changed();}
-            }
-            if (ImGui::TreeNode("AS / fit details and provenance")) {auto detail=a; detail.erase("inputs"); ImGui::TextWrapped("%s",detail.dump(2).c_str()); ImGui::TreePop();}
-            ImGui::TreePop();
-        }
-        ImGui::PopID();
-    }
-}
-}
-
-namespace SST::Prototypes::CapLab {
-void CapLabPrototypePanel::RenderWalter() {
-    if (const auto gallery = std::getenv("SST_CAPLAB_GALLERY_SECTION"))
-        ImGui::SetNextItemOpen(std::string_view(gallery) == "Walter", ImGuiCond_Once);
-    if (!ImGui::CollapsingHeader("Walter apparent DOS / integration")) return;
-    ImGui::PushID("Walter");
-    auto &p=state->Document().project;
-    static pl::Id sample=0, cv=0, arrhenius=0, dlcp=0, xdMeasurement=0;
-    static std::set<pl::Id> selected;
-    static std::uint64_t selectionProject = 0;
-    if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; sample=cv=arrhenius=dlcp=xdMeasurement=0; selected.clear(); }
-    static int model=0, source=0, policy=0;
-    static double vb=0, ef=0, prefactor=0, width=1, bias=0, tlo=1, thi=500, flo=100, fhi=1e6, elo=0, ehi=1, ilo=.1, ihi=.5;
-    static char provenance[256]="", emissionSource[256]="", description[256]="";
-    if (sst::ui::widgets::BeginCombo("Sample", std::to_string(sample).c_str())) {
-        for (const auto &s : p.samples) if (ImGui::Selectable(s.name.c_str(),s.id==sample)) {sample=s.id; selected.clear(); cv=arrhenius=dlcp=xdMeasurement=0;}
-        sst::ui::widgets::EndCombo();
-    }
-    sst::ui::widgets::Combo("Model", &model, "Walter1996-linear-field\0ProPho-compat\0");
-    Json options{{"type","Walter"},{"model",model ? "ProPho-compat" : "Walter1996-linear-field"}};
-    for (const auto &m : p.measurements) if (m.at("sample_id")==sample && m.at("metadata").at("kind")=="FrequencySweep") {
-        const auto id=m.at("id").get<pl::Id>(); bool enabled=selected.contains(id);
-        const std::string label=std::to_string(id)+" / "+m.at("metadata").at("temperature_K").dump()+" K";
-        if (sst::ui::widgets::Checkbox(label.c_str(), &enabled)) {if (enabled) selected.insert(id); else selected.erase(id);}
-    }
-    for (const auto &m : p.sweeps) if (m.sample_id==sample) {
-        bool enabled=selected.contains(m.id);
-        if (sst::ui::widgets::Checkbox((std::to_string(m.id)+" / AS").c_str(), &enabled)) {if (enabled) selected.insert(m.id); else selected.erase(m.id);}
-    }
-    auto chooseFit=[&](const char *label, const char *type, pl::Id &value) {
-        if (sst::ui::widgets::BeginCombo(label, value ? std::to_string(value).c_str() : "Manual")) {
-            if (ImGui::Selectable("Manual",value==0)) value=0;
-            for (const auto &a : p.analyses) if (a.at("type")==type && a.at("status")=="valid") {
-                const auto sid=a.contains("sample_id") ? a.at("sample_id") : a.at("inputs").at(0).at("sample_id");
-                if (sid==sample && ImGui::Selectable(std::to_string(a.at("id").get<pl::Id>()).c_str(),a.at("id")==value)) value=a.at("id");
-            }
-            sst::ui::widgets::EndCombo();
-        }
-    };
-    chooseFit("CV fit", "CV",cv);
-    if (cv) options["cv_fit_id"]=cv;
-    else {sst::ui::widgets::Double("V_b (V)", &vb, .01f, "%.6g"); sst::ui::widgets::Double("E_F infinity (eV)", &ef, .01f, "%.6g"); options["V_b_V"]=vb; options["E_F_eV"]=ef;}
-    if (!model) chooseFit("Arrhenius / defect fit", "Arrhenius",arrhenius);
-    if (!model && arrhenius) options["arrhenius_fit_id"]=arrhenius;
-    else {sst::ui::widgets::LogValue(model ? "B (s^-1)" : "zeta (s^-1 K^-2)", &prefactor); options[model ? "B_s_1" : "zeta_s_1_K_2"]=prefactor;}
-    sst::ui::widgets::Text("Parameter source", provenance, sizeof(provenance)); options["parameter_source"]=provenance;
-    if (model) {sst::ui::widgets::Text("B source (required)", emissionSource, sizeof(emissionSource)); options["emission_source"]=emissionSource;}
-    sst::ui::widgets::Combo("x_d source", &source, "CV at AS bias\0DLCP at V=0\0Manual\0");
-    sst::ui::widgets::Combo("Missing point policy", &policy, "Block\0Linear interpolation\0Nearest point (warning)\0");
-    options["xd_source"]=source==0 ? "CV" : source==1 ? "DLCP" : "manual";
-    options["xd_policy"]=policy==0 ? "block" : policy==1 ? "linear" : "nearest";
-    if (source==1) {
-        chooseFit("Raw DLCP width fit", "DLCPPolynomial",dlcp);
-        if (dlcp) options["dlcp_fit_id"]=dlcp;
-    }
-    if (source==2) {
-        sst::ui::widgets::Double("x_d (um)", &width, .01f, "%.6g"); sst::ui::widgets::Text("x_d description", description, sizeof(description));
-        options["xd_manual_m"]=width*1e-6; options["xd_description"]=description;
-    } else {
-        if (sst::ui::widgets::BeginCombo("Width measurement", std::to_string(xdMeasurement).c_str())) {
-            for (const auto &m : p.measurements) if (m.at("sample_id")==sample && m.at("metadata").at("kind")!="FrequencySweep")
-                if (ImGui::Selectable(std::to_string(m.at("id").get<pl::Id>()).c_str(),m.at("id")==xdMeasurement)) xdMeasurement=m.at("id");
-            sst::ui::widgets::EndCombo();
-        }
-        if (xdMeasurement) options["xd_measurement_id"]=xdMeasurement;
-        if (source==0) {
-            sst::ui::widgets::Double("Confirmed AS bias (V)", &bias, .01f, "%.6g"); options["as_bias_V"]=bias;
-            static int mat=-1;
-            std::vector<std::string> names{"ProPho-compat"};
-            const sst::physics::MaterialLibrary library;
-            for (const auto &m : library.list()) if (m.eps_r) names.push_back(m.name);
-            if (sst::ui::widgets::BeginCombo("Width material", mat<0 ? "Select material" : names.at(mat).c_str())) {
-                for (std::size_t i=0;i<names.size();++i) if (ImGui::Selectable(names[i].c_str(),mat==int(i))) mat=int(i);
-                sst::ui::widgets::EndCombo();
-            }
-            if (mat>=0) options["material"]=names.at(mat);
-        }
-    }
-    sst::ui::widgets::Double("Minimum T (K)", &tlo, .01f, "%.6g"); sst::ui::widgets::Double("Maximum T (K)", &thi, .01f, "%.6g");
-    sst::ui::widgets::LogValue("Minimum f (Hz)", &flo); sst::ui::widgets::LogValue("Maximum f (Hz)", &fhi);
-    sst::ui::widgets::Double("Minimum E (eV)", &elo, .01f, "%.6g"); sst::ui::widgets::Double("Maximum E (eV)", &ehi, .01f, "%.6g");
-    sst::ui::widgets::Double("Integral minimum E (eV)", &ilo, .01f, "%.6g"); sst::ui::widgets::Double("Integral maximum E (eV)", &ihi, .01f, "%.6g");
-    options["temperature_range_K"]={tlo,thi}; options["frequency_range_Hz"]={flo,fhi};
-    options["energy_range_eV"]={elo,ehi}; options["integration_range_eV"]={ilo,ihi}; options["measurement_ids"]=selected;
-    if (ImGui::Button("Calculate Walter")) {state->analysisOptions=options; (void)commands->Execute(CommandID{"caplab.analyze"});}
-    for (const auto &h : p.historical) if (h.at("sample_id")==sample) {
-        if (ImGui::Button(("Integrate saved ProPho slice##"+h.at("sample_id").dump()).c_str())) {
-            state->analysisOptions={{"type","WalterSaved"},{"sample_id",h.at("sample_id")}};
-            (void)commands->Execute(CommandID{"caplab.analyze"});
-        }
-    }
-    ImGui::TextWrapped("ProPho compatibility: saved W1-W3 integrals only. Full historical spectrum reconstruction unsupported.");
-    for (const auto &a : p.analyses) if (a.at("type")=="Walter" || a.at("type")=="WalterSaved") {
-        ImGui::PushID(a.at("id").dump().c_str());
-        if (ImGui::TreeNode((a.at("model").get<std::string>()+" / "+a.at("status").get<std::string>()).c_str())) {
-            ImGui::TextWrapped("CL-04: apparent DOS under the selected emission and field model.");
-            ImGui::TextWrapped("W1-W3 check saved-slice integrals only. Full historical spectra and parabolic-field reconstruction are unsupported.");
-            for (const auto &s : a.at("spectra")) ImGui::TextWrapped("Integrated apparent DOS: %s cm^-3; %s",s.at("integral").at("density_cm3").dump().c_str(),s.at("integral").at("semantics").get<std::string>().c_str());
-            for (const auto &g : a.at("graphs")) if (ImGui::Button(("Show spectrum##"+g.dump()).c_str())) {p.graph=g; state->view={}; state->Document().Changed();}
-            if (ImGui::TreeNode("Parameters / invalid points / provenance")) {auto detail=a; detail.erase("settings"); detail.erase("historical"); ImGui::TextWrapped("%s",detail.dump(2).c_str()); ImGui::TreePop();}
-            ImGui::TreePop();
-        }
-        ImGui::PopID();
-    }
-    ImGui::PopID();
-}
 }
