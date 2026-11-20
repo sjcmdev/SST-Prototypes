@@ -42,7 +42,8 @@
     {
       "id": "change-t",
       "target": {
-        "window": "scapslab.Run"
+        "window": "scapslab.Run",
+        "item": "temperature"
       },
       "instruction": "Change Temperature [K] to 350 (drag the slider).",
       "command": {
@@ -79,7 +80,8 @@
     {
       "id": "sweep",
       "target": {
-        "window": "scapslab.Run"
+        "window": "scapslab.Run",
+        "item": "temperature"
       },
       "instruction": "Right-click Temperature [K], choose Sweep..., set delta 10 K with 3 points and run. Inspect the converged rows in Batch.",
       "command": {

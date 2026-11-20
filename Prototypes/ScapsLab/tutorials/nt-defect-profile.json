@@ -80,7 +80,7 @@
       "id": "from-file",
       "target": {
         "window": "scapslab.Defects",
-        "item": "load-profile"
+        "item": "law"
       },
       "instruction": "Choose From file under Profile law and load examples/profiles/defects.grd (x/d, m^-3). Use Undo to return to the previous law.",
       "command": {

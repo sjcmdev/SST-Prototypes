@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "id": "table-undo-redo",
+  "title": "Undo and Redo of a table edit",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: Undo and Redo.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Undo and Redo",
+        "example": "08-pn-illumination.yaml"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Undo and Redo"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "load-table",
+      "target": {
+        "window": "scapslab.Grading",
+        "item": "parameter"
+      },
+      "instruction": "In Grading choose Na_m3, enable Grade parameter and load examples/profiles/doping.grd as From file.",
+      "command": {
+        "operation": "load_profile",
+        "layer_id": "layer-1",
+        "parameter_id": "Na_m3",
+        "profile_example": "doping.grd"
+      },
+      "condition": {
+        "predicate": "grading.law",
+        "op": "eq",
+        "value": "table"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "undo",
+      "target": {
+        "window": "scapslab.Project",
+        "item": "undo"
+      },
+      "instruction": "In Project press Undo (or Edit > Undo). The table disappears; each device has its own undo history.",
+      "command": {
+        "operation": "undo"
+      },
+      "condition": {
+        "predicate": "grading.law",
+        "op": "eq",
+        "value": ""
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "redo",
+      "target": {
+        "window": "scapslab.Project",
+        "item": "redo"
+      },
+      "instruction": "Press Redo (or Edit > Redo) to bring the loaded table back.",
+      "command": {
+        "operation": "redo"
+      },
+      "condition": {
+        "predicate": "grading.law",
+        "op": "eq",
+        "value": "table"
+      },
+      "timeout_s": 120
+    }
+  ]
+}

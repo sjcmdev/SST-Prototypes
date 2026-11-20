@@ -26,7 +26,7 @@
       "id": "load-gen",
       "target": {
         "window": "scapslab.Illumination",
-        "item": "gen-file"
+        "item": "source"
       },
       "instruction": "In Illumination (Spectrum / G(x)) choose Generation profile from file and browse to examples/profiles/generation.gen. The preview shows G in cm^-3 s^-1 versus x in nm.",
       "command": {

@@ -71,6 +71,7 @@ TEST(TutorialEngine,MenuAndPaletteShareEnabledStateShortcutAndExecution) {
     EXPECT_FALSE(registry.Execute(CommandID{"test.action"}));EXPECT_EQ(count,0);
     enabled=true;EXPECT_TRUE(palette.Search("Action")[0].enabled);EXPECT_TRUE(palette.Execute(CommandID{"test.action"}));EXPECT_EQ(count,1);
 }
+const char *const kLessons[]={"first-device","light-iv-qe","history-sweep","load-grading-profile","nt-defect-profile","generation-from-file","spectrum-absorption-files","compare-runs-sweep","export-profile","filter-optical-files","material-file","table-undo-redo","menus-tour"};
 class ScapsLabTutorialVerify:public testing::TestWithParam<const char *> {};
 TEST_P(ScapsLabTutorialVerify,HeadlessCommandsAndRealSolverPassEveryStep) {
     const auto report=VerifyTutorial(GetParam());
@@ -78,7 +79,7 @@ TEST_P(ScapsLabTutorialVerify,HeadlessCommandsAndRealSolverPassEveryStep) {
     EXPECT_EQ(report.at("steps").size(),report.at("step_count"));
     for(const auto &step:report.at("steps"))EXPECT_EQ(step.at("status"),"PASS")<<step.dump();
 }
-INSTANTIATE_TEST_SUITE_P(AllThree,ScapsLabTutorialVerify,testing::Values("first-device","light-iv-qe","history-sweep","load-grading-profile","nt-defect-profile","generation-from-file","spectrum-absorption-files","compare-runs-sweep","export-profile"));
+INSTANTIATE_TEST_SUITE_P(AllThree,ScapsLabTutorialVerify,testing::ValuesIn(kLessons));
 TEST_P(ScapsLabTutorialVerify,LearnAndDemoUseTheSameCommandsAndPassEveryStep) {
     for(const auto *mode:{"learn","demo"}) {
         Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
@@ -257,3 +258,66 @@ TEST(ScapsLabTutorial,CoachAvoidsTargetRowAndArrowAvoidsButtonAtViewportEdges) {
     }
     }glfwDestroyWindow(window);glfwTerminate();
 }
+
+// Every step of every lesson: the target resolves to a visible widget, the coach does not cover it and the arrow tip stays outside it.
+class ScapsLabTutorialUi:public testing::TestWithParam<const char *> {};
+TEST_P(ScapsLabTutorialUi,EveryStepTargetIsVisibleAndArrowTipClearsIt) {
+    static const char *names[]={"Project","Layers","Contacts","Solver","Run","Results","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","Devices","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
+    const std::string lesson=GetParam();
+    const char *shotRoot=std::getenv("SCAPSLAB_TUTORIAL_SHOTS");
+    Threading::SetMainThread();ASSERT_TRUE(glfwInit());
+    glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
+    auto *window=glfwCreateWindow(1400,1100,"Tutorial targets",nullptr,nullptr);ASSERT_NE(window,nullptr);glfwMakeContextCurrent(window);
+    ASSERT_NE(gladLoadGL(glfwGetProcAddress),0);
+    { Testing::UiScreenshotContext ui({.nativeWindow=window});auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1400,1100);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    SetCommandMenuHook([&](const std::string &root,bool open){w.MenuHook(root,open);});
+    ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.device_add"},"File/New","Ctrl+N"));
+    ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.run"},"Simulate/Calculate I-V"));
+    ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.undo"},"Edit/Undo","Ctrl+Z"));
+    std::map<std::string,Ref<Panel>> panels;
+    auto registry=CreateRef<CommandRegistry>();ApplicationDetail::RegisterScreenshotCommand(registry,w.jobs);
+    ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id",lesson}}).value("ok",false));
+    for(int guard=0;w.tutorial.Active() && guard<200;++guard) {
+        const auto step=*w.tutorial.Step();const auto stepId=step.at("id").get<std::string>();
+        const auto windowId=step.at("target").at("window").get<std::string>();
+        std::string view=windowId=="scapslab.Menu"?"Project":windowId.substr(std::string("scapslab.").size());
+        int index=-1;for(int i=0;i<23;++i)if(view==names[i])index=i;ASSERT_GE(index,0)<<windowId;
+        auto &panel=panels[view];if(!panel){panel=CreateRef<Panel>(&w,index);panel->SelectGradingParameter("Na_m3");}
+        for(int frame=0;frame<4;++frame) {
+            ImGui_ImplOpenGL3_NewFrame();io.DeltaTime=1.f/60;ImGui::NewFrame();
+            if(ImGui::BeginMainMenuBar()){RenderCommandMenu(*w.commands,"Simulate");ImGui::EndMainMenuBar();}
+            ImGui::SetNextWindowPos(ImVec2(20,40));ImGui::SetNextWindowSize(ImVec2(880,1040));
+            ImGui::Begin((std::string("ScapsLab / ")+view).c_str());panel->RenderContent();ImGui::End();
+            (void)w.tutorialOverlay.Draw(w.tutorial);
+            glViewport(0,0,1400,1100);ui.Render();glFinish();
+        }
+        const auto &g=w.tutorialOverlay.LastGeometry();
+        EXPECT_TRUE(w.tutorialOverlay.Highlighted())<<lesson<<"/"<<stepId<<": target "<<step.at("target").dump()<<" is not a visible widget";
+        if(w.tutorialOverlay.Highlighted()) {
+            EXPECT_GT(g.targetMax.x-g.targetMin.x,1.f);EXPECT_GT(g.targetMax.y-g.targetMin.y,1.f);
+            EXPECT_GE(g.targetMin.x,0.f);EXPECT_GE(g.targetMin.y,0.f);EXPECT_LE(g.targetMax.x,1400.f);EXPECT_LE(g.targetMax.y,1100.f);
+            const bool overlap=g.coachMin.x<g.targetMax.x && g.coachMax.x>g.targetMin.x && g.coachMin.y<g.targetMax.y && g.coachMax.y>g.targetMin.y;
+            EXPECT_FALSE(overlap)<<lesson<<"/"<<stepId<<": coach window covers the target";
+            EXPECT_TRUE(g.arrow)<<lesson<<"/"<<stepId<<": no arrow drawn";
+            const bool tipInside=g.tip.x>=g.targetMin.x && g.tip.x<=g.targetMax.x && g.tip.y>=g.targetMin.y && g.tip.y<=g.targetMax.y;
+            EXPECT_FALSE(tipInside)<<lesson<<"/"<<stepId<<": arrow tip covers the target";
+        }
+        if(shotRoot) {
+            const auto path=std::filesystem::path(shotRoot)/lesson/(stepId+".png");std::filesystem::create_directories(path.parent_path());
+            CommandContext context;context.Set("path",Path{path});EXPECT_TRUE(registry->Execute(CommandID{"app.screenshot"},context));
+        }
+        auto command=step.at("command");
+        if(command.value("run_id",std::string{})=="$selected_run")command["run_id"]=w.Current().selectedRun;
+        ASSERT_TRUE(w.Dispatch(command).value("ok",false))<<w.response.dump();
+        int ticks=0;
+        while(w.tutorial.Active() && (w.Busy() || w.tutorial.Step()->at("id").get<std::string>()==stepId)) {
+            ASSERT_LT(++ticks,120000)<<lesson<<"/"<<stepId<<" never completed";
+            w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+    EXPECT_EQ(w.tutorial.Report().at("status"),"passed")<<w.tutorial.Report().dump();
+    SetCommandMenuHook({});
+    } glfwDestroyWindow(window);glfwTerminate();
+}
+INSTANTIATE_TEST_SUITE_P(AllLessons,ScapsLabTutorialUi,testing::ValuesIn(kLessons));

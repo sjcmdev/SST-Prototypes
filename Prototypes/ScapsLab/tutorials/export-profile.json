@@ -25,7 +25,8 @@
     {
       "id": "profile",
       "target": {
-        "window": "scapslab.Grading"
+        "window": "scapslab.Grading",
+        "item": "parameter"
       },
       "instruction": "In Grading select layer 1 and Na_m3, enable Grade parameter and press erfc under Diffusion law.",
       "command": {

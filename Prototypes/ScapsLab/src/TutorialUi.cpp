@@ -1,4 +1,5 @@
 #include "Panel.hpp"
+#include "Core/Presentation/CommandMenu.hpp"
 #include "Core/App/Application.hpp"
 #include "Core/Presentation/EditorLayer.hpp"
 #include "Core/IO/TextFileIO.hpp"
@@ -32,6 +33,7 @@ public:
     TutorialUi(Application &app,Workflow &w,std::vector<Ref<Panel>> panels):Layer("ScapsLab tutorials"),w(w),panels(std::move(panels)) {
         auto &editor=app.GetEditorLayer();windows=editor.GetWindows();
         editor.UseStandardMenu("Simulate");
+        SetCommandMenuHook([this](const std::string &root,bool open){this->w.MenuHook(root,open);});
         if(const auto config=app.GetConfigManager().lock()) {
             const Path layout{app.GetConfig().layout.imGuiIniPath};
             const auto userDirectory=layout.Empty()?config->GetPaths().userConfigDirectory:layout.parent_path();

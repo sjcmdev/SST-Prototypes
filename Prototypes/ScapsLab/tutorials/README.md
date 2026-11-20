@@ -25,3 +25,11 @@ assert report['ok'], report
 ```
 
 `start({'operation': 'tutorial_start', 'tutorial_id': ..., 'mode': ...})` and `poll()` also support asynchronous use. `tutorial_state()` returns the report and saved progress; `tutorial_stop()` stops future steps. Tutorial commands modify the current session just like GUI commands. `mode='learn'` observes user/API actions without executing the lesson's commands.
+
+## Lesson inventory
+
+Every feature except the crash-recovery dialog has a lesson: first-device, light-iv-qe, history-sweep, load-grading-profile, nt-defect-profile (Gauss / erfc / file), generation-from-file (.gen), spectrum-absorption-files (.spe, .abs), compare-runs-sweep, export-profile (CSV / .grd), filter-optical-files (.ftr, .opt), material-file (.material), table-undo-redo, menus-tour (File / Edit / View / Simulate / Tools / Tutorials).
+
+The crash-recovery dialog has no lesson on purpose: it only appears after an unclean exit with an autosave present, and a lesson cannot trigger that safely.
+
+`ScapsLabTests` (ScapsLabTutorialUi) renders every step of every lesson offscreen and checks that the target resolves to a visible widget, that the coach window does not cover it and that the arrow tip stays outside it. Set `SCAPSLAB_TUTORIAL_SHOTS=<dir>` to also write one PNG per step to `<dir>/<lesson>/<step>.png`.

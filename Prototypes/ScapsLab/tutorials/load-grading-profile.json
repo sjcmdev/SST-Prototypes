@@ -25,7 +25,7 @@
       "id": "load-profile",
       "target": {
         "window": "scapslab.Grading",
-        "item": "load-profile"
+        "item": "parameter"
       },
       "instruction": "In Grading select layer 1 and Na_m3, enable Grade parameter, then choose From file and load examples/profiles/doping.grd. The preview shows x in nm and density in cm^-3.",
       "command": {

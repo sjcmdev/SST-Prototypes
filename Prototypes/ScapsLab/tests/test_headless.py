@@ -284,7 +284,7 @@ with tempfile.TemporaryDirectory(prefix='scapslab-io-') as output:
     print('slhist1 Python history, Keep/Pin, clear/Undo and batch sweep PASS', flush=True)
 
     tutorial_session = scapslab.Session()
-    assert len(tutorial_session.tutorials()['tutorials']) == 4
+    assert len(tutorial_session.tutorials()['tutorials']) == 13
     assert not tutorial_session.tutorial_start('../unknown')['ok']
     assert tutorial_session.tutorial_start('first-device')['tutorial']['status'] == 'running'
     assert tutorial_session.tutorial_state()['tutorial']['mode'] == 'learn'

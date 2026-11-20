@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "id": "menus-tour",
+  "title": "Tour of the standard menus",
+  "steps": [
+    {
+      "id": "file",
+      "target": {
+        "window": "scapslab.Menu",
+        "item": "File"
+      },
+      "instruction": "File: New, Open, Save, recent projects, Export. Open the File menu.",
+      "command": {
+        "operation": "tutorial_state",
+        "menu": "File"
+      },
+      "condition": {
+        "predicate": "menu.File",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "edit",
+      "target": {
+        "window": "scapslab.Menu",
+        "item": "Edit"
+      },
+      "instruction": "Edit: Undo and Redo for the active device. Open the Edit menu.",
+      "command": {
+        "operation": "tutorial_state",
+        "menu": "Edit"
+      },
+      "condition": {
+        "predicate": "menu.Edit",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "view",
+      "target": {
+        "window": "scapslab.Menu",
+        "item": "View"
+      },
+      "instruction": "View: panel visibility and Reset layout. Open the View menu.",
+      "command": {
+        "operation": "tutorial_state",
+        "menu": "View"
+      },
+      "condition": {
+        "predicate": "menu.View",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "simulate",
+      "target": {
+        "window": "scapslab.Menu",
+        "item": "Simulate"
+      },
+      "instruction": "Simulate: Calculate I-V and the other solvers. Open the Simulate menu.",
+      "command": {
+        "operation": "tutorial_state",
+        "menu": "Simulate"
+      },
+      "condition": {
+        "predicate": "menu.Simulate",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "tools",
+      "target": {
+        "window": "scapslab.Menu",
+        "item": "Tools"
+      },
+      "instruction": "Tools: screenshots and utilities. Open the Tools menu.",
+      "command": {
+        "operation": "tutorial_state",
+        "menu": "Tools"
+      },
+      "condition": {
+        "predicate": "menu.Tools",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "tutorials",
+      "target": {
+        "window": "scapslab.Menu",
+        "item": "Tutorials"
+      },
+      "instruction": "Tutorials: every lesson in learn, demo and verify mode. Open the Tutorials menu.",
+      "command": {
+        "operation": "tutorial_state",
+        "menu": "Tutorials"
+      },
+      "condition": {
+        "predicate": "menu.Tutorials",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

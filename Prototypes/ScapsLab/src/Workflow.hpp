@@ -112,6 +112,8 @@ public:
     std::string tutorialProgressPath;
     bool tutorialAuto = false, tutorialBand = false;
     Tutorial::Predicates TutorialPredicates();
+    std::set<std::string> menuOpened;
+    void MenuHook(const std::string &root, bool open) {if(open && tutorial.Active())menuOpened.insert(root);tutorialOverlay.Item("scapslab.Menu",root);}
     void TutorialRequest(const Json &request);
     void UpdateTutorial();
     std::string openRequest, fileAction;

@@ -10,6 +10,7 @@ public:
     void RenderContent() override;
     bool IsDirty() const override {return view==0 && w->dirty;}
     Workflow *GetWorkflow() const {return w;}
+    void SelectGradingParameter(const std::string &key) {gradingParameter=key;} // what the user does before a Grading step
 private:
     Workflow *w;
     int view;

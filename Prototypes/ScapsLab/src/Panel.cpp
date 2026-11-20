@@ -307,8 +307,8 @@ void Panel::RenderContent() {
         if(ImGui::Button("Save")) w->fileAction="save";ImGui::SameLine();
         if(ImGui::Button("Save As")) w->fileAction="save_as";
         ImGui::TextWrapped("%s",w->status.c_str());
-        if(ImGui::Button("Undo")) Send({{"operation","undo"}});ImGui::SameLine();
-        if(ImGui::Button("Redo")) Send({{"operation","redo"}});
+        if(ImGui::Button("Undo")) Send({{"operation","undo"}});w->tutorialOverlay.Item("scapslab.Project","undo");ImGui::SameLine();
+        if(ImGui::Button("Redo")) Send({{"operation","redo"}});w->tutorialOverlay.Item("scapslab.Project","redo");
         ImGui::Text("%d devices | active: %s",int(w->project.devices.size()),w->Current().name.c_str());
         if(!w->Current().document.is_null()) {
             ImGui::Text("Case: %s",w->Current().document.at("case_id").get<std::string>().c_str());
@@ -360,8 +360,8 @@ void Panel::RenderContent() {
             static int materialSelection=0;BeginRow("Material selection");ImGui::Combo("##material_selection",&materialSelection,"Both A/B\0Pure A\0Pure B\0");EndRow();
             const char *selection=materialSelection==1?"A":materialSelection==2?"B":"both";
             BeginRow("SCAPS material [.material]");
-            if(ImGui::Button("Load..."))try {if(const auto path=OpenFileDialog({"SCAPS material","material"}))Send({{"operation","load_material"},{"layer_id",id},{"selection",selection},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}
-            ImGui::SameLine();if(ImGui::Button("Save..."))try {if(const auto path=SaveFileDialog({"SCAPS material","material"},"layer.material"))Send({{"operation","save_material"},{"layer_id",id},{"selection",selection},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}EndRow();
+            const bool materialLoad=ImGui::Button("Load...");w->tutorialOverlay.Item("scapslab.Layers","material-load");if(materialLoad)try {if(const auto path=OpenFileDialog({"SCAPS material","material"}))Send({{"operation","load_material"},{"layer_id",id},{"selection",selection},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}
+            ImGui::SameLine();const bool materialSave=ImGui::Button("Save...");w->tutorialOverlay.Item("scapslab.Layers","material-save");if(materialSave)try {if(const auto path=SaveFileDialog({"SCAPS material","material"},"layer.material"))Send({{"operation","save_material"},{"layer_id",id},{"selection",selection},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}EndRow();
             char name[256]; std::snprintf(name,sizeof(name),"%s",l.at("name").get<std::string>().c_str());
             BeginRow("Name");if(ImGui::InputText("##name",name,sizeof(name),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {l["name"]=name;changed=true;++gesture;}EndRow();
             changed|=Number("Thickness [µm]",l,"thickness_m",1e6);
@@ -409,7 +409,7 @@ void Panel::RenderContent() {
             changed|=Number("Newton iteration limit",draft["solver"],"max_newton_iterations");
         } else if(view==4) {
             changed|=Number("Start [V]",draft["voltage"],"start_V"); changed|=Number("Stop [V]",draft["voltage"],"stop_V");
-            changed|=Number("Step [V]",draft["voltage"],"step_V"); changed|=Number("T [K]",draft,"temperature_K");
+            changed|=Number("Step [V]",draft["voltage"],"step_V"); changed|=Number("T [K]",draft,"temperature_K");w->tutorialOverlay.Item("scapslab.Run","temperature");
             ImGui::TextWrapped("Applied voltage: left minus right. Signed J follows the scaps_core terminal-current convention.");
             bool automatic=w->autoRecalculate;
             if(Toggle("Auto I-V",automatic)) Send({{"operation","auto_recalculate"},{"enabled",automatic}});
@@ -449,7 +449,7 @@ bool Panel::OpticalFile(Json &object,const char *file,const char *table,const ch
     ImGui::PushID(file);const auto previous=object;bool changed=FileField(label,object,file);
     BeginRow("Select file");if(ImGui::Button("Browse...")) {
         try {if(const auto path=OpenFileDialog({label,extension})){object[file]=path->Utf8();changed=true;}}catch(const std::exception &e){w->status=e.what();}
-    }w->tutorialOverlay.Item(std::string(extension)=="abs"?"scapslab.Absorption":std::string(extension)=="opt"?"scapslab.Defects":"scapslab.Illumination",std::string(extension)+"-file");EndRow();
+    }w->tutorialOverlay.Item(std::string(extension)=="abs"?"scapslab.Absorption":std::string(extension)=="opt"?"scapslab.Defects":"scapslab.Illumination",file);EndRow();
     if(changed) {
         try {
             const auto path=object.at(file).get<std::string>();Json points;
@@ -486,14 +486,15 @@ bool Panel::Illumination(Json &draft) {
     bool enabled=light.value("enabled",false);if(Toggle("Light enabled",enabled)) {light["enabled"]=enabled;changed=true;}
     const char *galleryTab=gallery?std::getenv("SCAPSLAB_OPTICAL_TAB"):nullptr;
     const int savedTab=w->project.ui.value("optical_tab",0);const bool restoreTab=opticalTab!=savedTab;
-    auto tabFlags=[&](int tab){return (galleryTab && std::atoi(galleryTab)==tab) || (restoreTab && savedTab==tab)?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None;};
+    int tutorialTab=-1;if(const auto *step=w->tutorial.Step();step && step->at("target").value("window",std::string{})=="scapslab.Illumination"){const auto item=step->at("target").value("item",std::string{});tutorialTab=item=="light-iv"?1:item=="qe"?2:-1;} // the coach must point at a visible button
+    auto tabFlags=[&](int tab){return (galleryTab && std::atoi(galleryTab)==tab) || (restoreTab && savedTab==tab) || tutorialTab==tab?ImGuiTabItemFlags_SetSelected:ImGuiTabItemFlags_None;};
     auto selectTab=[&](int tab){opticalTab=tab;w->project.ui["optical_tab"]=tab;};
     if(ImGui::BeginTabBar("Optical views")) {
         if(ImGui::BeginTabItem("Spectrum / G(x)",nullptr,tabFlags(0))) {selectTab(0);
             const bool wide=ImGui::GetContentRegionAvail().x>750;
             if(wide) {ImGui::BeginTable("Spectrum and generation",2,ImGuiTableFlags_SizingStretchSame);ImGui::TableNextColumn();}
             int source=light.value("mode",std::string("uniform"))=="generation_file"?3:light.value("mode",std::string("uniform"))=="uniform"?4:light.value("mode",std::string{})=="monochromatic"?2:light.value("scapslab_spectrum",std::string{})=="AM1.5G"?0:1;
-            BeginRow("Spectrum");if(ImGui::Combo("##source",&source,"AM1.5G\0Spectrum from file\0Monochromatic\0Generation profile from file\0Uniform generation\0")) {
+            BeginRow("Spectrum");const bool sourceChanged=ImGui::Combo("##source",&source,"AM1.5G\0Spectrum from file\0Monochromatic\0Generation profile from file\0Uniform generation\0");w->tutorialOverlay.Item("scapslab.Illumination","source");if(sourceChanged) {
                 std::string spectrumPath;bool apply=true;
                 if(source==1 || source==3) {try {const auto path=OpenFileDialog({source==3?"SCAPS generation":"SCAPS spectrum",source==3?"gen":"spe"});if(path)spectrumPath=path->Utf8();else apply=false;}catch(const std::exception &e){w->status=e.what();apply=false;}}
                 if(apply) {light["mode"]=source==3?"generation_file":source==4?"uniform":source==2?"monochromatic":"spectrum";light["scapslab_spectrum"]=source==0?"AM1.5G":"custom";light["spectrum_file"]="";light["spectrum_nm_W_m2"]=source==0?AM15Spectrum():Json::array();if(source==1)light["spectrum_file"]=spectrumPath;if(source==3){light["generation_file"]=spectrumPath;light["generation_m_m3s"]=Json::array();}changed=true;++gesture;}
@@ -571,7 +572,7 @@ bool Panel::Absorption(Json &draft) {
     auto &selected=w->Current().selectedLayer;auto &layers=draft["layers"];selected=std::clamp(selected,0,int(layers.size())-1);
     BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i);if(ImGui::Selectable(layers[i].at("name").get<std::string>().c_str(),i==selected)) selected=i;ImGui::PopID();}ImGui::EndCombo();}EndRow();
     const bool wide=ImGui::GetContentRegionAvail().x>750;if(wide){ImGui::BeginTable("Absorption editor and plot",2,ImGuiTableFlags_SizingStretchSame);ImGui::TableNextColumn();}
-    auto &a=layers[selected]["absorption"];const auto before=a;bool changed=Choice("Absorption model",a,"model",{{"None","none"},{"Square root","sqrt"},{"SCAPS model","scaps"},{"File","file"}});
+    auto &a=layers[selected]["absorption"];const auto before=a;bool changed=Choice("Absorption model",a,"model",{{"None","none"},{"Square root","sqrt"},{"SCAPS model","scaps"},{"File","file"}});w->tutorialOverlay.Item("scapslab.Absorption","model");
     if(changed && a["model"]=="file" && a.value("file",std::string{}).empty()) {try {const auto path=OpenFileDialog({"SCAPS absorption","abs"});if(path)a["file"]=path->Utf8();else {a=before;changed=false;}}catch(const std::exception &e){w->status=e.what();a=before;changed=false;}}
     if(a["model"]=="file") changed|=OpticalFile(a,"file","table_nm_m1","abs","Absorption file [.abs]");
     if(a["model"]=="sqrt") {changed|=Number("A [m^-1 eV^1/2]",a,"A_m1_eV_half");changed|=Number("B [m^-1 eV^-1/2]",a,"B_m1_eV_minus_half");}
@@ -615,6 +616,7 @@ bool Panel::ProfileEditor(Json &g,double thickness,const std::string &parameter,
     if(!g.contains("law"))g["law"]="uniform";
     changed|=Choice("Profile law",g,"law",{{"Uniform","uniform"},{"Linear","linear"},{"Parabolic","parabolic"},{"Two parabolas","parabolic2"},
         {"Logarithmic","logarithmic"},{"Exponential","exponential"},{"Beta","beta"},{"Power","power"},{"Effective medium","effective_medium"},{"Gaussian","gaussian"},{"From file","table"}});
+    w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","law");
     if(diffusion) {BeginRow("Diffusion law");if(ImGui::Button("Gauss")){g["law"]="gauss_diffusion";changed=true;}ImGui::SameLine();if(ImGui::Button("erfc")){g["law"]="erfc_diffusion";changed=true;}w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","diffusion-law");EndRow();}
     auto load=[&] {
         try {if(const auto file=OpenFileDialog({"SCAPS grading","grd"})) {
@@ -679,7 +681,7 @@ bool Panel::ProfileEditor(Json &g,double thickness,const std::string &parameter,
 bool Panel::Grading(Json &draft) {
     bool changed=false;auto &layers=draft["layers"];auto &selected=w->Current().selectedLayer;selected=std::clamp(selected,0,int(layers.size())-1);
     BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i);if(ImGui::Selectable(layers[i].at("name").get<std::string>().c_str(),i==selected)) selected=i;ImGui::PopID();}ImGui::EndCombo();}EndRow();
-    auto &l=layers[selected];BeginRow("Parameter (SI / eV)");if(ImGui::BeginCombo("##parameter",gradingParameter.c_str())) {for(const auto *key:{"composition","Eg_eV","chi_eV","eps_r","Nd_m3","Na_m3","Nc_ref_m3","Nv_ref_m3","mu_n_m2_V_s","mu_p_m2_V_s","vth_n_ref_m_s","vth_p_ref_m_s"}) if(ImGui::Selectable(key,gradingParameter==key)) gradingParameter=key;ImGui::EndCombo();}EndRow();
+    auto &l=layers[selected];BeginRow("Parameter (SI / eV)");const bool parameterOpen=ImGui::BeginCombo("##parameter",gradingParameter.c_str());w->tutorialOverlay.Item("scapslab.Grading","parameter");if(parameterOpen) {for(const auto *key:{"composition","Eg_eV","chi_eV","eps_r","Nd_m3","Na_m3","Nc_ref_m3","Nv_ref_m3","mu_n_m2_V_s","mu_p_m2_V_s","vth_n_ref_m_s","vth_p_ref_m_s"}) if(ImGui::Selectable(key,gradingParameter==key)) gradingParameter=key;ImGui::EndCombo();}EndRow();
     bool enabled=l.contains("grading") && l["grading"].contains(gradingParameter);
     if(Toggle("Grade parameter",enabled)) {if(enabled) {const auto &obj=(gradingParameter=="Nd_m3" || gradingParameter=="Na_m3")?l.at("doping"):l.at("material");const double value=gradingParameter=="composition"?.5:obj.at(gradingParameter).get<double>();l["grading"][gradingParameter]={{"law","linear"},{"left",value},{"right",value}};}else {l["grading"].erase(gradingParameter);if(l["grading"].empty()) l.erase("grading");}changed=true;}
     if(enabled) {
@@ -747,7 +749,8 @@ bool Panel::Defects(Json &draft,bool sheet) {
         changed|=Choice("Energy reference",d,"energy_reference",{{"Ec - offset","relative_to_Ec"},{"Ev + offset","relative_to_Ev"},{"Ei + offset","relative_to_Ei"}});
         changed|=Number("Integrated Nt [cm^-3]",d,"Nt_m3",1e-6);
         bool spatial=d.contains("density_profile_m3");if(Toggle("Spatial Nt(x)",spatial)){if(spatial)d["density_profile_m3"]={{"law","uniform"},{"left",d.at("Nt_m3")},{"right",d.at("Nt_m3")}};else d.erase("density_profile_m3");changed=true;}
-        if(ImGui::CollapsingHeader("Optical capture / IPV")) {
+        const bool opticalOpen=ImGui::CollapsingHeader("Optical capture / IPV");w->tutorialOverlay.Item("scapslab.Defects","optical-capture");
+        if(opticalOpen) {
             auto &opt=d["optical"];if(!opt.is_object())opt=Json::object();bool enabled=opt.value("enabled",false);if(Toggle("Optical capture enabled",enabled)){opt["enabled"]=enabled;changed=true;}
             changed|=OpticalFile(opt,"electron_file","electron_table_nm_m2","opt","Electron capture [.opt]");
             changed|=OpticalFile(opt,"hole_file","hole_table_nm_m2","opt","Hole capture [.opt]");

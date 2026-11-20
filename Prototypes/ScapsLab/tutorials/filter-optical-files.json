@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "id": "filter-optical-files",
+  "title": "Filters .ftr and optical capture .opt",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: Filter and capture.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Filter and capture",
+        "example": "08-pn-illumination.yaml",
+        "patches": [
+          "defect"
+        ]
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Filter and capture"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "filter",
+      "target": {
+        "window": "scapslab.Illumination",
+        "item": "front_filter_file"
+      },
+      "instruction": "In Illumination press Browse next to Front transmission [.ftr] and load examples/profiles/filter.ftr (nm, percent). The preview plots the transmission fraction.",
+      "command": {
+        "operation": "edit",
+        "example": "08-pn-illumination.yaml",
+        "patches": [
+          "defect",
+          "filter.ftr"
+        ]
+      },
+      "condition": {
+        "predicate": "illumination.filter_points",
+        "op": "eq",
+        "value": 3
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "capture",
+      "target": {
+        "window": "scapslab.Defects",
+        "item": "optical-capture"
+      },
+      "instruction": "In Defects open Optical capture / IPV, enable it and load examples/profiles/capture.opt as Electron capture (nm, m^2).",
+      "command": {
+        "operation": "edit",
+        "example": "08-pn-illumination.yaml",
+        "patches": [
+          "defect",
+          "filter.ftr",
+          "capture.opt"
+        ]
+      },
+      "condition": {
+        "predicate": "defect.optical_points",
+        "op": "eq",
+        "value": 3
+      },
+      "timeout_s": 120
+    }
+  ]
+}

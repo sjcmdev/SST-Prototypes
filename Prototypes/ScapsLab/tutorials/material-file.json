@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "id": "material-file",
+  "title": "Save and load a .material file",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: Material file.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Material file",
+        "example": "08-pn-illumination.yaml"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Material file"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "save",
+      "target": {
+        "window": "scapslab.Layers",
+        "item": "material-save"
+      },
+      "instruction": "In Layers press Save... next to SCAPS material [.material] to store layer 1 (choose Both A/B).",
+      "command": {
+        "operation": "save_material",
+        "layer_id": "layer-1",
+        "selection": "both",
+        "export_target": "scapslab-tutorial.material"
+      },
+      "condition": {
+        "predicate": "material.file_exists",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "edit",
+      "target": {
+        "window": "scapslab.Layers",
+        "item": "material-load"
+      },
+      "instruction": "Change the layer's band gap Eg to 1.5 eV in the Layers material table.",
+      "command": {
+        "operation": "edit",
+        "example": "08-pn-illumination.yaml",
+        "patches": [
+          "eg-1.5"
+        ]
+      },
+      "condition": {
+        "predicate": "layer.Eg_eV",
+        "op": "eq",
+        "value": 1.5
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "load",
+      "target": {
+        "window": "scapslab.Layers",
+        "item": "material-load"
+      },
+      "instruction": "Press Load... and choose the .material file you saved. The band gap returns to 1.12 eV; one Undo restores 1.5 eV.",
+      "command": {
+        "operation": "load_material",
+        "layer_id": "layer-1",
+        "selection": "both",
+        "path_target": "scapslab-tutorial.material"
+      },
+      "condition": {
+        "predicate": "layer.Eg_eV",
+        "op": "eq",
+        "value": 1.12
+      },
+      "timeout_s": 120
+    }
+  ]
+}

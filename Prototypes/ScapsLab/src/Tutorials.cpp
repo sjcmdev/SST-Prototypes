@@ -23,14 +23,21 @@ void PatchTutorialDocument(Json &document, const std::string &patch) {
     else if (patch == "spectrum.spe") {
         auto &light = document["illumination"]; const auto path = (profiles / "spectrum.spe").string();
         light["mode"] = "spectrum"; light["scapslab_spectrum"] = "custom"; EmbedTable(light, "spectrum_file", "spectrum_nm_W_m2", Json(scaps_core::read_scaps_spectrum(path)), path);
-    } else if (patch == "absorption.abs") {
+    } else if (patch == "filter.ftr") {
+        auto &light = document["illumination"]; const auto path = (profiles / "filter.ftr").string();
+        EmbedTable(light, "front_filter_file", "front_filter_nm_fraction", Json(scaps_core::read_scaps_filter(path)), path);
+    } else if (patch == "capture.opt") {
+        auto &optical = layer["defects"][0]["optical"]; const auto path = (profiles / "capture.opt").string();
+        optical = {{"enabled", true}}; EmbedTable(optical, "electron_file", "electron_table_nm_m2", Json(scaps_core::read_scaps_absorption(path)), path);
+    } else if (patch == "eg-1.5") layer["material"]["Eg_eV"] = 1.5;
+    else if (patch == "absorption.abs") {
         auto &absorption = layer["absorption"]; const auto path = (profiles / "absorption.abs").string();
         absorption = {{"model", "file"}}; EmbedTable(absorption, "file", "table_nm_m1", Json(scaps_core::read_scaps_absorption(path)), path);
     } else throw std::invalid_argument("Unknown tutorial patch");
 }
 }
 Json TutorialDefinition(const std::string &id) {
-    if (!std::set<std::string>{"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile"}.contains(id)) throw std::invalid_argument("Unknown tutorial_id: " + id);
+    if (!std::set<std::string>{"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile", "filter-optical-files", "material-file", "table-undo-redo", "menus-tour"}.contains(id)) throw std::invalid_argument("Unknown tutorial_id: " + id);
     std::ifstream stream(Directory() / (id + ".json"));
     if (!stream) throw std::runtime_error("Cannot read tutorial: " + id);
     auto definition = Json::parse(stream);
@@ -41,9 +48,10 @@ Json TutorialDefinition(const std::string &id) {
             if(!std::set<std::string>{"doping.grd","defects.grd","generation.gen"}.contains(name))throw std::invalid_argument("Unknown tutorial profile");
             command["path"]=(ExamplesDirectory()/"profiles"/name).string();command.erase("profile_example");
         }
+        if(command.contains("path_target")) {command["path"]=TutorialExportPath(command.at("path_target").get<std::string>()).string();command.erase("path_target");}
         if(command.contains("export_target")) {
             const auto name=command.at("export_target").get<std::string>();
-            if(name!="scapslab-tutorial-profile.csv" && name!="scapslab-tutorial-profile.grd")throw std::invalid_argument("Unknown tutorial export");
+            if(name!="scapslab-tutorial-profile.csv" && name!="scapslab-tutorial-profile.grd" && name!="scapslab-tutorial.material")throw std::invalid_argument("Unknown tutorial export");
             const auto path=TutorialExportPath(name);std::error_code ec;std::filesystem::remove(path,ec);
             command["path"]=path.string();command.erase("export_target");
         }
@@ -61,7 +69,7 @@ Json TutorialDefinition(const std::string &id) {
 }
 Json TutorialCatalog() {
     Json catalog = Json::array();
-    for (const auto *id : {"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile"}) {
+    for (const auto *id : {"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile", "filter-optical-files", "material-file", "table-undo-redo", "menus-tour"}) {
         const auto definition = TutorialDefinition(id);
         catalog.push_back({{"tutorial_id", id}, {"title", definition.at("title")}, {"step_count", definition.at("steps").size()}});
     }
@@ -79,6 +87,13 @@ Tutorial::Predicates Workflow::TutorialPredicates() {
         {"device.temperature_K", [this] { return Current().document.at("temperature_K"); }},
         {"history.count", [this] {return Json(Current().history.size());}},
         {"export.file_count", [] {int n=0;for(const auto *name:{"scapslab-tutorial-profile.csv","scapslab-tutorial-profile.grd"})if(std::filesystem::exists(TutorialExportPath(name)))++n;return Json(n);}},
+        {"illumination.filter_points", [this] {return Json(Current().document.value("illumination",Json::object()).value("front_filter_nm_fraction",Json::array()).size());}},
+        {"defect.optical_points", [this] {const auto &defects=Current().document.at("layers")[0].value("defects",Json::array());return Json(defects.empty()?0:defects[0].value("optical",Json::object()).value("electron_table_nm_m2",Json::array()).size());}},
+        {"layer.Eg_eV", [this] {return Current().document.at("layers")[0].at("material").at("Eg_eV");}},
+        {"material.file_exists", [] {return Json(std::filesystem::exists(TutorialExportPath("scapslab-tutorial.material")));}},
+        {"menu.File", [this] {return Json(menuOpened.contains("File"));}},{"menu.Edit", [this] {return Json(menuOpened.contains("Edit"));}},
+        {"menu.View", [this] {return Json(menuOpened.contains("View"));}},{"menu.Simulate", [this] {return Json(menuOpened.contains("Simulate"));}},
+        {"menu.Tools", [this] {return Json(menuOpened.contains("Tools"));}},{"menu.Tutorials", [this] {return Json(menuOpened.contains("Tutorials"));}},
         {"device.name", [this] { return Json(Current().name); }},
         {"device.layer_count", [this] { return Json(Current().document.at("layers").size()); }},
         {"device.dark", [this] { return Json(!Current().document.value("illumination", Json::object()).value("enabled", false)); }},
@@ -100,11 +115,14 @@ void Workflow::TutorialRequest(const Json &request) {
         const auto mode = request.value("mode", std::string("learn"));
         const auto resume = request.value("resume", false) && mode == "learn" ? tutorialProgress.value(id, Json::object()).value("step_index", std::size_t(0)) : 0;
         auto definition = TutorialDefinition(id);
+        menuOpened.clear();
         tutorial.Start(std::move(definition), mode, TutorialPredicates(), resume);
         tutorialAuto=autoRecalculate; tutorialBand=autoRecalculateBand;
         autoRecalculate=false; autoRecalculateBand=false;
     } else if (operation == "tutorial_stop") {
         if(tutorial.Active()) {tutorial.Stop(); autoRecalculate=tutorialAuto;autoRecalculateBand=tutorialBand;}
+    } else if (operation == "tutorial_state" && request.contains("menu")) {
+        menuOpened.insert(request.at("menu").get<std::string>()); // lets verify/demo mimic opening a menu
     } else if (operation != "tutorial_state" && operation != "tutorial_list") throw std::invalid_argument("Unknown tutorial operation");
     response={{"ok",true},{"error",nullptr},{"tutorial",tutorial.Report()},{"progress",tutorialProgress}};
     if (operation=="tutorial_list") response["tutorials"]=TutorialCatalog();
