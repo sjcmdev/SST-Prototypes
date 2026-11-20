@@ -270,10 +270,15 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
             entry.data={x.data(),y.data(),x.size()}; entry.style.color={.3f,.75f,.4f,1};
             series.push_back(std::move(entry));
         }
-        ImGui::PushID(static_cast<int>(index));
+        ImGui::PushID(std::to_string(graph).c_str());
         if (refitPlot) ImPlot::SetNextAxesToFit();
-        RenderISPlot("##IS",spec,series.data(),series.size(),index==2 ? bodePhaseView : viewState,ImVec2(-1,height));
-        if (&project==&state->Document().project) state->graphViews[graphs.at(index).get<pl::Id>()]=index==2 ? bodePhaseView : viewState;
+        auto &currentView=index==2 ? bodePhaseView : viewState;
+        if (!currentView.viewport) currentView=std::get<pl::Layer>(project.engine->object(layer).data).view;
+        RenderISPlot("##IS",spec,series.data(),series.size(),currentView,ImVec2(-1,height));
+        if (&project==&state->Document().project) {
+            state->graphViews[graph]=currentView;
+            state->StoreGraphView(graph,currentView);
+        }
         
         ImGui::PopID();
     };
@@ -285,7 +290,13 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
                 tab.index==5 ? current.ends_with("residual") : current==tab.label;
             if (ImGui::BeginTabItem(tab.label,nullptr,selectTab && selected ? ImGuiTabItemFlags_SetSelected : 0)) {
                 const auto graph=graphs.at(tab.index).get<pl::Id>();
-                if (isPlotGraph!=graph) {viewState={}; fitView={}; bodePhaseView={};}
+                if (isPlotGraph!=graph) {
+                    if (&project==&state->Document().project) {
+                        state->ShowGraph(graph); viewState=state->GraphView(graph);
+                        bodePhaseView=state->GraphView(graphs.at(2));
+                    } else {viewState={}; bodePhaseView={};}
+                    fitView={};
+                }
                 project.graph=graph; isPlotGraph=graph;
                 auto measurementLabel=modelOnly ? std::string("Model only") : SelectionLabel(project,measurement);
                 if (const auto temperature=measurementLabel.rfind(", T = "); temperature!=std::string::npos) measurementLabel.resize(temperature);

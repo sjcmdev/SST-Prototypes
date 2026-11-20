@@ -188,9 +188,9 @@ Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &
     if (plots) for (const auto &kind : {"Nyquist","Bode magnitude","Bode phase","C-f","G/omega-f","ReZ residual","ImZ residual"}) {
         const std::string k=kind;
         if (!measuredGrid && k.ends_with("residual")) continue;
-        Json plot{{"name",k},{"x_label",k=="Nyquist" ? "Re Z [Ohm]" : "f [Hz]"},
-            {"y_label",k=="Nyquist" ? "-Im Z [Ohm]" : k=="Bode magnitude" ? "|Z| [Ohm]" : k=="Bode phase" ? "phase [deg]" :
-                k=="C-f" ? "C [F]" : k=="G/omega-f" ? "G/omega [F]" : "model - measurement [Ohm]"},
+        Json plot{{"name",k},{"x_label",k=="Nyquist" ? "Re Z (Ohm)" : "Frequency (Hz)"},
+            {"y_label",k=="Nyquist" ? "-Im Z (Ohm)" : k=="Bode magnitude" ? "|Z| (Ohm)" : k=="Bode phase" ? "Phase (deg)" :
+                k=="C-f" ? "Capacitance (F)" : k=="G/omega-f" ? "G/omega (F)" : "model - measurement (Ohm)"},
             {"log_x",k!="Nyquist"},{"equal_aspect",k=="Nyquist"},{"curves",Json::array()}};
         const bool residual=k=="ReZ residual" || k=="ImZ residual";
         if (residual && measuredGrid) plot["curves"].push_back({{"name","residual"},{"x",f},{"y",out.at(k=="ReZ residual" ? "residual_ReZ_Ohm" : "residual_ImZ_Ohm")}});
@@ -222,8 +222,11 @@ void OverlayISMeasurement(Json &out, const Json &m) {
             out["diagnostics"].push_back({{"code","invalid_overlay"},{"message",e.what()},{"row_id",m.at("row_ids").at(i)},{"measurement_id",m.at("id")},{"severity","warning"}});
         }
     }
-    for (std::size_t i=0;i<5;++i) out["plots"][i]["curves"].push_back(
-        ISCurve(out["plots"][i].at("name"),"measured / "+m.at("id").dump()+" / T="+m.value("temperature_K",Json(nullptr)).dump()+" K / bias="+m.value("bias_V",Json(nullptr)).dump()+" V",f,re,im,false));
+    for (std::size_t i=0;i<5;++i) {
+        auto curve=ISCurve(out["plots"][i].at("name"),"measured / "+m.at("id").dump()+" / T="+m.value("temperature_K",Json(nullptr)).dump()+" K / bias="+m.value("bias_V",Json(nullptr)).dump()+" V",f,re,im,false);
+        curve["temperature_K"]=m.value("temperature_K",Json(nullptr));
+        out["plots"][i]["curves"].push_back(std::move(curve));
+    }
     out["inputs"].push_back(m);
 }
 }

@@ -1,0 +1,17 @@
+#pragma once
+#include <nlohmann/json.hpp>
+#include <sst/ui/Theme/ScientificPlotPreset.hpp>
+namespace SST::Prototypes::CapLab {
+inline sst::ui::plot::Color SampleTemperatureColor(std::uint64_t sample, const nlohmann::json &temperature) {
+    std::uint64_t hash=14695981039346656037ull;
+    const auto key=std::to_string(sample)+":"+(temperature.is_number() ? nlohmann::json(temperature.get<double>()).dump() : temperature.dump());
+    for (unsigned char c:key) {hash^=c; hash*=1099511628211ull;}
+    return sst::ui::plot::ScientificColor(hash);
+}
+inline void FormatCompareAxes(sst::ui::plot::PlotSpec &spec) {
+    spec.customAxes=true;
+    for (auto *axis:{&spec.x,&spec.y})
+        axis->labels.format=axis->scale==sst::ui::plot::AxisScale::Log10 ?
+            sst::ui::plot::LabelFormat::Power10 : sst::ui::plot::LabelFormat::Engineering;
+}
+}

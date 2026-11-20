@@ -176,6 +176,19 @@ NB_MODULE(sst_caplab, module)
                 if (state.activeJob) { jobs->Shutdown(); state.OnUpdate(0); }
                 if (state.failure) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(Serialize(state.Document().project))},
                     {"error",{{"code",state.failure->code},{"message",state.status}}}}.dump();
+            } else if (operation=="plot") {
+                state.analysisOptions=r;
+                if (r.value("cancel",false)) (void)jobs->PauseAllJobs();
+                const auto result=commands->Execute(CommandID{"caplab.plot"});
+                if (!result) throw std::runtime_error(result.Error().technicalDetails);
+                bus->ProcessQueue(); const auto id=state.activeJob;
+                if (r.value("cancel",false)) {(void)commands->Execute(CommandID{"caplab.cancel"}); (void)jobs->ResumeAllJobs();}
+                {RunningOperation running(operationId,[&] {return bool(commands->Execute(CommandID{"caplab.cancel"}));}); jobs->Shutdown();}
+                state.OnUpdate(0);
+                const auto job=jobs->GetJob(id);
+                if (!job || job->status!=JobStatus::Completed || state.failure)
+                    return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",job && job->status==JobStatus::Cancelled ? "cancelled" : "plot_failed"},{"message",state.status}}}}.dump();
+                response["graph_id"]=state.Document().project.graph;
             } else if (operation=="export" || operation=="save" || operation=="save_as" || operation=="open" || operation=="import" || operation=="preview") {
                 const auto path=r.contains("path") ? Path::FromResolved(std::filesystem::u8path(r.at("path").get<std::string>())) : Path{};
                 std::vector<Path> sources;
@@ -196,7 +209,12 @@ NB_MODULE(sst_caplab, module)
                 if (operation=="export" && (extension==".png" || extension==".svg" || extension==".pdf")) {
                     state.exportDpi=r.value("dpi",300.0);
                     auto view = [&](const Json& request, pl::Id graph) {
-                        const auto b=request.at("ranges").get<std::vector<double>>();
+                        if (!request.contains("ranges") && !request.contains("view")) {
+                            auto saved=state.GraphView(graph);
+                            if (!saved.viewport) throw std::runtime_error("Provide resolved ranges or render and save this graph before export.");
+                            return saved;
+                        }
+                        const auto b=(request.contains("ranges") ? request.at("ranges") : request.at("view").at("ranges")).get<std::vector<double>>();
                         if (b.size()!=4) throw std::runtime_error("Plot export requires four resolved preview ranges");
                         auto out=request.contains("view") ? pl::viewStateFromJson(request.at("view").dump()) : sst::ui::plot::PlotViewState{};
                         out.viewport=sst::ui::plot::Bounds{b[0],b[1],b[2],b[3]};

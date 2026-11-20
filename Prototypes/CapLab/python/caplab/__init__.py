@@ -42,6 +42,21 @@ def execute(project, request):
     use Core jobs. A failed close-save returns the unchanged open workspace.
     Undo history remains in the live C++ workspace, not in the JSON transport.
 
+    operation=plot: measurement_ids plus plot_type (C-V, Mott-Schottky, N_CV(W),
+    N_DLCP(W), C-f, G/omega-f, Nyquist, Bode magnitude, Bode phase), or graph_ids
+    from existing analyses (including Arrhenius defects and Walter spectra).
+    analysis_ids with plot_index (default 0) select the same result plot across
+    several analyses. graph_ids allow individual plot choices.
+    Optional name; returns graph_id. Uses stored SI columns/results without a fit.
+    Axes must describe the same quantities and scales. Missing/duplicate IDs,
+    missing area for Mott-Schottky or incompatible axes return plot_failed.
+    action=view with graph_id accepts the shared view JSON (ranges in the axis
+    SI units, visibility keyed by stable plot ID strings, x_ticks/y_ticks) and/or
+    x_scale/y_scale (linear/log10). View changes use the same job and Undo path.
+    operation=select, selection={kind: graph, id: graph_id} selects a saved graph.
+    Export accepts graphs=[{graph_id: ...}, ...] or graph_id for one figure;
+    saved views supply ranges/visibility/ticks unless explicitly overridden.
+
     Analysis results report one standard error from residual covariance:
     CV V_b_standard_error_V, N_standard_error_m3, x_d_fit.standard_error_m;
     raw DLCP group N_DL_standard_error_m3 and x_e_standard_error_m;

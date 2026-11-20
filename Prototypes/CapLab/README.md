@@ -615,3 +615,29 @@ exposes the actions documented in `python/caplab/__init__.py`; `operation=select
 uses `{kind, id}`. `operation=import` accepts `target_sample_id`. Responses return
 stable selection IDs and a workspace that retains each project's selection.
 No schema version change or additional dependency is required.
+
+## Compare browser (2D)
+
+The plot window selects saved graphs by ID and compares stored measurements or
+analysis graphs across samples and temperatures. Raw actions cover C-V,
+Mott-Schottky (requires area), imported N_CV(W)/N_DLCP(W), C-f, G/omega-f,
+Nyquist and Bode magnitude/phase. Imported profiles also have direct plot buttons
+in selection details. Select existing analysis graphs for calculated profiles,
+Arrhenius defects and Walter spectra; no analysis runs when building comparisons.
+Graphs with different quantities or scales cannot share axes. CV-derived profiles
+cannot be presented as measured DLCP. Missing values remain gaps.
+
+Legend order is sample name, numeric temperature and stable source ID. Colors
+depend on sample ID and temperature, so selection order does not change them.
+Axis scales, per-graph zoom, hidden curves and resolved tick labels survive
+save/open. Engineering and power-of-ten labels use the shared axis renderer.
+The existing exporter handles selected/batch PNG/SVG/PDF with each graph's saved
+or explicitly supplied view. A graph needs resolved ranges before export.
+
+`caplab.execute(p, {"operation":"plot", "plot_type":"C-f",
+"measurement_ids":[id1,id2]})` returns `graph_id` and an updated project.
+`graph_ids` selects existing analysis plots instead. `action="view"`, `graph_id`
+and the shared `view` JSON persist ranges in the labelled axis SI units,
+visibility and ticks. `x_scale`/`y_scale` accept `linear` or `log10` and refit the
+changed axes. GUI and Python use `caplab.plot`, a Core job and one Undo entry.
+Failures return `plot_failed`; cancellation keeps the original project.

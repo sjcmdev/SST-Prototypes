@@ -2,6 +2,7 @@
 #include "IO/PrototypeWorkflow.hpp"
 #include "Domain/CapLabIS.hpp"
 #include "Domain/CapLabBundleImport.hpp"
+#include "Domain/CapLabCompare.hpp"
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Core/IO/TextFileIO.hpp"
@@ -58,6 +59,14 @@ namespace SST::Prototypes::CapLab
                 if (sourcePreviews.empty()) throw std::runtime_error("No supported CapLab data files were found.");
                 for (const auto &item : sourcePreviews) if (item.value) { preview=*item.value; break; }
             }
+        }
+        else if (operation == Operation::Plot)
+        {
+            auto p=Parse(input);
+            context.ThrowIfCancellationRequested();
+            BuildCompareGraph(p,analysisOptions);
+            context.ThrowIfCancellationRequested();
+            opened=std::move(p);
         }
         else if (operation == Operation::Analyze)
         {
@@ -220,7 +229,7 @@ namespace SST::Prototypes::CapLab
                 if (sources.empty()) { status="Dialog cancelled."; return; }
                 target=sources.front();
             }
-            if (operation != Operation::Analyze && target.Empty())
+            if (operation != Operation::Analyze && operation != Operation::Plot && target.Empty())
             {
                 if (operation == Operation::Save && !saveAs) target = document.path.value_or(Path{});
                 if (target.Empty())
@@ -239,27 +248,23 @@ namespace SST::Prototypes::CapLab
                 if (const auto existing = workspace.FindByPath(target); existing && *existing != workspace.active)
                     throw std::runtime_error("This path belongs to another open project.");
             }
-            if (operation==Operation::Save && document.project.graph && view.viewport) {
-                auto& engine=*document.project.engine;
-                auto layer=engine.object(engine.children(document.project.graph).at(0));
-                std::get<pl::Layer>(layer.data).view=view;
-                engine.change("Save graph view",{std::move(layer)}).apply(engine);
+            if (operation==Operation::Save) {
+                if (document.project.graph && view.viewport) StoreGraphView(document.project.graph,view);
+                for (const auto &[id,value]:graphViews) StoreGraphView(id,value);
             }
-            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Analyze || operation == Operation::Save ? Serialize(EditSnapshot()) : operation == Operation::Export ? Serialize(document.project) : "",target);
+            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Analyze || operation == Operation::Plot || operation == Operation::Save ? Serialize(EditSnapshot()) : operation == Operation::Export ? Serialize(document.project) : "",target);
             job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
             job->sources=std::move(sources); job->recursive=recursive;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
             const auto extension=target.Native().extension();
             if (operation == Operation::Export && (extension==".png" || extension==".svg" || extension==".pdf")) {
                 job->dpi=exportDpi;
-                if (exportGraphs.empty()) job->snapshot=pl::snapshotGraph(*document.project.engine,document.project.graph,view);
+                if (exportGraphs.empty()) job->snapshot=pl::snapshotGraph(*document.project.engine,document.project.graph,view.viewport ? view : GraphView(document.project.graph));
                 else {
                     std::set<pl::Id> seen;
                     for (auto id : exportGraphs) {
                         if (!seen.insert(id).second) throw std::runtime_error("Duplicate export graph_id");
-                        const auto found=graphViews.find(id);
-                        if (found==graphViews.end()) throw std::runtime_error("Render each selected graph before batch export");
-                        job->snapshots.push_back(pl::snapshotGraph(*document.project.engine,id,found->second));
+                        job->snapshots.push_back(pl::snapshotGraph(*document.project.engine,id,GraphView(id)));
                     }
                 }
             }
@@ -309,6 +314,7 @@ namespace SST::Prototypes::CapLab
         auto engine=Json::parse(document.project.engine->toJson());
         document.identityHighWater=std::max(document.identityHighWater,engine.at("nextId").get<pl::Id>());
         RefreshAnalyses(document.project);
+        RefreshComparisonLabels(document.project);
         ReconcileSelection();
         document.Changed(); view = {}; graphViews.clear(); exportGraphs.clear();
         if (bus) { DocumentChanged e; e.project = document.handle; e.revision = document.revision; bus->Queue(e); }
@@ -329,7 +335,7 @@ namespace SST::Prototypes::CapLab
             else if (document.revision != pendingRevision ||
                 (pending->analysisOptions.value("preview",false) && document.selectionRevision!=pendingSelectionRevision) ||
                 (pending->operation==Operation::Preview && !previewGeneration.IsCurrent(pendingGeneration))) status = "Stale revision: result discarded.";
-            else if (pending->operation == Operation::Analyze)
+            else if (pending->operation == Operation::Analyze || pending->operation == Operation::Plot)
             {
                 analysisDraft = std::move(pending->opened); analysisRevision = pendingRevision;
                 if (pending->analysisOptions.value("fit",false) || pending->analysisOptions.value("preview",false)) status="Preview ready; review and accept or discard. Accepted results are unchanged.";
@@ -553,6 +559,7 @@ void CapLabWorkflow::Select(const Json &request) {
         auto &d=Document(); auto &p=d.project;
     if (!request.at("id").is_number_integer() || (request.at("id").is_number_integer() && request.at("id").get<std::int64_t>()<0)) throw std::runtime_error("Selection ID must be a nonnegative integer.");
     const std::string kind=request.at("kind"); const auto id=request.at("id").get<pl::Id>();
+    if (kind=="graph") {ShowGraph(id); analysisDraft.reset(); ++d.selectionRevision; return;}
     pl::Id sample=0, graph=0, measurement=0, defect=0, analysis=0, circuit=0;
     if (kind=="clear") {if (id) throw std::runtime_error("Clear selection requires id=0.");}
     else if (kind=="sample") {
@@ -608,8 +615,35 @@ void CapLabWorkflow::Select(const Json &request) {
     d.selectedDefect=defect ? defect : sameSample && kind!="sample" ? d.selectedDefect : 0;
     d.selectedCircuit=circuit ? circuit : sameSample && kind!="sample" ? d.selectedCircuit : 0;
     d.selectedAnalysis=analysis;
-    if (graph!=p.graph) {graphViews[p.graph]=view; p.graph=graph; view=graph ? graphViews[graph] : sst::ui::plot::PlotViewState{};}
+    ShowGraph(graph);
     analysisDraft.reset();
     ++d.selectionRevision; ReconcileSelection();
+}
+sst::ui::plot::PlotViewState CapLabWorkflow::GraphView(pl::Id graph) const {
+    if (const auto it=graphViews.find(graph);it!=graphViews.end()) return it->second;
+    const auto &p=*Document().project.engine;
+    if (!std::holds_alternative<pl::Graph>(p.object(graph).data)) throw std::runtime_error("Expected graph_id.");
+    return std::get<pl::Layer>(p.object(p.children(graph).at(0)).data).view;
+}
+void CapLabWorkflow::StoreGraphView(pl::Id graph, const sst::ui::plot::PlotViewState &value) {
+    if (!graph || !value.viewport) return;
+    auto &engine=Document().project.engine;
+    auto &p=*engine;
+    auto layer=p.object(p.children(graph).at(0));
+    auto &saved=std::get<pl::Layer>(layer.data).view;
+    if (pl::viewStateJson(saved)==pl::viewStateJson(value)) return;
+    const bool hadView=saved.viewport.has_value();
+    saved=value;
+    if (engine.use_count()>1) engine=CreateRef<pl::Project>(pl::Project::fromJson(engine->toJson()));
+    engine->change("Graph view",{std::move(layer)}).apply(*engine);
+    if (hadView) Document().Changed();
+}
+void CapLabWorkflow::ShowGraph(pl::Id graph) {
+    auto &p=Document().project;
+    if (graph==p.graph) return;
+    if (graph) (void)GraphView(graph);
+    StoreGraphView(p.graph,view);
+    if (p.graph && view.viewport) graphViews[p.graph]=view;
+    p.graph=graph; view=graph ? GraphView(graph) : sst::ui::plot::PlotViewState{};
 }
 }

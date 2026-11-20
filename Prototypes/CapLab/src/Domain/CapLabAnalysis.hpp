@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "Storage/CapLabDocument.hpp"
+#include "Domain/CapLabPlotStyle.hpp"
 namespace SST::Prototypes::CapLab {
 inline pl::Id AnalysisSample(const Json &a) {
     if (a.contains("sample_id")) return a.at("sample_id");
@@ -123,17 +124,23 @@ inline pl::Id AnalysisPlot(Project &p, pl::Id workbook, const Json &spec) {
     pl::Layer l; l.spec.x.label = spec.at("x_label"); l.spec.y.label = spec.at("y_label"); l.spec.autoFit = sst::ui::plot::AutoFit::Once;
     l.spec.equalAspect=spec.value("equal_aspect",false);
     if (spec.value("log_x",false)) l.spec.x.scale=sst::ui::plot::AxisScale::Log10;
+    if (spec.value("log_y",false)) l.spec.y.scale=sst::ui::plot::AxisScale::Log10;
+    FormatCompareAxes(l.spec);
     std::vector<pl::Object> objects{{graph,p.engine->root(),name,0,pl::Graph{}},{layer,graph,name,0,l}};
     for (const auto &curve : spec.at("curves")) {
         auto sheet = p.engine->reserveId(), x = p.engine->reserveId(), y = p.engine->reserveId();
-        pl::Worksheet w; for (std::size_t i=0; i<curve.at("x").size(); ++i) w.rows.push_back(p.engine->reserveId());
+        pl::Worksheet w;
+        if (curve.contains("temperature_K")) w.source["temperature_K"]=curve.at("temperature_K").dump();
+        for (std::size_t i=0; i<curve.at("x").size(); ++i) w.rows.push_back(p.engine->reserveId());
         pl::Column cx, cy; auto values=[](const Json &array) {std::vector<double> out; for (const auto &v : array) out.push_back(v.is_null() ? std::numeric_limits<double>::quiet_NaN() : v.get<double>()); return out;};
         cx.values=values(curve.at("x")); cy.values=values(curve.at("y"));
         cx.role = pl::Role::X; cy.role = pl::Role::Y;
         pl::Plot plot{sheet,x,y}; plot.kind = sst::ui::plot::SeriesKind::LineScatter;
+        if (curve.value("fit",false)) plot.kind=sst::ui::plot::SeriesKind::Line;
         if (curve.value("candidates",false)) plot.kind=sst::ui::plot::SeriesKind::Scatter;
         plot.style.marker=sst::ui::plot::Marker::Circle;
         plot.style.color = curve.value("fit",false) ? sst::ui::plot::Color{.85f,.25f,.12f,1} : sst::ui::plot::Color{.12f,.45f,.78f,1};
+        if (curve.contains("color")) plot.style.color=curve.at("color").get<sst::ui::plot::Color>();
         objects.push_back({sheet,workbook,name,0,w});
         objects.push_back({x,sheet,"x",0,cx}); objects.push_back({y,sheet,"y",0,cy});
         objects.push_back({p.engine->reserveId(),layer,curve.at("name").get<std::string>(),0,plot});
@@ -145,7 +152,16 @@ inline void AppendAnalysis(Project &p, Json result) {
     if (result.contains("x_d") && result.at("type")!="Walter") result["x_d"]["fit_id"] = result.at("type")=="DLCPPolynomial" && result.at("x_d").at("measurement_id")==result.at("inputs").at(0).at("id") ? result.at("id") : Json(nullptr);
     result["graphs"] = Json::array();
     const auto sample=result.contains("sample_id") ? result.at("sample_id").get<pl::Id>() : result.at("inputs").at(0).at("sample_id").get<pl::Id>();
-    for (const auto &plot : result.at("plots")) result["graphs"].push_back(AnalysisPlot(p,sample,plot));
+    for (auto plot : result.at("plots")) {
+        std::size_t i=0;
+        for (auto &curve:plot.at("curves")) {
+            Json temperature=curve.value("temperature_K",result.value("temperature_K",Json(nullptr)));
+            if (temperature.is_null() && !result.at("inputs").empty()) temperature=result.at("inputs").at(0).value("temperature_K",Json(nullptr));
+            if (result.at("type")=="Walter" && i<result.at("spectra").size()) temperature=result.at("spectra").at(i).value("temperature_K",Json(nullptr));
+            curve["temperature_K"]=temperature; curve["color"]=SampleTemperatureColor(sample,temperature); ++i;
+        }
+        result["graphs"].push_back(AnalysisPlot(p,sample,plot));
+    }
     p.graph = result.at("graphs").at(0).get<pl::Id>();
     result.erase("plots"); p.analyses.push_back(std::move(result));
 }

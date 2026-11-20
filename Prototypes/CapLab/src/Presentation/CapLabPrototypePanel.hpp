@@ -30,11 +30,15 @@ private:
     void RenderImport();
     void RenderTree();
     void RenderPlot();
+    void RenderBrowser();
     void RenderExport();
     void SelectObject(const char *kind, pl::Id id);
     void PreviewAfterEdit(const Json &options, bool calculate);
     int exportFormat = 0;
     std::set<pl::Id> selectedExportGraphs;
+    std::set<pl::Id> compareMeasurements, compareGraphs;
+    int compareType=0;
+    std::string compareFilter;
     void RenderISTabs(Project& project, const Json& analysis, sst::ui::plot::PlotViewState& viewState);
     std::uint64_t shownProject = 0;
     View view;

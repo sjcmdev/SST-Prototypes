@@ -1,7 +1,31 @@
 #pragma once
 #include "Storage/CapLabDocument.hpp"
+#include "Domain/CapLabPlotStyle.hpp"
 namespace SST::Prototypes::CapLab
 {
+    inline bool IsCFGraph(const pl::Project &p, pl::Id graph)
+    {
+        if (!graph || !std::holds_alternative<pl::Graph>(p.object(graph).data)) return false;
+        const auto layers=p.children(graph);
+        if (layers.size()!=1) return false;
+        const auto plots=p.children(layers.front());
+        if (plots.empty()) return false;
+        for (auto id:plots) {
+            const auto *plot=std::get_if<pl::Plot>(&p.object(id).data);
+            if (!plot || std::get<pl::Column>(p.object(plot->x).data).units!="Hz" ||
+                std::get<pl::Column>(p.object(plot->y).data).units!="F") return false;
+        }
+        const auto &spec=std::get<pl::Layer>(p.object(layers.front()).data).spec;
+        return spec.x.label=="Frequency (Hz)" && spec.y.label=="Capacitance (F)" &&
+            spec.x.scale==sst::ui::plot::AxisScale::Log10 && spec.y.scale==sst::ui::plot::AxisScale::Linear;
+    }
+    inline pl::Id MeasurementGraph(const pl::Project &p, pl::Id sheet)
+    {
+        for (const auto &[id,o]:p.objects())
+            if (const auto *plot=std::get_if<pl::Plot>(&o->data); plot && plot->worksheet==sheet)
+                return p.object(o->parent).parent;
+        throw std::runtime_error("Imported measurement has no graph.");
+    }
     inline pl::Table PreviewTable(const Json &preview, std::optional<double> temperature)
     {
         Optional(Nullable(temperature));
@@ -49,13 +73,18 @@ namespace SST::Prototypes::CapLab
             }
             pl::Id layer;
             std::vector<pl::Object> objects;
-            const pl::Id graph = std::stoull(parameters.at("graph"));
+            pl::Id graph = std::stoull(parameters.at("graph"));
+            if (!IsCFGraph(p,graph)) {
+                graph=0;
+                for (const auto &[id,o]:p.objects()) if (std::holds_alternative<pl::Graph>(o->data) && IsCFGraph(p,id)) {graph=id; break;}
+            }
             if (graph) layer = p.children(graph).at(0);
             else
             {
                 const auto id = p.reserveId(); layer = p.reserveId();
                 pl::Layer l; l.spec.x.label = "Frequency (Hz)"; l.spec.y.label = "Capacitance (F)";
                 l.spec.x.scale = sst::ui::plot::AxisScale::Log10;
+                FormatCompareAxes(l.spec);
                 l.spec.autoFit = sst::ui::plot::AutoFit::Once;
                 objects = {{id,folder,"C-f",0,pl::Graph{}},{layer,id,"C-f",0,l}};
             }
@@ -74,6 +103,7 @@ namespace SST::Prototypes::CapLab
                 temperature = metadata.at("temperature_K");
             }
             if (!temperature.is_null()) name += ", T = " + temperature.dump() + " K";
+            series.style.color=SampleTemperatureColor(p.object(sheet).parent,temperature);
             objects.push_back({p.reserveId(),layer,name,0,series});
             return p.change("C-f graph",std::move(objects));
         }
@@ -101,9 +131,7 @@ namespace SST::Prototypes::CapLab
                 graph.apply(*p.engine);
             }
             catch (...) { data.undo(*p.engine); throw; }
-            // Locate the graph by type; object order is unrelated to domain references.
-            newGraph = oldGraph;
-            if (!newGraph) for (const auto &[id,o] : p.engine->objects()) if (std::holds_alternative<pl::Graph>(o->data)) newGraph = id;
+            newGraph = MeasurementGraph(*p.engine,sweep.id);
             Finish();
         }
         void Redo() { data.apply(*target.engine); graph.apply(*target.engine); Finish(); }

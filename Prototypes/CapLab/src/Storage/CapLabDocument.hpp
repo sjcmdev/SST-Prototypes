@@ -26,7 +26,7 @@ namespace SST::Prototypes::CapLab
         Ref<pl::Project> engine = CreateRef<pl::Project>("CapLab");
         std::vector<Sample> samples;
         std::vector<FrequencySweep> sweeps;
-        Json measurements = Json::array(), historical = Json::array(), imports = Json::array(), analyses = Json::array(), defects = Json::array(), circuits = Json::array();
+        Json measurements = Json::array(), historical = Json::array(), imports = Json::array(), analyses = Json::array(), defects = Json::array(), circuits = Json::array(), comparisons = Json::array();
         pl::Id graph = 0;
     };
     inline Json Nullable(std::optional<double> value) { return value ? Json(*value) : Json(nullptr); }
@@ -369,6 +369,14 @@ namespace SST::Prototypes::CapLab
         }
         if (p.graph && !std::holds_alternative<pl::Graph>(p.engine->object(p.graph).data))
             throw std::runtime_error("Invalid graph reference.");
+        std::set<pl::Id> comparisons;
+        for (const auto &c:p.comparisons) {
+            const auto id=c.at("graph_id").get<pl::Id>();
+            if (!comparisons.insert(id).second || !std::holds_alternative<pl::Graph>(p.engine->object(id).data) ||
+                !c.at("inputs").is_array() || !c.at("analysis_ids").is_array()) throw std::runtime_error("Invalid comparison graph.");
+            for (const auto &input:c.at("inputs")) if (!input.at("id").is_number_unsigned()) throw std::runtime_error("Invalid comparison input ID.");
+            for (const auto &source:c.at("analysis_ids")) if (!source.is_number_unsigned()) throw std::runtime_error("Invalid comparison analysis ID.");
+        }
     }
     inline std::string Serialize(const Project &p)
     {
@@ -377,8 +385,10 @@ namespace SST::Prototypes::CapLab
         for (const auto &s : p.samples) samples.push_back({{"id",s.id},{"name",s.name},{"area_m2",Nullable(s.area_m2)},{"metadata",s.metadata}});
         for (const auto &s : p.sweeps) sweeps.push_back({{"id",s.id},{"sample_id",s.sample_id},{"variant","Cp_Rp"},
             {"frequency",s.frequency},{"capacitance",s.capacitance},{"resistance",s.resistance},{"temperature_K",Nullable(s.temperature_K)}});
-        return Json{{"circuits",p.circuits},{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
-            {"samples",samples},{"sweeps",sweeps},{"graph",p.graph},{"engine",Json::parse(p.engine->toJson())},{"measurements",p.measurements},{"historical",p.historical},{"imports",p.imports},{"analyses",p.analyses},{"defects",p.defects}}.dump();
+        Json result{{"circuits",p.circuits},{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
+            {"samples",samples},{"sweeps",sweeps},{"graph",p.graph},{"engine",Json::parse(p.engine->toJson())},{"measurements",p.measurements},{"historical",p.historical},{"imports",p.imports},{"analyses",p.analyses},{"defects",p.defects}};
+        if (!p.comparisons.empty()) result["comparisons"]=p.comparisons;
+        return result.dump();
     }
     inline Project Parse(const std::string &text)
     {
@@ -401,6 +411,7 @@ namespace SST::Prototypes::CapLab
         p.analyses = j.value("analyses",Json::array());
         p.defects = j.value("defects",Json::array());
         p.circuits = j.value("circuits",Json::array());
+        p.comparisons = j.value("comparisons",Json::array());
         Validate(p);
         return p;
     }

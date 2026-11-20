@@ -13,7 +13,7 @@
 #include <sst/plotlab/GraphSnapshot.hpp>
 namespace SST::Prototypes::CapLab
 {
-    enum class Operation { Preview, PreviewFolder, Open, OpenOrImport, Save, SaveAs, New, Close, Export, Analyze };
+    enum class Operation { Preview, PreviewFolder, Open, OpenOrImport, Save, SaveAs, New, Close, Export, Analyze, Plot };
     struct DocumentRequested : BusEvent { Operation operation = Operation::Preview; Path target; std::vector<Path> sources; bool recursive = false; };
     struct DocumentChanged : BusEvent { pl::Id project; std::uint64_t revision; };
     class DocumentJob final : public IJob
@@ -55,6 +55,9 @@ namespace SST::Prototypes::CapLab
         Project EditSnapshot() const;
         void Select(const Json &request);
         void ReconcileSelection();
+        void StoreGraphView(pl::Id graph, const sst::ui::plot::PlotViewState &value);
+        void ShowGraph(pl::Id graph);
+        sst::ui::plot::PlotViewState GraphView(pl::Id graph) const;
         Json SelectionJson() const;
         pl::Id importTargetSample = 0;
         ProjectWorkspace<CapLabDocument> workspace;

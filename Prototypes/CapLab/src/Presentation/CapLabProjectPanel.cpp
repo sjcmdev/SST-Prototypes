@@ -129,6 +129,17 @@ void CapLabPrototypePanel::RenderTree() {
         if (doc.selectedMeasurement) {
             const auto m=AnalysisMeasurement(p,doc.selectedMeasurement);
             ImGui::TextWrapped("%s; %zu rows",SelectionLabel(p,doc.selectedMeasurement).c_str(),m.at("row_ids").size());
+            ImGui::BeginDisabled(state->activeJob!=0);
+            const std::string kind=m.at("kind");
+            const auto types=kind=="DLCPProfile" ? std::vector<const char*>{"C-V","Mott-Schottky","N_CV(W)","N_DLCP(W)"} :
+                kind=="CV-derived" ? std::vector<const char*>{"C-V","Mott-Schottky","N_CV(W)"} :
+                kind=="CVSweep" ? std::vector<const char*>{"C-V","Mott-Schottky"} :
+                kind=="FrequencySweep" ? std::vector<const char*>{"C-f","G/omega-f","Nyquist","Bode magnitude","Bode phase"} : std::vector<const char*>{};
+            for (auto type:types) if (ImGui::Button((std::string("Plot ")+type).c_str())) {
+                state->analysisOptions={{"plot_type",type},{"measurement_ids",Json::array({doc.selectedMeasurement})}};
+                (void)commands->Execute(CommandID{"caplab.plot"});
+            }
+            ImGui::EndDisabled();
         }
         if (sst::ui::widgets::BeginCombo("Move / merge into",SelectionLabel(p,moveTarget).c_str())) {
             for (const auto &s:p.samples) if (s.id!=sample.id) {

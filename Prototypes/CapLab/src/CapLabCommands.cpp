@@ -216,6 +216,7 @@ void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWo
         std::tuple{"caplab.save_as", "Save CapLab project as", Operation::SaveAs},
         std::tuple{"caplab.save", "Save CapLab project", Operation::Save},
         std::tuple{"caplab.analyze", "Analyze CapLab data", Operation::Analyze},
+        std::tuple{"caplab.plot", "Compare stored CapLab data", Operation::Plot},
         std::tuple{"caplab.preview", "Import measurements", Operation::Preview},
         std::tuple{"caplab.preview_folder", "Import measurement folders", Operation::PreviewFolder},
         std::tuple{"caplab.open", "Open CapLab project", Operation::Open},

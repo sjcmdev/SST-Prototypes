@@ -77,8 +77,7 @@ namespace SST::Prototypes::CapLab
                         auto opGraph = CFTemplate{}.instantiate(*draft.engine,draft.engine->root(),sheet,
                             {{"x",cols.at(0).get<pl::Id>()},{"y",cols.at(1).get<pl::Id>()}},{{"graph",std::to_string(draft.graph)}});
                         opGraph.apply(*draft.engine);
-                        if (!draft.graph) for (const auto &[id,o] : draft.engine->objects())
-                            if (std::holds_alternative<pl::Graph>(o->data)) draft.graph = id;
+                        draft.graph = MeasurementGraph(*draft.engine,sheet);
                     }
                 }
             }

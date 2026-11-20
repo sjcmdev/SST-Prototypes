@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include "Presentation/SelectionLabel.hpp"
+#include "Domain/CapLabCompare.hpp"
 #include <imgui.h>
 #include "Core/Presentation/Panels/ImportSourceList.hpp"
 #include <sst/ui/Widgets/LabelledControls.hpp>
@@ -219,7 +220,7 @@ void CapLabPrototypePanel::RenderExport() {
     ImGui::SameLine(); if (ImGui::Button("Export CSV / XLSX tables...")) exportToFile(false,true);
     ImGui::EndDisabled();
     if (ImGui::TreeNode("Batch graphs")) {
-        ImGui::TextWrapped("Open each graph first to capture its current ranges and visibility.");
+        ImGui::TextWrapped("Exports use the saved or current ranges and visibility of each graph.");
         const auto& engine=*state->Document().project.engine;
         bool ready=!selectedExportGraphs.empty();
         std::set<pl::Id> graphs;
@@ -233,14 +234,83 @@ void CapLabPrototypePanel::RenderExport() {
             ImGui::PopID();
         }
         std::erase_if(selectedExportGraphs,[&](auto id) { return !graphs.contains(id); });
-        for (auto id : selectedExportGraphs) ready &= state->graphViews.contains(id) && state->graphViews.at(id).viewport.has_value();
+        for (auto id : selectedExportGraphs) ready &= state->GraphView(id).viewport.has_value();
         ImGui::BeginDisabled(state->activeJob || !ready || selectedExportGraphs.empty());
         if (ImGui::Button("Export selected graphs...")) exportToFile(true);
         ImGui::EndDisabled();
         ImGui::TreePop();
     }
 }
+void CapLabPrototypePanel::RenderBrowser() {
+    auto &p=state->Document().project;
+    ImGui::BeginDisabled(state->activeJob!=0 || state->analysisDraft.has_value());
+    if (sst::ui::widgets::BeginCombo("Graph",p.graph ? p.engine->object(p.graph).name.c_str() : "Select graph")) {
+        for (auto id:p.engine->children(p.engine->root())) if (std::holds_alternative<pl::Graph>(p.engine->object(id).data)) {
+            ImGui::PushID(std::to_string(id).c_str());
+            if (ImGui::Selectable(p.engine->object(id).name.c_str(),id==p.graph)) SelectObject("graph",id);
+            ImGui::PopID();
+        }
+        sst::ui::widgets::EndCombo();
+    }
+    if (const auto section=std::getenv("SST_CAPLAB_GALLERY_SECTION"))
+        ImGui::SetNextItemOpen(std::string_view(section)=="Compare",ImGuiCond_Once);
+    if (ImGui::CollapsingHeader("Compare stored data (2D)")) {
+        const char *types[]={"C-V","Mott-Schottky","N_CV(W)","N_DLCP(W)","C-f","G/omega-f","Nyquist","Bode magnitude","Bode phase"};
+        sst::ui::widgets::Combo("Measurement plot",&compareType,types,IM_ARRAYSIZE(types));
+        sst::ui::widgets::Text("Filter sample / source / result",&compareFilter);
+        ImGui::BeginChild("Compare sources",ImVec2(0,180),ImGuiChildFlags_Borders);
+        auto choose=[&](pl::Id id,const std::string &label,std::set<pl::Id> &selection) {
+            if (!compareFilter.empty() && label.find(compareFilter)==std::string::npos) return;
+            ImGui::PushID(std::to_string(id).c_str());
+            bool selected=selection.contains(id);
+            if (sst::ui::widgets::Checkbox(label.c_str(),&selected)) {if (selected) selection.insert(id); else selection.erase(id);}
+            ImGui::PopID();
+        };
+        std::set<pl::Id> measurements,graphs;
+        for (const auto &sample:p.samples) {
+            auto measurement=[&](pl::Id id) {
+                measurements.insert(id);
+                choose(id,sample.name+" / "+SelectionLabel(p,id)+" ["+std::to_string(id)+"]",compareMeasurements);
+            };
+            for (const auto &m:p.sweeps) if (m.sample_id==sample.id) measurement(m.id);
+            for (const auto &m:p.measurements) if (m.at("sample_id")==sample.id) measurement(m.at("id"));
+            for (const auto &a:p.analyses) if (AnalysisSample(a)==sample.id) for (const auto &g:a.at("graphs")) {
+                const auto id=g.get<pl::Id>(); graphs.insert(id);
+                choose(id,sample.name+" / "+p.engine->object(id).name+" / "+a.at("status").get<std::string>()+" ["+std::to_string(id)+"]",compareGraphs);
+            }
+        }
+        std::erase_if(compareMeasurements,[&](auto id) {return !measurements.contains(id);});
+        std::erase_if(compareGraphs,[&](auto id) {return !graphs.contains(id);});
+        ImGui::EndChild();
+        ImGui::TextWrapped("Analysis graphs include Arrhenius defects, Walter spectra and IS. Only identical quantities and scales can share axes.");
+        ImGui::BeginDisabled(compareMeasurements.empty() && compareGraphs.empty());
+        if (ImGui::Button("Build comparison (Undo)")) {
+            state->analysisOptions={{"plot_type",types[compareType]},{"measurement_ids",compareMeasurements},{"graph_ids",compareGraphs}};
+            (void)commands->Execute(CommandID{"caplab.plot"});
+        }
+        ImGui::EndDisabled(); ImGui::SameLine();
+        if (ImGui::Button("Clear sources")) {compareMeasurements.clear(); compareGraphs.clear();}
+    }
+    if (p.graph && ImGui::CollapsingHeader("Axes / view")) {
+        const auto &layer=std::get<pl::Layer>(p.engine->object(p.engine->children(p.graph).at(0)).data);
+        int x=layer.spec.x.scale==sst::ui::plot::AxisScale::Log10, y=layer.spec.y.scale==sst::ui::plot::AxisScale::Log10;
+        const char *scales[]={"Linear","Log10"};
+        bool changed=sst::ui::widgets::Combo("X scale",&x,scales,2);
+        changed |= sst::ui::widgets::Combo("Y scale",&y,scales,2);
+        if (changed) {
+            state->analysisOptions={{"action","view"},{"graph_id",p.graph},{"x_scale",x ? "log10" : "linear"},{"y_scale",y ? "log10" : "linear"}};
+            (void)commands->Execute(CommandID{"caplab.plot"});
+        }
+        if (ImGui::Button("Fit all data")) {
+            state->analysisOptions={{"action","view"},{"graph_id",p.graph},{"refit",true}};
+            (void)commands->Execute(CommandID{"caplab.plot"});
+        }
+        ImGui::TextWrapped("Drag to pan; wheel to zoom; click legend to hide a curve. Engineering units and logarithmic tick labels are retained in export.");
+    }
+    ImGui::EndDisabled();
+}
 void CapLabPrototypePanel::RenderPlot() {
+    RenderBrowser();
     auto &doc = state->Document();
     auto &project=state->analysisDraft && state->analysisRevision==doc.revision ? *state->analysisDraft : doc.project;
     if (project.graph) {
@@ -248,11 +318,14 @@ void CapLabPrototypePanel::RenderPlot() {
         else ImGui::TextUnformatted("Preview plot; accepted results remain in the project tree.");
         for (const auto &a:project.analyses) if (std::find(a.at("graphs").begin(),a.at("graphs").end(),Json(project.graph))!=a.at("graphs").end())
             ImGui::Text("%s result: %s",state->analysisDraft ? "Preview" : "Accepted",a.at("status").get<std::string>().c_str());
+        for (const auto &c:project.comparisons) if (c.at("graph_id")==project.graph)
+            ImGui::Text("Stored comparison: %s",CompareStatus(project,c).c_str());
         for (const auto& a : project.analyses) if (a.at("type")=="Circuit") {
             const auto& graphs=a.at("graphs");
             if (std::find(graphs.begin(),graphs.end(),Json(project.graph))!=graphs.end()) {
                 RenderISTabs(project,a,state->view);
                 state->graphViews[project.graph]=state->view;
+                if (!state->analysisDraft) state->StoreGraphView(project.graph,state->view);
                 return;
             }
         }
@@ -268,8 +341,10 @@ void CapLabPrototypePanel::RenderPlot() {
             entry.id = p.object(id).name + "###" + entry.id;
             series.push_back(std::move(entry));
         }
+        ImGui::PushID(std::to_string(project.graph).c_str());
         sst::ui::plot::RenderPlot("##cf", std::get<pl::Layer>(p.object(layer).data).spec,
             series.data(), series.size(), state->view, {}, ImVec2(-1, std::max(200.0f, ImGui::GetContentRegionAvail().y - 40)));
+        ImGui::PopID();
         if (state->view.picked && state->view.picked->series==0) {
             for (const auto &a : project.analyses) if (a.at("type")=="AS" && a.at("status")=="valid" &&
                 a.at("graphs").at(1)==project.graph && state->view.picked->point<a.at("candidates").size())
@@ -277,11 +352,12 @@ void CapLabPrototypePanel::RenderPlot() {
             state->view.picked.reset();
         }
         state->graphViews[project.graph]=state->view;
+        if (!state->analysisDraft) state->StoreGraphView(project.graph,state->view);
     }
 }
 void CapLabPrototypePanel::RenderContent() {
     if (shownProject!=state->workspace.active) {
-        shownProject=state->workspace.active; areaDraft.clear(); treeMeasurements.clear(); detailsSample=moveTarget=0; selectionSeen=UINT64_MAX;
+        shownProject=state->workspace.active; areaDraft.clear(); treeMeasurements.clear(); compareMeasurements.clear(); compareGraphs.clear(); selectedExportGraphs.clear(); detailsSample=moveTarget=0; selectionSeen=UINT64_MAX;
         selectedCircuit=circuitMeasurement=selectedDefect=fitCircuit=isPlotAnalysis=isPlotGraph=0;
         circuitDocument.clear(); circuitEditor.reset(); modelAutoReady=circuitAutoReady=circuitRecalc=false; isParameters=Json::array(); fitView={}; bodePhaseView={};
     }

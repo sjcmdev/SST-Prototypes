@@ -377,6 +377,9 @@ include (_SST_ROOT .. "/../SST-Libraries/sst_libraries.lua")
 project "Core"
     removefiles { "Core/IO/Hdf5/tests/**" }
     sst_link_hdf5()
+    filter "files:Core/IO/Hdf5/**.cpp"
+        flags { "NoPCH" }
+    filter {}
 
     group "Prototypes"
 local selectedPrototypes = os.getenv("SST_BUILD_PROTOTYPES")
