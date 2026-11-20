@@ -172,16 +172,14 @@ namespace SST::Prototypes::JFM
 				const std::size_t last = m_SingleIteration ? first + 1 : sampleCount;
 				for (std::size_t sampleIndex = first; sampleIndex < last; ++sampleIndex)
 				{
-                    const bool rejected = !result->samples[sampleIndex].converged;
+                    const bool rejected = !result->samples[sampleIndex].converged || result->samples[sampleIndex].flatDirections;
                     if (rejected && !m_ShowRejected) continue;
 					if (m_ShowNoisy)
 					{
 						ImPlotSpec spec;
 						spec.LineColor = ImVec4(1.0, 0.0f, 0.0f, rejected ? 0.06f : m_SingleIteration ? 0.9f : 0.18f);
 						spec.LineWeight = 2.0f;
-						spec.Flags = ImPlotItemFlags_NoLegend;
-						const std::string label = "##mc_noisy_" + std::to_string(sampleIndex);
-						PlotCurrent(label.c_str(), result->voltage, result->noisyCurrent.data() + sampleIndex * pointCount, pointCount, spec, m_SemiLog);
+						PlotCurrent(rejected ? "Noisy (rejected / flat)" : "Noisy", result->voltage, result->noisyCurrent.data() + sampleIndex * pointCount, pointCount, spec, m_SemiLog);
 					}
 					if (m_ShowFitted)
 					{
@@ -189,9 +187,7 @@ namespace SST::Prototypes::JFM
 						ImPlotSpec spec;
 						spec.LineColor = ImVec4(0.10f, 0.56f, 1.0f, rejected ? 0.08f : m_SingleIteration ? 1.0f : 0.28f);
 						spec.LineWeight = 2.5;
-						spec.Flags = ImPlotItemFlags_NoLegend;
-						const std::string label = "##mc_fit_" + std::to_string(sampleIndex);
-						PlotCurrent(label.c_str(), result->voltage, fitted.data(), std::min(pointCount, fitted.size()), spec, m_SemiLog);
+						PlotCurrent(rejected ? "Fitted (rejected / flat)" : "Fitted", result->voltage, fitted.data(), std::min(pointCount, fitted.size()), spec, m_SemiLog);
 					}
 				}
 				ImPlot::EndPlot();

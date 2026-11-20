@@ -1,0 +1,16 @@
+{
+  "case": "synthetic_forward_4p",
+  "current_mismatches": 0,
+  "flat": 0,
+  "g0_ms": 6197.313000000082,
+  "g0_over_a": 3.4697425124233967,
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "lm_fallback": 0,
+  "method": "nm",
+  "mode": "log_legacy",
+  "pre_port_ms": 1785.6035000002012,
+  "repeats": 3,
+  "result_mismatches": 0,
+  "samples": 1000,
+  "variant_a_ms": 1786.1016999995336
+}

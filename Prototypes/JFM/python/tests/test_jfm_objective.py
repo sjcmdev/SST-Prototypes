@@ -23,3 +23,13 @@ def test_phase4_final_fit_accepts_signed_light_data(name,mode):
     assert result['objective']['sigma_abs_A']>0
     assert result['objective']['linear_points']+result['objective']['log_points']==len(a)
     json.dumps(result,allow_nan=False)
+
+@pytest.mark.parametrize('mode', ['auto', 'log_legacy', 'isc_shift', 'signed_sigma'])
+@pytest.mark.parametrize('samples', [0, 1])
+def test_empty_input_returns_typed_error(mode, samples):
+    sst_jfm = pytest.importorskip('sst_jfm', reason='Product nanobind module requires embedded Python')
+    result = sst_jfm.fit(dict(voltage_V=[], current_A=[], temperature_K=300., model_id='SD-0',
+        parameters=dict(I0_A=1e-10, ideality_factor=1.5), objective_mode=mode, samples=samples))
+    assert result['ok'] is False
+    assert result['error']['code'] == 'jfm.fit.validation'
+    json.dumps(result, allow_nan=False)

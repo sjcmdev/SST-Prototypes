@@ -1,0 +1,16 @@
+{
+  "case": "HZB_T330_4p",
+  "current_mismatches": 0,
+  "flat": 0,
+  "g0_ms": 16249.133900000015,
+  "g0_over_a": 4.0468717732258925,
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "lm_fallback": 5,
+  "method": "lm",
+  "mode": "log_legacy",
+  "pre_port_ms": 4029.785900000017,
+  "repeats": 3,
+  "result_mismatches": 0,
+  "samples": 20000,
+  "variant_a_ms": 4015.2332000001334
+}

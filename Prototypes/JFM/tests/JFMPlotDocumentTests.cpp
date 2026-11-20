@@ -118,7 +118,7 @@ namespace SST::Prototypes::JFM
         EXPECT_EQ(snapshot->series[1].x.size(),1);
     }
 
-    TEST(JFMPlotDocumentTests, CurvesHideRejectedSamplesByDefault)
+    TEST(JFMPlotDocumentTests, CurvesLegendTracksVisibleSeriesColorsAndRejectedOrFlatSamples)
     {
         auto store = CreateRef<JFMWorkspaceStore>(); auto bus = CreateRef<EventBus>();
         auto project = store->GetActiveProjectHandle();
@@ -134,8 +134,10 @@ namespace SST::Prototypes::JFM
         JFMMonteCarloState state; state.modelId = "SD-0";
         JFMMonteCarloResult result; result.parameterNames = {"I0","A"};
         result.voltage = {.2,.3}; result.idealCurrent = {1e-5,2e-5};
-        result.noisyCurrent = {1e-5,2e-5,1e-5,2e-5};
-        result.samples = {{{1e-10,1.5},0,0,1,true},{{1e-9,1.5},0,0,1,false}};
+        result.noisyCurrent = {1e-5,2e-5,1e-5,2e-5,1e-5,2e-5,1e-5,2e-5};
+        result.samples = {{{1e-10,1.5},0,0,1,true},{{1e-9,1.5},0,0,1,false},
+            {{1e-10,1.5},0,0,1,true},{{1e-10,1.5},0,0,1,true}};
+        result.samples.back().flatDirections = true;
         ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,result));
         auto *gui = ImGui::CreateContext(); auto *plot = ImPlot::CreateContext();
         auto &io = ImGui::GetIO(); io.DisplaySize = {1200,800}; io.DeltaTime = 1.f/60;
@@ -147,8 +149,34 @@ namespace SST::Prototypes::JFM
             bus->PublishNew<MonteCarloRequested>(project,std::vector<CharacteristicId>{id});
             ImGui::NewFrame(); ImGui::SetNextWindowSize({1100,700}); panel.Render(); ImGui::Render();
             ASSERT_EQ(plot->Plots.GetBufSize(),1);
-            // Ideal + accepted noisy + accepted fitted; rejected curves create no items.
-            EXPECT_EQ(plot->Plots.GetByIndex(0)->Items.GetItemCount(),3);
+            auto &items = plot->Plots.GetByIndex(0)->Items;
+            auto checkLegend = [&items](std::initializer_list<std::pair<const char *, ImVec4>> expected) {
+                ASSERT_EQ(items.GetLegendCount(), expected.size());
+                int i = 0;
+                for (const auto &[label, color] : expected) {
+                    EXPECT_STREQ(items.GetLegendLabel(i), label);
+                    EXPECT_EQ(items.GetLegendItem(i)->Color, ImGui::ColorConvertFloat4ToU32(color));
+                    ++i;
+                }
+            };
+            checkLegend({{"Ideal", {1.f,.88f,.05f,1.f}}, {"Noisy", {1.f,0.f,0.f,.18f}},
+                {"Fitted", {.10f,.56f,1.f,.28f}}});
+            // Repeated accepted curves share one legend entry; rejected and flat curves are hidden.
+            EXPECT_EQ(items.GetItemCount(), 3);
+            auto *window = ImGui::FindWindowByName(panel.ImGuiName().c_str());
+            ASSERT_NE(window, nullptr);
+            const auto tableId = ImHashStr("##curve_controls", 0, window->ID);
+            auto activate = [&](const char *label) {
+                ImGui::ActivateItemByID(ImHashStr("##value", 0, ImHashStr(label, 0, tableId)));
+                ImGui::NewFrame(); panel.Render(); ImGui::Render();
+            };
+            activate("Show rejected (dimmed)");
+            checkLegend({{"Ideal", {1.f,.88f,.05f,1.f}}, {"Noisy", {1.f,0.f,0.f,.18f}},
+                {"Fitted", {.10f,.56f,1.f,.28f}}, {"Noisy (rejected / flat)", {1.f,0.f,0.f,.06f}},
+                {"Fitted (rejected / flat)", {.10f,.56f,1.f,.08f}}});
+            activate("Noisy");
+            checkLegend({{"Ideal", {1.f,.88f,.05f,1.f}}, {"Fitted", {.10f,.56f,1.f,.28f}},
+                {"Fitted (rejected / flat)", {.10f,.56f,1.f,.08f}}});
         }
         ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
     }

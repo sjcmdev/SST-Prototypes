@@ -590,6 +590,7 @@ __global__ void simplexOneStepKernel(
     }
 }
 
+// Variant A: one fit per thread, 128 fits per block, including LM's NM fallback.
 __global__ void sharedFitKernel(GpuModelType model, GpuParamLayout layout, GpuNmConfig config,
     const double* voltages, const double* measured, const double* reference_current,
     int point_count, int sample_count, uint64_t seed, double perturb, double noise, bool use_lm, GpuMcResult* result)

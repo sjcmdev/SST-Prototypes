@@ -151,7 +151,7 @@ namespace SST::Prototypes::JFM
 			FitData result;
 			const std::vector<double> &sourceCurrent = Current(characteristic);
 			const std::size_t count = characteristic.data->voltage.size();
-            if (sourceCurrent.size() != count) return result;
+            if (count < 2 || sourceCurrent.size() != count) return result;
             const double lower = prefit.fitRange.lowerVoltage;
             const double upper = prefit.fitRange.upperVoltage;
             if (!std::isfinite(lower) || !std::isfinite(upper) || upper <= lower)

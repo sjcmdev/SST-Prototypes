@@ -351,19 +351,47 @@ namespace SST::Prototypes::JFM
     {
         auto record = MakeRecord("SD-0");
         JFMFitMonteCarloSettings settings;
-        for (const auto bounds : {std::pair{0.8, 0.9}, std::pair{0.4, 0.2}, std::pair{0.3, 0.3}}) {
+        for (const auto bounds : {std::pair{0.8, 0.9}, std::pair{0.4, 0.2}, std::pair{0.3, 0.3}, std::pair{0., std::numeric_limits<double>::infinity()}}) {
             record.info.prefit->fitRange.lowerVoltage = bounds.first;
             record.info.prefit->fitRange.upperVoltage = bounds.second;
             auto result = RunJFMSimplexFit(record, settings);
             ASSERT_FALSE(result); EXPECT_FALSE(result.Error().technicalDetails.empty());
+            JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
+            auto mc = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
+            ASSERT_FALSE(mc); EXPECT_EQ(mc.Error().displayPolicy, DisplayPolicy::Notification);
+            EXPECT_FALSE(mc.Error().technicalDetails.empty());
         }
         settings.objectiveMode = "log_legacy";
-        for (double bad : {-1.0, 0.0, 1.0, std::numeric_limits<double>::quiet_NaN()}) {
+        for (double bad : {-1.0, 0.0, 1.0, std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
             record = MakeRecord("SD-0"); auto data = CreateRef<JFMCharacteristicData>(*record.data);
             data->current[10] = bad; record.data = data;
             auto result = RunJFMSimplexFit(record, settings);
             ASSERT_FALSE(result); EXPECT_NE(result.Error().technicalDetails.find("domain"), std::string::npos);
+            JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
+            auto mc = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
+            ASSERT_FALSE(mc); EXPECT_EQ(mc.Error().displayPolicy, DisplayPolicy::Notification);
+            EXPECT_NE(mc.Error().technicalDetails.find("domain"), std::string::npos);
         }
+    }
+
+    TEST(JFMFitEngineTests, EmptyInputReturnsTypedValidationErrorsForFitAndMonteCarlo)
+    {
+        auto record = MakeRecord("SD-0");
+        record.data = CreateRef<JFMCharacteristicData>();
+        JFMFitState fit; fit.modelId = "SD-0"; fit.parameters = record.info.prefit->parameters;
+        for (const char *mode : {"auto", "log_legacy", "isc_shift", "signed_sigma"}) {
+            JFMFitMonteCarloSettings settings; settings.objectiveMode = mode;
+            auto single = RunJFMSimplexFit(record, settings);
+            ASSERT_FALSE(single); EXPECT_EQ(single.Error().category, ErrorCategory::Validation);
+            EXPECT_EQ(single.Error().code, "jfm.fit"); EXPECT_FALSE(single.Error().technicalDetails.empty());
+            auto mc = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
+            ASSERT_FALSE(mc); EXPECT_EQ(mc.Error().category, ErrorCategory::Validation);
+            EXPECT_EQ(mc.Error().code, "jfm.fit"); EXPECT_FALSE(mc.Error().technicalDetails.empty());
+        }
+        const auto result = RunJFMFitRequest({{"voltage_V", nlohmann::json::array()},
+            {"current_A", nlohmann::json::array()}, {"temperature_K", 300.}, {"model_id", "SD-0"},
+            {"parameters", {{"I0", 1e-10}, {"A", 1.5}}}});
+        EXPECT_FALSE(result.at("ok")); EXPECT_EQ(result.at("error").at("code"), "jfm.fit.validation");
     }
 
     TEST(JFMFitEngineTests, FractionalAlphaOutsideRealDomainFailsLoudly)
@@ -461,7 +489,7 @@ namespace SST::Prototypes::JFM
         EXPECT_EQ(lm->state.fitMethod,"LM"); EXPECT_TRUE(lm->state.accepted);
         settings.fitMethod = "nm";
         auto nm = RunJFMSimplexFit(record,settings); ASSERT_TRUE(nm);
-        EXPECT_EQ(nm->state.fitMethod,"NM"); EXPECT_LE(lm->state.chiSquared,nm->state.chiSquared+1e-28);
+        EXPECT_EQ(nm->state.fitMethod,"NM"); EXPECT_LE(lm->state.chiSquared,nm->state.chiSquared*(1+1e-12));
     }
 
     TEST(JFMFitEngineTests, LmCapRunsNmFallbackAndReportsBothStatuses)

@@ -1,0 +1,16 @@
+{
+  "case": "HZB_T247_7p",
+  "current_mismatches": 0,
+  "flat": 314,
+  "g0_ms": 2926.8382000001147,
+  "g0_over_a": 1.3589326064493708,
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "lm_fallback": 0,
+  "method": "lm",
+  "mode": "log_legacy",
+  "pre_port_ms": 2188.721900000237,
+  "repeats": 3,
+  "result_mismatches": 0,
+  "samples": 1000,
+  "variant_a_ms": 2153.777299999725
+}

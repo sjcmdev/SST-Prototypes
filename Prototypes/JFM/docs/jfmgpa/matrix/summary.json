@@ -1,0 +1,7 @@
+{
+  "rows": 48,
+  "sample_pairs": 504000,
+  "result_mismatches": 0,
+  "current_mismatches": 0,
+  "lm_nm_chi2_passed": 252000
+}

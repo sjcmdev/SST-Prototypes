@@ -1,0 +1,43 @@
+{
+  "before_gpu_sha256": "fc7d1fb0d25dde44ee90779d6b6f6e834e8815f47d5eef8ca5fb6e3d0cba1c1e",
+  "current_gpu_sha256": "520c17a47f11c0634039c96bfd1a0c6d21a3de5761ed8f1fa4989acd67b5ba7a",
+  "snapshot_sha256": "43cf4ce98fdeac8f96e95ac43efa9001361d7e3bfada21e1363787f892e6c130",
+  "pre_port_and_current_kernel_bodies_identical": true,
+  "kernel_launch": "sharedFitKernel<<<(sampleCount+127)/128, 128>>>",
+  "source_sha256": {
+    "Prototypes/JFM/src/Analysis/Solver/gpu/gpu_backend.cu": "520c17a47f11c0634039c96bfd1a0c6d21a3de5761ed8f1fa4989acd67b5ba7a",
+    "Prototypes/JFM/src/Analysis/Solver/solver/lm_core.hpp": "1b3085def035552fdeb76ef91b66858586ead42a7114512d14331668eba82f22",
+    "Prototypes/JFM/src/Analysis/Solver/gpu/diode_model_device.cuh": "928cb12f2d8189e8723ba5255e01a6eb1953004cc1decc5486ecead1627f2fac",
+    "Prototypes/JFM/tests/gpu/pre-port-kernel.cuh": "43cf4ce98fdeac8f96e95ac43efa9001361d7e3bfada21e1363787f892e6c130",
+    "Prototypes/JFM/tests/gpu/organization.cu": "7e5ddfc9ab9d099dd39ab1229ac65a7c70153012f5a95449496580b44a4af843"
+  },
+  "captures_sha256": {
+    "HZB_T181_6p.json.resolved.json": "e8c9e38cf9eab3711132aa17a0e80db514b749f00b256539b466aa3d0c23c21d",
+    "HZB_T247_7p.json.resolved.json": "b614f00aad34905aacd94480288c3191f47a6c1b82de985a191ecadb7e8b2191",
+    "HZB_T330_4p.json.resolved.json": "faaaa41a7aaa635b44542fe099d6195903b4da1c4b2de4b5d46b2f97d11a5597",
+    "synthetic_forward_4p.json.resolved.json": "2e55709627129cb4c5d292a372fb26fe59e9bb911771c88fc48b5a36ebcae796"
+  },
+  "compiler": "MSVC 19.44.35225 / CUDA 12.6.20, --fmad=false /fp:strict, sm_89",
+  "gpu_executable_sha256": "f395d1a0004a65071a8ee61c9806c99067f05ef2f579375e61befb43f75191ef",
+  "resume_retained_regular_configurations": 35,
+  "resume_retained_regular_samples": 358000,
+  "resume_executed_regular_configurations": 13,
+  "resume_executed_regular_samples": 146000,
+  "final_validation": {
+    "gtest_passed": 104,
+    "pytest_passed": 235,
+    "pytest_xfailed": 24,
+    "pytest_failed": 0,
+    "pytest_warning_count": 1377,
+    "pytest_runtime_s": 1542.31,
+    "release_build": "passed",
+    "gpu_build": "passed",
+    "matrix": {
+      "rows": 48,
+      "sample_pairs": 504000,
+      "result_mismatches": 0,
+      "current_mismatches": 0,
+      "lm_nm_chi2_passed": 252000
+    }
+  }
+}

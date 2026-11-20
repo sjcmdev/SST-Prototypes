@@ -1,0 +1,16 @@
+{
+  "case": "HZB_T181_6p",
+  "current_mismatches": 0,
+  "flat": 0,
+  "g0_ms": 24244.179500000086,
+  "g0_over_a": 5.42183529823467,
+  "gpu": "NVIDIA GeForce RTX 4060",
+  "lm_fallback": 1,
+  "method": "lm",
+  "mode": "log_legacy",
+  "pre_port_ms": 4508.178799999878,
+  "repeats": 3,
+  "result_mismatches": 0,
+  "samples": 20000,
+  "variant_a_ms": 4471.581699999981
+}
