@@ -262,7 +262,7 @@ TEST(ScapsLabTutorial,CoachAvoidsTargetRowAndArrowAvoidsButtonAtViewportEdges) {
 // Every step of every lesson: the target resolves to a visible widget, the coach does not cover it and the arrow tip stays outside it.
 class ScapsLabTutorialUi:public testing::TestWithParam<const char *> {};
 TEST_P(ScapsLabTutorialUi,EveryStepTargetIsVisibleAndArrowTipClearsIt) {
-    static const char *names[]={"Project","Layers","Contacts","Solver","Run","Results","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
+    static const char *names[]={"Project","Layers","Contacts","Solver","Run","Band diagram & profiles","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
     const std::string lesson=GetParam();
     const char *shotRoot=std::getenv("SCAPSLAB_TUTORIAL_SHOTS");
     Threading::SetMainThread();ASSERT_TRUE(glfwInit());

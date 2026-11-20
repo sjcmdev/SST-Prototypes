@@ -642,13 +642,25 @@ void Operation::Execute(JobContext &ctx) {
                 auto &ac=device["ac_results"];for(auto it=ac.begin();it!=ac.end();) {if(!kept(it.value(),it.key()))it=ac.erase(it);else ++it;}
                 device["batch_result"]=Json::object();
                 device["status"]=history.empty()?"no results":"previous";
+            } else if(op=="history_update" && request.contains("unpin_kind")) {
+                const auto kind=request.at("unpin_kind").get<std::string>();
+                for(auto &r:history) if(r.at("pinned")==true && (r.at("kind")==kind || (kind=="iv" && r.at("kind")=="band"))) {r["pinned"]=false;if(r.at("name").get<std::string>().starts_with("#"))r["name"]="";}
+                TrimHistory(history,workspace.at("ui").value("history_retention",5));
+                if(std::none_of(history.begin(),history.end(),[&](const Json &r){return r.at("run_id")==device.value("selected_run",std::string{});}))device["selected_run"]="";
             } else if(op=="history_update" || op=="history_select") {
                 auto run=std::find_if(history.begin(),history.end(),[&](const Json &r){return r.at("run_id")==request.at("run_id");});
                 if(run==history.end()) throw std::invalid_argument("Unknown run_id");
                 if(op=="history_select")device["selected_run"]=request.at("run_id");
                 else {
                     for(const auto *key:{"pinned","name","visible","colour"}) if(request.contains(key)) (*run)[key]=request.at(key);
-                    if(run->at("pinned")==true && run->at("name")=="")(*run)["name"]=run->at("label");
+                    if(request.contains("pinned") && run->at("pinned")==true && run->at("name")=="") {
+                        // "Single shot": number + parameter diff against the previous pinned shot.
+                        int n=0;const Json *prev=nullptr;
+                        for(const auto &r:history) {const auto nm=r.at("name").get<std::string>();if(nm.starts_with("#"))n=std::max(n,std::atoi(nm.c_str()+1));if(&r!=&*run && r.at("pinned")==true && &r<&*run)prev=&r;}
+                        std::string text="#"+std::to_string(n+1);
+                        if(prev){const auto diff=DiffLabel(prev->at("document"),run->at("document"));text+=" "+(diff.empty()?std::string("same parameters"):diff);}
+                        (*run)["name"]=text;
+                    } else if(request.contains("pinned") && run->at("pinned")==false && run->at("name").get<std::string>().starts_with("#"))(*run)["name"]="";
                 }
                 TrimHistory(history,workspace.at("ui").value("history_retention",5));
                 if(std::none_of(history.begin(),history.end(),[&](const Json &r){return r.at("run_id")==device.value("selected_run",std::string{});}))device["selected_run"]="";
