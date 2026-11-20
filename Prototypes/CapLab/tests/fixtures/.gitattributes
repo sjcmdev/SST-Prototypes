@@ -1,0 +1,2 @@
+# Frozen manifests hash the source bytes, including line endings.
+* -text

@@ -211,7 +211,6 @@ void CapLabPrototypePanel::RenderTree() {
     }
 }
 void CapLabPrototypePanel::RenderPlot() {
-    if (std::getenv("SST_PLOT_GALLERY")) sst::ui::plot::ShowPlotGallery();
     auto &doc = state->document;
     if (doc.project.graph) {
         for (const auto& a : doc.project.analyses) if (a.at("type")=="Circuit") {

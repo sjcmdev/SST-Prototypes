@@ -413,7 +413,7 @@ template <class _Getter, class _GetterColor, class _GetterSize> struct RendererM
 
     IMPLOT3D_INLINE bool Render(ImDrawList3D& draw_list_3d, const ImPlot3DBox& cull_box, int prim) const {
         ImPlot3DPoint p_plot = Getter(prim);
-        if (!cull_box.Contains(p_plot))
+        if (ImNanOrInf(p_plot.x) || ImNanOrInf(p_plot.y) || ImNanOrInf(p_plot.z) || !cull_box.Contains(p_plot))
             return false;
         ImVec2 p = PlotToPixels(p_plot);
         ImU32 col = ColGetter(prim);
@@ -459,7 +459,7 @@ template <class _Getter, class _GetterColor, class _GetterSize> struct RendererM
 
     IMPLOT3D_INLINE bool Render(ImDrawList3D& draw_list_3d, const ImPlot3DBox& cull_box, int prim) const {
         ImPlot3DPoint p_plot = Getter(prim);
-        if (!cull_box.Contains(p_plot))
+        if (ImNanOrInf(p_plot.x) || ImNanOrInf(p_plot.y) || ImNanOrInf(p_plot.z) || !cull_box.Contains(p_plot))
             return false;
         ImVec2 p = PlotToPixels(p_plot);
         ImU32 col = ColGetter(prim);
@@ -494,6 +494,14 @@ template <class _Getter, class _GetterColor> struct RendererLineStrip : Renderer
     IMPLOT3D_INLINE bool Render(ImDrawList3D& draw_list_3d, const ImPlot3DBox& cull_box, int prim) const {
         ImPlot3DPoint P2_plot = Getter(prim + 1);
 
+        // Missing vertices break the strip, including the join to its next segment.
+        if (ImNanOrInf(P1_plot.x) || ImNanOrInf(P1_plot.y) || ImNanOrInf(P1_plot.z) ||
+            ImNanOrInf(P2_plot.x) || ImNanOrInf(P2_plot.y) || ImNanOrInf(P2_plot.z)) {
+            P1_plot = P2_plot;
+            Joint.Valid = false;
+            return false;
+        }
+
         // Clip the line segment to the culling box using Liang-Barsky algorithm
         ImPlot3DPoint P1_clipped, P2_clipped;
         bool visible = cull_box.ClipLineSegment(P1_plot, P2_plot, P1_clipped, P2_clipped);
@@ -501,9 +509,11 @@ template <class _Getter, class _GetterColor> struct RendererLineStrip : Renderer
         if (visible) {
             // Join with the next segment when the strip continues through P2 unclipped
             ImPlot3DPoint P3_plot;
-            const bool has_next = prim + 2 < Getter.Count && cull_box.Contains(P2_plot);
-            if (has_next)
+            bool has_next = prim + 2 < Getter.Count && cull_box.Contains(P2_plot);
+            if (has_next) {
                 P3_plot = Getter(prim + 2);
+                has_next = !ImNanOrInf(P3_plot.x) && !ImNanOrInf(P3_plot.y) && !ImNanOrInf(P3_plot.z);
+            }
             // Render the line segment
             PrimLineStrip(draw_list_3d, Joint, P1_clipped, P2_clipped, has_next ? &P3_plot : nullptr, HalfWeight, ColGetter(prim), UV0, UV1,
                           GetPointDepth((P1_plot + P2_plot) * 0.5));

@@ -12,6 +12,7 @@ from matplotlib.font_manager import FontProperties, findfont
 from matplotlib.ft2font import FT2Font
 from matplotlib.ticker import FixedLocator, FixedFormatter
 import numpy as np
+from .colormaps import COLORS
 
 
 _export_lock = RLock()  # rc_context touches matplotlib globals while native draws may release the GIL.
@@ -59,8 +60,13 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         style = series["style"]
         xx, yy, zz = (np.where(valid, v, np.nan) for v in (x, y, z))
         label = series["label"] if style["legend"] else "_nolegend_"
-        if kind == 5: ax.scatter(xx, yy, zz, color=style["color"], s=(2*style["marker_pt"])**2, label=label, depthshade=False)
-        else: ax.plot(xx, yy, zz, color=style["color"], linewidth=style["line_pt"], label=label)
+        marker = ("", "o", "s", "D", "x", "+", "*")[style["marker"]]
+        if kind == 5:
+            ax.scatter(xx, yy, zz, marker=marker or "o", facecolors=style["fill"], edgecolors=style["outline"],
+                       linewidths=style["line_pt"], s=(2*style["marker_pt"])**2, label=label, depthshade=False)
+        else:
+            ax.plot(xx, yy, zz, color=style["color"], linewidth=style["line_pt"], marker=marker,
+                    markersize=2*style["marker_pt"], markerfacecolor=style["fill"], markeredgecolor=style["outline"], label=label)
         return
     cols = series["grid_columns"]
     if not isinstance(cols, int) or cols < 2 or len(x) % cols or len(x)//cols < 2:
@@ -75,7 +81,10 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     zz = np.where(valid, z, np.nan).reshape(rows, cols)
     color_range = snapshot.get("color_range")
     if color_range is None:
-        values = z[valid]
+        color_valid = np.isfinite(z)
+        if mask.size: color_valid &= ~mask
+        if snapshot["z_axis"]["log"]: color_valid &= z > 0
+        values = z[color_valid]
         lo, hi = (float(values.min()), float(values.max())) if values.size else (0, 1)
         if lo == hi:
             padding = max(1, abs(lo))*.05
@@ -85,7 +94,10 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
             raise ValueError("Invalid color range")
         lo, hi = color_range
     name = snapshot.get("colormap", "Viridis")
-    cmap = mpl.colormaps[{"RdBu": "RdBu", "BrBG": "BrBG", "PiYG": "PiYG", "Spectral": "Spectral"}.get(name, name.lower())]
+    if name not in COLORS: raise ValueError("Unknown colormap")
+    keys = np.array([[(v >> shift) & 255 for shift in (0, 8, 16, 24)] for v in COLORS[name]])/255
+    cmap = (mpl.colors.ListedColormap(keys, name) if name in ("Deep", "Dark", "Pastel", "Paired")
+            else mpl.colors.LinearSegmentedColormap.from_list(name, keys, N=256))
     norm = mpl.colors.Normalize(lo, hi)
     if kind == 4:
         # Drop the whole quad when any corner is missing, matching ImPlot3D.
@@ -119,12 +131,19 @@ def build_figure(snapshot, dpi=300):
     fig = Figure(figsize=(width / 25.4, height / 25.4), dpi=dpi)
     FigureCanvasAgg(fig)
     three = any(e["kind"] in (4, 5, 6) for e in snapshot["series"])
+    heatmap = any(e["kind"] == 7 for e in snapshot["series"])
+    if (three and any(e["kind"] not in (4, 5, 6) for e in snapshot["series"]) or
+            heatmap and any(e["kind"] != 7 for e in snapshot["series"])):
+        raise ValueError("Separate 2D, heatmap and 3D series into different plots")
+    if sum(e["kind"] in (4, 7) for e in snapshot["series"]) > 1:
+        raise ValueError("Use one surface/heatmap grid per plot")
     ax = fig.add_axes((0.16, 0.20, 0.66 if any(e["kind"] in (4, 7) for e in snapshot["series"]) else 0.78, 0.72),
                       projection="3d" if three else None)
     if three:
         ax.set_proj_type("ortho")
         ax.set_box_aspect((1, 1, 1))
         camera = snapshot.get("camera")
+        if not camera: raise ValueError("3D export requires a resolved camera view")
         if camera:
             q = np.asarray(camera["rotation_xyzw"], dtype=float)
             ranges = camera["axis_limits"]
@@ -132,6 +151,8 @@ def build_figure(snapshot, dpi=300):
                 raise ValueError("Invalid camera quaternion")
             if len(ranges) != 6 or not all(math.isfinite(v) for v in ranges) or any(ranges[i] >= ranges[i+1] for i in (0, 2, 4)):
                 raise ValueError("Invalid camera limits")
+            if any(snapshot[key]["log"] and ranges[2*i] <= 0 for i, key in enumerate(("x_axis", "y_axis", "z_axis"))):
+                raise ValueError("Log camera limits must be positive")
             x, y, z, w = q
             right = np.array([1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)])
             view = np.array([2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)])
@@ -146,10 +167,12 @@ def build_figure(snapshot, dpi=300):
         ax.set_zscale("log" if z_axis["log"] else "linear")
         ax.set_zlabel(axis_label(z_axis), fontproperties=font)
         ax.grid(any(snapshot[k]["grid"] for k in ("x_axis", "y_axis", "z_axis")))
-    for axis, config in ((ax.xaxis, snapshot["x_axis"]), (ax.yaxis, snapshot["y_axis"])):
+    axes = [(ax.xaxis, snapshot["x_axis"]), (ax.yaxis, snapshot["y_axis"])]
+    if three: axes.append((ax.zaxis, snapshot["z_axis"]))
+    for axis, config in axes:
         scale = "log" if config["log"] else "linear"
-        (ax.set_xscale if axis is ax.xaxis else ax.set_yscale)(scale)
-        if config["log"] and limits[0 if axis is ax.xaxis else 2] <= 0:
+        (ax.set_xscale if axis is ax.xaxis else ax.set_yscale if axis is ax.yaxis else ax.set_zscale)(scale)
+        if axis is not getattr(ax, "zaxis", None) and config["log"] and limits[0 if axis is ax.xaxis else 2] <= 0:
             raise ValueError("Log ranges must be positive")
         for major in (True, False):
             ticks = [t for t in config["ticks"] if t["major"] == major]

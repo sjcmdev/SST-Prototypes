@@ -152,7 +152,7 @@ def test_custom_font_filename_is_resolved_without_family(tmp_path):
 @pytest.fixture
 def spatial(snapshot):
     snapshot.update(width_mm=130, height_mm=100, ranges=[.5, 3.5, 5, 35],
-                    z_axis=dict(label="Capacitance", unit="nF", log=False, grid=True, ticks=[]),
+                    z_axis=dict(label="Capacitance", unit="nF", log=False, grid=True, ticks=[dict(value=2,label="two",major=True)]),
                     colormap="Viridis", color_scale=True, color_range=[1, 9],
                     camera=dict(rotation_xyzw=[0, 0, 0, 1], axis_limits=[.5, 3.5, 5, 35, 0, 10]))
     series=snapshot["series"][0]
@@ -172,6 +172,7 @@ def test_spatial_exports_preserve_camera_grid_holes_and_units(spatial, tmp_path,
     if kind!=7:
         assert ax.name=="3d" and ax.get_zlim()==(0,10)
         assert ax.get_zlabel()=="Capacitance (nF)"
+        assert [t.get_text() for t in ax.get_zticklabels()]==["two"]
     else:
         grid=ax.collections[0].get_array()
         assert np.ma.getmaskarray(grid).sum()==2
@@ -207,3 +208,45 @@ def test_all_missing_grid_and_log_axes(spatial, tmp_path):
     export_graph(spatial,tmp_path/"empty.svg","svg")
     spatial["series"][0]["kind"]=7
     export_graph(spatial,tmp_path/"empty_heatmap.svg","svg")
+
+
+@pytest.mark.parametrize("name", ["Deep", "Dark", "Pastel", "Paired", "Viridis", "Plasma", "Hot", "Cool", "Pink", "Jet", "Twilight", "RdBu", "BrBG", "PiYG", "Spectral", "Greys"])
+def test_native_colormaps_keep_the_screen_endpoints(spatial, name):
+    from sst_plot_export.colormaps import COLORS
+    spatial["colormap"] = name
+    fig = build_figure(spatial)
+    cmap = fig.axes[0].collections[0].cmap
+    expected = [[((v >> shift) & 255)/255 for shift in (0, 8, 16, 24)] for v in (COLORS[name][0], COLORS[name][-1])]
+    assert np.allclose(cmap([0., 1.]), expected)
+    fig.clear()
+
+
+@pytest.mark.parametrize("invalid", ["no_camera", "z_log_limits", "mixed", "two_grids"])
+def test_spatial_export_rejects_unrenderable_views(spatial, tmp_path, invalid):
+    spatial["series"][0]["kind"] = 4
+    if invalid == "no_camera": spatial["camera"] = None
+    if invalid == "z_log_limits": spatial["z_axis"]["log"] = True
+    if invalid in ("mixed", "two_grids"):
+        extra = copy.deepcopy(spatial["series"][0])
+        if invalid == "mixed": extra["kind"] = 7
+        spatial["series"].append(extra)
+    target = tmp_path/"previous.svg"; target.write_bytes(b"previous")
+    with pytest.raises(ValueError): export_graph(spatial, target, "svg")
+    assert target.read_bytes() == b"previous"
+
+
+@pytest.mark.parametrize("kind", [5, 6])
+def test_spatial_marker_style_is_exported(spatial, kind):
+    series = spatial["series"][0]
+    series["kind"] = kind
+    series["style"].update(marker=2, fill=[1,0,0,1], outline=[0,0,0,1], marker_pt=3)
+    fig = build_figure(spatial)
+    if kind == 5:
+        scatter = fig.axes[0].collections[0]
+        assert np.allclose(scatter.get_facecolor()[0], [1,0,0,1])
+        assert np.allclose(scatter.get_sizes(), [36])
+    else:
+        line = fig.axes[0].lines[0]
+        assert line.get_marker() == "s" and line.get_markersize() == 6
+        assert line.get_markerfacecolor() == [1,0,0,1]
+    fig.clear()

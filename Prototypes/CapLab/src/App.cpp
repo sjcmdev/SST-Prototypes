@@ -9,6 +9,8 @@
 #include "IO/PrototypePythonBindings.hpp"
 #include "CapLabCommands.hpp"
 #include <imgui.h>
+#include <sst/ui/Plot/ImPlotRenderer.hpp>
+#include <cstdlib>
 namespace SST {
 void SetupApplication(Application &application) {
     using namespace Prototypes::CapLab;
@@ -25,13 +27,16 @@ void SetupApplication(Application &application) {
     if (!bound) throw std::runtime_error("Cannot register CapLab shortcut.");
     auto &editor = application.GetEditorLayer();
     editor.RegisterMenuRenderer("caplab", [registry](EditorServices &) {
+        static bool gallery = std::getenv("SST_PLOT_GALLERY") != nullptr;
         if (ImGui::BeginMenu("CapLab")) {
+            ImGui::MenuItem("3D and heatmap gallery", nullptr, &gallery);
             for (const auto &[label, id] : {
                 std::pair{"Import lab AS...", "caplab.preview"}, {"Open project...", "caplab.open"},
                 {"Save project", "project.save"}, {"Export CSV / XLSX / PNG...", "caplab.export"}})
                 if (ImGui::MenuItem(label)) (void)registry->Execute(CommandID{id});
             ImGui::EndMenu();
         }
+        if (gallery) sst::ui::plot::ShowPlotGallery();
     });
     for (auto view : {CapLabPrototypePanel::View::Project, CapLabPrototypePanel::View::Plot,
                       CapLabPrototypePanel::View::Analysis, CapLabPrototypePanel::View::Import})
