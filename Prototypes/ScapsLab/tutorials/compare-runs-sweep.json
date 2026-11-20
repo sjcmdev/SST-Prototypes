@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "id": "compare-runs-sweep",
+  "title": "Compare two runs, then Sweep",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: Compare runs.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Compare runs",
+        "example": "08-pn-illumination.yaml"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Compare runs"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "run-1",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Click Calculate I-V to store the first run in Run history.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "history.count",
+        "op": "ge",
+        "value": 1
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "change-t",
+      "target": {
+        "window": "scapslab.Run"
+      },
+      "instruction": "Change Temperature [K] to 350 (drag the slider).",
+      "command": {
+        "operation": "edit",
+        "example": "08-pn-illumination.yaml",
+        "document_set": {
+          "temperature_K": 350.0
+        }
+      },
+      "condition": {
+        "predicate": "device.temperature_K",
+        "op": "eq",
+        "value": 350.0
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "run-2",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Calculate I-V again. In Devices > Run history both runs appear with their own colours and are overlaid; toggle their visibility to compare.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "history.count",
+        "op": "ge",
+        "value": 2
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "sweep",
+      "target": {
+        "window": "scapslab.Run"
+      },
+      "instruction": "Right-click Temperature [K], choose Sweep..., set delta 10 K with 3 points and run. Inspect the converged rows in Batch.",
+      "command": {
+        "operation": "quick_sweep",
+        "parameter_id": "temperature_K",
+        "delta_native_units": 10.0,
+        "points": 3,
+        "spacing": "linear",
+        "voltages_V": [
+          0.0,
+          0.05,
+          0.1
+        ]
+      },
+      "condition": {
+        "predicate": "sweep.valid_count",
+        "op": "ge",
+        "value": 3
+      },
+      "timeout_s": 120
+    }
+  ]
+}

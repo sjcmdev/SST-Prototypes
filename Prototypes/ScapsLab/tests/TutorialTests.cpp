@@ -78,7 +78,7 @@ TEST_P(ScapsLabTutorialVerify,HeadlessCommandsAndRealSolverPassEveryStep) {
     EXPECT_EQ(report.at("steps").size(),report.at("step_count"));
     for(const auto &step:report.at("steps"))EXPECT_EQ(step.at("status"),"PASS")<<step.dump();
 }
-INSTANTIATE_TEST_SUITE_P(AllThree,ScapsLabTutorialVerify,testing::Values("first-device","light-iv-qe","history-sweep","load-grading-profile"));
+INSTANTIATE_TEST_SUITE_P(AllThree,ScapsLabTutorialVerify,testing::Values("first-device","light-iv-qe","history-sweep","load-grading-profile","nt-defect-profile","generation-from-file","spectrum-absorption-files","compare-runs-sweep","export-profile"));
 TEST_P(ScapsLabTutorialVerify,LearnAndDemoUseTheSameCommandsAndPassEveryStep) {
     for(const auto *mode:{"learn","demo"}) {
         Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);

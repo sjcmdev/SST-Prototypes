@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "id": "spectrum-absorption-files",
+  "title": "Spectrum and absorption files",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: Spectrum and absorption.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Spectrum and absorption",
+        "example": "08-pn-illumination.yaml"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Spectrum and absorption"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "spectrum",
+      "target": {
+        "window": "scapslab.Illumination",
+        "item": "spe-file"
+      },
+      "instruction": "In Illumination choose Spectrum from file and load examples/profiles/spectrum.spe (nm, W/m^2 per bin).",
+      "command": {
+        "operation": "edit",
+        "example": "08-pn-illumination.yaml",
+        "patches": [
+          "spectrum.spe"
+        ]
+      },
+      "condition": {
+        "predicate": "illumination.spectrum_points",
+        "op": "eq",
+        "value": 3
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "absorption",
+      "target": {
+        "window": "scapslab.Absorption",
+        "item": "abs-file"
+      },
+      "instruction": "In Absorption set the model to File and load examples/profiles/absorption.abs (nm, m^-1). The preview plots alpha(lambda).",
+      "command": {
+        "operation": "edit",
+        "example": "08-pn-illumination.yaml",
+        "patches": [
+          "spectrum.spe",
+          "absorption.abs"
+        ]
+      },
+      "condition": {
+        "predicate": "absorption.file_points",
+        "op": "eq",
+        "value": 3
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "light-iv",
+      "target": {
+        "window": "scapslab.Illumination",
+        "item": "light-iv"
+      },
+      "instruction": "Click Calculate light I-V.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

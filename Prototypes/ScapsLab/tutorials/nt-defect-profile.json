@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "id": "nt-defect-profile",
+  "title": "Defect profile Nt(x): Gauss, erfc, file",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: Nt(x) profile.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Nt(x) profile",
+        "example": "08-pn-illumination.yaml",
+        "patches": [
+          "defect"
+        ]
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Nt(x) profile"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "gauss",
+      "target": {
+        "window": "scapslab.Defects",
+        "item": "diffusion-law"
+      },
+      "instruction": "In Defects select the defect, enable Spatial Nt(x), then press Gauss under Diffusion law. Set dose and projected range; the preview shows Nt(x) in cm^-3.",
+      "command": {
+        "operation": "set_profile",
+        "layer_id": "layer-1",
+        "parameter_id": "Nt_m3",
+        "defect_id": "defect-1-1",
+        "profile": {
+          "law": "gauss_diffusion",
+          "diffusion_depth_m": -1e-06,
+          "projected_range_m": 0.0,
+          "dose_m2": 100000000000000.0
+        }
+      },
+      "condition": {
+        "predicate": "defect.law",
+        "op": "eq",
+        "value": "gauss_diffusion"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "erfc",
+      "target": {
+        "window": "scapslab.Defects",
+        "item": "diffusion-law"
+      },
+      "instruction": "Press erfc under Diffusion law and set the surface density. Compare the preview with the Gauss shape.",
+      "command": {
+        "operation": "set_profile",
+        "layer_id": "layer-1",
+        "parameter_id": "Nt_m3",
+        "defect_id": "defect-1-1",
+        "profile": {
+          "law": "erfc_diffusion",
+          "diffusion_depth_m": -1e-06,
+          "surface_density_m3": 1e+20
+        }
+      },
+      "condition": {
+        "predicate": "defect.law",
+        "op": "eq",
+        "value": "erfc_diffusion"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "from-file",
+      "target": {
+        "window": "scapslab.Defects",
+        "item": "load-profile"
+      },
+      "instruction": "Choose From file under Profile law and load examples/profiles/defects.grd (x/d, m^-3). Use Undo to return to the previous law.",
+      "command": {
+        "operation": "load_profile",
+        "layer_id": "layer-1",
+        "parameter_id": "Nt_m3",
+        "defect_id": "defect-1-1",
+        "profile_example": "defects.grd"
+      },
+      "condition": {
+        "predicate": "defect.profile_file",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

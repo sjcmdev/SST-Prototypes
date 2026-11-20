@@ -1,6 +1,6 @@
 # ScapsLab tutorials
 
-Tutorials > First device / Light I-V and QE / History and Sweep offers learn, demo, and verify modes. Lessons add a tutorial device to the current project; they do not replace or save the user's devices. Learn mode highlights real controls and waits for the user. Automatic recalculation is suspended during a lesson and restored on completion or Stop.
+Tutorials > First device / Light I-V and QE / History and Sweep / Load grading profile / Nt(x) defect profile / G(x) from file / Spectrum and absorption files / Compare runs, then Sweep / Export profile offer learn, demo, and verify modes. Lessons add a tutorial device to the current project; they do not replace or save the user's devices. Learn mode highlights real controls and waits for the user. Automatic recalculation is suspended during a lesson and restored on completion or Stop.
 
 Progress is saved beside ScapsLab's per-user layout in `scapslab-tutorials.json`. The Tutorials menu displays progress. A new visit restarts the lesson; the Python `resume=True` option resumes the recorded learn step when the matching project state is available. Verify runs do not change user progress.
 

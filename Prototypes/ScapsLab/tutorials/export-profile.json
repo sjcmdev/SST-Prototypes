@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "id": "export-profile",
+  "title": "Export a profile to CSV and .grd",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: Export profile.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Export profile",
+        "example": "08-pn-illumination.yaml"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Export profile"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "profile",
+      "target": {
+        "window": "scapslab.Grading"
+      },
+      "instruction": "In Grading select layer 1 and Na_m3, enable Grade parameter and press erfc under Diffusion law.",
+      "command": {
+        "operation": "set_profile",
+        "layer_id": "layer-1",
+        "parameter_id": "Na_m3",
+        "profile": {
+          "law": "erfc_diffusion",
+          "diffusion_depth_m": -1e-06,
+          "surface_density_m3": 1e+22
+        }
+      },
+      "condition": {
+        "predicate": "grading.law",
+        "op": "eq",
+        "value": "erfc_diffusion"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "export-csv",
+      "target": {
+        "window": "scapslab.Grading",
+        "item": "export-profile"
+      },
+      "instruction": "Right-click the Profile preview and choose Export .csv (columns x_m and the parameter ID, SI units).",
+      "command": {
+        "operation": "export_profile",
+        "layer_id": "layer-1",
+        "parameter_id": "Na_m3",
+        "export_target": "scapslab-tutorial-profile.csv"
+      },
+      "condition": {
+        "predicate": "export.file_count",
+        "op": "ge",
+        "value": 1
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "export-grd",
+      "target": {
+        "window": "scapslab.Grading",
+        "item": "export-profile"
+      },
+      "instruction": "Right-click the preview again and choose Export .grd (absolute um, SI values), readable by From file.",
+      "command": {
+        "operation": "export_profile",
+        "layer_id": "layer-1",
+        "parameter_id": "Na_m3",
+        "export_target": "scapslab-tutorial-profile.grd"
+      },
+      "condition": {
+        "predicate": "export.file_count",
+        "op": "ge",
+        "value": 2
+      },
+      "timeout_s": 120
+    }
+  ]
+}

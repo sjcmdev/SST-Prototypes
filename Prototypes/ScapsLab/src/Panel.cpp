@@ -449,7 +449,7 @@ bool Panel::OpticalFile(Json &object,const char *file,const char *table,const ch
     ImGui::PushID(file);const auto previous=object;bool changed=FileField(label,object,file);
     BeginRow("Select file");if(ImGui::Button("Browse...")) {
         try {if(const auto path=OpenFileDialog({label,extension})){object[file]=path->Utf8();changed=true;}}catch(const std::exception &e){w->status=e.what();}
-    }EndRow();
+    }w->tutorialOverlay.Item(std::string(extension)=="abs"?"scapslab.Absorption":std::string(extension)=="opt"?"scapslab.Defects":"scapslab.Illumination",std::string(extension)+"-file");EndRow();
     if(changed) {
         try {
             const auto path=object.at(file).get<std::string>();Json points;
@@ -615,7 +615,7 @@ bool Panel::ProfileEditor(Json &g,double thickness,const std::string &parameter,
     if(!g.contains("law"))g["law"]="uniform";
     changed|=Choice("Profile law",g,"law",{{"Uniform","uniform"},{"Linear","linear"},{"Parabolic","parabolic"},{"Two parabolas","parabolic2"},
         {"Logarithmic","logarithmic"},{"Exponential","exponential"},{"Beta","beta"},{"Power","power"},{"Effective medium","effective_medium"},{"Gaussian","gaussian"},{"From file","table"}});
-    if(diffusion) {BeginRow("Diffusion law");if(ImGui::Button("Gauss")){g["law"]="gauss_diffusion";changed=true;}ImGui::SameLine();if(ImGui::Button("erfc")){g["law"]="erfc_diffusion";changed=true;}EndRow();}
+    if(diffusion) {BeginRow("Diffusion law");if(ImGui::Button("Gauss")){g["law"]="gauss_diffusion";changed=true;}ImGui::SameLine();if(ImGui::Button("erfc")){g["law"]="erfc_diffusion";changed=true;}w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","diffusion-law");EndRow();}
     auto load=[&] {
         try {if(const auto file=OpenFileDialog({"SCAPS grading","grd"})) {
             auto loaded=ProfileFromFile(file->Utf8(),density);
@@ -625,7 +625,7 @@ bool Panel::ProfileEditor(Json &g,double thickness,const std::string &parameter,
     };
     if(changed && g["law"]=="table" && !g.contains("coordinate"))load();
     if(g.value("law",std::string{})=="table") {
-        BeginRow("Grading file [.grd]");if(ImGui::Button("Browse..."))load();w->tutorialOverlay.Item("scapslab.Grading","load-profile");EndRow();
+        BeginRow("Grading file [.grd]");if(ImGui::Button("Browse..."))load();w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","load-profile");EndRow();
         ImGui::TextWrapped("%s | %d points",g.value("source_file",std::string("Embedded table")).c_str(),int(g.value("coordinate",Json::array()).size()));
         bool log=g.value("interpolation_logarithmic",density);if(Toggle("Logarithmic interpolation",log)){g["interpolation_logarithmic"]=log;changed=true;}
     } else {
@@ -661,7 +661,7 @@ bool Panel::ProfileEditor(Json &g,double thickness,const std::string &parameter,
         samples["parameter_id"]=parameter;
         for(const auto &warning:g.value("scapslab_warnings",Json::array()))ImGui::TextWrapped("File warning: %s",warning.get<std::string>().c_str());
         auto x=samples.at("x_m").get<std::vector<double>>(),y=samples.at("value_SI").get<std::vector<double>>();for(auto &v:x)v*=1e9;for(auto &v:y)v*=scale;
-        PlotJson("Profile preview","Local x [nm]",("Value ["+unit+"]").c_str(),x,y,density,220);
+        PlotJson("Profile preview","Local x [nm]",("Value ["+unit+"]").c_str(),x,y,density,220);w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","export-profile");
         if(ImGui::BeginPopupContextItem("Export profile")) {
             ImGui::BeginDisabled(w->Busy());
             for(const auto *format:{"csv","grd"}) if(ImGui::MenuItem((std::string("Export .")+format).c_str())) {

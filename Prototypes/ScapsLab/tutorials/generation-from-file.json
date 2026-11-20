@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "id": "generation-from-file",
+  "title": "Generation G(x) from a .gen file",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: G(x) from file.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: G(x) from file",
+        "example": "08-pn-illumination.yaml"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: G(x) from file"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "load-gen",
+      "target": {
+        "window": "scapslab.Illumination",
+        "item": "gen-file"
+      },
+      "instruction": "In Illumination (Spectrum / G(x)) choose Generation profile from file and browse to examples/profiles/generation.gen. The preview shows G in cm^-3 s^-1 versus x in nm.",
+      "command": {
+        "operation": "load_profile",
+        "parameter_id": "generation_m3_s",
+        "profile_example": "generation.gen"
+      },
+      "condition": {
+        "predicate": "illumination.generation_file",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "light-iv",
+      "target": {
+        "window": "scapslab.Illumination",
+        "item": "light-iv"
+      },
+      "instruction": "Click Calculate light I-V with the file generation profile.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

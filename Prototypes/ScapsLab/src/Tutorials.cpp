@@ -1,6 +1,8 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
+#include <scaps_core/illumination.hpp>
 #include <fstream>
+#include <set>
 #include <thread>
 
 namespace SST::ScapsLab {
@@ -9,30 +11,57 @@ std::filesystem::path Directory() {
     const auto installed = std::filesystem::current_path() / "tutorials";
     return std::filesystem::exists(installed / "first-device.json") ? installed : std::filesystem::path(SCAPSLAB_TUTORIALS);
 }
+std::filesystem::path TutorialExportPath(const std::string &name) { return std::filesystem::temp_directory_path() / name; }
+// Fills a document the way the optical-file widgets do (embedded table + remembered source name).
+void EmbedTable(Json &object, const char *file, const char *table, const Json &points, const std::string &path) {
+    object[table] = points; object[std::string("scapslab_") + file] = path; object[file] = "";
+}
+void PatchTutorialDocument(Json &document, const std::string &patch) {
+    const auto profiles = ExamplesDirectory() / "profiles";
+    auto &layer = document.at("layers")[0];
+    if (patch == "defect") layer["defects"] = Json::array({{{"scapslab_id", "defect-1-1"}, {"label", "midgap"}, {"energy_reference", "relative_to_Ev"}, {"energy_offset_eV", 0.56}, {"Nt_m3", 1e20}, {"charge_type", "neutral"}, {"sigma_n_m2", 1e-19}, {"sigma_p_m2", 1e-19}, {"density_profile_m3", {{"law", "uniform"}, {"left", 1e20}, {"right", 1e20}}}}});
+    else if (patch == "spectrum.spe") {
+        auto &light = document["illumination"]; const auto path = (profiles / "spectrum.spe").string();
+        light["mode"] = "spectrum"; light["scapslab_spectrum"] = "custom"; EmbedTable(light, "spectrum_file", "spectrum_nm_W_m2", Json(scaps_core::read_scaps_spectrum(path)), path);
+    } else if (patch == "absorption.abs") {
+        auto &absorption = layer["absorption"]; const auto path = (profiles / "absorption.abs").string();
+        absorption = {{"model", "file"}}; EmbedTable(absorption, "file", "table_nm_m1", Json(scaps_core::read_scaps_absorption(path)), path);
+    } else throw std::invalid_argument("Unknown tutorial patch");
+}
 }
 Json TutorialDefinition(const std::string &id) {
-    if (id != "first-device" && id != "light-iv-qe" && id != "history-sweep" && id != "load-grading-profile") throw std::invalid_argument("Unknown tutorial_id: " + id);
+    if (!std::set<std::string>{"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile"}.contains(id)) throw std::invalid_argument("Unknown tutorial_id: " + id);
     std::ifstream stream(Directory() / (id + ".json"));
     if (!stream) throw std::runtime_error("Cannot read tutorial: " + id);
     auto definition = Json::parse(stream);
     for (auto &step : definition.at("steps")) {
         auto &command = step.at("command");
         if(command.contains("profile_example")) {
-            if(command.at("profile_example")!="doping.grd")throw std::invalid_argument("Unknown tutorial profile");
-            command["path"]=(ExamplesDirectory()/"profiles/doping.grd").string();command.erase("profile_example");
+            const auto name=command.at("profile_example").get<std::string>();
+            if(!std::set<std::string>{"doping.grd","defects.grd","generation.gen"}.contains(name))throw std::invalid_argument("Unknown tutorial profile");
+            command["path"]=(ExamplesDirectory()/"profiles"/name).string();command.erase("profile_example");
+        }
+        if(command.contains("export_target")) {
+            const auto name=command.at("export_target").get<std::string>();
+            if(name!="scapslab-tutorial-profile.csv" && name!="scapslab-tutorial-profile.grd")throw std::invalid_argument("Unknown tutorial export");
+            const auto path=TutorialExportPath(name);std::error_code ec;std::filesystem::remove(path,ec);
+            command["path"]=path.string();command.erase("export_target");
         }
         if (command.contains("example")) {
             const auto example = command.at("example").get<std::string>();
             if (example != "08-pn-illumination.yaml") throw std::invalid_argument("Unknown tutorial example");
-            command["document"] = ReadProject((ExamplesDirectory() / example).string());
-            command.erase("example");
+            auto document = ReadProject((ExamplesDirectory() / example).string());
+            for (const auto &patch : command.value("patches", Json::array())) PatchTutorialDocument(document, patch.get<std::string>());
+            if (command.contains("document_set")) document.update(command.at("document_set"), true);
+            command["document"] = std::move(document);
+            command.erase("example");command.erase("patches");command.erase("document_set");
         }
     }
     return definition;
 }
 Json TutorialCatalog() {
     Json catalog = Json::array();
-    for (const auto *id : {"first-device", "light-iv-qe", "history-sweep", "load-grading-profile"}) {
+    for (const auto *id : {"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile"}) {
         const auto definition = TutorialDefinition(id);
         catalog.push_back({{"tutorial_id", id}, {"title", definition.at("title")}, {"step_count", definition.at("steps").size()}});
     }
@@ -41,6 +70,15 @@ Json TutorialCatalog() {
 Tutorial::Predicates Workflow::TutorialPredicates() {
     return {
         {"profile.loaded", [this] {const auto &layer=Current().document.at("layers")[0];return Json(layer.contains("grading") && layer.at("grading").contains("Na_m3") && layer.at("grading").at("Na_m3").value("law",std::string{})=="table");}},
+        {"defect.law", [this] {const auto &defects=Current().document.at("layers")[0].value("defects",Json::array());return defects.empty()?Json(""):Json(defects[0].value("density_profile_m3",Json::object()).value("law",std::string{}));}},
+        {"defect.profile_file", [this] {const auto &defects=Current().document.at("layers")[0].value("defects",Json::array());return Json(!defects.empty() && defects[0].value("density_profile_m3",Json::object()).value("law",std::string{})=="table");}},
+        {"illumination.generation_file", [this] {return Json(Current().document.value("illumination",Json::object()).value("mode",std::string{})=="generation_file" && !Current().document.at("illumination").value("generation_m_m3s",Json::array()).empty());}},
+        {"illumination.spectrum_points", [this] {return Json(Current().document.value("illumination",Json::object()).value("spectrum_nm_W_m2",Json::array()).size());}},
+        {"absorption.file_points", [this] {return Json(Current().document.at("layers")[0].value("absorption",Json::object()).value("table_nm_m1",Json::array()).size());}},
+        {"grading.law", [this] {return Json(Current().document.at("layers")[0].value("grading",Json::object()).value("Na_m3",Json::object()).value("law",std::string{}));}},
+        {"device.temperature_K", [this] { return Current().document.at("temperature_K"); }},
+        {"history.count", [this] {return Json(Current().history.size());}},
+        {"export.file_count", [] {int n=0;for(const auto *name:{"scapslab-tutorial-profile.csv","scapslab-tutorial-profile.grd"})if(std::filesystem::exists(TutorialExportPath(name)))++n;return Json(n);}},
         {"device.name", [this] { return Json(Current().name); }},
         {"device.layer_count", [this] { return Json(Current().document.at("layers").size()); }},
         {"device.dark", [this] { return Json(!Current().document.value("illumination", Json::object()).value("enabled", false)); }},
