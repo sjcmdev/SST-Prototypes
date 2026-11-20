@@ -32,6 +32,7 @@ private:
     int recorderPlot=0, opticalTab=-1, grTab=-1;
     bool Defects(Json &draft,bool interface);
     bool Structure(Json &draft);
+    void StructureEdit();
     void Preview(bool interface);
     int selectedDefect=0;
     void Send(const Json &request);

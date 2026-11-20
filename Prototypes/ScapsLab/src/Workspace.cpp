@@ -133,10 +133,12 @@ DeviceState &Workflow::Device(const std::string &id) {
     throw std::invalid_argument("Unknown device_id: "+id);
 }
 DeviceState &Workflow::Current() {return Device(project.active_device);}
-Json Workflow::Workspace() const {
+Json Workflow::Workspace(bool withResults) const {
+    // withResults=false (autosave): skip history/results so the UI thread does not deep-copy tens of MB.
+    static const Json none=Json::object(),noHistory=Json::array();
     Json devices=Json::array();
     for(const auto &d:project.devices) devices.push_back({{"id",d->id},{"name",d->name},{"colour",d->colour},{"description",d->description},
-        {"history",d->history},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",d->result},{"band_result",d->bandResult},{"ac_results",d->acResults},{"batch_result",d->batchResult},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",d->status}});
+        {"history",withResults?d->history:noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",withResults?d->result:none},{"band_result",withResults?d->bandResult:none},{"ac_results",withResults?d->acResults:none},{"batch_result",withResults?d->batchResult:none},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",withResults?d->status:std::string("no results")}});
     return {{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}};
 }
 void Workflow::SetWorkspace(const Json &value) {

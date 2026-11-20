@@ -13,12 +13,15 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <set>
 #include <sstream>
 #include <iomanip>
 #include <fstream>
 #include <numbers>
 #include <thread>
+#include <mutex>
+#include <exception>
 namespace SST::ScapsLab {
 namespace {
 struct Temporary {
@@ -784,17 +787,28 @@ void Operation::Execute(JobContext &ctx) {
         ctx.ThrowIfCancellationRequested();
         output={{"kind",op},{"mesh_x_m",mesh.x_m},{"area_m2",device.external.area_m2},{"points",Json::array()},
             {"voltage_convention","consumer: left minus right; Y = G + j omega C"}};
-        IVPoint dc;
         const auto total=op=="cv"?volts.size():frequencies.size();
         auto finite=[](double x)->Json {return std::isfinite(x)?Json(x):Json(nullptr);};
+        // One DC continuation (C-V) or one operating point (C-f); AC solves are independent, so run them in parallel.
+        std::vector<IVPoint> dcs;
+        ctx.SetStage("DC operating points");
+        if(op=="cv") dcs=solve_iv(device,mesh,volts,T,p.solver,pc);
+        else dcs=solve_iv(device,mesh,std::vector<double>(volts.begin(),volts.begin()+1),T,p.solver,pc);
+        ctx.ThrowIfCancellationRequested();
+        std::vector<ACPoint> acs(total);
+        ctx.SetStage("AC solve ("+std::to_string(total)+" points)");
+        if(op=="cf") acs=solve_ac_spectrum(device,mesh,dcs.front(),frequencies,1e-3,pc); // core parallelises the frequencies
+        else {
+            std::atomic<std::size_t> next{0};std::exception_ptr failure;std::mutex failureLock;
+            auto work=[&]{for(std::size_t i;(i=next.fetch_add(1))<total;) {try {acs[i]=solve_ac_spectrum(device,mesh,dcs[i],{frequencies[0]},1e-3,pc).front();} catch(...) {std::lock_guard g(failureLock);if(!failure)failure=std::current_exception();next=total;}}};
+            std::vector<std::thread> pool;const auto threads=std::min<std::size_t>(total,std::max(1u,std::thread::hardware_concurrency()));
+            for(std::size_t t=1;t<threads;++t) pool.emplace_back(work);
+            work();for(auto &t:pool) t.join();
+            if(failure) std::rethrow_exception(failure);
+        }
+        ctx.ThrowIfCancellationRequested();
         for(std::size_t i=0;i<total;++i) {
-            ctx.ThrowIfCancellationRequested(); ctx.SetStage("AC point "+std::to_string(i+1)+" / "+std::to_string(total));
-            if(op=="cv" || i==0) {
-                // shortcut: replay DC prefixes for exact core continuation; use a cancellable core step API when exposed.
-                dc=solve_iv(device,mesh,std::vector<double>(volts.begin(),volts.begin()+(op=="cv"?i+1:1)),T,p.solver,pc).back();
-            }
-            ctx.ThrowIfCancellationRequested();
-            const auto ac=solve_ac_spectrum(device,mesh,dc,{frequencies[op=="cv"?0:i]},1e-3,pc).front();
+            const auto &dc=dcs[op=="cv"?i:0];const auto &ac=acs[i];
             output["points"].push_back({{"point_id",op+"-"+std::to_string(i)},{"voltage_V",-ac.voltage_V},{"terminal_voltage_V",-dc.voltage_V},{"internal_voltage_V",-dc.state.applied_voltage_V},{"frequency_Hz",ac.frequency_Hz},{"temperature_K",T},
                 {"capacitance_F",finite(ac.C_F)},{"conductance_S",finite(ac.G_S)},{"G_over_omega_F",finite(ac.G_S/(2*std::numbers::pi*ac.frequency_Hz))},
                 {"inverse_C2_F_minus2",finite(1/(ac.C_F*ac.C_F))},{"status",to_string(ac.status)},{"conservation_relative",finite(ac.current_conservation_relative)}});
@@ -812,10 +826,11 @@ void Operation::Execute(JobContext &ctx) {
         auto dark=device;dark.illumination.enabled=false;
         output={{"request",request},{"kind","qe"},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"probe_mode",mode},{mode=="constant_flux"?"probe_photon_flux_m2_s":"probe_power_W_m2",probe},{"temperature_K",p.temperature_K},{"voltage_V",0.},{"background","dark"}};
         OpticalTable response;
+        std::vector<double> wavelengths;for(int i=0;i<count;++i) wavelengths.push_back(first+(last-first)*i/(count-1));
+        ctx.SetStage("QE sweep ("+std::to_string(count)+" wavelengths)");
+        const auto qes=solve_qe(dark,mesh,wavelengths,mode,probe,0.,p.temperature_K,p.solver,pc);ctx.ThrowIfCancellationRequested();
         for(int i=0;i<count;++i) {
-            ctx.ThrowIfCancellationRequested();ctx.SetStage("QE wavelength "+std::to_string(i+1)+" / "+std::to_string(count));
-            const double wavelength=first+(last-first)*i/(count-1);
-            const auto q=solve_qe(dark,mesh,{wavelength},mode,probe,0.,p.temperature_K,p.solver,pc).front();
+            const double wavelength=wavelengths[i];const auto &q=qes[i];
             output["points"].push_back({{"point_id","qe-"+std::to_string(i)},{"voltage_V",0.},{"terminal_voltage_V",0.},{"internal_voltage_V",std::isfinite(q.internal_voltage_V)?Json(-q.internal_voltage_V):Json(nullptr)},{"temperature_K",p.temperature_K},{"wavelength_nm",q.wavelength_nm},{"EQE",std::isfinite(q.EQE)?Json(q.EQE):Json(nullptr)},
                 {"incident_photon_flux_m2_s",q.incident_photon_flux_m2_s},{"probe_power_W_m2",q.probe_power_W_m2},{"status",to_string(q.status)}});
             response.emplace_back(wavelength,q.EQE);ctx.SetProgress(float(i+1),float(count));
@@ -843,12 +858,14 @@ void Operation::Execute(JobContext &ctx) {
         ctx.ThrowIfCancellationRequested(); ctx.SetStage("Equilibrium");
         const auto eq=solve_equilibrium(device,mesh,p.temperature_K,p.solver,pc); auto previous=eq.state;
         output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
+        const bool externalNetwork=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
+        std::vector<IVPoint> sweep;
+        if(externalNetwork) {ctx.SetStage("I-V sweep ("+std::to_string(volts.size())+" points)");sweep=solve_iv(device,mesh,volts,p.temperature_K,p.solver,pc);ctx.ThrowIfCancellationRequested();} // one continuation instead of replaying every prefix (was O(N^2))
         for(std::size_t i=0;i<volts.size();++i) {
             ctx.ThrowIfCancellationRequested(); ctx.SetStage("I-V point "+std::to_string(i+1)+" / "+std::to_string(volts.size()));
             IVPoint pt;
-            if (p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2)) {
-                // shortcut: light/external networks replay continuation prefixes; use a core step API when exposed.
-                pt=solve_iv(device,mesh,std::vector<double>(volts.begin(),volts.begin()+i+1),p.temperature_K,p.solver,pc).back();
+            if (externalNetwork) {
+                pt=std::move(sweep[i]);
             } else {
                 const auto r=volts[i]==0 ? eq : solve_bias(device,mesh,previous,volts[i],p.temperature_K,p.solver,pc);
                 pt.state=r.state; pt.status=r.status; pt.iterations=volts[i]==0 ? 0 : r.iterations; pt.final_residual_norm=r.final_residual_norm;
@@ -970,14 +987,17 @@ Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsL
 }
 Workflow::~Workflow() { tutorial.Stop();queuedProject.clear();runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
 void Workflow::StartOperation(const Json &r,const std::string &id) {
-    auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);pending->acResults=d.acResults;pending->batchResult=d.batchResult;pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
+    auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);const std::string op0=r.at("operation");if(op0.starts_with("export_"))pending->acResults=d.acResults;if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchResult=d.batchResult;pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
     const std::string op=r.at("operation");
     if(op=="load_profile")pending->request["project_path"]=path;
     if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?d.bandResult:d.result;}
-    if(op.starts_with("history_") || op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load" || op=="export_results" || op=="action_settings") pending->workspace=Workspace();
+    if(op.starts_with("history_") || op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load" || op=="export_results" || op=="action_settings") { // Autosave copies the project on the UI thread: leave out big results (re-running takes ~0.2 s) so there is no hitch.
+        std::size_t values=0;if(r.value("autosave",false)) for(const auto &dev:project.devices) {const auto &res=dev->result;if(res.contains("points") && res.contains("mesh_x_m"))values+=res.at("points").size()*res.at("mesh_x_m").size();if(dev->batchResult.contains("rows"))values+=dev->batchResult.at("rows").size()*30000;}
+        pending->workspace=Workspace(values<60000);
+    }
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status="running";
     if(op=="run") {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
-    active=jobs->Submit(pending);status="Running: "+d.name;response=Json();
+    active=jobs->Submit(pending);if(!r.value("autosave",false)){status="Running: "+d.name;response=Json();}
 }
 Json Workflow::Dispatch(const Json &r) {
     try { CommandContext c; c.Set("request",r);
@@ -991,8 +1011,11 @@ void Workflow::Changed() {
     d.status=d.history.empty()?"no results":"previous";
 }
 void Workflow::OnUpdate(float) {
+    static const bool perf=std::getenv("SCAPSLAB_PERF")!=nullptr; // SCAPSLAB_PERF=1: log UI-thread hitches (>2 ms) to stderr
+    const auto t0=std::chrono::steady_clock::now();
     UpdateOperation();
     UpdateTutorial();
+    if(perf) {const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();if(ms>2)std::fprintf(stderr,"[perf] Workflow::OnUpdate %.1f ms (status: %s)\n",ms,status.c_str());}
 }
 void Workflow::UpdateOperation() {
     if(!Busy() && dirty && !recoveryPath.empty() && std::chrono::steady_clock::now()-autosavedAt>=std::chrono::seconds(30)) {
@@ -1015,13 +1038,15 @@ void Workflow::UpdateOperation() {
     const auto snapshot=jobs->GetJob(active);if(!snapshot || snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running) return;
     const auto op=pending->request.at("operation").get<std::string>();
     auto &d=Device(pendingDevice);
+    const bool outValid=pending->output.is_object() && pending->output.value("valid",false);
+    auto Take=[&](Json &dst){if(lightResponse)dst=std::move(pending->output);else dst=pending->output;}; // UI app: move big results instead of copying
             if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {
                 const auto group="batch-"+std::to_string(pending->output.at("provenance").at("time_unix_ms").get<std::int64_t>());
                 for(const auto &row:pending->output.at("rows")) {
                     if(op=="retry_batch" && row.at("id")!=pending->request.at("member_id"))continue;
                     auto model=pending->document;
                     for(const auto &parameter:BatchParameters(model)) if(row.at("parameters").contains(parameter.at("path").get<std::string>()) && row.at("parameters").at(parameter.at("path").get<std::string>())!=parameter.at("value")) model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=row.at("parameters").at(parameter.at("path").get<std::string>());
-                    auto result=pending->output;result["rows"]=Json::array({row});result["project_snapshot"]=model;result["provenance"]["device_hash"]=DocumentHash(model);
+                    Json result=Json::object();for(const auto &[key,value]:pending->output.items()) if(key!="rows") result[key]=value; /* do not copy every row per row */ result["rows"]=Json::array({row});result["project_snapshot"]=model;result["provenance"]["device_hash"]=DocumentHash(model);
                     result["elapsed_s"]=row.at("elapsed_s");
                     StoreRun(d.history,"batch",result,model,pending->request,project.ui.value("history_retention",5),group);
                     if(!d.history.empty()) {const double t=pending->output.at("rows").size()<2?0.:double(&row-&pending->output.at("rows")[0])/double(pending->output.at("rows").size()-1);d.history.back()["colour"]=Json::array({.15+.7*t,.4+.3*std::sin(3.14159*t),.9-.7*t,1.});}
@@ -1051,18 +1076,18 @@ void Workflow::UpdateOperation() {
                 (void)d.undo.PushExecuted(CreateUnique<EditRecord>(*this,d.document,pending->document,pending->request.value("gesture_id",std::string{})));preferProjectUndo=false;
             }
             d.document=pending->document;
-            if(op=="batch_select") d.selectedMember=pending->request.at("index");
-            if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
-            if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {d.batchResult=pending->output;projectDirty=true;}
-            if(op=="run") {d.result=pending->output;d.bandResult=Json::object();}
-            if(op=="band") d.bandResult=pending->output;
-            if(op=="cv" || op=="cf" || op=="qe") d.acResults[op]=pending->output;
-            if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=pending->output.value("valid",false)?"solved":"failed";projectDirty=true;}
             const int retention=project.ui.value("history_retention",5);
             if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
                 StoreRun(d.history,op=="run"?"iv":op,pending->output,d.document,pending->request,retention);
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
             }
+            if(op=="batch_select") d.selectedMember=pending->request.at("index");
+            if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
+            if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {Take(d.batchResult);projectDirty=true;}
+            if(op=="run") {Take(d.result);d.bandResult=Json::object();}
+            if(op=="band") Take(d.bandResult);
+            if(op=="cv" || op=="cf" || op=="qe") Take(d.acResults[op]);
+            if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=outValid?"solved":"failed";projectDirty=true;}
             if(op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") {
                 if(op=="import_def") {d.selectedLayer=0;d.selectedInterface=-1;}
                 d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";d.dirty=!d.undo.IsClean();
@@ -1072,17 +1097,18 @@ void Workflow::UpdateOperation() {
         if((op=="load" || op=="project_load" || op=="save" || op=="project_save") && !pending->request.value("autosave",false)) {
             const auto file=pending->request.at("path");recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
         }
-        RefreshDirty();status="Completed: "+op;response=Snapshot();
+        const bool quiet=op=="project_save" && pending->request.value("autosave",false);const auto keepStatus=status;const auto keepResponse=quiet?response:Json();RefreshDirty();status="Completed: "+op;response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();
         if(pending->output.contains("size_bytes")) status="Saved "+pending->output.at("path").get<std::string>()+" ("+std::to_string(pending->output.at("size_bytes").get<std::size_t>())+" bytes)";
         if(op=="project_load" && !recoveryPath.empty() && pending->request.at("path")==recoveryPath) {path.clear();projectDirty=true;RefreshDirty();response=Snapshot();status="Recovered unsaved project; use Save As";}
         if(op=="project_save" && !pending->request.value("autosave",false) && !recoveryPath.empty()) {std::error_code ec;if(!std::filesystem::equivalent(path,recoveryPath,ec))std::filesystem::remove(recoveryPath,ec);}
-        if(!pending->output.empty()) response["operation_result"]=pending->output;
+        if(!lightResponse && !pending->output.empty()) response["operation_result"]=pending->output;
+        if(quiet) {status=keepStatus;response=keepResponse;}
     } else {
         if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {d.batchResult=pending->output;projectDirty=true;}
         if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status=snapshot->status==JobStatus::Cancelled?(d.result.empty()?"no results":"solved"):"failed";
         status=snapshot->errorMessage;response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);
     }
-    if((op=="run_batch" || op=="retry_batch") && response.is_object()) response["batch_result"]=d.batchResult;
+    if(!lightResponse && (op=="run_batch" || op=="retry_batch") && response.is_object()) response["batch_result"]=d.batchResult;
     if(pending->request.value("batch",false)) {
         ++batchCompleted;batchResponse.push_back({{"device_id",pendingDevice},{"ok",response.at("ok")},{"error",response.at("error")}});
         if(snapshot->status==JobStatus::Cancelled) runQueue.clear();

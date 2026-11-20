@@ -339,7 +339,7 @@ TEST(ScapsLab,EveryExampleSolvesAndRoundtripsBitwise) {
         }
         const auto target=Temp("scapslab-example-roundtrip.scapslab");
         ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",target.string()}}).at("ok").get<bool>());
-        ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",target.string()}}).at("ok").get<bool>());
+        ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",target.string()}}).at("ok").get<bool>())<<w.status<<" "<<entry.path();
         EXPECT_EQ(w.Current().acResults,acBefore);
         for(std::size_t i=0;i<w.project.devices.size();++i) {EXPECT_EQ(w.project.devices[i]->document.dump(),originals[i]);EXPECT_EQ(w.project.devices[i]->result.at("points").dump(),solved[i].dump());}
         ASSERT_TRUE(Execute(w,{{"operation","run_all"}}).at("ok").get<bool>());

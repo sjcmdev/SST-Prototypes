@@ -6,6 +6,7 @@
 #include <implot.h>
 #include <implot_internal.h>
 #include <cmath>
+#include <map>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -185,22 +186,35 @@ void ShotBar(Workflow &w,const std::string &kind) {
     ImGui::PopID();
 }
 void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,const char *xkey,const char *ykey,bool absolute=false,double scale=1.) {
+    static int hashFrame=-1;static const void *hashDevice=nullptr;static std::string frameHash; // document hash once per frame, not per run
+    if(hashFrame!=ImGui::GetFrameCount() || hashDevice!=&device) {hashFrame=ImGui::GetFrameCount();hashDevice=&device;frameHash=DocumentHash(device.document);}
+    const std::string &currentHash=frameHash;
     for(const auto &run:device.history) {
         if(!run.at("visible").get<bool>() || !ShowRun(run) || (run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="batch")))continue;
-        const auto &result=HistoryResult(device,run);Json points=Json::array();
-        if(run.at("kind")=="batch") {
-            for(const auto &row:result.at("rows")) if(row.contains("curves")) for(auto point:row.at("curves").at("iv")) {point["J_A_m2"]=point.at("J_Am2");point["valid"]=point.at("status")=="Converged";points.push_back(point);}
-        } else points=result.value("points",Json::array());
-        std::vector<double>x,y;
-        for(const auto &point:points) {
-            if(!point.contains(xkey) || !point.at(xkey).is_number())continue;
-            const double value=point.value("valid",false) && point.contains(ykey) && point.at(ykey).is_number()?point.at(ykey).get<double>():NAN;
-            x.push_back(point.at(xkey));y.push_back(absolute?(value==0?NAN:std::abs(value)):value*scale);
+        // Curve arrays are cached per immutable run (extracting them from JSON every frame was a major UI cost).
+        static std::map<std::string,std::pair<std::vector<double>,std::vector<double>>> cache;
+        const auto cacheKey=device.id+"|"+run.at("run_id").get<std::string>()+"|"+run.at("time_unix_ms").dump()+"|"+run.value("model_hash",std::string{})+"|"+xkey+"|"+ykey+(absolute?"|abs":"|lin")+"|"+std::to_string(scale);
+        auto found=cache.find(cacheKey);
+        if(found==cache.end()) {
+            if(cache.size()>2000)cache.clear();
+            const auto &result=HistoryResult(device,run);Json points=Json::array();
+            if(run.at("kind")=="batch") {
+                for(const auto &row:result.at("rows")) if(row.contains("curves")) for(auto point:row.at("curves").at("iv")) {point["J_A_m2"]=point.at("J_Am2");point["valid"]=point.at("status")=="Converged";points.push_back(point);}
+            } else points=result.value("points",Json::array());
+            std::vector<double>x,y;
+            for(const auto &point:points) {
+                if(!point.contains(xkey) || !point.at(xkey).is_number())continue;
+                const double value=point.value("valid",false) && point.contains(ykey) && point.at(ykey).is_number()?point.at(ykey).get<double>():NAN;
+                x.push_back(point.at(xkey));y.push_back(absolute?(value==0?NAN:std::abs(value)):value*scale);
+            }
+            found=cache.emplace(cacheKey,std::make_pair(std::move(x),std::move(y))).first;
         }
+        const auto &x=found->second.first;const auto &y=found->second.second;
         if(x.empty())continue;
         const auto c=run.at("colour").get<std::vector<float>>();
-        const auto name=device.name+" / "+RunLabel(run)+(run.at("model_hash")!=DocumentHash(device.document)?" (previous)":"")+(std::string(ykey)=="G_over_omega_F"?" G/omega":"")+"##"+run.at("run_id").get<std::string>()+"/"+ykey;
-        ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,1.f});
+        const bool selected=run.at("run_id")==device.selectedRun;
+        const auto name=device.name+" / "+RunLabel(run)+(run.at("model_hash")!=currentHash?" (previous)":"")+(std::string(ykey)=="G_over_omega_F"?" G/omega":"")+"##"+run.at("run_id").get<std::string>()+"/"+ykey;
+        ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,selected?3.f:1.5f});
         if(auto *item=ImPlot::GetItem(name.c_str());item && !item->Show && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",device.id},{"run_id",run.at("run_id")},{"visible",false}});
     }
 }
@@ -987,6 +1001,18 @@ bool Panel::Structure(Json &draft) {
     ImGui::SetCursorScreenPos(ImVec2(origin.x,origin.y+height+6));ImGui::Dummy(ImVec2(width,1));
     return changed;
 }
+// Layer-edge drag: edit a local preview while the mouse is down, send ONE edit (one undo step, one recalculation) on release.
+void Panel::StructureEdit() {
+    static Json dragDoc;static std::string dragDevice;
+    auto &device=w->Current();
+    if(!dragDoc.empty() && dragDevice!=device.id) dragDoc=Json();
+    const bool held=ImGui::IsMouseDown(ImGuiMouseButton_Left);
+    auto draft=dragDoc.empty()?device.document:dragDoc;
+    const bool changed=Structure(draft);
+    if(changed && held) {dragDoc=std::move(draft);dragDevice=device.id;return;}
+    if(changed) {dragDoc=Json();Send({{"operation","edit"},{"document",draft},{"gesture_id",std::to_string(gesture)}});return;}
+    if(!dragDoc.empty() && !held) {auto doc=std::move(dragDoc);dragDoc=Json();if(doc!=device.document)Send({{"operation","edit"},{"document",doc},{"gesture_id",std::to_string(gesture)}});}
+}
 void Panel::Results() {
     const Json *selected=nullptr;
     for(const auto &run:w->Current().history) if(run.at("run_id")==w->Current().selectedRun && (run.at("kind")=="iv" || run.at("kind")=="band")) {
@@ -998,7 +1024,7 @@ void Panel::Results() {
     const auto profileKind=selected?selected->at("kind").get<std::string>():bandOnly?"band":"iv";
     const auto &layers=(selected?selected->at("document"):w->Current().document).at("layers");
     double total=0;for(const auto &l:layers) total+=l.at("thickness_m").get<double>();
-    if(view==5) {auto draft=w->Current().document;if(Structure(draft)) Send({{"operation","edit"},{"document",draft},{"gesture_id",std::to_string(gesture)}});}
+    if(view==5) StructureEdit();
     if(!result.contains("points") || result["points"].empty()) {ImGui::TextUnformatted("Calculate I-V to view results.");return;}
     const auto &points=result.at("points");int bias=bandOnly?0:w->Current().selectedBias;bias=std::clamp(bias,0,int(points.size())-1);
     BeginRow("Bias point");ImGui::SliderInt("##bias",&bias,0,int(points.size())-1);EndRow();if(!bandOnly)w->Current().selectedBias=bias;
@@ -1457,7 +1483,7 @@ void Panel::GenerationRecombination() {
     grFollow=w->project.ui.value("gr_follow",true);grHidden=w->project.ui.value("gr_hidden",std::set<std::string>{});grBias=w->project.ui.value("gr_bias",Json{{"voltage_V",0.}});
     const int savedTab=w->project.ui.value("gr_tab",0);const bool restoreTab=grTab!=savedTab;
     auto &device=w->Current();
-    auto draft=device.document;if(Structure(draft)) Send({{"operation","edit"},{"document",draft},{"gesture_id",std::to_string(gesture)}});
+    StructureEdit();
     ShotBar(*w,"iv");
     if(Toggle("Follow I-V working point",grFollow) && !grFollow) {
         if(device.result.contains("points") && !device.result.at("points").empty()) device.biasVoltage_V=device.result.at("points")[std::clamp(device.selectedBias,0,int(device.result.at("points").size())-1)].at("voltage_V");

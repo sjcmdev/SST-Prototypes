@@ -7,6 +7,10 @@
 #include <cmath>
 #include <functional>
 #include <sstream>
+#include <atomic>
+#include <thread>
+#include <mutex>
+#include <exception>
 #include <iomanip>
 namespace SST::ScapsLab {
 Json BatchDefaults() {return {{"mode","nested"},{"axes",Json::array({{{"parameter_id","temperature_K"},{"start",270.},{"stop",330.},{"count",3},{"spacing","linear"}}})},{"include_curves",true}};}
@@ -127,16 +131,36 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
         if(op=="preview_batch") {o.output=plan;return true;}
         const auto &points=plan.at("combinations");
         o.output=op=="retry_batch"?o.batchResult:Json{{"schema_version",1},{"spec",spec},{"columns",Json::parse(scaps_core::record_batch_json("{\"rows\":[]}",spec.at("columns").dump())).at("columns")},{"rows",Json::array()},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"elapsed_s",0.},{"project_snapshot",o.document},{"provenance",{{"device_hash",DocumentHash(o.document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}}}};
+        // Members are independent: solve them on a small thread pool, then merge rows in order (progress/cancel via the main thread).
+        std::vector<Json> solved(points.size());std::vector<char> ready(points.size(),0);
+        auto wanted=[&](std::size_t i){return !(op=="retry_batch" && o.output["rows"][i].at("id")!=o.request.at("member_id"));};
+        std::atomic<std::size_t> next{0},finished{0};std::atomic<bool> stop{false};std::exception_ptr failure;std::mutex failureLock;
+        auto work=[&]{
+            for(std::size_t i;(i=next.fetch_add(1))<points.size();) {
+                if(!wanted(i)) {++finished;continue;}
+                if(stop) {++finished;continue;}
+                try {auto single=spec;for(auto &axis:single["axes"]) {axis["values"]=Json::array({points[i].at(axis.at("path").get<std::string>())});axis.erase("count");axis.erase("start");axis.erase("stop");}
+                    solved[i]=Json::parse(scaps_core::run_batch_json(o.document.dump(),single.dump())).at("rows")[0];ready[i]=1;}
+                catch(...) {std::lock_guard g(failureLock);if(!failure)failure=std::current_exception();stop=true;}
+                ++finished;
+            }
+        };
+        {
+            std::vector<std::thread> pool;const auto threads=std::min<std::size_t>(points.size(),std::max(1u,std::thread::hardware_concurrency()));
+            for(std::size_t t=0;t<threads;++t) pool.emplace_back(work);
+            while(finished<points.size()) {if(ctx.IsCancellationRequested())stop=true;ctx.SetStage("Members "+std::to_string(finished.load())+" / "+std::to_string(points.size()));ctx.SetProgress(float(finished.load()),float(points.size()));std::this_thread::sleep_for(std::chrono::milliseconds(20));}
+            for(auto &t:pool) t.join();
+        }
+        if(failure) std::rethrow_exception(failure);
         for(std::size_t i=0;i<points.size();++i) {
-            if(op=="retry_batch" && o.output["rows"][i].at("id")!=o.request.at("member_id"))continue;
-            ctx.SetStage("Member "+std::to_string(i+1)+" / "+std::to_string(points.size()));ctx.SetProgress(float(i),float(points.size()));
+            if(!wanted(i))continue;
             Json row;
-            if(ctx.IsCancellationRequested()) {row={{"parameters",points[i]},{"status","Cancelled"},{"error_type","cancelled"},{"message","Stopped before this member"},{"elapsed_s",0.},{"values",Json::object()},{"statuses",Json::object()}};for(const auto &c:o.output.at("columns")) {row["values"][c.at("id").get<std::string>()]=nullptr;row["statuses"][c.at("id").get<std::string>()]="cancelled";}}
-            else {auto single=spec;for(auto &axis:single["axes"]) {axis["values"]=Json::array({points[i].at(axis.at("path").get<std::string>())});axis.erase("count");axis.erase("start");axis.erase("stop");}const auto table=Json::parse(scaps_core::run_batch_json(o.document.dump(),single.dump()));row=table.at("rows")[0];o.output["elapsed_s"]=o.output.at("elapsed_s").get<double>()+row.at("elapsed_s").get<double>();}
+            if(!ready[i]) {row={{"parameters",points[i]},{"status","Cancelled"},{"error_type","cancelled"},{"message","Stopped before this member"},{"elapsed_s",0.},{"values",Json::object()},{"statuses",Json::object()}};for(const auto &c:o.output.at("columns")) {row["values"][c.at("id").get<std::string>()]=nullptr;row["statuses"][c.at("id").get<std::string>()]="cancelled";}}
+            else {row=std::move(solved[i]);o.output["elapsed_s"]=o.output.at("elapsed_s").get<double>()+row.at("elapsed_s").get<double>();}
             row["id"]="point_"+std::to_string(i);row["attempt"]=op=="retry_batch"?o.output["rows"][i].value("attempt",1)+1:1;
             if(op=="retry_batch")o.output["rows"][i]=row;else o.output["rows"].push_back(row);
-            ctx.SetProgress(float(i+1),float(points.size()));
         }
+        ctx.SetProgress(float(points.size()),float(points.size()));
         if(op=="retry_batch" && std::none_of(o.output.at("rows").begin(),o.output.at("rows").end(),[&](const Json &r){return r.at("id")==o.request.at("member_id");}))throw std::invalid_argument("Unknown member_id");
         o.output["cancelled"]=ctx.IsCancellationRequested();
     } else if(op=="record_batch") {auto table=SelectedTable(o.batchResult,Json::object());o.output=Json::parse(scaps_core::record_batch_json(table.dump(),o.request.value("columns",o.recorderColumns).dump()));}
