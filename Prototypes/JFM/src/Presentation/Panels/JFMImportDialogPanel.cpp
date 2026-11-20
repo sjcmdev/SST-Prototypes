@@ -302,7 +302,7 @@ namespace SST::Prototypes::JFM
 		ImGui::Text("Project: %s", targetProject.name.c_str());
 		int placement = static_cast<int>(m_Request.placement);
 		const char *placementLabels[] = {"New series", "Existing series", "Preserve folder tree"};
-		if (ImGui::Combo("Placement", &placement, placementLabels, IM_ARRAYSIZE(placementLabels)))
+		if (sst::ui::widgets::Combo("Placement", &placement, placementLabels, IM_ARRAYSIZE(placementLabels)))
 		{
 			m_Request.placement = static_cast<JFMImportPlacement>(placement);
 			if (m_Request.placement != JFMImportPlacement::ExistingSeries)
@@ -316,7 +316,7 @@ namespace SST::Prototypes::JFM
 				if (series.id == m_Request.targetSeriesId)
 					seriesLabel = series.name;
 			}
-			if (ImGui::BeginCombo("Series", seriesLabel.c_str()))
+			if (sst::ui::widgets::BeginCombo("Series", seriesLabel.c_str()))
 			{
 				for (const JFMSeries &series : targetProject.series)
 				{
@@ -326,7 +326,7 @@ namespace SST::Prototypes::JFM
 						m_Request.targetGroupId = series.groupId;
 					}
 				}
-				ImGui::EndCombo();
+				sst::ui::widgets::EndCombo();
 			}
 		}
 		else
@@ -337,7 +337,7 @@ namespace SST::Prototypes::JFM
 				if (group.id == m_Request.targetGroupId)
 					groupLabel = group.name;
 			}
-			if (ImGui::BeginCombo("Parent group", groupLabel.c_str()))
+			if (sst::ui::widgets::BeginCombo("Parent group", groupLabel.c_str()))
 			{
 				if (ImGui::Selectable("Project root", m_Request.targetGroupId.empty()))
 					m_Request.targetGroupId.clear();
@@ -346,7 +346,7 @@ namespace SST::Prototypes::JFM
 					if (ImGui::Selectable(group.name.c_str(), group.id == m_Request.targetGroupId))
 						m_Request.targetGroupId = group.id;
 				}
-				ImGui::EndCombo();
+				sst::ui::widgets::EndCombo();
 			}
 		}
 
@@ -356,20 +356,19 @@ namespace SST::Prototypes::JFM
 			ImGui::TableSetupColumn("Variables", ImGuiTableColumnFlags_WidthStretch, 0.54f);
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
-			ImGui::Combo("Parser", &m_Parser, ParserOptions, IM_ARRAYSIZE(ParserOptions));
-			ImGui::InputText("Name pattern", m_NamePattern.data(), m_NamePattern.size());
-			ImGui::InputText("Short name", m_ShortNamePattern.data(), m_ShortNamePattern.size());
-			ImGui::InputText("Variable delimiter", m_VariableDelimiter.data(), m_VariableDelimiter.size());
+			sst::ui::widgets::Combo("Parser", &m_Parser, ParserOptions, IM_ARRAYSIZE(ParserOptions));
+			sst::ui::widgets::Text("Name pattern", m_NamePattern.data(), m_NamePattern.size());
+			sst::ui::widgets::Text("Short name", m_ShortNamePattern.data(), m_ShortNamePattern.size());
+			sst::ui::widgets::Text("Variable delimiter", m_VariableDelimiter.data(), m_VariableDelimiter.size());
 			ImGui::TextDisabled("Variables: {stem}, {file_name}, {folder}, {parent_folder}, {parent_folder_2}, {source_path}, {T}, {stem_0}, {folder_0}");
 			renderCustomVariables();
-			ImGui::InputText("Delimiter", m_Delimiter.data(), m_Delimiter.size());
-			ImGui::Combo("Decimal", &m_DecimalSeparator, DecimalOptions, IM_ARRAYSIZE(DecimalOptions));
-			ImGui::Combo("Temperature", &m_TemperatureExtraction, TemperatureOptions, IM_ARRAYSIZE(TemperatureOptions));
+			sst::ui::widgets::Text("Delimiter", m_Delimiter.data(), m_Delimiter.size());
+			sst::ui::widgets::Combo("Decimal", &m_DecimalSeparator, DecimalOptions, IM_ARRAYSIZE(DecimalOptions));
+			sst::ui::widgets::Combo("Temperature", &m_TemperatureExtraction, TemperatureOptions, IM_ARRAYSIZE(TemperatureOptions));
 
 			if (m_Parser == 3)
 			{
-				ImGui::InputText("Script", m_CustomScriptPath.data(), m_CustomScriptPath.size());
-				ImGui::SameLine();
+				sst::ui::widgets::Text("Script", m_CustomScriptPath.data(), m_CustomScriptPath.size());
 				if (ImGui::Button("..."))
 				{
 					if (auto script = OpenFileDialog(PythonScriptFilter))
@@ -380,7 +379,7 @@ namespace SST::Prototypes::JFM
 					const JFMProject project = m_Store->GetProjectSnapshot(m_Request.project);
 					for (const JFMScriptInfo &script : project.scripts)
 					{
-						ImGui::SameLine();
+						sst::ui::widgets::SameLineIfFits(ImGui::CalcTextSize(script.name.c_str()).x + 2.0f * ImGui::GetStyle().FramePadding.x);
 						if (ImGui::SmallButton(script.name.c_str()))
 							std::snprintf(m_CustomScriptPath.data(), m_CustomScriptPath.size(), "%s", script.path.Utf8().c_str());
 					}
@@ -407,8 +406,8 @@ namespace SST::Prototypes::JFM
 			ImGui::TextDisabled("Refreshing preview...");
 		else if (!m_PreviewError.empty())
 			ImGui::TextWrapped("Preview failed: %s", m_PreviewError.c_str());
-		ImGui::Checkbox("Preview window", &m_PreviewOpen);
-		ImGui::Checkbox("Plot after add", &m_PlotAfterImport);
+		sst::ui::widgets::Checkbox("Preview window", &m_PreviewOpen);
+		sst::ui::widgets::Checkbox("Plot after add", &m_PlotAfterImport);
 
 		const bool validDestination = m_Request.placement != JFMImportPlacement::ExistingSeries || !m_Request.targetSeriesId.empty();
 		if (!validDestination)

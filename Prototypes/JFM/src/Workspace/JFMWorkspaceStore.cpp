@@ -739,6 +739,10 @@ namespace SST::Prototypes::JFM
 					: characteristic.info.sourcePath.filename().Utf8();
 			}
 			removeCharacteristicReferencesLocked(document, characteristic.info.id);
+			if (characteristic.info.fit && characteristic.info.fit->status == "completed")
+				document.project.fitRuns.push_back({nextId(document, "fit"), characteristic.info.name, "completed"});
+			if (characteristic.info.monteCarlo && characteristic.info.monteCarlo->status == "completed")
+				document.project.monteCarloRuns.push_back({nextId(document, "mc"), characteristic.info.name, "completed"});
 			if (auto existing = findInfoLocked(document, characteristic.info.id))
 				existing->get() = characteristic.info;
 			else
@@ -1398,6 +1402,9 @@ namespace SST::Prototypes::JFM
 		if (!info || !info->get().prefit || info->get().prefit->modelId != result.modelId)
 			return false;
 		result.status = "completed";
+		if (!info->get().fit || info->get().fit->status != "running")
+			return false;
+		document->get().project.fitRuns.push_back({nextId(document->get(), "fit"), info->get().name, result.status});
 		info->get().fit = std::move(result);
 		document->get().fitCurves[ref.characteristic] = CreateRef<const JFMFitCurve>(std::move(curve));
 		info->get().monteCarlo.reset();
@@ -1475,6 +1482,9 @@ namespace SST::Prototypes::JFM
 		if (!info || !info->get().fit || info->get().fit->modelId != state.modelId)
 			return false;
 		state.status = "completed";
+		if (!info->get().monteCarlo || info->get().monteCarlo->status != "running")
+			return false;
+		document->get().project.monteCarloRuns.push_back({nextId(document->get(), "mc"), info->get().name, state.status});
 		info->get().monteCarlo = std::move(state);
 		document->get().monteCarloResults[ref.characteristic] = CreateRef<const JFMMonteCarloResult>(std::move(result));
 		bumpRevisionLocked(document->get());
@@ -2035,6 +2045,8 @@ namespace SST::Prototypes::JFM
 			std::any_of(document.project.groups.begin(), document.project.groups.end(), [&id](const JFMGroup &group) { return group.id == id; })
 			|| std::any_of(document.project.series.begin(), document.project.series.end(), [&id](const JFMSeries &series) { return series.id == id; })
 			|| std::any_of(document.project.scripts.begin(), document.project.scripts.end(), [&id](const JFMScriptInfo &script) { return script.id == id; })
+			|| std::any_of(document.project.fitRuns.begin(), document.project.fitRuns.end(), [&id](const JFMFitRun &run) { return run.id == id; })
+			|| std::any_of(document.project.monteCarloRuns.begin(), document.project.monteCarloRuns.end(), [&id](const JFMMonteCarloRun &run) { return run.id == id; })
 			|| std::any_of(document.project.groupings.begin(), document.project.groupings.end(), [&id](const JFMGroupingDefinition &grouping) { return grouping.id == id; }));
 		return id;
 	}

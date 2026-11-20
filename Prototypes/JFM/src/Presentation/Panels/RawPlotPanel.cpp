@@ -728,6 +728,13 @@ namespace SST::Prototypes::JFM
 				area.groups.end());
 
 			bool plotVisible = true;
+			const auto *viewport = ImGui::GetMainViewport();
+			const float gap = ImGui::GetStyle().ItemSpacing.x;
+			const float listWidth = viewport->WorkSize.x * 0.28f;
+			const float top = viewport->WorkPos.y + ImGui::GetFrameHeightWithSpacing();
+			const float height = viewport->WorkSize.y - 2.0f * ImGui::GetFrameHeightWithSpacing();
+			ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + listWidth + gap, top), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x - listWidth - gap, height), ImGuiCond_FirstUseEver);
 			const std::string windowTitle = area.title + "###jfm_raw_plot_window_" + std::to_string(area.id);
 			const bool rendered = m_Windows.Render(windowTitle, plotVisible, 0, [&] {
 
@@ -832,7 +839,9 @@ namespace SST::Prototypes::JFM
 			const std::string curvesTitle = area.title + " Curves###jfm_raw_plot_curves_" + std::to_string(area.id);
 			if (area.curvesWindowVisible)
 			{
-				m_Windows.Render(curvesTitle, area.curvesWindowVisible, ImGuiWindowFlags_AlwaysAutoResize, [&] {
+				ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, top), ImGuiCond_FirstUseEver);
+				ImGui::SetNextWindowSize(ImVec2(listWidth, height), ImGuiCond_FirstUseEver);
+				m_Windows.Render(curvesTitle, area.curvesWindowVisible, 0, [&] {
 					if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 						(void)HandleUndoShortcuts();
 					if (area.showOnlyActive && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive())

@@ -89,7 +89,7 @@ namespace SST::Prototypes::JFM
 
 		if (showParameterBounds) ImGui::TextWrapped("Bounds retain the fitted voltage/current (or current-density) column units.");
 		const auto &names = JFMModelParameterNames(modelId);
-		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings, ImVec2(0.0f, (names.size()+2)*ImGui::GetFrameHeightWithSpacing()+ImGui::GetStyle().ScrollbarSize+8.0f)))
+		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings, ImVec2(0.0f, (names.size()+2)*(ImGui::GetFrameHeightWithSpacing()+ImGui::GetTextLineHeightWithSpacing())+ImGui::GetStyle().ScrollbarSize+8.0f)))
 		{
 			ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, std::max(190.0f, 14.0f*ImGui::GetFontSize()));
 			ImGui::TableSetupColumn("Free", ImGuiTableColumnFlags_WidthFixed, std::max(44.0f, ImGui::CalcTextSize("Free").x+2*ImGui::GetStyle().CellPadding.x));

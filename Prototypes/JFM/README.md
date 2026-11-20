@@ -2,6 +2,12 @@
 
 Minimal executable project generated from `PrototypeTemplate`.
 
+Completed fit and Monte Carlo jobs append to the project's persistent run registry
+(`fit_runs` / `monte_carlo_runs`: stable ID, characteristic name, completion status).
+Save/reopen retains these entries; reruns keep earlier entries. Imported completed
+analysis also registers its latest fit and MC. Per-characteristic results and MC
+output files retain their existing storage contract.
+
 
 
 ### PlotLab figures (J2)

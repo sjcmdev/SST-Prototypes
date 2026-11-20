@@ -380,7 +380,7 @@ namespace SST::Prototypes::JFM
 
 			const std::string model = activeInfo.fit ? activeInfo.fit->modelId : activeInfo.prefit ? activeInfo.prefit->modelId : "SD-RsRsh";
 			const auto &names = JFMModelParameterNames(model);
-			if (!names.empty() && ImGui::BeginTable("##jfm_control_solver_params", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings, ImVec2(0.0f, (names.size()+2)*ImGui::GetFrameHeightWithSpacing()+ImGui::GetStyle().ScrollbarSize+8.0f)))
+			if (!names.empty() && ImGui::BeginTable("##jfm_control_solver_params", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings, ImVec2(0.0f, (names.size()+2)*(ImGui::GetFrameHeightWithSpacing()+ImGui::GetTextLineHeightWithSpacing())+ImGui::GetStyle().ScrollbarSize+8.0f)))
 			{
 				ImGui::TableSetupColumn("Parameter", ImGuiTableColumnFlags_WidthFixed, std::max(190.0f, 14.0f*ImGui::GetFontSize()));
 				ImGui::TableSetupColumn("Optimize", ImGuiTableColumnFlags_WidthFixed, std::max(76.0f, ImGui::CalcTextSize("Optimize").x+2*ImGui::GetStyle().CellPadding.x));

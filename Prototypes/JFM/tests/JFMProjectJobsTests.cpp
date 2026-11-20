@@ -19,6 +19,7 @@
 #include "IO/JFMExportRawTsvJob.hpp"
 #include "IO/JFMPlotExport.hpp"
 #include "IO/JFMFitJobs.hpp"
+#include "Analysis/JFMFitEngine.hpp"
 #include "Presentation/JFMPlotDocument.hpp"
 #include "IO/JFMImportJob.hpp"
 #include "IO/JFMImportPreviewJob.hpp"
@@ -132,6 +133,80 @@ namespace SST::Prototypes::JFM
 		(void)loadSub;
 		(void)FileSystem::Remove(path.Native());
 	}
+
+    TEST(JFMProjectJobsTests, CompletedFitAndMonteCarloHistorySurvivesSaveReopenAndRerun)
+    {
+        auto bus = CreateRef<EventBus>();
+        auto store = CreateRef<JFMWorkspaceStore>();
+        const auto project = store->GetActiveProjectHandle();
+        JFMCharacteristicRecord record;
+        record.info.name = "History source";
+        record.info.temperatureK = 300.;
+        record.info.prefit = JFMPrefitState{};
+        auto &prefit = *record.info.prefit;
+        prefit.modelId = "SD-0"; prefit.status = "completed";
+        prefit.fitRange = {0, 24, .02, .60, "test"};
+        prefit.parameters = {{"I0", {1e-10}}, {"A", {1.5}}};
+        auto data = CreateRef<JFMCharacteristicData>();
+        for (int i = 0; i < 24; ++i) {
+            const double voltage = .02 + .58 * i / 23.;
+            data->voltage.push_back(voltage);
+            data->current.push_back(EvaluateJFMCurrent("SD-0", voltage, 300., {{"I0", 1e-10}, {"A", 1.5}}));
+        }
+        record.data = data;
+        const auto id = store->AddCharacteristicRecords(project, {record}).front();
+        const JFMCharacteristicRef ref{project, id};
+        IOLayer io(bus);
+        RegisterJFMIOHandlers(io, {bus, store});
+        JFMFitMonteCarloSettings settings;
+        settings.preferGpu = false; settings.saveSamples = false;
+        settings.monteCarloSamples = 4; settings.monteCarloMaxIterations = 100;
+        settings.parameters = {{"I0", {1e-15, 1e-5, true}}, {"A", {.5, 3., true}}};
+        auto context = MakeTestJobContext();
+        auto fitQueue = CreateRef<JFMFitWorkQueue>();
+        const auto fitGeneration = store->BeginFit(ref);
+        ASSERT_TRUE(fitQueue->Enqueue({{ref, fitGeneration, *store->FindCharacteristicRecord(ref), settings}}));
+        JFMFitJob fitJob(bus, store, fitQueue);
+        fitJob.Execute(context); bus->ProcessQueue();
+        ASSERT_EQ(store->GetProjectSnapshot().fitRuns.size(), 1);
+        auto mcQueue = CreateRef<JFMMonteCarloWorkQueue>();
+        const auto root = Path::FromResolved(FileSystem::TempDirectoryPath() / "jfmui2-history");
+        const auto mcGeneration = store->BeginMonteCarlo(ref);
+        ASSERT_TRUE(mcQueue->Enqueue({{ref, mcGeneration, *store->FindCharacteristicRecord(ref), prefit, *store->GetFitState(ref), settings, root}}));
+        JFMMonteCarloJob mcJob(bus, store, mcQueue);
+        mcJob.Execute(context); bus->ProcessQueue();
+        const auto snapshot = store->GetProjectSnapshot();
+        ASSERT_EQ(snapshot.monteCarloRuns.size(), 1);
+        EXPECT_FALSE(store->ApplyFitResult(ref, fitGeneration, *store->GetFitState(ref), {}));
+        EXPECT_FALSE(store->ApplyMonteCarloResult(ref, mcGeneration, *store->GetMonteCarloState(ref), {}));
+        const auto path = root / "history.jfm.yaml";
+        SaveProjectJob save(bus, path, snapshot); save.Execute(context); bus->ProcessQueue();
+        auto reopened = CreateRef<JFMWorkspaceStore>();
+        bool loaded = false;
+        auto subscription = bus->Subscribe<ProjectLoadCompleted>([&](const auto &event) {
+            reopened->ReplaceProject(event.project, path); loaded = true;
+        });
+        LoadProjectJob load(bus, path); load.Execute(context); bus->ProcessQueue();
+        ASSERT_TRUE(loaded);
+        const auto restored = reopened->GetProjectSnapshot();
+        ASSERT_EQ(restored.fitRuns.size(), 1); ASSERT_EQ(restored.monteCarloRuns.size(), 1);
+        EXPECT_EQ(restored.fitRuns.front().id, snapshot.fitRuns.front().id);
+        EXPECT_EQ(restored.monteCarloRuns.front().id, snapshot.monteCarloRuns.front().id);
+        EXPECT_EQ(restored.fitRuns.front().status, "completed");
+        EXPECT_EQ(restored.monteCarloRuns.front().status, "completed");
+        const JFMCharacteristicRef next{reopened->GetActiveProjectHandle(), id};
+        ASSERT_TRUE(reopened->ApplyFitResult(next, reopened->BeginFit(next), *restored.characteristics.front().fit, {}));
+        ASSERT_TRUE(reopened->ApplyMonteCarloResult(next, reopened->BeginMonteCarlo(next), *restored.characteristics.front().monteCarlo, {}));
+        const auto rerun = reopened->GetProjectSnapshot();
+        ASSERT_EQ(rerun.fitRuns.size(), 2); ASSERT_EQ(rerun.monteCarloRuns.size(), 2);
+        EXPECT_NE(rerun.fitRuns.front().id, rerun.fitRuns.back().id);
+        EXPECT_NE(rerun.monteCarloRuns.front().id, rerun.monteCarloRuns.back().id);
+        auto imported = CreateRef<JFMWorkspaceStore>();
+        record.info = snapshot.characteristics.front(); record.info.id = InvalidCharacteristicId;
+        imported->AddCharacteristicRecords(imported->GetActiveProjectHandle(), {record});
+        EXPECT_EQ(imported->GetProjectSnapshot().fitRuns.size(), 1);
+        EXPECT_EQ(imported->GetProjectSnapshot().monteCarloRuns.size(), 1);
+    }
 
 #ifdef _WIN32
     TEST(JFMProjectJobsTests, FailedReplacementPreservesProjectAndDoesNotPublishCompletion)
