@@ -99,3 +99,36 @@ class Session:
         if not snapshot['ok']:
             return snapshot
         return dict(ok=True, runs=snapshot['runs'], error=None)
+
+    def history_list(self, device_id=None):
+        return self.execute(dict(operation='history_list', **({'device_id': device_id} if device_id else {})))
+
+    def history_update(self, run_id, **metadata):
+        return self.execute(dict(operation='history_update', run_id=run_id, **metadata))
+
+    def history_select(self, run_id, device_id=None):
+        return self.execute(dict(operation='history_select', run_id=run_id, **({'device_id': device_id} if device_id else {})))
+
+    def history_clear(self, scope='device', device_id=None, include_pinned=False):
+        return self.execute(dict(operation='history_clear', scope=scope, include_pinned=include_pinned,
+                                 **({'device_id': device_id} if device_id else {})))
+
+    def quick_sweep(self, parameter_id, delta_native_units, points=5, spacing='linear', **sampling):
+        """delta_native_units uses the unit from batch_parameters(); sampling uses voltages_V/frequencies_Hz."""
+        return self.execute(dict(operation='quick_sweep', parameter_id=parameter_id, delta_native_units=delta_native_units,
+                                 points=points, spacing=spacing, **sampling))
+
+    def tutorials(self):
+        return self.execute(dict(operation='tutorial_list'))
+
+    def tutorial_start(self, tutorial_id, mode='learn', resume=False):
+        return self.execute(dict(operation='tutorial_start', tutorial_id=tutorial_id, mode=mode, resume=resume))
+
+    def tutorial_state(self):
+        return self.execute(dict(operation='tutorial_state'))
+
+    def tutorial_stop(self):
+        return self.execute(dict(operation='tutorial_stop'))
+
+    def project_new(self):
+        return self.execute(dict(operation='project_new'))

@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/Presentation/CommandMenu.hpp"
 
 #include "Presentation/EditorLayer.hpp"
 
@@ -338,6 +339,10 @@ namespace SST
 			return;
 
 		EditorServices services = GetServices();
+		if (!m_StandardAppMenu.empty()) {
+			if (auto commands = m_CommandRegistry.lock())
+				RenderCommandMenu(*commands, m_StandardAppMenu, [this] { m_Windows->RenderMenu(); });
+		} else {
 		for (MenuRendererEntry &entry : m_MenuRenderers)
 		{
 			if (entry.renderer)
@@ -345,6 +350,7 @@ namespace SST
 		}
 
 		m_Windows->RenderMenu();
+		}
         const float menuBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
         ImGui::EndMainMenuBar();
         // ImGui applies menu work-area reservations on the following frame.

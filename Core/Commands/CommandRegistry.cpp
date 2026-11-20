@@ -78,6 +78,17 @@ namespace SST
 		return {};
 	}
 
+	Result<void> CommandRegistry::SetMenu(const CommandID &id, std::string path, std::string shortcut, std::function<bool()> enabled)
+	{
+		auto it = m_Commands.find(id.value);
+		if (it == m_Commands.end()) return GetMeta(id).Error();
+		if (!path.empty()) it->second.meta.name = path.substr(path.find('/') + 1);
+		it->second.meta.menuPath = std::move(path);
+		it->second.meta.shortcut = std::move(shortcut);
+		it->second.meta.enabled = std::move(enabled);
+		return {};
+	}
+
 	bool CommandRegistry::HasCommand(const CommandID &id) const
 	{
 		return m_Commands.find(id.value) != m_Commands.end();
@@ -120,6 +131,8 @@ namespace SST
 				"Command id '" + id.value + "' is not registered.",
 				"Register the command before executing it.");
 		}
+		if (it->second.meta.enabled && !it->second.meta.enabled())
+			return MakeCommandError("command.disabled", "Command is unavailable.", "Command is disabled: " + id.value, "Wait for the application to become ready.");
 		return ValidateCapabilities(it->second.meta);
 	}
 
@@ -147,7 +160,7 @@ namespace SST
 		const RegisteredCommand &registration = it->second;
 		notifyObservers(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Started, std::nullopt});
 
-		auto capabilityResult = ValidateCapabilities(registration.meta);
+		auto capabilityResult = CanExecute(id);
 		if (!capabilityResult)
 		{
 			notifyObservers(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Rejected, capabilityResult.Error()});

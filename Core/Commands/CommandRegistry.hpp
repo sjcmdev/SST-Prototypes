@@ -63,6 +63,7 @@ namespace SST
 		void SetUndoStack(WeakRef<UndoStack> undoStack) noexcept;
 
 		[[nodiscard]] Result<void> Register(CommandMeta meta, CommandFactory factory);
+		[[nodiscard]] Result<void> SetMenu(const CommandID &id, std::string path, std::string shortcut = {}, std::function<bool()> enabled = {});
 		[[nodiscard]] bool HasCommand(const CommandID &id) const;
 		[[nodiscard]] Result<CommandMeta> GetMeta(const CommandID &id) const;
 		[[nodiscard]] std::vector<CommandMeta> ListCommands() const;

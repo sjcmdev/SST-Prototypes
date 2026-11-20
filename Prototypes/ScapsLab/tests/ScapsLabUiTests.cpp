@@ -188,3 +188,101 @@ TEST(ScapsLab,GenerationRecombinationPanelHasNoConflictingIds) {
     frame();frame();for(float y=10;y<1500;y+=14) {io.AddMousePosEvent(450,y);frame();frame();}
     ImPlot::DestroyContext();ImGui::DestroyContext();
 }
+
+TEST(ScapsLab,HistoryControlsAndNumericRowsHaveNoConflictingIds) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;
+    io.DisplaySize=ImVec2(1600,1200);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).value("ok",false));
+    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.response.value("ok",false));
+    Panel history(&w,15),parameters(&w,1);
+    for(int view=0;view<2;++view) for(int frame=0;frame<30;++frame) {
+        io.AddMousePosEvent(200,float(40+frame*24));io.DeltaTime=1.f/60;ImGui::NewFrame();
+        ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1200,1100));
+        ImGui::Begin("History regression");if(view==0)history.RenderContent();else parameters.RenderContent();ImGui::End();ImGui::Render();
+        EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);
+    }
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}
+
+TEST(ScapsLab,CurrentIvRemainsVisibleAfterAnotherTechniqueEvictsItsHistory) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;
+    io.DisplaySize=ImVec2(1200,900);io.Fonts->AddFontDefault();io.Fonts->Build();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};w.project.ui["history_retention"]=1;
+    for(const auto *operation:{"run","band"}) {
+        ASSERT_TRUE(w.Dispatch({{"operation",operation},{"voltage_V",0.}}).value("ok",false));
+        while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        ASSERT_TRUE(w.response.value("ok",false));
+    }
+    ASSERT_EQ(w.Current().history.size(),1);ASSERT_EQ(w.Current().history.front().at("kind"),"band");
+    Panel panel(&w,10);
+    for(int frame=0;frame<3;++frame) {
+        io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowSize(ImVec2(1100,800));
+        ImGui::Begin("Current curve regression");panel.RenderContent();
+        const auto *plot=ImPlot::GetPlot("I-V compare");EXPECT_NE(plot,nullptr);if(plot)EXPECT_GT(plot->Items.GetItemCount(),0);
+        ImGui::End();ImGui::Render();
+    }
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}
+
+TEST(ScapsLab,CompactHistoryRowsEditAndCollapseWithoutChangingTheSchema) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;
+    io.DisplaySize=ImVec2(1200,1000);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    auto finish=[&] {while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();};
+    ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).value("ok",false));finish();
+    const auto seed=w.Current().history.front();w.project.ui["history_retention"]=20;
+    for(int i=1;i<20;++i) {
+        auto run=seed;run["run_id"]="compact-"+std::to_string(i);run["label"]="temperature_K 300 -> "+std::to_string(300+i);
+        run["group_id"]=i>=10?"sweep-1":"";run["profiles_stored"]=false;w.Current().history.push_back(run);
+    }
+    const auto deviceId=w.Current().id,runId=seed.at("run_id").get<std::string>();
+    auto frame=[&] {
+        w.OnUpdate(0);
+        io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(io.DisplaySize);
+        ImGui::Begin("Compact history");DrawHistory(w);ImGui::End();ImGui::Render();
+        EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);
+    };
+    const auto before=w.Workspace();frame();frame();EXPECT_EQ(w.Workspace(),before);
+    auto *window=ImGui::FindWindowByName("Compact history");
+    const auto scope=ImHashStr(deviceId.c_str(),0,window->GetID("device-history"));
+    const auto tableId=ImHashStr("runs",0,ImHashStr("device",0,scope));
+    const auto runScope=ImHashStr(runId.c_str(),0,tableId);
+    auto table=[&] {return GImGui->Tables.GetByKey(tableId);};
+    ASSERT_NE(table(),nullptr);EXPECT_EQ(table()->ColumnsCount,7);EXPECT_EQ(table()->CurrentRow,21);
+    EXPECT_LT(table()->OuterRect.GetHeight(),700.f)<<"Twenty runs must remain one row each";
+    auto locate=[&](ImGuiID id,int column) {
+        const float x=table()->Columns[column].WorkMinX+10;
+        for(float y=table()->OuterRect.Min.y+20;y<table()->OuterRect.Max.y;y+=3) {
+            io.AddMousePosEvent(x,y);frame();frame();if(GImGui->HoveredId==id)return true;
+        }
+        return false;
+    };
+    auto click=[&] {io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();};
+    ASSERT_TRUE(locate(ImHashStr("##visible",0,runScope),1));click();finish();EXPECT_FALSE(w.Current().history[0].at("visible"));
+    ASSERT_TRUE(locate(ImHashStr("##pin",0,runScope),2));click();finish();EXPECT_TRUE(w.Current().history[0].at("pinned"));
+    ASSERT_TRUE(locate(ImHashStr("##swatch",0,runScope),0));click();frame();EXPECT_TRUE(ImGui::IsPopupOpen(ImHashStr("Colour",0,runScope),ImGuiPopupFlags_None));
+    io.AddMousePosEvent(1100,30);click();frame();frame();
+    EXPECT_FALSE(ImGui::IsPopupOpen(ImHashStr("Colour",0,runScope),ImGuiPopupFlags_None));
+    ASSERT_TRUE(locate(ImHashStr("###label",0,runScope),3));
+    for(int i=0;i<25;++i)frame();
+    click();finish();click();frame();frame();
+    EXPECT_EQ(GImGui->InputTextState.ID,ImHashStr("##rename",0,runScope));
+    io.AddKeyEvent(ImGuiMod_Ctrl,true);io.AddKeyEvent(ImGuiKey_A,true);frame();
+    io.AddKeyEvent(ImGuiKey_A,false);io.AddKeyEvent(ImGuiMod_Ctrl,false);io.AddInputCharactersUTF8("Reference");frame();
+    io.AddKeyEvent(ImGuiKey_Enter,true);frame();io.AddKeyEvent(ImGuiKey_Enter,false);frame();finish();
+    EXPECT_EQ(w.Current().history[0].at("name"),"Reference");
+    const auto edited=w.Workspace();
+    ASSERT_TRUE(locate(ImHashStr("sweep",0,ImHashStr("sweep-1",0,tableId)),3));click();frame();
+    EXPECT_EQ(table()->CurrentRow,11);EXPECT_EQ(w.Workspace(),edited);
+    bool deviceHeader=false;
+    for(float y=window->WorkRect.Min.y;y<table()->OuterRect.Min.y;y+=2) {
+        io.AddMousePosEvent(window->WorkRect.Min.x+20,y);frame();frame();
+        if(GImGui->HoveredId==ImHashStr("device",0,scope)){deviceHeader=true;break;}
+    }
+    ASSERT_TRUE(deviceHeader);click();frame();
+    EXPECT_LT(table()->LastFrameActive,ImGui::GetFrameCount());EXPECT_EQ(w.Workspace(),edited);
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}

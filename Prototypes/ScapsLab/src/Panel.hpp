@@ -1,7 +1,9 @@
 ﻿#pragma once
 #include "Workflow.hpp"
 #include "Core/Presentation/Panels/EditorWindow.hpp"
+namespace SST {class Application;}
 namespace SST::ScapsLab {
+void DrawHistory(Workflow &workflow,bool global=false);
 class Panel final : public EditorWindow {
 public:
     Panel(Workflow *workflow, int view, bool gallery=false);
@@ -24,7 +26,7 @@ private:
     void Recorder();
     void BatchPlots();
     char parameterSearch[128]{};
-    int recorderPlot=0;
+    int recorderPlot=0, opticalTab=-1, grTab=-1;
     bool Defects(Json &draft,bool interface);
     bool Structure(Json &draft);
     void Preview(bool interface);
@@ -38,5 +40,6 @@ private:
     void Devices();
     void Compare();
 };
+void InstallTutorialUi(Application &app,Workflow &w,const std::vector<Ref<Panel>> &panels);
 }
 

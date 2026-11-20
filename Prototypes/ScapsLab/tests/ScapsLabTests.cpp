@@ -257,7 +257,7 @@ TEST(ScapsLab,DefectEditorsPreviewResistanceRoundtripAndStaleExport) {
     }
     EXPECT_EQ(w.Current().bandResult.at("project_snapshot"),draft);EXPECT_TRUE(w.Current().bandResult.contains("validity_status"));
     EXPECT_FALSE(Execute(w,{{"operation","layer"},{"action","remove"},{"layer_id","layer-2"}}).at("ok").get<bool>());
-    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());EXPECT_TRUE(w.Current().bandResult.empty());
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());EXPECT_FALSE(w.Current().bandResult.empty());
     EXPECT_FALSE(Execute(w,{{"operation","export_ac"},{"kind","cv"},{"path",Temp("stale.csv").string()}}).at("ok").get<bool>());
     std::filesystem::remove(path);
 }
@@ -408,11 +408,11 @@ TEST(ScapsLab,BatchFailedRowsRecorderRetryPersistenceAndPlotLab) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);auto spec=BatchDefaults();spec["axes"][0]={{"parameter_id","temperature_K"},{"values",Json::array({300.,-1.,330.})}};spec["voltages_V"]=Json::array({0.,0.05});
     auto result=Execute(w,{{"operation","run_batch"},{"spec",spec}});ASSERT_TRUE(result.at("ok").get<bool>())<<result.dump();auto table=w.Current().batchResult;ASSERT_EQ(table.at("rows").size(),3);EXPECT_EQ(table.at("rows")[1].at("status"),"Failed");EXPECT_EQ(table.at("rows")[1].at("error_type"),"invalid_parameter");
     EXPECT_TRUE(Execute(w,{{"operation","retry_batch"},{"member_id","point_1"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().batchResult.at("rows")[1].at("attempt"),2);EXPECT_EQ(w.Current().batchResult.at("rows")[0],table.at("rows")[0]);
-    const Json columns=Json::array({{{"id","Voc"},{"quantity","Voc"}}});EXPECT_TRUE(Execute(w,{{"operation","record_batch"},{"columns",columns}}).at("ok").get<bool>());EXPECT_EQ(w.Current().batchResult.at("rows")[0].at("statuses").at("Voc"),"pending st6");EXPECT_TRUE(w.Current().batchResult.at("rows")[1].at("values").at("Voc").is_null());
+    const Json columns=Json::array({{{"id","Voc"},{"quantity","Voc"}}});EXPECT_TRUE(Execute(w,{{"operation","record_batch"},{"columns",columns}}).at("ok").get<bool>());EXPECT_EQ(w.Current().batchResult.at("rows")[0].at("statuses").at("Voc"),"not_illuminated");EXPECT_TRUE(w.Current().batchResult.at("rows")[1].at("values").at("Voc").is_null());
     auto invalidDraft=spec;invalidDraft["axes"][0]["parameter_id"]="deleted-parameter";
     EXPECT_TRUE(Execute(w,{{"operation","batch_settings"},{"spec",invalidDraft}}).value("ok",false));
     ASSERT_TRUE(Execute(w,{{"operation","retry_batch"},{"member_id","point_0"}}).value("ok",false));
-    EXPECT_EQ(w.Current().batchResult.at("rows")[0].at("statuses").at("Voc"),"pending st6");
+    EXPECT_EQ(w.Current().batchResult.at("rows")[0].at("statuses").at("Voc"),"not_illuminated");
     const auto csv=Temp("sl4-batch.csv"),book=Temp("sl4-batch.plotlab"),project=Temp("sl4-batch.scapslab");
     EXPECT_TRUE(Execute(w,{{"operation","export_batch"},{"path",csv.string()}}).at("ok").get<bool>());
     EXPECT_TRUE(Execute(w,{{"operation","send_to_plotlab"},{"path",book.string()}}).at("ok").get<bool>());
@@ -420,7 +420,7 @@ TEST(ScapsLab,BatchFailedRowsRecorderRetryPersistenceAndPlotLab) {
     auto invalid=w.Workspace();invalid["devices"][0]["batch_result"]["rows"][0]["values"]=Json::object();
     EXPECT_THROW(w.SetWorkspace(invalid),Json::out_of_range);EXPECT_EQ(w.Current().batchResult.at("rows").size(),3);
     EXPECT_TRUE(Execute(w,{{"operation","project_save"},{"path",project.string()}}).at("ok").get<bool>());auto stored=w.Current().batchResult;EXPECT_TRUE(Execute(w,{{"operation","project_load"},{"path",project.string()}}).at("ok").get<bool>());EXPECT_EQ(w.Current().batchResult,stored);
-    EXPECT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",310.}}}}).at("ok").get<bool>());EXPECT_TRUE(w.Current().batchResult.empty());EXPECT_FALSE(Execute(w,{{"operation","export_batch"},{"path",csv.string()}}).at("ok").get<bool>());
+    EXPECT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",310.}}}}).at("ok").get<bool>());EXPECT_FALSE(w.Current().batchResult.empty());EXPECT_TRUE(Execute(w,{{"operation","export_batch"},{"path",csv.string()}}).at("ok").get<bool>());
     std::filesystem::remove(csv);std::filesystem::remove(book);std::filesystem::remove(project);
 }
 TEST(ScapsLab,BatchStopRetainsCompletedAndCancelledMembers) {
@@ -447,7 +447,7 @@ TEST(ScapsLab,IlluminationQeGradingAndOpticalRoundtrip) {
     const auto file=Temp("scapslab-light.scapslab");ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",file.string()}}).value("ok",false));
     ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_EQ(w.Current().acResults["qe"],qe);
     EXPECT_FALSE(Execute(w,{{"operation","qe"},{"points",1}}).value("ok",true));
-    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301.}}}}).value("ok",false));EXPECT_TRUE(w.Current().acResults.empty());std::filesystem::remove(file);
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301.}}}}).value("ok",false));EXPECT_FALSE(w.Current().acResults.empty());std::filesystem::remove(file);
 }
 
 TEST(ScapsLab,Stage05DefImportSolvesLikeIndependentYaml) {
@@ -538,8 +538,16 @@ TEST(ScapsLab,GenerationRecombinationChannelsLayersAndExport) {
     EXPECT_NEAR(generated,gr.at("generation_current_A_m2").get<double>(),1e-12);
     EXPECT_NEAR(layerRecombined,sum,1e-12);
     const double net=generated-sum,terminal=point.at("J_A_m2");
-    const double budgetError=std::abs(net+terminal)/std::max({1e-30,std::abs(net),std::abs(terminal)});
-    EXPECT_DOUBLE_EQ(gr.at("terminal_budget_relative_error").get<double>(),budgetError);
+    ASSERT_EQ(reference.state.contact_recombination.size(),2u);
+    double contactLoss=0;
+    for(std::size_t i=0;i<2;++i) {
+        const auto &c=reference.state.contact_recombination[i];const auto &actual=gr.at("contact_recombination")[i];
+        EXPECT_EQ(actual.at("id"),c.id);EXPECT_DOUBLE_EQ(actual.at("electron_current_A_m2").get<double>(),c.electron_current_A_m2);EXPECT_DOUBLE_EQ(actual.at("hole_current_A_m2").get<double>(),c.hole_current_A_m2);
+        contactLoss+=c.id=="right"?c.electron_current_A_m2:c.hole_current_A_m2;
+    }
+    const double budgetError=std::abs(net-contactLoss-terminal)/std::max({1e-30,std::abs(net),std::abs(contactLoss),std::abs(terminal)});
+    EXPECT_TRUE(gr.at("terminal_budget_valid").get<bool>());
+    EXPECT_NEAR(gr.at("terminal_budget_relative_error").get<double>(),budgetError,1e-14);
     EXPECT_EQ(gr.at("terminal_budget_valid").get<bool>(),budgetError<=1e-6);
     RecordProperty("terminal_budget_relative_error",gr.at("terminal_budget_relative_error").dump());
     RecordProperty("generation_current_A_m2",gr.at("generation_current_A_m2").dump());
@@ -557,7 +565,40 @@ TEST(ScapsLab,GenerationRecombinationChannelsLayersAndExport) {
     EXPECT_FALSE(Execute(w,{{"operation","export_gr"},{"source","band"},{"point_index",4294967296LL},{"path",Temp("overflow-gr.json").string()}}).at("ok").get<bool>());
     EXPECT_FALSE(Execute(w,{{"operation","export_gr"},{"source","band"},{"point_index",-1},{"path",Temp("bad-gr.json").string()}}).at("ok").get<bool>());
     ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301.}}}}).at("ok").get<bool>());
-    EXPECT_FALSE(Execute(w,{{"operation","export_gr"},{"source","band"},{"path",Temp("stale-gr.json").string()}}).at("ok").get<bool>());
+    EXPECT_TRUE(Execute(w,{{"operation","export_gr"},{"source","band"},{"path",Temp("stale-gr.json").string()}}).at("ok").get<bool>());
+}
+
+TEST(ScapsLab,ContactExternalBalanceAndQeInternalVoltage) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));
+    for(bool illuminated:{false,true}) {
+        w.Current().document=ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string());
+        auto &doc=w.Current().document;doc["illumination"]["enabled"]=illuminated;
+        doc["external"]={{"area_m2",1e-4},{"series_ohm_m2",1e-5},{"shunt_ohm_m2",1.0}};
+        ASSERT_TRUE(Execute(w,{{"operation","band"},{"voltage_V",.05}}).value("ok",false))<<w.response;
+        const auto point=w.Current().bandResult.at("points")[0];const auto &gr=point.at("generation_recombination");
+        ASSERT_TRUE(point.at("valid").get<bool>())<<point;
+        EXPECT_TRUE(gr.at("terminal_budget_valid").get<bool>())<<gr;
+        EXPECT_LE(gr.at("terminal_budget_relative_error").get<double>(),1e-6);
+        EXPECT_NE(gr.at("shunt_current_A_m2").get<double>(),0.);
+        EXPECT_EQ(gr.at("series_current_A_m2"),point.at("J_A_m2"));
+    }
+    const auto p=Model(w.Current().document);auto device=scaps_core::make_device_from_project(p);device.illumination.enabled=false;
+    const auto pc=scaps_core::physical_constants(p.constants_mode);
+    const auto mesh=scaps_core::prepare_mesh(device,p.mesh,{0.},{p.temperature_K},p.solver,pc);
+    for(const auto *mode:{"constant_flux","constant_power"}) {
+        ASSERT_TRUE(Execute(w,{{"operation","qe"},{"start_nm",590.},{"stop_nm",610.},{"points",3},{"probe_mode",mode}}).value("ok",false));
+        const auto qe=w.Current().acResults.at("qe");
+        const auto ref=scaps_core::solve_qe(device,mesh,{590.,600.,610.},mode,std::string(mode)=="constant_flux"?1e16:1e-3,0.,p.temperature_K,p.solver,pc);
+        for(std::size_t i=0;i<ref.size();++i) {ASSERT_TRUE(qe.at("points")[i].at("internal_voltage_V").is_number());EXPECT_DOUBLE_EQ(qe.at("points")[i].at("internal_voltage_V").get<double>(),-ref[i].internal_voltage_V);EXPECT_EQ(qe.at("points")[i].at("terminal_voltage_V"),0.);}
+        EXPECT_NE(qe.at("points")[1].at("internal_voltage_V").get<double>(),0.);
+        const auto path=Temp("slgr3.scapslab");
+        ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",path.string()},{"include_results",true}}).value("ok",false));
+        ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",path.string()}}).value("ok",false));EXPECT_EQ(w.Current().acResults.at("qe"),qe);
+        for(auto &point:w.Current().acResults["qe"]["points"]) {point.erase("internal_voltage_V");point.erase("terminal_voltage_V");}
+        ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",path.string()},{"include_results",true}}).value("ok",false));
+        ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",path.string()}}).value("ok",false));EXPECT_FALSE(w.Current().acResults.at("qe").at("points")[0].contains("internal_voltage_V"));
+        std::filesystem::remove(path);
+    }
 }
 
 TEST(ScapsLab,SlioProjectRoundtripMigrationRecoveryAndOptionalResults) {
@@ -581,7 +622,7 @@ TEST(ScapsLab,SlioProjectRoundtripMigrationRecoveryAndOptionalResults) {
     ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",file.string()},{"include_results",false}}).value("ok",false));
     EXPECT_FALSE(w.Current().result.empty());EXPECT_FALSE(std::filesystem::exists(recovery));
     ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_TRUE(w.Current().result.empty());EXPECT_EQ(w.Current().document,document);EXPECT_EQ(w.Current().actions,actions);
-    for(int version:{0,1}) {auto old=w.Workspace();old["schema_version"]=version;old.erase("ui");for(auto &d:old["devices"])d.erase("actions");std::string error;ASSERT_TRUE(TextFileIO::Save(Path{file},old.dump(),error));ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_EQ(w.project.schema_version,2);EXPECT_EQ(w.Current().document,document);}
+    for(int version:{0,1}) {auto old=w.Workspace();old["schema_version"]=version;old.erase("ui");for(auto &d:old["devices"])d.erase("actions");std::string error;ASSERT_TRUE(TextFileIO::Save(Path{file},old.dump(),error));ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_EQ(w.project.schema_version,3);EXPECT_EQ(w.Current().document,document);}
     ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",recovery.string()}}).value("ok",false));EXPECT_TRUE(std::filesystem::exists(recovery));
     ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",recovery.string()}}).value("ok",false));EXPECT_EQ(w.Current().document,document);std::filesystem::remove(recovery);
     auto old=document;old["schema_version"]=0;std::string error;ASSERT_TRUE(TextFileIO::Save(Path{file},old.dump(),error));ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_EQ(w.Current().document,document);
@@ -654,4 +695,57 @@ TEST(ScapsLab,SlioMeasures100000PointStorage) {
     EXPECT_EQ(UnpackResults(packed),rows);
     const Json sizes={{"point_count",100000},{"row_bytes",WorkspaceText(rows).size()},{"column_bytes",WorkspaceText(packed).size()},{"format","JSON with inline compact result columns"},{"scope","scalar terminal result; spatial profile arrays add their full serialized size"}};
     std::string error;ASSERT_TRUE(TextFileIO::Save(Path{Temp("slio-storage-size.json")},sizes.dump(2),error));std::cout<<sizes.dump()<<std::endl;
+}
+
+TEST(ScapsLab,ImmutableHistoryRetentionClearUndoAndPersistence) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};
+    auto ui=w.project.ui;ui["history_retention"]=20;
+    ASSERT_TRUE(Execute(w,{{"operation","project_edit"},{"ui",ui}}).value("ok",false));
+    const auto baseline=WorkspaceText(PackResults(w.Workspace())).size();
+    for(int i=0;i<20;++i) {
+        ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",300.+i}}}}).value("ok",false));
+        ASSERT_TRUE(Execute(w,{{"operation","run"}}).value("ok",false))<<w.response.dump();
+    }
+    ASSERT_EQ(w.Current().history.size(),20);
+    const auto first=w.Current().history.front();const auto id=first.at("run_id");
+    ASSERT_TRUE(Execute(w,{{"operation","history_update"},{"run_id",id},{"pinned",true},{"name","Reference"},{"visible",false},{"colour",{.1,.2,.3,1.}}}).value("ok",false));
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",330.}}}}).value("ok",false));
+    EXPECT_EQ(w.Current().status,"previous");EXPECT_EQ(w.Current().history.front().at("result"),first.at("result"));
+    ASSERT_FALSE(w.Current().history.back().at("diff").empty());
+    auto before=w.Workspace();auto damaged=before;damaged["devices"][0]["history"][0]["result"].erase("points");EXPECT_THROW(w.SetWorkspace(damaged),std::exception);EXPECT_EQ(w.Workspace(),before);
+    const auto file=Temp("slhist1-20.scapslab");
+    ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",file.string()}}).value("ok",false))<<w.response.dump();
+    std::cout<<"SLHIST1_SIZE baseline_bytes="<<baseline<<" twenty_runs_bytes="<<std::filesystem::file_size(file)<<" growth_bytes="<<std::filesystem::file_size(file)-baseline<<std::endl;
+    ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",Temp("slhist1-gallery.scapslab").string()}}).value("ok",false));
+    ASSERT_TRUE(Execute(w,{{"operation","history_clear"}}).value("ok",false));ASSERT_EQ(w.Current().history.size(),1);EXPECT_TRUE(w.Current().history[0].at("pinned"));
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).value("ok",false));EXPECT_EQ(w.Workspace(),before);
+    ASSERT_TRUE(Execute(w,{{"operation","redo"}}).value("ok",false));EXPECT_EQ(w.Current().history.size(),1);
+    ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false))<<w.response.dump();
+    EXPECT_EQ(w.Current().history.size(),20);EXPECT_EQ(w.Current().history[0].at("name"),"Reference");
+    const auto firstDevice=w.project.active_device;
+    ASSERT_TRUE(Execute(w,{{"operation","device_duplicate"}}).value("ok",false));
+    ASSERT_TRUE(Execute(w,{{"operation","band"},{"voltage_V",0.}}).value("ok",false));
+    ASSERT_TRUE(Execute(w,{{"operation","device_select"},{"device_id",firstDevice}}).value("ok",false));
+    const auto allBefore=w.Workspace();
+    ASSERT_TRUE(Execute(w,{{"operation","history_clear"},{"scope","all"},{"include_pinned",true}}).value("ok",false));for(const auto &device:w.project.devices)EXPECT_TRUE(device->history.empty());
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).value("ok",false));EXPECT_EQ(w.Workspace(),allBefore);EXPECT_EQ(w.Current().history.size(),20);
+    auto old=w.Workspace();old["schema_version"]=2;for(auto &d:old["devices"]){d.erase("history");d.erase("selected_run");}w.SetWorkspace(old);EXPECT_TRUE(w.Current().history.empty());
+    std::filesystem::remove(file);
+}
+TEST(ScapsLab,QuickSweepUsesBatchAndHistoryValidation) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    auto uiState=w.project.ui;uiState["plots"]["C-V"]={0.,1.,1e-12,1e-9,1e-13,1e-10};
+    ASSERT_TRUE(Execute(w,{{"operation","project_edit"},{"ui",uiState}}).value("ok",false));EXPECT_EQ(w.project.ui,uiState);
+    auto noRetention=uiState;noRetention["history_retention"]=0;EXPECT_FALSE(Execute(w,{{"operation","project_edit"},{"ui",noRetention}}).value("ok",true));EXPECT_EQ(w.project.ui,uiState);
+    auto invalidUi=uiState;invalidUi["plots"]["C-V"][5]=0.;EXPECT_FALSE(Execute(w,{{"operation","project_edit"},{"ui",invalidUi}}).value("ok",true));EXPECT_EQ(w.project.ui,uiState);
+    Json request={{"operation","quick_sweep"},{"parameter_id","temperature_K"},{"delta_native_units",10.},{"points",3},{"spacing","linear"},{"voltages_V",{0.,.05,.1}}};
+    const auto plan=QuickSweep(w.Current().document,request);EXPECT_EQ(plan.at("axes")[0].at("start"),290.);
+    ASSERT_TRUE(Execute(w,request).value("ok",false))<<w.response.dump();ASSERT_EQ(w.Current().history.size(),3);
+    EXPECT_EQ(w.Current().history.front().at("group_id"),w.Current().history.back().at("group_id"));
+    EXPECT_NE(w.Current().history.front().at("model_hash"),w.Current().history.back().at("model_hash"));
+    EXPECT_EQ(w.Current().history[1].at("model_hash"),DocumentHash(w.Current().document));
+    ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",Temp("slhist1-sweep.scapslab").string()}}).value("ok",false));
+    const auto before=w.Workspace();request["spacing"]="log";request["delta_native_units"]=400.;EXPECT_FALSE(Execute(w,request).value("ok",true));EXPECT_EQ(w.Workspace(),before);
+    const auto id=w.Current().history.front().at("run_id");EXPECT_FALSE(Execute(w,{{"operation","history_update"},{"run_id",id},{"colour",{2.,0.,0.,1.}}}).value("ok",true));EXPECT_EQ(w.Workspace(),before);
+    auto ui=w.project.ui;ui["history_retention"]=1;ASSERT_TRUE(Execute(w,{{"operation","project_edit"},{"ui",ui}}).value("ok",false));EXPECT_EQ(w.Current().history.size(),1);
 }

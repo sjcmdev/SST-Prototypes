@@ -1,0 +1,99 @@
+#include "Core/dspch.hpp"
+#include "TutorialOverlay.hpp"
+#include "Core/Presentation/Panels/HostedWindows.hpp"
+
+namespace SST {
+void TutorialOverlay::Window(const std::string &id) {
+    const auto pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+    const ImVec2 end(pos.x + size.x, pos.y + size.y);
+    targets[id] = {pos, end, pos, end, ImGui::GetFrameCount()};
+}
+void TutorialOverlay::Item(const std::string &window, const std::string &id) {
+    if (ImGui::IsItemVisible()) {
+        const auto min = ImGui::GetItemRectMin(), max = ImGui::GetItemRectMax(), pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+        targets[window + "/" + id] = {min, max, ImVec2(pos.x, min.y), ImVec2(pos.x + size.x, max.y), ImGui::GetFrameCount()};
+    }
+}
+bool TutorialOverlay::Draw(const Tutorial &tutorial, HostedWindows *windows) {
+    highlighted = false;
+    const auto *step = tutorial.Step();
+    if (!step) { placedStep.clear(); return false; }
+    const auto &target = step->at("target");
+    auto key = target.at("window").get<std::string>();
+    if (target.contains("item")) key += "/" + target.at("item").get<std::string>();
+    const auto found = targets.find(key);
+    const auto *vp = ImGui::GetMainViewport();
+    const auto &style = ImGui::GetStyle();
+    const float gap = style.ItemSpacing.y + 6;
+    const ImVec2 lo(vp->WorkPos.x + gap, vp->WorkPos.y + gap), hi(vp->WorkPos.x + vp->WorkSize.x - gap, vp->WorkPos.y + vp->WorkSize.y - gap);
+    highlighted = found != targets.end() && found->second.frame == ImGui::GetFrameCount();
+    float width = std::min(24 * ImGui::GetFontSize(), std::max(1.f, hi.x - lo.x));
+    if (highlighted) {
+        const auto &rect = found->second;
+        const float sideRoom = std::max(hi.x - rect.rowMax.x - gap, rect.rowMin.x - gap - lo.x);
+        if (sideRoom >= 14 * ImGui::GetFontSize()) width = std::min(width, sideRoom);
+    }
+    const float height = ImGui::CalcTextSize(step->at("instruction").get_ref<const std::string &>().c_str(), nullptr, false, width - 2 * style.WindowPadding.x).y
+        + 4 * ImGui::GetFrameHeightWithSpacing() + 2 * style.WindowPadding.y;
+    ImVec2 position(std::max(lo.x, hi.x - width), lo.y);
+    if (highlighted) {
+        const auto &rect = found->second;
+        const float x = std::clamp(rect.min.x, lo.x, std::max(lo.x, hi.x - width));
+        const float y = std::clamp(rect.min.y, lo.y, std::max(lo.y, hi.y - height));
+        if (rect.rowMax.x + gap + width <= hi.x) position = ImVec2(rect.rowMax.x + gap, y);
+        else if (rect.rowMin.x - gap - width >= lo.x) position = ImVec2(rect.rowMin.x - gap - width, y);
+        else if (rect.rowMax.y + gap + height <= hi.y) position = ImVec2(x, rect.rowMax.y + gap);
+        else position = ImVec2(x, std::max(lo.y, rect.rowMin.y - gap - height));
+    }
+    const auto report = tutorial.Report();
+    const auto stepKey = report.at("tutorial_id").get<std::string>() + "/" + step->at("id").get<std::string>();
+    if (placedStep != stepKey || reposition) {
+        ImGui::SetNextWindowPos(position);
+        ImGui::SetNextWindowSize(ImVec2(width, height));
+    }
+    reposition = false;
+    if (highlighted) placedStep = stepKey;
+    ImGui::SetNextWindowSizeConstraints(ImVec2(width, std::min(height, std::max(1.f, hi.y-lo.y))), ImVec2(std::max(width, hi.x-lo.x), std::max(1.f, hi.y-lo.y)));
+    bool stop = false;
+    const auto content = [&] {
+        ImGui::Text("%s | %zu / %zu", report.at("mode").get<std::string>().c_str(), report.at("step_index").get<std::size_t>() + 1, report.at("step_count").get<std::size_t>());
+        ImGui::TextWrapped("%s", step->at("instruction").get<std::string>().c_str());
+        if (!highlighted) ImGui::TextWrapped("Open %s to see the highlighted control.", target.at("window").get<std::string>().c_str());
+        stop = ImGui::Button("Stop tutorial");
+        if (highlighted) {
+            const auto &rect = found->second;
+            const ImVec2 min(rect.min.x - 3, rect.min.y - 3), max(rect.max.x + 3, rect.max.y + 3);
+            const auto pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+            reposition = !ImGui::IsWindowDocked() &&
+                ((pos.x < rect.rowMax.x && pos.x+size.x > rect.rowMin.x && pos.y < rect.rowMax.y && pos.y+size.y > rect.rowMin.y)
+                 || pos.x < lo.x || pos.y < lo.y || pos.x+size.x > hi.x || pos.y+size.y > hi.y);
+            auto *draw = ImGui::GetForegroundDrawList();
+            const auto colour = ImGui::GetColorU32(ImGuiCol_NavHighlight);
+            draw->AddRect(min, max, colour, style.FrameRounding, 0, 2);
+            const ImVec2 centre((min.x + max.x) / 2, (min.y + max.y) / 2);
+            ImVec2 start(std::clamp(centre.x, pos.x, pos.x + size.x), std::clamp(centre.y, pos.y, pos.y + size.y));
+            const float dx = start.x - centre.x, dy = start.y - centre.y;
+            const float scale = std::max(std::abs(dx) / ((max.x-min.x)/2), std::abs(dy) / ((max.y-min.y)/2));
+            if (scale > 1) {
+                ImVec2 end(centre.x + dx/scale, centre.y + dy/scale);
+                // A side coach points along the row's top edge, clear of neighbouring button labels.
+                const float corner = std::min(style.FrameRounding, (max.y-min.y)/2);
+                if (target.contains("item") && pos.x >= rect.rowMax.x) {start=pos;end=ImVec2(max.x,min.y+corner);}
+                else if (target.contains("item") && pos.x+size.x <= rect.rowMin.x) {start=ImVec2(pos.x+size.x,pos.y);end=ImVec2(min.x,min.y+corner);}
+                const float ax=start.x-end.x, ay=start.y-end.y, length=std::max(1.f,std::sqrt(ax*ax+ay*ay));
+                const ImVec2 along(ax/length*10, ay/length*10), side(-ay/length*4, ax/length*4);
+                draw->AddLine(start, end, colour, 2);
+                draw->AddTriangleFilled(end, ImVec2(end.x+along.x+side.x, end.y+along.y+side.y), ImVec2(end.x+along.x-side.x, end.y+along.y-side.y), colour);
+            }
+        }
+    };
+    const auto flags = ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar;
+    bool open = true;
+    if (windows) windows->Render("Tutorial coach###sst-tutorial", open, flags, content, true);
+    else {
+        coach.SetVisible(true);
+        coach.Render(content, flags);
+    }
+    return stop || !open;
+}
+}

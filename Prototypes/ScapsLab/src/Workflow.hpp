@@ -5,6 +5,8 @@
 #include "Core/JobSystem/JobContext.hpp"
 #include <nlohmann/json.hpp>
 #include "Core/Undo/UndoStack.hpp"
+#include "Core/Presentation/Tutorial.hpp"
+#include "Core/Presentation/TutorialOverlay.hpp"
 #include <chrono>
 #include <deque>
 #include <set>
@@ -24,7 +26,13 @@ void ChangeSheetDistribution(Json &defect,const std::string &shape,const std::st
 Json BatchDefaults();
 Json RecorderDefaults();
 Json BatchParameters(const Json &document);
+std::string ParameterLabel(const std::string &path,const std::string &unit,const Json &value,const Json &before=nullptr);
+std::string RunLabel(const Json &run);
 Json BatchPreview(const Json &document,const Json &spec);
+Json QuickSweep(const Json &document,const Json &request);
+void TrimHistory(Json &history,int retention);
+void StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group="");
+void CompactHistory(Json &workspace);
 class Operation final : public IJob {
 public:
     Json document, request, output, acResults, workspace, batchResult;
@@ -42,6 +50,8 @@ struct DeviceState {
     Json actions=Json::object();
     Json batchResult=Json::object(), batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
     int selectedMember=0;
+    Json history=Json::array();
+    std::string selectedRun;
     UndoStack undo;
     bool dirty = false, metadataDirty = false, needsBand = false, needsRecalculate = false;
     double biasVoltage_V = 0;
@@ -49,7 +59,7 @@ struct DeviceState {
     std::chrono::steady_clock::time_point changedAt;
 };
 struct Project {
-    int schema_version = 2;
+    int schema_version = 3;
     std::string name = "Untitled project", active_device;
     std::vector<Ref<DeviceState>> devices;
     std::set<std::string> compare_set;
@@ -89,13 +99,25 @@ public:
     Json batchResponse;
     std::size_t batchTotal = 0, batchCompleted = 0;
     Json recent = Json::array();
+    Tutorial tutorial;
+    TutorialOverlay tutorialOverlay;
+    Json tutorialProgress = Json::object();
+    std::string tutorialProgressPath;
+    bool tutorialAuto = false, tutorialBand = false;
+    Tutorial::Predicates TutorialPredicates();
+    void TutorialRequest(const Json &request);
+    void UpdateTutorial();
     std::string openRequest, fileAction;
     std::string recoveryPath;
     std::chrono::steady_clock::time_point autosavedAt=std::chrono::steady_clock::now();
     void Changed();
     Json Dispatch(const Json &request);
     void OnUpdate(float) override;
+    void UpdateOperation();
     bool Busy() const { return active != 0 || !edits.empty() || !runQueue.empty(); }
 };
 void RegisterPython();
+Json TutorialDefinition(const std::string &id);
+Json TutorialCatalog();
+Json VerifyTutorial(const std::string &id);
 }

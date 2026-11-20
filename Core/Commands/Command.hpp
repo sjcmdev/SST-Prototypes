@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -43,6 +44,10 @@ namespace SST
 		std::string description;
 		std::vector<CapabilityID> requiredCapabilities;
 		CommandFlags flags = CommandFlags::None;
+		std::string menuPath;
+		std::string shortcut;
+		std::function<bool()> enabled;
+		std::function<bool()> checked;
 	};
 
 	class ICommand;

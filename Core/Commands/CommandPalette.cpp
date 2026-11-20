@@ -56,6 +56,7 @@ namespace SST
 			item.category = meta.category;
 			item.description = meta.description;
 			item.enabled = m_CommandRegistry.CanExecute(meta.id).HasValue();
+			item.shortcut = meta.shortcut;
 			if (auto shortcut = findShortcut(meta.id))
 				item.shortcut = *shortcut;
 			items.push_back(std::move(item));

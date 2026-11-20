@@ -37,8 +37,9 @@ namespace SST
         auto workspace = m_Workspace.lock();
         if (m_Capabilities.auxiliary && ImGui::GetCurrentContext())
         {
-            ImGui::ClearWindowSettings(ImGuiName().c_str());
-            ImGui::ClearWindowSettings(GetTitle().c_str());
+            // Forget persisted entries without resetting a live window's position or dock node.
+            for (const auto &name : {ImGuiName(), GetTitle()})
+                if (auto *settings = ImGui::FindWindowSettingsByID(ImHashStr(name.c_str()))) settings->WantDelete = true;
         }
         if (!IsVisible() || m_State.mode == WindowMode::Minimized) { OnContentSkipped(); return; }
         auto *viewport = ImGui::GetMainViewport();

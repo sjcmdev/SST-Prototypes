@@ -13,7 +13,7 @@ project "Tracy"
 
     includedirs { "public" }
 
-    defines { "TRACY_ENABLE", "TRACY_NO_SYSTEM_TRACING" }
+    defines { "TRACY_ENABLE", "TRACY_NO_SYSTEM_TRACING", "TRACY_ONLY_LOCALHOST" }
 
     filter "system:linux"
         pic "On"

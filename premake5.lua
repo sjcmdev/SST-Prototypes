@@ -1,4 +1,4 @@
-﻿local function readActivePrototypeName()
+local function readActivePrototypeName()
     local file = io.open(".sst-prototype", "r")
     if file == nil then
         return "Core"
@@ -229,6 +229,10 @@ project "Core"
         "Core/Platform/NativeFileDialog.cpp",
         "Core/Platform/ProcessRunner.hpp",
         "Core/Platform/ProcessRunner.cpp",
+        "Core/Presentation/Tutorial*.hpp",
+        "Core/Presentation/Tutorial*.cpp",
+        "Core/Presentation/CommandMenu.hpp",
+        "Core/Presentation/CommandMenu.cpp",
         "Core/Presentation/EditorUiState.hpp",
         "Core/Presentation/EditorLayer.hpp",
         "Core/Presentation/EditorLayer.cpp",
@@ -312,7 +316,8 @@ project "Core"
         systemversion "latest"
         defines {
             "DS_PLATFORM_WINDOWS",
-            "TRACY_ENABLE"
+            "TRACY_ENABLE",
+            "TRACY_ONLY_LOCALHOST" -- loopback only: no Windows Firewall prompt per new exe path
         }
         links { "opengl32", "dwmapi", "gdi32", "user32", "shell32", "Tracy" }
 

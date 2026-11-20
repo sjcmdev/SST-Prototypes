@@ -7,6 +7,10 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 #include <fstream>
+#include "UiScreenshotContext.hpp"
+#include <imgui.h>
+#include <array>
+#include <algorithm>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
 #define STBI_ONLY_PNG
@@ -14,6 +18,42 @@
 
 namespace SST
 {
+    TEST(ApplicationScreenshot, ScreenshotStyleAndFontsEqualApplicationInitialization)
+    {
+        Threading::SetMainThread(); ASSERT_TRUE(glfwInit());
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        auto *window = glfwCreateWindow(400, 300, "Style parity", nullptr, nullptr);
+        ASSERT_NE(window, nullptr); glfwMakeContextCurrent(window); ASSERT_NE(gladLoadGL(glfwGetProcAddress), 0);
+        ImGuiLayerRuntime runtime{.nativeWindow=window};
+        runtime.appearance.accentColor = {.2f, .7f, .4f, 1.f}; runtime.ui.fontScale = 1.25f;
+        std::array<ImVec4, ImGuiCol_COUNT> colours;
+        float fontSize;
+        std::string font;
+        {
+            ImGuiLayer app(runtime); app.OnAttach();
+            auto state = CreateRef<EditorUiState>(); state->appearance = runtime.appearance;
+            app.BindUiState(state);
+            std::copy_n(ImGui::GetStyle().Colors, colours.size(), colours.begin());
+            fontSize = ImGui::GetIO().FontDefault->LegacySize;
+            font = ImGui::GetIO().FontDefault->GetDebugName();
+            app.OnDetach();
+        }
+        {
+            Testing::UiScreenshotContext screenshot(runtime);
+            for (int i=0; i<ImGuiCol_COUNT; ++i) {
+                const auto &actual=ImGui::GetStyle().Colors[i], &expected=colours[i];
+                EXPECT_FLOAT_EQ(actual.x, expected.x); EXPECT_FLOAT_EQ(actual.y, expected.y);
+                EXPECT_FLOAT_EQ(actual.z, expected.z); EXPECT_FLOAT_EQ(actual.w, expected.w);
+            }
+            EXPECT_FLOAT_EQ(ImGui::GetIO().FontDefault->LegacySize, fontSize);
+            EXPECT_EQ(ImGui::GetIO().FontDefault->GetDebugName(), font);
+            EXPECT_FLOAT_EQ(ImGui::GetIO().FontGlobalScale, runtime.ui.fontScale);
+            EXPECT_GE(ImGui::GetStyle().FrameBorderSize, 1.f);
+            EXPECT_GT(ImGui::GetStyle().Colors[ImGuiCol_FrameBg].x - ImGui::GetStyle().Colors[ImGuiCol_WindowBg].x, .03f);
+            EXPECT_TRUE(ImGui::GetIO().FontDefault->IsGlyphInFont(0x2192));
+        }
+        glfwDestroyWindow(window); glfwTerminate();
+    }
     static ApplicationSpecification Parse(std::vector<std::string> arguments)
     {
         std::vector<char *> argv;

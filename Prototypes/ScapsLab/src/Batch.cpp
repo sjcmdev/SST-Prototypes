@@ -1,4 +1,4 @@
-﻿#include "Workflow.hpp"
+#include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include <scaps_core/batch.hpp>
 #include <scaps_core/api.hpp>
@@ -7,13 +7,15 @@
 #include <cmath>
 #include <functional>
 #include <sstream>
+#include <iomanip>
 namespace SST::ScapsLab {
 Json BatchDefaults() {return {{"mode","nested"},{"axes",Json::array({{{"parameter_id","temperature_K"},{"start",270.},{"stop",330.},{"count",3},{"spacing","linear"}}})},{"include_curves",true}};}
 Json RecorderDefaults() {return Json::array({{{"id","J_at_0V"},{"quantity","J"},{"voltage_V",0.}}});}
 namespace {
-std::string Unit(const std::string &key) {
-    if(key.ends_with("Nt_m2"))return "m^-2";
-    for(const auto &[suffix,unit]:std::vector<std::pair<std::string,std::string>>{{"_m3_s","m^-3/s"},{"_cm6_s","cm^6/s"},{"_cm3_s","cm^3/s"},{"_W_m2","W/m^2"},{"_m1","m^-1"},{"_nm","nm"},{"_m2_V_s","m^2/V/s"},{"_ohm_m2","Ohm m^2"},{"_m2_eV","m^-2/eV"},{"_m_s","m/s"},{"_m3","m^-3"},{"_m2","m^2"},{"_eV","eV"},{"_Hz","Hz"},{"_K","K"},{"_V","V"},{"_m","m"}}) if(key.ends_with(suffix)) return unit;
+std::string Unit(const std::string &key,std::string *name=nullptr) {
+    if(name)*name=key;
+    if(key.ends_with("Nt_m2")){if(name)name->erase(key.size()-3);return "m^-2";}
+    for(const auto &[suffix,unit]:std::vector<std::pair<std::string,std::string>>{{"_m3_s","m^-3/s"},{"_cm6_s","cm^6/s"},{"_cm3_s","cm^3/s"},{"_W_m2","W/m^2"},{"_m1","m^-1"},{"_nm","nm"},{"_m2_V_s","m^2/V/s"},{"_ohm_m2","Ohm m^2"},{"_m2_eV","m^-2/eV"},{"_m_s","m/s"},{"_m3","m^-3"},{"_m2","m^2"},{"_eV","eV"},{"_Hz","Hz"},{"_K","K"},{"_V","V"},{"_m","m"}}) if(key.ends_with(suffix)) {if(name)name->erase(key.size()-suffix.size());return unit;}
     return "1";
 }
 Json SelectedTable(const Json &table,const Json &request) {
@@ -35,6 +37,15 @@ void Workbook(const Json &table,const std::string &path) {
     for(const auto &c:table.at("columns")) {const std::string id=c.at("id");std::vector<double> values;std::vector<std::string> statuses;for(const auto &r:table.at("rows")) {const auto &v=r.at("values").at(id);values.push_back(v.is_number()?v.get<double>():NAN);statuses.push_back(r.at("statuses").at(id));}column(id,c.at("unit"),values,pl::Role::Y);column(id+" status","",statuses);}
     auto change=project.change("ScapsLab recorder workbook",std::move(objects));change.apply(project);Save(path,project.toJson());
 }
+}
+std::string ParameterLabel(const std::string &path,const std::string &unit,const Json &value,const Json &before) {
+    auto name=path;
+    if(unit!="1") (void)Unit(path,&name);
+    if(name=="temperature") name="T";
+    std::ostringstream text;text.imbue(std::locale::classic());text<<std::setprecision(6)<<name<<' ';
+    if(before.is_number()) text<<before.get<double>()<<" \u2192 ";
+    text<<value.get<double>();if(unit!="1")text<<' '<<unit;
+    return text.str();
 }
 Json BatchParameters(const Json &document) {
     Json result=Json::array();
@@ -80,6 +91,17 @@ Json BatchPreview(const Json &document,const Json &input) {
     spec["voltages_V"]=volts;spec["frequencies_Hz"]=frequencies;
     return {{"spec",spec},{"combinations",combinations},{"member_count",combinations.size()},{"bias_count",volts.size()},{"frequency_count",frequencies.size()},{"sample_count",combinations.size()*volts.size()*(1+frequencies.size())},{"voltages_V",volts},{"frequencies_Hz",frequencies},{"time_estimate_s",nullptr},{"time_estimate_status","unavailable before first run"}};
 }
+Json QuickSweep(const Json &document,const Json &request) {
+    const auto parameters=BatchParameters(document);
+    auto parameter=std::find_if(parameters.begin(),parameters.end(),[&](const Json &p){return p.at("id")==request.at("parameter_id");});
+    if(parameter==parameters.end())throw std::invalid_argument("Unknown parameter_id");
+    const double centre=parameter->at("value"),delta=request.at("delta_native_units");
+    if(!std::isfinite(delta) || delta<=0)throw std::invalid_argument("delta must be positive, in the parameter's native unit");
+    auto spec=BatchDefaults();spec["axes"]=Json::array({{{"parameter_id",request.at("parameter_id")},{"start",centre-delta},{"stop",centre+delta},{"count",request.value("points",5)},{"spacing",request.value("spacing",std::string("linear"))}}});
+    if(request.contains("voltages_V"))spec["voltages_V"]=request.at("voltages_V");
+    if(request.contains("frequencies_Hz"))spec["frequencies_Hz"]=request.at("frequencies_Hz");
+    return BatchPreview(document,spec).at("spec");
+}
 bool BatchOperation(Operation &o,JobContext &ctx) {
     const auto op=o.request.at("operation").get<std::string>();
     if(op=="batch_select") {const int i=o.request.at("index");if(i<0 || o.batchResult.empty() || i>=int(o.batchResult.at("rows").size()))throw std::invalid_argument("Unknown member index");}
@@ -97,9 +119,9 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
         auto spec=o.batchSpec;spec["columns"]=o.recorderColumns;
         try {o.output=BatchPreview(o.document,spec);}catch(const std::invalid_argument &e) {o.output={{"configuration_error",e.what()}};}
     }
-    else if(op=="preview_batch" || op=="run_batch" || op=="retry_batch") {
+    else if(op=="quick_sweep" || op=="preview_batch" || op=="run_batch" || op=="retry_batch") {
         if(op=="retry_batch" && o.batchResult.empty())throw std::invalid_argument("No batch to retry");
-        auto spec=op=="retry_batch"?o.batchResult.at("spec"):o.request.value("spec",o.batchSpec);
+        auto spec=op=="quick_sweep"?QuickSweep(o.document,o.request):op=="retry_batch"?o.batchResult.at("spec"):o.request.value("spec",o.batchSpec);
         spec["columns"]=op=="retry_batch"?o.batchResult.at("columns"):o.request.value("columns",o.recorderColumns);
         const auto plan=BatchPreview(o.document,spec);spec=plan.at("spec");
         if(op=="preview_batch") {o.output=plan;return true;}

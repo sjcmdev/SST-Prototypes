@@ -129,6 +129,7 @@ namespace SST
 			style.ScrollbarRounding = appearance.scrollbarRounding;
 			style.TabRounding = appearance.tabRounding;
 			style.WindowBorderSize = 1.0f;
+            style.FrameBorderSize = 1.0f;
             style.ChildBorderSize = 1.0f;
             style.DockingSeparatorSize = 3.0f;
             style.GrabMinSize = std::max(14.0f, style.GrabMinSize);
@@ -166,7 +167,7 @@ namespace SST
 			colors[ImGuiCol_PopupBg] = surface;
 			colors[ImGuiCol_Border] = withAlpha(mix(border, white, .18f), 1.f);
 			colors[ImGuiCol_BorderShadow] = withAlpha(black, 0.0f);
-			colors[ImGuiCol_FrameBg] = surface;
+			colors[ImGuiCol_FrameBg] = raised;
 			colors[ImGuiCol_FrameBgHovered] = neutralHover;
 			colors[ImGuiCol_FrameBgActive] = neutralActive;
 			colors[ImGuiCol_TitleBg] = mix(surface, white, .08f);
@@ -670,7 +671,8 @@ namespace SST
 		else
 		{
 			DS_LOG_INFO("Loading UI font: {} [{}]", fontOption.label, fontOption.path);
-			font = io.Fonts->AddFontFromFileTTF(fontOption.path.c_str(), ImGuiLayerDetail::FontPixelSize);
+            static constexpr ImWchar textRanges[] = {0x20, 0xFF, 0x2192, 0x2192, 0};
+			font = io.Fonts->AddFontFromFileTTF(fontOption.path.c_str(), ImGuiLayerDetail::FontPixelSize, nullptr, textRanges);
 			loadedRequestedFont = font != nullptr;
 		}
 

@@ -73,6 +73,7 @@ namespace SST
 		[[nodiscard]] WeakRef<const IPanel> FindPanel(PanelId panelId) const;
 		void RenderCorePanelMenuItems();
 		void RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer);
+		void UseStandardMenu(std::string appMenu) { m_StandardAppMenu = std::move(appMenu); }
 		void RegisterSettingsTab(SettingsTabExtension extension);
 		[[nodiscard]] Ref<WindowWorkspace> GetWindows() const { return m_Windows; }
 		WindowId RegisterWindow(Ref<EditorWindow> window, WindowId savedId = 0)
@@ -108,6 +109,7 @@ namespace SST
 		PanelRegistry m_Panels;
 		Ref<WindowWorkspace> m_Windows;
 		std::vector<MenuRendererEntry> m_MenuRenderers;
+		std::string m_StandardAppMenu;
 		std::vector<SettingsTabExtension> m_SettingsTabs;
 		Ref<EditorUiState> m_UiState;
 		Ref<ApplicationConfig> m_CurrentConfig;

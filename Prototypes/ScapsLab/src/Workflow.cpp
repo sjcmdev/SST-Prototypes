@@ -79,10 +79,12 @@ public:
 class Command final : public ICommand {
     Workflow &w;
 public:
-    explicit Command(Workflow &w):w(w) {}
+    Json defaultRequest;
+    explicit Command(Workflow &w,Json request=Json::object()):w(w),defaultRequest(std::move(request)) {}
     std::string Description() const override {return "ScapsLab operation";}
     Result<void> Execute(CommandContext &c) override {
         const auto *r=c.TryGet<Json>("request");
+        if (!r && !defaultRequest.empty()) r=&defaultRequest;
         if (!r) return StructuredError{ErrorCategory::Validation,Severity::Error,"Missing request","Missing JSON request","Supply a request","ScapsLab","invalid_request"};
         if (r->at("operation")=="cancel") {
             w.runQueue.clear();
@@ -90,6 +92,7 @@ public:
             return {};
         }
         const std::string op=r->at("operation");
+        if(op.starts_with("tutorial_")) {w.TutorialRequest(*r);return {};}
         if(op=="device_select") {
             if(w.active) {const std::string pending=w.pending->request.at("operation");if(pending!="run" && pending!="band" && pending!="cv" && pending!="cf") throw std::invalid_argument("Wait for the project operation before selecting a device");}
             const auto id=r->at("device_id").get<std::string>(); (void)w.Device(id);
@@ -125,7 +128,7 @@ public:
             auto &stack=w.preferProjectUndo?w.projectUndo:w.Current().undo;
             const auto result=op=="undo"?stack.Undo():stack.Redo();
             if(!result) return result;
-            w.status=w.active?"Applying history":"No history available";
+            w.status=w.active?"Applying history":"History restored";
             w.RefreshDirty();w.response=w.Snapshot();return {};
         }
         if(op=="run") {w.Current().needsRecalculate=false;w.Current().needsBand=false;}
@@ -392,6 +395,8 @@ Json GenerationRecombination(const Json &document,const scaps_core::DeviceProjec
             {"layer_sum_relative_error",std::abs(sum-channel.integrated_current_A_m2)/std::max(1e-30,std::abs(channel.integrated_current_A_m2))}});
     }
     out["generation_current_A_m2"]=generated;out["recombination_current_A_m2"]=recombined;out["net_generation_current_A_m2"]=generated-recombined;
+    out["contact_recombination"]=Json::array();
+    for(const auto &c:state.contact_recombination) out["contact_recombination"].push_back({{"id",c.id},{"electron_current_A_m2",c.electron_current_A_m2},{"hole_current_A_m2",c.hole_current_A_m2}});
     out["sheet_layer_convention"]="interface assigned to left layer";
     return out;
 }
@@ -429,6 +434,9 @@ void Operation::Execute(JobContext &ctx) {
                 for(std::size_t i=0;i<c.at("x_m").size();++i) row(c.at("id"),c.at("engine_id"),c.at("mechanism"),"",c.at("x_m")[i],sheet?Json(nullptr):c.at("R_m3_s")[i],sheet?c.at("R_sheet_m2_s")[i]:Json(nullptr),nullptr,c);
                 for(const auto &l:c.at("by_layer")) row(c.at("id"),c.at("engine_id"),c.at("mechanism"),l.at("layer_id"),nullptr,nullptr,nullptr,l.at("current_A_m2"),c);
             }
+            for(const auto &c:gr.value("contact_recombination",Json::array())) for(const auto *carrier:{"electron","hole"})
+                row("contact:"+c.at("id").get<std::string>()+":"+carrier,"","contact","",nullptr,nullptr,nullptr,c.at(std::string(carrier)+"_current_A_m2"),point);
+            for(const auto *key:{"shunt_current_A_m2","series_current_A_m2","predicted_terminal_current_A_m2"}) if(gr.contains(key)) row(key,"","terminal_budget","",nullptr,nullptr,nullptr,gr.at(key),point);
             text=csv.str();
         } else throw std::invalid_argument("format must be csv or json");
         SaveText(Path{request.at("path").get<std::string>()}.Native(),text);
@@ -438,6 +446,10 @@ void Operation::Execute(JobContext &ctx) {
         save_device_project_yaml(imported,temporary.path);document=ReadProject(temporary.path.string());
         output={{"warnings",imported.scaps_native.warnings}};
     } else if(op=="export_def") {export_def(Model(document),request.at("path").get<std::string>());output={{"warnings",Model(document).scaps_native.warnings}};}
+    else if(op=="project_new") {
+        Workflow fresh(CreateRef<JobSystem>(nullptr,1));fresh.Current().document=ReadProject(SCAPSLAB_PROJECT);
+        fresh.Current().name=fresh.Current().document.at("case_id");workspace=fresh.Workspace();
+    }
     else if(op=="project_load" || op=="load") {
         const auto file=request.at("path").get<std::string>();
         std::string source,error;if(!TextFileIO::Load(Path{file},source,error)) throw std::runtime_error(error);
@@ -446,10 +458,46 @@ void Operation::Execute(JobContext &ctx) {
         else { Workflow loaded(CreateRef<JobSystem>(nullptr,1));loaded.Current().document=ReadProject(file);loaded.Current().name=loaded.Current().document.value("case_id",std::string("Device"));workspace=loaded.Workspace();workspace["name"]=std::filesystem::path(file).stem().string(); }
         Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
     }
+    else if(op.starts_with("history_")) {
+        const auto scope=request.value("scope",std::string("device"));
+        if(scope!="device" && scope!="all") throw std::invalid_argument("scope must be device or all");
+        const auto id=request.value("device_id",workspace.at("active_device").get<std::string>());
+        bool found=false;
+        for(auto &device:workspace["devices"]) {
+            if(scope=="device" && device.at("id")!=id) continue;found=true;
+            auto &history=device["history"];
+            if(op=="history_clear") {
+                const bool pinned=request.value("include_pinned",false);
+                history.erase(std::remove_if(history.begin(),history.end(),[&](const Json &r){return pinned || !r.at("pinned").get<bool>();}),history.end());
+                device["selected_run"]=history.empty()?"":history.back().at("run_id").get<std::string>();
+                auto kept=[&](const Json &result,const std::string &kind) {
+                    return !result.empty() && std::any_of(history.begin(),history.end(),[&](const Json &run){return run.at("kind")==kind && run.at("provenance")==result.at("provenance");});
+                };
+                if(!kept(device.at("result"),"iv"))device["result"]=Json::object();
+                if(!kept(device.at("band_result"),"band"))device["band_result"]=Json::object();
+                auto &ac=device["ac_results"];for(auto it=ac.begin();it!=ac.end();) {if(!kept(it.value(),it.key()))it=ac.erase(it);else ++it;}
+                device["batch_result"]=Json::object();
+                device["status"]=history.empty()?"no results":"previous";
+            } else if(op=="history_update" || op=="history_select") {
+                auto run=std::find_if(history.begin(),history.end(),[&](const Json &r){return r.at("run_id")==request.at("run_id");});
+                if(run==history.end()) throw std::invalid_argument("Unknown run_id");
+                if(op=="history_select")device["selected_run"]=request.at("run_id");
+                else {
+                    for(const auto *key:{"pinned","name","visible","colour"}) if(request.contains(key)) (*run)[key]=request.at(key);
+                    if(run->at("pinned")==true && run->at("name")=="")(*run)["name"]=run->at("label");
+                }
+                TrimHistory(history,workspace.at("ui").value("history_retention",5));
+                if(std::none_of(history.begin(),history.end(),[&](const Json &r){return r.at("run_id")==device.value("selected_run",std::string{});}))device["selected_run"]="";
+            } else if(op!="history_list") throw std::invalid_argument("Unknown history operation");
+        }
+        if(!found) throw std::invalid_argument("Unknown device_id");
+        Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
+    }
     else if(op=="project_save" || (op=="save" && std::filesystem::path(request.at("path").get<std::string>()).extension()==".scapslab")) {
         Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
         if(!request.value("include_results",true)) for(auto &d:workspace["devices"]) for(const auto *key:{"result","band_result","ac_results","batch_result"}) d[key]=Json::object();
-        if(!request.value("include_results",true)) for(auto &d:workspace["devices"]) d["status"]="no results";
+        if(!request.value("include_results",true)) for(auto &d:workspace["devices"]) {d["status"]="no results";d["history"]=Json::array();d["selected_run"]="";}
+        CompactHistory(workspace);
         const auto text=WorkspaceText(PackResults(workspace));
         ctx.ThrowIfCancellationRequested();SaveText(Path{request.at("path").get<std::string>()}.Native(),text);
         output={{"path",std::filesystem::absolute(request.at("path").get<std::string>()).string()},{"size_bytes",text.size()},{"save_status","saved"}};
@@ -464,6 +512,7 @@ void Operation::Execute(JobContext &ctx) {
             else { const auto doc=request.contains("path")?ReadProject(request.at("path").get<std::string>()):request.contains("document")?SelfContained(request.at("document")):ReadProject(SCAPSLAB_PROJECT);
                 d={{"document",doc},{"name",doc.value("case_id",std::string("Device"))},{"description",request.value("description",std::string{})}}; }
             static std::atomic_uint64_t sequence{0};
+            d["history"]=Json::array();d["selected_run"]="";
             d["id"]="device-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"-"+std::to_string(sequence++);
             d["name"]=request.value("name",d.at("name").get<std::string>()+(op=="device_duplicate"?" copy":""));
             static const double colours[][4]={{.25,.65,.95,1},{.95,.55,.25,1},{.4,.8,.45,1},{.8,.45,.85,1},{.9,.8,.3,1}};
@@ -591,7 +640,7 @@ void Operation::Execute(JobContext &ctx) {
             ctx.ThrowIfCancellationRequested();ctx.SetStage("QE wavelength "+std::to_string(i+1)+" / "+std::to_string(count));
             const double wavelength=first+(last-first)*i/(count-1);
             const auto q=solve_qe(dark,mesh,{wavelength},mode,probe,0.,p.temperature_K,p.solver,pc).front();
-            output["points"].push_back({{"point_id","qe-"+std::to_string(i)},{"voltage_V",0.},{"temperature_K",p.temperature_K},{"wavelength_nm",q.wavelength_nm},{"EQE",std::isfinite(q.EQE)?Json(q.EQE):Json(nullptr)},
+            output["points"].push_back({{"point_id","qe-"+std::to_string(i)},{"voltage_V",0.},{"terminal_voltage_V",0.},{"internal_voltage_V",std::isfinite(q.internal_voltage_V)?Json(-q.internal_voltage_V):Json(nullptr)},{"temperature_K",p.temperature_K},{"wavelength_nm",q.wavelength_nm},{"EQE",std::isfinite(q.EQE)?Json(q.EQE):Json(nullptr)},
                 {"incident_photon_flux_m2_s",q.incident_photon_flux_m2_s},{"probe_power_W_m2",q.probe_power_W_m2},{"status",to_string(q.status)}});
             response.emplace_back(wavelength,q.EQE);ctx.SetProgress(float(i+1),float(count));
         }
@@ -638,7 +687,15 @@ void Operation::Execute(JobContext &ctx) {
             const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
             const double terminalJ=pt.status!=SolverStatus::Converged ? NAN : external ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
             const double net=gr.at("net_generation_current_A_m2");
-            const double budgetError=std::abs(net+terminalJ)/std::max({1e-30,std::abs(net),std::abs(terminalJ)});
+            // Native J = G-R - right electron removal - left hole removal + shunt.
+            double contactLoss=0;for(const auto &c:s.contact_recombination) contactLoss+=c.id=="right"?c.electron_current_A_m2:c.hole_current_A_m2;
+            const double predicted=net-contactLoss+pt.J_shunt_Am2;
+            const double budgetError=std::abs(predicted-terminalJ)/std::max({1e-30,std::abs(net),std::abs(contactLoss),std::abs(pt.J_shunt_Am2),std::abs(terminalJ)});
+            gr["contact_loss_current_A_m2"]=contactLoss;
+            gr["shunt_current_A_m2"]=pt.J_shunt_Am2;
+            gr["series_current_A_m2"]=pt.series_current_density_A_m2();
+            gr["predicted_terminal_current_A_m2"]=predicted;
+            gr["terminal_budget_identity"]="J = G - R - right.electron - left.hole + J_shunt (native current sign)";
             gr["terminal_budget_relative_error"]=std::isfinite(budgetError)?Json(budgetError):Json(nullptr);
             gr["terminal_budget_valid"]=std::isfinite(budgetError) && budgetError<=1e-6;
             output["points"].push_back({{"generation_recombination",gr},{"defect_previews",curves},{"bias_id","bias-"+std::to_string(i)},{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(terminalJ)?Json(terminalJ):Json(nullptr)},
@@ -701,6 +758,16 @@ void Operation::Execute(JobContext &ctx) {
     if(op!="save" && op!="project_save" && !op.starts_with("export_")) ctx.ThrowIfCancellationRequested();
 }
 namespace {
+class WorkspaceRecord final : public ICommand {
+    Workflow &w;Json before,after;
+    Result<void> Apply(const Json &value) {w.SetWorkspace(value);w.projectDirty=true;w.RefreshDirty();return {};}
+public:
+    WorkspaceRecord(Workflow &w,Json before,Json after):w(w),before(std::move(before)),after(std::move(after)) {}
+    std::string Description() const override {return "Change ScapsLab history";}
+    bool IsUndoable() const noexcept override {return true;}
+    Result<void> Execute(CommandContext &) override {return Apply(after);}
+    Result<void> Undo(CommandContext &) override {return Apply(before);}
+};
 class ProjectRecord final : public ICommand {
     Workflow &w;Project before,after;
     Result<void> Apply(const Project &p) {w.project=p;w.projectDirty=true;w.RefreshDirty();return {};}
@@ -714,19 +781,23 @@ public:
 }
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()) {
     auto initial=CreateRef<DeviceState>();initial->id="device-1";initial->name="Device";project.devices.push_back(initial);project.active_device=initial->id;project.compare_set.insert(initial->id);
-    for(const auto *op:{"load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
-        "project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def"}) {
+    for(const auto *op:{"tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
+        "history_list","history_update","history_select","history_clear","quick_sweep","project_new","project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def"}) {
         const auto registered=commands->Register({CommandID{std::string("scapslab.")+op},std::string("ScapsLab ")+op,"ScapsLab","",{},CommandFlags::AsyncCapable},
-            [this](CommandContext &){return CreateUnique<Command>(*this);});
+            [this,op](CommandContext &){
+                const std::string operation=op;
+                const bool menuDefault=operation=="device_add" || operation=="run" || operation=="run_batch" || operation=="cancel" || operation=="undo" || operation=="redo" || operation=="tutorial_stop";
+                return CreateUnique<Command>(*this,menuDefault?Json{{"operation",operation}}:Json::object());
+            });
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
     }
 }
-Workflow::~Workflow() { runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
+Workflow::~Workflow() { tutorial.Stop();runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
 void Workflow::StartOperation(const Json &r,const std::string &id) {
     auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);pending->acResults=d.acResults;pending->batchResult=d.batchResult;pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
     const std::string op=r.at("operation");
     if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?d.bandResult:d.result;}
-    if(op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load" || op=="export_results" || op=="action_settings") pending->workspace=Workspace();
+    if(op.starts_with("history_") || op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load" || op=="export_results" || op=="action_settings") pending->workspace=Workspace();
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status="running";
     if(op=="run") {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
     active=jobs->Submit(pending);status="Running: "+d.name;response=Json();
@@ -739,10 +810,14 @@ Json Workflow::Dispatch(const Json &r) {
     } catch(const std::exception &e) {return Failure("invalid_request",e.what());}
 }
 void Workflow::Changed() {
-    auto &d=Current();d.needsRecalculate=true;d.needsBand=true;d.bandResult=Json::object();d.changedAt=std::chrono::steady_clock::now();
-    d.result=Json::object();d.acResults=Json::object();d.batchResult=Json::object();d.status="no results";
+    auto &d=Current();d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();
+    d.status=d.history.empty()?"no results":"previous";
 }
 void Workflow::OnUpdate(float) {
+    UpdateOperation();
+    UpdateTutorial();
+}
+void Workflow::UpdateOperation() {
     if(!Busy() && dirty && !recoveryPath.empty() && std::chrono::steady_clock::now()-autosavedAt>=std::chrono::seconds(30)) {
         autosavedAt=std::chrono::steady_clock::now();(void)Dispatch({{"operation","project_save"},{"path",recoveryPath},{"autosave",true}});
     }
@@ -762,12 +837,28 @@ void Workflow::OnUpdate(float) {
     const auto snapshot=jobs->GetJob(active);if(!snapshot || snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running) return;
     const auto op=pending->request.at("operation").get<std::string>();
     auto &d=Device(pendingDevice);
+            if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {
+                const auto group="batch-"+std::to_string(pending->output.at("provenance").at("time_unix_ms").get<std::int64_t>());
+                for(const auto &row:pending->output.at("rows")) {
+                    if(op=="retry_batch" && row.at("id")!=pending->request.at("member_id"))continue;
+                    auto model=pending->document;
+                    for(const auto &parameter:BatchParameters(model)) if(row.at("parameters").contains(parameter.at("path").get<std::string>()) && row.at("parameters").at(parameter.at("path").get<std::string>())!=parameter.at("value")) model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=row.at("parameters").at(parameter.at("path").get<std::string>());
+                    auto result=pending->output;result["rows"]=Json::array({row});result["project_snapshot"]=model;result["provenance"]["device_hash"]=DocumentHash(model);
+                    result["elapsed_s"]=row.at("elapsed_s");
+                    StoreRun(d.history,"batch",result,model,pending->request,project.ui.value("history_retention",5),group);
+                    if(!d.history.empty()) {const double t=pending->output.at("rows").size()<2?0.:double(&row-&pending->output.at("rows")[0])/double(pending->output.at("rows").size()-1);d.history.back()["colour"]=Json::array({.15+.7*t,.4+.3*std::sin(3.14159*t),.9-.7*t,1.});}
+                }
+                d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
+            }
     if(snapshot->status==JobStatus::Completed) {
-        if(op=="project_load" || op=="load") {
+        if(op=="project_new" || op=="project_load" || op=="load") {
             SetWorkspace(pending->workspace);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
-            path=pending->request.at("path");
-            if(std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
-            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();device->needsBand=false;device->needsRecalculate=false;device->selectedLayer=0;device->selectedInterface=-1;device->selectedBias=0;device->biasVoltage_V=0;}
+            path=op=="project_new"?std::string{}:pending->request.at("path").get<std::string>();
+            if(op!="project_new" && std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
+            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();device->needsBand=false;device->needsRecalculate=false;}
+        } else if(op.starts_with("history_")) {
+            const auto before=Workspace();SetWorkspace(pending->workspace);
+            if(op!="history_list") {projectDirty=true;(void)projectUndo.PushExecuted(CreateUnique<WorkspaceRecord>(*this,before,Workspace()));preferProjectUndo=true;}
         } else if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {
             const auto before=project;SetWorkspace(pending->workspace);
             if(op!="device_list") projectDirty=true;
@@ -784,14 +875,19 @@ void Workflow::OnUpdate(float) {
             d.document=pending->document;
             if(op=="batch_select") d.selectedMember=pending->request.at("index");
             if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
-            if(op=="run_batch" || op=="retry_batch" || op=="record_batch") {d.batchResult=pending->output;projectDirty=true;}
+            if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {d.batchResult=pending->output;projectDirty=true;}
             if(op=="run") {d.result=pending->output;d.bandResult=Json::object();}
             if(op=="band") d.bandResult=pending->output;
             if(op=="cv" || op=="cf" || op=="qe") d.acResults[op]=pending->output;
             if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=pending->output.value("valid",false)?"solved":"failed";projectDirty=true;}
+            const int retention=project.ui.value("history_retention",5);
+            if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
+                StoreRun(d.history,op=="run"?"iv":op,pending->output,d.document,pending->request,retention);
+                d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
+            }
             if(op=="edit" || op=="layer" || op=="import_def") {
                 if(op=="import_def") {d.selectedLayer=0;d.selectedInterface=-1;}
-                d.batchResult=Json::object();d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.result=Json::object();d.bandResult=Json::object();d.acResults=Json::object();d.status="no results";d.dirty=!d.undo.IsClean();
+                d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";d.dirty=!d.undo.IsClean();
             }
             if(op=="save" && project.devices.size()==1) {d.dirty=false;d.metadataDirty=false;d.undo.MarkClean();}
         }
@@ -804,7 +900,7 @@ void Workflow::OnUpdate(float) {
         if(op=="project_save" && !pending->request.value("autosave",false) && !recoveryPath.empty()) {std::error_code ec;if(!std::filesystem::equivalent(path,recoveryPath,ec))std::filesystem::remove(recoveryPath,ec);}
         if(!pending->output.empty()) response["operation_result"]=pending->output;
     } else {
-        if((op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {d.batchResult=pending->output;projectDirty=true;}
+        if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {d.batchResult=pending->output;projectDirty=true;}
         if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status=snapshot->status==JobStatus::Cancelled?(d.result.empty()?"no results":"solved"):"failed";
         status=snapshot->errorMessage;response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);
     }

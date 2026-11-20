@@ -132,7 +132,7 @@ for actual, expected in zip(python_batch['batch_result']['rows'], ui_batch['rows
     for key in ('id', 'parameters', 'status', 'error_type', 'project_hash', 'curves', 'values', 'statuses'):
         assert actual.get(key) == expected.get(key), key
 assert len(python_batch['batch_result']['rows']) == 3
-assert batch_session.record_batch([dict(id='Voc', quantity='Voc')])['batch_result']['rows'][0]['statuses']['Voc'] == 'pending st6'
+assert batch_session.record_batch([dict(id='Voc', quantity='Voc')])['batch_result']['rows'][0]['statuses']['Voc'] == 'not_illuminated'
 with tempfile.TemporaryDirectory(prefix='scapslab-batch-') as folder:
     path = Path(folder) / 'recorder.csv'
     assert batch_session.export_batch(path)['ok']
@@ -150,12 +150,27 @@ assert light['ok'], light
 assert light['result']['points'] == ui_light['result']['points']
 assert light['result']['photovoltaic'] == ui_light['result']['photovoltaic']
 assert light['result']['optics'] == ui_light['result']['optics']
+for p in light['result']['points']:
+    if p['valid'] and abs(p['J_A_m2']) > 1e-8:
+        gr = p['generation_recombination']
+        assert len(gr['contact_recombination']) == 2
+        assert gr['terminal_budget_valid'], gr
+        assert gr['terminal_budget_relative_error'] <= 1e-6
 for mode in ('constant_flux', 'constant_power'):
     qe = light_session.execute(dict(operation='qe', start_nm=590., stop_nm=610., points=3,
                                     probe_mode=mode, probe_photon_flux_m2_s=1e16, probe_power_W_m2=1e-3))
     assert qe['ok'], qe
     assert qe['ac_results']['qe']['probe_mode'] == mode
-    assert all(p['EQE'] is not None for p in qe['ac_results']['qe']['points'])
+    assert all(p['EQE'] is not None and p['internal_voltage_V'] is not None and p['terminal_voltage_V'] == 0. for p in qe['ac_results']['qe']['points'])
+    with tempfile.TemporaryDirectory(prefix='scapslab-qe-') as folder:
+        path = Path(folder) / 'qe.csv'
+        runs = light_session.result_runs()['runs']
+        selected = [r['run_id'] for r in runs if r['kind'] == 'qe'][-1:]
+        assert light_session.export_results(path, run_ids=selected)['ok']
+        with path.open(newline='', encoding='utf-8') as stream:
+            rows = list(csv.DictReader(stream))
+        assert [float(r['internal_voltage_V']) for r in rows] == [p['internal_voltage_V'] for p in qe['ac_results']['qe']['points']]
+
 print('Light I-V GUI/Python: bitwise points, PV and optics; both QE probe modes PASS', flush=True)
 
 am15 = light_session.execute(dict(operation='edit', patch={'illumination': {'scapslab_spectrum': 'AM1.5G'}}))
@@ -251,3 +266,30 @@ with tempfile.TemporaryDirectory(prefix='scapslab-io-') as output:
             assert [json.loads(r['point_json']) for r in batch_rows] == batch_run['batch_result']['rows']
             assert all(json.loads(r['batch_spec_json']) == batch_run['batch_result']['spec'] for r in batch_rows)
     print('slio selected/all: mixed I-V + batch/Recorder one-sheet CSV/JSON and retained batch plots PASS', flush=True)
+
+    history = io_session.history_list()
+    assert history['ok'], history
+    runs = history['project']['devices'][0]['history']
+    assert runs and all('model_hash' in run and 'diff' in run for run in runs)
+    run_id = runs[0]['run_id']
+    assert io_session.history_update(run_id, pinned=True, name='Python reference')['ok']
+    assert io_session.history_clear()['ok']
+    remaining = io_session.history_list()['project']['devices'][0]['history']
+    assert len(remaining) == 1 and remaining[0]['pinned']
+    assert io_session.history_list()['result']['points'] == before['result']['points']
+    assert io_session.execute(dict(operation='undo'))['ok']
+    assert io_session.quick_sweep('temperature_K', 5., points=2, voltages_V=[0.])['ok']
+    assert io_session.history_clear(scope='all', include_pinned=True)['ok']
+    assert not io_session.history_list()['project']['devices'][0]['history']
+    print('slhist1 Python history, Keep/Pin, clear/Undo and batch sweep PASS', flush=True)
+
+    tutorial_session = scapslab.Session()
+    assert len(tutorial_session.tutorials()['tutorials']) == 3
+    assert not tutorial_session.tutorial_start('../unknown')['ok']
+    assert tutorial_session.tutorial_start('first-device')['tutorial']['status'] == 'running'
+    assert tutorial_session.tutorial_state()['tutorial']['mode'] == 'learn'
+    assert tutorial_session.tutorial_stop()['tutorial']['status'] == 'stopped'
+    report = tutorial_session.tutorial_start('first-device', mode='verify')
+    assert report['ok'], report
+    assert all(step['status'] == 'PASS' for step in report['tutorial']['steps'])
+    print('sltut1 embedded Python tutorial catalog, learn/stop and verify PASS', flush=True)

@@ -8,6 +8,7 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <cstdlib>
+#include <iostream>
 #include <thread>
 namespace {std::string startupFile;}
 namespace SST {
@@ -46,7 +47,9 @@ public:
 };
 class ScapsCloseGuard final : public Layer {
     Application &app;ScapsLab::Workflow &w;
-    bool requested=false,saving=false,closing=false;
+    bool requested=false,saving=false,closing=false,creating=false;
+    std::vector<Ref<ScapsLab::Panel>> panels;
+    ScapsLab::Json appliedPanels;
     std::string opening;
     Path recentPath;
     ScapsLab::Json savedRecent;
@@ -66,11 +69,12 @@ class ScapsCloseGuard final : public Layer {
     void Proceed() {
         if(!w.recoveryPath.empty() && opening!=w.recoveryPath) {std::error_code ec;if(w.path.empty() || !std::filesystem::equivalent(w.path,w.recoveryPath,ec))std::filesystem::remove(w.recoveryPath,ec);}
         if(closing) {w.dirty=false;app.Shutdown();}
+        else if(creating) {(void)w.Dispatch({{"operation","project_new"}});creating=false;}
         else if(!opening.empty()) {(void)w.Dispatch({{"operation","project_load"},{"path",opening}});opening.clear();}
     }
 public:
-    ScapsCloseGuard(Application &app,ScapsLab::Workflow &w):Layer("ScapsLab file actions"),app(app),w(w) {
-        app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Busy())return true;closing=true;requested=true;return false;});
+    ScapsCloseGuard(Application &app,ScapsLab::Workflow &w,std::vector<Ref<ScapsLab::Panel>> panels):Layer("ScapsLab file actions"),app(app),w(w),panels(std::move(panels)) {
+        app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Busy())return true;creating=false;closing=true;requested=true;return false;});
         if(const auto config=app.GetConfigManager().lock()) recentPath=config->GetConfigDirectory()/Path{"scapslab-recent.json"};
         std::string text,error;if(TextFileIO::Load(recentPath,text,error)) {try {const auto items=ScapsLab::Json::parse(text);if(items.is_array() && items.size()<=10 && std::all_of(items.begin(),items.end(),[](const auto &p){return p.is_string();})) w.recent=items;}catch(...) {}}
         savedRecent=w.recent;
@@ -78,19 +82,26 @@ public:
     }
     void OnImGuiRender() override {
         w.interacting=ImGui::IsAnyItemActive();
+        const auto savedPanels=w.project.ui.value("panels",ScapsLab::Json::object());
+        if(savedPanels!=appliedPanels) for(auto &panel:panels) if(savedPanels.contains(panel->GetTitle()))panel->SetVisible(savedPanels.at(panel->GetTitle()).get<bool>());
+        appliedPanels=ScapsLab::Json::object();for(const auto &panel:panels)appliedPanels[panel->GetTitle()]=panel->GetState().visible;
+        w.project.ui["panels"]=appliedPanels;
         const auto layout=w.project.ui.value("imgui_ini",std::string{});
         if(!layout.empty() && layout!=appliedLayout && !w.Busy()) {ImGui::LoadIniSettingsFromMemory(layout.c_str(),layout.size());appliedLayout=layout;}
         if(auto *window=glfwGetCurrentContext()) glfwSetWindowTitle(window,(w.project.name+(w.dirty?" *":"")+" - ScapsLab").c_str());
         if(w.recent!=savedRecent) {std::string error;if(TextFileIO::Save(recentPath,w.recent.dump(2),error))savedRecent=w.recent;else w.status=error;}
         if(!ImGui::GetIO().WantTextInput) {
-            if(ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Z)) (void)w.Dispatch({{"operation","undo"}});
-            if(ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Y)) (void)w.Dispatch({{"operation","redo"}});
-            if(ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_S)) w.fileAction="save";
-            if(ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_O)) w.fileAction="open";
+            for(const auto &[chord,id]:{
+                std::pair{ImGuiMod_Ctrl | ImGuiKey_Z,"scapslab.undo"},std::pair{ImGuiMod_Ctrl | ImGuiKey_Y,"scapslab.redo"},
+                std::pair{ImGuiMod_Ctrl | ImGuiKey_N,"scapslab.file.new"},std::pair{ImGuiMod_Ctrl | ImGuiKey_S,"scapslab.file.save"},
+                std::pair{ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S,"scapslab.file.save_as"},std::pair{ImGuiMod_Ctrl | ImGuiKey_O,"scapslab.file.open"}})
+                if(ImGui::Shortcut(chord) && w.commands->CanExecute(CommandID{id}))(void)w.commands->Execute(CommandID{id});
         }
         if(!w.fileAction.empty() && !w.Busy()) {
             const auto action=std::exchange(w.fileAction,std::string{});
-            if(action=="export_results") exporting=true;
+            if(action=="new") {creating=true;closing=false;if(w.dirty)requested=true;else Proceed();}
+            else if(action=="exit") {if(!w.dirty)app.Shutdown();else {creating=false;closing=true;requested=true;}}
+            else if(action=="export_results") exporting=true;
             else if(action=="recover") w.openRequest=w.recoveryPath;
             else if(action=="save" || action=="save_as") (void)Save(action=="save_as");
             else if(action=="import_def" || action=="export_def") {try {const auto file=action=="import_def"?OpenFileDialog({"SCAPS definition","def"}):SaveFileDialog({"SCAPS definition","def"},"device.def");if(file)(void)w.Dispatch({{"operation",action},{"path",file->Utf8()}});}catch(const std::exception &e){w.status=e.what();}}
@@ -124,16 +135,16 @@ public:
                 ImGui::TextWrapped("%s",w.status.c_str());
             }ImGui::End();
         }
-        if(!w.openRequest.empty() && !w.Busy()) {opening=std::exchange(w.openRequest,std::string{});closing=false;if(w.dirty)requested=true;else Proceed();}
+        if(!w.openRequest.empty() && !w.Busy()) {opening=std::exchange(w.openRequest,std::string{});creating=false;closing=false;if(w.dirty)requested=true;else Proceed();}
         if(requested) {ImGui::OpenPopup("Unsaved ScapsLab project");requested=false;}
         if(ImGui::BeginPopupModal("Unsaved ScapsLab project",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
-            ImGui::TextUnformatted(closing?"Save changes before closing?":"Save changes before opening another project?");
+            ImGui::TextUnformatted(closing?"Save changes before closing?":creating?"Save changes before creating a new project?":"Save changes before opening another project?");
             ImGui::TextWrapped("%s",w.status.c_str());
             if(w.Busy()) ImGui::TextUnformatted("Wait for the active operation or cancel it in Devices / Run.");
             ImGui::BeginDisabled(w.Busy() || saving);
             if(ImGui::Button("Save and continue")) saving=Save();
             ImGui::SameLine();if(ImGui::Button("Discard")) {Proceed();ImGui::CloseCurrentPopup();}
-            ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Keep editing")) {saving=false;opening.clear();closing=false;ImGui::CloseCurrentPopup();}
+            ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Keep editing")) {saving=false;opening.clear();creating=false;closing=false;ImGui::CloseCurrentPopup();}
             if(saving && !w.Busy()) {saving=false;if(w.response.value("ok",false) && !w.dirty) {Proceed();ImGui::CloseCurrentPopup();}}
             ImGui::EndPopup();
         }
@@ -172,7 +183,7 @@ void SetupApplication(Application &app) {
         while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     if(gallery && std::atoi(gallery)==22 && startupFile.empty()) {
-        auto draft=w->Current().document;
+        auto draft=w->Current().document;draft["external"]["series_ohm_m2"]=1e-5;draft["external"]["shunt_ohm_m2"]=1.;
         for(int i=0;i<2;++i) {auto defect=NewDefect();defect["scapslab_id"]="gr-defect-"+std::to_string(i);defect["Nt_m3"]=1e17;draft["layers"][0]["defects"].push_back(defect);}
         for(auto &layer:draft["layers"]) layer["recombination"]={{"radiative_cm3_s",1e-14},{"auger_n_cm6_s",2.8e-31},{"auger_p_cm6_s",1e-31}};
         auto sheet=NewDefect(true);sheet["id"]="gr-interface";sheet["Nt_m2"]=1e10;draft["interface_defects"].push_back(sheet);
@@ -185,6 +196,8 @@ void SetupApplication(Application &app) {
         while(w->Busy()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     if(gallery && std::atoi(gallery)==19 && std::getenv("SCAPSLAB_OPTICAL_TAB") && std::string(std::getenv("SCAPSLAB_OPTICAL_TAB"))=="2") {
+        (void)w->Dispatch({{"operation","edit"},{"patch",{{"external",{{"series_ohm_m2",1e-5},{"shunt_ohm_m2",1.}}}}}});
+        while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         (void)w->Dispatch({{"operation","qe"},{"start_nm",300.},{"stop_nm",1500.},{"points",61}});
         while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
@@ -208,38 +221,14 @@ void SetupApplication(Application &app) {
         while(w->Busy()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     auto &editor=app.GetEditorLayer();
-    std::vector<std::filesystem::path> examples;if(std::filesystem::exists(ExamplesDirectory())) for(const auto &entry:std::filesystem::directory_iterator(ExamplesDirectory())) if(entry.path().extension()==".scapslab") examples.push_back(entry.path());std::sort(examples.begin(),examples.end());
-    const bool galleryMenu=std::getenv("SCAPSLAB_GALLERY_MENU")!=nullptr;
-    editor.RegisterMenuRenderer("scapslab.file",[w,examples,galleryMenu](EditorServices &) {
-        if(galleryMenu && ImGui::GetFrameCount()>5) ImGui::OpenPopup("File");
-        if(ImGui::BeginMenu("File")) {
-            ImGui::BeginDisabled(w->Busy());
-            if(ImGui::MenuItem("Open...","Ctrl+O")) w->fileAction="open";
-            if(ImGui::MenuItem("Save","Ctrl+S")) w->fileAction="save";
-            if(ImGui::MenuItem("Save As...")) w->fileAction="save_as";
-            ImGui::MenuItem("Include results in project",nullptr,&w->includeResults);
-            if(ImGui::MenuItem("Export results...")) w->fileAction="export_results";
-            if(ImGui::MenuItem("Recover autosave...",nullptr,false,!w->recoveryPath.empty() && std::filesystem::exists(w->recoveryPath))) w->fileAction="recover";
-            ImGui::Separator();
-            if(ImGui::MenuItem("Import SCAPS .def...")) w->fileAction="import_def";
-            if(ImGui::MenuItem("Export SCAPS .def...")) w->fileAction="export_def";
-            if(ImGui::BeginMenu("Recent files")) {for(const auto &path:w->recent) if(ImGui::MenuItem(path.get<std::string>().c_str())) w->openRequest=path;ImGui::EndMenu();}
-            
-            if(ImGui::BeginMenu("Examples")) {for(const auto &path:examples) if(ImGui::MenuItem(path.stem().string().c_str())) w->openRequest=path.string();ImGui::EndMenu();}
-            ImGui::EndDisabled();ImGui::EndMenu();
-        }
-    });
-    editor.RegisterMenuRenderer("scapslab.edit",[w](EditorServices &) {
-        if(ImGui::BeginMenu("Edit")) {ImGui::BeginDisabled(w->Busy());if(ImGui::MenuItem("Undo","Ctrl+Z"))(void)w->Dispatch({{"operation","undo"}});if(ImGui::MenuItem("Redo","Ctrl+Y"))(void)w->Dispatch({{"operation","redo"}});ImGui::EndDisabled();ImGui::EndMenu();}
-        if(ImGui::BeginMenu("Run")) {ImGui::BeginDisabled(w->Busy());if(ImGui::MenuItem("Calculate I-V"))(void)w->Dispatch({{"operation","run"}});if(ImGui::MenuItem("Run batch"))(void)w->Dispatch({{"operation","run_batch"}});ImGui::EndDisabled();ImGui::BeginDisabled(!w->active);if(ImGui::MenuItem("Stop"))(void)w->Dispatch({{"operation","cancel"}});ImGui::EndDisabled();ImGui::EndMenu();}
-    });
     std::vector<Ref<Panel>> panels;
     for(int v=0;v<23;++v) if(!single || std::atoi(gallery)==v) {
         auto panel=CreateRef<Panel>(w,v,single); panels.push_back(panel); const auto id=editor.RegisterWindow(panel);
         for(PanelId i=1;i<id;++i) if(auto existing=editor.FindPanel(i).lock();existing && existing->GetTitle()=="Logging Panel") existing->SetVisible(false);
     }
     if(!single) app.InsertLayerBefore(LayerId::ImGui,CreateUnique<DefaultLayout>(panels,gallery!=nullptr));
-    app.InsertLayerBefore(LayerId::ImGui,CreateUnique<ScapsCloseGuard>(app,*w));
+    app.InsertLayerBefore(LayerId::ImGui,CreateUnique<ScapsCloseGuard>(app,*w,panels));
+    InstallTutorialUi(app,*w,panels);
     app.InsertLayerBefore(LayerId::ImGui,std::move(state));
 }
 }
@@ -247,6 +236,18 @@ void SetupApplication(Application &app) {
 
 
 int main(int argc,char **argv) {
+    for(int i=1;i<argc;++i) if(std::string(argv[i])=="--tutorial-verify") {
+        try {
+            if(i+1>=argc || std::string(argv[i+1]).starts_with("--")) throw std::invalid_argument("--tutorial-verify requires a tutorial ID");
+            const std::string id=argv[i+1];
+            std::string reportPath="tutorial-report.json";
+            for(int j=1;j<argc;++j) if(std::string(argv[j])=="--tutorial-report") {if(j+1>=argc)throw std::invalid_argument("--tutorial-report requires a JSON path");reportPath=argv[j+1];}
+            const auto report=SST::ScapsLab::VerifyTutorial(id);
+            std::string error;
+            if(!SST::TextFileIO::Save(SST::Path{reportPath},report.dump(2),error)) throw std::runtime_error(error);
+            std::cout<<report.dump(2)<<std::endl;return report.value("ok",false)?0:1;
+        } catch(const std::exception &e) {std::cerr<<e.what()<<std::endl;return 2;}
+    }
     for(int i=1;i<argc;++i) {const std::filesystem::path p=argv[i];if(p.extension()==".scapslab" || p.extension()==".yaml" || p.extension()==".yml") {startupFile=std::filesystem::absolute(p).string();break;}}
     auto app=SST::Application::Create(argc,argv,SST::SetupApplication);return app.Run();
 }

@@ -1,0 +1,87 @@
+{
+  "schema_version": 1,
+  "id": "history-sweep",
+  "title": "History and Sweep",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: History and Sweep.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: History and Sweep"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: History and Sweep"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "run",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Click Calculate I-V to store a result in Run history.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "keep",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "keep"
+      },
+      "instruction": "Select the saved run in Devices > Run history and enable Keep / Pin. Pinned runs survive retention.",
+      "command": {
+        "operation": "history_update",
+        "run_id": "$selected_run",
+        "pinned": true,
+        "name": "Tutorial baseline"
+      },
+      "condition": {
+        "predicate": "history.pinned_count",
+        "op": "ge",
+        "value": 1
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "sweep",
+      "target": {
+        "window": "scapslab.Run"
+      },
+      "instruction": "Right-click Temperature [K], choose Sweep..., set delta 10 K with 3 points and run. Inspect the three converged rows in Batch.",
+      "command": {
+        "operation": "quick_sweep",
+        "parameter_id": "temperature_K",
+        "delta_native_units": 10.0,
+        "points": 3,
+        "spacing": "linear",
+        "voltages_V": [
+          0.0,
+          0.05,
+          0.1
+        ]
+      },
+      "condition": {
+        "predicate": "sweep.valid_count",
+        "op": "ge",
+        "value": 3
+      },
+      "timeout_s": 120
+    }
+  ]
+}

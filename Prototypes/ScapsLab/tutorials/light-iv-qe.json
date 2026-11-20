@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "id": "light-iv-qe",
+  "title": "Light I-V and QE",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Create a device named Tutorial: Light I-V and QE. Your other devices remain in the project.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Light I-V and QE"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Light I-V and QE"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "illumination",
+      "target": {
+        "window": "scapslab.Illumination"
+      },
+      "instruction": "Open the 08-pn-illumination example as a device (Import YAML), or configure a p-n device with 600 nm illumination at 100 W/m^2. Enable Light.",
+      "command": {
+        "operation": "edit",
+        "example": "08-pn-illumination.yaml"
+      },
+      "condition": {
+        "predicate": "device.light",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "light-iv",
+      "target": {
+        "window": "scapslab.Illumination",
+        "item": "light-iv"
+      },
+      "instruction": "On Light I-V, click Calculate light I-V. Read Voc [V], Jsc [A/m^2] and FF [fraction]. This solar device must have positive Voc, Jsc and FF.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.Voc_V",
+        "op": "gt",
+        "value": 0.0
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "jsc",
+      "target": {
+        "window": "scapslab.Illumination"
+      },
+      "instruction": "Read the positive short-circuit current density Jsc [A/m^2].",
+      "command": {
+        "operation": "inspect"
+      },
+      "condition": {
+        "predicate": "result.iv.Jsc_A_m2",
+        "op": "gt",
+        "value": 0.0
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "ff",
+      "target": {
+        "window": "scapslab.Illumination"
+      },
+      "instruction": "Read the fill factor FF [fraction]. It must be positive.",
+      "command": {
+        "operation": "inspect"
+      },
+      "condition": {
+        "predicate": "result.iv.FF_fraction",
+        "op": "gt",
+        "value": 0.0
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "qe",
+      "target": {
+        "window": "scapslab.Illumination",
+        "item": "qe"
+      },
+      "instruction": "On QE(lambda), set 590 to 610 nm with 3 samples and click Calculate QE. Inspect EQE and integrated Jsc.",
+      "command": {
+        "operation": "qe",
+        "start_nm": 590.0,
+        "stop_nm": 610.0,
+        "points": 3
+      },
+      "condition": {
+        "predicate": "result.qe.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

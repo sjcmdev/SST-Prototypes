@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "id": "first-device",
+  "title": "First device",
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "Click New (template) in Devices, then name the device Tutorial: First device.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: First device"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: First device"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "add-layer",
+      "target": {
+        "window": "scapslab.Layers",
+        "item": "add-layer"
+      },
+      "instruction": "Click Add in Layers. The device needs at least two layers.",
+      "command": {
+        "operation": "layer",
+        "action": "add"
+      },
+      "condition": {
+        "predicate": "device.layer_count",
+        "op": "ge",
+        "value": 2
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "dark",
+      "target": {
+        "window": "scapslab.Illumination"
+      },
+      "instruction": "Disable Light enabled. This calculation uses dark conditions.",
+      "command": {
+        "operation": "edit",
+        "patch": {
+          "illumination": {
+            "enabled": false
+          },
+          "voltage": {
+            "start_V": 0.0,
+            "stop_V": 0.1,
+            "step_V": 0.05
+          }
+        }
+      },
+      "condition": {
+        "predicate": "device.dark",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "dark-iv",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Click Calculate I-V. Wait for a valid dark I-V curve.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}
