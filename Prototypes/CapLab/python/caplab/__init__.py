@@ -48,11 +48,17 @@ def execute(project, request):
     analysis_ids with plot_index (default 0) select the same result plot across
     several analyses. graph_ids allow individual plot choices.
     Optional name; returns graph_id. Uses stored SI columns/results without a fit.
+    AS C(f,T) / AS G/omega(f,T) take a temperature series from one sample/bias,
+    view_kind=lines/surface/heatmap, grid_policy=measured (default) or explicit
+    interpolate_log_f with increasing frequency_Hz. Unequal measured grids use
+    per-temperature 3D lines; no automatic interpolation or extrapolation.
     Axes must describe the same quantities and scales. Missing/duplicate IDs,
     missing area for Mott-Schottky or incompatible axes return plot_failed.
     action=view with graph_id accepts the shared view JSON (ranges in the axis
     SI units, visibility keyed by stable plot ID strings, x_ticks/y_ticks) and/or
     x_scale/y_scale (linear/log10). View changes use the same job and Undo path.
+    Spatial views also retain camera; colormap and color_range_F (or null for
+    automatic limits) set the shared surface/heatmap colour scale.
     operation=select, selection={kind: graph, id: graph_id} selects a saved graph.
     Export accepts graphs=[{graph_id: ...}, ...] or graph_id for one figure;
     saved views supply ranges/visibility/ticks unless explicitly overridden.

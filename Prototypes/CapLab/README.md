@@ -107,6 +107,37 @@ VISUAL QA NOT RUN.
 
 ## M4 ? AS and Arrhenius
 
+AS temperature maps are available in **Compare stored data / AS maps** as
+`AS C(f,T)` and `AS G/omega(f,T)`. Select measurements from one sample/bias at
+distinct confirmed temperatures, then choose per-temperature 3D lines, surface
+or heatmap. Measured grids are the default. Unequal grids remain separate 3D
+lines with a diagnostic; only an explicit `interpolate_log_f` policy creates
+a common requested grid. Interpolation is linear in ln(f), never in T, never
+outside measured bounds and never across missing endpoints. Missing values
+remain holes; source columns and row IDs are unchanged.
+
+The existing nanobind `caplab.execute` command/job path accepts:
+
+```python
+result = execute(project, {
+    "operation": "plot", "plot_type": "AS C(f,T)",
+    "measurement_ids": measurement_ids, "view_kind": "surface",
+    "grid_policy": "interpolate_log_f", "frequency_Hz": [100, 1000, 10000],
+})
+```
+
+Omit `frequency_Hz` with `grid_policy="measured"`. The default `view_kind` is
+`lines`; other values are `surface` and `heatmap`. Failures return typed
+`plot_failed` errors and leave the project unchanged. Comparison records retain
+the source snapshots, policy, requested grid, actual view and diagnostics.
+The shared cl3d1 renderer supplies log-frequency axes, units, colour scale and
+camera interaction. Camera, zoom, visibility, colormap and colour limits persist
+per graph. Existing `plot`/`action="view"` accepts `colormap` (Viridis, Plasma,
+Greys) and `color_range_F` (two increasing limits, or null for automatic).
+Existing single/batch PNG/SVG/PDF export uses the saved/rendered view, including
+the camera, colour limits and missing cells; headless 3D export needs a resolved
+camera in `view`, as in `python/tests/test_as_map.py`.
+
 The AS section accepts both old M1 Cp/Rp sweeps and M2 FrequencySweep C/G or
 Cp/Rp data. Select the sample and measurement, then calculate AS in a Core
 job. The default is the unequal-grid `numpy.gradient(C, ln(f), edge_order=1)`;

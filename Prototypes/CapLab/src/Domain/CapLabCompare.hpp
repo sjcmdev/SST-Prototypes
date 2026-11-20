@@ -1,5 +1,6 @@
 #pragma once
 #include "Domain/CapLabAnalysis.hpp"
+#include "Domain/CapLabASMap.hpp"
 #include <complex>
 #include <numbers>
 #include <tuple>
@@ -68,12 +69,26 @@ inline void BuildCompareGraph(Project &p, const Json &request) {
             data.view={};
         };
         scale("x_scale",data.spec.x); scale("y_scale",data.spec.y);
+        if (request.contains("colormap")) {
+            const std::string name=request.at("colormap");
+            if (name!="Viridis" && name!="Plasma" && name!="Greys") throw std::runtime_error("Select Viridis, Plasma or Greys.");
+            data.spec.colormap=name;
+        }
+        if (request.contains("color_range_F")) {
+            if (request.at("color_range_F").is_null()) data.spec.colorRange.reset();
+            else {
+                auto range=request.at("color_range_F").get<std::array<double,2>>();
+                if (!std::isfinite(range[0]) || !std::isfinite(range[1]) || range[0]>=range[1]) throw std::runtime_error("Expected increasing finite color_range_F.");
+                data.spec.colorRange=range;
+            }
+        }
         if (request.value("refit",false)) data.view={};
         FormatCompareAxes(data.spec);
         p.engine->change("Graph view settings",{std::move(layer)}).apply(*p.engine);
         p.graph=graph; return;
     }
     const std::string type=request.value("plot_type",std::string("C-f"));
+    if (type=="AS C(f,T)" || type=="AS G/omega(f,T)") {BuildASMapGraph(p,request); return;}
     Json spec{{"name",request.value("name",request.value("measurement_ids",Json::array()).empty() ? std::string("Stored results comparison") : type+" comparison")},{"curves",Json::array()}};
     Json record{{"inputs",Json::array()},{"analysis_ids",Json::array()}};
     struct Curve {std::string sample; double temperature; pl::Id id; Json data; sst::ui::plot::Color color;};

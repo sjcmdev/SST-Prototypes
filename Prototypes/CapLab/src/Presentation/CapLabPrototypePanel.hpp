@@ -38,6 +38,8 @@ private:
     std::set<pl::Id> selectedExportGraphs;
     std::set<pl::Id> compareMeasurements, compareGraphs;
     int compareType=0;
+    int asMapView=0, asMapGrid=0, asMapPoints=101;
+    double asMapMinHz=100, asMapMaxHz=1e6;
     std::string compareFilter;
     void RenderISTabs(Project& project, const Json& analysis, sst::ui::plot::PlotViewState& viewState);
     std::uint64_t shownProject = 0;

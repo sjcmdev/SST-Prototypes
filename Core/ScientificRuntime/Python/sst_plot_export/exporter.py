@@ -73,11 +73,10 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         raise ValueError("Grid requires at least 2x2 row-major cells")
     rows = len(x)//cols
     xx, yy = x.reshape(rows, cols), y.reshape(rows, cols)
-    dx, dy = xx[0, 1]-xx[0, 0], yy[1, 0]-yy[0, 0]
-    if not (dx > 0 and dy > 0 and np.all(np.isfinite(x)) and np.all(np.isfinite(y)) and
-            np.allclose(xx, xx[0, 0]+np.arange(cols)*dx, rtol=1e-12, atol=dx*1e-8) and
-            np.allclose(yy, yy[0, 0]+np.arange(rows)[:, None]*dy, rtol=1e-12, atol=dy*1e-8)):
-        raise ValueError("Non-uniform grid: explicitly regrid the source before plotting")
+    if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y)) and
+            np.all(np.diff(xx[0]) > 0) and np.all(np.diff(yy[:, 0]) > 0) and
+            np.allclose(xx, xx[0], rtol=1e-12, atol=0) and np.allclose(yy, yy[:, :1], rtol=1e-12, atol=0)):
+        raise ValueError("Non-uniform rows or unordered coordinates: expected a rectilinear grid")
     zz = np.where(valid, z, np.nan).reshape(rows, cols)
     color_range = snapshot.get("color_range")
     if color_range is None:
@@ -110,8 +109,13 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         ax.add_collection3d(Poly3DCollection(quads, facecolors=colors, edgecolors="none", zsort="average"))
         artist = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     else:
-        xe = xx[0, 0]+(np.arange(cols+1)-.5)*dx
-        ye = yy[0, 0]+(np.arange(rows+1)-.5)*dy
+        def edges(centres, logarithmic):
+            v = np.log(centres) if logarithmic else centres
+            mid = v[:-1]+np.diff(v)*.5
+            out = np.r_[2*v[0]-mid[0], mid, 2*v[-1]-mid[-1]]
+            return np.exp(out) if logarithmic else out
+        xe = edges(xx[0], snapshot["x_axis"]["log"])
+        ye = edges(yy[:, 0], snapshot["y_axis"]["log"])
         artist = ax.pcolormesh(xe, ye, np.ma.masked_invalid(zz), cmap=cmap, norm=norm, shading="flat")
     if snapshot.get("color_scale", True):
         bar = fig.colorbar(artist, ax=ax, pad=.14 if three else .04, fraction=.05)

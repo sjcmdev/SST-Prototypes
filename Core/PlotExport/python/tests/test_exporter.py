@@ -200,6 +200,19 @@ def test_invalid_spatial_data_does_not_replace_destination(spatial, tmp_path, in
     assert target.read_bytes()==b"previous"
 
 
+def test_rectilinear_heatmap_uses_log_frequency_edges(spatial):
+    spatial["x_axis"]["log"] = True
+    spatial["ranges"] = [10, 1e5, 180, 350]
+    spatial["series"][0].update(x=[100,1000,10000]*3, y=[200]*3+[230]*3+[310]*3)
+    fig = build_figure(spatial)
+    mesh = fig.axes[0].collections[0]
+    coordinates = mesh.get_coordinates()
+    assert np.log10(coordinates[0, :, 0]).tolist() == pytest.approx([1.5,2.5,3.5,4.5])
+    assert coordinates[:, 0, 1].tolist() == pytest.approx([185,215,270,350])
+    assert np.ma.getmaskarray(mesh.get_array()).sum() == 2
+    fig.clear()
+
+
 def test_all_missing_grid_and_log_axes(spatial, tmp_path):
     spatial["series"][0]["z"]=[None]*9
     spatial["series"][0]["kind"]=4
