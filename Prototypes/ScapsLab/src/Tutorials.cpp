@@ -37,7 +37,7 @@ void PatchTutorialDocument(Json &document, const std::string &patch) {
 }
 }
 Json TutorialDefinition(const std::string &id) {
-    if (!std::set<std::string>{"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile", "filter-optical-files", "material-file", "table-undo-redo", "menus-tour"}.contains(id)) throw std::invalid_argument("Unknown tutorial_id: " + id);
+    if (!std::set<std::string>{"first-device", "heterojunction", "bulk-defect", "interface-defect", "contacts", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile", "filter-optical-files", "material-file", "table-undo-redo", "menus-tour"}.contains(id)) throw std::invalid_argument("Unknown tutorial_id: " + id);
     std::ifstream stream(Directory() / (id + ".json"));
     if (!stream) throw std::runtime_error("Cannot read tutorial: " + id);
     auto definition = Json::parse(stream);
@@ -69,7 +69,7 @@ Json TutorialDefinition(const std::string &id) {
 }
 Json TutorialCatalog() {
     Json catalog = Json::array();
-    for (const auto *id : {"first-device", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile", "filter-optical-files", "material-file", "table-undo-redo", "menus-tour"}) {
+    for (const auto *id : {"first-device", "heterojunction", "bulk-defect", "interface-defect", "contacts", "light-iv-qe", "history-sweep", "load-grading-profile", "nt-defect-profile", "generation-from-file", "spectrum-absorption-files", "compare-runs-sweep", "export-profile", "filter-optical-files", "material-file", "table-undo-redo", "menus-tour"}) {
         const auto definition = TutorialDefinition(id);
         catalog.push_back({{"tutorial_id", id}, {"title", definition.at("title")}, {"step_count", definition.at("steps").size()}, {"description", definition.value("description", std::string{})}, {"minutes", definition.value("minutes", 0)}});
     }
@@ -94,6 +94,15 @@ Tutorial::Predicates Workflow::TutorialPredicates() {
         {"menu.File", [this] {return Json(menuOpened.contains("File"));}},{"menu.Edit", [this] {return Json(menuOpened.contains("Edit"));}},
         {"menu.View", [this] {return Json(menuOpened.contains("View"));}},{"menu.Simulate", [this] {return Json(menuOpened.contains("Simulate"));}},
         {"menu.Tools", [this] {return Json(menuOpened.contains("Tools"));}},{"menu.Tutorials", [this] {return Json(menuOpened.contains("Tutorials"));}},
+        {"layer2.Eg_eV", [this] {const auto &l=Current().document.at("layers");return l.size()>1?l[1].at("material").at("Eg_eV"):Json(0);}},
+        {"layer1.Na_m3", [this] {return Current().document.at("layers")[0].at("doping").at("Na_m3");}},
+        {"defect.count", [this] {return Json(Current().document.at("layers")[0].value("defects",Json::array()).size());}},
+        {"defect.Nt_m3", [this] {const auto &d=Current().document.at("layers")[0].value("defects",Json::array());return d.empty()?Json(0):d[0].at("Nt_m3");}},
+        {"interface_defect.count", [this] {return Json(Current().document.value("interface_defects",Json::array()).size());}},
+        {"interface_defect.Nt_m2", [this] {const auto &d=Current().document.value("interface_defects",Json::array());return d.empty()?Json(0):d[0].at("Nt_m2");}},
+        {"contact.left_phi_eV", [this] {return Current().document.at("contacts").at("left").at("phi_m_eV");}},
+        {"contact.left_flat_band", [this] {return Json(Current().document.at("contacts").at("left").value("flat_band",false));}},
+        {"contact.right_Sn_m_s", [this] {return Current().document.at("contacts").at("right").at("Sn_m_s");}},
         {"device.name", [this] { return Json(Current().name); }},
         {"device.layer_count", [this] { return Json(Current().document.at("layers").size()); }},
         {"device.dark", [this] { return Json(!Current().document.value("illumination", Json::object()).value("enabled", false)); }},

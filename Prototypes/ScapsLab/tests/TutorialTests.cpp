@@ -81,7 +81,7 @@ TEST(TutorialEngine,MenuAndPaletteShareEnabledStateShortcutAndExecution) {
     EXPECT_FALSE(registry.Execute(CommandID{"test.action"}));EXPECT_EQ(count,0);
     enabled=true;EXPECT_TRUE(palette.Search("Action")[0].enabled);EXPECT_TRUE(palette.Execute(CommandID{"test.action"}));EXPECT_EQ(count,1);
 }
-const char *const kLessons[]={"first-device","light-iv-qe","history-sweep","load-grading-profile","nt-defect-profile","generation-from-file","spectrum-absorption-files","compare-runs-sweep","export-profile","filter-optical-files","material-file","table-undo-redo","menus-tour"};
+const char *const kLessons[]={"first-device","heterojunction","bulk-defect","interface-defect","contacts","light-iv-qe","history-sweep","load-grading-profile","nt-defect-profile","generation-from-file","spectrum-absorption-files","compare-runs-sweep","export-profile","filter-optical-files","material-file","table-undo-redo","menus-tour"};
 class ScapsLabTutorialVerify:public testing::TestWithParam<const char *> {};
 TEST_P(ScapsLabTutorialVerify,HeadlessCommandsAndRealSolverPassEveryStep) {
     const auto report=VerifyTutorial(GetParam());

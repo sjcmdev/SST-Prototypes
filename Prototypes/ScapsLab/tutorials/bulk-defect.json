@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "id": "bulk-defect",
+  "title": "Bulk defect",
+  "description": "Add a recombination defect to a layer and see its effect on the dark I-V.",
+  "minutes": 5,
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "In Devices click New (template) and name the device: Tutorial: Bulk defect.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Bulk defect"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Bulk defect"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "run-1",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Calculate I-V in Run. This is the reference curve without defects.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "add-defect",
+      "target": {
+        "window": "scapslab.Defects"
+      },
+      "instruction": "In Defects press Add defect for layer 1.",
+      "command": {
+        "operation": "edit",
+        "patch": {},
+        "pointer_set": [
+          {
+            "path": "/layers/0/defects",
+            "value": [
+              {
+                "scapslab_id": "defect-1-1",
+                "label": "Defect",
+                "energy_distribution": "single",
+                "energy_offset_eV": 0.0,
+                "charge_type": "neutral",
+                "characteristic_energy_eV": 0.05,
+                "gaussian_width": 6.0,
+                "energy_levels": 63,
+                "energy_quadrature": "gauss_legendre",
+                "energy_reference": "relative_to_Ei",
+                "Nt_m3": 1e+22,
+                "sigma_n_m2": 1e-19,
+                "sigma_p_m2": 1e-19,
+                "tail_width": 7.0,
+                "distribution_normalization": "scaps",
+                "amphoteric": false,
+                "correlated": true,
+                "second_energy_offset_eV": 0.1,
+                "second_sigma_n_m2": 1e-19,
+                "second_sigma_p_m2": 1e-19
+              }
+            ]
+          }
+        ]
+      },
+      "condition": {
+        "predicate": "defect.count",
+        "op": "ge",
+        "value": 1
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "set-nt",
+      "target": {
+        "window": "scapslab.Defects"
+      },
+      "instruction": "Set the defect density Nt to 1e22 m^-3 (Et = mid-gap, sigma_n = sigma_p = 1e-19 m^2).",
+      "command": {
+        "operation": "edit",
+        "patch": {},
+        "pointer_set": [
+          {
+            "path": "/layers/0/defects/0/Nt_m3",
+            "value": 1e+22
+          }
+        ]
+      },
+      "condition": {
+        "predicate": "defect.Nt_m3",
+        "op": "ge",
+        "value": 1e+22
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "run-2",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Calculate I-V again. Run history now holds both curves.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "compare",
+      "target": {
+        "window": "scapslab.I-V"
+      },
+      "instruction": "Compare the two curves in I-V: the defect adds recombination current. Press Next.",
+      "command": {
+        "operation": "inspect"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

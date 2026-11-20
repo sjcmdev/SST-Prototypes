@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "id": "heterojunction",
+  "title": "Heterojunction",
+  "description": "Build a two-layer p/n heterojunction with a different band gap in each layer and see the band offsets.",
+  "minutes": 5,
+  "steps": [
+    {
+      "id": "new-device",
+      "target": {
+        "window": "scapslab.Devices",
+        "item": "new"
+      },
+      "instruction": "In Devices click New (template) and name the device: Tutorial: Heterojunction.",
+      "command": {
+        "operation": "device_add",
+        "name": "Tutorial: Heterojunction"
+      },
+      "condition": {
+        "predicate": "device.name",
+        "op": "eq",
+        "value": "Tutorial: Heterojunction"
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "add-layer",
+      "target": {
+        "window": "scapslab.Layers",
+        "item": "add-layer"
+      },
+      "instruction": "In Layers click Add. The new layer starts as a copy of layer 1.",
+      "command": {
+        "operation": "layer",
+        "action": "add"
+      },
+      "condition": {
+        "predicate": "device.layer_count",
+        "op": "ge",
+        "value": 2
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "p-layer",
+      "target": {
+        "window": "scapslab.Layers"
+      },
+      "instruction": "Select layer 1 and make it p-type: Na = 1e22 m^-3, Nd = 0.",
+      "command": {
+        "operation": "edit",
+        "patch": {},
+        "pointer_set": [
+          {
+            "path": "/layers/0/doping",
+            "value": {
+              "Na_m3": 1e+22,
+              "Nd_m3": 0
+            }
+          }
+        ]
+      },
+      "condition": {
+        "predicate": "layer1.Na_m3",
+        "op": "ge",
+        "value": 1e+22
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "window",
+      "target": {
+        "window": "scapslab.Layers"
+      },
+      "instruction": "Select layer 2 (n-type) and set its band gap Eg to 1.6 eV. Chi and Eg set the band offsets.",
+      "command": {
+        "operation": "edit",
+        "patch": {},
+        "pointer_set": [
+          {
+            "path": "/layers/1/material/Eg_eV",
+            "value": 1.6
+          }
+        ]
+      },
+      "condition": {
+        "predicate": "layer2.Eg_eV",
+        "op": "ge",
+        "value": 1.5
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "run",
+      "target": {
+        "window": "scapslab.Run",
+        "item": "run"
+      },
+      "instruction": "Calculate I-V in Run. The dark I-V of the heterojunction appears in I-V.",
+      "command": {
+        "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "bands",
+      "target": {
+        "window": "scapslab.Results"
+      },
+      "instruction": "Open Results (Band diagram & profiles) and move the Bias point slider. Look at the Ec / Ev steps at the junction. Press Next.",
+      "command": {
+        "operation": "inspect"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    }
+  ]
+}

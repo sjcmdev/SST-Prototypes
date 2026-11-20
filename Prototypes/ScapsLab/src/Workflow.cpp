@@ -708,6 +708,7 @@ void Operation::Execute(JobContext &ctx) {
     else if (op=="edit") { auto candidate=document; const auto &patch=request.contains("document")?request.at("document"):request.at("patch");
         if (!patch.is_object()) throw std::invalid_argument("patch must be an object");
         if(request.contains("document")) candidate=patch; else candidate.update(patch,true);
+        if(request.contains("pointer_set")) for(const auto &s:request.at("pointer_set")) candidate[Json::json_pointer(s.at("path").get<std::string>())]=s.at("value"); // tutorials: "Show me" for array fields
         if(patch.contains("illumination") && patch.at("illumination").value("scapslab_spectrum",std::string{})=="AM1.5G") {
             auto &light=candidate["illumination"];light["mode"]="spectrum";light["spectrum_file"]="";light["spectrum_nm_W_m2"]=AM15Spectrum();
         }

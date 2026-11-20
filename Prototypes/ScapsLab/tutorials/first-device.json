@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "first-device",
   "title": "First device",
-  "description": "Create a device, add a second layer and calculate a dark I-V curve.",
-  "minutes": 3,
+  "description": "Create a device, add a second layer, calculate a dark I-V curve and read its band diagram.",
+  "minutes": 4,
   "steps": [
     {
       "id": "new-device",
@@ -76,6 +76,22 @@
       "instruction": "In Run click Calculate I-V and wait for the dark I-V curve.",
       "command": {
         "operation": "run"
+      },
+      "condition": {
+        "predicate": "result.iv.valid",
+        "op": "eq",
+        "value": true
+      },
+      "timeout_s": 120
+    },
+    {
+      "id": "bands",
+      "target": {
+        "window": "scapslab.Results"
+      },
+      "instruction": "Open Results (Band diagram & profiles). Move the Bias point slider and watch Ec, Ev and the Fermi levels change. Press Next.",
+      "command": {
+        "operation": "inspect"
       },
       "condition": {
         "predicate": "result.iv.valid",
