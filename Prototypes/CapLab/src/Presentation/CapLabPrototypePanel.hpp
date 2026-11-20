@@ -1,5 +1,6 @@
 #pragma once
 #include <map>
+#include <set>
 #include "Presentation/Panels/EditorWindow.hpp"
 #include "CapLabCommands.hpp"
 #include "Presentation/CapLabSchematicEditor.hpp"
@@ -28,6 +29,9 @@ private:
     void RenderImport();
     void RenderTree();
     void RenderPlot();
+    void RenderExport();
+    int exportFormat = 0;
+    std::set<pl::Id> selectedExportGraphs;
     void RenderISTabs(Project& project, const Json& analysis, sst::ui::plot::PlotViewState& viewState);
     View view;
     std::map<pl::Id, double> areaDraft;

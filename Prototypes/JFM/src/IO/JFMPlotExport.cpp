@@ -1,5 +1,6 @@
 #include "IO/JFMPlotExport.hpp"
-#include "Core/PlotExport/PlotExport.hpp"
+#include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
+#include <sst/plotlab/SnapshotJson.hpp>
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -12,7 +13,6 @@
 namespace SST::Prototypes::JFM
 {
     namespace pl = sst::plotlab;
-    namespace host = SST::PlotExport;
     namespace {
         WeakRef<CommandRegistry> appCommands;
         WeakRef<JobSystem> appJobs;
@@ -35,8 +35,9 @@ namespace SST::Prototypes::JFM
             std::string GetType() const override { return "jfm.plot.export"; }
             void Execute(JobContext &context) override {
                 context.ThrowIfCancellationRequested();
-                // ExportGraph owns the GIL scope, matching PlotLab's existing exporter job.
-                host::ExportGraph(snapshot, std::filesystem::u8path(path), format, dpi, SST_PLOT_EXPORT_PYTHON_ROOT);
+                // The shared adapter acquires the GIL inside this job.
+                const PlotExportRequest request{pl::SnapshotJson(snapshot), std::filesystem::u8path(path), format, dpi};
+                ExportPlotsJson(context, {&request, 1});
                 context.SetProgress(1, 1);
             }
         };
@@ -131,7 +132,7 @@ namespace SST::Prototypes::JFM
             if (!std::isfinite(snapshot.widthMm) || snapshot.widthMm <= 0 || !std::isfinite(snapshot.heightMm) || snapshot.heightMm <= 0)
                 throw std::invalid_argument("width_mm and height_mm must be positive");
             const auto operation = request.at("operation").get<std::string>();
-            if (operation == "snapshot") return {{"ok", true}, {"snapshot", nlohmann::json::parse(host::SnapshotJson(snapshot))}};
+            if (operation == "snapshot") return {{"ok", true}, {"snapshot", nlohmann::json::parse(pl::SnapshotJson(snapshot))}};
             if (operation != "export") throw std::invalid_argument("Unknown plot operation");
             return ExportJFMPlot(snapshot, request.at("path"), request.at("format"), request.value("dpi", 300.0));
         } catch (const std::exception &e) {

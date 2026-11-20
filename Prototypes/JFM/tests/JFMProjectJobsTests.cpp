@@ -863,6 +863,15 @@ assert sst_jfm.fit(q,method="invalid")["error"]["code"] == "jfm.fit.validation"
 bad=dict(q,parameters=dict(I0=1e-10,A=1.5))
 assert sst_jfm.fit(bad)["error"]["code"] == "jfm.fit.validation"
 
+# Match the CapLab embedded host: product-only Python tests need this built-in module.
+import os, sys
+if os.environ.get("SST_RUN_PYTEST"):
+    sys.path.extend(json.loads(os.environ["SST_ROOT_PYTHON_PATHS"]))
+    import pytest
+    result = pytest.main([os.environ["SST_RUN_PYTEST"], "-q", "-p", "no:cacheprovider"])
+    sys.stdout.flush(); sys.stderr.flush()
+    assert result == 0
+
 )PY");
         PythonInterpreter::ReleaseRuntimeGil(gil); EXPECT_EQ(status,0);
 #endif

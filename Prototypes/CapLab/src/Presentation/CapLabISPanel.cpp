@@ -271,6 +271,7 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
         ImGui::PushID(static_cast<int>(index));
         if (refitPlot) ImPlot::SetNextAxesToFit();
         const auto scale=RenderISPlot("##IS",spec,series.data(),series.size(),index==2 ? bodePhaseView : viewState,ImVec2(-1,height));
+        if (&project==&state->document.project) state->graphViews[graphs.at(index).get<pl::Id>()]=index==2 ? bodePhaseView : viewState;
         if (spec.equalAspect) ImGui::Text("Equal scale: X %.9g px/Ohm | Y %.9g px/Ohm",scale.xPixelsPerOhm,scale.yPixelsPerOhm);
         ImGui::PopID();
     };

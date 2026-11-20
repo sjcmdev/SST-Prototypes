@@ -6,14 +6,14 @@
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
-#include "Core/PlotExport/PlotExport.hpp"
-
+#include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
+#include <sst/plotlab/SnapshotJson.hpp>
 namespace SST::Prototypes::CapLab
 {
     void DocumentJob::Execute(JobContext &context)
     {
         context.SetProgress(0, 1);
-        context.SetStage(operation == Operation::Preview ? "Reading import data" : operation == Operation::Open || operation == Operation::OpenOrImport ? "Opening project / import file" : operation == Operation::Save ? "Saving project" : "Exporting C-f snapshot");
+        context.SetStage(operation == Operation::Preview ? "Reading import data" : operation == Operation::Open || operation == Operation::OpenOrImport ? "Opening project / import file" : operation == Operation::Save ? "Saving project" : "Exporting data / graph snapshots");
         context.ThrowIfCancellationRequested();
         std::string error;
         if (operation == Operation::Open || operation == Operation::Preview || operation == Operation::OpenOrImport)
@@ -156,13 +156,24 @@ namespace SST::Prototypes::CapLab
                 preview=ExportData(Parse(input),path,context);
             } else {
             if (format!=".png" && format!=".svg" && format!=".pdf") throw std::runtime_error("Choose CSV, XLSX, PNG, SVG or PDF export.");
-            if (!snapshot) throw std::runtime_error("No current graph snapshot.");
-            const auto executable = Platform::CurrentExecutablePath();
-            if (!executable) throw std::runtime_error(executable.Error().technicalDetails);
-            const auto local = executable.Value().parent_path().Join("python").Native();
-            const auto pythonRoot = FileSystem::Exists(local / "sst_plot_export") ? local : std::filesystem::path(SST_PLOT_EXPORT_PYTHON_ROOT);
-            preview=Json::parse(PlotExport::SnapshotJson(*snapshot));
-            PlotExport::ExportGraph(*snapshot,path.Native(),format.substr(1),300,pythonRoot);
+            if (!snapshot && snapshots.empty()) throw std::runtime_error("No current graph snapshot.");
+            std::vector<PlotExportRequest> exports;
+            auto add = [&](const pl::GraphSnapshot& graph, const std::filesystem::path& destination) {
+                auto text = pl::SnapshotJson(graph);
+                exports.push_back({text, destination, format.substr(1), dpi});
+                return Json::parse(text);
+            };
+            if (snapshots.empty()) preview=add(*snapshot,path.Native());
+            else {
+                preview={{"graphs",Json::array()}};
+                for (const auto& graph : snapshots) {
+                    auto destination=path.Native().parent_path() / path.Native().stem();
+                    destination+=std::filesystem::path("-"+std::to_string(graph->graph)+format);
+                    auto result=add(*graph,destination);
+                    preview["graphs"].push_back({{"graph_id",graph->graph},{"path",Path::FromResolved(destination).Utf8()},{"snapshot",std::move(result)}});
+                }
+            }
+            ExportPlotsJson(context,exports);
             }
         }
         if (!saveCommitted && operation!=Operation::Export) context.ThrowIfCancellationRequested();
@@ -181,7 +192,7 @@ namespace SST::Prototypes::CapLab
                 {
                     const NativeFileDialogFilter filter{operation == Operation::Preview ? "CapLab measurements / ProPho" : operation == Operation::Export ? "CapLab export (choose extension)" : "CapLab project", operation == Operation::Preview ? "dat,txt,csv,cf,cv,json" : operation == Operation::Export ? "csv,xlsx,png,svg,pdf" : "json"};
                     const auto selected = operation == Operation::Save || operation == Operation::Export
-                        ? SaveFileDialog(filter,operation == Operation::Save ? "project.caplab.json" : "cf.png") : OpenFileDialog(filter);
+                        ? SaveFileDialog(filter,operation == Operation::Save ? "project.caplab.json" : ("graph."+exportFormat).c_str()) : OpenFileDialog(filter);
                     if (!selected) { status = "Dialog cancelled."; return; }
                     target = *selected;
                 }
@@ -195,7 +206,20 @@ namespace SST::Prototypes::CapLab
             auto job = CreateRef<DocumentJob>(operation,operation == Operation::Save || operation == Operation::Analyze || operation == Operation::Export ? Serialize(document.project) : "",target);
             job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
-            if (operation == Operation::Export && (target.Native().extension()==".png" || target.Native().extension()==".svg" || target.Native().extension()==".pdf")) job->snapshot = pl::snapshotGraph(*document.project.engine,document.project.graph,view);
+            const auto extension=target.Native().extension();
+            if (operation == Operation::Export && (extension==".png" || extension==".svg" || extension==".pdf")) {
+                job->dpi=exportDpi;
+                if (exportGraphs.empty()) job->snapshot=pl::snapshotGraph(*document.project.engine,document.project.graph,view);
+                else {
+                    std::set<pl::Id> seen;
+                    for (auto id : exportGraphs) {
+                        if (!seen.insert(id).second) throw std::runtime_error("Duplicate export graph_id");
+                        const auto found=graphViews.find(id);
+                        if (found==graphViews.end()) throw std::runtime_error("Render each selected graph before batch export");
+                        job->snapshots.push_back(pl::snapshotGraph(*document.project.engine,id,found->second));
+                    }
+                }
+            }
             pendingRevision = document.revision;
             activeJob = jobs->Submit(job);
             if (!activeJob) throw std::runtime_error("Job submission failed.");
@@ -211,7 +235,7 @@ namespace SST::Prototypes::CapLab
     void CapLabWorkflow::Changed()
     {
         RefreshAnalyses(document.project);
-        document.Changed(); view = {};
+        document.Changed(); view = {}; graphViews.clear(); exportGraphs.clear();
         if (bus) { DocumentChanged e; e.project = document.project.engine->id(); e.revision = document.revision; bus->Queue(e); }
     }
     void CapLabWorkflow::OnUpdate(float)
@@ -236,7 +260,7 @@ namespace SST::Prototypes::CapLab
             {
                 if (undo) undo->Clear();
                 document.Opened(std::move(*pending->opened),pending->path,pendingRevision);
-                preview.reset(); view = {};
+                preview.reset(); view = {}; graphViews.clear(); exportGraphs.clear();
                 if(document.project.graph) {const auto& p=*document.project.engine;view=std::get<pl::Layer>(p.object(p.children(document.project.graph).at(0)).data).view;}
                 if (bus) { DocumentChanged e; e.project = document.project.engine->id(); e.revision = document.revision; bus->Queue(e); }
             }

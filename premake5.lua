@@ -253,6 +253,8 @@ project "Core"
         "Core/Presentation/Panels/**.cpp",
         "Core/ProgressTrackingSystem/**.hpp",
         "Core/ProgressTrackingSystem/**.cpp",
+        "Core/ScientificRuntime/PlotExport/**.hpp",
+        "Core/ScientificRuntime/PlotExport/**.cpp",
         "Core/ScientificRuntime/ScientificRuntimeLayer.hpp",
         "Core/ScientificRuntime/ScientificRuntimeLayer.cpp",
         "Core/ScientificRuntime/Python/PythonApi.hpp",
@@ -298,9 +300,10 @@ project "Core"
         "Vendor/yaml-cpp/include"
     }
 
+    defines { 'SST_PLOT_EXPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/ScientificRuntime/python"' }
     if _SST_PYTHON_EMBED_AVAILABLE == true then
-        includedirs { _SST_PYTHON_INCLUDE_DIR }
-        defines { "DS_PYTHON_CAPI_AVAILABLE=1", "Py_NO_LINK_LIB" }
+        includedirs { _SST_PYTHON_INCLUDE_DIR, "Vendor/nanobind/include" }
+        defines { "DS_PYTHON_CAPI_AVAILABLE=1", "Py_NO_LINK_LIB", "NB_STATIC" }
     else
         defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
     end

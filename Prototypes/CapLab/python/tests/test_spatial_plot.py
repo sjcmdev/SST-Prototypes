@@ -43,12 +43,19 @@ def project(kind):
 
 @pytest.mark.parametrize('kind',[4,5,6,7])
 @pytest.mark.parametrize('format',['png','svg','pdf'])
-def test_execute_exports_spatial_kinds(tmp_path,kind,format):
+@pytest.mark.parametrize('batch',[False,True])
+def test_execute_exports_spatial_kinds(tmp_path,kind,format,batch):
     p,view=project(kind)
     target=tmp_path/f'figure.{format}'
-    result=execute(p,dict(operation='export',path=str(target),ranges=view['ranges'],view=view))
+    request=dict(operation='export',path=str(target),ranges=view['ranges'],view=view)
+    if batch:
+        request['graphs']=[dict(graph_id=p['graph'],ranges=view['ranges'],view=view)]
+    result=execute(p,request)
     assert result['ok'],result.get('error')
     snapshot=result['export']
+    if batch:
+        target=Path(snapshot['graphs'][0]['path'])
+        snapshot=snapshot['graphs'][0]['snapshot']
     assert snapshot['series'][0]['kind']==kind
     assert snapshot['series'][0]['z'][4] is None
     assert snapshot['camera']==view['camera']

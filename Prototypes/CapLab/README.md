@@ -505,3 +505,40 @@ The real-data case uses every 60th acquisition row of the existing frozen
 `tests/fixtures/cf_100K_7.dat` (PFS I2, provenance in `tests/fixtures/manifest.json`),
 without interpolation. It checks finite bounded fitting and score reduction;
 it does not claim that this empirical topology identifies the device physics.
+
+## Shared publication export (clshare3)
+
+JFM and CapLab use `Core/ScientificRuntime/PlotExport` and the Core-free
+`PlotLab-Engine/SnapshotJson` boundary. They no longer compile or deploy PlotLab
+app sources. PlotLab retains its paused copy.
+
+The figure panel exposes PNG, SVG and PDF, plus batch selection. Render every
+selected graph first so its ranges and legend visibility are captured. Batch
+files use `<chosen stem>-<graph_id>.<format>`, independent of editable labels.
+Data tables remain available alongside the figure controls.
+
+The existing nanobind `caplab.execute` uses the same command/job path:
+
+```python
+execute(project, {"operation": "export", "path": "figure.svg",
+                  "graph_id": graph_id, "ranges": [xmin, xmax, ymin, ymax],
+                  "visibility": [{"plot_id": plot_id, "visible": False}], "dpi": 300})
+execute(project, {"operation": "export", "path": "figures.pdf", "graphs": [
+    {"graph_id": first_id, "ranges": [xmin, xmax, ymin, ymax]},
+    {"graph_id": second_id, "ranges": [xmin2, xmax2, ymin2, ymax2]}]})
+```
+
+Single export returns the actual JSON snapshot in `export`. Batch returns
+`export.graphs`, each with `graph_id`, `path` and `snapshot`. Optional `x_ticks`
+and `y_ticks` contain `{value, label, major}` objects per graph. A batch needs
+distinct existing graph IDs and explicit finite increasing ranges. Nyquist
+preserves equal physical axis scales. Rendering/commit failure leaves existing
+files intact; errors use the existing `invalid_request` / `export_failed` codes.
+
+CSV keeps its lossless `path,value_json` contents and adds `<stem>.results.csv`.
+XLSX keeps Metadata and measurement sheets, and adds a Results sheet. Results
+are tidy lab rows with analysis ID/type/model/status, section, row ID, quantity,
+value and unit: CV profiles, DLCP coefficients, AS points, Arrhenius fits,
+Walter spectra/integrals and circuit fit parameters. Blank values remain
+unavailable; stale/invalid statuses are retained. Both CSV files commit as one
+batch. `export.results_path` and `export.result_rows` identify the lab table.
