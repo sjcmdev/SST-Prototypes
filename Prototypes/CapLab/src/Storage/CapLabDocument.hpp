@@ -224,7 +224,8 @@ namespace SST::Prototypes::CapLab
             if (status!="valid" && status!="conditional" && status!="invalid" && status!="stale" && status!="missing_input")
                 throw std::runtime_error("Invalid analysis status.");
             if (a.at("kernel_version")!=1 || (a.at("type")!="CV" && a.at("type")!="DLCPPolynomial" && a.at("type")!="AS" && a.at("type")!="Arrhenius" && a.at("type")!="Circuit" && a.at("type")!="Walter" && a.at("type")!="WalterSaved") ||
-                !a.at("inputs").is_array() || (a.at("inputs").empty() && a.at("type")!="Arrhenius" && a.at("type")!="WalterSaved") || !a.at("settings").is_object())
+                !a.at("inputs").is_array() || (a.at("inputs").empty() && a.at("type")!="Arrhenius" && a.at("type")!="WalterSaved" &&
+                    !(a.at("type")=="Circuit" && a.value("grid_source",std::string("measurement"))=="model")) || !a.at("settings").is_object())
                 throw std::runtime_error("Invalid analysis contract.");
             if (a.at("type")=="Walter" || a.at("type")=="WalterSaved") {
                 if (!samples.contains(a.at("sample_id").get<pl::Id>()) ||
@@ -264,7 +265,10 @@ namespace SST::Prototypes::CapLab
             }
             if (a.at("type")=="Circuit") {
                 const auto n=a.at("frequency_Hz").size();
-                if (!samples.contains(a.at("sample_id").get<pl::Id>()) || n==0 || n>1201 || a.at("row_ids").size()!=n ||
+                const auto grid=a.value("grid_source",std::string("measurement"));
+                const bool modelOnly=grid=="model";
+                if ((grid!="model" && grid!="measurement") || (modelOnly && a.at("model")=="CircuitCore-AC-fit") ||
+                    !samples.contains(a.at("sample_id").get<pl::Id>()) || n==0 || n>1201 || a.at("row_ids").size()!=(modelOnly ? 0 : n) ||
                     (a.at("model")!="CircuitCore-AC" && a.at("model")!="CircuitCore-AC-fit") || !a.at("diagnostics").is_array()) throw std::runtime_error("Invalid circuit result");
                 if (a.at("model")=="CircuitCore-AC-fit") {
                     for (const char *key : {"score","initial_score","Z_floor_Ohm"}) {
@@ -319,7 +323,8 @@ namespace SST::Prototypes::CapLab
                 if (a.at("temperature_K").is_null() || !std::isfinite(a.at("bias_V").get<double>())) throw std::runtime_error("Invalid IS T/bias");
                 (void)ReadCircuit(a.at("circuit").at("schematic"));
                 for (const auto *key : {"measured_ReZ_Ohm","measured_ImZ_Ohm","model_ReZ_Ohm","model_ImZ_Ohm","residual_ReZ_Ohm","residual_ImZ_Ohm"}) {
-                    if (!a.at(key).is_array() || a.at(key).size()!=n) throw std::runtime_error("Unequal circuit columns");
+                    const auto size=modelOnly && !std::string_view(key).starts_with("model_") ? 0 : n;
+                    if (!a.at(key).is_array() || a.at(key).size()!=size) throw std::runtime_error("Unequal circuit columns");
                     for (const auto &v : a.at(key)) if (!v.is_null() && (!v.is_number() || !std::isfinite(v.get<double>()))) throw std::runtime_error("Invalid IS value");
                 }
                 for (const auto &f : a.at("frequency_Hz")) if (f.is_null() || !f.is_number() || !std::isfinite(f.get<double>()) || f.get<double>()<=0) throw std::runtime_error("Invalid IS frequency");

@@ -30,13 +30,19 @@ void CapLabPrototypePanel::RenderIS() {
         sst::ui::widgets::Text("Circuit name", name, sizeof(name));
         sst::ui::widgets::Text("Topology", topology, sizeof(topology));
         static pl::Id sample=0;
-        if (sst::ui::widgets::BeginCombo("Circuit sample", sample ? std::to_string(sample).c_str() : "Select sample")) {
-            for (const auto &s : p.samples) if (ImGui::Selectable(s.name.c_str(),sample==s.id)) sample=s.id;
+        static char sampleName[128]="Simulation";
+        if (sample && std::none_of(p.samples.begin(),p.samples.end(),[&](const auto &s) {return s.id==sample;})) sample=0;
+        if (sst::ui::widgets::BeginCombo("Circuit sample", sample ? SelectionLabel(p,sample).c_str() : "New sample")) {
+            if (ImGui::Selectable("New sample",!sample)) sample=0;
+            for (const auto &s : p.samples) if (ImGui::Selectable((s.name+"##"+std::to_string(s.id)).c_str(),sample==s.id)) sample=s.id;
             sst::ui::widgets::EndCombo();
         }
+        if (!sample) sst::ui::widgets::Text("New sample name",sampleName,sizeof(sampleName));
         if (ImGui::Button("Create circuit")) {
             const auto old=p.circuits.size();
-            edit({{"action","create"},{"sample_id",sample},{"name",name},{"topology",topology}});
+            Json request{{"action","create"},{"name",name},{"topology",topology}};
+            if (sample) request["sample_id"]=sample; else request["sample_name"]=sampleName;
+            edit(std::move(request));
             if (p.circuits.size()>old) { selectedCircuit=p.circuits.back().at("id"); circuitMeasurement=0; circuitRecalc=false; circuitAutoReady=false; circuitEditor.reset(); }
         }
         ImGui::Spacing(); ImGui::SeparatorText("Schematic and parameters");
@@ -68,6 +74,29 @@ void CapLabPrototypePanel::RenderIS() {
             }
             // Commands replace the project; never retain JSON iterators across one.
             selected=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==selectedCircuit;});
+            ImGui::Spacing(); ImGui::SeparatorText("Model-only simulation");
+            static double startHz=.1, stopHz=1e6, modelTemperature=300., modelBias=0.;
+            static int density=20, gridMode=0;
+            static std::string explicitHz="[1, 10, 100, 1000]";
+            sst::ui::widgets::Combo("Frequency grid",&gridMode,"Log sweep\0Explicit list\0");
+            if (gridMode==0) {
+                sst::ui::widgets::LogValue("Sweep start [Hz]",&startHz);
+                sst::ui::widgets::LogValue("Sweep stop [Hz]",&stopHz);
+                sst::ui::widgets::Int("Points per decade",&density,1,1,1200);
+            } else sst::ui::widgets::Text("Frequency list [Hz] (JSON)",&explicitHz);
+            sst::ui::widgets::Double("Model temperature [K]",&modelTemperature,.1f);
+            sst::ui::widgets::Double("Model bias [V]",&modelBias,.01f);
+            ImGui::TextWrapped("1..1201 points. Same-sample measurements overlay on their own grids and retain their T / bias.");
+            ImGui::BeginDisabled(state->activeJob!=0);
+            if (ImGui::Button("Simulate model IS")) {
+                Json settings{{"type","Circuit"},{"circuit_id",selectedCircuit},{"temperature_K",modelTemperature},{"bias_V",modelBias}};
+                if (gridMode==0) settings["frequency_sweep"]={{"start_Hz",startHz},{"stop_Hz",stopHz},{"points_per_decade",density}};
+                else settings["frequency_Hz"]=Json::parse(explicitHz);
+                circuitRecalc=false; circuitAutoReady=false;
+                state->analysisOptions=std::move(settings);
+                (void)commands->Execute(CommandID{"caplab.analyze"});
+            }
+            ImGui::EndDisabled();
             ImGui::Spacing(); ImGui::SeparatorText("Measurement and simulation");
             if (sst::ui::widgets::BeginCombo("IS measurement", circuitMeasurement ? std::to_string(circuitMeasurement).c_str() : "Select sweep")) {
                 auto item=[&](pl::Id id) {
@@ -194,7 +223,7 @@ void CapLabPrototypePanel::RenderIS() {
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, sst::ui::plot::PlotViewState& viewState) {
     const auto& graphs=analysis.at("graphs");
-    if (graphs.size()<7) return;
+    if (graphs.size()<5) return;
     const auto analysisId=analysis.at("id").get<pl::Id>();
     ImGui::PushID(state->document.path.Utf8().c_str());
     ImGui::PushID(std::to_string(analysisId).c_str());
@@ -202,7 +231,8 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
     const bool selectTab=isPlotAnalysis!=analysisId || isPlotGraph!=project.graph;
     isPlotAnalysis=analysisId;
     const auto sample=SelectionLabel(project,analysis.at("sample_id"));
-    const auto measurement=analysis.at("inputs").at(0).at("id").get<pl::Id>();
+    const bool modelOnly=analysis.value("grid_source",std::string("measurement"))=="model";
+    const auto measurement=modelOnly ? pl::Id{0} : analysis.at("inputs").at(0).at("id").get<pl::Id>();
     bool refitPlot=false;
     auto render=[&](std::size_t index, float height) {
         const auto graph=graphs.at(index).get<pl::Id>();
@@ -215,7 +245,7 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
             series.push_back(std::move(entry));
         }
         // The two residual components share frequency and units, so overlay them.
-        if (index==5) {
+        if (index==5 && !series.empty()) {
             const auto other=project.engine->children(graphs.at(6).get<pl::Id>()).at(0);
             series.front().id="Re residual";
             for (auto id : project.engine->children(other)) {
@@ -224,7 +254,7 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
             }
         }
         std::vector<double> x,y;
-        if (residualOverlay && index<3) {
+        if (residualOverlay && index<3 && !modelOnly) {
             const auto& re=analysis.at("residual_ReZ_Ohm");
             const auto& im=analysis.at("residual_ImZ_Ohm");
             for (std::size_t i=0;i<re.size();++i) {
@@ -247,13 +277,14 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
     if (ImGui::BeginTabBar("IS views")) {
         struct Tab {const char* label; std::size_t index;};
         for (const auto tab : {Tab{"Nyquist",0},Tab{"Bode",1},Tab{"Residuals",5},Tab{"C-f",3},Tab{"G/omega-f",4}}) {
+            if (modelOnly && tab.index==5) continue;
             const bool selected=tab.index==0 ? current=="Nyquist" : tab.index==1 ? current.starts_with("Bode") :
                 tab.index==5 ? current.ends_with("residual") : current==tab.label;
             if (ImGui::BeginTabItem(tab.label,nullptr,selectTab && selected ? ImGuiTabItemFlags_SetSelected : 0)) {
                 const auto graph=graphs.at(tab.index).get<pl::Id>();
                 if (isPlotGraph!=graph) {viewState={}; fitView={}; bodePhaseView={};}
                 project.graph=graph; isPlotGraph=graph;
-                auto measurementLabel=SelectionLabel(project,measurement);
+                auto measurementLabel=modelOnly ? std::string("Model only") : SelectionLabel(project,measurement);
                 if (const auto temperature=measurementLabel.rfind(", T = "); temperature!=std::string::npos) measurementLabel.resize(temperature);
                 const std::string title=(measurementLabel==sample ? measurementLabel : sample+" / "+measurementLabel)+
                     ", T = "+analysis.at("temperature_K").dump()+" K \u2014 "+tab.label;
@@ -261,7 +292,7 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
                     auto window=GetState();
                     if (window.shortName!=title) {window.shortName=title; window.longName=title; ApplyState(window);}
                 } else ImGui::TextWrapped("%s — fit draft",title.c_str());
-                if (tab.index<3) refitPlot=sst::ui::widgets::Checkbox("Residual overlay (model - measured)",&residualOverlay);
+                if (tab.index<3 && !modelOnly) refitPlot=sst::ui::widgets::Checkbox("Residual overlay (model - measured)",&residualOverlay);
                 if (ImGui::Button("Fit plot")) refitPlot=true;
                 const float available=std::max(220.f,ImGui::GetContentRegionAvail().y-65);
                 if (tab.index==1) {

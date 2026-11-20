@@ -38,6 +38,10 @@ def execute(project, request):
 
     operation: edit_circuit (edit: create/replace/delete), simulate or fit
     (settings: measurement_id, circuit_id, optional confirmed temperature_K/bias_V).
+    Model-only simulate omits measurement_id and supplies temperature_K, bias_V,
+    and frequency_Hz (list) or frequency_sweep {start_Hz, stop_Hz, points_per_decade}.
+    Same-sample measurements overlay on their original grids; no residuals are invented.
+    edit_circuit/create can supply sample_name instead of sample_id for a new sample.
     fit settings add parameters [{element, field, unit, free, min, max}],
     Z_floor_Ohm, optional max_iterations, score_tolerance, frequency_min_Hz,
     frequency_max_Hz and sigma_Ohm per original measurement row.

@@ -180,6 +180,8 @@ project "CapLab"
 -- Embed only the reusable CircuitCore-UI model/widget/runner, without its host.
 local circuitRoot = os.getenv("SST_CIRCUITCORE_ROOT") or (_SST_ROOT .. "/../CircuitCore")
 local circuitUiRoot = os.getenv("SST_CIRCUIT_UI_ROOT") or (_SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src")
+if not os.isdir(circuitRoot) then circuitRoot = _SST_ROOT .. "/../../../CircuitCore" end
+if not os.isdir(circuitUiRoot) then circuitUiRoot = _SST_ROOT .. "/../../../SST-Experiments/CircuitCore-UI/src" end
 for _, target in ipairs { "CapLab", "CapLabTests" } do
     project(target)
     includedirs { circuitRoot .. "/include", circuitRoot .. "/src", circuitUiRoot }

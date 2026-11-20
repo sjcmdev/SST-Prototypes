@@ -95,7 +95,8 @@ namespace SST::Prototypes::CapLab
                             throw std::runtime_error("Point input changed; reassign the point before fitting.");
                         if (seen.insert(id).second) analysisOptions["point_inputs"].push_back(m);
                     }
-            } else measurement=AnalysisMeasurement(p,analysisOptions.at("measurement_id").get<pl::Id>());
+            } else if (analysisOptions.at("type")!="Circuit" || analysisOptions.value("fit",false) || analysisOptions.contains("measurement_id"))
+                measurement=AnalysisMeasurement(p,analysisOptions.at("measurement_id").get<pl::Id>());
             Json xd;
             if (analysisOptions.at("type")=="Walter" && analysisOptions.value("xd_source",std::string("CV"))=="CV" &&
                 !analysisOptions.contains("xd_measurement_id") && analysisOptions.contains("cv_fit_id"))
@@ -117,7 +118,20 @@ namespace SST::Prototypes::CapLab
                     result=FitIS(measurement,*it,analysisOptions,context);
                     *it=result.at("circuit");
                     RefreshAnalyses(p);
-                } else result=SimulateIS(measurement,*it,analysisOptions,context);
+                } else {
+                    result=SimulateIS(measurement,*it,analysisOptions,context);
+                    if (measurement.is_null()) {
+                        auto overlay=[&](pl::Id id) {
+                            context.ThrowIfCancellationRequested();
+                            const auto m=AnalysisMeasurement(p,id);
+                            if (m.at("sample_id")==it->at("sample_id") && m.at("kind")=="FrequencySweep" &&
+                                (m.at("variant")=="ReZ_ImZ" || m.at("variant")=="C_G" || m.at("variant")=="Cp_Rp"))
+                                OverlayISMeasurement(result,m);
+                        };
+                        for (const auto &m : p.sweeps) overlay(m.id);
+                        for (const auto &m : p.measurements) overlay(m.at("id"));
+                    }
+                }
             } else result = ReadAnalysis(measurement,analysisOptions,xd,context);
             result["input_revision"] = analysisOptions.at("input_revision");
             AppendAnalysis(p,std::move(result)); opened = std::move(p);

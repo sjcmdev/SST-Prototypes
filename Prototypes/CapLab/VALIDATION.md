@@ -826,3 +826,91 @@ raw-DLCP laboratory uncertainty acceptance therefore remains open.
 Walter results and plot axes say **apparent DOS** (CL-04); JSON carries the
 interpretation and historical limits. W1-W3 remain saved-slice integral checks.
 Full historical spectra and the parabolic-field variant remain unsupported.
+
+## clis2: model-only IS and fit robustness (2026-11-20)
+
+Built from scratch with MSVC Debug in this worktree's `SST-Prototypes/build/`
+and sibling `SST-Libraries/build/`. CapLab, CapLabTests and their Core/library
+dependencies built successfully. Every generation, build, test suite and GPU
+capture used `tools/agents/build-lock.sh`; MSBuild used `-nr:false -m:1`
+and `-p:CL_MPCount=6`. No Git commands or GCC builds were run.
+
+Inherited build failures were missing sibling CircuitCore paths and references
+to `Axis.hpp` / `PlotSpec.customAxes` absent from this pair's UI-Library.
+CapLab now falls back to the owner's root CircuitCore sources and uses the
+available native plot API. Equal-scale PNG sizing follows the current exporter's
+equal fractional margins; its existing physical pixels-per-unit assertion remains.
+The obsolete assertion requiring a particular `custom_axes` implementation was removed.
+
+Changed code: `Domain/CapLabIS.*`, `IO/PrototypeWorkflow.cpp`,
+`Storage/CapLabDocument.hpp`, `Presentation/CapLabISPanel.cpp`,
+`Presentation/CapLabISPlot.hpp`, Python API documentation and the IS tests.
+No JFM, Core, SST-Libraries or PlotLab application sources were changed.
+
+Coverage includes empty-project sample/circuit creation, JSON list/log grids,
+exact order/endpoints, the 1..1201-point boundary, invalid requests, cancellation,
+save/roundtrip, circuit deletion/staleness, same-sample measurement overlays on
+their original grids/conditions, no fabricated measurement rows/residuals, and
+model-only ImGui rendering with zero ID conflicts. Model-only results have five
+graphs; measured-grid simulations/fits retain seven.
+
+The nine independent fit fixtures cover R-CPE and R-CPE-W, clean and seeded 0.2%
+noise, two distant starting vectors, parameter bounds, covariance, draft acceptance
+and finite residuals on real frozen PFS I2 Cp/Rp data (every 60th row, no interpolation).
+All nine passed on the final native build. No optimizer replacement was needed.
+
+The first full Python run had 215 passes and three fixture-hash failures caused
+by checkout CRLF conversion. Restored 181 fixture files to the exact LF bytes
+matching the existing SHA-256 manifests, without changing expected hashes or
+numerical values. `tests/fixtures/.gitattributes` prevents future text conversion.
+After repair, the other 209 Python tests passed; all 218 collected cases therefore
+passed in this job, with no skipped cases. Evidence: `build/clis2/pytest-full.xml`
+(nine robustness cases passed) and `build/clis2/pytest-final.xml` (209 passed).
+The embedded host also completed successfully after the final Python suite.
+Full C++ evidence: `build/clis2/cpp-full.xml` (43 passed, zero disabled/errors).
+
+Visual QA: ran the requested `snap-app.ps1` for before/after. Its desktop
+`CopyFromScreen` failed with "The handle is invalid", so used the existing app
+framebuffer capture and inspected both PNGs. Evidence is in
+`tools/agents/runs/clis2/shots/before.png` and `after.png` under the studio root.
+The after image shows a model-only Nyquist curve plus measured data on a different
+grid, equal axis scales, explicit overlay T/bias, and no residual tab.
+Both framebuffer runs exited cleanly. Temporary layouts remained in `build/clis2/`.
+
+`graphify update .` completed: 76084 nodes, 149424 edges, 2225 communities.
+JFM suites were not run because neither JFM nor Core changed. Larger frequency
+grids remain explicitly rejected; real-data fit improvement does not establish
+unique physical parameter identification.
+
+## merge-clis2 integration (2026-11-20)
+
+Resolved all five conflicted CapLab files: `src/IO/PrototypeWorkflow.cpp`,
+`premake5.lua`, `python/tests/test_m8_workflow.py`, `tests/fixtures/.gitattributes`
+and this document. SST-Libraries had no conflict markers. Model-only IS,
+measured-grid fitting/overlays, shared PNG/SVG/PDF export, equal-aspect Nyquist
+and the existing 3D/science work remain together. CircuitCore configuration
+retains environment overrides and the studio-root fallback; fixture bytes remain
+protected with `* -text`. Both branches' validation records are preserved above.
+
+Fresh MSVC Release builds passed for CapLab, CapLabTests, JFM and JFMTests in
+`SST-Prototypes/build/`, with library dependencies in `SST-Libraries/build/`.
+Standalone library build/tests used `SST-Libraries/build/standalone/`.
+Premake, each build and each test invocation used `tools/agents/build-lock.sh`;
+MSBuild used `-nr:false -m:1`, with at most six compiles. The existing native
+memory helper supplied the lock's RAM check because sandbox CIM access is denied.
+
+Results from this integration job (all reports under `build/merge-clis2-*`):
+
+- CapLab C++: **43/43 passed**, no skips.
+- CapLab embedded Python: **242/242 passed**, no skips; nanobind host also passed.
+- JFM C++: **103/103 passed**, no skips.
+- JFM Python: **204 passed, 18 skipped, 24 xfailed**, no failures/errors across
+  246 unique cases. The full suite was split into five non-overlapping runs;
+  every SCAPS gold group held its own lock for less than eight minutes.
+- SST-Libraries C++: **130/130 passed**.
+- Shared exporter Python: **64/64 passed**.
+
+`graphify update .` completed (77015 nodes, 151436 edges). Final source scan
+found no remaining conflict markers in either repository. No manual GUI smoke
+was performed; automated display/ID-conflict tests are included in CapLab C++.
+The merge index and commits remain for the owner/chain; no Git writes were run.
