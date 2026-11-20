@@ -18,7 +18,7 @@ TEST(CapLabISDisplay, ModelOnlyPlotAndControlsRenderWithoutMeasurementOrIdConfli
     auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>();
     auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
     CapLabWorkflow workflow(jobs,bus,undo); RegisterCommands(commands,bus,workflow);
-    auto& p=workflow.document.project;
+    auto& p=workflow.Document().project;
     EditCircuit(p,{{"action","create"},{"sample_name","Simulation"},{"name","RC"},{"topology","R0-C0"}});
     JobContext context({}, {}, {}, {}, [] {return false;});
     AppendAnalysis(p,SimulateIS(nullptr,p.circuits[0],{{"frequency_Hz",{1.,10.,100.}},

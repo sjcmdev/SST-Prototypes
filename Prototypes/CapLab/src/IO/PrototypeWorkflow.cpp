@@ -5,6 +5,7 @@
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Core/IO/TextFileIO.hpp"
+#include "Core/IO/RecentFiles.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
 #include <sst/plotlab/SnapshotJson.hpp>
@@ -197,7 +198,16 @@ namespace SST::Prototypes::CapLab
         try
         {
             if (activeJob) throw std::runtime_error("Wait for the current job or cancel it.");
-            if ((operation == Operation::Open || operation == Operation::OpenOrImport) && document.dirty) throw std::runtime_error("Save pending changes before opening another project.");
+            if (closeRequested && operation != Operation::Save && operation != Operation::SaveAs && operation != Operation::Close)
+                throw std::runtime_error("Resolve the pending close request first.");
+            if (operation == Operation::New) {
+                const auto handle = workspace.Open(CapLabDocument{}, false);
+                (void)Activate(handle); status = "New project."; return;
+            }
+            if (operation == Operation::Close) { (void)RequestClose(); return; }
+            auto &document = Document();
+            const bool saveAs = operation == Operation::SaveAs;
+            if (saveAs) operation = Operation::Save;
             if (operation == Operation::PreviewFolder) {
                 if (target.Empty() && sources.empty()) sources=PickFoldersDialog(true);
                 operation=Operation::Preview;
@@ -211,7 +221,7 @@ namespace SST::Prototypes::CapLab
             }
             if (operation != Operation::Analyze && target.Empty())
             {
-                if (operation == Operation::Save) target = document.path;
+                if (operation == Operation::Save && !saveAs) target = document.path.value_or(Path{});
                 if (target.Empty())
                 {
                     const NativeFileDialogFilter filter{operation == Operation::Preview ? "CapLab measurements / ProPho" : operation == Operation::Export ? "CapLab export (choose extension)" : "CapLab project", operation == Operation::Preview ? "dat,txt,csv,cf,cv,json" : operation == Operation::Export ? "csv,xlsx,png,svg,pdf" : "json"};
@@ -220,6 +230,13 @@ namespace SST::Prototypes::CapLab
                     if (!selected) { status = "Dialog cancelled."; return; }
                     target = *selected;
                 }
+            }
+            if (operation == Operation::Open || operation == Operation::OpenOrImport) {
+                if (const auto existing = workspace.FindByPath(target)) { (void)Activate(*existing); TouchRecent(recent,*Document().path); status = "Project already open."; return; }
+            }
+            if (operation == Operation::Save) {
+                if (const auto existing = workspace.FindByPath(target); existing && *existing != workspace.active)
+                    throw std::runtime_error("This path belongs to another open project.");
             }
             if (operation==Operation::Save && document.project.graph && view.viewport) {
                 auto& engine=*document.project.engine;
@@ -245,7 +262,7 @@ namespace SST::Prototypes::CapLab
                     }
                 }
             }
-            pendingRevision = document.revision;
+            pendingRevision = document.revision; pendingProject = workspace.active;
             activeJob = jobs->Submit(job);
             if (!activeJob) throw std::runtime_error("Job submission failed.");
             pending = std::move(job); status.clear(); failure.reset();
@@ -279,17 +296,20 @@ namespace SST::Prototypes::CapLab
     }
     void CapLabWorkflow::Changed()
     {
+        auto &document = Document();
         RefreshAnalyses(document.project);
         document.Changed(); view = {}; graphViews.clear(); exportGraphs.clear();
-        if (bus) { DocumentChanged e; e.project = document.project.engine->id(); e.revision = document.revision; bus->Queue(e); }
+        if (bus) { DocumentChanged e; e.project = document.handle; e.revision = document.revision; bus->Queue(e); }
     }
     void CapLabWorkflow::OnUpdate(float)
     {
         if (!activeJob) return;
+        auto &document = *workspace.Find(pendingProject);
         const auto job = jobs->GetJob(activeJob);
         if (job && (job->status == JobStatus::Queued || job->status == JobStatus::Running)) return;
+        const bool saved = pending->saveCommitted;
         if (!job) status = "Job removed before completion.";
-        else if (pending->saveCommitted) { document.Saved(pending->path,pendingRevision); status = "Saved."; }
+        else if (pending->saveCommitted) { document.Saved(pending->path,pendingRevision); TouchRecent(recent,pending->path); status = "Saved."; }
         else if (job->status == JobStatus::Completed)
         {
             status = "Completed.";
@@ -304,12 +324,13 @@ namespace SST::Prototypes::CapLab
             }
             else if (pending->operation == Operation::Open)
             {
-                if (undo) undo->Clear();
-                document.Opened(std::move(*pending->opened),pending->path,pendingRevision);
-                ClearPreview(); view = {}; graphViews.clear(); exportGraphs.clear();
-                if(document.project.graph) {const auto& p=*document.project.engine;view=std::get<pl::Layer>(p.object(p.children(document.project.graph).at(0)).data).view;}
-
-                if (bus) { DocumentChanged e; e.project = document.project.engine->id(); e.revision = document.revision; bus->Queue(e); }
+                CapLabDocument opened;
+                opened.Opened(std::move(*pending->opened),pending->path,0);
+                const auto handle = workspace.Open(std::move(opened), false);
+                // Release the completed job before switching the active document.
+                activeJob = 0;
+                (void)Activate(handle);
+                TouchRecent(recent,pending->path);
             }
             else if (pending->operation == Operation::Preview)
             {
@@ -344,5 +365,132 @@ namespace SST::Prototypes::CapLab
                 failure=StructuredError{ErrorCategory::Validation,Severity::Error,"Document operation failed",status,"Check the file and import settings.","CapLab",pending->operation==Operation::Preview ? "caplab.preview" : "caplab.document"};
         }
         activeJob = 0; pending.reset();
+        if (saveBeforeClose) {
+            saveBeforeClose = false;
+            if (saved && !Document().IsDirty()) ResolveClose("discard");
+            else if (saved) status = "Newer edits remain unsaved; review before closing.";
+        }
+    }
+}
+
+namespace SST::Prototypes::CapLab
+{
+    void CapLabWorkflow::ResetProjectUI()
+    {
+        ClearPreview(); graphViews.clear(); exportGraphs.clear();
+        analysisDraft.reset(); pendingCandidate = nullptr;
+        analysisOptions = Json::object(); view = {}; failure.reset(); status = "Ready.";
+        const auto &p = Document().project;
+        if (p.graph) view=std::get<pl::Layer>(p.engine->object(p.engine->children(p.graph).at(0)).data).view;
+        if (bus) { DocumentChanged event; event.project = workspace.active; event.revision = Document().revision; bus->Queue(event); }
+    }
+    bool CapLabWorkflow::Activate(std::uint64_t handle)
+    {
+        if (activeJob || !workspace.Find(handle)) return false;
+        if (workspace.active == handle) return true;
+        if (undo) std::swap(*undo, Document().history);
+        (void)workspace.Activate(handle);
+        if (undo) std::swap(*undo, Document().history);
+        ResetProjectUI(); return true;
+    }
+    bool CapLabWorkflow::IsDirty() const
+    {
+        return std::any_of(workspace.projects.begin(), workspace.projects.end(), [](const auto &d) { return d.IsDirty(); });
+    }
+    bool CapLabWorkflow::CloseProject(bool discard)
+    {
+        if (activeJob || (Document().IsDirty() && !discard)) return false;
+        if (undo) undo->Clear();
+        (void)workspace.Close(workspace.active);
+        if (workspace.projects.empty()) (void)workspace.Open(CapLabDocument{});
+        if (undo) std::swap(*undo, Document().history);
+        ResetProjectUI(); return true;
+    }
+    bool CapLabWorkflow::RequestClose(bool application)
+    {
+        if (application && !activeJob && !IsDirty()) return true;
+        if (!application && !activeJob && !Document().IsDirty()) return CloseProject();
+        closeApplication = application; closeReady = false; closeRequested = true;
+        if (application && !activeJob && !Document().IsDirty())
+            for (const auto &d : workspace.projects) if (d.IsDirty()) { (void)Activate(d.handle); break; }
+        return false;
+    }
+    void CapLabWorkflow::ResolveClose(const std::string &decision, Path target)
+    {
+        if (decision == "cancel") { closeRequested = false; closeApplication = false; saveBeforeClose = false; return; }
+        if (!closeRequested || activeJob) return;
+        if (decision == "save") {
+            Start(Operation::Save, std::move(target)); saveBeforeClose = activeJob != 0; return;
+        }
+        if (decision != "discard") throw std::runtime_error("Unknown close decision.");
+        const bool application = closeApplication;
+        if (!CloseProject(true)) return;
+        closeRequested = false;
+        if (application) {
+            if (IsDirty()) (void)RequestClose(true);
+            else closeReady = true;
+        }
+    }
+    Json CapLabWorkflow::WorkspaceJson() const
+    {
+        Json projects = Json::array();
+        for (const auto &d : workspace.projects) projects.push_back({{"project_id",d.handle},
+            {"project",Json::parse(Serialize(d.project))},{"path",d.path ? Json(d.path->Utf8()) : Json(nullptr)},
+            {"revision",d.revision},{"saved_revision",d.savedRevision},{"dirty",d.IsDirty()}});
+        Json files = Json::array(); for (const auto &path : recent) files.push_back(path.Utf8());
+        return {{"projects",projects},{"active_project_id",workspace.active},{"next_project_id",workspace.nextHandle},
+            {"recent_projects",files},{"close_requested",closeRequested},{"close_application",closeApplication},{"close_ready",closeReady}};
+    }
+    void CapLabWorkflow::RestoreWorkspace(const Json &value)
+    {
+        ProjectWorkspace<CapLabDocument> restored;
+        for (const auto &item : value.at("projects")) {
+            if (!item.at("project_id").is_number_unsigned() || !item.at("revision").is_number_unsigned() || !item.at("saved_revision").is_number_unsigned())
+                throw std::runtime_error("Project IDs and revisions must be nonnegative integers.");
+            CapLabDocument d; d.handle = item.at("project_id").get<std::uint64_t>();
+            if (!d.handle || d.handle == UINT64_MAX || restored.Find(d.handle)) throw std::runtime_error("Invalid or duplicate project_id.");
+            d.project = Parse(item.at("project").dump());
+            if (!item.at("path").is_null()) d.path = Path{item.at("path").get<std::string>()};
+            d.revision = item.at("revision"); d.savedRevision = item.at("saved_revision");
+            if (d.revision == UINT64_MAX || (d.path && d.path->Empty()) || d.savedRevision > d.revision) throw std::runtime_error("Invalid saved revision.");
+            if (d.path && restored.FindByPath(*d.path)) throw std::runtime_error("Duplicate project path.");
+            restored.nextHandle = std::max(restored.nextHandle, d.handle + 1);
+            restored.projects.push_back(std::move(d));
+        }
+        if (!value.at("active_project_id").is_number_unsigned() || !restored.Activate(value.at("active_project_id"))) throw std::runtime_error("Missing active project.");
+        if (value.contains("next_project_id") && !value.at("next_project_id").is_number_unsigned()) throw std::runtime_error("Invalid next_project_id.");
+        restored.nextHandle = std::max(restored.nextHandle,value.value("next_project_id",restored.nextHandle));
+        if (restored.nextHandle == UINT64_MAX) throw std::runtime_error("Project handles exhausted.");
+        std::vector<Path> files;
+        const auto paths=value.at("recent_projects").get<std::vector<std::string>>();
+        for (auto it=paths.rbegin();it!=paths.rend();++it) TouchRecent(files,Path{*it});
+        const bool requested=value.value("close_requested",false), application=value.value("close_application",false), ready=value.value("close_ready",false);
+        workspace = std::move(restored); if (undo) undo->Clear(); recent=std::move(files);
+        closeRequested=requested; closeApplication=application; closeReady=ready;
+    }
+    Result<void> CapLabWorkflow::WorkspaceRequest(const Json &request)
+    {
+        try {
+            const std::string operation = request.at("operation");
+            if (operation == "close_decision") {
+                if (!closeRequested) throw std::runtime_error("No pending close request.");
+                const std::string decision=request.at("decision");
+                if (decision!="save" && decision!="discard" && decision!="cancel") throw std::runtime_error("Unknown close decision.");
+                const auto target=Path{request.value("path",std::string{})};
+                if (decision=="save" && target.Empty() && !Document().path) throw std::runtime_error("Save requires an explicit path.");
+                ResolveClose(decision,target);
+            } else {
+                if (activeJob) throw std::runtime_error("Wait for the current job or cancel it.");
+                if (closeRequested && operation != "workspace") throw std::runtime_error("Resolve the pending close request first.");
+                if (operation == "new") Start(Operation::New);
+                else if (operation == "activate") {
+                    if (!request.at("project_id").is_number_unsigned() || !Activate(request.at("project_id"))) throw std::runtime_error("Unknown project_id.");
+                } else if (operation == "close") (void)RequestClose(request.value("application",false));
+                else if (operation != "workspace") throw std::runtime_error("Unknown workspace operation.");
+            }
+            return {};
+        } catch (const std::exception &e) {
+            return StructuredError{ErrorCategory::Validation,Severity::Error,"Workspace operation failed",e.what(),"Check the project and active jobs.","CapLab","caplab.workspace"};
+        }
     }
 }

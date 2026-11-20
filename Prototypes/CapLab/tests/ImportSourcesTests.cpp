@@ -105,14 +105,36 @@ namespace SST::Prototypes::CapLab
         const auto a=Write("a.dat"), b=Write("b.dat");
         state.sourcePreviews={{{a,root},FixturePreview(),{}},{{b,root},FixturePreview(),{}}};
         state.selectedSources={0,1};
-        const auto before=Serialize(state.document.project);
+        const auto before=Serialize(state.Document().project);
         ASSERT_TRUE(commands->Execute(CommandID{"caplab.import"}));
-        EXPECT_EQ(state.document.project.sweeps.size(),2); const auto after=Serialize(state.document.project);
-        ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(state.document.project),before); EXPECT_FALSE(undo->CanUndo());
-        ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(state.document.project),after);
+        EXPECT_EQ(state.Document().project.sweeps.size(),2); const auto after=Serialize(state.Document().project);
+        ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(state.Document().project),before); EXPECT_FALSE(undo->CanUndo());
+        ASSERT_TRUE(undo->Redo()); EXPECT_EQ(Serialize(state.Document().project),after);
         state.sourcePreviews={{{a,root},FixturePreview(),{}},{{b,root},Json::object(),{}}};
-        state.selectedSources={0,1}; state.previewRevision=state.document.revision;
-        EXPECT_FALSE(commands->Execute(CommandID{"caplab.import"})); EXPECT_EQ(Serialize(state.document.project),after);
+        state.selectedSources={0,1}; state.previewRevision=state.Document().revision;
+        EXPECT_FALSE(commands->Execute(CommandID{"caplab.import"})); EXPECT_EQ(Serialize(state.Document().project),after);
+    }
+
+    TEST_F(ImportSourcesTest, SwitchingProjectsClearsBatchPreviewAndExportSelection)
+    {
+        auto jobs=CreateRef<JobSystem>(nullptr,1);
+        CapLabWorkflow state(jobs);
+        const auto first=state.workspace.active;
+        state.Document().project=FixtureProject();
+        auto layer=state.Document().project.engine->object(state.Document().project.engine->children(state.Document().project.graph).at(0));
+        auto &view=std::get<pl::Layer>(layer.data).view;
+        view.viewport=sst::ui::plot::Bounds{1,2,3,4};
+        state.Document().project.engine->change("View",{std::move(layer)}).apply(*state.Document().project.engine);
+        const auto generation=state.previewGeneration.Next();
+        const auto source=Write("a.dat");
+        state.sourcePreviews={{{source,root},FixturePreview(),{}}}; state.selectedSources={0};
+        state.exportGraphs={state.Document().project.graph}; state.graphViews[state.Document().project.graph]={};
+        state.Start(Operation::New);
+        EXPECT_TRUE(state.sourcePreviews.empty()); EXPECT_TRUE(state.selectedSources.empty());
+        EXPECT_FALSE(state.previewGeneration.IsCurrent(generation));
+        EXPECT_TRUE(state.exportGraphs.empty()); EXPECT_TRUE(state.graphViews.empty());
+        ASSERT_TRUE(state.Activate(first)); ASSERT_TRUE(state.view.viewport);
+        EXPECT_DOUBLE_EQ(state.view.viewport->minX,1); EXPECT_DOUBLE_EQ(state.view.viewport->maxY,4);
     }
 
     class FixtureImporter final : public pl::Importer

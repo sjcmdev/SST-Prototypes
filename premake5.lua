@@ -300,7 +300,7 @@ project "Core"
         "Vendor/yaml-cpp/include"
     }
 
-    defines { 'SST_PLOT_EXPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/ScientificRuntime/python"' }
+    defines { 'SST_PLOT_EXPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/ScientificRuntime/Python"' }
     if _SST_PYTHON_EMBED_AVAILABLE == true then
         includedirs { _SST_PYTHON_INCLUDE_DIR, "Vendor/nanobind/include" }
         defines { "DS_PYTHON_CAPI_AVAILABLE=1", "Py_NO_LINK_LIB", "NB_STATIC" }

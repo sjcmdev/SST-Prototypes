@@ -19,8 +19,8 @@ std::string WithStandardError(const Json& result, const char* value, const char*
 }
 }
 void CapLabPrototypePanel::RenderImport() {
-    auto &doc = state->document;
-    ImGui::Text("%s%s", doc.path.Empty() ? "Untitled" : doc.path.Utf8().c_str(), doc.dirty ? " (unsaved)" : "");
+    auto &doc = state->Document();
+    ImGui::Text("%s%s", !doc.path.has_value() ? "Untitled" : doc.path->Utf8().c_str(), doc.IsDirty() ? " (unsaved)" : "");
     ImGui::SeparatorText("Import settings and metadata");
     bool comma = state->decimal == ',';
     if (sst::ui::widgets::Checkbox("Decimal comma (semicolon/whitespace columns)", &comma)) state->decimal = comma ? ',' : '.';
@@ -203,8 +203,23 @@ void CapLabPrototypePanel::RenderImport() {
     }
 }
 void CapLabPrototypePanel::RenderTree() {
-    auto &doc = state->document;
-    ImGui::TextWrapped("%s", doc.path.Empty() ? "Untitled" : doc.path.filename().Utf8().c_str());
+    auto &doc = state->Document();
+    ImGui::BeginDisabled(state->activeJob!=0 || state->closeRequested);
+    const auto activeLabel=doc.path ? doc.path->filename().Utf8() : "Untitled";
+    if (sst::ui::widgets::BeginCombo("Project",activeLabel.c_str())) {
+        for (const auto &project:state->workspace.projects) {
+            ImGui::PushID(std::to_string(project.handle).c_str());
+            const auto label=(project.path ? project.path->filename().Utf8() : "Untitled")+(project.IsDirty() ? " *" : "");
+            if (ImGui::Selectable(label.c_str(),project.handle==state->workspace.active)) {
+                CommandContext context; context.Set("request",Json{{"operation","activate"},{"project_id",project.handle}});
+                (void)commands->Execute(CommandID{"caplab.workspace"},std::move(context));
+            }
+            ImGui::PopID();
+        }
+        sst::ui::widgets::EndCombo();
+    }
+    ImGui::EndDisabled();
+    if (doc.handle!=state->workspace.active) return;
     if (ImGui::Button("Save project")) (void)commands->Execute(CommandID{"project.save"});
     for (const auto &sample : doc.project.samples) {
         ImGui::PushID(static_cast<int>(sample.id));
@@ -263,7 +278,7 @@ void CapLabPrototypePanel::RenderExport() {
     ImGui::EndDisabled();
     if (ImGui::TreeNode("Batch graphs")) {
         ImGui::TextWrapped("Open each graph first to capture its current ranges and visibility.");
-        const auto& engine=*state->document.project.engine;
+        const auto& engine=*state->Document().project.engine;
         bool ready=!selectedExportGraphs.empty();
         std::set<pl::Id> graphs;
         for (auto id : engine.children(engine.root())) if (std::holds_alternative<pl::Graph>(engine.object(id).data)) {
@@ -284,7 +299,7 @@ void CapLabPrototypePanel::RenderExport() {
     }
 }
 void CapLabPrototypePanel::RenderPlot() {
-    auto &doc = state->document;
+    auto &doc = state->Document();
     if (doc.project.graph) {
         RenderExport();
         for (const auto& a : doc.project.analyses) if (a.at("type")=="Circuit") {
@@ -319,6 +334,13 @@ void CapLabPrototypePanel::RenderPlot() {
     }
 }
 void CapLabPrototypePanel::RenderContent() {
+    if (shownProject!=state->workspace.active) {
+        shownProject=state->workspace.active; areaDraft.clear();
+        selectedCircuit=circuitMeasurement=selectedDefect=fitCircuit=isPlotAnalysis=isPlotGraph=0;
+        circuitDocument.clear(); circuitEditor.reset(); circuitAutoReady=circuitRecalc=false; isParameters=Json::array(); fitView={}; bodePhaseView={};
+    }
+    ImGui::PushID(std::to_string(state->workspace.active).c_str());
+
     switch (view) {
     case View::Project: RenderTree(); break;
     case View::Plot: RenderPlot(); break;
@@ -338,6 +360,7 @@ void CapLabPrototypePanel::RenderContent() {
         ImGui::ProgressBar(job->totalWork > 0 ? job->completedWork / job->totalWork : 0);
         if (ImGui::Button("Cancel")) (void)commands->Execute(CommandID{"caplab.cancel"});
     }
+    ImGui::PopID();
 }
 
 }
@@ -345,8 +368,11 @@ void CapLabPrototypePanel::RenderContent() {
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderAnalysis() {
     if (!ImGui::CollapsingHeader("CV / raw DLCP analysis",ImGuiTreeNodeFlags_DefaultOpen)) return;
-    auto &p = state->document.project;
-    static pl::Id selected = 0, xdSelected = 0;
+    auto &p = state->Document().project;
+    static pl::Id selected = 0, xdSelected = 0, maskMeasurement = 0;
+    static std::set<pl::Id> masked;
+    static std::uint64_t selectionProject = 0;
+    if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; selected=xdSelected=maskMeasurement=0; masked.clear(); }
     auto select = [&](const char *label, pl::Id &id, const char *empty = "none — select") {
         if (sst::ui::widgets::BeginCombo(label, SelectionLabel(p,id,empty).c_str())) {
             for (const auto &m : p.measurements) {
@@ -364,8 +390,6 @@ void CapLabPrototypePanel::RenderAnalysis() {
         static int type=0, degree=1, materialChoice=-1, band=0, source=0, policy=0;
         static double lo=-.3, hi=.35, ampLo=0, ampHi=1, manual=1, bias=0, eps=0, ref=0;
         static char description[256]="", materialSource[256]="";
-        static std::set<pl::Id> masked;
-        static pl::Id maskMeasurement=0;
         if (maskMeasurement != selected) { masked.clear(); maskMeasurement=selected; }
         sst::ui::widgets::Combo("Analysis", &type, "CV\0Raw DLCP\0");
         Json options{{"measurement_id",selected},{"type",type ? "DLCPPolynomial" : "CV"}};
@@ -440,7 +464,7 @@ void CapLabPrototypePanel::RenderAnalysis() {
                 }
                 for (const auto &g : a.at("graphs")) {
                     const auto id=g.get<pl::Id>();
-                    if (ImGui::Button((p.engine->object(id).name+"##"+std::to_string(id)).c_str())) { p.graph=id; state->view={}; state->document.Changed(); }
+                    if (ImGui::Button((p.engine->object(id).name+"##"+std::to_string(id)).c_str())) { p.graph=id; state->view={}; state->Document().Changed(); }
                 }
                 ImGui::TreePop();
             }
@@ -453,8 +477,10 @@ void CapLabPrototypePanel::RenderAnalysis() {
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderAS() {
     if (!ImGui::CollapsingHeader("AS / defects / Arrhenius",ImGuiTreeNodeFlags_DefaultOpen)) return;
-    auto &p=state->document.project;
+    auto &p=state->Document().project;
     static pl::Id sample=0, measurement=0;
+    static std::uint64_t selectionProject = 0;
+    if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; sample=measurement=0; }
     static char name[128]="Defect", provenance[256]="Manual point";
     static double manualT=300, manualF=1000, gamma=0;
     static char gammaSource[256]="";
@@ -550,7 +576,7 @@ void CapLabPrototypePanel::RenderAS() {
             for (const auto &d : a.at("diagnostics")) ImGui::TextWrapped("%s",d.get<std::string>().c_str());
             for (const auto &g : a.at("graphs")) {
                 auto id=g.get<pl::Id>();
-                if (ImGui::Button((p.engine->object(id).name+"##"+std::to_string(id)).c_str())) {p.graph=id; state->view={}; state->document.Changed();}
+                if (ImGui::Button((p.engine->object(id).name+"##"+std::to_string(id)).c_str())) {p.graph=id; state->view={}; state->Document().Changed();}
             }
             if (ImGui::TreeNode("AS / fit details and provenance")) {auto detail=a; detail.erase("inputs"); ImGui::TextWrapped("%s",detail.dump(2).c_str()); ImGui::TreePop();}
             ImGui::TreePop();
@@ -566,9 +592,11 @@ void CapLabPrototypePanel::RenderWalter() {
         ImGui::SetNextItemOpen(std::string_view(gallery) == "Walter", ImGuiCond_Once);
     if (!ImGui::CollapsingHeader("Walter apparent DOS / integration")) return;
     ImGui::PushID("Walter");
-    auto &p=state->document.project;
+    auto &p=state->Document().project;
     static pl::Id sample=0, cv=0, arrhenius=0, dlcp=0, xdMeasurement=0;
     static std::set<pl::Id> selected;
+    static std::uint64_t selectionProject = 0;
+    if (selectionProject != state->workspace.active) { selectionProject=state->workspace.active; sample=cv=arrhenius=dlcp=xdMeasurement=0; selected.clear(); }
     static int model=0, source=0, policy=0;
     static double vb=0, ef=0, prefactor=0, width=1, bias=0, tlo=1, thi=500, flo=100, fhi=1e6, elo=0, ehi=1, ilo=.1, ihi=.5;
     static char provenance[256]="", emissionSource[256]="", description[256]="";
@@ -655,7 +683,7 @@ void CapLabPrototypePanel::RenderWalter() {
         if (ImGui::TreeNode((a.at("model").get<std::string>()+" / "+a.at("status").get<std::string>()).c_str())) {
             ImGui::TextWrapped("CL-04: apparent DOS under the selected emission and field model.");
             for (const auto &s : a.at("spectra")) ImGui::TextWrapped("Integrated apparent DOS: %s cm^-3; %s",s.at("integral").at("density_cm3").dump().c_str(),s.at("integral").at("semantics").get<std::string>().c_str());
-            for (const auto &g : a.at("graphs")) if (ImGui::Button(("Show spectrum##"+g.dump()).c_str())) {p.graph=g; state->view={}; state->document.Changed();}
+            for (const auto &g : a.at("graphs")) if (ImGui::Button(("Show spectrum##"+g.dump()).c_str())) {p.graph=g; state->view={}; state->Document().Changed();}
             if (ImGui::TreeNode("Parameters / invalid points / provenance")) {auto detail=a; detail.erase("settings"); detail.erase("historical"); ImGui::TextWrapped("%s",detail.dump(2).c_str()); ImGui::TreePop();}
             ImGui::TreePop();
         }

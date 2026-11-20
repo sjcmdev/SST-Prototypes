@@ -3,6 +3,7 @@
 #include "App/JFMUserSettings.hpp"
 
 #include "Core/IO/TextFileIO.hpp"
+#include "Core/IO/RecentFiles.hpp"
 #include "Core/Logging/Logger.hpp"
 
 #include <algorithm>
@@ -546,12 +547,7 @@ namespace SST::Prototypes::JFM
 
 		{
 			std::scoped_lock lock(m_Mutex);
-			m_Settings.recentProjects.erase(
-				std::remove(m_Settings.recentProjects.begin(), m_Settings.recentProjects.end(), path),
-				m_Settings.recentProjects.end());
-			m_Settings.recentProjects.insert(m_Settings.recentProjects.begin(), std::move(path));
-			if (m_Settings.recentProjects.size() > 10)
-				m_Settings.recentProjects.resize(10);
+			TouchRecent(m_Settings.recentProjects, path);
 		}
 		Save();
 	}

@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Core/Utils/Memory.hpp"
+#include "Core/App/ProjectWorkspace.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Domain/JFMTypes.hpp"
 
@@ -187,7 +188,7 @@ namespace SST::Prototypes::JFM
 		template <typename T>
 		using OptionalRef = std::optional<std::reference_wrapper<T>>;
 
-		struct ProjectDocument
+		struct ProjectDocument : DocumentState
 		{
 			ProjectHandle handle = InvalidProjectHandle;
 			JFMProject project;
@@ -199,7 +200,6 @@ namespace SST::Prototypes::JFM
 			std::unordered_map<CharacteristicId, Ref<const JFMMonteCarloResult>> monteCarloResults;
 			std::unordered_map<CharacteristicId, std::uint64_t> monteCarloGenerations;
 			std::optional<JFMArrheniusLayoutDocument> arrheniusLayout;
-			std::optional<Path> path;
 			std::string selectedSeriesId;
 			std::string selectedGroupId;
 			CharacteristicId selectedCharacteristicId = InvalidCharacteristicId;
@@ -210,8 +210,6 @@ namespace SST::Prototypes::JFM
 			bool hidden = false;
 			std::size_t nextId = 1;
 			CharacteristicId nextCharacteristicId = 1;
-			std::uint64_t revision = 1;
-			std::uint64_t savedRevision = 1;
 		};
 
 		[[nodiscard]] static JFMProject MakeDefaultProject(std::string name);
@@ -245,9 +243,7 @@ namespace SST::Prototypes::JFM
 
 	private:
 		mutable std::mutex m_Mutex;
-		std::vector<ProjectDocument> m_Projects;
-		ProjectHandle m_ActiveProject = InvalidProjectHandle;
-		ProjectHandle m_NextProjectHandle = 1;
+		ProjectWorkspace<ProjectDocument> m_Workspace;
 		std::uint64_t m_NextRevision = 2;
 		JFMTreeItemRef m_FocusedTreeItem;
 		std::optional<JFMTreeItemRef> m_TreeClipboard;

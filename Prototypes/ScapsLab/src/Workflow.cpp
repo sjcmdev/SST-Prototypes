@@ -1,3 +1,4 @@
+#include "Core/IO/RecentFiles.hpp"
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include <scaps_core/api.hpp>
@@ -578,7 +579,8 @@ void Workflow::OnUpdate(float) {
             if(op=="save" && project.devices.size()==1) {d.dirty=false;d.metadataDirty=false;d.undo.MarkClean();}
         }
         if(op=="load" || op=="project_load" || op=="save" || op=="project_save") {
-            const auto file=pending->request.at("path");recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
+            auto files=recent.get<std::vector<std::string>>();
+            TouchRecent(files,pending->request.at("path").get<std::string>()); recent=files;
         }
         RefreshDirty();status="Completed: "+op;response=Snapshot();
     } else {

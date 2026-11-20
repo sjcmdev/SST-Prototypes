@@ -150,7 +150,7 @@ def test_frozen_m8_manifest():
 
 
 def test_png_snapshot_parity_every_module_and_missing_dependency(tmp_path, monkeypatch):
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[4]/"Core/ScientificRuntime/python"))
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[4]/"Core/ScientificRuntime/Python"))
     import sst_plot_export.exporter as renderer
     from test_m6_fit import fixture
     p = pipeline()

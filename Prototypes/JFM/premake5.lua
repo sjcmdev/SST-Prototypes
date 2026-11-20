@@ -291,7 +291,7 @@ project "JFMTests"
     }
 project "JFM"
     postbuildcommands {
-        '{COPYDIR} "' .. _SST_ROOT .. '/Core/ScientificRuntime/python/sst_plot_export" "%{cfg.targetdir}/python/sst_plot_export"',
+        '{COPYDIR} "' .. _SST_ROOT .. '/Core/ScientificRuntime/Python/sst_plot_export" "%{cfg.targetdir}/python/sst_plot_export"',
         '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/JFM/install/app/assets/fonts" "%{cfg.targetdir}/install/app/assets/fonts"'
     }
 

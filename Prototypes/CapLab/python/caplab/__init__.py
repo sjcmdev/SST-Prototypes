@@ -34,6 +34,13 @@ def execute(project, request):
     sources atomically; if any source fails, supply source_ids to explicitly select
     the files to commit. Filename metadata remains a suggestion. cancel=True or
     operation_id uses the same Core cancellation path as analysis.
+    Workspace operations: new, activate (project_id), close (optional application),
+    close_decision (decision=save/discard/cancel, explicit path for an unsaved
+    project), workspace and save_as (path). Pass the previous response's workspace
+    in request["workspace"] to retain open projects, active_project_id, paths,
+    revisions, dirty state and recent_projects between calls. File save/open still
+    use Core jobs. A failed close-save returns the unchanged open workspace.
+    Undo history remains in the live C++ workspace, not in the JSON transport.
 
     operation=walter: settings select measurement_id or measurement_ids, optional
     cv_fit_id / arrhenius_fit_id, model (default Walter1996-linear-field),

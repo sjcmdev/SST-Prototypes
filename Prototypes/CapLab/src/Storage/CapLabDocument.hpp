@@ -7,6 +7,8 @@
 #include "Domain/CapLabCircuit.hpp"
 #include <sst/plotlab/Extensions.hpp>
 #include "Core/Utils/Memory.hpp"
+#include "Core/App/DocumentState.hpp"
+#include "Core/Undo/UndoStack.hpp"
 #include "Core/Utils/Path.hpp"
 
 namespace SST::Prototypes::CapLab
@@ -401,23 +403,18 @@ namespace SST::Prototypes::CapLab
         Validate(p);
         return p;
     }
-    struct CapLabDocument
+    struct CapLabDocument : DocumentState
     {
+        std::uint64_t handle = 0;
         Project project;
-        Path path;
-        bool dirty = false;
-        std::uint64_t revision = 0;
-        void Changed() { ++revision; dirty = true; }
-        void Saved(const Path &target, std::uint64_t expected)
-        {
-            path = target;
-            if (revision == expected) dirty = false;
-        }
+        UndoStack history;
+        void Changed() { ++revision; }
+        void Saved(const Path &target, std::uint64_t expected) { MarkSaved(target, expected); }
         bool Opened(Project next, const Path &source, std::uint64_t expected)
         {
             if (revision != expected) return false;
             Validate(next);
-            project = std::move(next); path = source; ++revision; dirty = false;
+            project = std::move(next); ++revision; MarkSaved(source, revision);
             return true;
         }
     };

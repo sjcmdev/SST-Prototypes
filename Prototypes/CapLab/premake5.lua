@@ -139,7 +139,7 @@ for _, target in ipairs { "CapLab", "CapLabTests" } do
         postbuildcommands { '{COPYFILE} "' .. _SST_ROOT .. '/../SST-Libraries/SST-Physics/data/' .. name .. '" "%{cfg.targetdir}/' .. name .. '"' }
     end
     sst_link_plotlab()
-    defines { 'SST_PLOT_EXPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/ScientificRuntime/python"' }
+    defines { 'SST_PLOT_EXPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/ScientificRuntime/Python"' }
     defines { 'SST_PROTOTYPE_PYTHON_ROOT="' .. _SST_ROOT .. '/Prototypes/CapLab/python"' }
     filter "configurations:Debug"
         runtime "Debug"
@@ -174,7 +174,7 @@ project "CapLab"
     postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/CapLab/python" "%{cfg.targetdir}/python"' }
 
 project "CapLab"
-    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Core/ScientificRuntime/python/sst_plot_export" "%{cfg.targetdir}/python/sst_plot_export"' }
+    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Core/ScientificRuntime/Python/sst_plot_export" "%{cfg.targetdir}/python/sst_plot_export"' }
 
 -- Embed only the reusable CircuitCore-UI model/widget/runner, without its host.
 local circuitRoot = os.getenv("SST_CIRCUITCORE_ROOT") or (_SST_ROOT .. "/../CircuitCore")

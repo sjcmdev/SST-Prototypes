@@ -20,6 +20,7 @@ public:
         layout.height = view == View::Import ? 190.0f : view == View::Plot ? 430.0f : 630.0f;
         ApplyState(layout);
     }
+    bool IsDirty() const override { return view == View::Project && state->IsDirty(); }
     void RenderContent() override;
     void RenderAnalysis();
     void RenderAS();
@@ -33,6 +34,7 @@ private:
     int exportFormat = 0;
     std::set<pl::Id> selectedExportGraphs;
     void RenderISTabs(Project& project, const Json& analysis, sst::ui::plot::PlotViewState& viewState);
+    std::uint64_t shownProject = 0;
     View view;
     std::map<pl::Id, double> areaDraft;
     sst::ui::plot::PlotViewState fitView, bodePhaseView;
