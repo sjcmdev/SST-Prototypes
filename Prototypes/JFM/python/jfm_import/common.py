@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 import numpy as np
+from sst_import_metadata import add_token_variables, add_custom_variables
 
 
 @dataclass(slots=True)
@@ -77,42 +78,6 @@ def build_curve_name(
         return pattern.format(**values)
     except (KeyError, ValueError):
         return values.get("stem") or values.get("source_path") or "curve"
-
-
-def add_token_variables(metadata: dict[str, Any], key: str, text: str, delimiter: str) -> None:
-    if not delimiter:
-        return
-    for index, part in enumerate(text.split(delimiter)):
-        metadata[f"{key}_{index}"] = part
-
-
-def add_custom_variables(metadata: dict[str, Any], options: ParseOptions) -> None:
-    delimiter = options.variable_delimiter
-    for rule in options.custom_variables:
-        if not isinstance(rule, dict):
-            continue
-        name = str(rule.get("name") or "").strip()
-        source = str(rule.get("source") or "stem").strip()
-        if not name:
-            continue
-
-        value = "" if metadata.get(source) is None else str(metadata.get(source, ""))
-        token_index = _int_or_default(rule.get("token_index"), -1)
-        if token_index >= 0 and delimiter:
-            tokens = value.split(delimiter)
-            value = tokens[token_index] if token_index < len(tokens) else ""
-
-        start = max(0, _int_or_default(rule.get("substring_start"), 0))
-        length = _int_or_default(rule.get("substring_length"), -1)
-        value = value[start:] if length < 0 else value[start : start + max(0, length)]
-        metadata[name] = value
-
-
-def _int_or_default(value: Any, default: int) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def split_numeric_rows(

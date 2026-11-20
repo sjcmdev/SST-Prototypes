@@ -13,7 +13,7 @@
 #include <sst/plotlab/GraphSnapshot.hpp>
 namespace SST::Prototypes::CapLab
 {
-    enum class Operation { Preview, PreviewFolder, Open, OpenOrImport, Save, SaveAs, New, Close, Export, Analyze };
+    enum class Operation { Preview, PreviewFolder, Open, OpenOrImport, Save, SaveAs, New, Close, Export, Analyze, Reimport, Relink };
     struct DocumentRequested : BusEvent { Operation operation = Operation::Preview; Path target; std::vector<Path> sources; bool recursive = false; };
     struct DocumentChanged : BusEvent { pl::Id project; std::uint64_t revision; };
     class DocumentJob final : public IJob
@@ -31,6 +31,7 @@ namespace SST::Prototypes::CapLab
         bool recursive = false;
         std::vector<ImportPreviewItem<Json>> sourcePreviews;
         Json analysisOptions;
+        pl::Id measurementId=0;
         std::shared_ptr<const pl::Importer> importer = std::make_shared<LabASImporter>();
         std::optional<Project> opened;
         char decimal = '.';
@@ -51,12 +52,22 @@ namespace SST::Prototypes::CapLab
         void SelectPreview(int index);
         void ClearPreview();
         void OnUpdate(float) override;
+        void OnEvent(Event &event) override;
         void Changed(bool inputsChanged = true);
         Project EditSnapshot() const;
         void Select(const Json &request);
         void ReconcileSelection();
         Json SelectionJson() const;
+        Json ImportGroups() const;
         pl::Id importTargetSample = 0;
+        pl::Id sourceMeasurement=0;
+        bool metadataConfirmed=false;
+        bool sourceMetadataConfirmed=false;
+        std::optional<Project> sourceDraft;
+        Json sourceDiff;
+        std::uint64_t sourceRevision=0;
+        bool sourceRelink=false;
+        std::uint64_t profileRevision=0;
         ProjectWorkspace<CapLabDocument> workspace;
         CapLabDocument &Document() { return *workspace.Find(workspace.active); }
         const CapLabDocument &Document() const { return *workspace.Find(workspace.active); }

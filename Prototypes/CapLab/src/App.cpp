@@ -31,8 +31,23 @@ public:
             } catch (const std::exception &) { state.status="Recent projects file could not be read."; }
         }
         savedRecent=state.recent;
+        profilePath=recentPath.parent_path().Join("caplab-import-profiles.json");
+        if (TextFileIO::Load(profilePath,text,error)) {
+            try {
+                auto checked=state.Document().project;
+                checked.importProfiles=sst::plotlab::importProfilesFromJson(text); Validate(checked);
+                state.Document().project.importProfiles=std::move(checked.importProfiles);
+            }
+            catch (const std::exception &e) {state.status=e.what();}
+        }
     }
     void OnImGuiRender() override {
+        if (state.profileRevision!=savedProfileRevision) {
+            const auto profiles=sst::plotlab::importProfilesJson(state.Document().project.importProfiles);
+            std::string error;
+            if (TextFileIO::Save(profilePath,profiles,error)) savedProfileRevision=state.profileRevision;
+            else state.status=error;
+        }
         if (state.recent!=savedRecent) {
             Prototypes::CapLab::Json files=Prototypes::CapLab::Json::array(); for (const auto &path:state.recent) files.push_back(path.Utf8());
             std::string error;
@@ -74,6 +89,8 @@ private:
     Application &app;
     Prototypes::CapLab::CapLabWorkflow &state;
     Path recentPath;
+    Path profilePath;
+    std::uint64_t savedProfileRevision=0;
     std::vector<Path> savedRecent;
 };
 }

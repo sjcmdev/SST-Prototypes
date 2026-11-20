@@ -1,6 +1,6 @@
 """Laboratory AS import; no document or UI mutation."""
 import json
-from .importers import import_preview, parse_measurement
+from .importers import import_preview, parse_measurement, provenance as _source_provenance
 
 
 def parse_lab_as(text, source="", decimal=".", cancelled=lambda: False, progress=lambda value: None):
@@ -11,8 +11,12 @@ def parse_lab_as(text, source="", decimal=".", cancelled=lambda: False, progress
     return result
 
 
-def preview_json(text, source, decimal, cancelled=lambda: False, progress=lambda value: None, options_json=""):
-    if options_json:
+def preview_json(text, source, decimal, cancelled=lambda: False, progress=lambda value: None, options_json="", provenance_only=False):
+    if cancelled():
+        raise RuntimeError('Import cancelled')
+    if provenance_only:
+        result = _source_provenance(text, source, '')
+    elif options_json:
         result = import_preview(text, source, decimal, json.loads(options_json), cancelled, progress)
     else:
         result = parse_lab_as(text, source, decimal, cancelled, progress)
@@ -34,6 +38,23 @@ def execute(project, request):
     sources atomically; if any source fails, supply source_ids to explicitly select
     the files to commit. Filename metadata remains a suggestion. cancel=True or
     operation_id uses the same Core cancellation path as analysis.
+    preview returns groups by target_sample_id, T/f/bias/type with source/block indices.
+    target_sample_name creates one new target for the selected batch, with one Undo
+    entry; use target_sample_id for an existing target or omit both for per-source samples.
+    format_profile selects a named profile. profile(action=save/load/delete, name,
+    options, decimal) stores PlotLab-Engine ImportOptions in the project; the app
+    also persists named formats in its configuration directory.
+    options.metadata_rules maps sample_name/treatment/temperature_K/frequency_Hz/
+    bias_V to patterns such as {stem_0}, {folder_1} or custom variable names.
+    custom_variables and variable_delimiter use JFM's shared token/slice rules.
+    These are candidates; headers win. Explicit options confirm a chosen value;
+    confirm_metadata_conflicts=True acknowledges conflicting candidates.
+    reimport(measurement_id, optional path) and relink(measurement_id, path) return
+    source_draft={base_project, project, diff, provenance_only}. accept_source(draft)
+    is the explicit commit, using the same Undo command as GUI. Re-import retains
+    measurement/column IDs and invalidates dependent results. A changed grid
+    disables approved defect points pending reassignment. Relink requires the
+    original SHA-256 and changes provenance only, preserving numerical results.
     Workspace operations: new, activate (project_id), close (optional application),
     close_decision (decision=save/discard/cancel, explicit path for an unsaved
     project), workspace and save_as (path). Pass the previous response's workspace

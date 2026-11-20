@@ -1,9 +1,19 @@
 #pragma once
 
 #include "Core/EventSystem/DispatchingEventSystem/PlatformEvents/PlatformEventBase.hpp"
+#include "Core/Utils/Path.hpp"
+#include <vector>
 
 namespace SST
 {
+    class FilesDroppedEvent final : public Event
+    {
+    public:
+        explicit FilesDroppedEvent(std::vector<Path> paths) : paths(std::move(paths)) {}
+        std::vector<Path> paths;
+        DS_EVENT_CLASS_TYPE(FilesDropped)
+        DS_EVENT_CLASS_CATEGORY(EventCategoryApplication)
+    };
 	class WindowCloseEvent final : public Event
 	{
 	public:

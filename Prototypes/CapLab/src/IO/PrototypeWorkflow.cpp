@@ -2,6 +2,7 @@
 #include "IO/PrototypeWorkflow.hpp"
 #include "Domain/CapLabIS.hpp"
 #include "Domain/CapLabBundleImport.hpp"
+#include "Domain/CapLabSourceOperations.hpp"
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Core/IO/TextFileIO.hpp"
@@ -18,10 +19,19 @@ namespace SST::Prototypes::CapLab
         context.SetStage(operation == Operation::Preview ? "Reading import data" : operation == Operation::Open || operation == Operation::OpenOrImport ? "Opening project / import file" : operation == Operation::Save ? "Saving project" : "Exporting data / graph snapshots");
         context.ThrowIfCancellationRequested();
         std::string error;
-        if (operation == Operation::Open || operation == Operation::Preview || operation == Operation::OpenOrImport)
+        if (operation==Operation::Relink) {
+            context.SetStage("Checking source provenance");
+            std::string text;
+            if (!TextFileIO::Load(path,text,error)) throw std::runtime_error(error);
+            const auto origin=ReadLabAS(text,path,decimal,context,"",true);
+            auto draft=Parse(input); RelinkSource(draft,measurementId,origin);
+            preview={{"measurement_id",measurementId},{"source",path.Utf8()},{"provenance_only",true}};
+            context.ThrowIfCancellationRequested(); opened=std::move(draft); context.SetProgress(1,1); return;
+        }
+        if (operation == Operation::Open || operation == Operation::Preview || operation == Operation::OpenOrImport || operation==Operation::Reimport)
         {
             std::string text;
-            if (operation != Operation::Preview) {
+            if (operation == Operation::Open || operation == Operation::OpenOrImport) {
                 if (!TextFileIO::Load(path, text, error)) throw std::runtime_error(error);
                 if (operation == Operation::OpenOrImport) {
                     const auto json=Json::parse(text,nullptr,false);
@@ -57,6 +67,14 @@ namespace SST::Prototypes::CapLab
                 });
                 if (sourcePreviews.empty()) throw std::runtime_error("No supported CapLab data files were found.");
                 for (const auto &item : sourcePreviews) if (item.value) { preview=*item.value; break; }
+                if (operation==Operation::Reimport) {
+                    if (sourcePreviews.size()!=1 || !sourcePreviews[0].value) throw std::runtime_error("Source preview failed: "+(sourcePreviews[0].error ? sourcePreviews[0].error->technicalDetails : std::string{}));
+                    auto draft=Parse(input);
+                    const auto imported=preview;
+                    preview=ReplaceMeasurement(draft,measurementId,imported);
+                    preview["import_preview"]=imported;
+                    opened=std::move(draft);
+                }
             }
         }
         else if (operation == Operation::Analyze)
@@ -202,11 +220,27 @@ namespace SST::Prototypes::CapLab
             if (closeRequested && operation != Operation::Save && operation != Operation::SaveAs && operation != Operation::Close)
                 throw std::runtime_error("Resolve the pending close request first.");
             if (operation == Operation::New) {
-                const auto handle = workspace.Open(CapLabDocument{}, false);
+                CapLabDocument fresh; fresh.project.importProfiles=Document().project.importProfiles;
+                const auto handle = workspace.Open(std::move(fresh), false);
                 (void)Activate(handle); status = "New project."; return;
             }
             if (operation == Operation::Close) { (void)RequestClose(); return; }
             auto &document = Document();
+            if (operation==Operation::Reimport || operation==Operation::Relink) {
+                const auto meta=SourceMetadata(document.project,sourceMeasurement);
+                if (target.Empty()) {
+                    if (operation==Operation::Relink) {
+                        const auto selected=OpenFileDialog({"Moved measurement source","dat,txt,csv,cf,cv,json"});
+                        if (!selected) {status="Dialog cancelled."; return;}
+                        target=*selected;
+                    } else target=Path::FromResolved(std::filesystem::u8path(meta.at("source").get<std::string>()));
+                }
+                auto options=meta.value("parser_options",Json::object()); options["profile"]=meta.at("profile");
+                if (!meta.contains("parser_options") && meta.contains("temperature_K") && !meta.at("temperature_K").is_null()) options["temperature_K"]=meta.at("temperature_K");
+                importOptions=options.dump(); decimal=meta.value("decimal",std::string("."))[0];
+                sourceDraft.reset(); sourceDiff=nullptr;
+                sourceMetadataConfirmed=false;
+            }
             const bool saveAs = operation == Operation::SaveAs;
             if (saveAs) operation = Operation::Save;
             if (operation == Operation::PreviewFolder) {
@@ -245,7 +279,8 @@ namespace SST::Prototypes::CapLab
                 std::get<pl::Layer>(layer.data).view=view;
                 engine.change("Save graph view",{std::move(layer)}).apply(engine);
             }
-            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Analyze || operation == Operation::Save ? Serialize(EditSnapshot()) : operation == Operation::Export ? Serialize(document.project) : "",target);
+            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Analyze || operation == Operation::Save || operation==Operation::Reimport || operation==Operation::Relink ? Serialize(EditSnapshot()) : operation == Operation::Export ? Serialize(document.project) : "",target);
+            job->measurementId=sourceMeasurement;
             job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
             job->sources=std::move(sources); job->recursive=recursive;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
@@ -271,6 +306,7 @@ namespace SST::Prototypes::CapLab
             if (operation==Operation::Analyze) analysisDraft.reset();
             if (operation == Operation::Preview || operation == Operation::OpenOrImport) {
                 pendingGeneration=previewGeneration.Next();
+                metadataConfirmed=false;
                 preview.reset(); sourcePreviews.clear(); selectedSources.clear(); sourceTemperatures.clear(); previewSourceIndex=-1;
             }
         }
@@ -283,6 +319,43 @@ namespace SST::Prototypes::CapLab
     {
         previewGeneration.Next(); preview.reset(); sourcePreviews.clear();
         selectedSources.clear(); sourceTemperatures.clear(); previewSourceIndex=-1;
+        metadataConfirmed=false;
+    }
+    void CapLabWorkflow::OnEvent(Event &event)
+    {
+        EventDispatcher dispatcher(event);
+        dispatcher.Dispatch<FilesDroppedEvent>([&](const auto &drop) {
+            if (drop.paths.empty() || !commands) return false;
+            CommandContext context; context.Set("paths",drop.paths); context.Set("recursive",recursiveImport);
+            (void)commands->Execute(CommandID{"caplab.preview"},std::move(context));
+            return true;
+        });
+    }
+    Json CapLabWorkflow::ImportGroups() const
+    {
+        std::map<std::string,Json> groups;
+        for (const auto &source:sourcePreviews) if (source.value) {
+            auto add=[&](const Json &m, std::size_t sample, std::size_t measurement) {
+                auto partitions=m.value("groups",Json::array());
+                if (partitions.empty()) partitions.push_back(Json::object());
+                for (const auto &part:partitions) {
+                Json key{{"target_sample_id",importTargetSample},{"kind",m.value("kind",std::string("FrequencySweep"))},
+                    {"variant",m.value("variant",std::string("Cp_Rp"))},{"temperature_K",part.value("temperature_K",m.value("temperature_K",Json(nullptr)))},
+                    {"frequency_Hz",part.value("frequency_Hz",m.value("frequency_Hz",Json(nullptr)))},{"bias_V",part.value("bias_V",m.value("bias_V",Json(nullptr)))}};
+                const auto id=key.dump();
+                if (!groups.contains(id)) {key["sources"]=Json::array(); groups[id]=std::move(key);}
+                groups[id]["sources"].push_back({{"source_id",source.source.path.Utf8()},{"sample_index",sample},{"measurement_index",measurement},{"row_indices",part.value("rows",Json(nullptr))}});
+                }
+            };
+            if (source.value->contains("samples")) {
+                const auto &samples=source.value->at("samples");
+                for (std::size_t s=0;s<samples.size();++s) {
+                    const auto &measurements=samples[s].at("measurements");
+                    for (std::size_t m=0;m<measurements.size();++m) add(measurements[m],s,m);
+                }
+            } else add(*source.value,0,0);
+        }
+        Json result=Json::array(); for (const auto &[key,value]:groups) result.push_back(value); return result;
     }
     void CapLabWorkflow::SelectPreview(int index)
     {
@@ -329,6 +402,11 @@ namespace SST::Prototypes::CapLab
             else if (document.revision != pendingRevision ||
                 (pending->analysisOptions.value("preview",false) && document.selectionRevision!=pendingSelectionRevision) ||
                 (pending->operation==Operation::Preview && !previewGeneration.IsCurrent(pendingGeneration))) status = "Stale revision: result discarded.";
+            else if (pending->operation==Operation::Reimport || pending->operation==Operation::Relink) {
+                sourceDraft=std::move(pending->opened); sourceDiff=pending->preview;
+                sourceRevision=pendingRevision; sourceRelink=pending->operation==Operation::Relink; sourceMetadataConfirmed=false;
+                status="Source diff ready; review and confirm.";
+            }
             else if (pending->operation == Operation::Analyze)
             {
                 analysisDraft = std::move(pending->opened); analysisRevision = pendingRevision;
@@ -339,6 +417,7 @@ namespace SST::Prototypes::CapLab
             {
                 CapLabDocument opened;
                 opened.Opened(std::move(*pending->opened),pending->path,0);
+                for (const auto &[name,profile]:Document().project.importProfiles) opened.project.importProfiles.try_emplace(name,profile);
                 const auto handle = workspace.Open(std::move(opened), false);
                 // Release the completed job before switching the active document.
                 activeJob = 0;
@@ -358,7 +437,6 @@ namespace SST::Prototypes::CapLab
                         const auto &item=*sourcePreviews[i].value;
                         if (!item.contains("samples")) {
                             value=Optional(item.at("temperature_K"));
-                            if (!value) value=Optional(item.at("suggested_temperature_K"));
                         }
                     }
                     sourceTemperatures.push_back(value);
@@ -390,6 +468,7 @@ namespace SST::Prototypes::CapLab
 {
     void CapLabWorkflow::ResetProjectUI()
     {
+        sourceDraft.reset(); sourceDiff=nullptr; sourceMeasurement=0;
         ClearPreview(); graphViews.clear(); exportGraphs.clear(); importTargetSample=0;
         analysisDraft.reset(); pendingCandidate = nullptr;
         analysisOptions = Json::object(); view = {}; failure.reset(); status = "Ready.";

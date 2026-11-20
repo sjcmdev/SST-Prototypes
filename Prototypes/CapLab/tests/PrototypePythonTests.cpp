@@ -139,7 +139,8 @@ namespace SST::Prototypes::CapLab
         EXPECT_DOUBLE_EQ(workflow.preview->at("columns")[0][0].get<double>(),100);
         EXPECT_DOUBLE_EQ(workflow.preview->at("columns")[1][0].get<double>(),8.8601e-10);
         EXPECT_DOUBLE_EQ(workflow.preview->at("columns")[2][0].get<double>(),134160);
-        ASSERT_EQ(workflow.temperature,100);
+        EXPECT_FALSE(workflow.temperature); // Filename temperature remains a candidate until confirmed.
+        workflow.temperature=100;
         ASSERT_TRUE(commands->Execute(CommandID{"caplab.import"}));
         EXPECT_EQ(workflow.Document().project.sweeps.at(0).temperature_K,100);
         const auto &project=*workflow.Document().project.engine;

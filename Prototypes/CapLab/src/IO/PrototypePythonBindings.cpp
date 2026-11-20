@@ -1,6 +1,7 @@
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Domain/CapLabBundleImport.hpp"
+#include "Domain/CapLabSourceOperations.hpp"
 #include "Domain/CapLabAnalysis.hpp"
 #include "CapLabCommands.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
@@ -176,6 +177,52 @@ NB_MODULE(sst_caplab, module)
                 if (state.activeJob) { jobs->Shutdown(); state.OnUpdate(0); }
                 if (state.failure) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(Serialize(state.Document().project))},
                     {"error",{{"code",state.failure->code},{"message",state.status}}}}.dump();
+            } else if (operation=="profile") {
+                if (r.contains("options")) state.importOptions=r.at("options").dump();
+                if (r.contains("decimal")) {
+                    const auto decimal=r.at("decimal").get<std::string>();
+                    if (decimal!="." && decimal!=",") throw std::runtime_error("decimal must be . or ,");
+                    state.decimal=decimal[0];
+                }
+                CommandContext context; context.Set("request",r);
+                const auto result=commands->Execute(CommandID{"caplab.profile"},std::move(context));
+                if (!result) throw std::runtime_error(result.Error().technicalDetails);
+                response["options"]=Json::parse(state.importOptions.empty() ? "{}" : state.importOptions);
+                response["decimal"]=std::string(1,state.decimal);
+            } else if (operation=="reimport" || operation=="relink" || operation=="accept_source") {
+                state.sourceMetadataConfirmed=r.value("confirm_metadata_conflicts",false);
+                if (operation=="accept_source") {
+                    const auto &draft=r.at("draft");
+                    if (Json::parse(Serialize(state.Document().project))!=draft.at("base_project")) throw std::runtime_error("Stale source diff");
+                    state.sourceDraft=Parse(draft.at("project").dump()); state.sourceDiff=draft.at("diff");
+                    state.sourceRelink=draft.at("provenance_only"); state.sourceRevision=state.Document().revision;
+                    const auto result=commands->Execute(CommandID{"caplab.accept_source"});
+                    if (!result) return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}}.dump();
+                } else {
+                    state.sourceMeasurement=r.at("measurement_id").get<pl::Id>();
+                    if (operation=="reimport" && !r.contains("path") && SourceMetadata(state.Document().project,state.sourceMeasurement).at("source").get<std::string>().empty())
+                        throw std::runtime_error("Re-import requires a source path.");
+                    if (r.value("cancel",false)) (void)jobs->PauseAllJobs();
+                    CommandContext context;
+                    if (r.contains("path")) {
+                        const auto path=r.at("path").get<std::string>();
+                        if (path.empty()) throw std::runtime_error("Source path must not be empty");
+                        context.Set("path",Path::FromResolved(std::filesystem::u8path(path)));
+                    }
+                    if (operation=="relink" && !r.contains("path")) throw std::runtime_error("Relink requires path");
+                    const auto result=commands->Execute(CommandID{operation=="relink" ? "caplab.relink" : "caplab.reimport"},std::move(context));
+                    if (!result) throw std::runtime_error(result.Error().technicalDetails);
+                    bus->ProcessQueue();
+                    const auto id=state.activeJob;
+                    if (!id) throw std::runtime_error(state.status);
+                    if (r.value("cancel",false)) {(void)commands->Execute(CommandID{"caplab.cancel"}); (void)jobs->ResumeAllJobs();}
+                    {RunningOperation running(operationId,[&] {return bool(commands->Execute(CommandID{"caplab.cancel"}));}); jobs->Shutdown();}
+                    state.OnUpdate(0);
+                    if (!state.sourceDraft) return Json{{"ok",false},{"project",Json::parse(project)},
+                        {"error",{{"code",jobs->GetJob(id) && jobs->GetJob(id)->status==JobStatus::Cancelled ? "cancelled" : "caplab.source"},{"message",state.status}}}}.dump();
+                    response["source_draft"]={{"base_project",Json::parse(Serialize(state.Document().project))},{"project",Json::parse(Serialize(*state.sourceDraft))},
+                        {"diff",state.sourceDiff},{"provenance_only",state.sourceRelink}};
+                }
             } else if (operation=="export" || operation=="save" || operation=="save_as" || operation=="open" || operation=="import" || operation=="preview") {
                 const auto path=r.contains("path") ? Path::FromResolved(std::filesystem::u8path(r.at("path").get<std::string>())) : Path{};
                 std::vector<Path> sources;
@@ -190,6 +237,10 @@ NB_MODULE(sst_caplab, module)
                 if (operation!="import" && operation!="preview" && path.Empty()) throw std::runtime_error("Provide path");
                 if (path.Empty() && sources.empty()) throw std::runtime_error("Provide path or paths");
                 if ((operation=="import" || operation=="preview") && r.contains("options")) state.importOptions=r.at("options").dump();
+                if (r.contains("format_profile")) {
+                    const auto &profile=state.Document().project.importProfiles.at(r.at("format_profile").get<std::string>());
+                    state.importOptions=profile.extra.at("options"); state.decimal=profile.decimal;
+                }
                 if (r.contains("graph_id")) state.Document().project.graph=r.at("graph_id").get<pl::Id>();
                 Validate(state.Document().project);
                 const auto extension=path.Native().extension();
@@ -242,6 +293,9 @@ NB_MODULE(sst_caplab, module)
                 const auto job=jobs->GetJob(id);
                 if ((!job && state.failure) || (job && job->status!=JobStatus::Completed))
                     return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(project)},{"error",{{"code",job && job->status==JobStatus::Cancelled ? "cancelled" : operation+"_failed"},{"message",state.status}}}}.dump();
+                state.importTargetSample=r.value("target_sample_id",pl::Id{0});
+                response["target_sample_name"]=r.value("target_sample_name",std::string{});
+                response["groups"]=state.ImportGroups();
                 response["sources"]=Json::array();
                 for (const auto &item : state.sourcePreviews) {
                     Json error=nullptr;
@@ -250,6 +304,7 @@ NB_MODULE(sst_caplab, module)
                         {"root",item.source.root.Utf8()},{"preview",item.value ? *item.value : Json(nullptr)},{"error",error}});
                 }
                 if (operation=="import" && !state.sourcePreviews.empty()) {
+                    state.metadataConfirmed=r.value("confirm_metadata_conflicts",false);
                     state.importTargetSample=r.value("target_sample_id",pl::Id{0});
                     if (r.contains("source_ids")) {
                         if (!r.at("source_ids").is_array()) throw std::runtime_error("source_ids must be an array of strings");
@@ -272,7 +327,9 @@ NB_MODULE(sst_caplab, module)
                         if (value && !value->contains("samples")) state.sourceTemperatures[i]=Optional(value->at("temperature_K"));
                     }
                     if (state.preview && !state.preview->contains("samples")) state.temperature=Optional(state.preview->at("temperature_K"));
-                    const auto imported=commands->Execute(CommandID{"caplab.import"});
+                    CommandContext context;
+                    if (r.contains("target_sample_name")) context.Set("target_sample_name",r.at("target_sample_name").get<std::string>());
+                    const auto imported=commands->Execute(CommandID{"caplab.import"},std::move(context));
                     if (!imported) {
                         response.update(Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code","caplab.import"},{"message",state.status}}}});
                         return response.dump();
@@ -411,7 +468,7 @@ namespace SST::Prototypes::CapLab
         throw std::runtime_error("Embedded Python unavailable.");
 #endif
     }
-    Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const std::string &options)
+    Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const std::string &options, bool provenanceOnly)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
         if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python is unavailable; rebuild with embedding.");
@@ -426,10 +483,11 @@ namespace SST::Prototypes::CapLab
             const auto root = executable.Value().parent_path().Join("python");
             const std::string pythonRoot = FileSystem::Exists(root.Join("caplab").Native()) ? root.Utf8() : SST_PROTOTYPE_PYTHON_ROOT;
             if (!nb::cast<bool>(paths.attr("__contains__")(pythonRoot))) paths.attr("insert")(0,pythonRoot);
+            if (!nb::cast<bool>(paths.attr("__contains__")(SST_PLOT_EXPORT_PYTHON_ROOT))) paths.attr("append")(SST_PLOT_EXPORT_PYTHON_ROOT);
             const std::function<bool()> cancel = [&] { return context.IsCancellationRequested(); };
             const std::function<void(double)> progress = [&](double v) { context.SetProgress(float(v),1); };
             // nanobind must be initialized before converting std::function callbacks.
-            const auto result = nb::module_::import_("caplab").attr("preview_json")(text,source.Utf8(),std::string(1,decimal),cancel,progress,options);
+            const auto result = nb::module_::import_("caplab").attr("preview_json")(text,source.Utf8(),std::string(1,decimal),cancel,progress,options,provenanceOnly);
             return Json::parse(nb::cast<std::string>(result));
         }
         catch (const nb::python_error &e)
@@ -438,7 +496,7 @@ namespace SST::Prototypes::CapLab
             throw std::runtime_error(e.what());
         }
 #else
-        (void)text; (void)source; (void)decimal; (void)context; (void)options;
+        (void)text; (void)source; (void)decimal; (void)context; (void)options; (void)provenanceOnly;
         throw std::runtime_error("Embedded Python is unavailable; rebuild with embedding.");
 #endif
     }

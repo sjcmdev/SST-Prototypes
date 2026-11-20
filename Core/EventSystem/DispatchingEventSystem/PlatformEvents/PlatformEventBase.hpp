@@ -21,7 +21,8 @@ namespace SST
 		MouseButtonReleased,
 		MouseMoved,
 		MouseScrolled,
-		TouchpadGesture
+		TouchpadGesture,
+		FilesDropped
 	};
 
 	enum EventCategory : std::uint32_t

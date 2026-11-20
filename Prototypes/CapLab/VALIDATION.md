@@ -1065,3 +1065,54 @@ check also passed. Frozen files restored byte-for-byte were
 `m2/#1_CF_test_200K.dat`, `m2/CV_test_230K_DL1e+03Hz_REL.dat`,
 `m2/samples_Cd_diffusion.json`, `m8/synthetic.json`,
 `scaps-gold1/reference.json` and `scaps-gold1/README.md`.
+
+## clfiles1 — import workflows and confirmation regression (2026-11-20)
+
+The checkout already contained target-sample batch import, named PlotLab-Engine
+format profiles, shared JFM filename/folder rules, source diff/relink commands
+and OS file drop. This job verified those flows and closed a confirmation gap:
+the import acknowledgement survived a new preview and was shared with the
+source-diff acknowledgement. Preview creation now resets import confirmation;
+source diffs use their own flag in GUI, commands and nanobind `execute`.
+Legacy SI previews now enforce the same conflict check and expose its control.
+
+Regression coverage added: three C++ cases (fresh preview, independent import /
+source acknowledgements, legacy conflicts) and one embedded Python case
+(re-import acceptance with a header/filename conflict on a Unicode source path).
+The existing I1–I5/D1, Unicode, unit/sign, target-sample, profile persistence,
+re-import invalidation, stale diff, relink and atomic failure cases all passed.
+
+| Gate executed in this job | Result |
+|---|---|
+| MSVC Debug CapLab, CapLabTests, JFM, JFMTests and linked libraries | Passed |
+| Full CapLab C++ | 76/76 passed, no skipped tests |
+| Full embedded CapLab Python | 288/288 passed, no skipped tests |
+| Full JFM C++ | 105/105 passed, no skipped tests |
+| Full embedded JFM Python | 222 passed + 24 existing strict xfail; no errors or ordinary skips |
+| Offscreen GUI / native OS drop | Before and after reviewed; both app runs exited 0 |
+| ImGui ID conflicts | Render assertions passed; no conflicts in capture logs |
+| graphify | AST update completed: 77,496 nodes / 152,433 edges |
+
+Build directories were this worktree's `SST-Prototypes/build` and sibling
+`SST-Libraries/build`, under `D:/SJCM/01_SemiconductorStudio/wt-cl/clfiles1/`.
+Premake, every build, every suite and each GPU capture used the global
+`tools/agents/build-lock.sh`. MSBuild used `-nr:false -m:1`, with `/MP6`.
+JFM Python ran as 13 separately locked groups; their reports contain exactly
+246 unique test cases, with no overlap or omissions. Embedded host invocations
+are not counted again as additional C++ cases. A transient LNK1163 was resolved
+by recompiling `SourceOperationsTests.obj`; the subsequent build and full suites
+passed without a source or compiler-setting workaround.
+
+Evidence in `build/`: `clfiles1-job-build-*.log`,
+`clfiles1-job-CapLab-cpp.xml`, `clfiles1-job-CapLab-pytest.xml`,
+`clfiles1-job-JFM-gtest.xml`, the 13 `clfiles1-job-JFM-*.xml` pytest reports,
+`clfiles1-job-JFM-python-results.json` and `clfiles1-job-graphify.log`.
+Reviewed captures: `tools/agents/runs/clfiles1/shots/review-before.png` and
+`review-after.png` (1280 × 720, nonuniform framebuffers). The capture runner
+used `--screenshot` and an isolated portable configuration, injected a native
+file-drop event, and left the project unmodified at the import preview.
+Desktop capture and Computer Use were not used.
+
+Manual owner workflow remains untested. Additional instrument adapters remain
+an owner question: identify the actual export formats and supply valid/damaged
+fixtures before extending the existing Lab/ProPho/SCAPS adapters.

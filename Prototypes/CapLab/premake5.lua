@@ -133,6 +133,7 @@ project "CapLabTests"
 -- Keep app/tests on the same embedding and CRT contract as Core.
 for _, target in ipairs { "CapLab", "CapLabTests" } do
     project(target)
+    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Core/ScientificRuntime/Python/sst_import_metadata" "%{cfg.targetdir}/python/sst_import_metadata"' }
     sst_link_libraries()
     defines { 'SST_CAPLAB_MATERIALS_JSON="' .. _SST_ROOT .. '/../SST-Libraries/SST-Physics/data/caplab-materials.json"' }
     for _, name in ipairs { "caplab-materials.json", "caplab-propho-compat.json" } do

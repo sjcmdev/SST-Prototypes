@@ -1,3 +1,4 @@
+#include "Core/dspch.hpp"
 #include "Hdf5Session.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #if DS_PYTHON_CAPI_AVAILABLE
