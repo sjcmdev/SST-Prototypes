@@ -7,7 +7,6 @@
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "PlotLabExport.hpp"
-#include <sst/ui/Plot/Axis.hpp>
 namespace SST::Prototypes::CapLab
 {
     void DocumentJob::Execute(JobContext &context)
@@ -95,7 +94,8 @@ namespace SST::Prototypes::CapLab
                             throw std::runtime_error("Point input changed; reassign the point before fitting.");
                         if (seen.insert(id).second) analysisOptions["point_inputs"].push_back(m);
                     }
-            } else measurement=AnalysisMeasurement(p,analysisOptions.at("measurement_id").get<pl::Id>());
+            } else if (analysisOptions.at("type")!="Circuit" || analysisOptions.value("fit",false) || analysisOptions.contains("measurement_id"))
+                measurement=AnalysisMeasurement(p,analysisOptions.at("measurement_id").get<pl::Id>());
             Json xd;
             if (analysisOptions.at("type")=="Walter" && analysisOptions.value("xd_source",std::string("CV"))=="CV" &&
                 !analysisOptions.contains("xd_measurement_id") && analysisOptions.contains("cv_fit_id"))
@@ -117,7 +117,20 @@ namespace SST::Prototypes::CapLab
                     result=FitIS(measurement,*it,analysisOptions,context);
                     *it=result.at("circuit");
                     RefreshAnalyses(p);
-                } else result=SimulateIS(measurement,*it,analysisOptions,context);
+                } else {
+                    result=SimulateIS(measurement,*it,analysisOptions,context);
+                    if (measurement.is_null()) {
+                        auto overlay=[&](pl::Id id) {
+                            context.ThrowIfCancellationRequested();
+                            const auto m=AnalysisMeasurement(p,id);
+                            if (m.at("sample_id")==it->at("sample_id") && m.at("kind")=="FrequencySweep" &&
+                                (m.at("variant")=="ReZ_ImZ" || m.at("variant")=="C_G" || m.at("variant")=="Cp_Rp"))
+                                OverlayISMeasurement(result,m);
+                        };
+                        for (const auto &m : p.sweeps) overlay(m.id);
+                        for (const auto &m : p.measurements) overlay(m.at("id"));
+                    }
+                }
             } else result = ReadAnalysis(measurement,analysisOptions,xd,context);
             result["input_revision"] = analysisOptions.at("input_revision");
             AppendAnalysis(p,std::move(result)); opened = std::move(p);
@@ -150,15 +163,11 @@ namespace SST::Prototypes::CapLab
             if (snapshot->spec.equalAspect) {
                 auto equal=*snapshot;
                 const double ratio=(equal.ranges.maxX-equal.ranges.minX)/(equal.ranges.maxY-equal.ranges.minY);
-                const double paddingX=2*sst::ui::plot::AxisHorizontalPaddingPt*25.4/72;
-                const double paddingY=2*sst::ui::plot::AxisVerticalPaddingPt*25.4/72;
-                if (!std::isfinite(ratio) || ratio<=0 || equal.widthMm<=paddingX || equal.heightMm<=paddingY)
+                if (!std::isfinite(ratio) || ratio<=0 || equal.widthMm<=0 || equal.heightMm<=0)
                     throw std::runtime_error("Export page is too small for equal-scale axes and labels.");
-                // The shared painter has fixed physical margins; grow the plot area to preserve 1:1 units.
-                equal.spec.customAxes=true;
-                if (ratio>(equal.widthMm-paddingX)/(equal.heightMm-paddingY))
-                    equal.widthMm=(equal.heightMm-paddingY)*ratio+paddingX;
-                else equal.heightMm=(equal.widthMm-paddingX)/ratio+paddingY;
+                // The current exporter uses the same fractional margin on both axes.
+                if (ratio>equal.widthMm/equal.heightMm) equal.widthMm=equal.heightMm*ratio;
+                else equal.heightMm=equal.widthMm/ratio;
                 preview=Json::parse(PlotLab::SnapshotJson(equal));
                 PlotLab::ExportGraph(equal,path.Native(),"png",300,pythonRoot);
             } else {preview=Json::parse(PlotLab::SnapshotJson(*snapshot)); PlotLab::ExportGraph(*snapshot,path.Native(),"png",300,pythonRoot); }

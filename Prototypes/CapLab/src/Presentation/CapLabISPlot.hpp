@@ -21,8 +21,7 @@ inline NyquistScale RenderISPlot(const char* id, const sst::ui::plot::PlotSpec& 
         const auto text=Engineering(value,"",4);
         return std::snprintf(buffer,size,"%s",text.c_str());
     };
-    if (spec.customAxes) RenderPlot(id,spec,series,count,state,{},size);
-    else if (ImPlot::BeginPlot(id,size,(spec.equalAspect ? ImPlotFlags_Equal : 0) | (spec.legend.visible ? 0 : ImPlotFlags_NoLegend))) {
+    if (ImPlot::BeginPlot(id,size,(spec.equalAspect ? ImPlotFlags_Equal : 0) | (spec.legend.visible ? 0 : ImPlotFlags_NoLegend))) {
         auto xLabel=spec.x.label, yLabel=spec.y.label;
         for (auto* label : {&xLabel,&yLabel}) if (const auto pos=label->find("Ohm"); pos!=std::string::npos) label->replace(pos,3,"\u03a9");
         ImPlot::SetupAxes(xLabel.c_str(),yLabel.c_str(),

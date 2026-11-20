@@ -453,3 +453,55 @@ per-parameter `sigma` in the accompanying `unit`. The estimate is
 for the weighted complex residual Jacobian at the optimum. Unidentifiable parameters
 or insufficient degrees of freedom give null covariance and an explicit
 `covariance_status`; fixed parameters have null sigma. Saved older fits remain readable.
+
+## Model-only IS (clis2)
+
+The IS panel can create a **New sample** and circuit in an empty project, then run
+**Simulate model IS** without importing a measurement. The existing nanobind
+`caplab.execute` command/job path accepts the same operation:
+
+```python
+created = execute(project, {"operation": "edit_circuit", "edit": {
+    "action": "create", "sample_name": "Simulation", "name": "Randles",
+    "topology": "R0-p(R1,CPE1)-W1"}})
+assert created["ok"], created["error"]
+project = created["project"]
+result = execute(project, {"operation": "simulate", "settings": {
+    "circuit_id": project["circuits"][-1]["id"],
+    "temperature_K": 298.15, "bias_V": 0,
+    "frequency_sweep": {"start_Hz": .1, "stop_Hz": 1e6,
+                        "points_per_decade": 20}}})
+```
+
+Supply an existing `sample_id` instead of `sample_name` to attach a circuit to a
+sample. Omit `measurement_id` for model-only simulation. T and bias are required;
+there is no measurement object or implicit condition. Choose exactly one grid:
+`frequency_Hz: [1000, .3, 25]` preserves explicit order, while `frequency_sweep`
+uses positive start/stop Hz and integer points per decade, always including both
+endpoints (one point if start equals stop). Frequencies must be positive, finite
+and unique. Supplying a measured grid and an explicit grid together is an error.
+
+The shared limit is **1..1201 points** for either grid. This preserves the existing
+measured-grid budget: each frequency requires a CircuitCore AC solve (including
+DC linearization), and results persist model arrays and plotting columns. The cap
+bounds job cost, project size and UI/export work; it is not a physics limit.
+For example, six decades at 200 points/decade use 1201 points. Larger sweeps fail
+with `simulation_failed` rather than truncating or silently coarsening the grid.
+Cancellation remains available between solves.
+
+Results contain `grid_source: "model"`, explicit `frequency_Hz`, `temperature_K`,
+`bias_V`, model Z, and five graphs: Nyquist, Bode magnitude/phase, C-f and G/omega-f.
+`row_ids`, measured Z and residual arrays are empty; there are no residual graphs.
+Every compatible same-sample measurement overlays on its original frequency grid;
+legend entries retain its stable ID, T and bias, including unknown conditions.
+Overlay inputs are snapshotted for staleness checks. Invalid measurement points
+produce gaps and warning diagnostics without invalidating an otherwise valid model.
+Project save/open, Undo, graph selection and PNG export use the existing workflow.
+
+`fit` continues to require `measurement_id` and exact measured frequencies/T/bias.
+The robustness fixtures independently evaluate R-CPE and R-CPE-W formulas over
+7.5 decades, with clean/0.2% seeded-noise spectra and starts at 0.6/1.6 of truth.
+The real-data case uses every 60th acquisition row of the existing frozen
+`tests/fixtures/cf_100K_7.dat` (PFS I2, provenance in `tests/fixtures/manifest.json`),
+without interpolation. It checks finite bounded fitting and score reduction;
+it does not claim that this empirical topology identifies the device physics.

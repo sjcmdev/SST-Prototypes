@@ -1,0 +1,2 @@
+# Frozen fixtures have byte-for-byte source hashes; preserve their stored endings.
+* -text

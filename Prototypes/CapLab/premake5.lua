@@ -178,13 +178,16 @@ project "CapLab"
     postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/PlotLab/python/sst_plotlab" "%{cfg.targetdir}/python/sst_plotlab"' }
 
 -- Embed only the reusable CircuitCore-UI model/widget/runner, without its host.
+local circuitRoot = _SST_ROOT .. "/../CircuitCore"
+local circuitUiRoot = _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI"
+if not os.isdir(circuitRoot) then circuitRoot = _SST_ROOT .. "/../../../CircuitCore" end
+if not os.isdir(circuitUiRoot) then circuitUiRoot = _SST_ROOT .. "/../../../SST-Experiments/CircuitCore-UI" end
 for _, target in ipairs { "CapLab", "CapLabTests" } do
     project(target)
-    includedirs { _SST_ROOT .. "/../CircuitCore/include", _SST_ROOT .. "/../CircuitCore/src",
-        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src" }
-    files { _SST_ROOT .. "/../CircuitCore/src/**.cpp",
-        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/CircuitDocument.cpp",
-        _SST_ROOT .. "/../SST-Experiments/CircuitCore-UI/src/AnalysisRunner.cpp",
+    includedirs { circuitRoot .. "/include", circuitRoot .. "/src", circuitUiRoot .. "/src" }
+    files { circuitRoot .. "/src/**.cpp",
+        circuitUiRoot .. "/src/CircuitDocument.cpp",
+        circuitUiRoot .. "/src/AnalysisRunner.cpp",
         _SST_ROOT .. "/Prototypes/CapLab/src/Domain/CapLabIS.cpp" }
 end
 project "CapLabTests"

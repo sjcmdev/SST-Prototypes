@@ -3,8 +3,38 @@
 #include "Presentation/CapLabISPlot.hpp"
 #include <limits>
 #include "Presentation/SelectionLabel.hpp"
+#include "Presentation/CapLabPrototypePanel.hpp"
+#include "Domain/CapLabIS.hpp"
+#include "Domain/CapLabAnalysis.hpp"
 
 namespace SST::Prototypes::CapLab {
+TEST(CapLabISDisplay, ModelOnlyPlotAndControlsRenderWithoutMeasurementOrIdConflicts) {
+    const auto oldGui=ImGui::GetCurrentContext();
+    const auto oldPlot=ImPlot::GetCurrentContext();
+    auto* gui=ImGui::CreateContext(); auto* plot=ImPlot::CreateContext();
+    auto& io=ImGui::GetIO(); io.IniFilename=nullptr; io.DisplaySize={1600,1800}; io.DeltaTime=1.f/60;
+    io.ConfigDebugHighlightIdConflicts=true;
+    unsigned char* pixels; int width,height; io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+    auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>();
+    auto undo=CreateRef<UndoStack>(); auto commands=CreateRef<CommandRegistry>();
+    CapLabWorkflow workflow(jobs,bus,undo); RegisterCommands(commands,bus,workflow);
+    auto& p=workflow.document.project;
+    EditCircuit(p,{{"action","create"},{"sample_name","Simulation"},{"name","RC"},{"topology","R0-C0"}});
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    AppendAnalysis(p,SimulateIS(nullptr,p.circuits[0],{{"frequency_Hz",{1.,10.,100.}},
+        {"temperature_K",300.},{"bias_V",0.}},context));
+    CapLabPrototypePanel panel(&workflow,commands,CapLabPrototypePanel::View::Plot);
+    for (int frame=0;frame<3;++frame) {
+        ImGui::NewFrame(); ImGui::SetNextWindowPos({0,0}); ImGui::SetNextWindowSize({1500,1700});
+        ImGui::Begin("Model-only IS"); panel.RenderContent();
+        ImGui::SetNextItemOpen(true); panel.RenderIS();
+        ImGui::End(); ImGui::Render();
+        EXPECT_EQ(gui->DebugDrawIdConflictsCount,0);
+        EXPECT_TRUE(workflow.status.empty()) << workflow.status;
+    }
+    ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
+    ImGui::SetCurrentContext(oldGui); ImPlot::SetCurrentContext(oldPlot);
+}
 TEST(CapLabISDisplay, ConversionAnnotationIsNotAMeasurementPath) {
     Project p;
     p.measurements.push_back({{"id",123u},{"metadata",{{"source","D:/data/cf_100K_7.dat (Cp/Rp -> C/G)"},{"temperature_K",100}}}});

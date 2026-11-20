@@ -9,7 +9,17 @@ void EditCircuit(Project &p, const Json &edit) {
     const std::string action=edit.at("action");
     if (action=="create") {
         const auto schematic=edit.contains("topology") ? CircuitJson(ccui::importString(edit.at("topology"))) : CircuitJson(ReadCircuit(edit.at("schematic")));
-        p.circuits.push_back({{"id",p.engine->reserveId()},{"sample_id",edit.at("sample_id")},
+        pl::Id sample;
+        if (edit.contains("sample_id")) sample=edit.at("sample_id");
+        else {
+            const std::string name=edit.at("sample_name");
+            if (name.find_first_not_of(" \t\r\n")==std::string::npos) throw std::runtime_error("Sample name is required");
+            sample=p.engine->reserveId();
+            auto change=p.engine->change("Create circuit sample",{{sample,p.engine->root(),name,0,pl::Workbook{}}});
+            change.apply(*p.engine);
+            p.samples.push_back({sample,name,std::nullopt});
+        }
+        p.circuits.push_back({{"id",p.engine->reserveId()},{"sample_id",sample},
             {"name",edit.at("name")},{"schematic",schematic}});
     } else {
         const auto it=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==edit.at("circuit_id");});
@@ -48,33 +58,74 @@ double Condition(const Json &m, const Json &s, const char *key, bool positive) {
     if (!std::isfinite(v) || (positive && v<=0)) throw std::runtime_error(std::string("Invalid/missing ")+key);
     return v;
 }
+std::vector<double> ISColumn(const Json &m, const char *name, const char *unit) {
+    const auto &names=m.at("names");
+    const auto it=std::find(names.begin(),names.end(),Json(name));
+    if (it==names.end()) throw std::runtime_error(std::string("Missing IS column ")+name);
+    const auto i=std::distance(names.begin(),it);
+    if (m.at("units").at(i)!=unit) throw std::runtime_error("Invalid IS SI units");
+    return m.at("columns").at(i).get<std::vector<double>>();
+}
+std::vector<double> ModelFrequencies(const Json &settings) {
+    if (settings.contains("frequency_Hz")==settings.contains("frequency_sweep"))
+        throw std::runtime_error("Specify frequency_Hz or frequency_sweep, exclusively");
+    if (settings.contains("frequency_Hz")) {
+        const auto &f=settings.at("frequency_Hz");
+        if (!f.is_array() || f.empty() || f.size()>1201) throw std::runtime_error("IS requires 1..1201 frequencies");
+        return f.get<std::vector<double>>();
+    }
+    const auto &s=settings.at("frequency_sweep");
+    const double start=s.at("start_Hz"), stop=s.at("stop_Hz"), density=s.at("points_per_decade");
+    if (!std::isfinite(start) || !std::isfinite(stop) || !std::isfinite(density) ||
+        start<=0 || stop<start || density<1 || density!=std::floor(density))
+        throw std::runtime_error("Invalid logarithmic frequency sweep");
+    const double intervals=(std::log10(stop)-std::log10(start))*density;
+    // Keep exact decade endpoints from gaining a point through floating-point roundoff.
+    const double count=std::abs(intervals-std::round(intervals))<1e-10 ? std::round(intervals) : std::ceil(intervals);
+    if (!std::isfinite(count) || count>1200) throw std::runtime_error("IS requires 1..1201 frequencies");
+    std::vector<double> f{start};
+    for (int i=1;i<count;++i) f.push_back(std::pow(10.,std::log10(start)+i/density));
+    if (stop>start) f.push_back(stop);
+    return f;
+}
+Json ISCurve(const std::string &kind, const std::string &name, const std::vector<double> &f,
+    const Json &real, const Json &imaginary, bool model) {
+    Json x=Json::array(),y=Json::array();
+    for (std::size_t i=0;i<f.size();++i) {
+        const auto &re=real.at(i), &im=imaginary.at(i);
+        x.push_back(kind=="Nyquist" ? re : Json(f[i]));
+        if (re.is_null() || im.is_null()) {y.push_back(nullptr); continue;}
+        const std::complex<double> z{re.get<double>(),im.get<double>()};
+        const double omega=2*std::acos(-1.)*f[i];
+        const auto admittance=sst::physics::reciprocalImmittance(z);
+        y.push_back(kind=="Nyquist" ? -z.imag() : kind=="Bode magnitude" ? std::abs(z) :
+            kind=="Bode phase" ? std::arg(z)*180/std::acos(-1.) : kind=="C-f" ? admittance.imag()/omega : admittance.real()/omega);
+    }
+    return {{"name",name},{"x",x},{"y",y},{"fit",model}};
+}
 }
 Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &context, bool plots) {
     using namespace circuitcore;
     using namespace sst::physics;
-    if (m.at("kind")!="FrequencySweep" || m.at("sample_id")!=c.at("sample_id")) throw std::runtime_error("Circuit requires a same-sample FrequencySweep");
+    const bool measuredGrid=!m.is_null();
+    if (measuredGrid && (m.at("kind")!="FrequencySweep" || m.at("sample_id")!=c.at("sample_id"))) throw std::runtime_error("Circuit requires a same-sample FrequencySweep");
+    if (measuredGrid && (settings.contains("frequency_Hz") || settings.contains("frequency_sweep")))
+        throw std::runtime_error("Measured grid cannot be combined with an explicit grid");
     const double temperature=Condition(m,settings,"temperature_K",true), bias=Condition(m,settings,"bias_V",false);
-    auto column=[&](const char *name,const char *unit) {
-        const auto &names=m.at("names");
-        const auto it=std::find(names.begin(),names.end(),Json(name));
-        if (it==names.end()) throw std::runtime_error(std::string("Missing IS column ")+name);
-        const auto i=std::distance(names.begin(),it);
-        if (m.at("units").at(i)!=unit) throw std::runtime_error("Invalid IS SI units");
-        return m.at("columns").at(i).get<std::vector<double>>();
-    };
-    const auto f=column("f","Hz");
-    if (f.empty() || f.size()>1201 || f.size()!=m.at("row_ids").size()) throw std::runtime_error("IS requires 1..1201 measured frequencies");
+    auto column=[&](const char *name,const char *unit) {return ISColumn(m,name,unit);};
+    const auto f=measuredGrid ? column("f","Hz") : ModelFrequencies(settings);
+    if (f.empty() || f.size()>1201 || (measuredGrid && f.size()!=m.at("row_ids").size())) throw std::runtime_error("IS requires 1..1201 frequencies");
     std::set<double> unique;
     for (double v : f) if (!std::isfinite(v) || v<=0 || !unique.insert(v).second) throw std::runtime_error("Invalid/duplicate IS frequency");
-    const std::string variant=m.at("variant");
+    const std::string variant=measuredGrid ? m.at("variant").get<std::string>() : "";
     std::vector<double> a,b;
     if (variant=="ReZ_ImZ") {a=column("ReZ","Ohm"); b=column("ImZ","Ohm");}
     else if (variant=="C_G" || variant=="Cp_Rp") {a=column("C","F"); b=variant=="C_G" ? column("G","S") : column("Rp","Ohm");}
-    else throw std::runtime_error("Unsupported IS variant");
-    if (a.size()!=f.size() || b.size()!=f.size()) throw std::runtime_error("Unequal IS columns");
+    else if (measuredGrid) throw std::runtime_error("Unsupported IS variant");
+    if (measuredGrid && (a.size()!=f.size() || b.size()!=f.size())) throw std::runtime_error("Unequal IS columns");
     Json out{{"type","Circuit"},{"model","CircuitCore-AC"},{"kernel_version",1},{"sample_id",c.at("sample_id")},
-        {"circuit",c},{"inputs",Json::array({m})},{"settings",settings},{"temperature_K",temperature},{"bias_V",bias},
-        {"frequency_Hz",f},{"row_ids",m.at("row_ids")},{"diagnostics",Json::array()},
+        {"circuit",c},{"inputs",measuredGrid ? Json::array({m}) : Json::array()},{"settings",settings},{"temperature_K",temperature},{"bias_V",bias},
+        {"frequency_Hz",f},{"grid_source",measuredGrid ? "measurement" : "model"},{"row_ids",measuredGrid ? m.at("row_ids") : Json::array()},{"diagnostics",Json::array()},
         {"status","valid"},{"computed_status","valid"},{"plots",Json::array()},
         {"source","CircuitCore-UI compileDocument; CircuitCore AC linearization; PFS pp.94-96 Y=G+j*omega*C"}};
     for (const char *key : {"measured_ReZ_Ohm","measured_ImZ_Ohm","model_ReZ_Ohm","model_ImZ_Ohm",
@@ -102,9 +153,9 @@ Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &
     AcSweepOptions options; options.observations.observeDeviceCurrent(built.portSource);
     for (std::size_t i=0;i<f.size();++i) {
         context.ThrowIfCancellationRequested();
-        const auto row=m.at("row_ids").at(i);
+        const Json row=measuredGrid ? m.at("row_ids").at(i) : Json(nullptr);
         std::optional<std::complex<double>> measured,model;
-        try {
+        if (measuredGrid) try {
             measured=variant=="ReZ_ImZ" ? std::complex<double>{a[i],b[i]} :
                 reciprocalImmittance(parallelAdmittance(f[i],a[i],variant=="C_G" ? b[i] : parallelConductance(b[i])));
             (void)reciprocalImmittance(*measured);
@@ -120,41 +171,60 @@ Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &
             try { model=reciprocalImmittance(-result.points[0].deviceCurrents[0]); }
             catch (const std::exception &e) { diagnostic("invalid_model",e.what(),row); }
         }
-        if (!model) diagnostic("unusable_point","CircuitCore failed AC at measured frequency",row);
+        if (!model) diagnostic("unusable_point","CircuitCore failed AC at requested frequency",row);
         auto append=[&](const char *key,std::optional<double> v) {out[key].push_back(v ? Json(*v) : Json(nullptr));};
-        append("measured_ReZ_Ohm",measured ? std::optional(measured->real()) : std::nullopt);
-        append("measured_ImZ_Ohm",measured ? std::optional(measured->imag()) : std::nullopt);
+        if (measuredGrid) {
+            append("measured_ReZ_Ohm",measured ? std::optional(measured->real()) : std::nullopt);
+            append("measured_ImZ_Ohm",measured ? std::optional(measured->imag()) : std::nullopt);
+        }
         append("model_ReZ_Ohm",model ? std::optional(model->real()) : std::nullopt);
         append("model_ImZ_Ohm",model ? std::optional(model->imag()) : std::nullopt);
-        append("residual_ReZ_Ohm",measured && model ? std::optional(model->real()-measured->real()) : std::nullopt);
-        append("residual_ImZ_Ohm",measured && model ? std::optional(model->imag()-measured->imag()) : std::nullopt);
+        if (measuredGrid) {
+            append("residual_ReZ_Ohm",measured && model ? std::optional(model->real()-measured->real()) : std::nullopt);
+            append("residual_ImZ_Ohm",measured && model ? std::optional(model->imag()-measured->imag()) : std::nullopt);
+        }
         context.SetProgress(float(i+1)/f.size(),1);
     }
     if (plots) for (const auto &kind : {"Nyquist","Bode magnitude","Bode phase","C-f","G/omega-f","ReZ residual","ImZ residual"}) {
         const std::string k=kind;
+        if (!measuredGrid && k.ends_with("residual")) continue;
         Json plot{{"name",k},{"x_label",k=="Nyquist" ? "Re Z [Ohm]" : "f [Hz]"},
             {"y_label",k=="Nyquist" ? "-Im Z [Ohm]" : k=="Bode magnitude" ? "|Z| [Ohm]" : k=="Bode phase" ? "phase [deg]" :
                 k=="C-f" ? "C [F]" : k=="G/omega-f" ? "G/omega [F]" : "model - measurement [Ohm]"},
             {"log_x",k!="Nyquist"},{"equal_aspect",k=="Nyquist"},{"curves",Json::array()}};
         const bool residual=k=="ReZ residual" || k=="ImZ residual";
-        if (residual) plot["curves"].push_back({{"name","residual"},{"x",f},{"y",out.at(k=="ReZ residual" ? "residual_ReZ_Ohm" : "residual_ImZ_Ohm")}});
-        else for (const std::string prefix : {"measured","model"}) {
-            Json x=Json::array(),y=Json::array();
-            for (std::size_t i=0;i<f.size();++i) {
-                const auto &re=out.at(prefix+"_ReZ_Ohm").at(i), &im=out.at(prefix+"_ImZ_Ohm").at(i);
-                x.push_back(k=="Nyquist" ? re : Json(f[i]));
-                if (re.is_null() || im.is_null()) {y.push_back(nullptr); continue;}
-                const std::complex<double> z{re.get<double>(),im.get<double>()};
-                const double omega=2*std::acos(-1.)*f[i];
-                const auto admittance=reciprocalImmittance(z);
-                y.push_back(k=="Nyquist" ? -z.imag() : k=="Bode magnitude" ? std::abs(z) :
-                    k=="Bode phase" ? std::arg(z)*180/std::acos(-1.) : k=="C-f" ? admittance.imag()/omega : admittance.real()/omega);
-            }
-            plot["curves"].push_back({{"name",prefix},{"x",x},{"y",y},{"fit",prefix=="model"}});
+        if (residual && measuredGrid) plot["curves"].push_back({{"name","residual"},{"x",f},{"y",out.at(k=="ReZ residual" ? "residual_ReZ_Ohm" : "residual_ImZ_Ohm")}});
+        else if (!residual) for (const std::string prefix : {"measured","model"}) {
+            if (prefix=="measured" && !measuredGrid) continue;
+            plot["curves"].push_back(ISCurve(k,prefix,f,out.at(prefix+"_ReZ_Ohm"),out.at(prefix+"_ImZ_Ohm"),prefix=="model"));
         }
         out["plots"].push_back(std::move(plot));
     }
     context.ThrowIfCancellationRequested(); return out;
+}
+void OverlayISMeasurement(Json &out, const Json &m) {
+    if (m.at("sample_id")!=out.at("sample_id")) throw std::runtime_error("Overlay requires the same sample");
+    const auto f=ISColumn(m,"f","Hz");
+    const std::string variant=m.at("variant");
+    const auto a=ISColumn(m,variant=="ReZ_ImZ" ? "ReZ" : "C",variant=="ReZ_ImZ" ? "Ohm" : "F");
+    const auto b=ISColumn(m,variant=="ReZ_ImZ" ? "ImZ" : variant=="C_G" ? "G" : "Rp",variant=="C_G" ? "S" : "Ohm");
+    if (a.size()!=f.size() || b.size()!=f.size()) throw std::runtime_error("Unequal overlay columns");
+    Json re=Json::array(),im=Json::array();
+    for (std::size_t i=0;i<f.size();++i) {
+        try {
+            if (!std::isfinite(f[i]) || f[i]<=0) throw std::runtime_error("Invalid overlay frequency");
+            const auto z=variant=="ReZ_ImZ" ? std::complex<double>{a[i],b[i]} :
+                sst::physics::reciprocalImmittance(sst::physics::parallelAdmittance(f[i],a[i],variant=="C_G" ? b[i] : sst::physics::parallelConductance(b[i])));
+            (void)sst::physics::reciprocalImmittance(z);
+            re.push_back(z.real()); im.push_back(z.imag());
+        } catch (const std::exception &e) {
+            re.push_back(nullptr); im.push_back(nullptr);
+            out["diagnostics"].push_back({{"code","invalid_overlay"},{"message",e.what()},{"row_id",m.at("row_ids").at(i)},{"measurement_id",m.at("id")},{"severity","warning"}});
+        }
+    }
+    for (std::size_t i=0;i<5;++i) out["plots"][i]["curves"].push_back(
+        ISCurve(out["plots"][i].at("name"),"measured / "+m.at("id").dump()+" / T="+m.value("temperature_K",Json(nullptr)).dump()+" K / bias="+m.value("bias_V",Json(nullptr)).dump()+" V",f,re,im,false));
+    out["inputs"].push_back(m);
 }
 }
 namespace SST::Prototypes::CapLab {

@@ -22,6 +22,51 @@ std::complex<double> Z(const Json &r,std::size_t i) {
     return {r.at("model_ReZ_Ohm").at(i).get<double>(),r.at("model_ImZ_Ohm").at(i).get<double>()};
 }
 }
+TEST(CapLabIS, ModelOnlyUsesExplicitConditionsAndNoMeasurementRows) {
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    auto c=Circuit("R0-C0");
+    Json settings{{"frequency_Hz",{1000.,1.,123.45}},{"temperature_K",315.},{"bias_V",-.2}};
+    auto r=SimulateIS(nullptr,c,settings,context);
+    EXPECT_EQ(r.at("status"),"valid"); EXPECT_EQ(r.at("grid_source"),"model");
+    EXPECT_TRUE(r.at("inputs").empty()); EXPECT_TRUE(r.at("row_ids").empty());
+    EXPECT_TRUE(r.at("measured_ReZ_Ohm").empty()); EXPECT_TRUE(r.at("residual_ReZ_Ohm").empty());
+    EXPECT_EQ(r.at("frequency_Hz"),settings.at("frequency_Hz"));
+    EXPECT_EQ(r.at("temperature_K"),315.); EXPECT_EQ(r.at("bias_V"),-.2);
+    const auto d=ReadCircuit(c.at("schematic"));
+    for (std::size_t i=0;i<3;++i) {
+        const double f=settings["frequency_Hz"][i];
+        const std::complex<double> expected{d.elements[0].value,-1./(2*std::acos(-1.)*f*d.elements[1].value)};
+        EXPECT_LT(std::abs(Z(r,i)-expected)/std::abs(expected),1e-8);
+    }
+    for (std::size_t i=0;i<5;++i) EXPECT_EQ(r["plots"][i]["curves"].size(),1);
+    auto m=Measurement({7.25,100.});
+    OverlayISMeasurement(r,m);
+    EXPECT_EQ(r["plots"][1]["curves"][1]["x"],m["columns"][0]);
+    EXPECT_EQ(r["inputs"][0],m);
+    EXPECT_TRUE(r["residual_ReZ_Ohm"].empty());
+}
+TEST(CapLabIS, LogSweepEndpointsLimitAndValidation) {
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    const auto c=Circuit("R0");
+    Json s{{"temperature_K",300.},{"bias_V",0.},
+        {"frequency_sweep",{{"start_Hz",.1},{"stop_Hz",1e5},{"points_per_decade",200}}}};
+    const auto r=SimulateIS(nullptr,c,s,context);
+    EXPECT_EQ(r["frequency_Hz"].size(),1201);
+    EXPECT_EQ(r["frequency_Hz"].front(),.1); EXPECT_EQ(r["frequency_Hz"].back(),1e5);
+    s["frequency_sweep"]["stop_Hz"]=2e5;
+    EXPECT_THROW(SimulateIS(nullptr,c,s,context),std::exception);
+    s["frequency_sweep"]={{"start_Hz",7.},{"stop_Hz",7.},{"points_per_decade",1}};
+    EXPECT_EQ(SimulateIS(nullptr,c,s,context)["frequency_Hz"],Json::array({7.}));
+    s.erase("frequency_sweep");
+    for (const auto f : {Json::array(),Json::array({0.}),Json::array({1.,1.}),Json::array({-1.})}) {
+        s["frequency_Hz"]=f; EXPECT_THROW(SimulateIS(nullptr,c,s,context),std::exception);
+    }
+    s["frequency_Hz"]={1.}; s.erase("temperature_K");
+    EXPECT_THROW(SimulateIS(nullptr,c,s,context),std::exception);
+    s["temperature_K"]=300.;
+    JobContext cancelled({}, {}, {}, {}, [] {return true;});
+    EXPECT_THROW(SimulateIS(nullptr,c,s,cancelled),JobCancelledException);
+}
 TEST(CapLabIS, AnalyticR_C_SeriesRC_RandlesAtExactMeasuredFrequencies) {
     const std::vector<double> f{1234.5,.001,7.25,94001,9e7};
     auto m=Measurement(f);
