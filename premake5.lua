@@ -374,6 +374,9 @@ project "Core"
 
 
 include (_SST_ROOT .. "/../SST-Libraries/sst_libraries.lua")
+project "Core"
+    removefiles { "Core/IO/Hdf5/tests/**" }
+    sst_link_hdf5()
 
     group "Prototypes"
 local selectedPrototypes = os.getenv("SST_BUILD_PROTOTYPES")
@@ -384,5 +387,11 @@ for _, projectScript in ipairs(os.matchfiles("Prototypes/*/premake5.lua")) do
     end
 end
 group ""
+
+-- Core's HDF5 adapter needs the runtime beside each host executable.
+workspace "SSTPrototypes"
+    filter "kind:ConsoleApp or WindowedApp"
+        sst_link_hdf5()
+    filter {}
 
 
