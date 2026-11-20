@@ -41,7 +41,7 @@ void TextInput(const char *label,char *text,std::size_t size) {
 }
 namespace {
 // New defect with a unique id; bulk default = SCAPS-like single neutral level at mid-gap (Ei), Nt 1e14 cm^-3, sigma 1e-15 cm^2.
-int AddDefectTo(Json &draft,int layer,bool sheet) {
+int AddDefectToDraft(Json &draft,int layer,bool sheet) {
     auto &layers=draft["layers"];auto &defects=sheet?draft["interface_defects"]:layers[layer]["defects"];
     if(!defects.is_array()) defects=Json::array();
     auto d=NewDefect(sheet);unsigned n=1;std::set<std::string> ids;
@@ -419,9 +419,9 @@ void Panel::RenderContent() {
             ImGui::TextDisabled("Stable ID: %s",id.get<std::string>().c_str());
             {   // Defects / interface shortcuts: edit through the Defects and Interfaces panels.
                 static std::string picked;const bool last=selected+1>=int(layers.size());
-                if(ImGui::Button("Add defect")) {w->pendingDefect=AddDefectTo(draft,selected,false);w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;picked=draft["layers"][selected]["defects"].back().at("scapslab_id");changed=true;++gesture;}
+                if(ImGui::Button("Add defect")) {w->pendingDefect=AddDefectToDraft(draft,selected,false);w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;picked=draft["layers"][selected]["defects"].back().at("scapslab_id");changed=true;++gesture;}
                 ImGui::SameLine();ImGui::BeginDisabled(last);
-                if(ImGui::Button("Add interface")) {w->pendingDefect=AddDefectTo(draft,selected,true);w->pendingSheet=true;w->Current().selectedInterface=selected;w->focusPanel=12;picked=draft["interface_defects"].back().at("id");changed=true;++gesture;}
+                if(ImGui::Button("Add interface")) {w->pendingDefect=AddDefectToDraft(draft,selected,true);w->pendingSheet=true;w->Current().selectedInterface=selected;w->focusPanel=12;picked=draft["interface_defects"].back().at("id");changed=true;++gesture;}
                 ImGui::EndDisabled();if(last&&ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("The last layer has no next layer to form an interface with.");
                 ImGui::SameLine();
                 if(ImGui::Button("Remove##defect")&&!picked.empty()) {
@@ -797,7 +797,7 @@ bool Panel::Defects(Json &draft,bool sheet) {
     auto &defects=sheet?draft["interface_defects"]:layers[selected]["defects"];
     if(!defects.is_array()) defects=Json::array();
     if(w->pendingDefect>=0 && w->pendingSheet==sheet) {selectedDefect=w->pendingDefect;w->pendingDefect=-1;}
-    if(ImGui::Button("Add defect")) {selectedDefect=AddDefectTo(draft,selected,sheet);changed=true;++gesture;}
+    if(ImGui::Button("Add defect")) {selectedDefect=AddDefectToDraft(draft,selected,sheet);changed=true;++gesture;}
     std::vector<int> indices;for(int i=0;i<int(defects.size());++i) if(!sheet || defects[i].at("left_layer_index")==selected) indices.push_back(i);
     if(indices.empty()) {ImGui::TextUnformatted("No defects on this object.");return changed;}
     if(std::find(indices.begin(),indices.end(),selectedDefect)==indices.end()) selectedDefect=indices.front();
