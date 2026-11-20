@@ -29,7 +29,7 @@
       "id": "gauss",
       "target": {
         "window": "scapslab.Defects",
-        "item": "diffusion-law"
+        "item": "diffusion-gauss"
       },
       "instruction": "In Defects select the defect, enable Spatial Nt(x), then press Gauss under Diffusion law. Set dose and projected range; the preview shows Nt(x) in cm^-3.",
       "command": {
@@ -55,7 +55,7 @@
       "id": "erfc",
       "target": {
         "window": "scapslab.Defects",
-        "item": "diffusion-law"
+        "item": "diffusion-erfc"
       },
       "instruction": "Press erfc under Diffusion law and set the surface density. Compare the preview with the Gauss shape.",
       "command": {

@@ -617,7 +617,7 @@ bool Panel::ProfileEditor(Json &g,double thickness,const std::string &parameter,
     changed|=Choice("Profile law",g,"law",{{"Uniform","uniform"},{"Linear","linear"},{"Parabolic","parabolic"},{"Two parabolas","parabolic2"},
         {"Logarithmic","logarithmic"},{"Exponential","exponential"},{"Beta","beta"},{"Power","power"},{"Effective medium","effective_medium"},{"Gaussian","gaussian"},{"From file","table"}});
     w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","law");
-    if(diffusion) {BeginRow("Diffusion law");if(ImGui::Button("Gauss")){g["law"]="gauss_diffusion";changed=true;}ImGui::SameLine();if(ImGui::Button("erfc")){g["law"]="erfc_diffusion";changed=true;}w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","diffusion-law");EndRow();}
+    if(diffusion) {BeginRow("Diffusion law");const char* owner=parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading";if(ImGui::Button("Gauss")){g["law"]="gauss_diffusion";changed=true;}w->tutorialOverlay.Item(owner,"diffusion-gauss");ImGui::SameLine();if(ImGui::Button("erfc")){g["law"]="erfc_diffusion";changed=true;}w->tutorialOverlay.Item(owner,"diffusion-erfc");EndRow();}
     auto load=[&] {
         try {if(const auto file=OpenFileDialog({"SCAPS grading","grd"})) {
             auto loaded=ProfileFromFile(file->Utf8(),density);
