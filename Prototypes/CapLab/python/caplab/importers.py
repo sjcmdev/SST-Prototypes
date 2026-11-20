@@ -5,6 +5,8 @@ import json
 import math
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from sst_import_metadata import add_token_variables, add_custom_variables
 
 DL_NAMES = ['W', 'N_DL', 'V', 'C0', 'C1', 'C2', 'A2_C02', 'W_CV', 'N_CV']
 DL_UNITS = ['m', 'm^-3', 'V', 'F', 'F/V', 'F/V^2', 'm^4/F^2', 'm', 'm^-3']
@@ -72,7 +74,32 @@ def read_rows(text, decimal, cancelled, progress, scaps=False, exclude_rows=(), 
 
 
 def metadata(header, source, options):
-    result = {}
+    path = Path(source)
+    variables = dict(stem=path.stem, folder=path.parent.name, parent_folder=path.parent.parent.name,
+                     source_path=str(path), folder_path=str(path.parent))
+    delimiter = options.get('variable_delimiter', '_')
+    if not isinstance(delimiter, str):
+        raise ValueError('variable_delimiter must be text')
+    rules = options.get('custom_variables', [])
+    if not isinstance(rules, list) or not all(isinstance(rule, dict) for rule in rules):
+        raise ValueError('custom_variables must be an array of objects')
+    for key in ('stem', 'folder', 'parent_folder'):
+        add_token_variables(variables, key, variables[key], delimiter)
+    add_custom_variables(variables, SimpleNamespace(variable_delimiter=delimiter, custom_variables=rules))
+    candidates = {}
+    for field, pattern in options.get('metadata_rules', {}).items():
+        if field not in ('sample_name', 'treatment', 'temperature_K', 'frequency_Hz', 'bias_V'):
+            raise ValueError(f'Unknown metadata field: {field}')
+        try:
+            value = pattern.format_map(variables)
+            candidates[field] = float(value.replace(',', '.')) if field.endswith(('_K', '_Hz', '_V')) else value
+        except (KeyError, ValueError, AttributeError) as e:
+            raise ValueError(f'Invalid metadata rule: {field}') from e
+        if field in ('temperature_K', 'frequency_Hz'):
+            positive(candidates[field], field)
+        elif field == 'bias_V' and not math.isfinite(candidates[field]):
+            raise ValueError('Nonfinite bias candidate')
+    result = dict(metadata_variables=variables, metadata_candidates=candidates, metadata_conflicts=[])
     for key, pattern, suffix in [('temperature_K', r'(?:temperature|\bT)\s*[=:]?\s*', 'K'),
                                  ('frequency_Hz', r'(?:frequency|\bf)\s*[=:]?\s*', 'Hz'),
                                  ('bias_V', r'(?:bias(?: voltage)?)\s*[=:]?\s*', '(?:Volt|V)')]:
@@ -81,9 +108,9 @@ def metadata(header, source, options):
             raise ValueError(f'Conflicting header {key}')
         suggestion = re.search(NUMBER + ('K' if key == 'temperature_K' else 'Hz'), Path(source).name, re.I) if key != 'bias_V' else None
         result['header_' + key] = matches[0] if matches else None
-        result['suggested_' + key] = float(suggestion[1].replace(',', '.')) if suggestion else None
-        result[key] = options.get(key, result['header_' + key])
-        result[key + '_source'] = 'preview_confirmed' if key in options else ('header' if matches else None)
+        result['suggested_' + key] = candidates.get(key, float(suggestion[1].replace(',', '.')) if suggestion else None)
+        result[key] = options.get(key, candidates.get(key) if options.get('use_metadata_candidates') and key in candidates else result['header_' + key])
+        result[key + '_source'] = 'preview_confirmed' if key in options else ('filename_confirmed' if options.get('use_metadata_candidates') and key in candidates else ('header' if matches else None))
         if key != 'bias_V':
             positive(result[key], key)
         elif result[key] is not None and not math.isfinite(result[key]):
@@ -94,6 +121,17 @@ def metadata(header, source, options):
             result['diagnostics'].append(f'{key}: confirmed value overrides conflicting header')
         if result['suggested_' + key] is not None and result[key] is not None and result[key] != result['suggested_' + key]:
             result['diagnostics'].append(f'{key}: filename suggestion conflicts with confirmed/header value')
+        comparison = result['header_' + key] if result['header_' + key] is not None else result[key]
+        if result['suggested_' + key] is not None and comparison is not None and comparison != result['suggested_' + key]:
+            result['metadata_conflicts'].append(dict(field=key, header=result['header_' + key], candidate=result['suggested_' + key]))
+    for key in ('sample_name', 'treatment'):
+        match = re.search(r'(?:^|\n)\s*(?:#\s*)?' + key + r'\s*[=:]\s*([^\n]+)', header, re.I)
+        header_value = match[1].strip() if match else None
+        candidate = candidates.get(key)
+        result[key] = options.get(key, candidates.get(key) if options.get('use_metadata_candidates') and key in candidates else header_value)
+        result['header_' + key] = header_value
+        if header_value is not None and candidate is not None and header_value != candidate:
+            result['metadata_conflicts'].append(dict(field=key, header=header_value, candidate=candidate))
     return result
 
 
@@ -218,7 +256,7 @@ def parse_measurement(text, source='', profile='lab_as_cp_rp', decimal='.', opti
                     c[ri] = None
                     quality.append(dict(column=ci, source_row=rows[ri], value=None, reason='historical_nonfinite'))
         raw = [[v if math.isfinite(v) else None for v in c] for c in raw]
-    return dict(provenance(text, source, profile), quality=quality, kind=kind, variant=variant, names=names, units=units, input_units=input_units,
+    return dict(provenance(text, source, profile), parser_options=options, quality=quality, kind=kind, variant=variant, names=names, units=units, input_units=input_units,
                 columns=columns, source_columns=raw, source_rows=rows, header=header, decimal=decimal,
                 conversions=dict(zip(names, factors)), mapping=mapping, source_column_rows=source_column_rows, excluded_rows=options.get('exclude_rows', []), **meta)
 
@@ -262,8 +300,8 @@ def import_preview(text, source, decimal='.', options=None, cancelled=lambda: Fa
         m['sha256'] = hashlib.sha256(text.encode('utf-8')).hexdigest()
         m['block_index'] = i
         measurements.append(m)
-    return dict(provenance(text, source, profile), decimal=decimal, samples=[dict(name=options.get('sample_name', Path(str(source).split(' (Cp/Rp -> C/G)', 1)[0]).stem or 'Sample'),
-                area_m2=positive(options.get('area_m2'), 'area_m2'), metadata={}, measurements=measurements)], historical=[])
+    return dict(provenance(text, source, profile), decimal=decimal, samples=[dict(name=measurements[0].get('sample_name') or Path(str(source).split(' (Cp/Rp -> C/G)', 1)[0]).stem or 'Sample',
+                area_m2=positive(options.get('area_m2'), 'area_m2'), metadata={'treatment': measurements[0].get('treatment')}, measurements=measurements)], historical=[])
 
 
 def import_manifest(data, text, source, decimal, options, cancelled, progress):

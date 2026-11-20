@@ -641,3 +641,36 @@ and the shared `view` JSON persist ranges in the labelled axis SI units,
 visibility and ticks. `x_scale`/`y_scale` accept `linear` or `log10` and refit the
 changed axes. GUI and Python use `caplab.plot`, a Core job and one Undo entry.
 Failures return `plot_failed`; cancellation keeps the original project.
+
+## Import profiles and source updates (clfiles1)
+
+The import preview accepts an existing sample ID, a single new sample name for
+the whole batch, or separate new samples per source. Series groups show T [K],
+f [Hz], bias [V] and measurement kind/variant before the atomic Undoable import.
+Saved, named formats reuse PlotLab-Engine `ImportOptions`; they round-trip in
+the project and persist in the app's `caplab-import-profiles.json` configuration.
+Cp/Rp and C/G remain separate profiles. Z import requires `ImZ` or `-ImZ`.
+
+Filename/folder rules provide candidates using `{stem_0}`, `{folder_0}`,
+`{parent_folder_0}` and JFM's shared custom token/slice variables. Headers win
+by default. Applying candidates is explicit and conflicting values require
+confirmation. Every new preview resets that confirmation; import and source
+diffs have independent confirmation controls, including the legacy SI preview.
+
+Re-import parses the saved mapping and units in a Core job, then shows changed
+cells and metadata before acceptance. Measurement/column IDs are retained;
+changed grids get new row IDs and disable dependent approved defect points.
+Accepted results become stale when their inputs change. A schema change must
+be imported as a new measurement. Relink verifies the original SHA-256 and
+updates provenance only, without reinterpreting a renamed file or its extension.
+OS file drop opens the same preview and never imports automatically.
+
+Python uses the same `caplab.execute` commands: `preview`, `import`, `profile`,
+`reimport`, `relink`, `accept_source`. See its docstring for JSON request fields,
+stable IDs, explicit units, typed errors and source-draft acceptance.
+
+Open question for the owner: which additional instrument export formats are
+actually used in the laboratory? Provide one valid and one damaged export per
+format before adding adapters. The current adapters cover the repository's
+Lab AS/CV/DLCP/IS, ProPho and SCAPS text/JSON fixtures; no instrument-specific
+support is inferred from a compatible column layout.

@@ -14,10 +14,10 @@ public:
             view == View::Project ? "Project / measurements" : view == View::Plot ? "C-f" :
             view == View::CV ? "CV / DLCP" : view == View::AS ? "AS / Arrhenius" : view == View::Walter ? "Walter" : view == View::IS ? "IS / circuits" : "Import", true, {.auxiliary = view == View::Import, .openCommand = "caplab.preview", .closeCommand = "caplab.import"}), state(state), commands(std::move(commands)), view(view) {
         auto layout = GetState();
-        layout.x = view == View::Project ? 10.0f : view == View::Plot ? 260.0f : 900.0f;
-        layout.y = view == View::Import ? 480.0f : 40.0f;
-        layout.width = view == View::Project ? 300.0f : view == View::Plot ? 630.0f : 430.0f;
-        layout.height = view == View::Import ? 190.0f : view == View::Plot ? 430.0f : 630.0f;
+        layout.x = view == View::Project ? 10.0f : view == View::Plot ? 260.0f : view == View::Import ? 320.0f : 900.0f;
+        layout.y = 40.0f;
+        layout.width = view == View::Project ? 300.0f : view == View::Plot ? 630.0f : view == View::Import ? 640.0f : 430.0f;
+        layout.height = view == View::Plot ? 430.0f : 630.0f;
         ApplyState(layout);
     }
     bool IsDirty() const override { return view == View::Project && state->IsDirty(); }
@@ -48,6 +48,10 @@ private:
     pl::Id detailsSample=0, moveTarget=0;
     std::string sampleName, sampleMaterial, sampleNotes;
     std::map<std::string,Json> previousPreviewOptions;
+    std::string savedFormat;
+    char formatName[129]="", sampleRule[256]="", treatmentRule[256]="", temperatureRule[256]="", frequencyRule[256]="", biasRule[256]="";
+    char variableRules[2048]="[]", variableDelimiter[32]="_";
+    bool useMetadataCandidates=false;
     std::set<std::string> previewPending;
     sst::ui::plot::PlotViewState fitView, bodePhaseView;
     Json isParameters=Json::array();

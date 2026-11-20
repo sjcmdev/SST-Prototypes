@@ -85,6 +85,8 @@ TEST(CapLabCompare, ImpedancePlotsUseIndependentAnalyticValues) {
 }
 TEST(CapLabCompare, PerGraphViewsSurviveSwitchSaveAndOpen) {
     auto p=FixtureProject(); const auto first=p.graph;
+    pl::ImportOptions options; options.decimal=','; options.extra["options"]=R"({"profile":"lab_as_cp_rp"})";
+    p.importProfiles["lab"]=options;
     BuildCompareGraph(p,Json{{"plot_type","Nyquist"},{"measurement_ids",{p.sweeps[0].id}}}); const auto second=p.graph;
     CapLabWorkflow w(CreateRef<JobSystem>(nullptr,1)); w.Document().project=p;
     w.view.viewport=sst::ui::plot::Bounds{1,3,2,4}; w.view.fitted=true;
@@ -94,6 +96,8 @@ TEST(CapLabCompare, PerGraphViewsSurviveSwitchSaveAndOpen) {
     w.ShowGraph(second); ASSERT_TRUE(w.view.viewport); EXPECT_EQ(w.view.viewport->minX,1);
     EXPECT_FALSE(w.view.visibility.at(p.engine->series(plot).id));
     auto reopened=Parse(Serialize(w.Document().project));
+    EXPECT_EQ(reopened.comparisons,p.comparisons);
+    EXPECT_EQ(pl::importProfilesJson(reopened.importProfiles),pl::importProfilesJson(p.importProfiles));
     for (auto graph:{first,second}) EXPECT_TRUE(std::get<pl::Layer>(reopened.engine->object(reopened.engine->children(graph)[0]).data).view.viewport);
 }
 TEST(CapLabCompare, InitialFitDoesNotDirtyAnOpenedProjectButZoomDoes) {

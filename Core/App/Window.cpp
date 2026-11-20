@@ -149,6 +149,13 @@ namespace SST
 		glfwSetMouseButtonCallback(m_Handle, OnGlfwMouseButton);
 		glfwSetCursorPosCallback(m_Handle, OnGlfwCursorPos);
 		glfwSetScrollCallback(m_Handle, OnGlfwScroll);
+        glfwSetDropCallback(m_Handle, [](GLFWwindow *window, int count, const char **names) {
+            if (auto *instance=GetWindowInstance(window)) {
+                std::vector<Path> paths;
+                for (int i=0;i<count;++i) paths.push_back(Path::FromResolved(std::filesystem::u8path(names[i])));
+                instance->DispatchEvent(FilesDroppedEvent{std::move(paths)});
+            }
+        });
 
 		Platform::InitializeWindowPlatform(m_Handle, iconPath);
 		DS_LOG_INFO("GLFW window created");

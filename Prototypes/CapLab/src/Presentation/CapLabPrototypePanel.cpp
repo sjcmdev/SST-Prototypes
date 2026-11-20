@@ -10,6 +10,20 @@
 #include <cstdio>
 namespace SST::Prototypes::CapLab {
 void CapLabPrototypePanel::RenderImport() {
+    auto &formats=state->Document().project.importProfiles;
+    if (!savedFormat.empty() && !formats.contains(savedFormat)) savedFormat.clear();
+    if (sst::ui::widgets::BeginCombo("Saved format",savedFormat.empty() ? "Custom controls" : savedFormat.c_str())) {
+        if (ImGui::Selectable("Custom controls",savedFormat.empty())) {savedFormat.clear(); state->ClearPreview();}
+        for (const auto &[name,value]:formats) {
+            ImGui::PushID(name.c_str());
+            if (ImGui::Selectable(name.c_str(),name==savedFormat)) {
+                CommandContext context; context.Set("request",Json{{"action","load"},{"name",name}});
+                if (commands->Execute(CommandID{"caplab.profile"},std::move(context))) savedFormat=name;
+            }
+            ImGui::PopID();
+        }
+        sst::ui::widgets::EndCombo();
+    }
     if (sst::ui::widgets::BeginCombo("Target sample",SelectionLabel(state->Document().project,state->importTargetSample,"Create new samples").c_str())) {
         if (ImGui::Selectable("Create new samples",!state->importTargetSample)) state->importTargetSample=0;
         for (const auto &s:state->Document().project.samples) {
@@ -20,8 +34,19 @@ void CapLabPrototypePanel::RenderImport() {
         sst::ui::widgets::EndCombo();
     }
     auto &doc = state->Document();
+    static char targetSampleName[256]="";
+    if (!state->importTargetSample) sst::ui::widgets::Text("New sample name (empty = per source)",targetSampleName,sizeof(targetSampleName));
+    auto confirmImport=[&] {
+        CommandContext context;
+        if (!state->importTargetSample && targetSampleName[0]) context.Set("target_sample_name",std::string(targetSampleName));
+        (void)commands->Execute(CommandID{"caplab.import"},std::move(context));
+    };
     ImGui::Text("%s%s", !doc.path.has_value() ? "Untitled" : doc.path->Utf8().c_str(), doc.IsDirty() ? " (unsaved)" : "");
     ImGui::SeparatorText("Import settings and metadata");
+    Json options=Json::object();
+    const bool custom=savedFormat.empty();
+    if (!custom) options=Json::parse(formats.at(savedFormat).extra.at("options"));
+    if (custom) {
     bool comma = state->decimal == ',';
     if (sst::ui::widgets::Checkbox("Decimal comma (semicolon/whitespace columns)", &comma)) state->decimal = comma ? ',' : '.';
     static int profile = 1;
@@ -42,7 +67,6 @@ void CapLabPrototypePanel::RenderImport() {
         for (int i=0;i<5;++i) { mapping[i]=i+1; unitChoice[i]=0; }
         excluded.clear();
     }
-    Json options = Json::object();
     if (profile) {
         options["profile"] = keys[profile];
         sst::ui::widgets::Checkbox("Area known", &areaKnown);
@@ -106,20 +130,93 @@ void CapLabPrototypePanel::RenderImport() {
             ImGui::Text("Excluded source rows: %s",options["exclude_rows"].dump().c_str());
         }
     }
+    if (ImGui::TreeNode("Filename / folder candidates")) {
+        ImGui::TextWrapped("Rules use {stem_0}, {folder_0}, {parent_folder_0} or custom variables. Candidates never override a header automatically.");
+        sst::ui::widgets::Text("Token delimiter",variableDelimiter,sizeof(variableDelimiter));
+        sst::ui::widgets::Text("Sample name rule",sampleRule,sizeof(sampleRule));
+        sst::ui::widgets::Text("Treatment rule",treatmentRule,sizeof(treatmentRule));
+        sst::ui::widgets::Text("Temperature rule (K)",temperatureRule,sizeof(temperatureRule));
+        sst::ui::widgets::Text("Frequency rule (Hz)",frequencyRule,sizeof(frequencyRule));
+        sst::ui::widgets::Text("Bias rule (V)",biasRule,sizeof(biasRule));
+        sst::ui::widgets::Text("Custom variables (JSON)",variableRules,sizeof(variableRules));
+        sst::ui::widgets::Checkbox("Use filename / folder candidates",&useMetadataCandidates);
+        ImGui::TreePop();
+    }
+    options["variable_delimiter"]=variableDelimiter;
+    options["use_metadata_candidates"]=useMetadataCandidates;
+    const auto variables=Json::parse(variableRules,nullptr,false);
+    if (!variables.is_array()) ImGui::TextUnformatted("Custom variables must be a JSON array.");
+    else options["custom_variables"]=variables;
+    for (const auto &[field,rule]:{std::pair{"sample_name",sampleRule},{"treatment",treatmentRule},{"temperature_K",temperatureRule},{"frequency_Hz",frequencyRule},{"bias_V",biasRule}})
+        if (rule[0]) options["metadata_rules"][field]=rule;
+    } else ImGui::TextWrapped("Saved parser options: %s",options.dump().c_str());
+    const int selectedProfile=[&] {const auto key=options.value("profile",std::string{}); return key=="propho_json" ? 11 : 1;}();
+    sst::ui::widgets::Text("Format name",formatName,sizeof(formatName));
+    if (ImGui::Button("Save named format") && formatName[0]) {
+        state->importOptions=options.dump();
+        CommandContext context; context.Set("request",Json{{"action","save"},{"name",formatName}});
+        (void)commands->Execute(CommandID{"caplab.profile"},std::move(context));
+    }
+    ImGui::SameLine(); ImGui::BeginDisabled(savedFormat.empty());
+    if (ImGui::Button("Delete named format")) {
+        CommandContext context; context.Set("request",Json{{"action","delete"},{"name",savedFormat}});
+        (void)commands->Execute(CommandID{"caplab.profile"},std::move(context)); savedFormat.clear();
+    }
+    ImGui::EndDisabled();
     if (ImGui::Button("Read import preview...")) {
-        state->importOptions = profile ? options.dump() : "";
+        state->importOptions = options.dump();
         CommandContext c; c.Set("recursive",state->recursiveImport);
         (void)commands->Execute(CommandID{"caplab.preview"},std::move(c));
     }
     ImGui::SameLine();
     if (ImGui::Button("Read folders...")) {
-        state->importOptions=profile ? options.dump() : "";
+        state->importOptions=options.dump();
         CommandContext c; c.Set("recursive",state->recursiveImport);
         (void)commands->Execute(CommandID{"caplab.preview_folder"},std::move(c));
     }
     sst::ui::widgets::Checkbox("Include subfolders", &state->recursiveImport);
+    if (!state->sourcePreviews.empty() && ImGui::TreeNode("Series groups (T / f / bias / type)")) {
+        for (const auto &group:state->ImportGroups()) ImGui::TextWrapped("%s / %s; T=%s K; f=%s Hz; bias=%s V; %zu source blocks",
+            group.at("kind").get<std::string>().c_str(),group.at("variant").get<std::string>().c_str(),
+            group.at("temperature_K").dump().c_str(),group.at("frequency_Hz").dump().c_str(),
+            group.at("bias_V").dump().c_str(),group.at("sources").size());
+        ImGui::TreePop();
+    }
     ImGui::TextUnformatted("Ctrl/Shift + click selects several sources. Confirm imports the selected sources as one Undo step.");
     if (ImGui::Button("Save project")) (void)commands->Execute(CommandID{"project.save"});
+    if (sst::ui::widgets::BeginCombo("Source measurement",SelectionLabel(doc.project,state->sourceMeasurement,"Select measurement").c_str())) {
+        auto choose=[&](pl::Id id) {ImGui::PushID(std::to_string(id).c_str()); if (ImGui::Selectable(SelectionLabel(doc.project,id).c_str(),state->sourceMeasurement==id)) state->sourceMeasurement=id; ImGui::PopID();};
+        for (const auto &m:doc.project.measurements) choose(m.at("id").get<pl::Id>());
+        for (const auto &m:doc.project.sweeps) choose(m.id);
+        sst::ui::widgets::EndCombo();
+    }
+    ImGui::BeginDisabled(!state->sourceMeasurement || state->activeJob!=0);
+    if (ImGui::Button("Preview re-import")) (void)commands->Execute(CommandID{"caplab.reimport"});
+    ImGui::SameLine(); if (ImGui::Button("Relink moved source...")) (void)commands->Execute(CommandID{"caplab.relink"});
+    ImGui::EndDisabled();
+    if (state->sourceDraft) {
+        const auto &diff=state->sourceDiff;
+        if (state->sourceRelink) ImGui::TextWrapped("Provenance only: %s",diff.at("source").get<std::string>().c_str());
+        else {
+            ImGui::Text("Rows: %zu -> %zu; changed cells: %zu",diff.at("old_rows").get<std::size_t>(),diff.at("new_rows").get<std::size_t>(),diff.at("changed_cells").get<std::size_t>());
+            ImGui::TextUnformatted(diff.at("grid_changed").get<bool>() ? "Grid changed: defect points require reassignment." : "Measurement and column IDs retained.");
+            if (diff.contains("cell_changes") && ImGui::TreeNode("Changed values (first 100)")) {
+                for (const auto &cell:diff.at("cell_changes")) ImGui::Text("%s [%s], row %zu: %s -> %s",
+                    cell.at("column").get<std::string>().c_str(),cell.at("unit").get<std::string>().c_str(),
+                    cell.at("row_index").get<std::size_t>()+1,cell.at("before").dump().c_str(),cell.at("after").dump().c_str());
+                ImGui::TreePop();
+            }
+            if (ImGui::TreeNode("Metadata diff")) {
+                ImGui::TextWrapped("Before: %s",diff.at("old_metadata").dump().c_str());
+                ImGui::TextWrapped("After: %s",diff.at("new_metadata").dump().c_str()); ImGui::TreePop();
+            }
+        }
+        sst::ui::widgets::Checkbox("Confirm metadata conflicts##source-diff",&state->sourceMetadataConfirmed);
+        ImGui::BeginDisabled(state->sourceRevision!=doc.revision || state->activeJob!=0);
+        if (ImGui::Button("Accept source diff (Undo)")) (void)commands->Execute(CommandID{"caplab.accept_source"});
+        ImGui::EndDisabled(); ImGui::SameLine();
+        if (ImGui::Button("Discard source diff")) {state->sourceDraft.reset(); state->sourceDiff=nullptr;}
+    }
     auto renderDetails = [&] {
     if (state->preview) {
         const auto &preview = *state->preview;
@@ -134,6 +231,9 @@ void CapLabPrototypePanel::RenderImport() {
                     ImGui::Text("%s / %s; %zu rows; T=%s K; f=%s Hz",m.at("kind").get<std::string>().c_str(),
                         m.at("variant").get<std::string>().c_str(),m.at("source_rows").size(),
                         m.at("temperature_K").dump().c_str(),m.at("frequency_Hz").dump().c_str());
+                    ImGui::Text("Bias=%s V; group type=%s",m.at("bias_V").dump().c_str(),m.at("kind").get<std::string>().c_str());
+                    if (m.contains("metadata_candidates")) ImGui::TextWrapped("Filename / folder candidates: %s",m.at("metadata_candidates").dump().c_str());
+                    if (m.contains("metadata_conflicts") && !m.at("metadata_conflicts").empty()) ImGui::TextWrapped("Conflicts requiring confirmation: %s",m.at("metadata_conflicts").dump().c_str());
                     ImGui::TextWrapped("Header T=%s; filename T suggestion=%s. Header f=%s; filename f suggestion=%s.",
                         m.at("header_temperature_K").dump().c_str(),m.at("suggested_temperature_K").dump().c_str(),
                         m.at("header_frequency_Hz").dump().c_str(),m.at("suggested_frequency_Hz").dump().c_str());
@@ -149,14 +249,16 @@ void CapLabPrototypePanel::RenderImport() {
             if (!preview.at("historical").empty()) ImGui::TextUnformatted("Saved ProPho fits, results and selections will be imported as historical.");
             ImGui::TextWrapped("To correct metadata, mapping or units, change import fields and read preview again. Filename values are suggestions only.");
             auto previousOptions=Json::parse(state->importOptions.empty() ? "{}" : state->importOptions);
-            if (profile!=11 && !previousOptions.contains("exclude_rows")) previousOptions["exclude_rows"]=Json::array();
+            if (selectedProfile!=11 && !previousOptions.contains("exclude_rows")) previousOptions["exclude_rows"]=Json::array();
+            if (selectedProfile!=11 && !options.contains("exclude_rows")) options["exclude_rows"]=Json::array();
             const bool settingsChanged = previousOptions != options || preview.value("decimal",std::string(1,state->decimal)) != std::string(1,state->decimal);
             if (ImGui::Button("Refresh preview with current fields")) {
                 const Path source{preview.at("source").get<std::string>()};
                 state->importOptions = options.dump(); state->Start(Operation::Preview,{},state->previewInputs.empty() ? std::vector<Path>{source} : state->previewInputs,state->previewRecursive);
             }
             ImGui::BeginDisabled(settingsChanged);
-            if (ImGui::Button("Confirm import")) (void)commands->Execute(CommandID{"caplab.import"});
+            sst::ui::widgets::Checkbox("Confirm metadata conflicts",&state->metadataConfirmed);
+            if (ImGui::Button("Confirm import")) confirmImport();
             ImGui::EndDisabled();
             ImGui::SameLine(); if (ImGui::Button("Discard preview")) state->ClearPreview();
         } else {
@@ -168,7 +270,7 @@ void CapLabPrototypePanel::RenderImport() {
         ImGui::TextUnformatted("Confirm temperature below; filename is only a suggestion.");
         bool known = state->temperature.has_value();
         if (sst::ui::widgets::Checkbox("Temperature known", &known)) state->temperature = known ? std::optional<double>{300} : std::nullopt;
-        if (state->temperature) sst::ui::widgets::Double("Temperature (K)", &*state->temperature, .01f, "%.6g");
+        if (state->temperature) sst::ui::widgets::Double("Temperature (K)##legacy-preview", &*state->temperature, .01f, "%.6g");
         if (state->temperature && !preview.at("temperature_K").is_null() && *state->temperature != preview.at("temperature_K").get<double>())
             ImGui::TextWrapped("Temperature conflict: confirmation will override header T.");
         const auto columns = preview.at("columns").get<std::vector<std::vector<double>>>();
@@ -184,7 +286,8 @@ void CapLabPrototypePanel::RenderImport() {
             }
             ImGui::EndTable();
         }
-        if (ImGui::Button("Confirm import")) (void)commands->Execute(CommandID{"caplab.import"});
+        sst::ui::widgets::Checkbox("Confirm metadata conflicts",&state->metadataConfirmed);
+        if (ImGui::Button("Confirm import")) confirmImport();
         ImGui::SameLine(); if (ImGui::Button("Discard preview")) state->ClearPreview();
     }
     }
@@ -357,6 +460,7 @@ void CapLabPrototypePanel::RenderPlot() {
 }
 void CapLabPrototypePanel::RenderContent() {
     if (shownProject!=state->workspace.active) {
+        savedFormat.clear();
         shownProject=state->workspace.active; areaDraft.clear(); treeMeasurements.clear(); compareMeasurements.clear(); compareGraphs.clear(); selectedExportGraphs.clear(); detailsSample=moveTarget=0; selectionSeen=UINT64_MAX;
         selectedCircuit=circuitMeasurement=selectedDefect=fitCircuit=isPlotAnalysis=isPlotGraph=0;
         circuitDocument.clear(); circuitEditor.reset(); modelAutoReady=circuitAutoReady=circuitRecalc=false; isParameters=Json::array(); fitView={}; bodePhaseView={};

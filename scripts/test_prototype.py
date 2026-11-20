@@ -47,6 +47,7 @@ def main() -> int:
     command = [uv, "run", "--no-sync", "--project", str(ROOT), "python", "-c",
         "import json, os, subprocess, sys; "
         "os.environ['SST_ROOT_PYTHON_PATHS'] = json.dumps(sys.path); "
+        "os.environ['PYTHONPATH'] = os.pathsep.join(sys.path + [os.environ.get('PYTHONPATH', '')]); "
         "raise SystemExit(subprocess.run(sys.argv[1:]).returncode)", str(executable)]
     if args.dry_run:
         print(f"GTest: {command}; pytest={tests}; require_embedding={args.require_embedding}")
@@ -63,7 +64,7 @@ def main() -> int:
         environment["SST_REQUIRE_EMBEDDING"] = "1"
         return run_gtest(command + ["--gtest_filter=PrototypePython.EmbeddedRoundtrip"],
                          environment, require_embedding=True)
-    environment["PYTHONPATH"] = str(python_root) + os.pathsep + environment.get("PYTHONPATH", "")
+    environment["PYTHONPATH"] = os.pathsep.join([str(python_root), str(ROOT / "Core/ScientificRuntime/Python"), environment.get("PYTHONPATH", "")])
     return subprocess.run([uv, "run", "--no-sync", "--project", str(ROOT), "python", "-m", "pytest", str(tests)],
                           cwd=ROOT, env=environment, check=False).returncode
 

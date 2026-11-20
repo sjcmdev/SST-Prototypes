@@ -188,6 +188,20 @@ namespace SST::Prototypes::CapLab
         ASSERT_EQ(state.sourcePreviews.size(),1);
     }
 
+    TEST_F(ImportSourcesTest, EachPreviewRequiresFreshMetadataConfirmation)
+    {
+        for (auto operation : {Operation::Preview,Operation::OpenOrImport}) {
+            auto jobs=CreateRef<JobSystem>(nullptr,1);
+            CapLabWorkflow state(jobs); state.labImporter=std::make_shared<FixtureImporter>();
+            state.metadataConfirmed=true;
+            state.Start(operation,Write("a.dat")); ASSERT_NE(state.activeJob,0);
+            EXPECT_FALSE(state.metadataConfirmed);
+            jobs->Shutdown(); state.OnUpdate(0);
+            ASSERT_TRUE(state.preview) << state.status;
+            EXPECT_FALSE(state.metadataConfirmed);
+        }
+    }
+
     TEST_F(ImportSourcesTest, OpeningProjectClearsBatchPreviewAndRestoresGraphView)
     {
         auto project=FixtureProject();

@@ -478,6 +478,7 @@ namespace SST
 
 	template void Application::OnEvent<WindowCloseEvent>(WindowCloseEvent &);
 	template void Application::OnEvent<WindowResizeEvent>(WindowResizeEvent &);
+	template void Application::OnEvent<FilesDroppedEvent>(FilesDroppedEvent &);
 	template void Application::OnEvent<KeyPressedEvent>(KeyPressedEvent &);
 	template void Application::OnEvent<KeyReleasedEvent>(KeyReleasedEvent &);
 	template void Application::OnEvent<KeyRepeatedEvent>(KeyRepeatedEvent &);

@@ -82,6 +82,7 @@ namespace SST::Prototypes::JFM
 #if DS_PYTHON_CAPI_AVAILABLE
 		appendNearbyVenvs(Path::FromResolved(FileSystem::CurrentPath()));
 		appendNearbyVenvs(pythonRoot);
+        (void)appendStringToSysPath(SST_IMPORT_PYTHON_ROOT);
 		return appendStringToSysPath(pythonRoot.Utf8());
 #else
 		(void)pythonRoot;

@@ -281,6 +281,8 @@ project "JFMTests"
 
 for _, target in ipairs { "JFM", "JFMTests" } do
     project(target)
+    defines { 'SST_IMPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/ScientificRuntime/Python"' }
+    postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/Core/ScientificRuntime/Python/sst_import_metadata" "%{cfg.targetdir}/python/sst_import_metadata"' }
     sst_link_plotlab()
 end
 project "JFMTests"

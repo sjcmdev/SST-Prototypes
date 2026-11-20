@@ -19,6 +19,7 @@ namespace SST
 	using EventVariant = std::variant<
 		WindowCloseEvent,
 		WindowResizeEvent,
+		FilesDroppedEvent,
 		KeyPressedEvent,
 		KeyReleasedEvent,
 		KeyRepeatedEvent,
@@ -30,7 +31,7 @@ namespace SST
 	>;
 
 	// Compile-time guard — aktualizuj gdy dodajesz nowy typ eventu
-	static_assert(std::variant_size_v<EventVariant> == 10,
+	static_assert(std::variant_size_v<EventVariant> == 11,
 		"EventVariant: dodano nowy typ eventu — zaktualizuj alias i ten assert");
 
 } // namespace SST

@@ -28,6 +28,7 @@ namespace SST::Prototypes::CapLab
         std::vector<FrequencySweep> sweeps;
         Json measurements = Json::array(), historical = Json::array(), imports = Json::array(), analyses = Json::array(), defects = Json::array(), circuits = Json::array(), comparisons = Json::array();
         pl::Id graph = 0;
+        pl::ImportProfiles importProfiles;
     };
     inline Json Nullable(std::optional<double> value) { return value ? Json(*value) : Json(nullptr); }
     inline std::optional<double> Optional(const Json &value)
@@ -39,6 +40,12 @@ namespace SST::Prototypes::CapLab
     }
     inline void Validate(const Project &p)
     {
+        (void)pl::importProfilesJson(p.importProfiles);
+        for (const auto &[name,profile]:p.importProfiles) {
+            const auto options=Json::parse(profile.extra.at("options"));
+            if (!options.is_object() || (options.contains("profile") && !options.at("profile").is_string()))
+                throw std::runtime_error("Invalid CapLab format profile options.");
+        }
         std::set<pl::Id> samples, sweeps;
         for (const auto &s : p.samples)
         {
@@ -385,7 +392,7 @@ namespace SST::Prototypes::CapLab
         for (const auto &s : p.samples) samples.push_back({{"id",s.id},{"name",s.name},{"area_m2",Nullable(s.area_m2)},{"metadata",s.metadata}});
         for (const auto &s : p.sweeps) sweeps.push_back({{"id",s.id},{"sample_id",s.sample_id},{"variant","Cp_Rp"},
             {"frequency",s.frequency},{"capacitance",s.capacitance},{"resistance",s.resistance},{"temperature_K",Nullable(s.temperature_K)}});
-        Json result{{"circuits",p.circuits},{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
+        Json result{{"import_profiles",Json::parse(pl::importProfilesJson(p.importProfiles))},{"circuits",p.circuits},{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
             {"samples",samples},{"sweeps",sweeps},{"graph",p.graph},{"engine",Json::parse(p.engine->toJson())},{"measurements",p.measurements},{"historical",p.historical},{"imports",p.imports},{"analyses",p.analyses},{"defects",p.defects}};
         if (!p.comparisons.empty()) result["comparisons"]=p.comparisons;
         return result.dump();
@@ -395,6 +402,7 @@ namespace SST::Prototypes::CapLab
         const auto j = Json::parse(text);
         if (j.at("schema_version") != 1) throw std::runtime_error("Unsupported CapLab schema; file will not be overwritten.");
         Project p;
+        p.importProfiles=pl::importProfilesFromJson(j.value("import_profiles",Json::object()).dump());
         p.engine = CreateRef<pl::Project>(pl::Project::fromJson(j.at("engine").dump()));
         if (j.at("id") != p.engine->id() || j.at("name") != p.engine->name()) throw std::runtime_error("Project identity mismatch.");
         p.graph = j.at("graph").get<pl::Id>();
