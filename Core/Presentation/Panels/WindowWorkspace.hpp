@@ -3,6 +3,7 @@
 #include <array>
 #include <map>
 #include <optional>
+#include <functional>
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Presentation/Panels/PanelRegistry.hpp"
 #include "Presentation/Panels/EditorWindow.hpp"
@@ -31,6 +32,8 @@ namespace SST
         Result<void> Load(const std::string &json);
         [[nodiscard]] std::vector<Ref<EditorWindow>> Windows() const;
         [[nodiscard]] Ref<EditorWindow> Find(WindowId id) const;
+        void RegisterFactory(std::string type, std::function<Ref<EditorWindow>()> factory)
+        { m_Factories[std::move(type)] = std::move(factory); }
         [[nodiscard]] bool IsLocked() const { return m_Locked; }
         void SetActive(WindowId id) { if (!m_FocusRequested) m_Active = id; }
         void RenderMenu();
@@ -47,6 +50,7 @@ namespace SST
         void ResetWindowStates();
         std::string SettingsPayload() const;
         PanelRegistry &m_Panels;
+        std::map<std::string, std::function<Ref<EditorWindow>()>> m_Factories;
         WeakRef<CommandRegistry> m_Commands;
         std::size_t m_CommandObserver = 0;
         bool m_Locked = false;

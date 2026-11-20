@@ -3,6 +3,7 @@
 #include <imgui.h>
 #include <nlohmann/json.hpp>
 #include <cmath>
+#include <sst/ui/Widgets/LabelledControls.hpp>
 
 namespace SST::Prototypes::WindowChromeLab
 {
@@ -23,7 +24,7 @@ namespace SST::Prototypes::WindowChromeLab
         }
         if (m_Kind == Kind::Plot)
         {
-            ImGui::SliderFloat("View scale", &m_Scale, .1f, 5);
+            sst::ui::widgets::SliderFloat("View scale", &m_Scale, .1f, 5);
             auto scaled = m_Samples;
             for (auto &value : scaled) value *= m_Scale;
             ImGui::PlotLines("Samples", scaled.data(), int(scaled.size()), 0, nullptr, 0, 250, ImVec2(-1, 160));

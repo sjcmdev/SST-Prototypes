@@ -10,6 +10,7 @@
 #include "Core/Utils/FramebufferScreenshot.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
 #include "Presentation/Panels/WindowWorkspace.hpp"
+#include "Presentation/Panels/ViewHost.hpp"
 #include "Presentation/Panels/HostedEditorWindow.hpp"
 
 namespace {
@@ -29,6 +30,10 @@ namespace SST::Prototypes::WindowChromeLab
         auto workspace = CreateRef<WindowWorkspace>(panels);
         auto commands = CreateRef<CommandRegistry>();
         ASSERT_TRUE(workspace->Bind(commands, {}));
+        auto jobs = CreateRef<JobSystem>(Ref<EventBus>{}, 1);
+        auto views = CreateRef<ViewHost>(panels, workspace);
+        ASSERT_TRUE(views->Bind(commands, jobs));
+        ASSERT_TRUE(views->RegisterTemplate({"iv", "I-V", {}}));
         auto window = CreateRef<HostedEditorWindow>("Headless tool");
         const auto id = panels.AddExisting(window);
         auto state = window->GetState(); state.pinned = true; state.visible = false; window->ApplyState(state);
@@ -47,7 +52,29 @@ namespace SST::Prototypes::WindowChromeLab
             "assert abs(conductivity(2.0) - 4.4860945752) < 1e-12\n"
             "import json, sst_application\n"
             "response = json.loads(sst_application.execute(json.dumps({'command_id': 'app.layout.reset'})))\n"
-            "assert response == {'ok': True, 'command_id': 'app.layout.reset'}, response\n"), 0);
+            "assert response == {'ok': True, 'command_id': 'app.layout.reset'}, response\n"
+            "import sst_views\n"
+            "def view_call(**request):\n"
+            "    response = json.loads(sst_views.execute(json.dumps(request)))\n"
+            "    assert response['ok'], response\n"
+            "    return response\n"
+            "view_call(operation='catalog', metrics=[dict(id='voc_V', name='Voc', unit='V')], items=[dict(id='a',name='Alpha',metrics=dict(voc_V=.8)),dict(id='b',name='Beta',metrics=dict(voc_V=.7))])\n"
+            "view_call(operation='active', item_id='a')\n"
+            "instance = view_call(operation='open', template_id='iv')['instance_id']\n"
+            "assert view_call(operation='rows', instance_id=instance)['items'][0]['id'] == 'a'\n"
+            "view_call(operation='bind', instance_id=instance, binding={'mode':'pinned','item_ids':['b']})\n"
+            "assert view_call(operation='rows', instance_id=instance)['items'][0]['id'] == 'b'\n"
+            "table = view_call(operation='open', template_id='core.comparison', binding=dict(mode='explicit',item_ids=['a','b']))['instance_id']\n"
+            "view_call(operation='table', instance_id=table, table=dict(sort_metric_id='voc_V',selected_item_ids=['b']))\n"
+            "view_call(operation='bind', instance_id=instance, binding=dict(mode='explicit',item_ids=['a','b'],selection_source=table))\n"
+            "assert view_call(operation='rows', instance_id=instance)['items'][0]['id'] == 'b'\n"
+            "assert len(view_call(operation='list')['instances']) == 2\n"
+            "saved = view_call(operation='save')['layout']\n"
+            "view_call(operation='duplicate', instance_id=instance)\n"
+            "view_call(operation='close', instance_id=instance)\n"
+            "view_call(operation='activate', instance_id=instance)\n"
+            "view_call(operation='load', layout=saved)\n"
+            "assert not json.loads(sst_views.execute('{bad'))['ok']\n"), 0);
         EXPECT_FALSE(window->GetState().pinned); EXPECT_TRUE(window->IsVisible()); EXPECT_EQ(window->GetId(), id);
         if (std::getenv("SST_RUN_PYTEST"))
             ASSERT_EQ(PyRun_SimpleString(

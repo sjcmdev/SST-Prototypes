@@ -1,2 +1,2 @@
-# Frozen manifests hash the source bytes, including line endings.
-** -text
+# Preserve original bytes in frozen fixtures and checksum manifests.
+* -text

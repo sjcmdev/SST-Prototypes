@@ -374,6 +374,8 @@ project "Core"
 
 
 include (_SST_ROOT .. "/../SST-Libraries/sst_libraries.lua")
+project "Core"
+    sst_link_ui()
 
     group "Prototypes"
 local selectedPrototypes = os.getenv("SST_BUILD_PROTOTYPES")

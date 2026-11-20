@@ -366,6 +366,7 @@ namespace SST
                 {
                     if (m_Panels.Contains(id)) return invalid("Layout ID conflicts with a legacy panel.");
                     if (type.starts_with("hosted.")) window = CreateRef<HostedEditorWindow>(type.substr(7));
+                    if (auto factory = m_Factories.find(type); !window && factory != m_Factories.end()) window = factory->second();
                     for (auto &candidate : Windows()) if (!window && candidate->GetType() == type && candidate->Capabilities().duplicable)
                     {
                         auto factory = candidate->Duplicate();

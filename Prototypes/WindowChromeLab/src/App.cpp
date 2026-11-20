@@ -9,6 +9,7 @@
 #include "Presentation/EditorLayer.hpp"
 #include "Presentation/WindowChromeLabPrototypePanel.hpp"
 #include "Presentation/LabWindows.hpp"
+#include "Presentation/MultiViewDemo.hpp"
 #include "IO/PrototypePythonBindings.hpp"
 #include <imgui.h>
 
@@ -94,6 +95,7 @@ namespace SST
         editor.RegisterPanel<LabWindow>(LabWindow::Kind::Plot, selection);
         editor.RegisterPanel<LabWindow>(LabWindow::Kind::Table, selection);
         editor.RegisterPanel<LabWindow>(LabWindow::Kind::Tools, selection);
+        RegisterMultiViewDemo(editor);
         application.InsertLayerBefore(LayerId::ImGui, std::move(workflow));
     }
 }

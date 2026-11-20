@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/EditorLayer.hpp"
+#include "Presentation/Panels/ViewHost.hpp"
 
 #include <algorithm>
 
@@ -44,7 +45,7 @@ namespace SST
 	} // namespace
 
 	EditorLayer::EditorLayer()
-		: Layer("EditorLayer"), m_Windows(CreateRef<WindowWorkspace>(m_Panels))
+		: Layer("EditorLayer"), m_Windows(CreateRef<WindowWorkspace>(m_Panels)), m_Views(CreateRef<ViewHost>(m_Panels, m_Windows))
 	{
 	}
 
@@ -68,6 +69,8 @@ namespace SST
 		{
 			const auto result = m_Windows->Bind(commands, m_KeymapResolver.lock());
 			if (!result) DS_LOG_ERROR("Window command registration failed: {}", result.Error().userMessage);
+			const auto views = m_Views->Bind(commands, m_JobSystem.lock());
+			if (!views) DS_LOG_ERROR("View command registration failed: {}", views.Error().userMessage);
 		}
 		bindEvents();
 	}
@@ -130,6 +133,7 @@ namespace SST
 	void EditorLayer::RenderCorePanelMenuItems()
 	{
 		initializePanelsIfNeeded();
+		m_Views->RenderMenu();
 		const PanelId panelIds[] = {m_ProgressMonitorPanelId, m_TaskMonitorPanelId, m_LoggingPanelId, m_SettingsPanelId};
 		for (PanelId panelId : panelIds)
 		{

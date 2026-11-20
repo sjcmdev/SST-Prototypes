@@ -6,6 +6,7 @@
 #include "Core/Logging/Logger.hpp"
 #include "ScientificRuntime/Python/PythonErrors.hpp"
 #include "Core/Utils/FramebufferScreenshot.hpp"
+#include "Presentation/Panels/ViewHost.hpp"
 
 namespace SST
 {
@@ -39,6 +40,7 @@ namespace SST
 		if (!Py_IsInitialized())
 		{
 			ApplicationDetail::RegisterApplicationPythonModule();
+			RegisterViewPythonModule();
 			configureEmbeddedPythonHome();
 		}
 
