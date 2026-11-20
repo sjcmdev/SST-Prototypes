@@ -16,6 +16,7 @@ void TutorialOverlay::Item(const std::string &window, const std::string &id) {
 }
 bool TutorialOverlay::Draw(const Tutorial &tutorial, HostedWindows *windows) {
     highlighted = false;
+    geometry = {};
     const auto *step = tutorial.Step();
     if (!step) { placedStep.clear(); return false; }
     const auto &target = step->at("target");
@@ -64,6 +65,7 @@ bool TutorialOverlay::Draw(const Tutorial &tutorial, HostedWindows *windows) {
             const auto &rect = found->second;
             const ImVec2 min(rect.min.x - 3, rect.min.y - 3), max(rect.max.x + 3, rect.max.y + 3);
             const auto pos = ImGui::GetWindowPos(), size = ImGui::GetWindowSize();
+            geometry.targetMin = rect.min; geometry.targetMax = rect.max; geometry.coachMin = pos; geometry.coachMax = ImVec2(pos.x + size.x, pos.y + size.y);
             reposition = !ImGui::IsWindowDocked() &&
                 ((pos.x < rect.rowMax.x && pos.x+size.x > rect.rowMin.x && pos.y < rect.rowMax.y && pos.y+size.y > rect.rowMin.y)
                  || pos.x < lo.x || pos.y < lo.y || pos.x+size.x > hi.x || pos.y+size.y > hi.y);
@@ -82,6 +84,7 @@ bool TutorialOverlay::Draw(const Tutorial &tutorial, HostedWindows *windows) {
                 else if (target.contains("item") && pos.x+size.x <= rect.rowMin.x) {start=ImVec2(pos.x+size.x,pos.y);end=ImVec2(min.x,min.y+corner);}
                 const float ax=start.x-end.x, ay=start.y-end.y, length=std::max(1.f,std::sqrt(ax*ax+ay*ay));
                 const ImVec2 along(ax/length*10, ay/length*10), side(-ay/length*4, ax/length*4);
+                geometry.arrow = true; geometry.tip = end;
                 draw->AddLine(start, end, colour, 2);
                 draw->AddTriangleFilled(end, ImVec2(end.x+along.x+side.x, end.y+along.y+side.y), ImVec2(end.x+along.x-side.x, end.y+along.y-side.y), colour);
             }

@@ -13,6 +13,9 @@ namespace SST
 
 #if DS_PYTHON_CAPI_AVAILABLE
 	PyThreadState *g_PythonRuntimeThreadState = nullptr;
+	// Main-thread state whose GIL was released at first Start(). Python stays initialized after Stop()
+	// (extensions are not restartable), so a later Start() must reuse it instead of releasing the GIL again.
+	PyThreadState *g_ReleasedMainThreadState = nullptr;
 
 	static void configureEmbeddedPythonHome()
 	{
@@ -54,7 +57,8 @@ namespace SST
 				"python.embed.initialize_failed");
 		}
 
-		m_MainThreadState = PyEval_SaveThread();
+		m_MainThreadState = g_ReleasedMainThreadState ? g_ReleasedMainThreadState : PyEval_SaveThread();
+		g_ReleasedMainThreadState = m_MainThreadState;
 		g_PythonRuntimeThreadState = m_MainThreadState;
 		if (m_MainThreadState == nullptr)
 		{

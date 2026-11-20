@@ -5,6 +5,7 @@
 
 namespace SST {
 namespace {
+std::function<void(const std::string &, bool)> g_MenuHook;
 void Branch(CommandRegistry &registry, const std::vector<CommandMeta> &commands, const std::string &prefix) {
     std::set<std::string> submenus;
     for (const auto &command : commands) {
@@ -25,13 +26,16 @@ void Branch(CommandRegistry &registry, const std::vector<CommandMeta> &commands,
     }
 }
 }
+void SetCommandMenuHook(std::function<void(const std::string &, bool)> hook) { g_MenuHook = std::move(hook); }
 void RenderCommandMenu(CommandRegistry &registry, const std::string &appMenu, const std::function<void()> &windowMenu) {
     auto commands = registry.ListCommands();
     std::sort(commands.begin(), commands.end(), [](const auto &a, const auto &b) { return a.menuPath < b.menuPath; });
     for (const auto &root : {std::string("File"), std::string("Edit"), std::string("View"), appMenu,
                              std::string("Tools"), std::string("Tutorials"), std::string("Window"), std::string("Help")}) {
         if (root == "Window" && windowMenu) { windowMenu(); continue; }
-        if (ImGui::BeginMenu(root.c_str())) { Branch(registry, commands, root + "/"); ImGui::EndMenu(); }
+        const bool open = ImGui::BeginMenu(root.c_str());
+        if (g_MenuHook) g_MenuHook(root, open);
+        if (open) { Branch(registry, commands, root + "/"); ImGui::EndMenu(); }
     }
 }
 }
