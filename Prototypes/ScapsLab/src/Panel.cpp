@@ -1001,6 +1001,8 @@ void Panel::Results() {
         ImPlot::SetupAxes("Position [um]","Density [cm^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupAxisFormat(ImAxis_Y1,[](double value,char *buffer,int size,void*) {return std::snprintf(buffer,size,"1e%.0f",std::log10(value));});
         ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);FitWhenChanged("carriers",ImAxis_X1,total*1e6,0,total*1e6);
+        {double lo=1e300,hi=0;for(const auto *key:{"n_m3","p_m3"}) for(double v:p.at(key).get<std::vector<double>>()) if(std::isfinite(v) && v>0){lo=std::min(lo,v*1e-6);hi=std::max(hi,v*1e-6);}
+        if(hi>0)FitWhenChanged("carriers",ImAxis_Y1,std::log10(lo)*7.31+std::log10(hi),std::max(lo,hi*1e-16),hi*3);}
         for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;auto y=p.at(key).get<std::vector<double>>();for(auto &value:y)value*=1e-6;if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
         DrawLayerRegions(layers);EndSavedPlot(*w,"Carriers");
     }
