@@ -2,7 +2,10 @@
   "thesis": {
     "source": "M, page 46, Table 4.2, 250 C anneal; PFS section 6 A7",
     "energy_eV": 0.17,
-    "capture_cross_section_cm2": 2.54e-17
+    "capture_cross_section_cm2": 2.54e-17,
+    "text_source": "C:\\Users\\Franek\\AppData\\Local\\Temp\\claude\\48b5991471f9e403\\b6c41bad-fa23-4d92-8b18-1094bc477a22\\scratchpad\\magisterka.txt",
+    "text_sha256": "39d601df9abfb2f8b0afce045cf613ed507bc73340d1e888801faecd9ac0b345",
+    "locator": "PAGE 46 / Table 4.2 / 250 C; Figure 4.3c/d on PAGE 47 has no numeric point list in the text extraction"
   },
   "sources": [
     {

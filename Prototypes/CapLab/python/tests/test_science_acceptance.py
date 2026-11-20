@@ -84,6 +84,39 @@ def test_cv_no_dof_and_no_fit_width_extrapolation():
     assert analyze(cv(), settings)['x_d_fit']['value_m'] is None
 
 
+def test_cv_optional_fit_bias_and_invalid_bias():
+    settings = options()
+    default = analyze(cv(), settings)['x_d_fit']
+    settings['as_bias_V'] = None
+    assert analyze(cv(), settings)['x_d_fit'] == default
+    for bias in (float('nan'), float('inf')):
+        settings['as_bias_V'] = bias
+        with pytest.raises(ValueError, match='AS bias'):
+            analyze(cv(), settings)
+
+
+@pytest.mark.parametrize('degree', [1, 2])
+def test_dlcp_width_errors_follow_selected_bias_and_missing_covariance(degree):
+    settings = dl_options(); settings['degree'] = degree
+    m = raw()
+    r = analyze(m, settings)
+    g = r['groups'][0]
+    settings.update(dlcp_fit=copy.deepcopy(r), xd_policy='nearest')
+    settings['dlcp_fit']['groups'] = [dict(g, bias_V=1, x_e_standard_error_m=2e-9),
+                                      dict(g, bias_V=-.25, x_e_standard_error_m=1e-9)]
+    assert analyze(m, settings)['x_d']['standard_error_m'] == 1e-9
+    settings['xd_policy'] = 'linear'
+    assert analyze(m, settings)['x_d']['standard_error_m'] == pytest.approx(math.hypot(.8e-9, .4e-9))
+    settings['dlcp_fit']['groups'][0]['x_e_standard_error_m'] = None
+    assert analyze(m, settings)['x_d']['standard_error_m'] is None
+    settings.pop('dlcp_fit')
+    settings['excluded_row_ids'] = m['row_ids'][degree+1:]
+    r = analyze(m, settings)
+    assert r['groups'][0]['x_e_standard_error_m'] is None
+    assert r['groups'][0]['N_DL_standard_error_m3'] is None
+    assert r['x_d']['standard_error_m'] is None
+
+
 def test_a7_source_sets_are_frozen_without_tuning():
     evidence = json.loads((Path(__file__).parent/'fixtures/a7_sources.json').read_text())
     for item, expected in zip(evidence['sources'], [.156167135801643, .173038521237882]):

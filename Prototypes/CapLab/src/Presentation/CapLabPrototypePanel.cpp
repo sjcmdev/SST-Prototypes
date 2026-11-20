@@ -682,6 +682,7 @@ void CapLabPrototypePanel::RenderWalter() {
         ImGui::PushID(a.at("id").dump().c_str());
         if (ImGui::TreeNode((a.at("model").get<std::string>()+" / "+a.at("status").get<std::string>()).c_str())) {
             ImGui::TextWrapped("CL-04: apparent DOS under the selected emission and field model.");
+            ImGui::TextWrapped("W1-W3 check saved-slice integrals only. Full historical spectra and parabolic-field reconstruction are unsupported.");
             for (const auto &s : a.at("spectra")) ImGui::TextWrapped("Integrated apparent DOS: %s cm^-3; %s",s.at("integral").at("density_cm3").dump().c_str(),s.at("integral").at("semantics").get<std::string>().c_str());
             for (const auto &g : a.at("graphs")) if (ImGui::Button(("Show spectrum##"+g.dump()).c_str())) {p.graph=g; state->view={}; state->Document().Changed();}
             if (ImGui::TreeNode("Parameters / invalid points / provenance")) {auto detail=a; detail.erase("settings"); detail.erase("historical"); ImGui::TextWrapped("%s",detail.dump(2).c_str()); ImGui::TreePop();}

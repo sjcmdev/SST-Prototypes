@@ -827,6 +827,90 @@ Walter results and plot axes say **apparent DOS** (CL-04); JSON carries the
 interpretation and historical limits. W1-W3 remain saved-slice integral checks.
 Full historical spectra and the parabolic-field variant remain unsupported.
 
+### Resume verification (2026-11-20)
+
+The original final/WIP files were read again: their SHA-256 and all points
+match `a7_sources.json`. The thesis text extraction, PAGE 46 / Table 4.2,
+contains the 250 C row with 0.170 eV and 2.54e-17 cm2; its path, SHA-256 and
+locator are now frozen in the same evidence file. Independent NumPy OLS
+reproduces the two values and errors above using the historical conversion
+`sigma_cm2 = prefactor_Hz / (2 * 2e18 * 1e7)`. No deduplication or point
+selection was used to force energy agreement.
+
+Independent expected CV values from the frozen noisy laboratory profiles
+(one SE, area/material/calibration fixed; fitted x_d evaluated at the midpoint
+of the original acceptance range, not the historical measured x_d):
+
+| Case | Points | V_b [V] | SE V_b [V] | N [m^-3] | SE N [m^-3] | Fit bias [V] | Fitted x_d [m] | SE x_d [m] |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| C1 | 14 | 0.761846577 | 0.009422705 | 5.93464872e21 | 7.32023345e19 | 0.025 | 3.70446241e-7 | 6.24949216e-10 |
+| C2 | 5 | 0.457216186 | 0.008027087 | 7.22833434e20 | 2.65004814e19 | 0.250 | 5.62894348e-7 | 3.52106262e-9 |
+| C3 | 11 | 0.424348122 | 0.000787352 | 5.43737877e20 | 1.05350613e18 | 0.050 | 8.72322757e-7 | 3.56934916e-10 |
+| C4 | 6 | 0.367984307 | 0.007418404 | 1.53104844e20 | 4.40995820e18 | 0.125 | 1.32442940e-6 | 6.70315922e-9 |
+| C5 | 6 | 0.759699431 | 0.023791749 | 3.14683217e21 | 1.16905923e20 | 0.125 | 4.72151561e-7 | 1.17993929e-9 |
+
+`test_science_acceptance.py` compares all three propagated errors against
+independent NumPy covariance at relative tolerance 1e-8. The resumed change
+also accepts a null optional fit bias as 0 V, rejects nonfinite bias, checks
+degree-1/2 DLCP selection/interpolation and unavailable covariance, and puts
+the W1-W3 limitations directly beside Walter results in the panel.
+
+The checkpoint also fixed inherited build/API mismatches: this worktree's
+UI-Library has neither `PlotSpec.customAxes` nor `Plot/Axis.hpp`. The CapLab
+Nyquist path therefore uses its existing ImPlot renderer, and PNG dimensions
+use the existing exporter's equal fractional axis spans. The physical
+equal-scale PNG assertion remains in `test_m8_workflow.py`. Frozen fixture
+line endings are pinned to LF so their original SHA-256 survives Windows
+checkouts. These are compatibility fixes, not new analysis models.
+
+Fresh resumed gates, MSVC Release in this worktree's existing repository
+`build/` (no temporary build directory):
+
+- CapLab app and CapLabTests host/dependencies: PASS, each build in a separate
+  shared build-lock call, `-nr:false -m:1 -p:CL_MPCount=6`; 0 errors, 6 existing
+  C4996 warnings in each target. Logs: `build/clsci1r3-app.log` and
+  `build/clsci1r3-tests-build.log`.
+- Full CapLab C++ suite: **40 passed, 0 failed/skipped**, at 02:20:15.
+  Evidence: `build/clsci1r3-cpp.xml` / `.log`.
+- Full embedded CapLab Python suite: **209 passed, 0 failed/skipped**, at
+  02:20:19; includes 14 science acceptance cases, PFS A/C/W checks, JSON
+  command/job round-trip and export parity. Evidence:
+  `build/clsci1r3-pytest-python.xml`, `build/clsci1r3-python.log`.
+- The C++ suite and embedded Python suite each used their own shared lock.
+  The local lock wrapper only replaces denied CIM memory inspection with
+  `GlobalMemoryStatusEx`; it keeps the same four shared slots and limits.
+- `graphify update .`: PASS (76,077 nodes / 149,391 edges); unsupported JSON,
+  MATLAB and SQL extraction warnings remain explicit in
+  `build/clsci1r3-graphify.log`. No semantic/API extraction was requested.
+
+No Core, JFM or SST-Libraries sources changed; JFM suites were not rerun.
+A7 exact thesis energy and raw laboratory DLCP covariance remain open as
+described above; the passing regressions do not remove these limits.
+
+Visual QA remains **OPEN**, not a passing gate. The required
+`tools/agents/snap-app.ps1` was run under separate GPU locks before and after
+the resumed change; images were inspected in
+`tools/agents/runs/clsci1/shots/`:
+
+- `before-resume.png` shows the loaded project, apparent-DOS plot and panel
+  headers. Earlier `before.png` captured only the main viewport.
+- `after-resume.png` captures the Logging Panel; `after-analysis.png` still
+  omits the detached analysis viewport despite an isolated test-layout retry.
+  These are framebuffer captures from the app's `--screenshot` command.
+- The script's desktop `CopyFromScreen` fails with an invalid handle in the
+  sandbox; its `.screen-copy.png` outputs are not visual acceptance evidence.
+- Each captured app run exited with code 0. The screenshot issue is not
+  evidence that the expanded result values were visually checked.
+- An interactive Computer Use launch was attempted with a shared GPU lock
+  held. Automatic approval review rejected it with the exact message:
+  `Computer Use was not approved to use caplab`. No interactive instance was
+  launched and no alternate UI-control path bypassed the rejection. The lock
+  was released. The local final GPU wrapper shortened only its acquisition
+  retry interval; the shared four-slot limit was unchanged.
+
+Remaining visual gate: inspect expanded Ea/prefactor SE, CV/DLCP derived SE
+and Walter CL-04 / W1-W3 labels in an approved interactive CapLab session.
+
 ## clis2: model-only IS and fit robustness (2026-11-20)
 
 Built from scratch with MSVC Debug in this worktree's `SST-Prototypes/build/`
