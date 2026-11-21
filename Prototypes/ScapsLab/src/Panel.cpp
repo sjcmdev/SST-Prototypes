@@ -1157,7 +1157,7 @@ void Panel::Devices() {
     } else if(w->dirty || !w->status.empty()) ImGui::TextDisabled("%s%s",w->dirty?"* unsaved  ":"",w->status.c_str());
     ImGui::Separator();
     const auto select=[&](const DeviceState &d) {if(w->project.active_device!=d.id) Send({{"operation","device_select"},{"device_id",d.id}});};
-    const auto go=[&](int target) {w->focusView=target;};
+    const auto go=[&](int target) {if(PanelShown(target))w->focusView=target;}; // hidden panels: no jump
     // Tree node with room for inline decoration; returns {open, clicked (not the arrow)}.
     const auto node=[&](const char *id,ImGuiTreeNodeFlags flags,bool selected) {
         const bool open=ImGui::TreeNodeEx(id,flags|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_AllowOverlap|ImGuiTreeNodeFlags_OpenOnArrow|(selected?ImGuiTreeNodeFlags_Selected:0));
@@ -1251,6 +1251,7 @@ void Panel::Devices() {
                         ImGui::TreePop();
                     }
                     for(const auto &[label,target]:{std::pair<const char*,int>{ICON_FA_PLUG " Contacts",2},{ICON_FA_SUN " Illumination",19}}) {
+                        if(!PanelShown(target)) continue;
                         ImGui::PushID(target);const auto [lopen,lclick]=node("##leaf",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)lopen;
                         if(lclick) {select(d);go(target);}
                         text(label);ImGui::PopID();
@@ -1263,11 +1264,13 @@ void Panel::Devices() {
                             ImGui::PushID(id.c_str());
                             const auto [ropen,rclick]=node("##run",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,active && d.selectedRun==id);(void)ropen;
                             const std::string kind=run.value("kind",std::string{});
-                            if(rclick) {(void)w->Dispatch({{"operation","history_select"},{"device_id",d.id},{"run_id",id}});go(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:5);}
+                            const bool hiddenKind=!PanelShown(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:kind=="batch"?16:5);
+                            if(hiddenKind && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("panel disabled in basic mode");
+                            if(rclick && !hiddenKind) {(void)w->Dispatch({{"operation","history_select"},{"device_id",d.id},{"run_id",id}});go(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:5);}
                             const auto rc=run.at("colour").get<std::vector<float>>();
                             ImGui::SameLine(0,4);ImGui::ColorButton("##rc",ImVec4(rc[0],rc[1],rc[2],rc[3]),ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(box*.5f,box*.5f));
                             const std::time_t seconds=run.value("time_unix_ms",std::int64_t(0))/1000;std::tm local{};localtime_s(&local,&seconds);char time[32];std::strftime(time,sizeof(time),"%H:%M:%S",&local);
-                            text(RunLabel(run),time);ImGui::PopID();
+                            ImGui::BeginDisabled(hiddenKind);text(RunLabel(run),time);ImGui::EndDisabled();ImGui::PopID();
                         }
                         ImGui::TreePop();
                     }

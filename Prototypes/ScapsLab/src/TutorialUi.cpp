@@ -29,6 +29,21 @@ class TutorialUi final : public Layer {
     bool about=false,clear=false,reportOpen=true;
     Json savedRecent;
     const Json catalog=TutorialCatalog();
+    // Basic mode: a lesson is listed only if every panel it targets is shown (hidden lessons stay in code).
+    void SaveExperimental() {
+        if(UiSettingsPath().empty())return;
+        Json s=Json::object();std::string text,error;
+        if(TextFileIO::Load(Path{UiSettingsPath()},text,error)) {try{s=Json::parse(text);}catch(...){}}
+        if(!s.is_object())s=Json::object();
+        s["experimental_panels"]=ExperimentalPanels();(void)TextFileIO::Save(Path{UiSettingsPath()},s.dump(2),error);
+    }
+    bool LessonShown(const std::string &id) const {
+        for(const auto &step:TutorialDefinition(id).at("steps")) {
+            const auto window=step.at("target").at("window").get<std::string>();
+            for(std::size_t i=0;i<panels.size();++i) if(panels[i]->GetType()==window && !PanelShown(int(i))) return false;
+        }
+        return true;
+    }
 public:
     TutorialUi(Application &app,Workflow &w,std::vector<Ref<Panel>> panels):Layer("ScapsLab tutorials"),w(w),panels(std::move(panels)) {
         auto &editor=app.GetEditorLayer();windows=editor.GetWindows();
@@ -77,20 +92,23 @@ public:
         menu("scapslab.file.exit","File/Exit",[&w]{w.fileAction="exit";});
         for(int i=0;i<10;++i) menu("scapslab.recent."+std::to_string(i),"",[&w,i]{if(i<int(w.recent.size()))w.openRequest=w.recent[i];},"",[&w,i]{return !w.Busy() && i<int(w.recent.size());});
         if(std::filesystem::exists(ExamplesDirectory())) for(const auto &entry:std::filesystem::directory_iterator(ExamplesDirectory())) if(entry.path().extension()==".scapslab") {
-            const auto path=entry.path();menu("scapslab.example."+path.stem().string(),"File/Examples/"+path.stem().string(),[&w,path]{w.openRequest=path.string();},"",idle);
+            const auto path=entry.path();const std::string stem=path.stem().string();menu("scapslab.example."+stem,"File/Examples/"+stem+(!ExperimentalPanels() && stem=="05-capacitance-ready"?" (needs experimental panels)":""),[&w,path]{w.openRequest=path.string();},"",idle);
         }
         operation("undo","Edit/Undo","Ctrl+Z",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanUndo();});
         operation("redo","Edit/Redo","Ctrl+Y",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanRedo();});
         menu("scapslab.history.clear","Edit/Clear history...",[this]{clear=true;});
-        operation("run","Simulate/Calculate I-V","",idle);operation("run_batch","Simulate/Run batch","",idle);
+        operation("run","Simulate/Calculate I-V","",idle);if(ExperimentalPanels())operation("run_batch","Simulate/Run batch","",idle);
         operation("cancel","Simulate/Stop","",[&w]{return w.active!=0;});
-        for(const auto &panel:this->panels) menu("scapslab.view."+std::to_string(panel->GetId()),"View/"+panel->GetTitle(),[panel]{panel->SetVisible(!panel->IsVisible());},"",{},[panel]{return panel->IsVisible();});
-        for(WindowId i=1;i<=this->panels.back()->GetId();++i) if(auto panel=editor.FindPanel(i).lock();panel && panel->GetTitle()=="Settings") {
+        menu("scapslab.view.experimental","View/Show experimental panels (applies after restart)",[this]{ExperimentalPanels()=!ExperimentalPanels();SaveExperimental();this->w.status="Experimental panels "+std::string(ExperimentalPanels()?"on":"off")+": restart ScapsLab to apply";},"",{},[]{return ExperimentalPanels();});
+        for(const auto &panel:this->panels) if(panel->GetId()) menu("scapslab.view."+std::to_string(panel->GetId()),"View/"+panel->GetTitle(),[panel]{panel->SetVisible(!panel->IsVisible());},"",{},[panel]{return panel->IsVisible();});
+        WindowId top=0;for(const auto &p:this->panels)top=std::max(top,p->GetId());
+        for(WindowId i=1;i<=top;++i) if(auto panel=editor.FindPanel(i).lock();panel && panel->GetTitle()=="Settings") {
             menu("scapslab.preferences","Tools/Preferences...",[panel]{panel->SetVisible(true);});break;
         }
         menu("scapslab.about","Help/About ScapsLab",[this]{about=true;});
         for(const auto &lesson:catalog) for(const auto *mode:{"learn","demo","verify"}) {
             const std::string id=lesson.at("tutorial_id"),title=lesson.at("title");
+            if(!LessonShown(id)) continue;
             menu("scapslab.lesson."+id+"."+mode,"Tutorials/"+title+"/"+mode,[&w,id,mode]{w.TutorialRequest({{"operation","tutorial_start"},{"tutorial_id",id},{"mode",mode}});},"",[&w]{return !w.Busy() && !w.tutorial.Active();});
         }
         operation("tutorial_stop","Tutorials/Stop tutorial","",[&w]{return w.tutorial.Active();});
@@ -106,6 +124,7 @@ public:
         }
         for(const auto &lesson:catalog) {
             const std::string id=lesson.at("tutorial_id"),title=lesson.at("title");
+            if(!LessonShown(id)) continue;
             const auto progress=w.tutorialProgress.value(id,Json::object());
             const auto suffix=progress.value("status",std::string{})=="passed"?" (complete)":" ("+std::to_string(progress.value("step_index",std::size_t(0)))+"/"+std::to_string(lesson.at("step_count").get<std::size_t>())+")";
             for(const auto *mode:{"learn","demo","verify"}) (void)w.commands->SetMenu(CommandID{"scapslab.lesson."+id+"."+mode},"Tutorials/"+title+suffix+"/"+mode,"",[this]{return !w.Busy() && !w.tutorial.Active();});

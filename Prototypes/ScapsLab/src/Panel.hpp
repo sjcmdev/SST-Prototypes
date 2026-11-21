@@ -4,6 +4,11 @@
 namespace SST {class Application;}
 namespace SST::ScapsLab {
 void DrawHistory(Workflow &workflow,bool global=false);
+// Basic mode (owner 2026-11-21): only these panels (indices into Panel.cpp names[]) are created/docked/listed in View. The rest stay in code.
+inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,14,16,17,18,22}; // all except C-V, Mott-Schottky, C-f, G-omega-f, History, Illumination, Absorption, Grading
+inline bool &ExperimentalPanels() {static bool on=false;return on;} // View > Show experimental panels; persisted in app settings, applied at start
+inline std::string &UiSettingsPath() {static std::string path;return path;}
+inline bool PanelShown(int view) {if(ExperimentalPanels())return true;for(const int p:kBasicPanels)if(p==view)return true;return false;}
 class Panel final : public EditorWindow {
 public:
     Panel(Workflow *workflow, int view, bool gallery=false);
