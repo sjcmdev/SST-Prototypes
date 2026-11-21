@@ -93,8 +93,8 @@ public:
         if(std::filesystem::exists(ExamplesDirectory())) for(const auto &entry:std::filesystem::directory_iterator(ExamplesDirectory())) if(entry.path().extension()==".scapslab") {
             const auto path=entry.path();const std::string stem=path.stem().string();menu("scapslab.example."+stem,"File/Examples/"+stem+(!ExperimentalPanels() && stem=="05-capacitance-ready"?" (needs experimental panels)":""),[&w,path]{w.openRequest=path.string();},"",idle);
         }
-        operation("undo",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanUndo();});
-        operation("redo",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanRedo();});
+        operation("undo",[&w]{return w.CanUndo();}); // synchronous: not gated by running calculations
+        operation("redo",[&w]{return w.CanRedo();});
         menu("scapslab.history.clear","Edit/Clear history...",[this]{clear=true;});
         operation("run",idle);if(ExperimentalPanels())operation("run_batch",idle,"Simulate/Run batch");
         operation("cancel",[&w]{return w.AnyActive();});

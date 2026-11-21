@@ -85,6 +85,7 @@ namespace SST
 				if (mergeResult)
 				{
 					invalidateCleanIfHistoryMutatedAtCleanPoint();
+					enforceLimits();
 					return true;
 				}
 			}
@@ -271,6 +272,49 @@ namespace SST
 		m_IsApplying = false;
 	}
 
+	void UndoStack::SetLimits(std::size_t maxDepth, std::size_t maxBytes)
+	{
+		m_MaxDepth = maxDepth;
+		m_MaxBytes = maxBytes;
+		enforceLimits();
+	}
+
+	std::size_t UndoStack::GetByteSize() const
+	{
+		std::size_t bytes = 0;
+		for (const UndoRecord &record : m_History)
+			for (const auto &command : record.commands)
+				bytes += command->ByteSize();
+		return bytes;
+	}
+
+	void UndoStack::enforceLimits()
+	{
+		if (m_MaxDepth == 0 && m_MaxBytes == 0)
+			return;
+		std::size_t bytes = m_MaxBytes != 0 ? GetByteSize() : 0;
+		std::size_t drop = 0;
+		// only applied (undoable) steps are dropped, oldest first; the newest applied step stays
+		while (m_Index - drop > 1 &&
+			   ((m_MaxDepth != 0 && m_History.size() - drop > m_MaxDepth) || (m_MaxBytes != 0 && bytes > m_MaxBytes)))
+		{
+			for (const auto &command : m_History[drop].commands)
+				bytes -= command->ByteSize();
+			++drop;
+		}
+		if (drop == 0)
+			return;
+		m_History.erase(m_History.begin(), m_History.begin() + static_cast<std::ptrdiff_t>(drop));
+		m_Index -= drop;
+		if (m_CleanIndex.has_value())
+		{
+			if (*m_CleanIndex >= drop)
+				*m_CleanIndex -= drop;
+			else
+				m_CleanIndex.reset();
+		}
+	}
+
 	void UndoStack::MarkClean()
 	{
 		m_CleanIndex = m_Index;
@@ -334,6 +378,7 @@ namespace SST
 		m_History.push_back(std::move(record));
 		m_Index = m_History.size();
 		invalidateCleanIfHistoryMutatedAtCleanPoint();
+		enforceLimits();
 		return {};
 	}
 

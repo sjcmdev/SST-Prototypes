@@ -50,6 +50,11 @@ namespace SST
 		[[nodiscard]] Result<void> CancelGroup(CommandContext context = {});
 		[[nodiscard]] UndoScope ScopedGroup(std::string description);
 
+		// Opt-in cap (0 = unlimited, the default): oldest undo steps are dropped when the depth or the summed ICommand::ByteSize() is exceeded.
+		// The newest step is always kept. A dropped step that held the clean point makes the stack permanently dirty.
+		void SetLimits(std::size_t maxDepth, std::size_t maxBytes);
+		[[nodiscard]] std::size_t GetByteSize() const;
+
 		void Clear();
 		void MarkClean();
 
@@ -68,11 +73,14 @@ namespace SST
 		[[nodiscard]] Result<void> applyUndoRecord(UndoRecord &record, CommandContext &context);
 		[[nodiscard]] Result<void> applyRedoRecord(UndoRecord &record, CommandContext &context);
 		void dropRedoBranch();
+		void enforceLimits();
 		void invalidateCleanIfHistoryMutatedAtCleanPoint();
 
 		std::vector<UndoRecord> m_History;
 		std::size_t m_Index = 0;
 		std::optional<std::size_t> m_CleanIndex = 0;
+		std::size_t m_MaxDepth = 0;
+		std::size_t m_MaxBytes = 0;
 
 		std::optional<UndoRecord> m_ActiveGroup;
 		std::size_t m_GroupDepth = 0;

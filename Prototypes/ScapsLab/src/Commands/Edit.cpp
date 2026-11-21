@@ -8,14 +8,16 @@ Out EditDocument::Execute(ILabStore &s) const {
     s.StartJob(ToJson());
     return {};
 }
-Out Undo::Execute(ILabStore &s) const {
-    if(s.Busy()) return Reject("busy", "Busy", "A job is still active", "Wait or cancel");
-    return s.Step(true);
+namespace {
+// S9: undo/redo are synchronous and never wait for calculations (the store cancels the active device's job). Only a job that replaces the whole project blocks them.
+Out StepOut(ILabStore &s, bool undo) {
+    for(const auto &op : s.ActiveOps())
+        if(op == "project_load" || op == "load" || op == "project_new") return Reject("busy", "Busy", "The project is being replaced", "Wait for the operation");
+    return s.Step(undo);
 }
-Out Redo::Execute(ILabStore &s) const {
-    if(s.Busy()) return Reject("busy", "Busy", "A job is still active", "Wait or cancel");
-    return s.Step(false);
 }
+Out Undo::Execute(ILabStore &s) const {return StepOut(s, true);}
+Out Redo::Execute(ILabStore &s) const {return StepOut(s, false);}
 Out ListHistory::Execute(ILabStore &s) const {
     if(args.contains("device_id")) s.RequireDevice(args.at("device_id").get<std::string>());
     s.PublishSnapshot(); // read-only: answered inline

@@ -12,6 +12,7 @@
 #include "Core/Presentation/Tutorial.hpp"
 #include "Domain/Results.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
+#include <algorithm>
 #include <chrono>
 #include <mutex>
 #include <atomic>
@@ -93,6 +94,7 @@ public:
     Ref<LiveFeed> feed;                   // set by Workflow::StartOperation for exact runs and batches
     std::string batchGroup;
     Json batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
+    bool superseded=false;                // set on the UI thread when undo/redo changed the document (or removed the device) under this job: its result is dropped on arrival
     bool slim=false, prewarm=false, outputValid=false; // prewarm: build panel Json views on the worker (UI app only)
       // slim: drop run output Json once typed (UI app); outputValid: output["valid"] read before that
     Operation(Json d, Json r) : document(std::move(d)), request(std::move(r)) {}
@@ -168,7 +170,9 @@ public:
     Json json(bool cached=false) const {Json o=Json::object();for(const auto &[k,r]:m)o[k]=cached?r->View():r->Dump();return o;} // Json copy of all kinds (cached: through the Json views)
     bool operator==(const AcSet &o) const {if(m.size()!=o.m.size())return false;for(const auto &[k,r]:m){auto it=o.m.find(k);if(it==o.m.end()||(r!=it->second&&r->View()!=it->second->View()))return false;}return true;}
 };
+inline constexpr std::size_t kUndoMaxDepth=500, kUndoMaxBytes=8u<<20; // per undo stack: oldest steps drop first (a step is a small delta, so this is hundreds of edits)
 struct DeviceState {
+    DeviceState() {undo.SetLimits(kUndoMaxDepth,kUndoMaxBytes);}
     std::string id, name, description, status = "no results";
     Json colour = Json::array({0.25, 0.65, 0.95, 1.0});
     Json document;
@@ -236,14 +240,14 @@ public:
     DeviceState &Device(const std::string &id);
     Json Workspace(bool withResults=true) const;
     void SetWorkspace(const Json &value,bool validated=false,const std::vector<DeviceResults> *typed=nullptr); // validated: value came from NormalizeWorkspace; typed: its results already taken out by ExtractResults
-    void DeviceOp(const Json &request) override; // device_*/project_edit/action_settings: in place on the UI thread (no job, no workspace copy)
+    void DeviceOp(const Json &request) override; // device_*/project_edit/action_settings: in place on the UI thread (no job, no workspace copy); add/duplicate/remove/update/move/project_edit push a small undo delta
     static inline std::atomic_size_t constructed{0}; // test counter: Workflow instances ever built
     Json Snapshot() const;
     std::string MemoryReport() const; // SCAPSLAB_PERF: private bytes + history/result sizes
     Json Runs() const;
     void RefreshDirty();
     void StartOperation(const Json &request, const std::string &deviceId);
-    void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy, not undoable)
+    void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy; undoable as a run delta, see Commands/UndoOps.cpp)
     Json response;
     std::string status = "Ready", path;
     Ref<JobSystem> jobs;
@@ -344,7 +348,14 @@ public:
     void PublishSnapshot() override {response=Snapshot();}
     void SelectDevice(const std::string &device) override;
     void SetAutoRecalculate(bool automatic,std::optional<bool> band) override;
-    Result<void> Step(bool undo) override;
+    Result<void> Step(bool undo) override; // synchronous: state changes now (no job); unapplied edits of the active device are discarded first, running calculations are cancelled and dropped
+    bool CanUndo() const; bool CanRedo() const; // a discardable pending edit counts
+    // S9 undo support (Commands/UndoOps.cpp)
+    bool HasDevice(const std::string &id) const {return std::any_of(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==id;});}
+    void ApplyDocument(DeviceState &d,Json document); // undo/redo of an edit: new document, revision++, DocumentEdited, auto-recalculate arms
+    bool DiscardPendingEdits(const std::string &device); // running/queued document-changing jobs of the device are dropped; true when there were any
+    void SupersedeJobs(const std::string &device);       // running calculation of the device is cancelled and its result dropped on arrival
+    void DropDeviceLane(const std::string &device);      // device leaves the project: its job is cancelled/dropped, its queue cleared
     void RunAll() override;
     void OnUpdate(float) override;
     void UpdateOperation();

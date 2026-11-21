@@ -126,11 +126,15 @@ TEST(Commands, LoadWhileCalculatingCancelsAndDefers) {
     Mock doc;doc.busy = doc.active = true;doc.ops = {"cv"};
     ASSERT_TRUE(Cmd::LoadDocument::With({{"path", "d.yaml"}}).Execute(doc));EXPECT_EQ(doc.calls, std::vector<std::string>{"DeferProjectLoad"});
 }
-TEST(Commands, UndoRedoNeedAnIdleProject) {
+TEST(Commands, UndoRedoAreSynchronousAndOnlyBlockedByProjectReplacement) {
     Mock m;ASSERT_TRUE(Cmd::Undo{}.Execute(m));ASSERT_TRUE(Cmd::Redo{}.Execute(m));
     EXPECT_EQ(m.calls, (std::vector<std::string>{"Undo", "Redo"}));
-    m.busy = true;m.calls.clear();
-    EXPECT_EQ(Code(Cmd::Undo{}.Execute(m)), "busy");EXPECT_EQ(Code(Cmd::Redo{}.Execute(m)), "busy");EXPECT_TRUE(m.calls.empty());
+    m.busy = m.active = true;m.ops = {"run", "run_batch"};m.calls.clear(); // calculations never block undo: the store cancels the active device's job
+    ASSERT_TRUE(Cmd::Undo{}.Execute(m));ASSERT_TRUE(Cmd::Redo{}.Execute(m));EXPECT_EQ(m.calls, (std::vector<std::string>{"Undo", "Redo"}));
+    for(const char *op : {"project_load", "load", "project_new"}) {
+        Mock loading;loading.busy = loading.active = true;loading.ops = {op};
+        EXPECT_EQ(Code(Cmd::Undo{}.Execute(loading)), "busy");EXPECT_EQ(Code(Cmd::Redo{}.Execute(loading)), "busy");EXPECT_TRUE(loading.calls.empty());
+    }
     Mock none;none.stepOk = false;EXPECT_EQ(Code(Cmd::Undo{}.Execute(none)), "nothing");
 }
 TEST(Commands, SelectDeviceChecks) {

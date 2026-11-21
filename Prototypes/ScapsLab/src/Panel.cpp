@@ -1415,10 +1415,10 @@ void Panel::Devices() {
     if(ImGui::Button(ICON_FA_PLUS " New device")) Do(Cmd::AddDevice::With());w->tutorialOverlay.Item("scapslab.Project","new");ImGui::SameLine();
     if(ImGui::Button(ICON_FA_FILE_IMPORT " Import device")) {try {if(const auto path=OpenFileDialog({"Device YAML","yaml,yml"})) Do(Cmd::AddDevice::With({{"path",path->Utf8()}}));}catch(const std::exception &e){w->status=e.what();}}
     if(ImGui::IsItemHovered()) ImGui::SetTooltip("Import a device YAML (or use File / Import SCAPS .def). Unsupported items are reported as warnings.");
-    if(ImGui::Button("Undo")) Do(Cmd::Undo::With());w->tutorialOverlay.Item("scapslab.Project","undo");
+    ImGui::EndDisabled();
+    if(ImGui::Button("Undo")) Do(Cmd::Undo::With());w->tutorialOverlay.Item("scapslab.Project","undo"); // S9: synchronous, works while calculating
     if(ImGui::IsItemHovered()) ImGui::SetTooltip("Undo (also restores a deleted device)");
     ImGui::SameLine();if(ImGui::Button("Redo")) Do(Cmd::Redo::With());w->tutorialOverlay.Item("scapslab.Project","redo");
-    ImGui::EndDisabled();
     ImGui::SameLine();if(ImGui::Button(ICON_FA_PLAY " Run all checked") && !w->Busy()) Do(Cmd::RunAll::With());
     ImGui::SameLine();ImGui::TextDisabled("Compare: show in plots");
     if(w->Busy()) {
