@@ -41,6 +41,8 @@ Json QuickSweep(const Json &document,const Json &request);
 void TrimHistory(Json &history,int retention);
 void StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group="");
 void CompactHistory(Json &workspace);
+std::size_t PrivateBytes();
+std::size_t JsonValues(const Json &v);
 class Operation final : public IJob {
 public:
     Json document, request, output, acResults, workspace, batchResult;
@@ -63,6 +65,7 @@ public:
     const Json *operator->() const {return p.get();}
     Json &mut() {if(p.use_count()>1)p=CreateRef<Json>(*p);return *p;}
     Ref<const Json> share() const {return p;}
+    void adopt(Ref<const Json> v) {p=std::const_pointer_cast<Json>(std::move(v));} // mut() copies while shared, so this stays immutable
     template<class K> bool contains(K &&k) const {return p->contains(std::forward<K>(k));}
     template<class K> const Json &at(K &&k) const {return p->at(std::forward<K>(k));}
     template<class K> const Json &operator[](K &&k) const {return (*p)[std::forward<K>(k)];}
@@ -92,6 +95,7 @@ struct DeviceState {
     int selectedLayer = 0, selectedInterface = -1, selectedBias = 0;
     std::chrono::steady_clock::time_point changedAt;
 };
+void LimitProfiles(DeviceState &d,int keep=3);
 struct Project {
     int schema_version = 3;
     std::string name = "Untitled project", active_device;
@@ -116,9 +120,11 @@ public:
     Json Workspace(bool withResults=true) const;
     void SetWorkspace(const Json &value);
     Json Snapshot() const;
+    std::string MemoryReport() const; // SCAPSLAB_PERF: private bytes + history/result sizes
     Json Runs() const;
     void RefreshDirty();
     void StartOperation(const Json &request, const std::string &deviceId);
+    void HistoryOp(const Json &request); // history_select/update/clear: in place on the UI thread (no workspace copy, not undoable)
     Json response;
     std::string status = "Ready", path, pendingDevice;
     Ref<JobSystem> jobs;

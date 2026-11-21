@@ -99,3 +99,39 @@ TEST(PerfProbe,SaveCost) {
         std::printf("PERF save autosave=%d: Dispatch (UI) %.2f ms, max OnUpdate %.2f ms\n",int(autosave),d,rest);}
     std::filesystem::remove(file);
 }
+
+// Memory growth of repeated Auto I-V runs + result clicks. Run: SCAPSLAB_PERF_TEST=1 SCAPSLAB_MEM_PROJECT=<file.scapslab> SCAPSLAB_MEM_RUNS=20 ScapsLabTests --gtest_filter=PerfProbe.MemoryGrowth
+TEST(PerfProbe,MemoryGrowth) {
+    if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
+    const char *project=std::getenv("SCAPSLAB_MEM_PROJECT");const int n=std::getenv("SCAPSLAB_MEM_RUNS")?std::atoi(std::getenv("SCAPSLAB_MEM_RUNS")):20;
+    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;
+    if(project)(void)Timed(w,{{"operation","project_load"},{"path",project}});else w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    std::printf("MEM start: %s\n",w.MemoryReport().c_str());
+    double clickMax=0;
+    for(int i=0;i<n;++i) {
+        auto doc=w.Current().document;doc["layers"][0]["thickness_m"]=doc["layers"][0]["thickness_m"].get<double>()*(1+0.001*(i%2?1:-1));
+        (void)Timed(w,{{"operation","edit"},{"document",doc},{"gesture_id","mem"}});
+        (void)Timed(w,{{"operation","run"}});
+        if(i%5==4) { // click an older result like the Project tree does
+            const auto id=w.Current().history[w.Current().history.size()/2].at("run_id");const auto t=Timed(w,{{"operation","history_select"},{"device_id",w.Current().id},{"run_id",id}});clickMax=std::max(clickMax,t.wall);
+            std::printf("MEM run %d: %s | click wall %.1f ms\n",i+1,w.MemoryReport().c_str(),t.wall);std::fflush(stdout);
+        }
+    }
+    std::printf("MEM end: %s | max click %.1f ms\n",w.MemoryReport().c_str(),clickMax);
+}
+
+// Old runs must drop their spatial profiles (bounded memory); pinned and selected runs keep them.
+TEST(PerfEquivalence,OldRunsDropProfiles) {
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    auto doc=w.Current().document;doc["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};(void)Timed(w,{{"operation","edit"},{"document",doc}});
+    auto ui=w.project.ui;ui["history_retention"]=20;(void)Timed(w,{{"operation","project_edit"},{"ui",ui}});
+    for(int i=0;i<8;++i){doc["temperature_K"]=300.+i;(void)Timed(w,{{"operation","edit"},{"document",doc}});(void)Timed(w,{{"operation","run"}});}
+    const auto stored=[&]{int n=0;for(const auto &run:w.Current().history)n+=run.value("profiles_stored",true);return n;};
+    ASSERT_EQ(w.Current().history.size(),8);EXPECT_EQ(stored(),3);
+    const auto oldest=w.Current().history.front().at("run_id").get<std::string>();
+    (void)Timed(w,{{"operation","history_select"},{"run_id",oldest}});EXPECT_EQ(w.Current().selectedRun,oldest);
+    EXPECT_EQ(w.Current().history.front().value("profiles_stored",true),false); // already dropped: selecting does not resurrect it
+    const auto newest=w.Current().history.back().at("run_id").get<std::string>();
+    (void)Timed(w,{{"operation","history_update"},{"run_id",newest},{"pinned",true}});
+    (void)Timed(w,{{"operation","history_clear"},{"run_ids",Json::array({oldest})}});EXPECT_EQ(w.Current().history.size(),7);EXPECT_EQ(w.Current().selectedRun,"");
+}

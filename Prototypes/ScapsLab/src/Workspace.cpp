@@ -7,8 +7,22 @@
 #ifdef _WIN32
 #define NOMINMAX
 #include <Windows.h>
+#include <Psapi.h>
+#pragma comment(lib,"psapi.lib")
 #endif
 namespace SST::ScapsLab {
+std::size_t PrivateBytes() {
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS_EX m{};if(GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&m),sizeof(m)))return m.PrivateUsage;
+#endif
+    return 0;
+}
+std::size_t JsonValues(const Json &v) {std::size_t n=1;if(v.is_structured())for(const auto &c:v)n+=JsonValues(c);return n;}
+std::string Workflow::MemoryReport() const {
+    std::string out="private "+std::to_string(PrivateBytes()>>20)+" MB;";
+    for(const auto &d:project.devices)out+=" ["+d->name+": history "+std::to_string(d->history.size())+" runs "+std::to_string(JsonValues(*d->history)>>10)+" kvalues, result "+std::to_string(JsonValues(*d->result)>>10)+" k]";
+    return out;
+}
 std::filesystem::path ExamplesDirectory() {
 #ifdef _WIN32
     wchar_t path[32768];const auto length=GetModuleFileNameW(nullptr,path,32768);
@@ -117,16 +131,35 @@ void StoreRun(Json &history,const std::string &kind,const Json &result,const Jso
     history.push_back({{"run_id",id},{"kind",kind},{"model_hash",DocumentHash(document)},{"document",document},{"diff",changes},{"model_diff",Json::diff(previous,document)},{"label",label},{"result",result},{"request",request},{"time_unix_ms",result.at("provenance").at("time_unix_ms")},{"elapsed_s",result.value("elapsed_s",result.value("compute_time_ms",0.)/1000.)},{"provenance",result.at("provenance")},{"pinned",false},{"name",""},{"visible",true},{"colour",colour},{"group_id",group}});
     TrimHistory(history,retention);
 }
+// Drop the spatial profiles of one run (keeps the document, I-V curve and scalar metrics); the UI then offers "Recalculate to view profiles".
+void DropProfiles(Json &run) {
+    auto &result=run["result"];
+    if(!result.contains("points") || !result.contains("mesh_x_m")) return;
+    for(auto &point:result["points"]) for(auto field=point.begin();field!=point.end();) {
+        if(field->is_array() || field->is_object()) field=point.erase(field);else ++field;
+    }
+    result.erase("mesh_x_m");run["profiles_stored"]=false;
+}
 void CompactHistory(Json &workspace) {
     // shortcut: profiles over 64 KiB stay in memory only; move them to the HDF5 sidecar in slview1.
     for(auto &device:workspace["devices"]) for(auto &run:device["history"]) {
-        auto &result=run["result"];
-        if(result.dump().size()<=65536 || !result.contains("points")) continue;
-        for(auto &point:result["points"]) for(auto field=point.begin();field!=point.end();) {
-            if(field->is_array() || field->is_object()) field=point.erase(field);else ++field;
-        }
-        result.erase("mesh_x_m");run["profiles_stored"]=false;
+        if(run["result"].dump().size()<=65536) continue;
+        DropProfiles(run);
     }
+}
+// Memory bound: only pinned runs, the selected run, the live result and the newest `keep` runs keep spatial profiles.
+void LimitProfiles(DeviceState &d,int keep) {
+    const auto &h=*d.history;std::vector<std::size_t> drop;int kept=0;
+    for(std::size_t i=h.size();i-->0;) {
+        const auto &run=h[i];
+        if(!run.value("profiles_stored",true) || !run.at("result").contains("mesh_x_m")) continue;
+        bool live=false;for(const auto *r:{&*d.result,&*d.bandResult}) live|=r->contains("provenance") && run.at("provenance")==r->at("provenance");
+        if(live) ++kept; // the live run counts towards the LRU
+        if(live || run.at("pinned")==true || run.at("run_id")==d.selectedRun || kept++<keep) continue;
+        drop.push_back(i);
+    }
+    if(drop.empty()) return;
+    auto &m=d.history.mut();for(auto i:drop) DropProfiles(m[i]);
 }
 DeviceState &Workflow::Device(const std::string &id) {
     for(const auto &d:project.devices) if(d->id==id) return *d;

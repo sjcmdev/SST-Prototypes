@@ -97,6 +97,21 @@ const Json &HistoryResult(const DeviceState &device,const Json &run) {
     return run.at("result");
 }
 bool Archived(const DeviceState &,const Json &,const std::string &) {return false;} // live curve is always drawn; history draws only pinned shots (and batch runs)
+// True when the selected run is an I-V/band run that is not the live result (so the live curve and other runs are drawn dimmed).
+bool SelectedOffLive(const DeviceState &device,const std::string &kind) {
+    if(device.selectedRun.empty())return false;
+    for(const auto &run:device.history) if(run.at("run_id")==device.selectedRun) {
+        if(run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="band"))return false;
+        const auto &live=run.at("kind")=="band"?device.bandResult:device.result;
+        return live.empty() || !live.contains("provenance") || live.at("provenance")!=run.at("provenance");
+    }
+    return false;
+}
+// Live-curve line style: dimmed with the device colour while another run is selected.
+ImPlotSpec LiveStyle(const DeviceState &device,float weight) {
+    if(!SelectedOffLive(device,"iv"))return {ImPlotProp_LineWeight,weight};
+    const auto c=device.colour.get<std::vector<float>>();return {ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],.3f),ImPlotProp_LineWeight,weight};
+}
 bool ShowRun(const Json &run) {return run.value("pinned",false) || run.at("kind")=="batch";}
 const Json *LiveRun(const DeviceState &d,const std::string &kind) {
     const Json *res=kind=="iv"?&*d.result:d.acResults.contains(kind)?&d.acResults.at(kind):nullptr;
@@ -157,23 +172,23 @@ void FitWhenChanged(const std::string &plot,ImAxis axis,double key,double lo,dou
 // Live vs pinned: toolbar with "Single shot" (Ctrl+P) and the "Shots" list of the active device.
 void ShotBar(Workflow &w,const std::string &kind) {
     ImGui::PushID("shotbar");
-    const auto &device=w.Current();const Json *live=LiveRun(device,kind);const std::string deviceId=device.id;const Json liveRun=live?*live:Json();const auto history=device.history;
+    const auto &device=w.Current();const Json *live=LiveRun(device,kind);const std::string deviceId=device.id;const std::string liveId=live?live->at("run_id").get<std::string>():std::string{};const auto history=device.history;
     const bool livePinned=live && live->at("pinned")==true;
     ImGui::BeginDisabled(w.Busy() || !live || livePinned);
     bool shot=ImGui::Button("Single shot");
     ImGui::EndDisabled();
     if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Pin the current curve as a frozen overlay (Ctrl+P).\nEdits and sliders only replace the live curve.");
     if(ImGui::Shortcut(ImGuiMod_Ctrl|ImGuiKey_P,ImGuiInputFlags_RouteFocused))shot=true; // Ctrl+P = pin; Ctrl+Shift+S stays Save As
-    if(shot && live && !livePinned && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",deviceId},{"run_id",liveRun.at("run_id")},{"pinned",true}});
-    std::vector<Json> shots;
-    for(const auto &run:history)if(run.at("pinned")==true && (run.at("kind")==kind || (kind=="iv" && run.at("kind")=="band")))shots.push_back(run);
+    if(shot && live && !livePinned && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",deviceId},{"run_id",liveId},{"pinned",true}});
+    std::vector<const Json *> shots;
+    for(const auto &run:history)if(run.at("pinned")==true && (run.at("kind")==kind || (kind=="iv" && run.at("kind")=="band")))shots.push_back(&run);
     ImGui::SameLine();
     if(ImGui::Button(("Shots ("+std::to_string(shots.size())+")###shots").c_str()))ImGui::OpenPopup("shotlist");
     if(ImGui::BeginPopup("shotlist")) {
         static std::string editId,editText;
         if(shots.empty())ImGui::TextDisabled("No shots yet. Press Single shot to pin the current curve.");
-        for(const auto &run:shots) {
-            const auto id=run.at("run_id").get<std::string>();ImGui::PushID(id.c_str());
+        for(const auto *shotRun:shots) {
+            const auto &run=*shotRun;const auto id=run.at("run_id").get<std::string>();ImGui::PushID(id.c_str());
             bool visible=run.at("visible");
             if(ImGui::Checkbox("##v",&visible) && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",deviceId},{"run_id",id},{"visible",visible}});
             ImGui::SameLine();const auto c=run.at("colour").get<std::vector<float>>();ImGui::ColorButton("##c",ImVec4(c[0],c[1],c[2],c[3]),ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(12,12));
@@ -194,8 +209,10 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
     static int hashFrame=-1;static const void *hashDevice=nullptr;static std::string frameHash; // document hash once per frame, not per run
     if(hashFrame!=ImGui::GetFrameCount() || hashDevice!=&device) {hashFrame=ImGui::GetFrameCount();hashDevice=&device;frameHash=DocumentHash(device.document);}
     const std::string &currentHash=frameHash;
+    const bool dim=SelectedOffLive(device,kind); // a selected non-live run is highlighted, the rest dimmed
     for(const auto &run:device.history) {
-        if(!run.at("visible").get<bool>() || !ShowRun(run) || (run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="batch")))continue;
+        const bool chosen=dim && run.at("run_id")==device.selectedRun;
+        if(!run.at("visible").get<bool>() || (!ShowRun(run) && !chosen) || (run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="batch")))continue;
         // Curve arrays are cached per immutable run (extracting them from JSON every frame was a major UI cost).
         static std::map<std::string,std::pair<std::vector<double>,std::vector<double>>> cache;
         const auto cacheKey=device.id+"|"+run.at("run_id").get<std::string>()+"|"+run.at("time_unix_ms").dump()+"|"+run.value("model_hash",std::string{})+"|"+xkey+"|"+ykey+(absolute?"|abs":"|lin")+"|"+std::to_string(scale);
@@ -218,8 +235,9 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
         if(x.empty())continue;
         const auto c=run.at("colour").get<std::vector<float>>();
         const bool selected=run.at("run_id")==device.selectedRun;
+        const ImVec4 lineColour(c[0],c[1],c[2],dim&&!selected?.3f:c[3]);
         const auto name=device.name+" / "+RunLabel(run)+(run.at("model_hash")!=currentHash?" (previous)":"")+(std::string(ykey)=="G_over_omega_F"?" G/omega":"")+"##"+run.at("run_id").get<std::string>()+"/"+ykey;
-        ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,selected?3.f:1.5f});
+        ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,lineColour,ImPlotProp_LineWeight,selected?4.f:1.5f});
         if(auto *item=ImPlot::GetItem(name.c_str());item && !item->Show && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",device.id},{"run_id",run.at("run_id")},{"visible",false}});
     }
 }
@@ -1066,7 +1084,7 @@ void Panel::Results() {
         if(BeginSavedPlot(*w,"I-V",ImVec2(-1,-1))) {
             ImPlot::SetupAxes("Voltage [V]",absoluteLog?"|J| [A/m^2]":"Signed J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
             if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
-            HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",absoluteLog);if(!Archived(w->Current(),result,"iv"))ImPlot::PlotLine("I-V",v.data(),j.data(),int(v.size()));
+            HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",absoluteLog);if(!Archived(w->Current(),result,"iv"))ImPlot::PlotLine("I-V",v.data(),j.data(),int(v.size()),LiveStyle(w->Current(),2.f));
             ImPlot::PlotScatter("Selected bias",&v[bias],&j[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});
             double selectedVoltage=v[bias];
             if(ImPlot::DragLineX(1,&selectedVoltage,ImVec4(1,.7f,.3f,1))) {
@@ -1328,19 +1346,45 @@ void Panel::Devices() {
                     const auto &history=d.history;
                     if(ImGui::TreeNodeEx("##results",ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow|(active?ImGuiTreeNodeFlags_DefaultOpen:0))) {
                         text(ICON_FA_CHART_LINE " Results ("+std::to_string(history.size())+")");
+                        static std::set<std::string> multi;static std::string anchor; // Ctrl/Shift multi-selection of runs
+                        std::vector<Json> deferred; // history edits run after the list (they may replace the history under our references)
                         for(int r=int(history.size())-1;r>=0;--r) {
                             const auto &run=history[r];const auto id=run.at("run_id").get<std::string>();
                             ImGui::PushID(id.c_str());
-                            const auto [ropen,rclick]=node("##run",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,active && d.selectedRun==id);(void)ropen;
+                            const auto [ropen,rclick]=node("##run",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,active && (d.selectedRun==id || multi.contains(id)));(void)ropen;
                             const std::string kind=run.value("kind",std::string{});
                             const bool hiddenKind=!PanelShown(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:kind=="batch"?16:5);
                             if(hiddenKind && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("panel disabled in basic mode");
-                            if(rclick && !hiddenKind) {(void)w->Dispatch({{"operation","history_select"},{"device_id",d.id},{"run_id",id}});go(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:5);}
+                            if(rclick && !hiddenKind) {
+                                const auto &io=ImGui::GetIO();
+                                if(io.KeyShift && !anchor.empty()) {
+                                    int a=-1;for(int k=0;k<int(history.size());++k)if(history[k].at("run_id")==anchor)a=k;
+                                    if(a>=0)for(int k=std::min(a,r);k<=std::max(a,r);++k)multi.insert(history[k].at("run_id").get<std::string>());else multi.insert(id);
+                                } else if(io.KeyCtrl) {if(!multi.erase(id))multi.insert(id);anchor=id;}
+                                else {multi={id};anchor=id;}
+                                deferred.push_back({{"operation","history_select"},{"device_id",d.id},{"run_id",id}});
+                                if(!io.KeyShift && !io.KeyCtrl)go(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:5);
+                            }
+                            if(ImGui::BeginPopupContextItem("runmenu")) {
+                                if(!multi.contains(id)){multi={id};anchor=id;}
+                                const std::vector<std::string> picked(multi.begin(),multi.end());const std::string count=" ("+std::to_string(picked.size())+")";
+                                const auto each=[&](const Json &change){for(const auto &x:picked){Json u=change;u["operation"]="history_update";u["device_id"]=d.id;u["run_id"]=x;deferred.push_back(u);}};
+                                if(ImGui::MenuItem(("Show in plots"+count).c_str()))each({{"visible",true}});
+                                if(ImGui::MenuItem(("Hide in plots"+count).c_str()))each({{"visible",false}});
+                                if(ImGui::MenuItem(("Pin (Single shot)"+count).c_str()))each({{"pinned",true}});
+                                if(ImGui::MenuItem(("Unpin"+count).c_str()))each({{"pinned",false}});
+                                if(ImGui::MenuItem(("Compare (overlay)"+count).c_str()))each({{"pinned",true},{"visible",true}});
+                                if(ImGui::MenuItem(("Export CSV..."+count).c_str())) try {if(const auto path=SaveFileDialog({"Results CSV","csv"},"results.csv"))deferred.push_back({{"operation","export_results"},{"path",path->Utf8()},{"format","csv"},{"run_ids",picked}});}catch(const std::exception &e){w->status=e.what();}
+                                ImGui::Separator();
+                                if(ImGui::MenuItem(("Delete"+count).c_str())){deferred.push_back({{"operation","history_clear"},{"device_id",d.id},{"run_ids",picked}});multi.clear();}
+                                ImGui::EndPopup();
+                            }
                             const auto rc=run.at("colour").get<std::vector<float>>();
                             ImGui::SameLine(0,4);ImGui::ColorButton("##rc",ImVec4(rc[0],rc[1],rc[2],rc[3]),ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(box*.5f,box*.5f));
                             const std::time_t seconds=run.value("time_unix_ms",std::int64_t(0))/1000;std::tm local{};localtime_s(&local,&seconds);char time[32];std::strftime(time,sizeof(time),"%H:%M:%S",&local);
                             ImGui::BeginDisabled(hiddenKind);text(RunLabel(run),time);ImGui::EndDisabled();ImGui::PopID();
                         }
+                        for(const auto &request:deferred)(void)w->Dispatch(request);
                         ImGui::TreePop();
                     }
                     ImGui::TreePop();
@@ -1400,7 +1444,7 @@ void Panel::Compare() {
             std::vector<double> x,y;for(const auto &pt:d->result.at("points")) {x.push_back(pt.at("voltage_V"));double j=pt.value("valid",false) && pt.at("J_A_m2").is_number()?pt.at("J_A_m2").get<double>():NAN;y.push_back(absoluteLog?(j==0?NAN:std::abs(j)):j);}
             if(!d->history.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);if(Archived(*d,d->result,"iv"))continue;}
             const auto c=d->colour.get<std::vector<float>>();const auto label=d->name+"##"+d->id;
-            ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,2.5f});
+            ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],SelectedOffLive(*d,"iv")?.3f:c[3]),ImPlotProp_LineWeight,2.5f});
             if(d->id==w->project.active_device && !x.empty()) {
                 int bias=std::clamp(d->selectedBias,0,int(x.size())-1);double voltage=x[bias];
                 ImPlot::PlotScatter("Selected bias",&x[bias],&y[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});

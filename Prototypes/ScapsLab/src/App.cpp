@@ -120,7 +120,7 @@ public:
         if(std::getenv("SCAPSLAB_PERF")) { // frame-time log: avg/max over 2 s windows
             static double sum=0,mx=0;static int n=0;static auto last=std::chrono::steady_clock::now();
             const double ms=ImGui::GetIO().DeltaTime*1000.;sum+=ms;mx=std::max(mx,ms);++n;
-            if(std::chrono::steady_clock::now()-last>std::chrono::seconds(2)) {std::fprintf(stderr,"[perf] frames %d avg %.2f ms max %.2f ms\n",n,sum/n,mx);sum=mx=0;n=0;last=std::chrono::steady_clock::now();}
+            if(std::chrono::steady_clock::now()-last>std::chrono::seconds(2)) {std::fprintf(stderr,"[perf] frames %d avg %.2f ms max %.2f ms | %s\n",n,sum/n,mx,w.MemoryReport().c_str());sum=mx=0;n=0;last=std::chrono::steady_clock::now();}
         }
         const auto savedPanels=w.project.ui.value("panels",ScapsLab::Json::object());
         if(savedPanels!=appliedPanels) for(auto &panel:panels) if(savedPanels.contains(panel->GetTitle()))panel->SetVisible(savedPanels.at(panel->GetTitle()).get<bool>());
