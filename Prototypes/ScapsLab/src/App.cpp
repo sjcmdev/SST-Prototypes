@@ -18,7 +18,7 @@ namespace {
 class DefaultLayout final : public Layer {
     std::vector<Ref<ScapsLab::Panel>> panels;
     bool done=false, focus=false, force;
-    std::string layoutKey=ScapsLab::ExperimentalPanels()?"full1":"basic1";
+    std::string layoutKey=ScapsLab::ExperimentalPanels()?"full1":"basic2";
 public:
     DefaultLayout(std::vector<Ref<ScapsLab::Panel>> panels,bool force):Layer("ScapsLab layout"),panels(std::move(panels)),force(force) {}
     void OnImGuiRender() override {

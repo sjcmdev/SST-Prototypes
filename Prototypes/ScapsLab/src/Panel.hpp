@@ -6,7 +6,7 @@ namespace SST::ScapsLab {
 void DrawHistory(Workflow &workflow,bool global=false);
 void OpenLayerWindow(Workflow *w,const std::string &device,const std::string &layer); // adds an extra pinned "Layer: <name>" editor (drawn by the tutorial/UI layer)
 // Basic mode (owner 2026-11-21): only these panels (indices into Panel.cpp names[]) are created/docked/listed in View. The rest stay in code.
-inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,14,16,17,18,22}; // all except C-V, Mott-Schottky, C-f, G-omega-f, History, Illumination, Absorption, Grading
+inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,16,17,18,22}; // all except Structure (14; strip lives in Band diagram), C-V, Mott-Schottky, C-f, G-omega-f, History, Illumination, Absorption, Grading
 inline bool &ExperimentalPanels() {static bool on=false;return on;} // View > Show experimental panels; persisted in app settings, applied at start
 inline std::string &UiSettingsPath() {static std::string path;return path;}
 inline bool PanelShown(int view) {if(ExperimentalPanels())return true;for(const int p:kBasicPanels)if(p==view)return true;return false;}

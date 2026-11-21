@@ -133,13 +133,16 @@ void DashedLine(const std::vector<double> &x,const std::vector<double> &y,ImVec4
 }
 // Layer type from net doping Nd-Na (graded doping: base value; ponytail: grading ignored, upgrade via ProfileSamples mean).
 // Shaded band + boundary line + name per layer; x in um. Call inside a plot after the data.
+int LayerType(const Json &l) {const double net=l.value("doping",Json::object()).value("Nd_m3",0.)-l.value("doping",Json::object()).value("Na_m3",0.);return std::abs(net)<1e15?0:net>0?1:-1;} // 1 = n, -1 = p, 0 = i
+// Opaque strip colour per layer type, same hue as the translucent regions in the Bands/Carriers plots: n blue, p red, i grey.
+ImU32 LayerStripColour(const Json &l) {const int t=LayerType(l);return t>0?IM_COL32(40,75,130,255):t<0?IM_COL32(130,48,52,255):IM_COL32(78,78,84,255);}
 void DrawLayerRegions(const Json &layers) {
     const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();ImPlot::PushPlotClipRect();
     double x0=0;
     for(std::size_t i=0;i<layers.size();++i) {
         const auto &l=layers[i];const double x1=x0+l.at("thickness_m").get<double>()*1e6;
-        const double net=l.value("doping",Json::object()).value("Nd_m3",0.)-l.value("doping",Json::object()).value("Na_m3",0.);
-        const ImU32 fill=std::abs(net)<1e15?IM_COL32(160,160,160,24):net>0?IM_COL32(90,150,255,28):IM_COL32(255,90,90,28);
+        const int type=LayerType(l);
+        const ImU32 fill=type==0?IM_COL32(160,160,160,24):type>0?IM_COL32(90,150,255,28):IM_COL32(255,90,90,28);
         const auto a=ImPlot::PlotToPixels(x0,limits.Y.Max),b=ImPlot::PlotToPixels(x1,limits.Y.Min);
         draw->AddRectFilled(a,b,fill);
         if(i+1<layers.size())draw->AddLine({b.x,a.y},{b.x,b.y},IM_COL32(210,210,220,150));
@@ -425,8 +428,11 @@ void Panel::RenderContent() {
     if(!placed && !gallery) {auto s=GetState();const auto *vp=ImGui::GetMainViewport();s.x+=vp->Pos.x;s.y+=vp->Pos.y;ApplyState(s);placed=true;}
     ImGui::TextDisabled("SCAPSLAB / %s",names[view]);
     {static const std::map<int,const char*> subtitles={{5,"Spatial profiles (bands, carriers) vs. position x at the selected bias point"},{6,"Capacitance vs. DC bias at fixed frequency"},{7,"1/C^2 vs. DC bias (built-in potential, doping)"},{8,"Capacitance and G/omega vs. frequency at fixed bias"},{9,"G/omega vs. frequency at fixed bias"},{10,"J-V curve of the checked devices; marker = selected bias point"},{22,"Generation and recombination rates vs. position x at the selected bias point"}};
-     if(const auto it=subtitles.find(view);it!=subtitles.end())ImGui::TextDisabled("%s",it->second);}
-    if(view==4 || view==5 || (w->response.is_object() && !w->response.value("ok",true))) ImGui::TextWrapped("%s",w->status.c_str()); ImGui::Separator();
+     if(const auto it=subtitles.find(view);it!=subtitles.end()) { // compact header: help text is a tooltip on (?), status stays on the same grey line
+         ImGui::SameLine();ImGui::TextDisabled("(?)");if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",it->second);
+         if(view==5 && !w->status.empty()){ImGui::SameLine();ImGui::TextDisabled("| %s",w->status.c_str());}}}
+    if(view==4 || (view!=5 && w->response.is_object() && !w->response.value("ok",true))) ImGui::TextWrapped("%s",w->status.c_str());
+    if(view==5 || view==10 || view==22) {} else ImGui::Separator();
     if(w->Current().document.contains("scaps_native")) for(const auto &warning:w->Current().document.at("scaps_native").value("warnings",Json::array())) ImGui::TextWrapped("SCAPS import warning: %s",warning.get<std::string>().c_str());
     if(!pinLayer.empty() && w->project.active_device!=pinDevice) { // extra "Layer: <name>" window of a device that is not active
         ImGui::TextWrapped("This layer belongs to another device.");
@@ -530,11 +536,24 @@ void Panel::RenderContent() {
         } else if(view==2) {
             for(const auto *side:{"left","right"}) {
                 ImGui::PushID(side); ImGui::SeparatorText(side); auto &c=draft["contacts"][side];
-                const bool flat=c.value("flat_band",false);
-                ImGui::BeginDisabled(flat);changed|=Number("Work function [eV]",c,"phi_m_eV");ImGui::EndDisabled();
-                if(flat) ImGui::TextWrapped("Work function is derived from the adjacent material in Flat band mode. Select Work function to edit it.");
-                int mode=c.contains("flat_band")?(c["flat_band"].get<bool>()?2:1):0;
-                BeginRow("Boundary mode");if(ImGui::Combo("##mode",&mode,"Legacy default\0Work function\0Flat band\0")) {if(mode==0)c.erase("flat_band");else c["flat_band"]=mode==2;changed=true;++gesture;}EndRow();
+                bool flat=c.value("flat_band",false);
+                if(Toggle("Flat band (ohmic, automatic phi_m)",flat)) {c["flat_band"]=flat;changed=true;++gesture;}
+                if(ImGui::IsItemHovered()) ImGui::SetTooltip("Checked (SCAPS 'flat band'): phi_m follows the adjacent semiconductor, the contact is ohmic, no band bending.\nUnchecked: phi_m is used as entered; a metal on the wrong side of the semiconductor work function makes a depleting (Schottky-like) contact.");
+                ImGui::BeginDisabled(flat);changed|=Number("Work function phi_m [eV]",c,"phi_m_eV");ImGui::EndDisabled();
+                if(flat) ImGui::TextDisabled("phi_m is derived from the adjacent layer (flat band).");
+                else {
+                    // Documented formula (same non-degenerate model as scaps_core semiconductor_work_function_eV; Nc/Nv at reference T, full ionisation):
+                    // ni = sqrt(Nc Nv) exp(-Eg/2kT); n0 = (net+sqrt(net^2+4ni^2))/2 for net=Nd-Na>=0 (else n0=ni^2/p0); phi_s = chi - kT ln(n0/Nc).
+                    // n-type barrier = phi_m - phi_s, p-type barrier = phi_s - phi_m; barrier > 0 means depleting.
+                    const auto &layer=draft.at("layers")[std::string(side)=="left"?0:draft.at("layers").size()-1];const auto &m=layer.at("material");
+                    const double kT=8.617333262e-5*draft.value("temperature_K",300.),Nc=m.at("Nc_ref_m3"),Nv=m.at("Nv_ref_m3"),Eg=m.at("Eg_eV");
+                    const double net=layer.value("doping",Json::object()).value("Nd_m3",0.)-layer.value("doping",Json::object()).value("Na_m3",0.);
+                    const double ni=std::sqrt(Nc*Nv)*std::exp(-Eg/(2*kT)),root=std::sqrt(net*net+4*ni*ni),n0=net>=0?(net+root)/2:ni*ni/((-net+root)/2);
+                    const double phiS=m.at("chi_eV").get<double>()-kT*std::log(n0/Nc),barrier=net>=0?c.value("phi_m_eV",0.)-phiS:phiS-c.value("phi_m_eV",0.);
+                    if(barrier>1e-3) ImGui::TextColored(ImVec4(1.f,.7f,.3f,1.f),"semiconductor phi_s = %.3f eV -> barrier %.3f eV (depleting, Schottky-like)",phiS,barrier);
+                    else ImGui::TextColored(ImVec4(.5f,.9f,.5f,1.f),"semiconductor phi_s = %.3f eV -> barrier %.3f eV (ohmic, no depletion)",phiS,barrier);
+                    if(!c.contains("flat_band")) ImGui::TextDisabled("flat_band not set: engine default (ohmic only when phi_m is on the ohmic side of phi_s).");
+                }
                 for(const auto *key:{"Sn_m_s","Sp_m_s"}) {
                     ImGui::PushID(key); bool infinite=c[key].is_string();
                     if(Toggle(key==std::string("Sn_m_s")?"Infinite Sn [m/s]":"Infinite Sp [m/s]",infinite)) {c[key]=infinite?Json(".inf"):Json(1e5);changed=true;}
@@ -966,22 +985,23 @@ void Panel::Preview(bool sheet) {
 bool Panel::Structure(Json &draft) {
     auto &layers=draft["layers"];double total=0,emin=0,emax=-1e10;
     for(const auto &l:layers) {total+=l.at("thickness_m").get<double>();const auto &m=l.at("material");emin=std::min(emin,-m.at("chi_eV").get<double>()-m.at("Eg_eV").get<double>());emax=std::max(emax,-m.at("chi_eV").get<double>());}
-    ImGui::TextWrapped("Structure to scale | total %.5g um. Click layer/interface; drag a layer's right edge to change thickness.",total*1e6);
     const bool compact=view==22 || view==5;
-    const auto origin=ImGui::GetCursorScreenPos();const float width=std::max(1.f,ImGui::GetContentRegionAvail().x),height=compact?64.f:view==14?std::max(190.f,ImGui::GetContentRegionAvail().y-12):190.f;
+    if(!compact) ImGui::TextWrapped("Structure to scale | total %.5g um. Click layer/interface; drag a layer's right edge to change thickness.",total*1e6);
+    const auto origin=ImGui::GetCursorScreenPos();const float width=std::max(1.f,ImGui::GetContentRegionAvail().x),height=compact?40.f:view==14?std::max(190.f,ImGui::GetContentRegionAvail().y-12):190.f;
     auto *draw=ImGui::GetWindowDrawList();double offset=0;bool changed=false;
     auto y=[&](double e){return origin.y+16+float((emax-e)/(emax-emin))*std::max(78.f,height-120);};
     for(int i=0;i<int(layers.size());++i) {
         auto &l=layers[i];const auto &m=l.at("material");const float x1=origin.x+float(offset/total)*width;offset+=l.at("thickness_m").get<double>();const float x2=origin.x+float(offset/total)*width;
-        draw->AddRectFilled(ImVec2(x1,origin.y),ImVec2(x2,origin.y+height),w->Current().selectedInterface<0 && w->Current().selectedLayer==i?IM_COL32(44,86,116,255):IM_COL32(25+15*(i%3),48,67,255));
+        draw->AddRectFilled(ImVec2(x1,origin.y),ImVec2(x2,origin.y+height),LayerStripColour(l));
+        if(w->Current().selectedInterface<0 && w->Current().selectedLayer==i) draw->AddRect(ImVec2(x1+1,origin.y+1),ImVec2(x2-1,origin.y+height-1),IM_COL32(255,190,70,255),0,0,2.f); // selection = border, never a different fill
         const double ec=-m.at("chi_eV").get<double>(),ev=ec-m.at("Eg_eV").get<double>();
         if(!compact) {draw->AddLine(ImVec2(x1,y(ec)),ImVec2(x2,y(ec)),IM_COL32(110,200,255,255),2);draw->AddLine(ImVec2(x1,y(ev)),ImVec2(x2,y(ev)),IM_COL32(255,173,110,255),2);
         if(i>0) {const auto &a=layers[i-1].at("material");const double prevEc=-a.at("chi_eV").get<double>();draw->AddLine(ImVec2(x1,y(prevEc)),ImVec2(x1,y(ec)),IM_COL32(110,200,255,255),2);draw->AddLine(ImVec2(x1,y(prevEc-a.at("Eg_eV").get<double>())),ImVec2(x1,y(ev)),IM_COL32(255,173,110,255),2);}
         }
         draw->PushClipRect(ImVec2(x1+2,origin.y),ImVec2(x2-2,origin.y+height),true);
-        draw->AddText(ImVec2(x1+5,origin.y+(compact?8:height-90)),IM_COL32_WHITE,l.at("name").get<std::string>().c_str());
+        draw->AddText(ImVec2(x1+5,origin.y+(compact?4:height-90)),IM_COL32_WHITE,l.at("name").get<std::string>().c_str());
         char thickness[80];std::snprintf(thickness,sizeof(thickness),"%.4g um",l.at("thickness_m").get<double>()*1e6);
-        if(x2-x1>ImGui::CalcTextSize(thickness).x+10) draw->AddText(ImVec2(x1+5,origin.y+(compact?32:height-50)),IM_COL32_WHITE,thickness);
+        if(x2-x1>ImGui::CalcTextSize(thickness).x+10) draw->AddText(ImVec2(x1+5,origin.y+(compact?20:height-50)),IM_COL32_WHITE,thickness);
         char parameters[100];std::snprintf(parameters,sizeof(parameters),"chi %.3g eV | Eg %.3g eV",-ec,ec-ev);
         if(!compact && x2-x1>ImGui::CalcTextSize(parameters).x+10) draw->AddText(ImVec2(x1+5,origin.y+height-70),IM_COL32(205,220,235,255),parameters);
         if(!compact && l.contains("grading") && !l["grading"].empty()) {
@@ -997,7 +1017,7 @@ bool Panel::Structure(Json &draft) {
         draw->PopClipRect();
         ImGui::PushID(i);ImGui::SetCursorScreenPos(ImVec2(x1,origin.y));ImGui::InvisibleButton("##select-layer",ImVec2(std::max(1.f,x2-x1-7),height));
         if(ImGui::IsItemClicked()) {w->Current().selectedLayer=i;w->Current().selectedInterface=-1;w->focusLayers=true;}
-        if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s | %.6g um | chi %.4g eV | Eg %.4g eV",l.at("name").get<std::string>().c_str(),l.at("thickness_m").get<double>()*1e6,m.at("chi_eV").get<double>(),m.at("Eg_eV").get<double>());
+        if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s) | %.6g um | chi %.4g eV | Eg %.4g eV\nClick: select layer. Drag right edge: thickness (total %.5g um).",l.at("name").get<std::string>().c_str(),LayerType(l)>0?"n":LayerType(l)<0?"p":"i",l.at("thickness_m").get<double>()*1e6,m.at("chi_eV").get<double>(),m.at("Eg_eV").get<double>(),total*1e6);
         ImGui::SetCursorScreenPos(ImVec2(x2-7,origin.y));ImGui::InvisibleButton("##thickness-interface",ImVec2(7,height));TrackGesture();
         if(ImGui::IsItemClicked()) {w->Current().selectedInterface=i+1<int(layers.size())?i:-1;w->Current().selectedLayer=i;w->focusLayers=true;}
         if(ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {l["thickness_m"]=std::max(1e-9,l.at("thickness_m").get<double>()+ImGui::GetIO().MouseDelta.x*total/width);changed|=ImGui::GetIO().MouseDelta.x!=0;}
@@ -1041,15 +1061,22 @@ void Panel::Results() {
     if(view==5) StructureEdit();
     if(!result.contains("points") || result["points"].empty()) {ImGui::TextUnformatted("Calculate I-V to view results.");return;}
     const auto &points=result.at("points");int bias=bandOnly?0:w->Current().selectedBias;bias=std::clamp(bias,0,int(points.size())-1);
-    BeginRow("Bias point");ImGui::SliderInt("##bias",&bias,0,int(points.size())-1);EndRow();if(!bandOnly)w->Current().selectedBias=bias;
-    ShotBar(*w,"iv");
+    { // one row: Bias point [slider showing V] | Single shot | Shots
+        char biasFormat[64];std::snprintf(biasFormat,sizeof(biasFormat),"%.4g V  (#%%d)",points[bias].at("voltage_V").get<double>());
+        ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Bias point");ImGui::SameLine();
+        ImGui::SetNextItemWidth(std::max(120.f,ImGui::GetContentRegionAvail().x*.5f));ImGui::SliderInt("##bias",&bias,0,int(points.size())-1,biasFormat);if(!bandOnly)w->Current().selectedBias=bias;
+        ImGui::SameLine();ShotBar(*w,"iv");
+    }
     const auto &band=w->Current().bandResult;
     const auto &p=selected?points[bias]:view==5?PointAtBias(w->Current().result,band,bias):points[bias];
     const bool preview=view==5 && !band.empty() && &p==&band.at("points")[0];
     const auto &metrics=preview?(const Json &)band:result;
-    ImGui::Text("%.2f ms | %d mesh nodes",metrics.value("compute_time_ms",0.0),metrics.value("mesh_node_count",0));
     w->Current().biasVoltage_V=p.at("voltage_V");
-    ImGui::TextWrapped("Terminal %.5g V | internal %.5g V | %s | %d iterations",p.at("terminal_voltage_V").get<double>(),p.at("internal_voltage_V").get<double>(),p.at("status").get<std::string>().c_str(),p.at("iterations").get<int>());
+    {   // one small grey status line
+        const double jAbs=p.at("J_A_m2").is_number()?std::abs(p.at("J_A_m2").get<double>()):0;char residual[80]="";
+        if(jAbs>0 && p.contains("residual")) std::snprintf(residual,sizeof(residual)," | residual %.2e | dJ/J %.1e",p.at("residual").get<double>(),p.at("conservation_error_A_m2").get<double>()/jAbs);
+        ImGui::TextDisabled("%.0f ms | %d nodes | terminal %.5g V | internal %.5g V | %s | %d it%s",metrics.value("compute_time_ms",0.0),metrics.value("mesh_node_count",0),p.at("terminal_voltage_V").get<double>(),p.at("internal_voltage_V").get<double>(),p.at("status").get<std::string>().c_str(),p.at("iterations").get<int>(),residual);
+    }
     if(view==10) {
         Toggle("Log |J|",absoluteLog);
         std::vector<double> v,j; int failed=0;
@@ -1077,18 +1104,20 @@ void Panel::Results() {
         }
         return;
     }
-    const double current=p.at("J_A_m2").is_number()?std::abs(p.at("J_A_m2").get<double>()):0;
-    if(current>0) ImGui::Text("Residual %.3e | relative dJ %.3e",p.at("residual").get<double>(),p.at("conservation_error_A_m2").get<double>()/current);
     if(p.at("status")!="Converged" || p.at("J_A_m2").is_null()) {ImGui::TextWrapped("This bias did not converge; profiles are masked. Select a converged bias.");return;}
     auto x=p.at("x_m").get<std::vector<double>>();for(auto &value:x)value*=1e6;
     if(x.empty()) return;
-    const float h=std::max(120.f,(ImGui::GetContentRegionAvail().y-10)/2);
+    // Bands and Carriers share the free height; the splitter fraction is kept in project.ui["band_split"].
+    const float splitterH=8.f,availH=std::max(160.f,ImGui::GetContentRegionAvail().y-splitterH-2*ImGui::GetStyle().ItemSpacing.y);
+    float split=std::clamp(w->project.ui.value("band_split",.5f),.15f,.85f);
+    const float h=std::max(60.f,availH*split),h2=std::max(60.f,availH-h);
+    const auto &contactDoc=(selected?selected->at("document"):w->Current().document).at("contacts");
     if(BeginSavedPlot(*w,"Bands / contacts",ImVec2(-1,h))) {
         ImPlot::SetupAxes("Position [um]","Energy [eV]");ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
         const double end=total*1e6,metal=end*.04;
         FitWhenChanged("bands",ImAxis_X1,end,-metal,end+metal);
         {double lo=1e300,hi=-1e300;for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) for(double v:p.at(key).get<std::vector<double>>()) if(std::isfinite(v)){lo=std::min(lo,v);hi=std::max(hi,v);}
-        if(hi>lo){const double m=.05*(hi-lo);FitWhenChanged("bands",ImAxis_Y1,lo*7.31+hi,lo-m,hi+m);}}
+        if(hi>lo){const double m=.05*(hi-lo);FitWhenChanged("bands",ImAxis_Y1,lo*7.31+hi+p.at("voltage_V").get<double>()*1e-3,lo-m,hi+m);}}
         for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(Archived(w->Current(),result,profileKind))continue;const auto y=p.at(key).get<std::vector<double>>();if(y.size()==x.size()){const auto c=XColour(key);ImPlot::PlotLine(key,x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c.x,c.y,c.z,dashed?.6f:1.f),ImPlotProp_LineWeight,2.f});if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,c);ImPlot::PopPlotClipRect();}}}
         const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();
         ImPlot::PushPlotClipRect();
@@ -1101,18 +1130,24 @@ void Panel::Results() {
             const auto ec=p.at("Ec_eV").get<std::vector<double>>();
             if(!ec.empty()) {
                 const double ef=(side?ec.back():ec.front())+chi-phi;const double xx[]={lo,hi},yy[]={ef,ef};
-                ImPlot::PlotLine(side?"EFm right":"EFm left",xx,yy,2);
-                ImPlot::Annotation((lo+hi)/2,ef,ImVec4(1,.8f,.4f,1),ImVec2(side?-90.f:5.f,-28.f),true,"EFm / phi %.3f eV",phi);
+                const bool flatContact=contactDoc.at(side?"right":"left").value("flat_band",false);
+                ImPlot::PlotLine(side?"Right contact Fermi level (phi_m)":"Left contact Fermi level (phi_m)",xx,yy,2);
+                ImPlot::Annotation((lo+hi)/2,ef,ImVec4(1,.8f,.4f,1),ImVec2(side?-90.f:5.f,-28.f),true,"%s contact phi_m = %.3f eV%s",side?"Right":"Left",phi,flatContact?" (flat band)":"");
             }
         }
         ImPlot::PopPlotClipRect();DrawLayerRegions(layers);EndSavedPlot(*w,"Bands / contacts");
     }
-    if(BeginSavedPlot(*w,"Carriers",ImVec2(-1,h))) {
+    ImGui::InvisibleButton("##band-split",ImVec2(-1,splitterH));
+    if(ImGui::IsItemHovered() || ImGui::IsItemActive()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+    if(ImGui::IsItemActive() && ImGui::GetIO().MouseDelta.y!=0) w->project.ui["band_split"]=std::clamp(split+ImGui::GetIO().MouseDelta.y/availH,.15f,.85f);
+    if(ImGui::IsItemDeactivated()) {w->projectDirty=true;w->RefreshDirty();}
+    {const auto a=ImGui::GetItemRectMin(),b=ImGui::GetItemRectMax();const float cy=(a.y+b.y)*.5f;ImGui::GetWindowDrawList()->AddLine({a.x+4,cy},{b.x-4,cy},ImGui::IsItemHovered()||ImGui::IsItemActive()?IM_COL32(255,190,70,255):IM_COL32(110,110,120,200),2.f);}
+    if(BeginSavedPlot(*w,"Carriers",ImVec2(-1,h2))) {
         ImPlot::SetupAxes("Position [um]","Density [cm^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupAxisFormat(ImAxis_Y1,[](double value,char *buffer,int size,void*) {return std::snprintf(buffer,size,"1e%.0f",std::log10(value));});
         ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);FitWhenChanged("carriers",ImAxis_X1,total*1e6,0,total*1e6);
         {double lo=1e300,hi=0;for(const auto *key:{"n_m3","p_m3"}) for(double v:p.at(key).get<std::vector<double>>()) if(std::isfinite(v) && v>0){lo=std::min(lo,v*1e-6);hi=std::max(hi,v*1e-6);}
-        if(hi>0)FitWhenChanged("carriers",ImAxis_Y1,std::log10(lo)*7.31+std::log10(hi),std::max(lo,hi*1e-16),hi*3);}
+        if(hi>0)FitWhenChanged("carriers",ImAxis_Y1,std::log10(lo)*7.31+std::log10(hi)+p.at("voltage_V").get<double>()*1e-3,std::max(lo,hi*1e-16),hi*3);}
         for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;auto y=p.at(key).get<std::vector<double>>();for(auto &value:y)value*=1e-6;if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
         DrawLayerRegions(layers);EndSavedPlot(*w,"Carriers");
     }
@@ -1378,9 +1413,12 @@ void Panel::AddDefectTo(bool sheet,int layer) {
 }
 void Panel::Compare() {
     absoluteLog=w->project.ui.value("iv_absolute_log",true);
-    if(ImGui::CollapsingHeader("Run history")) DrawHistory(*w);
-    if(Toggle("Log |J|",absoluteLog)) {auto ui=w->project.ui;ui["iv_absolute_log"]=absoluteLog;Send({{"operation","project_edit"},{"ui",ui}});}
-    ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Run all checked")) Send({{"operation","run_all"}});ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"iv");
+    static bool historyOpen=false; // one compact row: Run history toggle | Log |J| | Run all checked | Single shot | Shots
+    if(ImGui::Button(historyOpen?"Run history  v":"Run history  >"))historyOpen=!historyOpen;
+    ImGui::SameLine();
+    if(ImGui::Checkbox("Log |J|",&absoluteLog)) {auto ui=w->project.ui;ui["iv_absolute_log"]=absoluteLog;Send({{"operation","project_edit"},{"ui",ui}});}TrackGesture();
+    ImGui::SameLine();ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Run all checked")) Send({{"operation","run_all"}});ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"iv");
+    if(historyOpen) DrawHistory(*w);
     bool any=false;for(const auto &d:w->project.devices) any|=(w->project.compare_set.contains(d->id) || d->id==w->project.active_device) && (!d->result.empty() || !d->history.empty());
     if(!any) {ImGui::TextWrapped("Tick 'Compare' on devices in the Project tree to overlay them.");return;}
     bool light=false;for(const auto &d:w->project.devices) light|=w->project.compare_set.contains(d->id) && d->result.contains("photovoltaic");
@@ -1531,13 +1569,16 @@ void Panel::GenerationRecombination() {
     const int savedTab=w->project.ui.value("gr_tab",0);const bool restoreTab=grTab!=savedTab;
     auto &device=w->Current();
     StructureEdit();
-    ShotBar(*w,"iv");
-    if(Toggle("Follow I-V working point",grFollow) && !grFollow) {
+    ShotBar(*w,"iv");ImGui::SameLine();
+    const bool followToggled=ImGui::Checkbox("Follow I-V working point",&grFollow);TrackGesture();
+    if(followToggled && !grFollow) {
         if(device.result.contains("points") && !device.result.at("points").empty()) device.biasVoltage_V=device.result.at("points")[std::clamp(device.selectedBias,0,int(device.result.at("points").size())-1)].at("voltage_V");
         grBias["voltage_V"]=device.biasVoltage_V;device.needsBand=true;device.changedAt=std::chrono::steady_clock::now();
     }
     if(grFollow && device.result.contains("points") && !device.result.at("points").empty()) {
-        BeginRow("I-V point");ImGui::SliderInt("##point",&device.selectedBias,0,int(device.result.at("points").size())-1);EndRow();
+        ImGui::SameLine();ImGui::SetNextItemWidth(std::max(100.f,ImGui::GetContentRegionAvail().x));
+        {const auto &pts=device.result.at("points");const int sel=std::clamp(device.selectedBias,0,int(pts.size())-1);char fmt[64];std::snprintf(fmt,sizeof(fmt),"%.4g V  (#%%d)",pts[sel].at("voltage_V").get<double>());
+        ImGui::SliderInt("##point",&device.selectedBias,0,int(pts.size())-1,fmt);}
     }
     if(!grFollow) {
         grBias["voltage_V"]=device.biasVoltage_V;
