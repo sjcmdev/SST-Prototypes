@@ -928,4 +928,28 @@ TEST(ScapsLab,EventsAndNotifierSequence) {
     EXPECT_TRUE(w.notifier->GetHistory().empty());
     EXPECT_FALSE(Execute(w,{{"operation","project_load"},{"path",Temp("scapslab-missing.scapslab").string()}}).at("ok").get<bool>());
     ASSERT_EQ(w.notifier->GetHistory().size(),1u);EXPECT_EQ(w.notifier->GetHistory()[0].severity,NotificationSeverity::Error);EXPECT_EQ(w.notifier->GetHistory()[0].title,"Load failed");
+TEST(ScapsLab,TypedResultsRoundtripJson) {
+    auto same=[](const Json &typed,const Json &src){EXPECT_EQ(typed.dump(),Json::parse(src.dump()).dump());}; // dump normalises NaN to null
+    std::size_t checked=0;
+    for(const auto &entry:std::filesystem::directory_iterator(SCAPSLAB_EXAMPLES)) if(entry.path().extension()==".scapslab") {
+        Workflow w(CreateRef<JobSystem>(nullptr,1));
+        ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",entry.path().string()}}).at("ok").get<bool>());
+        ASSERT_TRUE(Execute(w,{{"operation","run_all"}}).at("ok").get<bool>());
+        if(entry.path().filename()=="05-capacitance-ready.scapslab") for(const auto *kind:{"cv","cf"})
+            ASSERT_TRUE(Execute(w,{{"operation",kind},{"temperature_K",300},{"start_V",-0.1},{"stop_V",0.1},{"step_V",0.1},{"frequency_Hz",1e4},{"voltage_V",0},{"start_Hz",10},{"stop_Hz",1e4},{"points",3}}).at("ok").get<bool>());
+        for(const auto &d:w.project.devices) {
+            const auto iv=d->Iv();ASSERT_EQ(iv->points.size(),d->result.at("points").size());++checked;
+            EXPECT_EQ(iv.get(),d->Iv().get()); // converted once
+            same(ToJson(*iv),*d->result);
+            for(std::size_t i=0;i<iv->points.size();++i) {EXPECT_FALSE(iv->points[i].x_m.empty());EXPECT_EQ(iv->points[i].status,"Converged");}
+            same(ToJson(*d->Band()),*d->bandResult);
+            for(const auto &[kind,r]:d->acResults->items()) {const auto ac=d->Ac(kind);EXPECT_EQ(ac->points.size(),r.at("points").size());same(ToJson(*ac),r);}
+        }
+    }
+    EXPECT_GT(checked,0u);
+    // non-converged / null values become NaN and are written back as null; unknown keys survive
+    const Json j={{"mesh_x_m",{0.,1.}},{"extra",{{"a",1}}},{"points",Json::array({{{"status","Failed"},{"J_A_m2",nullptr},{"voltage_V",0.5},{"iterations",7},{"x_m",{0.,nullptr}},{"mystery",3}}})}};
+    const auto r=IvFromJson(j);ASSERT_EQ(r.points.size(),1u);
+    EXPECT_TRUE(std::isnan(r.points[0].J_A_m2));EXPECT_TRUE(std::isnan(r.points[0].x_m[1]));EXPECT_EQ(r.points[0].iterations,7);EXPECT_EQ(r.mesh_x_m.size(),2u);
+    EXPECT_EQ(ToJson(r).dump(),j.dump());EXPECT_EQ(ToJson(IvFromJson(Json::object())),Json::object());
 }

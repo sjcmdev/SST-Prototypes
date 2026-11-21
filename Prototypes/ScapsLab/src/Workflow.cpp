@@ -1215,8 +1215,8 @@ void Workflow::UpdateOperation() {
             if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
             if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {Take(d.batchResult);projectDirty=true;Emit(RunCompleted(d.id,d.selectedRun,op,d.revision));}
             if(op=="run") {Take(d.result);d.bandResult=Json::object();}
-            if(op=="band") Take(d.bandResult);
-            if(op=="cv" || op=="cf" || op=="qe") Take(d.acResults.mut()[op]);
+            if(op=="band") {Take(d.bandResult);}
+            if(op=="cv" || op=="cf" || op=="qe") {Take(d.acResults.mut()[op]);d.acTyped[op].reset();} // typed view (d.Iv()/Band()/Ac()) is built lazily on first use: eager conversion cost ~20 ms UI + ~75 MB on big results
             if(op=="run" || op=="band") LimitProfiles(d);
             if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=outValid?"solved":"failed";projectDirty=true;
                 if(outValid) Emit(RunCompleted(d.id,d.selectedRun,op=="run"?"iv":op,d.revision));

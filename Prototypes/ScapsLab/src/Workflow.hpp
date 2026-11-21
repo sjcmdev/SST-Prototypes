@@ -9,11 +9,13 @@
 #include <nlohmann/json.hpp>
 #include "Core/Undo/UndoStack.hpp"
 #include "Core/Presentation/Tutorial.hpp"
+#include "Domain/Results.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
 #include <chrono>
 #include <array>
 #include <deque>
 #include <set>
+#include <map>
 #include <scaps_core/device_project.hpp>
 namespace SST::ScapsLab {
 using Json = nlohmann::json;
@@ -88,6 +90,12 @@ struct DeviceState {
     Json colour = Json::array({0.25, 0.65, 0.95, 1.0});
     Json document;
     Cow bandResult{Json::object()}, result{Json::object()}, acResults{Json::object()};
+    // Typed views of the Json above (S2): same data, built once per result object; the Json stays the saved form.
+    Memo<IvResult,IvFromJson> ivTyped, bandTyped;
+    mutable std::map<std::string,Memo<AcResult,AcFromJson>> acTyped; // per kind cv/cf/qe; reset() after in-place acResults edits
+    Ref<const IvResult> Iv() const {return ivTyped.get(result.share());}
+    Ref<const IvResult> Band() const {return bandTyped.get(bandResult.share());}
+    Ref<const AcResult> Ac(const std::string &kind) const {static const Json none=Json::object();auto &m=acTyped[kind];if(!acResults->contains(kind)){return m.get(CreateRef<const Json>(none));}auto &j=acResults->at(kind);return m.get(Ref<const Json>(acResults.share(),&j));} // aliasing ref: tied to the acResults object
     Json actions=Json::object();
     Cow batchResult{Json::object()};Json batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
     int selectedMember=0;
