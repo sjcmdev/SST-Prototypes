@@ -1,6 +1,9 @@
 #include "Core/dspch.hpp"
 
 #include <functional>
+#include <map>
+#include <chrono>
+#include <algorithm>
 #include <optional>
 
 #if defined(TRACY_ENABLE)
@@ -368,8 +371,28 @@ namespace SST
 	}
 
 
+	namespace { // SCAPSLAB_PERF=1: per-layer UI cost, top entries every 2 s
+		std::map<std::string, std::pair<double, int>> g_perf;
+		std::chrono::steady_clock::time_point g_perfLast = std::chrono::steady_clock::now();
+		void perfAdd(const std::string &n, double ms) { auto &e = g_perf[n]; e.first += ms; ++e.second; }
+		void perfFlush()
+		{
+			if (std::chrono::steady_clock::now() - g_perfLast < std::chrono::seconds(2)) return;
+			std::vector<std::pair<double, std::string>> v;
+			for (auto &[n, e] : g_perf) v.push_back({e.first, n + " x" + std::to_string(e.second)});
+			std::sort(v.rbegin(), v.rend());
+			std::string out = "[perf] top layers (total ms/2s):";
+			for (size_t i = 0; i < v.size() && i < 6; ++i) out += " | " + v[i].second + "=" + std::to_string(int(v[i].first));
+			std::fprintf(stderr, "%s\n", out.c_str());
+			g_perf.clear(); g_perfLast = std::chrono::steady_clock::now();
+		}
+	}
+
+	void PerfAdd(const std::string &name, double ms) { perfAdd(name, ms); }
+
 	void Application::runMainLoopFrame(const ImVec4 &clearColor, ImGuiIO &io)
 	{
+		static const bool perf = std::getenv("SCAPSLAB_PERF") != nullptr;
 		const double now = glfwGetTime();
 		const float deltaTime = static_cast<float>(now - m_Runtime.lastFrameTime);
 		m_Runtime.lastFrameTime = now;
@@ -381,14 +404,18 @@ namespace SST
         for (const auto &layer : m_LayerStack) {
             if(m_FailedLayers.contains(layer.get())) continue;
             ImGuiErrorRecoveryState saved;ImGui::ErrorRecoveryStoreState(&saved);
+            const auto lt0 = std::chrono::steady_clock::now();
             try {layer->OnImGuiRender();}
             catch(const std::exception &error) {
                 const bool assertRecovery=io.ConfigErrorRecoveryEnableAssert;io.ConfigErrorRecoveryEnableAssert=false;
                 ImGui::ErrorRecoveryTryToRecoverState(&saved);io.ConfigErrorRecoveryEnableAssert=assertRecovery;
                 handleLayerException(*layer,error.what());
             }
+            if (perf) perfAdd(layer->GetName(), std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - lt0).count());
         }
+		const auto rt0 = std::chrono::steady_clock::now();
 		onRender(clearColor, io.Framerate);
+		if (perf) { perfAdd("<onRender(draw+swap)>", std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - rt0).count()); perfFlush(); }
 	}
 
 
@@ -411,7 +438,15 @@ namespace SST
             catch(const std::exception &error) {handleLayerException(*layer,error.what());}
         }
 
-		m_Graphics.window->PollEvents();
+		const double wait = m_IdleWait ? m_IdleWait() : 0.0;
+		if (wait > 0.0 && glfwGetTime() > m_ActiveUntil)
+		{
+			const double t0 = glfwGetTime();
+			glfwWaitEventsTimeout(wait);
+			if (glfwGetTime() - t0 < wait * 0.9) m_ActiveUntil = glfwGetTime() + 0.4; // input woke us: keep rendering briefly (hover/animation settle)
+		}
+		else
+			m_Graphics.window->PollEvents();
 		processPendingEvents();
 	}
 

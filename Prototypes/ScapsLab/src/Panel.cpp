@@ -18,6 +18,7 @@
 #include <imgui_internal.h>
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "Vendor/ImGuiNotify/win32Example/fonts/IconsFontAwesome6.h"
+namespace SST {void PerfAdd(const std::string &name, double ms);}
 namespace SST::ScapsLab {
 static const char *names[]={"Project","Layers","Contacts","Solver","Run","Band diagram & profiles","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
 Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.")+names[v],names[v],true),w(w),view(v),gallery(gallery) {
@@ -413,6 +414,7 @@ static bool Choice(const char *label,Json &j,const char *key,std::initializer_li
     if(ImGui::BeginCombo("##value",preview)) {for(const auto &[name,value]:items) if(ImGui::Selectable(name,current==value)) {j[key]=value;changed=true;++gesture;} ImGui::EndCombo();} EndRow();return changed;
 }
 void Panel::RenderContent() {
+    struct PerfScope {const char *n;std::chrono::steady_clock::time_point t=std::chrono::steady_clock::now();~PerfScope(){static const bool on=std::getenv("SCAPSLAB_PERF")!=nullptr;if(on)SST::PerfAdd(std::string("panel ")+n,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t).count());}} perfScope{names[view]};
     w->tutorialOverlay.Window(std::string("scapslab.")+names[view]);
     numericWorkflow=w;numericDocument=nullptr;
     struct ResetNumeric {~ResetNumeric(){numericDocument=nullptr;numericWorkflow=nullptr;}} resetNumeric;

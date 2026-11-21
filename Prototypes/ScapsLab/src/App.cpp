@@ -94,7 +94,7 @@ class ScapsCloseGuard final : public Layer {
             auto target=w.path;
             if(saveAs || target.empty()) {const auto file=SaveFileDialog({"ScapsLab project","scapslab"},"Untitled.scapslab");if(!file)return false;target=file->Utf8();}
             if(std::filesystem::path(target).extension()!=".scapslab") target+=".scapslab";
-            std::size_t iniSize=0;const auto *ini=ImGui::SaveIniSettingsToMemory(&iniSize);w.project.ui["imgui_ini"]=std::string(ini,iniSize);
+            std::size_t iniSize=0;const auto *ini=ImGui::SaveIniSettingsToMemory(&iniSize);w.project.ui["imgui_ini"]=std::string(ini,iniSize);appliedLayout=std::string(ini,iniSize); /* live layout: do not reload what we just captured (reset after Save) */
             const auto response=w.Dispatch({{"operation","project_save"},{"path",target},{"include_results",w.includeResults}});return response.at("ok").get<bool>();
         } catch(const std::exception &e) {w.status=e.what();return false;}
     }
@@ -106,6 +106,9 @@ class ScapsCloseGuard final : public Layer {
     }
 public:
     ScapsCloseGuard(Application &app,ScapsLab::Workflow &w,std::vector<Ref<ScapsLab::Panel>> panels):Layer("ScapsLab file actions"),app(app),w(w),panels(std::move(panels)) {
+        if(!std::getenv("SCAPSLAB_GALLERY_EXPORT") && !std::getenv("SCAPSLAB_NO_IDLE_THROTTLE")) app.SetIdleWaitProvider([this]()->double { // idle: sleep until input; job running: ~20 fps
+            if(ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || this->w.tutorial.Active() || this->requested || this->exporting) return 0.;
+            return this->w.Pending() ? 0.05 : 0.5;});
         app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Pending())return true;creating=false;closing=true;requested=true;return false;});
         if(const auto config=app.GetConfigManager().lock()) recentPath=config->GetConfigDirectory()/Path{"scapslab-recent.json"};
         std::string text,error;if(TextFileIO::Load(recentPath,text,error)) {try {const auto items=ScapsLab::Json::parse(text);if(items.is_array() && items.size()<=10 && std::all_of(items.begin(),items.end(),[](const auto &p){return p.is_string();})) w.recent=items;}catch(...) {}}

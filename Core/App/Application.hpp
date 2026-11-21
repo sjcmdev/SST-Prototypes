@@ -28,6 +28,7 @@ struct ImGuiIO;
 namespace SST
 {
 	class ApplicationEventController;
+	void PerfAdd(const std::string &name, double ms); // SCAPSLAB_PERF=1 helper: top costs logged every 2 s
 	class CommandRegistry;
 	class ContextManager;
 	class CoreLayer;
@@ -50,6 +51,8 @@ namespace SST
 		void Shutdown();
         // Return false to defer closing (for example, while asking to save edits).
         void SetCloseGuard(std::function<bool()> guard) { m_CloseGuard = std::move(guard); }
+        // Opt-in idle throttling: provider returns max seconds to sleep waiting for input (0 = never sleep). Unset = busy polling.
+        void SetIdleWaitProvider(std::function<double()> provider) { m_IdleWait = std::move(provider); }
 		~Application();
 
 		// Queue a platform event for main-thread processing.
@@ -164,6 +167,8 @@ namespace SST
 		LayerStack m_LayerStack;
 		ApplicationSetup m_ProjectSetup;
         std::function<bool()> m_CloseGuard;
+        std::function<double()> m_IdleWait;
+        double m_ActiveUntil = 0.0;
 		Ref<LogRegistry> m_LogRegistry;
 		
 		Ref<CapabilityService> m_CapabilityService;
