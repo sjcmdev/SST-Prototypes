@@ -1,5 +1,8 @@
 #pragma once
 #include "Core/Layer.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Notifications/Notifier.hpp"
+#include "Events.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -88,6 +91,7 @@ struct DeviceState {
     Json actions=Json::object();
     Cow batchResult{Json::object()};Json batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
     int selectedMember=0;
+    std::uint64_t revision=0; // bumped with every DocumentEdited event
     Cow history{Json::array()};
     std::string selectedRun;
     UndoStack undo;
@@ -111,7 +115,7 @@ Json UnpackResults(const Json &value);
 std::string WorkspaceText(const Json &workspace);
 class Workflow final : public Layer {
 public:
-    explicit Workflow(Ref<JobSystem> jobs, Ref<CommandRegistry> registry = {});
+    explicit Workflow(Ref<JobSystem> jobs, Ref<CommandRegistry> registry = {}, Ref<EventBus> bus = {}, Ref<Notifier> notifier = {}); // no bus/notifier (headless, tests): own ones; events are published synchronously on the calling thread, no ProcessQueue needed
     ~Workflow() override;
     Workflow(const Workflow &) = delete;
     Workflow &operator=(const Workflow &) = delete;
@@ -130,6 +134,9 @@ public:
     std::string status = "Ready", path, pendingDevice;
     Ref<JobSystem> jobs;
     Ref<CommandRegistry> commands;
+    Ref<EventBus> bus;
+    Ref<Notifier> notifier;
+    template<class E> void Emit(E e) {bus->Publish(e);}
     JobId active = 0;
     Ref<Operation> pending;
     std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}

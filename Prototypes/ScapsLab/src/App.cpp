@@ -202,7 +202,7 @@ void SetupApplication(Application &app) {
         std::string text,error;if(TextFileIO::Load(Path{UiSettingsPath()},text,error)) {try {ExperimentalPanels()=Json::parse(text).value("experimental_panels",false);}catch(...) {}}
     }
     if(std::getenv("SCAPSLAB_EXPERIMENTAL")) ExperimentalPanels()=std::string(std::getenv("SCAPSLAB_EXPERIMENTAL"))=="1";
-    auto state=CreateUnique<Workflow>(app.GetJobSystemHandle().lock(),app.GetCommandRegistryHandle().lock()); auto *w=state.get();
+    auto state=CreateUnique<Workflow>(app.GetJobSystemHandle().lock(),app.GetCommandRegistryHandle().lock(),app.GetEventBusRef(),app.GetNotifierRef()); auto *w=state.get();
     w->Current().document=NewDeviceDocument(); w->Current().name=w->Current().document.at("case_id");w->path="";
     if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}
     const char *gallery=std::getenv("SCAPSLAB_GALLERY_PANEL");

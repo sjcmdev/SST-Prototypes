@@ -1058,7 +1058,7 @@ void Workflow::HistoryOp(const Json &request) {
     projectDirty=true;RefreshDirty();status="Completed: "+op;
     response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();
 }
-Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()) {
+Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry,Ref<EventBus> eventBus,Ref<Notifier> note):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()),bus(eventBus?std::move(eventBus):CreateRef<EventBus>()),notifier(note?std::move(note):CreateRef<Notifier>(bus)) {
     auto initial=CreateRef<DeviceState>();initial->id="device-1";initial->name="Device";project.devices.push_back(initial);project.active_device=initial->id;project.compare_set.insert(initial->id);
     for(const auto *op:{"load_material","save_material","set_profile","load_profile","preview_profile","export_profile","tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
         "history_list","history_update","history_select","history_clear","quick_sweep","project_new","project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def"}) {
@@ -1116,13 +1116,15 @@ void Workflow::UpdateSave() {
                 recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
                 if(!recoveryPath.empty()) {std::error_code ec;if(!std::filesystem::equivalent(file,recoveryPath,ec))std::filesystem::remove(recoveryPath,ec);}
                 status="Saved "+op->output.at("path").get<std::string>()+" ("+std::to_string(op->output.at("size_bytes").get<std::size_t>())+" bytes)";
+                Emit(ProjectSaved(file,false));
                 if(!active) {response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();if(!lightResponse)response["operation_result"]=op->output;}
-            }
+            } else Emit(ProjectSaved(op->request.value("path",std::string{}),true));
         } else if(!autosave) {
             if(sameProject) projectDirty=true;
             status=snapshot?snapshot->errorMessage:std::string("Save failed");
             if(!active) response=Failure("operation_failed",status);
-        }
+            Emit(ProjectSaveFailed(op->request.value("path",std::string{}),status,false));notifier->Error("Save failed",status,NotificationCategory::Project);
+        } else Emit(ProjectSaveFailed(op->request.value("path",std::string{}),snapshot?snapshot->errorMessage:std::string("Save failed"),true)); // autosave: event only, no toast (Notifier has no dedupe yet)
         RefreshDirty();
     }
     if(!saveJob && !queuedSave.empty()) {auto next=std::move(queuedSave);queuedSave=Json();StartSave(next);return;}
@@ -1181,7 +1183,7 @@ void Workflow::UpdateOperation() {
                     if(!d.history.empty()) {const double t=pending->output.at("rows").size()<2?0.:double(&row-&pending->output.at("rows")[0])/double(pending->output.at("rows").size()-1);d.history.mut().back()["colour"]=Json::array({.15+.7*t,.4+.3*std::sin(3.14159*t),.9-.7*t,1.});}
                 }
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
-                LimitProfiles(d);
+                LimitProfiles(d);Emit(HistoryChanged(d.id));Emit(SelectionChanged(d.id));
             }
     if(snapshot->status==JobStatus::Completed) {
         if(op=="project_new" || op=="project_load" || op=="load") {
@@ -1189,9 +1191,11 @@ void Workflow::UpdateOperation() {
             ++epoch;path=op=="project_new"?std::string{}:pending->request.at("path").get<std::string>();
             if(op!="project_new" && std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
             for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();device->needsBand=false;device->needsRecalculate=false;}
+            Emit(ProjectLoaded(path));Emit(DeviceListChanged());
         } else if(op.starts_with("history_")) {
             const auto before=Workspace();SetWorkspace(pending->workspace);
             if(op!="history_list") {projectDirty=true;(void)projectUndo.PushExecuted(CreateUnique<WorkspaceRecord>(*this,before,Workspace()));preferProjectUndo=true;}
+            if(op!="history_list") {Emit(HistoryChanged(pendingDevice));Emit(SelectionChanged(pendingDevice));}
         } else if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {
             const auto before=project;const auto beforeWorkspace=Workspace();SetWorkspace(pending->workspace);
             if(op!="device_list") projectDirty=true;
@@ -1199,6 +1203,7 @@ void Workflow::UpdateOperation() {
             if(op=="device_update") Device(pending->request.value("device_id",project.active_device)).metadataDirty=true;
             if(op=="device_update" || op=="device_move" || op=="project_edit") {(void)projectUndo.PushExecuted(CreateUnique<WorkspaceRecord>(*this,beforeWorkspace,Workspace()));preferProjectUndo=true;} // rename / compare / colour / reorder are undoable
             if(op=="device_remove") {(void)projectUndo.PushExecuted(CreateUnique<ProjectRecord>(*this,before,project));preferProjectUndo=true;}
+            if(op!="device_list") Emit(DeviceListChanged());
         } else {
             if((op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") && !pending->request.value("history",false) && d.document!=pending->document) {
                 (void)d.undo.PushExecuted(CreateUnique<EditRecord>(*this,d.document,pending->document,pending->request.value("gesture_id",std::string{})));preferProjectUndo=false;
@@ -1208,23 +1213,29 @@ void Workflow::UpdateOperation() {
             if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
                 StoreRun(d.history.mut(),op=="run"?"iv":op,pending->output,d.document,pending->request,retention);
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
+                Emit(HistoryChanged(d.id));Emit(SelectionChanged(d.id));
             }
             if(op=="batch_select") d.selectedMember=pending->request.at("index");
             if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
-            if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {Take(d.batchResult);projectDirty=true;}
+            if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {Take(d.batchResult);projectDirty=true;Emit(RunCompleted(d.id,d.selectedRun,op,d.revision));}
             if(op=="run") {Take(d.result);d.bandResult=Json::object();}
             if(op=="band") Take(d.bandResult);
             if(op=="cv" || op=="cf" || op=="qe") Take(d.acResults.mut()[op]);
             if(op=="run" || op=="band") LimitProfiles(d);
-            if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=outValid?"solved":"failed";projectDirty=true;}
+            if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=outValid?"solved":"failed";projectDirty=true;
+                if(outValid) Emit(RunCompleted(d.id,d.selectedRun,op=="run"?"iv":op,d.revision));
+                else {const std::string message="solver returned no valid result";Emit(RunFailed(d.id,op,message,false));notifier->Error("Calculation failed",d.name+": "+message);}
+            }
             if(op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") {
                 if(op=="import_def") {d.selectedLayer=0;d.selectedInterface=-1;}
                 d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";d.dirty=!d.undo.IsClean();
+                ++d.revision;Emit(DocumentEdited(d.id,d.revision));
+                if(op=="import_def") Emit(SelectionChanged(d.id));
             }
             if(op=="save" && project.devices.size()==1) {d.dirty=false;d.metadataDirty=false;d.undo.MarkClean();}
         }
         if((op=="load" || op=="project_load" || op=="save" || op=="project_save") && !pending->request.value("autosave",false)) {
-            const auto file=pending->request.at("path");recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
+            const auto file=pending->request.at("path");if(op=="save" || op=="project_save") Emit(ProjectSaved(file.get<std::string>(),false));recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
         }
         const bool quiet=op=="project_save" && pending->request.value("autosave",false);const auto keepStatus=status;const auto keepResponse=quiet?response:Json();RefreshDirty();status="Completed: "+op;response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();
         if(pending->output.contains("size_bytes")) status="Saved "+pending->output.at("path").get<std::string>()+" ("+std::to_string(pending->output.at("size_bytes").get<std::size_t>())+" bytes)";
@@ -1236,6 +1247,17 @@ void Workflow::UpdateOperation() {
         if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {d.batchResult=pending->output;projectDirty=true;}
         if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status=snapshot->status==JobStatus::Cancelled?(d.result.empty()?"no results":"solved"):"failed";
         status=snapshot->errorMessage;response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);
+        {
+            const bool cancelled=snapshot->status==JobStatus::Cancelled,isRun=op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe" || op=="quick_sweep" || op=="run_batch" || op=="retry_batch";
+            if(isRun) Emit(RunFailed(d.id,op,status,cancelled));
+            if(!cancelled && !(op=="project_save" && pending->request.value("autosave",false))) {
+                if(op=="save" || op=="project_save") Emit(ProjectSaveFailed(pending->request.value("path",std::string{}),status,false));
+                if(isRun) notifier->Error("Calculation failed",d.name+": "+status);
+                else if(op=="load" || op=="project_load") notifier->Error("Load failed",status,NotificationCategory::Project);
+                else if(op=="save" || op=="project_save") notifier->Error("Save failed",status,NotificationCategory::Project);
+                else if(op.starts_with("export_")) notifier->Error("Export failed",status,NotificationCategory::Export);
+            }
+        }
     }
     if(!lightResponse && (op=="run_batch" || op=="retry_batch") && response.is_object()) response["batch_result"]=*d.batchResult;
     if(pending->request.value("batch",false)) {

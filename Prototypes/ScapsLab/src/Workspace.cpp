@@ -308,7 +308,7 @@ void Workflow::SetWorkspace(const Json &value) {
     }
     project=std::move(checked);
 }
-void Workflow::RefreshDirty() {for(auto &d:project.devices) d->dirty=d->metadataDirty || !d->undo.IsClean();dirty=projectDirty || std::any_of(project.devices.begin(),project.devices.end(),[](const auto &d){return d->dirty;});}
+void Workflow::RefreshDirty() {const bool was=dirty;for(auto &d:project.devices) d->dirty=d->metadataDirty || !d->undo.IsClean();dirty=projectDirty || std::any_of(project.devices.begin(),project.devices.end(),[](const auto &d){return d->dirty;});if(dirty!=was)Emit(ProjectDirtyChanged(dirty));}
 Json Workflow::Snapshot() const {
     const auto &d=*std::find_if(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==project.active_device;});
     Json list=Json::array();for(const auto &item:project.devices) list.push_back({{"device_id",item->id},{"name",item->name},{"description",item->description},{"colour",item->colour},{"status",item->status},{"dirty",item->dirty},{"compare",project.compare_set.contains(item->id)}});

@@ -896,3 +896,36 @@ TEST(ScapsLabNewDevice,ContactsDefaultToFlatBand) {
     ASSERT_TRUE(Execute(w,{{"operation","device_add"}}).at("ok").get<bool>());
     for(const auto *side:{"left","right"}) EXPECT_TRUE(w.Current().document.at("contacts").at(side).value("flat_band",false));
 }
+TEST(ScapsLab,EventsAndNotifierSequence) {
+    auto bus=CreateRef<EventBus>();Workflow w(CreateRef<JobSystem>(nullptr,1),{},bus);w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    std::vector<std::string> log;std::uint64_t revision=0;std::string runKind,runId;bool autosave=true;
+    std::vector<SubscriptionHandle> subs;
+    subs.push_back(bus->Subscribe<DocumentEdited>([&](const DocumentEdited &e){log.push_back("edited");revision=e.revision;}));
+    subs.push_back(bus->Subscribe<RunCompleted>([&](const RunCompleted &e){log.push_back("run");runKind=e.kind;runId=e.runId;}));
+    subs.push_back(bus->Subscribe<RunFailed>([&](const RunFailed &e){log.push_back(e.cancelled?"cancelled":"failed");}));
+    subs.push_back(bus->Subscribe<HistoryChanged>([&](const HistoryChanged &){log.push_back("history");}));
+    subs.push_back(bus->Subscribe<ProjectSaved>([&](const ProjectSaved &e){log.push_back("saved");autosave=e.autosave;}));
+    subs.push_back(bus->Subscribe<ProjectDirtyChanged>([&](const ProjectDirtyChanged &e){log.push_back(e.dirty?"dirty":"clean");}));
+    subs.push_back(bus->Subscribe<ProjectLoaded>([&](const ProjectLoaded &){log.push_back("loaded");}));
+    ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());
+    EXPECT_EQ(revision,1u);EXPECT_NE(std::find(log.begin(),log.end(),"edited"),log.end());
+    log.clear();
+    ASSERT_TRUE(Execute(w,{{"operation","run"}}).at("ok").get<bool>());
+    ASSERT_EQ(log.size(),2u);EXPECT_EQ(log[0],"history");EXPECT_EQ(log[1],"run");
+    EXPECT_EQ(runKind,"iv");EXPECT_EQ(runId,w.Current().selectedRun);EXPECT_TRUE(w.notifier->GetHistory().empty());
+    log.clear();
+    ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>());ASSERT_TRUE(w.jobs->ResumeAllJobs());
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_EQ(log.size(),1u);EXPECT_EQ(log[0],"cancelled");EXPECT_TRUE(w.notifier->GetHistory().empty()); // cancel is not an error
+    log.clear();
+    const auto file=Temp("scapslab-events.scapslab");std::filesystem::remove(file);
+    ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",file.string()}}).at("ok").get<bool>());
+    EXPECT_NE(std::find(log.begin(),log.end(),"saved"),log.end());EXPECT_FALSE(autosave);EXPECT_NE(std::find(log.begin(),log.end(),"clean"),log.end());
+    log.clear();
+    ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).at("ok").get<bool>());
+    EXPECT_NE(std::find(log.begin(),log.end(),"loaded"),log.end());std::filesystem::remove(file);
+    EXPECT_TRUE(w.notifier->GetHistory().empty());
+    EXPECT_FALSE(Execute(w,{{"operation","project_load"},{"path",Temp("scapslab-missing.scapslab").string()}}).at("ok").get<bool>());
+    ASSERT_EQ(w.notifier->GetHistory().size(),1u);EXPECT_EQ(w.notifier->GetHistory()[0].severity,NotificationSeverity::Error);EXPECT_EQ(w.notifier->GetHistory()[0].title,"Load failed");
+}
