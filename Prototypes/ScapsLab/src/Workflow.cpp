@@ -774,24 +774,11 @@ void Operation::Execute(JobContext &ctx) {
         ctx.SetStage("Preparing mesh (cancel checked after preparation)");
         const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);
         ctx.ThrowIfCancellationRequested(); ctx.SetStage("Equilibrium");
-        const auto eq=solve_equilibrium(device,mesh,p.temperature_K,p.solver,pc); auto previous=eq.state;
+        IVSession session(device,mesh,p.temperature_K,p.solver,pc); // equilibrium + continuation (bias predictor); bit-identical to solve_iv/scaps_headless
         output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
-        const bool externalNetwork=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
-        std::vector<IVPoint> sweep;
-        if(externalNetwork) {ctx.SetStage("I-V sweep ("+std::to_string(volts.size())+" points)");sweep=solve_iv(device,mesh,volts,p.temperature_K,p.solver,pc);ctx.ThrowIfCancellationRequested();} // one continuation instead of replaying every prefix (was O(N^2))
         for(std::size_t i=0;i<volts.size();++i) {
             ctx.ThrowIfCancellationRequested(); ctx.SetStage("I-V point "+std::to_string(i+1)+" / "+std::to_string(volts.size()));
-            IVPoint pt;
-            if (externalNetwork) {
-                pt=std::move(sweep[i]);
-            } else {
-                const auto r=volts[i]==0 ? eq : solve_bias(device,mesh,previous,volts[i],p.temperature_K,p.solver,pc);
-                pt.state=r.state; pt.status=r.status; pt.iterations=volts[i]==0 ? 0 : r.iterations; pt.final_residual_norm=r.final_residual_norm;
-                const auto &j=r.state.Jtotal_Am2;
-                if (!j.empty()) { for(double v:j) pt.J_total_Am2+=v; pt.J_total_Am2/=double(j.size());
-                    for(double v:j) pt.J_conservation_error_Am2=std::max(pt.J_conservation_error_Am2,std::abs(v-pt.J_total_Am2)); }
-                if(r.status==SolverStatus::Converged) previous=r.state;
-            }
+            IVPoint pt=session.next(volts[i]);
             const auto &s=pt.state;
             const auto curves=DefectCurves(document,p,s);
             auto gr=GenerationRecombination(document,p,device,s);
