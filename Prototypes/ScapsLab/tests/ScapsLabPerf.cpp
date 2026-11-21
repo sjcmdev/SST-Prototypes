@@ -17,7 +17,7 @@ double Ms(Clock::time_point a){return std::chrono::duration<double,std::milli>(C
 struct Timing {double wall=0,uiTotal=0,uiMax=0;};
 Timing Timed(Workflow &w,const Json &r) {
     Timing t;const auto start=Clock::now();auto s=Clock::now();(void)w.Dispatch(r);double d=Ms(s);t.uiTotal+=d;t.uiMax=std::max(t.uiMax,d);
-    while(w.Busy()) {s=Clock::now();w.OnUpdate(0);d=Ms(s);t.uiTotal+=d;t.uiMax=std::max(t.uiMax,d);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()) {s=Clock::now();w.OnUpdate(0);d=Ms(s);t.uiTotal+=d;t.uiMax=std::max(t.uiMax,d);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     t.wall=Ms(start);return t;
 }
 void Print(const char *name,const Timing &t) {std::printf("PERF %-28s wall %9.1f ms | UI total %8.1f ms | UI max-call %8.1f ms\n",name,t.wall,t.uiTotal,t.uiMax);std::fflush(stdout);}
@@ -37,7 +37,7 @@ TEST(PerfProbe,All) {
             const auto s=Clock::now();(void)w.Dispatch({{"operation","edit"},{"document",doc},{"gesture_id","perf"}});w.OnUpdate(0);const double d=Ms(s);
             total+=d;mx=std::max(mx,d);std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }
-        while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         std::printf("PERF drag %d frames: avg UI cost/frame %.2f ms, max %.2f ms\n",n,total/n,mx);
     }
     std::string recovery=(std::filesystem::temp_directory_path()/"perf-recovery.scapslab").string();w.recoveryPath=recovery;
@@ -85,4 +85,17 @@ TEST(PerfProbe,BatchEngineDirect) {
         const auto b=Clock::now();const auto table=Json::parse(out);const double parse=Ms(b);
         std::printf("PERF run_batch_json curves=%d threads=%d: wall %.0f ms, engine elapsed_s %.2f, output %zu bytes, parse %.0f ms\n",curves,threads,wall,table.at("rows")[0].value("elapsed_s",0.),out.size(),parse);
     }
+}
+// UI-thread cost of starting a save (snapshot) of a big project. Run: SCAPSLAB_PERF_TEST=1 ScapsLabTests --gtest_filter=PerfProbe.SaveCost
+TEST(PerfProbe,SaveCost) {
+    if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
+    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    (void)Timed(w,{{"operation","run"}});(void)Timed(w,{{"operation","band"},{"voltage_V",0.0}});
+    auto spec=BatchDefaults();spec["axes"][0]["count"]=8;(void)Timed(w,{{"operation","run_batch"},{"spec",spec}});
+    std::printf("PERF workspace json %zu bytes\n",w.Workspace().dump().size());
+    const std::string file=(std::filesystem::temp_directory_path()/"perf-save.scapslab").string();
+    for(bool autosave:{false,true}) {auto s=Clock::now();(void)w.Dispatch({{"operation","project_save"},{"path",file},{"autosave",autosave}});const double d=Ms(s);
+        double rest=0;while(w.Pending()){s=Clock::now();w.OnUpdate(0);rest=std::max(rest,Ms(s));std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        std::printf("PERF save autosave=%d: Dispatch (UI) %.2f ms, max OnUpdate %.2f ms\n",int(autosave),d,rest);}
+    std::filesystem::remove(file);
 }

@@ -97,6 +97,7 @@ public:
             return {};
         }
         const std::string op=r->at("operation");
+        if(op=="project_save" || (op=="save" && std::filesystem::path(r->at("path").get<std::string>()).extension()==".scapslab")) {(void)r->at("path").get<std::string>();w.StartSave(*r);return {};}
         if((op=="load" || op=="project_load") && w.active) {
             const std::string running=w.pending->request.at("operation");
             if(running=="run" || running=="band" || running=="cv" || running=="cf" || running=="qe" || running=="run_batch") {
@@ -673,6 +674,7 @@ void Operation::Execute(JobContext &ctx) {
         Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
     }
     else if(op=="project_save" || (op=="save" && std::filesystem::path(request.at("path").get<std::string>()).extension()==".scapslab")) {
+        if(!shared.empty()) {auto &devs=workspace["devices"];for(std::size_t i=0;i<shared.size();++i) {auto &d=devs[i];d["history"]=*shared[i][0];d["result"]=*shared[i][1];d["band_result"]=*shared[i][2];d["ac_results"]=*shared[i][3];d["batch_result"]=*shared[i][4];}shared.clear();}
         Workflow checked(CreateRef<JobSystem>(nullptr,1));checked.SetWorkspace(workspace);
         if(!request.value("include_results",true)) for(auto &d:workspace["devices"]) for(const auto *key:{"result","band_result","ac_results","batch_result"}) d[key]=Json::object();
         if(!request.value("include_results",true)) for(auto &d:workspace["devices"]) {d["status"]="no results";d["history"]=Json::array();d["selected_run"]="";}
@@ -986,19 +988,64 @@ Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry):Layer("ScapsL
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
     }
 }
-Workflow::~Workflow() { tutorial.Stop();queuedProject.clear();runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } }
+Workflow::~Workflow() { tutorial.Stop();queuedSave=Json();queuedProject.clear();runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } while(saveJob) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} }
 void Workflow::StartOperation(const Json &r,const std::string &id) {
-    auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);const std::string op0=r.at("operation");if(op0.starts_with("export_"))pending->acResults=d.acResults;if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchResult=d.batchResult;pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
+    auto &d=Device(id);pendingDevice=id;pending=CreateRef<Operation>(d.document,r);const std::string op0=r.at("operation");if(op0.starts_with("export_"))pending->acResults=*d.acResults;if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchResult=*d.batchResult;pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
     const std::string op=r.at("operation");
     if(op=="load_profile")pending->request["project_path"]=path;
-    if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?d.bandResult:d.result;}
-    if(op.starts_with("history_") || op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load" || op=="export_results" || op=="action_settings") { // Autosave copies the project on the UI thread: leave out big results (re-running takes ~0.2 s) so there is no hitch.
-        std::size_t values=0;if(r.value("autosave",false)) for(const auto &dev:project.devices) {const auto &res=dev->result;if(res.contains("points") && res.contains("mesh_x_m"))values+=res.at("points").size()*res.at("mesh_x_m").size();if(dev->batchResult.contains("rows"))values+=dev->batchResult.at("rows").size()*30000;}
-        pending->workspace=Workspace(values<60000);
+    if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?*d.bandResult:*d.result;}
+    if(op.starts_with("history_") || op.starts_with("project_") || op.starts_with("device_") || op=="save" || op=="load" || op=="export_results" || op=="action_settings") { 
+        pending->workspace=Workspace();
     }
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status="running";
     if(op=="run") {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
     active=jobs->Submit(pending);if(!r.value("autosave",false)){status="Running: "+d.name;response=Json();}
+}
+void Workflow::StartSave(const Json &r) {
+    const bool autosave=r.value("autosave",false);
+    if(saveJob) { // one save at a time: remember the newest request (a manual one is not displaced by an autosave)
+        if(queuedSave.empty() || !autosave || queuedSave.value("autosave",false)) queuedSave=r;
+        if(!autosave) status="Saving... (queued)";
+        return;
+    }
+    auto op=CreateRef<Operation>(Current().document,r);op->request["operation"]="project_save";
+    op->workspace=Workspace(false);
+    for(std::size_t i=0;i<project.devices.size();++i) {
+        const auto &d=*project.devices[i];op->workspace["devices"][i]["selected_run"]=d.selectedRun;
+        op->shared.push_back({d.history.share(),d.result.share(),d.bandResult.share(),d.acResults.share(),d.batchResult.share()});
+    }
+    savePending=op;saveEpoch=epoch;savingAuto=autosave;saveJob=jobs->Submit(op);
+    if(!autosave) { // what is saved is clean; later edits mark the project dirty again
+        status="Saving...";projectDirty=false;
+        for(auto &d:project.devices) {d->metadataDirty=false;d->undo.MarkClean();}
+        RefreshDirty();
+    }
+}
+void Workflow::UpdateSave() {
+    if(saveJob) {
+        const auto snapshot=jobs->GetJob(saveJob);
+        if(snapshot && (snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running)) return;
+        const auto op=std::move(savePending);const bool autosave=savingAuto,sameProject=saveEpoch==epoch;saveJob=0;savePending.reset();
+        if(snapshot && snapshot->status==JobStatus::Completed) {
+            if(!autosave) {
+                const auto file=op->request.at("path").get<std::string>();
+                if(sameProject) path=file;
+                recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
+                if(!recoveryPath.empty()) {std::error_code ec;if(!std::filesystem::equivalent(file,recoveryPath,ec))std::filesystem::remove(recoveryPath,ec);}
+                status="Saved "+op->output.at("path").get<std::string>()+" ("+std::to_string(op->output.at("size_bytes").get<std::size_t>())+" bytes)";
+                if(!active) {response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();if(!lightResponse)response["operation_result"]=op->output;}
+            }
+        } else if(!autosave) {
+            if(sameProject) projectDirty=true;
+            status=snapshot?snapshot->errorMessage:std::string("Save failed");
+            if(!active) response=Failure("operation_failed",status);
+        }
+        RefreshDirty();
+    }
+    if(!saveJob && !queuedSave.empty()) {auto next=std::move(queuedSave);queuedSave=Json();StartSave(next);return;}
+    if(!saveJob && dirty && !recoveryPath.empty() && std::chrono::steady_clock::now()-autosavedAt>=std::chrono::seconds(30)) {
+        autosavedAt=std::chrono::steady_clock::now();StartSave({{"operation","project_save"},{"path",recoveryPath},{"autosave",true}});
+    }
 }
 Json Workflow::Dispatch(const Json &r) {
     try { CommandContext c; c.Set("request",r);
@@ -1019,9 +1066,7 @@ void Workflow::OnUpdate(float) {
     if(perf) {const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();if(ms>2)std::fprintf(stderr,"[perf] Workflow::OnUpdate %.1f ms (status: %s)\n",ms,status.c_str());}
 }
 void Workflow::UpdateOperation() {
-    if(!Busy() && dirty && !recoveryPath.empty() && std::chrono::steady_clock::now()-autosavedAt>=std::chrono::seconds(30)) {
-        autosavedAt=std::chrono::steady_clock::now();(void)Dispatch({{"operation","project_save"},{"path",recoveryPath},{"autosave",true}});
-    }
+    UpdateSave();
     if(!active) {
         if(!edits.empty()) {auto edit=std::move(edits.front());edits.pop_front();StartOperation(edit,edit.value("device_id",project.active_device));}
         else if(!queuedProject.empty()) {auto request=std::move(queuedProject);queuedProject=Json();StartOperation(request,project.active_device);}
@@ -1040,7 +1085,7 @@ void Workflow::UpdateOperation() {
     const auto op=pending->request.at("operation").get<std::string>();
     auto &d=Device(pendingDevice);
     const bool outValid=pending->output.is_object() && pending->output.value("valid",false);
-    auto Take=[&](Json &dst){if(lightResponse)dst=std::move(pending->output);else dst=pending->output;}; // UI app: move big results instead of copying
+    auto Take=[&](auto &dst){if(lightResponse)dst=std::move(pending->output);else dst=pending->output;}; // UI app: move big results instead of copying
             if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {
                 const auto group="batch-"+std::to_string(pending->output.at("provenance").at("time_unix_ms").get<std::int64_t>());
                 for(const auto &row:pending->output.at("rows")) {
@@ -1049,15 +1094,15 @@ void Workflow::UpdateOperation() {
                     for(const auto &parameter:BatchParameters(model)) if(row.at("parameters").contains(parameter.at("path").get<std::string>()) && row.at("parameters").at(parameter.at("path").get<std::string>())!=parameter.at("value")) model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=row.at("parameters").at(parameter.at("path").get<std::string>());
                     Json result=Json::object();for(const auto &[key,value]:pending->output.items()) if(key!="rows") result[key]=value; /* do not copy every row per row */ result["rows"]=Json::array({row});result["project_snapshot"]=model;result["provenance"]["device_hash"]=DocumentHash(model);
                     result["elapsed_s"]=row.at("elapsed_s");
-                    StoreRun(d.history,"batch",result,model,pending->request,project.ui.value("history_retention",5),group);
-                    if(!d.history.empty()) {const double t=pending->output.at("rows").size()<2?0.:double(&row-&pending->output.at("rows")[0])/double(pending->output.at("rows").size()-1);d.history.back()["colour"]=Json::array({.15+.7*t,.4+.3*std::sin(3.14159*t),.9-.7*t,1.});}
+                    StoreRun(d.history.mut(),"batch",result,model,pending->request,project.ui.value("history_retention",5),group);
+                    if(!d.history.empty()) {const double t=pending->output.at("rows").size()<2?0.:double(&row-&pending->output.at("rows")[0])/double(pending->output.at("rows").size()-1);d.history.mut().back()["colour"]=Json::array({.15+.7*t,.4+.3*std::sin(3.14159*t),.9-.7*t,1.});}
                 }
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
             }
     if(snapshot->status==JobStatus::Completed) {
         if(op=="project_new" || op=="project_load" || op=="load") {
             SetWorkspace(pending->workspace);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
-            path=op=="project_new"?std::string{}:pending->request.at("path").get<std::string>();
+            ++epoch;path=op=="project_new"?std::string{}:pending->request.at("path").get<std::string>();
             if(op!="project_new" && std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
             for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();device->needsBand=false;device->needsRecalculate=false;}
         } else if(op.starts_with("history_")) {
@@ -1069,9 +1114,6 @@ void Workflow::UpdateOperation() {
             if(op=="device_add" || op=="device_duplicate") Current().metadataDirty=true;
             if(op=="device_update") Device(pending->request.value("device_id",project.active_device)).metadataDirty=true;
             if(op=="device_remove") {(void)projectUndo.PushExecuted(CreateUnique<ProjectRecord>(*this,before,project));preferProjectUndo=true;}
-        } else if(op=="project_save" || (op=="save" && std::filesystem::path(pending->request.at("path").get<std::string>()).extension()==".scapslab")) {
-            if(!pending->request.value("autosave",false)) {path=pending->request.at("path");projectDirty=false;
-            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();}}
         } else {
             if((op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") && !pending->request.value("history",false) && d.document!=pending->document) {
                 (void)d.undo.PushExecuted(CreateUnique<EditRecord>(*this,d.document,pending->document,pending->request.value("gesture_id",std::string{})));preferProjectUndo=false;
@@ -1079,7 +1121,7 @@ void Workflow::UpdateOperation() {
             d.document=pending->document;
             const int retention=project.ui.value("history_retention",5);
             if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
-                StoreRun(d.history,op=="run"?"iv":op,pending->output,d.document,pending->request,retention);
+                StoreRun(d.history.mut(),op=="run"?"iv":op,pending->output,d.document,pending->request,retention);
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
             }
             if(op=="batch_select") d.selectedMember=pending->request.at("index");
@@ -1087,7 +1129,7 @@ void Workflow::UpdateOperation() {
             if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {Take(d.batchResult);projectDirty=true;}
             if(op=="run") {Take(d.result);d.bandResult=Json::object();}
             if(op=="band") Take(d.bandResult);
-            if(op=="cv" || op=="cf" || op=="qe") Take(d.acResults[op]);
+            if(op=="cv" || op=="cf" || op=="qe") Take(d.acResults.mut()[op]);
             if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=outValid?"solved":"failed";projectDirty=true;}
             if(op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") {
                 if(op=="import_def") {d.selectedLayer=0;d.selectedInterface=-1;}
@@ -1109,7 +1151,7 @@ void Workflow::UpdateOperation() {
         if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status=snapshot->status==JobStatus::Cancelled?(d.result.empty()?"no results":"solved"):"failed";
         status=snapshot->errorMessage;response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);
     }
-    if(!lightResponse && (op=="run_batch" || op=="retry_batch") && response.is_object()) response["batch_result"]=d.batchResult;
+    if(!lightResponse && (op=="run_batch" || op=="retry_batch") && response.is_object()) response["batch_result"]=*d.batchResult;
     if(pending->request.value("batch",false)) {
         ++batchCompleted;batchResponse.push_back({{"device_id",pendingDevice},{"ok",response.at("ok")},{"error",response.at("error")}});
         if(snapshot->status==JobStatus::Cancelled) runQueue.clear();

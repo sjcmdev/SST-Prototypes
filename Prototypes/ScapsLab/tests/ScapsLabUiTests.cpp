@@ -65,12 +65,12 @@ TEST(ScapsLab,UiAddsDefectAndMatchesYamlBitwise) {
     }
     EXPECT_TRUE(found);
     if(found) {io.AddMousePosEvent(button.x,button.y);io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}
-    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().document["layers"][0]["defects"].size(),1u);
     const auto path=std::filesystem::temp_directory_path()/"scapslab-ui-defect.yaml";WriteProject(w.Current().document,path.string());
     Workflow yaml(CreateRef<JobSystem>(nullptr,1));yaml.Current().document=ReadProject(path.string());
     EXPECT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());EXPECT_TRUE(yaml.Dispatch({{"operation","run"}}).at("ok").get<bool>());
-    while(w.Busy() || yaml.Busy()) {w.OnUpdate(0);yaml.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending() || yaml.Busy()) {w.OnUpdate(0);yaml.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().result.at("points"),yaml.Current().result.at("points"));EXPECT_EQ(w.Current().result.at("mesh_x_m"),yaml.Current().result.at("mesh_x_m"));
     for(std::size_t i=0;i<w.Current().result.at("points").size();++i) {
         const auto &a=w.Current().result.at("points")[i],&b=yaml.Current().result.at("points")[i];
@@ -129,10 +129,10 @@ TEST(ScapsLab,StructureThicknessDragIsUndoable) {
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1000,700));ImGui::Begin("Structure drag");panel.RenderContent();ImGui::End();ImGui::Render();};
     frame();frame();io.AddMousePosEvent(988,120);frame();frame();io.AddMouseButtonEvent(0,true);frame();
     io.AddMousePosEvent(968,120);frame();io.AddMouseButtonEvent(0,false);frame();
-    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_LT(w.Current().document["layers"][0]["thickness_m"].get<double>(),original["layers"][0]["thickness_m"].get<double>());
     EXPECT_TRUE(w.Dispatch({{"operation","undo"}}).at("ok").get<bool>());
-    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().document,original);ImPlot::DestroyContext();ImGui::DestroyContext();
 }
 
@@ -142,7 +142,7 @@ Json RunBatchViaUi(const Json &document,const Json &spec) {
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1100,1050));ImGui::Begin("Batch parity");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);};
     frame();frame();const auto button=ImGui::FindWindowByName("Batch parity")->GetID("Run batch");bool found=false;
     for(float y=40;y<1000 && !found;y+=4) {io.AddMousePosEvent(40,y);frame();frame();if(GImGui->HoveredId==button) {found=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
-    EXPECT_TRUE(found);while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();
+    EXPECT_TRUE(found);while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();
     auto result=w.Current().batchResult;ImPlot::DestroyContext();ImGui::DestroyContext();return result;
 }
 
@@ -162,7 +162,7 @@ Json RunLightViaUi() {
     bool tab=false;
     for(float y=45;y<150 && !tab;y+=2) for(float x=100;x<250 && !tab;x+=3) {io.AddMousePosEvent(x,y);frame();frame();if(GImGui->HoveredId==tabId) {tab=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
     EXPECT_TRUE(tab);EXPECT_TRUE(click("Calculate light I-V",75,60,220));
-    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();
     frame();frame();
     bool pvPlot=false;
     for(int i=0;i<GImPlot->Plots.GetBufSize();++i) if(auto *plot=GImPlot->Plots.GetByIndex(i);plot && plot->HasTitle() && std::string(plot->GetTitle())=="Light I-V") {
@@ -182,7 +182,7 @@ Json RunLightViaUi() {
 TEST(ScapsLab,GenerationRecombinationPanelHasNoConflictingIds) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string());
     ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).at("ok").get<bool>());
-    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.at("ok").get<bool>())<<w.response.dump();w.Current().result=w.Current().bandResult;
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1500,1600);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
     Panel panel(&w,22);
@@ -196,7 +196,7 @@ TEST(ScapsLab,HistoryControlsAndNumericRowsHaveNoConflictingIds) {
     io.DisplaySize=ImVec2(1600,1200);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).value("ok",false));
-    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.value("ok",false));
     Panel history(&w,15),parameters(&w,1);
     for(int view=0;view<2;++view) for(int frame=0;frame<30;++frame) {
@@ -215,7 +215,7 @@ TEST(ScapsLab,CurrentIvRemainsVisibleAfterAnotherTechniqueEvictsItsHistory) {
     w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};w.project.ui["history_retention"]=1;
     for(const auto *operation:{"run","band"}) {
         ASSERT_TRUE(w.Dispatch({{"operation",operation},{"voltage_V",0.}}).value("ok",false));
-        while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         ASSERT_TRUE(w.response.value("ok",false));
     }
     ASSERT_EQ(w.Current().history.size(),1);ASSERT_EQ(w.Current().history.front().at("kind"),"band");
@@ -233,12 +233,12 @@ TEST(ScapsLab,CompactHistoryRowsEditAndCollapseWithoutChangingTheSchema) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;
     io.DisplaySize=ImVec2(1200,1000);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    auto finish=[&] {while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();};
+    auto finish=[&] {while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();};
     ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).value("ok",false));finish();
     const auto seed=w.Current().history.front();w.project.ui["history_retention"]=20;
     for(int i=1;i<20;++i) {
         auto run=seed;run["run_id"]="compact-"+std::to_string(i);run["label"]="temperature_K 300 -> "+std::to_string(300+i);
-        run["group_id"]=i>=10?"sweep-1":"";run["profiles_stored"]=false;w.Current().history.push_back(run);
+        run["group_id"]=i>=10?"sweep-1":"";run["profiles_stored"]=false;w.Current().history.mut().push_back(run);
     }
     const auto deviceId=w.Current().id,runId=seed.at("run_id").get<std::string>();
     auto frame=[&] {

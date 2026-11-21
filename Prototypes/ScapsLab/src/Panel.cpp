@@ -94,7 +94,7 @@ const Json &HistoryResult(const DeviceState &device,const Json &run) {
 bool Archived(const DeviceState &,const Json &,const std::string &) {return false;} // live curve is always drawn; history draws only pinned shots (and batch runs)
 bool ShowRun(const Json &run) {return run.value("pinned",false) || run.at("kind")=="batch";}
 const Json *LiveRun(const DeviceState &d,const std::string &kind) {
-    const Json *res=kind=="iv"?&d.result:d.acResults.contains(kind)?&d.acResults.at(kind):nullptr;
+    const Json *res=kind=="iv"?&*d.result:d.acResults.contains(kind)?&d.acResults.at(kind):nullptr;
     if(!res || res->empty() || !res->contains("provenance"))return nullptr;
     for(auto it=d.history.rbegin();it!=d.history.rend();++it)if(it->at("kind")==kind && it->at("provenance")==res->at("provenance"))return &*it;
     return nullptr;
@@ -1020,7 +1020,7 @@ void Panel::Results() {
         selected=&run;
     }
     const bool bandOnly=view==5 && w->Current().result.empty() && !w->Current().bandResult.empty();
-    const auto &result=selected?HistoryResult(w->Current(),*selected):bandOnly?w->Current().bandResult:w->Current().result;
+    const auto &result=selected?HistoryResult(w->Current(),*selected):bandOnly?*w->Current().bandResult:*w->Current().result;
     const auto profileKind=selected?selected->at("kind").get<std::string>():bandOnly?"band":"iv";
     const auto &layers=(selected?selected->at("document"):w->Current().document).at("layers");
     double total=0;for(const auto &l:layers) total+=l.at("thickness_m").get<double>();
@@ -1032,7 +1032,7 @@ void Panel::Results() {
     const auto &band=w->Current().bandResult;
     const auto &p=selected?points[bias]:view==5?PointAtBias(w->Current().result,band,bias):points[bias];
     const bool preview=view==5 && !band.empty() && &p==&band.at("points")[0];
-    const auto &metrics=preview?band:result;
+    const auto &metrics=preview?(const Json &)band:result;
     ImGui::Text("%.2f ms | %d mesh nodes",metrics.value("compute_time_ms",0.0),metrics.value("mesh_node_count",0));
     w->Current().biasVoltage_V=p.at("voltage_V");
     ImGui::TextWrapped("Terminal %.5g V | internal %.5g V | %s | %d iterations",p.at("terminal_voltage_V").get<double>(),p.at("internal_voltage_V").get<double>(),p.at("status").get<std::string>().c_str(),p.at("iterations").get<int>());

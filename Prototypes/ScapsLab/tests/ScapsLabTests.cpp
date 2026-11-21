@@ -20,7 +20,7 @@ using namespace SST::ScapsLab;
 namespace {
 Json Execute(Workflow &w,const Json &r) {
     const auto started=w.Dispatch(r); if(!started.at("ok").get<bool>()) return started;
-    while(w.Busy()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));} return w.response;
+    while(w.Pending()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));} return w.response;
 }
 std::filesystem::path Temp(const char *name) {return std::filesystem::temp_directory_path()/name;}
 }
@@ -86,7 +86,7 @@ TEST(ScapsLab,EditsStableIdsValidationAndCancellation) {
     EXPECT_FALSE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",-1}}}}).at("ok").get<bool>()); EXPECT_EQ(w.Current().document,original);
     ASSERT_TRUE(w.jobs->PauseAllJobs()); ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>()); ASSERT_TRUE(w.jobs->ResumeAllJobs());
-    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_TRUE(w.Current().result.empty());
     auto bad=original;bad["temperature_K"]=-1;const auto path=Temp("scapslab-protected.yaml");
     std::string error,text;ASSERT_TRUE(TextFileIO::Save(Path{path},"original",error));EXPECT_THROW(WriteProject(bad,path.string()),std::exception);
@@ -150,7 +150,7 @@ TEST(ScapsLab,ACMatchesCoreAndExports) {
     EXPECT_EQ(w.Current().acResults,prior);
     ASSERT_TRUE(w.jobs->PauseAllJobs()); ASSERT_TRUE(w.Dispatch({{"operation","cf"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>()); ASSERT_TRUE(w.jobs->ResumeAllJobs());
-    while(w.Busy()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.response.at("error").at("code"),"cancelled"); EXPECT_EQ(w.Current().acResults,prior);
 }
 
@@ -168,23 +168,23 @@ TEST(ScapsLab,UndoMergesOnlyOneGesture) {
 TEST(ScapsLab,AutoRecalculateCancelsAndDebounces) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     ASSERT_TRUE(w.Dispatch({{"operation","auto_recalculate"},{"enabled",true}}).at("ok").get<bool>());
-    w.OnUpdate(0);EXPECT_FALSE(w.Busy());
+    w.OnUpdate(0);EXPECT_FALSE(w.Pending());
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
     const auto obsolete=w.active;
     ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());
     ASSERT_TRUE(w.jobs->ResumeAllJobs());
-    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.jobs->GetJob(obsolete)->status,JobStatus::Cancelled);EXPECT_EQ(w.Current().document.at("temperature_K"),301);
-    w.interacting=true;w.Current().changedAt-=std::chrono::seconds(1);w.OnUpdate(0);EXPECT_FALSE(w.Busy());
+    w.interacting=true;w.Current().changedAt-=std::chrono::seconds(1);w.OnUpdate(0);EXPECT_FALSE(w.Pending());
     w.interacting=false;w.Current().changedAt=std::chrono::steady_clock::now();const auto start=w.Current().changedAt;
-    while(!w.Busy() && std::chrono::steady_clock::now()-start<std::chrono::seconds(5)) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    ASSERT_TRUE(w.Busy());
+    while(!w.Pending() && std::chrono::steady_clock::now()-start<std::chrono::seconds(5)) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.Pending());
     EXPECT_GE((std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()),250.0);
-    while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.at("ok").get<bool>())<<w.response.dump();
     EXPECT_GT(w.Current().result.at("compute_time_ms").get<double>(),0);EXPECT_EQ(w.Current().result.at("mesh_node_count"),w.Current().result.at("mesh_x_m").size());
     std::cout<<"Auto-recalculate compute_ms="<<w.Current().result.at("compute_time_ms")<<"; edit-release-to-result_ms="<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<"; debounce_ms=250\n";
-    w.OnUpdate(0);EXPECT_FALSE(w.Busy());
+    w.OnUpdate(0);EXPECT_FALSE(w.Pending());
 }
 
 TEST(ScapsLab,BandRecalculationUsesSelectedVoltageAndPreservesSweep) {
@@ -202,7 +202,7 @@ TEST(ScapsLab,QueuedEditsKeepSeparateGestures) {
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
     for(int value:{301,302}) ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",value}}},{"gesture_id","first"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",303}}},{"gesture_id","second"}}).at("ok").get<bool>());
-    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().document.at("temperature_K"),303);EXPECT_EQ(w.Current().undo.GetUndoDepth(),2u);
     ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().document.at("temperature_K"),302);
 }
@@ -230,7 +230,7 @@ TEST(ScapsLab,StructuralChangesDoNotAcceptStaleEditorSnapshots) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);const auto count=w.Current().document.at("layers").size();
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","layer"},{"action","add"}}).at("ok").get<bool>());
     EXPECT_FALSE(w.Dispatch({{"operation","edit"},{"document",w.Current().document}}).at("ok").get<bool>());
-    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().document.at("layers").size(),count+1);
 }
 
@@ -301,7 +301,7 @@ TEST(ScapsLab,MultiDeviceIsolationHistoryAndOwnership) {
     EXPECT_EQ(w.Current().undo.GetUndoDepth(),0u);EXPECT_FALSE(w.Current().dirty);
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","device_select"},{"device_id",second}}).at("ok").get<bool>());
-    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.jobs->ResumeAllJobs());while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_TRUE(w.Current().result.empty());EXPECT_EQ(w.Device(first).result.at("points"),firstResult.at("points"));
     ASSERT_TRUE(Execute(w,{{"operation","device_remove"},{"device_id",second}}).at("ok").get<bool>());
     EXPECT_EQ(w.project.devices.size(),1u);ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());
@@ -312,7 +312,7 @@ TEST(ScapsLab,MultiDeviceIsolationHistoryAndOwnership) {
     ASSERT_TRUE(Execute(w,{{"operation","run_all"}}).at("ok").get<bool>())<<w.response.dump();EXPECT_EQ(w.response.at("runs").size(),2u);
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run_all"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>());ASSERT_TRUE(w.jobs->ResumeAllJobs());
-    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_TRUE(w.runQueue.empty());EXPECT_EQ(w.response.at("error").at("code"),"cancelled");EXPECT_EQ(w.response.at("runs").size(),1u);
 }
 TEST(ScapsLab,EveryExampleSolvesAndRoundtripsBitwise) {
@@ -426,7 +426,7 @@ TEST(ScapsLab,BatchFailedRowsRecorderRetryPersistenceAndPlotLab) {
 }
 TEST(ScapsLab,BatchStopRetainsCompletedAndCancelledMembers) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);auto spec=BatchDefaults();spec["axes"][0]["count"]=100;spec["voltages_V"]=Json::array({0.,0.05});ASSERT_TRUE(w.Dispatch({{"operation","run_batch"},{"spec",spec}}).at("ok").get<bool>());
-    bool progressed=false;for(int i=0;i<20000 && w.active;++i) {const auto job=w.jobs->GetJob(w.active);if(job && job->completedWork>=1){progressed=true;break;}w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}ASSERT_TRUE(progressed);ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>());while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    bool progressed=false;for(int i=0;i<20000 && w.active;++i) {const auto job=w.jobs->GetJob(w.active);if(job && job->completedWork>=1){progressed=true;break;}w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}ASSERT_TRUE(progressed);ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>());while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.response.at("error").at("code"),"cancelled");ASSERT_EQ(w.Current().batchResult.at("rows").size(),100);EXPECT_EQ(w.Current().batchResult.at("rows")[0].at("status"),"Converged");EXPECT_EQ(w.Current().batchResult.at("rows").back().at("status"),"Cancelled");
 }
 
@@ -595,7 +595,7 @@ TEST(ScapsLab,ContactExternalBalanceAndQeInternalVoltage) {
         const auto path=Temp("slgr3.scapslab");
         ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",path.string()},{"include_results",true}}).value("ok",false));
         ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",path.string()}}).value("ok",false));EXPECT_EQ(w.Current().acResults.at("qe"),qe);
-        for(auto &point:w.Current().acResults["qe"]["points"]) {point.erase("internal_voltage_V");point.erase("terminal_voltage_V");}
+        for(auto &point:w.Current().acResults.mut()["qe"]["points"]) {point.erase("internal_voltage_V");point.erase("terminal_voltage_V");}
         ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",path.string()},{"include_results",true}}).value("ok",false));
         ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",path.string()}}).value("ok",false));EXPECT_FALSE(w.Current().acResults.at("qe").at("points")[0].contains("internal_voltage_V"));
         std::filesystem::remove(path);
@@ -617,7 +617,7 @@ TEST(ScapsLab,SlioProjectRoundtripMigrationRecoveryAndOptionalResults) {
     EXPECT_EQ(w.Current().document.dump(),document.dump());EXPECT_EQ(w.Current().actions,actions);
     ASSERT_TRUE(Execute(w,{{"operation","run"}}).value("ok",false));EXPECT_EQ(w.Current().result.at("points").dump(),points.dump());
     w.recoveryPath=recovery.string();w.autosavedAt=std::chrono::steady_clock::now()-std::chrono::seconds(31);
-    w.OnUpdate(0);while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    w.OnUpdate(0);while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_TRUE(std::filesystem::exists(recovery));EXPECT_TRUE(w.dirty);EXPECT_EQ(w.path,file.string());
     ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",recovery.string()}}).value("ok",false));EXPECT_TRUE(w.dirty);EXPECT_TRUE(w.path.empty());EXPECT_EQ(w.Current().document,document);
     ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",file.string()},{"include_results",false}}).value("ok",false));
@@ -761,7 +761,7 @@ TEST(ScapsLab,LegacyWorkspaceIlluminationDefaultsAndLoadDuringCalculation) {
         ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok"));ASSERT_NE(w.active,0u);
         ASSERT_TRUE(w.Dispatch({{"operation",operation},{"path",file.string()}}).at("ok"));
         EXPECT_NE(w.status.find("Cancelling"),std::string::npos);
-        while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         ASSERT_TRUE(w.response.value("ok",false))<<w.response.dump();
         EXPECT_EQ(w.Current().document.at("illumination").at("mode"),"uniform");
         EXPECT_FALSE(w.Current().document.at("illumination").at("enabled").get<bool>());
@@ -844,4 +844,36 @@ TEST(ScapsLab,OpticalFileTablesRemainUsableWithoutOriginalFiles) {
     const auto file=Temp("scapslab-all-optical-profiles.yaml");WriteProject(embedded,file.string());const auto restored=ReadProject(file.string());
     EXPECT_EQ(restored["layers"][0]["absorption"]["composition"]["table_b_nm_m1"],embedded["layers"][0]["absorption"]["composition"]["table_b_nm_m1"]);
     EXPECT_EQ(restored["layers"][0]["defects"][0]["optical"]["electron_table_nm_m2"],embedded["layers"][0]["defects"][0]["optical"]["electron_table_nm_m2"]);std::filesystem::remove(file);
+}
+// Save is its own job: it runs beside a calculation, stores the state at snapshot time, and later edits keep the project dirty.
+TEST(ScapsLabSave,SaveDuringRunStoresSnapshotState) {
+    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    ASSERT_TRUE(Execute(w,{{"operation","run"}}).value("ok",false));
+    const auto before=w.Current().history.size(),pointsBefore=w.Current().result.at("points").size();ASSERT_EQ(before,1u);
+    const auto file=Temp("slsave-during-run.scapslab");std::filesystem::remove(file);
+    ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());ASSERT_NE(w.active,0u);
+    ASSERT_TRUE(w.Dispatch({{"operation","project_save"},{"path",file.string()}}).at("ok").get<bool>());
+    EXPECT_NE(w.active,0u);EXPECT_TRUE(w.Saving());EXPECT_EQ(w.status,"Saving...");
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(w.Current().history.size(),2u);EXPECT_TRUE(w.dirty); // the run finished after the snapshot
+    ASSERT_TRUE(std::filesystem::exists(file));
+    Workflow loaded(CreateRef<JobSystem>(nullptr,2));loaded.lightResponse=true;
+    ASSERT_TRUE(Execute(loaded,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));
+    EXPECT_EQ(loaded.Current().history.size(),before);EXPECT_EQ(loaded.Current().result.at("points").size(),pointsBefore);
+    std::filesystem::remove(file);
+}
+TEST(ScapsLabSave,AutosaveOfLargeProjectKeepsResults) {
+    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    ASSERT_TRUE(Execute(w,{{"operation","run"}}).value("ok",false));
+    auto spec=BatchDefaults();spec["axes"][0]["count"]=3;ASSERT_TRUE(Execute(w,{{"operation","run_batch"},{"spec",spec}}).value("ok",false));
+    const auto recovery=Temp("slsave-autosave.scapslab");std::filesystem::remove(recovery);
+    w.recoveryPath=recovery.string();w.autosavedAt=std::chrono::steady_clock::now()-std::chrono::seconds(31);
+    ASSERT_TRUE(w.dirty);w.OnUpdate(0);EXPECT_TRUE(w.Saving());EXPECT_EQ(w.active,0u);
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_TRUE(w.dirty); // autosave never cleans the project
+    Workflow loaded(CreateRef<JobSystem>(nullptr,2));loaded.lightResponse=true;
+    ASSERT_TRUE(Execute(loaded,{{"operation","project_load"},{"path",recovery.string()}}).value("ok",false));
+    EXPECT_EQ(loaded.Current().result.at("points").size(),w.Current().result.at("points").size());
+    EXPECT_EQ(loaded.Current().batchResult.at("rows").size(),3u);EXPECT_FALSE(loaded.Current().history.empty());
+    std::filesystem::remove(recovery);
 }

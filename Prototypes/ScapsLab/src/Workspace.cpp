@@ -138,7 +138,7 @@ Json Workflow::Workspace(bool withResults) const {
     static const Json none=Json::object(),noHistory=Json::array();
     Json devices=Json::array();
     for(const auto &d:project.devices) devices.push_back({{"id",d->id},{"name",d->name},{"colour",d->colour},{"description",d->description},
-        {"history",withResults?d->history:noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",withResults?d->result:none},{"band_result",withResults?d->bandResult:none},{"ac_results",withResults?d->acResults:none},{"batch_result",withResults?d->batchResult:none},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",withResults?d->status:std::string("no results")}});
+        {"history",withResults?*d->history:noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",withResults?*d->result:none},{"band_result",withResults?*d->bandResult:none},{"ac_results",withResults?*d->acResults:none},{"batch_result",withResults?*d->batchResult:none},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",withResults?d->status:std::string("no results")}});
     return {{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}};
 }
 void Workflow::SetWorkspace(const Json &value) {
@@ -262,7 +262,7 @@ void Workflow::SetWorkspace(const Json &value) {
         const auto id=item.at("id").get<std::string>();Ref<DeviceState> state;
         for(const auto &existing:project.devices) if(existing->id==id) state=existing;
         if(!state) state=CreateRef<DeviceState>();
-        state->history=item.value("history",Json::array());TrimHistory(state->history,retention);
+        state->history=item.value("history",Json::array());TrimHistory(state->history.mut(),retention);
         state->selectedRun=item.value("selected_run",std::string{});
         if(std::none_of(state->history.begin(),state->history.end(),[&](const Json &r){return r.at("run_id")==state->selectedRun;}))state->selectedRun.clear();
         const auto selection=item.value("selection",Json::object());
@@ -279,7 +279,7 @@ void Workflow::RefreshDirty() {for(auto &d:project.devices) d->dirty=d->metadata
 Json Workflow::Snapshot() const {
     const auto &d=*std::find_if(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==project.active_device;});
     Json list=Json::array();for(const auto &item:project.devices) list.push_back({{"device_id",item->id},{"name",item->name},{"description",item->description},{"colour",item->colour},{"status",item->status},{"dirty",item->dirty},{"compare",project.compare_set.contains(item->id)}});
-    return {{"ok",true},{"history",d->history},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",d->result},{"band_result",d->bandResult},{"ac_results",d->acResults},{"batch_result",d->batchResult},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},
+    return {{"ok",true},{"history",*d->history},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",*d->result},{"band_result",*d->bandResult},{"ac_results",*d->acResults},{"batch_result",*d->batchResult},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},
         {"devices",list},{"active_device",project.active_device},{"project",Workspace()},{"runs",Runs()},{"dirty",dirty},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"error",nullptr}};
 }
 }

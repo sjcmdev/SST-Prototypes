@@ -163,7 +163,7 @@ Json VerifyTutorial(const std::string &id) {
     workflow.Current().document=ReadProject(SCAPSLAB_PROJECT);
     const auto started=workflow.Dispatch({{"operation","tutorial_start"},{"tutorial_id",id},{"mode","verify"}});
     if (!started.value("ok",false)) return {{"schema_version",1},{"tutorial_id",id},{"status","failed"},{"ok",false},{"error",started.at("error")},{"steps",Json::array()}};
-    while (workflow.tutorial.Automatic() || workflow.Busy()) {
+    while (workflow.tutorial.Automatic() || workflow.Pending()) {
         workflow.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     return workflow.tutorial.Report();

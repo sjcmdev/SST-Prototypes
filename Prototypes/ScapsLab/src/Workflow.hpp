@@ -8,6 +8,7 @@
 #include "Core/Presentation/Tutorial.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
 #include <chrono>
+#include <array>
 #include <deque>
 #include <set>
 #include <scaps_core/device_project.hpp>
@@ -43,6 +44,7 @@ void CompactHistory(Json &workspace);
 class Operation final : public IJob {
 public:
     Json document, request, output, acResults, workspace, batchResult;
+    std::vector<std::array<Ref<const Json>,5>> shared; // save jobs: history,result,band,ac,batch per device (immutable, shared with the UI)
     Json batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
     Operation(Json d, Json r) : document(std::move(d)), request(std::move(r)) {}
     std::string GetName() const override { return "ScapsLab " + request.at("operation").get<std::string>(); }
@@ -50,14 +52,39 @@ public:
     void Execute(JobContext &context) override;
 };
 bool BatchOperation(Operation &operation,JobContext &context);
+// Copy-on-write JSON: a save job shares the pointer (O(1) snapshot); writers use mut()/assignment, which never touch a shared value.
+class Cow {
+    Ref<Json> p;
+public:
+    Cow(Json v=Json::object()):p(CreateRef<Json>(std::move(v))) {}
+    Cow &operator=(Json v) {p=CreateRef<Json>(std::move(v));return *this;}
+    operator const Json &() const {return *p;}
+    const Json &operator*() const {return *p;}
+    const Json *operator->() const {return p.get();}
+    Json &mut() {if(p.use_count()>1)p=CreateRef<Json>(*p);return *p;}
+    Ref<const Json> share() const {return p;}
+    template<class K> bool contains(K &&k) const {return p->contains(std::forward<K>(k));}
+    template<class K> const Json &at(K &&k) const {return p->at(std::forward<K>(k));}
+    template<class K> const Json &operator[](K &&k) const {return (*p)[std::forward<K>(k)];}
+    bool empty() const {return p->empty();}
+    std::size_t size() const {return p->size();}
+    auto begin() const {return p->begin();} auto end() const {return p->end();}
+    auto rbegin() const {return p->rbegin();} auto rend() const {return p->rend();}
+    const Json &back() const {return p->back();} const Json &front() const {return p->front();}
+    template<class... A> auto value(A &&...a) const {return p->value(std::forward<A>(a)...);}
+    std::string dump(int i=-1) const {return p->dump(i);}
+    bool operator==(const Json &o) const {return *p==o;}
+    bool operator==(const Cow &o) const {return *p==*o.p;}
+};
 struct DeviceState {
     std::string id, name, description, status = "no results";
     Json colour = Json::array({0.25, 0.65, 0.95, 1.0});
-    Json document, bandResult = Json::object(), result = Json::object(), acResults = Json::object();
+    Json document;
+    Cow bandResult{Json::object()}, result{Json::object()}, acResults{Json::object()};
     Json actions=Json::object();
-    Json batchResult=Json::object(), batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
+    Cow batchResult{Json::object()};Json batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
     int selectedMember=0;
-    Json history=Json::array();
+    Cow history{Json::array()};
     std::string selectedRun;
     UndoStack undo;
     bool dirty = false, metadataDirty = false, needsBand = false, needsRecalculate = false;
@@ -122,9 +149,19 @@ public:
     std::string recoveryPath;
     std::chrono::steady_clock::time_point autosavedAt=std::chrono::steady_clock::now();
     void Changed();
+    // Save/autosave run as their own Core job beside `active`; one at a time, the next request is coalesced.
+    JobId saveJob = 0;
+    Ref<Operation> savePending;
+    Json queuedSave;
+    bool savingAuto = false;
+    unsigned epoch = 0, saveEpoch = 0; // bumped when a project is loaded/new
+    bool Saving() const { return saveJob != 0 || !queuedSave.empty(); }
+    void StartSave(const Json &request);
+    void UpdateSave();
     Json Dispatch(const Json &request);
     void OnUpdate(float) override;
     void UpdateOperation();
+    bool Pending() const { return Busy() || Saving(); } // calculations or saves
     bool Busy() const { return active != 0 || !queuedProject.empty() || !edits.empty() || !runQueue.empty(); }
 };
 void RegisterPython();

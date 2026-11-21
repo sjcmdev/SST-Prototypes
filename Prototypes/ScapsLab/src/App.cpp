@@ -106,7 +106,7 @@ class ScapsCloseGuard final : public Layer {
     }
 public:
     ScapsCloseGuard(Application &app,ScapsLab::Workflow &w,std::vector<Ref<ScapsLab::Panel>> panels):Layer("ScapsLab file actions"),app(app),w(w),panels(std::move(panels)) {
-        app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Busy())return true;creating=false;closing=true;requested=true;return false;});
+        app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Pending())return true;creating=false;closing=true;requested=true;return false;});
         if(const auto config=app.GetConfigManager().lock()) recentPath=config->GetConfigDirectory()/Path{"scapslab-recent.json"};
         std::string text,error;if(TextFileIO::Load(recentPath,text,error)) {try {const auto items=ScapsLab::Json::parse(text);if(items.is_array() && items.size()<=10 && std::all_of(items.begin(),items.end(),[](const auto &p){return p.is_string();})) w.recent=items;}catch(...) {}}
         savedRecent=w.recent;
@@ -134,8 +134,8 @@ public:
                 std::pair{ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S,"scapslab.file.save_as"},std::pair{ImGuiMod_Ctrl | ImGuiKey_O,"scapslab.file.open"}})
                 if(ImGui::Shortcut(chord) && w.commands->CanExecute(CommandID{id}))(void)w.commands->Execute(CommandID{id});
         }
-        if((!w.openRequest.empty() || !w.fileAction.empty()) && w.Busy()) w.status="Project action queued; waiting for the current calculation or pending edits";
-        if(!w.fileAction.empty() && !w.Busy()) {
+        if((!w.openRequest.empty() || !w.fileAction.empty()) && w.Pending()) w.status="Project action queued; waiting for the current calculation or pending edits";
+        if(!w.fileAction.empty() && !w.Pending()) {
             const auto action=std::exchange(w.fileAction,std::string{});
             if(action=="new") {creating=true;closing=false;if(w.dirty)requested=true;else Proceed();}
             else if(action=="exit") {if(!w.dirty)app.Shutdown();else {creating=false;closing=true;requested=true;}}
@@ -173,17 +173,19 @@ public:
                 ImGui::TextWrapped("%s",w.status.c_str());
             }ImGui::End();
         }
-        if(!w.openRequest.empty() && !w.Busy()) {opening=std::exchange(w.openRequest,std::string{});creating=false;closing=false;if(w.dirty)requested=true;else Proceed();}
+        if(!w.openRequest.empty() && !w.Pending()) {opening=std::exchange(w.openRequest,std::string{});creating=false;closing=false;if(w.dirty)requested=true;else Proceed();}
         if(requested) {ImGui::OpenPopup("Unsaved ScapsLab project");requested=false;}
         if(ImGui::BeginPopupModal("Unsaved ScapsLab project",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextUnformatted(closing?"Save changes before closing?":creating?"Save changes before creating a new project?":"Save changes before opening another project?");
             ImGui::TextWrapped("%s",w.status.c_str());
+            if(w.Saving()) ImGui::TextUnformatted("Saving the project, please wait...");
+            else if(closing && !w.dirty && !w.Busy() && !saving) {Proceed();ImGui::CloseCurrentPopup();} // save finished while the close popup was up
             if(w.Busy()) ImGui::TextUnformatted("Wait for the active operation or cancel it in Devices / Run.");
             ImGui::BeginDisabled(w.Busy() || saving);
             if(ImGui::Button("Save and continue")) saving=Save();
             ImGui::SameLine();if(ImGui::Button("Discard")) {Proceed();ImGui::CloseCurrentPopup();}
             ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Keep editing")) {saving=false;opening.clear();creating=false;closing=false;ImGui::CloseCurrentPopup();}
-            if(saving && !w.Busy()) {saving=false;if(w.response.value("ok",false) && !w.dirty) {Proceed();ImGui::CloseCurrentPopup();}}
+            if(saving && !w.Pending()) {saving=false;if(w.response.value("ok",false) && !w.dirty) {Proceed();ImGui::CloseCurrentPopup();}}
             ImGui::EndPopup();
         }
     }
@@ -199,7 +201,7 @@ void SetupApplication(Application &app) {
     if(std::getenv("SCAPSLAB_EXPERIMENTAL")) ExperimentalPanels()=std::string(std::getenv("SCAPSLAB_EXPERIMENTAL"))=="1";
     auto state=CreateUnique<Workflow>(app.GetJobSystemHandle().lock(),app.GetCommandRegistryHandle().lock()); auto *w=state.get();
     w->Current().document=ReadProject(SCAPSLAB_PROJECT); w->Current().name=w->Current().document.at("case_id");w->path="";
-    if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}
+    if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}
     const char *gallery=std::getenv("SCAPSLAB_GALLERY_PANEL");
     w->lightResponse=true;
     w->autoRecalculateBand=true;
@@ -219,12 +221,12 @@ void SetupApplication(Application &app) {
         auto sheet=NewDefect(true);sheet["id"]="interface-preview";sheet["energy_distribution"]="gaussian";sheet["energy_offset_eV"]=0.5;sheet["Nt_m2"]=1e11;
         draft["interface_defects"]=Json::array({sheet});draft["external"]["area_m2"]=1e-4;draft["external"]["series_ohm_m2"]=1e-5;draft["external"]["shunt_ohm_m2"]=1.;
         (void)w->Dispatch({{"operation","edit"},{"document",draft}});
-        while(w->Busy()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         w->Current().selectedInterface=0;
     }
     if(gallery && (std::atoi(gallery)>=19 || std::getenv("SCAPSLAB_GALLERY_PN")) && startupFile.empty()) {
         (void)w->Dispatch({{"operation","edit"},{"document",ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string())}});
-        while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     if(gallery && std::atoi(gallery)==22 && startupFile.empty()) {
         auto draft=w->Current().document;draft["external"]["series_ohm_m2"]=1e-5;draft["external"]["shunt_ohm_m2"]=1.;
@@ -232,37 +234,37 @@ void SetupApplication(Application &app) {
         for(auto &layer:draft["layers"]) layer["recombination"]={{"radiative_cm3_s",1e-14},{"auger_n_cm6_s",2.8e-31},{"auger_p_cm6_s",1e-31}};
         auto sheet=NewDefect(true);sheet["id"]="gr-interface";sheet["Nt_m2"]=1e10;draft["interface_defects"].push_back(sheet);
         (void)w->Dispatch({{"operation","edit"},{"document",draft}});
-        while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         w->Current().selectedBias=10;
     }
     if(gallery && startupFile.empty()) {
         (void)w->Dispatch({{"operation",std::atoi(gallery)>=11 && std::atoi(gallery)<19?"band":"run"},{"voltage_V",0.05}});
-        while(w->Busy()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     if(gallery && std::atoi(gallery)==19 && std::getenv("SCAPSLAB_OPTICAL_TAB") && std::string(std::getenv("SCAPSLAB_OPTICAL_TAB"))=="2") {
         (void)w->Dispatch({{"operation","edit"},{"patch",{{"external",{{"series_ohm_m2",1e-5},{"shunt_ohm_m2",1.}}}}}});
-        while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         (void)w->Dispatch({{"operation","qe"},{"start_nm",300.},{"stop_nm",1500.},{"points",61}});
-        while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     if(gallery && std::atoi(gallery)>=16 && std::atoi(gallery)<=18) {
         auto settings=BatchDefaults();settings["axes"][0]["count"]=5;
         (void)w->Dispatch({{"operation","batch_settings"},{"spec",settings}});
-        while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         (void)w->Dispatch({{"operation","run_batch"}});
-        while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     const bool single=gallery && std::string(gallery)!="default";
     if(gallery && startupFile.empty() && (!single || (std::atoi(gallery)>=6 && std::atoi(gallery)<10))) {
         for(const auto *kind:{"cv","cf"}) {
             (void)w->Dispatch({{"operation",kind},{"start_V",-0.5},{"stop_V",0.5},{"step_V",0.05},{"frequency_Hz",1e4},
                 {"voltage_V",0.0},{"start_Hz",10.0},{"stop_Hz",1e7},{"points",61},{"temperature_K",w->Current().document.at("temperature_K")}});
-            while(w->Busy()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+            while(w->Pending()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         }
     }
     if(std::getenv("SCAPSLAB_GALLERY_DIRTY")) {
         (void)w->Dispatch({{"operation","project_edit"},{"name",w->project.name+" (edited)"}});
-        while(w->Busy()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+        while(w->Pending()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     auto &editor=app.GetEditorLayer();
     std::vector<Ref<Panel>> panels;

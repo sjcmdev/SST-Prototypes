@@ -9,7 +9,7 @@ using namespace SST::ScapsLab;
 namespace {
 Json Exec(Workflow &w,const Json &r) {
     const auto started=w.Dispatch(r); if(!started.at("ok").get<bool>()) return started;
-    while(w.Busy()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));} return w.response;
+    while(w.Pending()) {w.OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(1));} return w.response;
 }
 }
 // Every shipped example opens, and every device's I-V calculates without error. Prints the compute time per device.

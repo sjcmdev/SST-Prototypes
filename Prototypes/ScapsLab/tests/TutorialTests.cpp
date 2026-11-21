@@ -95,9 +95,9 @@ TEST_P(ScapsLabTutorialVerify,LearnAndDemoUseTheSameCommandsAndPassEveryStep) {
         Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
         ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id",GetParam()},{"mode",mode}}).value("ok",false));
         int ticks=0;
-        while(w.tutorial.Active() || w.Busy()) {
+        while(w.tutorial.Active() || w.Pending()) {
             ASSERT_LT(++ticks,120000)<<w.tutorial.Report().dump();
-            if(std::string(mode)=="learn" && !w.Busy() && w.tutorial.Active()) {
+            if(std::string(mode)=="learn" && !w.Pending() && w.tutorial.Active()) {
                 if(w.tutorial.AlreadyDone()) w.tutorial.Skip(); // condition held at step start: learn waits for the user's Next
                 else {
                 auto command=w.tutorial.Step()->at("command");
@@ -134,7 +134,7 @@ TEST(ScapsLabTutorial,LearnPersistsProgressAndVerifyDoesNotWriteUserConfig) {
     EXPECT_EQ(w.tutorial.Report().at("step_index"),1);
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_stop"}}).value("ok",false));
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","first-device"},{"mode","verify"}}).value("ok",false));
-    while(w.tutorial.Automatic() || w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.tutorial.Automatic() || w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.tutorial.Report().at("status"),"passed");EXPECT_EQ(w.tutorialProgress,progress);
     std::filesystem::remove(path,ec);
 }
@@ -142,7 +142,7 @@ TEST(ScapsLabTutorial,NewProjectUsesJobPathAndResetsProjectState) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     w.path="previous.scapslab";w.project.name="Previous";w.projectDirty=true;
     const auto started=w.Dispatch({{"operation","project_new"}});ASSERT_TRUE(started.value("ok",false));EXPECT_NE(w.active,0);
-    while(w.Busy()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.value("ok",false))<<w.response.dump();EXPECT_TRUE(w.path.empty());EXPECT_FALSE(w.dirty);
     EXPECT_EQ(w.project.name,"Untitled project");EXPECT_EQ(w.project.devices.size(),1);EXPECT_TRUE(w.Current().history.empty());
 }
@@ -189,11 +189,11 @@ TEST(ScapsLabHistory,OffscreenCompactTable) {
     w.project.ui["history_retention"]=20;
     for(int i=0;i<20;++i) {
         auto document=w.Current().document;document["temperature_K"]=300.+i;
-        StoreRun(w.Current().history,"iv",{{"provenance",{{"time_unix_ms",1795161600000LL+i*1000}}}},document,Json::object(),20,i>=15?"temperature-sweep":"");
-        w.Current().history.back()["profiles_stored"]=false;
+        StoreRun(w.Current().history.mut(),"iv",{{"provenance",{{"time_unix_ms",1795161600000LL+i*1000}}}},document,Json::object(),20,i>=15?"temperature-sweep":"");
+        w.Current().history.mut().back()["profiles_stored"]=false;
     }
-    w.Current().history.front()["name"]="Reference";w.Current().history.front()["pinned"]=true;
-    w.Current().history[1]["visible"]=false;
+    w.Current().history.mut().front()["name"]="Reference";w.Current().history.mut().front()["pinned"]=true;
+    w.Current().history.mut()[1]["visible"]=false;
     w.Current().selectedRun=w.Current().history.front().at("run_id");
     auto second=CreateRef<DeviceState>();second->id="second";second->name="Second device";second->document=w.Current().document;
     second->history=Json::array({w.Current().history.back()});w.project.devices.push_back(second);
@@ -326,7 +326,7 @@ TEST_P(ScapsLabTutorialUi,EveryStepTargetIsVisibleAndArrowTipClearsIt) {
         if(command.value("run_id",std::string{})=="$selected_run")command["run_id"]=w.Current().selectedRun;
         ASSERT_TRUE(w.Dispatch(command).value("ok",false))<<w.response.dump();}
         int ticks=0;
-        while(w.tutorial.Active() && (w.Busy() || w.tutorial.Step()->at("id").get<std::string>()==stepId)) {
+        while(w.tutorial.Active() && (w.Pending() || w.tutorial.Step()->at("id").get<std::string>()==stepId)) {
             ASSERT_LT(++ticks,120000)<<lesson<<"/"<<stepId<<" never completed";
             w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
