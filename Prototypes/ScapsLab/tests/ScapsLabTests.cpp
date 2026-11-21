@@ -608,7 +608,7 @@ TEST(ScapsLab,ContactExternalBalanceAndQeInternalVoltage) {
         const auto path=Temp("slgr3.scapslab");
         ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",path.string()},{"include_results",true}}).value("ok",false));
         ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",path.string()}}).value("ok",false));EXPECT_EQ(w.Current().acResults.at("qe"),qe);
-        for(auto &point:w.Current().acResults.mut()["qe"]["points"]) {point.erase("internal_voltage_V");point.erase("terminal_voltage_V");}
+        {auto j=w.Current().acResults.at("qe");for(auto &point:j["points"]) {point.erase("internal_voltage_V");point.erase("terminal_voltage_V");}w.Current().acResults.set("qe",CreateRef<const AcResult>(AcFromJson(j)));}
         ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",path.string()},{"include_results",true}}).value("ok",false));
         ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",path.string()}}).value("ok",false));EXPECT_FALSE(w.Current().acResults.at("qe").at("points")[0].contains("internal_voltage_V"));
         std::filesystem::remove(path);
@@ -721,10 +721,10 @@ TEST(ScapsLab,ImmutableHistoryRetentionClearUndoAndPersistence) {
         ASSERT_TRUE(Execute(w,{{"operation","run"}}).value("ok",false))<<w.response.dump();
     }
     ASSERT_EQ(w.Current().history.size(),20);
-    const auto first=w.Current().history.front();const auto id=first.at("run_id");
+    const auto first=w.Current().history.front();const auto id=first.at("run_id");const auto firstResult=w.Current().RunResult(id);ASSERT_TRUE(firstResult);
     ASSERT_TRUE(Execute(w,{{"operation","history_update"},{"run_id",id},{"pinned",true},{"name","Reference"},{"visible",false},{"colour",{.1,.2,.3,1.}}}).value("ok",false));
     ASSERT_TRUE(Execute(w,{{"operation","edit"},{"patch",{{"temperature_K",330.}}}}).value("ok",false));
-    EXPECT_EQ(w.Current().status,"previous");EXPECT_EQ(w.Current().history.front().at("result"),first.at("result"));
+    EXPECT_EQ(w.Current().status,"previous");EXPECT_EQ(w.Current().RunResult(id),firstResult);EXPECT_FALSE(w.Current().history.front().contains("result"));
     ASSERT_FALSE(w.Current().history.back().at("diff").empty());
     auto before=w.Workspace();auto damaged=before;damaged["devices"][0]["history"][0]["result"].erase("points");EXPECT_THROW(w.SetWorkspace(damaged),std::exception);EXPECT_EQ(w.Workspace(),before);
     const auto file=Temp("slhist1-20.scapslab");
@@ -930,29 +930,50 @@ TEST(ScapsLab,EventsAndNotifierSequence) {
     ASSERT_EQ(w.notifier->GetHistory().size(),1u);EXPECT_EQ(w.notifier->GetHistory()[0].severity,NotificationSeverity::Error);EXPECT_EQ(w.notifier->GetHistory()[0].title,"Load failed");
 }
 TEST(ScapsLab,TypedResultsRoundtripJson) {
-    auto same=[](const Json &typed,const Json &src){EXPECT_EQ(typed.dump(),Json::parse(src.dump()).dump());}; // dump normalises NaN to null
+    // The typed result is the stored form; Json(typed) must dump exactly like the Json it came from (file contents, or the job output).
+    auto same=[](const Json &typed,const Json &src,const std::string &what){EXPECT_EQ(typed.dump(),Json::parse(src.dump()).dump())<<what;}; // dump normalises NaN to null
     std::size_t checked=0;
     for(const auto &entry:std::filesystem::directory_iterator(SCAPSLAB_EXAMPLES)) if(entry.path().extension()==".scapslab") {
+        std::string text,error;ASSERT_TRUE(TextFileIO::Load(Path{entry.path().string()},text,error));
+        const auto raw=UnpackResults(Json::parse(text));
         Workflow w(CreateRef<JobSystem>(nullptr,1));
         ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",entry.path().string()}}).at("ok").get<bool>());
-        ASSERT_TRUE(Execute(w,{{"operation","run_all"}}).at("ok").get<bool>());
-        if(entry.path().filename()=="05-capacitance-ready.scapslab") for(const auto *kind:{"cv","cf"})
-            ASSERT_TRUE(Execute(w,{{"operation",kind},{"temperature_K",300},{"start_V",-0.1},{"stop_V",0.1},{"step_V",0.1},{"frequency_Hz",1e4},{"voltage_V",0},{"start_Hz",10},{"stop_Hz",1e4},{"points",3}}).at("ok").get<bool>());
-        for(const auto &d:w.project.devices) {
-            const auto iv=d->Iv();ASSERT_EQ(iv->points.size(),d->result.at("points").size());++checked;
-            EXPECT_EQ(iv.get(),d->Iv().get()); // converted once
-            same(ToJson(*iv),*d->result);
-            for(std::size_t i=0;i<iv->points.size();++i) {EXPECT_FALSE(iv->points[i].x_m.empty());EXPECT_EQ(iv->points[i].status,"Converged");}
-            same(ToJson(*d->Band()),*d->bandResult);
-            for(const auto &[kind,r]:d->acResults->items()) {const auto ac=d->Ac(kind);EXPECT_EQ(ac->points.size(),r.at("points").size());same(ToJson(*ac),r);}
+        for(std::size_t i=0;i<w.project.devices.size();++i) {
+            const auto &d=*w.project.devices[i];const auto &src=raw.at("devices")[i];
+            same(d.result.empty()?Json::object():d.result.typed()->Dump(),src.value("result",Json::object()),"result");
+            same(d.bandResult.empty()?Json::object():d.bandResult.typed()->Dump(),src.value("band_result",Json::object()),"band");
+            same(d.acResults.json(),src.value("ac_results",Json::object()),"ac");
+            same(d.batchResult.empty()?Json::object():d.batchResult.typed()->Dump(),src.value("batch_result",Json::object()),"batch");
+            same(HistoryJson(*d.history,*d.runs),src.value("history",Json::array()),"history");
+            ++checked;
         }
     }
     EXPECT_GT(checked,0u);
-    // non-converged / null values become NaN and are written back as null; unknown keys survive
-    const Json j={{"mesh_x_m",{0.,1.}},{"extra",{{"a",1}}},{"points",Json::array({{{"status","Failed"},{"J_A_m2",nullptr},{"voltage_V",0.5},{"iterations",7},{"x_m",{0.,nullptr}},{"mystery",3}}})}};
+    // fresh job output: the response carries the output Json (non-light mode); the stored typed result must dump identically
+    Workflow w(CreateRef<JobSystem>(nullptr,1));
+    for(const auto &entry:std::filesystem::directory_iterator(SCAPSLAB_EXAMPLES)) if(entry.path().filename()=="05-capacitance-ready.scapslab") {
+        ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",entry.path().string()}}).at("ok").get<bool>());
+        auto out=Execute(w,{{"operation","run"}});ASSERT_TRUE(out.at("ok").get<bool>());same(w.Current().Iv()->Dump(),out.at("operation_result"),"run");EXPECT_EQ(w.Current().Iv().get(),w.Current().result.typed().get());
+        out=Execute(w,{{"operation","band"},{"voltage_V",0.}});ASSERT_TRUE(out.at("ok").get<bool>());same(w.Current().Band()->Dump(),out.at("operation_result"),"band");
+        for(const auto *kind:{"cv","cf"}) {
+            out=Execute(w,{{"operation",kind},{"temperature_K",300},{"start_V",-0.1},{"stop_V",0.1},{"step_V",0.1},{"frequency_Hz",1e4},{"voltage_V",0},{"start_Hz",10},{"stop_Hz",1e4},{"points",3}});
+            ASSERT_TRUE(out.at("ok").get<bool>());same(w.Current().Ac(kind)->Dump(),out.at("operation_result"),kind);EXPECT_FALSE(w.Current().Ac(kind)->empty());
+        }
+        EXPECT_EQ(w.Current().RunResult(w.Current().history.back().at("run_id").get<std::string>()),w.Current().acResults.get("cf")); // history and live share one typed result
+    }
+    // non-converged / null values become NaN and are written back as null; unknown keys survive; integers stay integers
+    const Json j={{"mesh_x_m",{0.,1.}},{"extra",{{"a",1}}},{"points",Json::array({{{"status","Failed"},{"J_A_m2",nullptr},{"voltage_V",0.5},{"iterations",7},{"x_m",{0.,nullptr}},{"mystery",3},{"int_as_double",2},{"big",Json::array({1.,2.,3.,4.,5.,6.,7.,8.,9.})}}})}};
     const auto r=IvFromJson(j);ASSERT_EQ(r.points.size(),1u);
     EXPECT_TRUE(std::isnan(r.points[0].J_A_m2));EXPECT_TRUE(std::isnan(r.points[0].x_m[1]));EXPECT_EQ(r.points[0].iterations,7);EXPECT_EQ(r.mesh_x_m.size(),2u);
-    EXPECT_EQ(ToJson(r).dump(),j.dump());EXPECT_EQ(ToJson(IvFromJson(Json::object())),Json::object());
+    EXPECT_EQ(ToJson(r).dump(),j.dump());EXPECT_TRUE(IvFromJson(Json::object()).Dump()==Json::object());
+    // integers where doubles are expected are kept verbatim (never written back as 1.0)
+    const Json ints={{"mesh_x_m",{0,1}},{"points",Json::array({{{"voltage_V",1},{"J_A_m2",2},{"x_m",{1,2}}}})}};
+    EXPECT_EQ(ToJson(IvFromJson(ints)).dump(),ints.dump());
+    // identical arrays are interned: two points with the same mesh share one column
+    Json twin=Json::array();for(int i=0;i<2;++i)twin.push_back({{"x_m",Json::array({0.,1.,2.,3.,4.,5.,6.,7.,8.})},{"voltage_V",double(i)}});
+    const auto shared=IvFromJson({{"points",twin}});EXPECT_EQ(shared.points[0].x_m.id(),shared.points[1].x_m.id());
+    // profile dropping keeps curve and scalars and clears the arrays
+    const auto dropped=DropProfiles(shared);EXPECT_TRUE(dropped->points[0].x_m.empty());EXPECT_EQ(dropped->points[1].voltage_V,1.);EXPECT_FALSE(dropped->Dump().at("points")[0].contains("x_m"));
 }
 TEST(ScapsLab,InPlaceDeviceOpsUndoAndNoThrowawayWorkflows) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);

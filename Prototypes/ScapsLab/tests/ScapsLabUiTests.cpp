@@ -238,7 +238,7 @@ TEST(ScapsLab,CompactHistoryRowsEditAndCollapseWithoutChangingTheSchema) {
     const auto seed=w.Current().history.front();w.project.ui["history_retention"]=20;
     for(int i=1;i<20;++i) {
         auto run=seed;run["run_id"]="compact-"+std::to_string(i);run["label"]="temperature_K 300 -> "+std::to_string(300+i);
-        run["group_id"]=i>=10?"sweep-1":"";run["profiles_stored"]=false;w.Current().history.mut().push_back(run);
+        run["group_id"]=i>=10?"sweep-1":"";run["profiles_stored"]=false;w.Current().history.mut().push_back(run);{auto runs=CreateRef<RunMap>(*w.Current().runs);(*runs)[run["run_id"].get<std::string>()]=w.Current().RunResult(seed.at("run_id"));w.Current().runs=std::move(runs);}
     }
     const auto deviceId=w.Current().id,runId=seed.at("run_id").get<std::string>();
     auto frame=[&] {

@@ -92,10 +92,16 @@ void SweepMenu(Json &object,const char *key,double scale=1,const char *title="")
     ImGui::EndPopup();
 }
 template<class S> bool Is(const Json &j,const S &s) {return j.is_string() && j.template get_ref<const std::string &>()==s;} // Json string == s without building a temporary Json (no allocation)
+// Typed result of a history run; a run whose profiles were dropped is served by the live result when it is the same calculation.
+Ref<const ResultBase> HistoryTyped(const DeviceState &device,const Json &run) {
+    const auto live=(Is(run.at("kind"),"band")?device.bandResult:device.result).typed();
+    if(!run.value("profiles_stored",true) && live && live->Provenance()==run.at("provenance"))return live;
+    return device.RunResult(run.at("run_id").get_ref<const std::string &>());
+}
 const Json &HistoryResult(const DeviceState &device,const Json &run) {
-    const auto &live=run.at("kind")=="band"?device.bandResult:device.result;
-    if(!run.value("profiles_stored",true) && !live.empty() && live.at("provenance")==run.at("provenance"))return live;
-    return run.at("result");
+    static const Json none=Json::object();
+    const auto typed=HistoryTyped(device,run);
+    return typed?typed->View():none; // the view is owned by the (shared) typed result, so the reference stays valid
 }
 bool Archived(const DeviceState &,const Json &,const std::string &) {return false;} // live curve is always drawn; history draws only pinned shots (and batch runs)
 // True when the selected run is an I-V/band run that is not the live result (so the live curve and other runs are drawn dimmed).
@@ -103,8 +109,8 @@ bool SelectedOffLive(const DeviceState &device,const std::string &kind) {
     if(device.selectedRun.empty())return false;
     for(const auto &run:device.history) if(Is(run.at("run_id"),device.selectedRun)) {
         if(!Is(run.at("kind"),kind) && !(kind=="iv" && Is(run.at("kind"),"band")))return false;
-        const auto &live=Is(run.at("kind"),"band")?device.bandResult:device.result;
-        return live.empty() || !live.contains("provenance") || live.at("provenance")!=run.at("provenance");
+        const auto live=(Is(run.at("kind"),"band")?device.bandResult:device.result).typed();
+        return !live || live->Provenance().is_null() || live->Provenance()!=run.at("provenance");
     }
     return false;
 }
@@ -115,9 +121,9 @@ ImPlotSpec LiveStyle(const DeviceState &device,float weight) {
 }
 bool ShowRun(const Json &run) {return run.value("pinned",false) || Is(run.at("kind"),"batch");}
 const Json *LiveRun(const DeviceState &d,const std::string &kind) {
-    const Json *res=kind=="iv"?&*d.result:d.acResults.contains(kind)?&d.acResults.at(kind):nullptr;
-    if(!res || res->empty() || !res->contains("provenance"))return nullptr;
-    for(auto it=d.history.rbegin();it!=d.history.rend();++it)if(Is(it->at("kind"),kind) && it->at("provenance")==res->at("provenance"))return &*it;
+    const Ref<const ResultBase> res=kind=="iv"?Ref<const ResultBase>(d.result.typed()):Ref<const ResultBase>(d.acResults.get(kind));
+    if(!res || res->Provenance().is_null())return nullptr;
+    for(auto it=d.history.rbegin();it!=d.history.rend();++it)if(Is(it->at("kind"),kind) && it->at("provenance")==res->Provenance())return &*it;
     return nullptr;
 }
 // Colour scheme for all plots versus x (one table; Ec/n blue, Ev/p red, G green, one colour per recombination mechanism).
@@ -280,15 +286,19 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
         for(const auto &run:device.history) {
             const bool chosen=dim && run.at("run_id")==device.selectedRun;
             if(!run.at("visible").get<bool>() || (!ShowRun(run) && !chosen) || (run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="batch")))continue;
-            const auto &result=HistoryResult(device,run);Json points=Json::array();
-            if(run.at("kind")=="batch") {
-                for(const auto &row:result.at("rows")) if(row.contains("curves")) for(auto point:row.at("curves").at("iv")) {point["J_A_m2"]=point.at("J_Am2");point["valid"]=point.at("status")=="Converged";points.push_back(point);}
-            } else points=result.value("points",Json::array());
             HLine l;
-            for(const auto &point:points) {
-                if(!point.contains(xkey) || !point.at(xkey).is_number())continue;
-                const double value=point.value("valid",false) && point.contains(ykey) && point.at(ykey).is_number()?point.at(ykey).get<double>():NAN;
-                l.x.push_back(point.at(xkey));l.y.push_back(absolute?(value==0?NAN:std::abs(value)):value*scale);
+            const auto add=[&](double x,double value){l.x.push_back(x);l.y.push_back(absolute?(value==0?NAN:std::abs(value)):value*scale);};
+            if(run.at("kind")=="batch") {
+                Json points=Json::array();const auto &result=HistoryResult(device,run);
+                for(const auto &row:result.at("rows")) if(row.contains("curves")) for(auto point:row.at("curves").at("iv")) {point["J_A_m2"]=point.at("J_Am2");point["valid"]=point.at("status")=="Converged";points.push_back(point);}
+                for(const auto &point:points) {
+                    if(!point.contains(xkey) || !point.at(xkey).is_number())continue;
+                    add(point.at(xkey),point.value("valid",false) && point.contains(ykey) && point.at(ykey).is_number()?point.at(ykey).get<double>():NAN);
+                }
+            } else { // typed points: no Json is built for history runs
+                const auto typed=HistoryTyped(device,run);
+                const auto each=[&](const auto &points){for(const auto &point:points){double x=0,y=0;if(!PointNumber(point,xkey,x))continue;add(x,point.valid && PointNumber(point,ykey,y)?y:NAN);}};
+                if(const auto iv=dynamic_cast<const IvResult *>(typed.get()))each(iv->points);else if(const auto ac=dynamic_cast<const AcResult *>(typed.get()))each(ac->points);
             }
             if(l.x.empty())continue;
             if(!hashed) {currentHash=DocumentHash(device.document);hashed=true;}
@@ -312,13 +322,15 @@ void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false
     if(!e) {
         ++PlotCacheBuilds();e=&entries.emplace_back();e->dev=&device;e->profiles=true;e->gr=gr;e->dashed=dashed;e->scale=scale;e->bias=device.selectedBias;e->ykey=field;e->selected=device.selectedRun;
         for(const auto &run:device.history) {
-            if(!run.at("visible").get<bool>() || !ShowRun(run) || run.at("run_id")==device.selectedRun || (run.at("kind")!="iv" && run.at("kind")!="band") || !HistoryResult(device,run).contains("points"))continue;
-            const auto &points=HistoryResult(device,run).at("points");if(points.empty())continue;
-            const auto &point=points[std::clamp(device.selectedBias,0,int(points.size())-1)];
-            if(!point.value("valid",false))continue;
-            const auto &profile=gr?point.value("generation_recombination",Json::object()):point;
-            if(!profile.contains("x_m") || !profile.contains(field))continue;
-            HLine l;l.x=profile.at("x_m").get<std::vector<double>>();l.y=profile.at(field).get<std::vector<double>>();if(l.x.size()!=l.y.size())continue;
+            if(!run.at("visible").get<bool>() || !ShowRun(run) || run.at("run_id")==device.selectedRun || (run.at("kind")!="iv" && run.at("kind")!="band"))continue;
+            const auto typed=HistoryTyped(device,run);const auto iv=dynamic_cast<const IvResult *>(typed.get());
+            if(!iv || !(iv->has>>31&1u) || iv->points.empty())continue;
+            const auto &point=iv->points[std::clamp(device.selectedBias,0,int(iv->points.size())-1)];
+            if(point.verbatim || !point.valid)continue;
+            HLine l;
+            if(gr) {const auto *g=ChildOf(point.rest,"generation_recombination");if(!g || !NumbersOf(*g,"x_m",l.x) || !NumbersOf(*g,field,l.y))continue;}
+            else if(!PointArray(point,"x_m",l.x) || !PointArray(point,field,l.y))continue;
+            if(l.x.size()!=l.y.size())continue;
             for(auto &v:l.x)v*=1e6;for(auto &v:l.y){v*=scale;if(gr && v<=0)v=NAN;}
             const auto c=run.at("colour").get<std::vector<float>>();
             l.colour=ImVec4(c[0],c[1],c[2],c[3]); // the selected run is never in this list, so it keeps its run colour

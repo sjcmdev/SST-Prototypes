@@ -18,9 +18,35 @@ std::size_t PrivateBytes() {
     return 0;
 }
 std::size_t JsonValues(const Json &v) {std::size_t n=1;if(v.is_structured())for(const auto &c:v)n+=JsonValues(c);return n;}
+namespace {
+// Approximate heap bytes of typed results; interned vectors are counted once per call (`seen`).
+std::size_t PBytes(const PJson &p,std::set<const void*> &seen) {
+    std::size_t n=sizeof(PJson)+JsonValues(p.prim)*16;
+    if(p.kind==PJson::Kind::Floats && p.f.id() && seen.insert(p.f.id()).second) n+=p.f.size()*8;
+    for(const auto &k:p.kids) n+=PBytes(k.second,seen);
+    return n;
+}
+std::size_t VBytes(const Column &v,std::set<const void*> &seen) {return v.id() && seen.insert(v.id()).second?v.size()*8:0;}
+std::size_t TypedBytes(const ResultBase *r,std::set<const void*> &seen) {
+    if(!r) return 0;
+    std::size_t n=0;
+    if(auto iv=dynamic_cast<const IvResult*>(r)) {
+        n=PBytes(iv->meta,seen)+VBytes(iv->mesh_x_m,seen);
+        for(const auto &p:iv->points) {n+=sizeof(IvPoint)+PBytes(p.rest,seen);for(const auto *v:{&p.x_m,&p.Ec_eV,&p.Ev_eV,&p.EFn_eV,&p.EFp_eV,&p.n_m3,&p.p_m3})n+=VBytes(*v,seen);}
+    } else if(auto ac=dynamic_cast<const AcResult*>(r)) {
+        n=PBytes(ac->meta,seen)+VBytes(ac->mesh_x_m,seen);for(const auto &p:ac->points)n+=sizeof(AcPoint)+PBytes(p.rest,seen);
+    } else if(auto b=dynamic_cast<const BatchResult*>(r)) n=PBytes(b->body,seen);
+    return n;
+}
+}
 std::string Workflow::MemoryReport() const {
     std::string out="private "+std::to_string(PrivateBytes()>>20)+" MB;";
-    for(const auto &d:project.devices)out+=" ["+d->name+": history "+std::to_string(d->history.size())+" runs "+std::to_string(JsonValues(*d->history)>>10)+" kvalues, result "+std::to_string(JsonValues(*d->result)>>10)+" k]";
+    for(const auto &d:project.devices) {
+        std::set<const void*> seen;std::size_t bytes=TypedBytes(d->result.typed().get(),seen)+TypedBytes(d->bandResult.typed().get(),seen)+TypedBytes(d->batchResult.typed().get(),seen);
+        for(const auto &[k,r]:d->acResults.all())bytes+=TypedBytes(r.get(),seen);
+        for(const auto &[id,r]:*d->runs)bytes+=TypedBytes(r.get(),seen);
+        out+=" ["+d->name+": history "+std::to_string(d->history.size())+" runs, typed results "+std::to_string(bytes>>20)+" MB (shared/interned counted once), json meta "+std::to_string(JsonValues(*d->history)>>10)+" kvalues]";
+    }
     return out;
 }
 std::filesystem::path ExamplesDirectory() {
@@ -113,7 +139,7 @@ std::string DiffLabel(const Json &previous,const Json &document) {
     }
     return label;
 }
-void StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group) {
+std::string StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group) {
     static std::atomic_uint64_t sequence{0};
     const auto id="run-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"-"+std::to_string(sequence++);
     const auto previous=history.empty()?document:history.back().at("document");
@@ -128,8 +154,9 @@ void StoreRun(Json &history,const std::string &kind,const Json &result,const Jso
     if(label.empty()) label=history.empty()?"Initial run":previous==document?"Same parameters":"Model changed: "+Json::diff(previous,document).front().at("path").get<std::string>();
     const double t=double(sequence%12)/12.;
     Json colour=Json::array({.5+.45*std::cos(6.283*t),.5+.45*std::cos(6.283*(t-.333)),.5+.45*std::cos(6.283*(t+.333)),1.});
-    history.push_back({{"run_id",id},{"kind",kind},{"model_hash",DocumentHash(document)},{"document",document},{"diff",changes},{"model_diff",Json::diff(previous,document)},{"label",label},{"result",result},{"request",request},{"time_unix_ms",result.at("provenance").at("time_unix_ms")},{"elapsed_s",result.value("elapsed_s",result.value("compute_time_ms",0.)/1000.)},{"provenance",result.at("provenance")},{"pinned",false},{"name",""},{"visible",true},{"colour",colour},{"group_id",group}});
+    history.push_back({{"run_id",id},{"kind",kind},{"model_hash",DocumentHash(document)},{"document",document},{"diff",changes},{"model_diff",Json::diff(previous,document)},{"label",label},{"request",request},{"time_unix_ms",result.at("provenance").at("time_unix_ms")},{"elapsed_s",result.value("elapsed_s",result.value("compute_time_ms",0.)/1000.)},{"provenance",result.at("provenance")},{"pinned",false},{"name",""},{"visible",true},{"colour",colour},{"group_id",group}});
     TrimHistory(history,retention);
+    return id;
 }
 // Drop the spatial profiles of one run (keeps the document, I-V curve and scalar metrics); the UI then offers "Recalculate to view profiles".
 void DropProfiles(Json &run) {
@@ -149,17 +176,72 @@ void CompactHistory(Json &workspace) {
 }
 // Memory bound: only pinned runs, the selected run, the live result and the newest `keep` runs keep spatial profiles.
 void LimitProfiles(DeviceState &d,int keep) {
-    const auto &h=*d.history;std::vector<std::size_t> drop;int kept=0;
+    const auto &h=*d.history;std::vector<std::string> drop;int kept=0;
     for(std::size_t i=h.size();i-->0;) {
         const auto &run=h[i];
-        if(!run.value("profiles_stored",true) || !run.at("result").contains("mesh_x_m")) continue;
-        bool live=false;for(const auto *r:{&*d.result,&*d.bandResult}) live|=r->contains("provenance") && run.at("provenance")==r->at("provenance");
+        if(!run.value("profiles_stored",true)) continue;
+        const auto id=run.at("run_id").get<std::string>();const auto typed=d.RunResult(id);
+        const auto iv=dynamic_cast<const IvResult*>(typed.get());const auto ac=dynamic_cast<const AcResult*>(typed.get());
+        const bool has=iv?HasProfiles(*iv):ac&&(ac->has>>31&1u)&&((ac->has&1u)||(ac->meta.prim.is_object()&&ac->meta.prim.contains("mesh_x_m")));
+        if(!has) continue;
+        bool live=false;for(const auto *r:{d.result.typed().get(),d.bandResult.typed().get()}) live|=r && !r->Provenance().is_null() && run.at("provenance")==r->Provenance();
         if(live) ++kept; // the live run counts towards the LRU
-        if(live || run.at("pinned")==true || run.at("run_id")==d.selectedRun || kept++<keep) continue;
-        drop.push_back(i);
+        if(live || run.at("pinned")==true || id==d.selectedRun || kept++<keep) continue;
+        drop.push_back(id);
     }
     if(drop.empty()) return;
-    auto &m=d.history.mut();for(auto i:drop) DropProfiles(m[i]);
+    auto runs=CreateRef<RunMap>(*d.runs);auto &m=d.history.mut();
+    for(const auto &id:drop) {
+        auto typed=d.RunResult(id);
+        if(auto iv=std::dynamic_pointer_cast<const IvResult>(typed)) (*runs)[id]=DropProfiles(*iv);
+        else if(auto ac=std::dynamic_pointer_cast<const AcResult>(typed)) {auto out=CreateRef<AcResult>(*ac);out->mesh_x_m=Column();out->has&=~1u;if(out->meta.prim.is_object())out->meta.prim.erase("mesh_x_m");for(auto &p:out->points)if(!p.verbatim)DropStructured(p.rest);(*runs)[id]=out;}
+        for(auto &run:m) if(run.at("run_id")==id) run["profiles_stored"]=false;
+    }
+    d.runs=std::move(runs);
+}
+DeviceResults DeviceState::Results() const {DeviceResults r;r.result=result.typed();r.band=bandResult.typed();r.ac=acResults.all();r.batch=batchResult.typed();r.runs=runs;return r;}
+void DeviceState::SetResults(const DeviceResults &r) {result.adopt(r.result);bandResult.adopt(r.band);acResults.clear();for(const auto &[k,v]:r.ac)acResults.set(k,v);batchResult.adopt(r.batch);runs=r.runs?r.runs:CreateRef<const RunMap>();}
+void DeviceState::SyncRuns() {
+    std::set<std::string> ids;for(const auto &run:*history) ids.insert(run.at("run_id").get<std::string>());
+    if(std::all_of(runs->begin(),runs->end(),[&](const auto &e){return ids.contains(e.first);})) return;
+    auto m=CreateRef<RunMap>();for(const auto &e:*runs) if(ids.contains(e.first)) m->insert(e);runs=std::move(m);
+}
+namespace {Json JsonOf(const ResultBase &r,bool cached) {return cached?r.View():r.Dump();}}
+Json HistoryJson(const Json &history,const RunMap &runs,bool cached) {
+    Json out=Json::array();
+    for(const auto &run:history) {
+        Json copy=run;auto it=runs.find(run.at("run_id").get<std::string>());
+        copy["result"]=it==runs.end()?Json::object():JsonOf(*it->second,cached);out.push_back(std::move(copy));
+    }
+    return out;
+}
+void AttachResults(Json &device,const Json &history,const DeviceResults &r,bool cached) {
+    device["history"]=HistoryJson(history,*r.runs,cached);
+    device["result"]=r.result?JsonOf(*r.result,cached):Json::object();device["band_result"]=r.band?JsonOf(*r.band,cached):Json::object();
+    Json ac=Json::object();for(const auto &[k,v]:r.ac)ac[k]=JsonOf(*v,cached);device["ac_results"]=std::move(ac);
+    device["batch_result"]=r.batch?JsonOf(*r.batch,cached):Json::object();
+}
+std::vector<DeviceResults> ExtractResults(Json &workspace) {
+    std::vector<DeviceResults> out;
+    if(!workspace.is_object() || !workspace.contains("devices")) return out;
+    for(auto &item:workspace["devices"]) {
+        DeviceResults r;auto runs=CreateRef<RunMap>();
+        const auto take=[&](const char *key) {Json v=Json::object();if(item.contains(key)) {v=std::move(item[key]);item[key]=Json::object();}return v;};
+        if(auto j=take("result");!j.empty()) r.result=CreateRef<const IvResult>(IvFromJson(std::move(j)));
+        if(auto j=take("band_result");!j.empty()) r.band=CreateRef<const IvResult>(IvFromJson(std::move(j)));
+        if(auto j=take("ac_results");j.is_object()) for(auto it=j.begin();it!=j.end();++it) if(!it.value().empty()) r.ac[it.key()]=CreateRef<const AcResult>(AcFromJson(it.value()));
+        if(auto j=take("batch_result");!j.empty()) r.batch=CreateRef<const BatchResult>(BatchFromJson(j));
+        if(item.contains("history") && item["history"].is_array()) for(auto &run:item["history"]) {
+            if(!run.contains("result")) continue;
+            Json result=std::move(run["result"]);run.erase("result");
+            const auto id=run.at("run_id").get<std::string>(),kind=run.at("kind").get<std::string>();
+            if(kind=="iv" || kind=="band") (*runs)[id]=CreateRef<const IvResult>(IvFromJson(std::move(result)));
+            else if(kind=="batch") (*runs)[id]=CreateRef<const BatchResult>(BatchFromJson(result));
+            else (*runs)[id]=CreateRef<const AcResult>(AcFromJson(std::move(result)));
+        }
+        r.runs=std::move(runs);out.push_back(std::move(r));
+    }
+    return out;
 }
 DeviceState &Workflow::Device(const std::string &id) {
     for(const auto &d:project.devices) if(d->id==id) return *d;
@@ -167,11 +249,15 @@ DeviceState &Workflow::Device(const std::string &id) {
 }
 DeviceState &Workflow::Current() {return Device(project.active_device);}
 Json Workflow::Workspace(bool withResults) const {
-    // withResults=false (autosave): skip history/results so the UI thread does not deep-copy tens of MB.
+    // withResults=false (autosave): skip history/results so the UI thread does not convert tens of MB.
     static const Json none=Json::object(),noHistory=Json::array();
     Json devices=Json::array();
-    for(const auto &d:project.devices) devices.push_back({{"id",d->id},{"name",d->name},{"colour",d->colour},{"description",d->description},
-        {"history",withResults?*d->history:noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",withResults?*d->result:none},{"band_result",withResults?*d->bandResult:none},{"ac_results",withResults?*d->acResults:none},{"batch_result",withResults?*d->batchResult:none},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",withResults?d->status:std::string("no results")}});
+    for(const auto &d:project.devices) {
+        Json device={{"id",d->id},{"name",d->name},{"colour",d->colour},{"description",d->description},
+            {"history",noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",none},{"band_result",none},{"ac_results",none},{"batch_result",none},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",withResults?d->status:std::string("no results")}};
+        if(withResults) AttachResults(device,*d->history,d->Results(),!lightResponse);
+        devices.push_back(std::move(device));
+    }
     return {{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}};
 }
 // ui object checks shared by workspace validation and project_edit; returns history_retention
@@ -308,26 +394,30 @@ Json SingleDeviceWorkspace(Json document,std::string projectName) { // what Work
     Json device={{"id","device-1"},{"name",name},{"colour",Json::array({0.25,0.65,0.95,1.0})},{"description",""},{"history",Json::array()},{"selected_run",""},{"selection",{{"layer",0},{"interface",-1},{"bias",0},{"member",0},{"voltage_V",0.}}},{"actions",Json::object()},{"document",std::move(document)},{"result",Json::object()},{"band_result",Json::object()},{"ac_results",Json::object()},{"batch_result",Json::object()},{"batch_spec",BatchDefaults()},{"recorder_columns",RecorderDefaults()},{"status","no results"}};
     return NormalizeWorkspace({{"schema_version",3},{"name",std::move(projectName)},{"devices",Json::array({std::move(device)})},{"active_device","device-1"},{"compare_set",Json::array({"device-1"})},{"ui",Json::object()}});
 }
-void Workflow::SetWorkspace(const Json &value,bool validated) { // validated: value came from NormalizeWorkspace (already checked and normalized)
+void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<DeviceResults> *typed) { // validated: value came from NormalizeWorkspace (already checked and normalized)
     ++plotGen;
     if(!validated) ValidateWorkspace(value);
+    std::vector<DeviceResults> own;
+    if(!typed) {Json copy=value;own=ExtractResults(copy);typed=&own;} // Python/tests hand over Json with results: convert it here
     const auto &devices=value.at("devices");
     Project checked;checked.schema_version=3;checked.name=value.at("name").get<std::string>();checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
     const auto retention=checked.ui.value("history_retention",5);
+    std::size_t index=0;
     for(const auto &item:devices) {
         const auto id=item.at("id").get<std::string>();Ref<DeviceState> state;
         for(const auto &existing:project.devices) if(existing->id==id) state=existing;
         if(!state) state=CreateRef<DeviceState>();
-        state->history=item.value("history",Json::array());TrimHistory(state->history.mut(),retention);
+        {Json h=Json::array();for(const auto &run:item.value("history",Json::array())) {Json copy=run;copy.erase("result");h.push_back(std::move(copy));}state->history=std::move(h);}
+        TrimHistory(state->history.mut(),retention);
         state->selectedRun=item.value("selected_run",std::string{});
         if(std::none_of(state->history.begin(),state->history.end(),[&](const Json &r){return r.at("run_id")==state->selectedRun;}))state->selectedRun.clear();
         const auto selection=item.value("selection",Json::object());
         state->selectedLayer=selection.value("layer",0);state->selectedInterface=selection.value("interface",-1);state->selectedBias=selection.value("bias",0);state->selectedMember=selection.value("member",0);state->biasVoltage_V=selection.value("voltage_V",0.);
         state->actions=item.value("actions",Json::object());
         state->id=id;state->name=item.at("name");state->colour=item.at("colour");state->description=item.value("description",std::string{});
-        state->batchResult=item.value("batch_result",Json::object());state->batchSpec=item.value("batch_spec",BatchDefaults());state->recorderColumns=item.value("recorder_columns",RecorderDefaults());
-        state->document=validated?item.at("document"):NormalizeDocument(item.at("document"));state->result=item.value("result",Json::object());state->bandResult=item.value("band_result",Json::object());state->acResults=item.value("ac_results",Json::object());state->status=item.value("status",std::string("no results"));
-        checked.devices.push_back(state);
+        state->batchSpec=item.value("batch_spec",BatchDefaults());state->recorderColumns=item.value("recorder_columns",RecorderDefaults());
+        state->document=validated?item.at("document"):NormalizeDocument(item.at("document"));state->SetResults(index<typed->size()?(*typed)[index]:DeviceResults{});state->SyncRuns();state->status=item.value("status",std::string("no results"));
+        checked.devices.push_back(state);++index;
     }
     project=std::move(checked);
 }
@@ -335,7 +425,7 @@ void Workflow::RefreshDirty() {const bool was=dirty;for(auto &d:project.devices)
 Json Workflow::Snapshot() const {
     const auto &d=*std::find_if(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==project.active_device;});
     Json list=Json::array();for(const auto &item:project.devices) list.push_back({{"device_id",item->id},{"name",item->name},{"description",item->description},{"colour",item->colour},{"status",item->status},{"dirty",item->dirty},{"compare",project.compare_set.contains(item->id)}});
-    return {{"ok",true},{"history",*d->history},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",*d->result},{"band_result",*d->bandResult},{"ac_results",*d->acResults},{"batch_result",*d->batchResult},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},
+    return {{"ok",true},{"history",HistoryJson(*d->history,*d->runs,true)},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",d->result.json()},{"band_result",d->bandResult.json()},{"ac_results",d->acResults.json(true)},{"batch_result",d->batchResult.json()},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},
         {"devices",list},{"active_device",project.active_device},{"project",Workspace()},{"runs",Runs()},{"dirty",dirty},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"error",nullptr}};
 }
 }
