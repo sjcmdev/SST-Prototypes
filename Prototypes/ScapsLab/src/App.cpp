@@ -206,7 +206,7 @@ void SetupApplication(Application &app) {
     w->Current().document=NewDeviceDocument(); w->Current().name=w->Current().document.at("case_id");w->path="";
     if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}
     const char *gallery=std::getenv("SCAPSLAB_GALLERY_PANEL");
-    w->lightResponse=true;
+    w->lightResponse=true;w->viewIdleSeconds=5; // S4: Json views of idle results are freed (typed results stay)
     w->autoRecalculateBand=true;
     w->autoRecalculate=true;
     ImGui::GetIO().ConfigDebugHighlightIdConflicts=true;

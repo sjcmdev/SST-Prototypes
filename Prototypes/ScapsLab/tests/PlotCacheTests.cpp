@@ -51,7 +51,7 @@ void SeedRuns(Workflow &w,int runs) {
     w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};w.project.ui["history_retention"]=100;
     ASSERT_TRUE(w.Dispatch({{"operation","run"}}).value("ok",false));Finish(w);
     const auto seed=w.Current().history.front();
-    for(int i=0;i<runs;++i) {auto run=seed;run["run_id"]="cache-"+std::to_string(i);run["pinned"]=true;run["visible"]=true;run["name"]="#"+std::to_string(i+1);w.Current().history.mut().push_back(run);}
+    for(int i=0;i<runs;++i) {auto run=seed;run["run_id"]="cache-"+std::to_string(i);run["pinned"]=true;run["visible"]=true;run["name"]="#"+std::to_string(i+1);w.Current().history.mut().push_back(run);auto runs=CreateRef<RunMap>(*w.Current().runs);(*runs)[run["run_id"].get<std::string>()]=w.Current().RunResult(seed.at("run_id"));w.Current().runs=std::move(runs);}
     w.Emit(HistoryChanged(w.Current().id));
 }
 }
@@ -73,7 +73,8 @@ TEST(PlotCache,StaleCacheIsRebuiltByEventsOnly) {
     for(int i=0;i<3;++i)Frame(panel);
     const double before=PlotCacheSum();const int builds=PlotCacheBuildCount();EXPECT_NE(before,0.);
     // an in-place change without an event is not seen (the contract: mutators publish events)...
-    auto &run=w.Current().history.mut().at(1);for(auto &pt:run["result"]["points"])if(pt["J_A_m2"].is_number())pt["J_A_m2"]=pt["J_A_m2"].get<double>()*3;
+    {const auto id=w.Current().history.at(1).at("run_id").get<std::string>();auto iv=CreateRef<IvResult>(*std::static_pointer_cast<const IvResult>(w.Current().RunResult(id)));
+     for(auto &pt:iv->points)if(std::isfinite(pt.J_A_m2))pt.J_A_m2*=3;auto runs=CreateRef<RunMap>(*w.Current().runs);(*runs)[id]=iv;w.Current().runs=std::move(runs);}
     Frame(panel);EXPECT_EQ(PlotCacheSum(),before);EXPECT_EQ(PlotCacheBuildCount(),builds);
     // ...and the HistoryChanged event makes the next frame rebuild it.
     w.Emit(HistoryChanged(w.Current().id));Frame(panel);

@@ -169,3 +169,16 @@ TEST(PerfProbe,InPlaceOps) {
     time("device_move",{{"operation","device_move"},{"device_id",device},{"index",0}});
     time("project_edit(name)",{{"operation","project_edit"},{"name","Perf project"}});
 }
+
+// S4: cost of the first Json view of a typed result (what a panel that still reads Json pays once per result). Run: SCAPSLAB_PERF_TEST=1 [SCAPSLAB_MEM_PROJECT=<file>] ScapsLabTests --gtest_filter=PerfProbe.ViewCost
+TEST(PerfProbe,ViewCost) {
+    if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    (void)Timed(w,{{"operation","run"}});
+    auto a=Clock::now();const auto &j=w.Current().result.json();const double view=Ms(a);a=Clock::now();const auto dump=w.Current().result.typed()->Dump();
+    std::printf("PERF view default run: first Json view %.2f ms (Dump %.2f ms), %zu bytes of Json\n",view,Ms(a),j.dump().size());
+    if(const char *project=std::getenv("SCAPSLAB_MEM_PROJECT")) {
+        Workflow big(CreateRef<JobSystem>(nullptr,2));big.lightResponse=true;(void)Timed(big,{{"operation","project_load"},{"path",project}});
+        a=Clock::now();(void)big.Current().result.json();std::printf("PERF view project result: first Json view %.1f ms\n",Ms(a));
+    }
+}
