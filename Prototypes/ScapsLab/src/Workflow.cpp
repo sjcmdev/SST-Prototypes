@@ -516,6 +516,7 @@ void Operation::Execute(JobContext &ctx) {
     using namespace scaps_core;
     const auto started=std::chrono::steady_clock::now();
     ctx.ThrowIfCancellationRequested(); const std::string op=request.at("operation");
+    struct Phase {bool on=std::getenv("SCAPSLAB_PERF_PHASES")!=nullptr;Json log=Json::object();std::chrono::steady_clock::time_point t=std::chrono::steady_clock::now();void lap(const char *n){if(!on)return;const auto now=std::chrono::steady_clock::now();log[n]=log.value(n,0.)+std::chrono::duration<double,std::milli>(now-t).count();t=now;}} phase; // opt-in per-phase timing (SCAPSLAB_PERF_PHASES=1) -> output.perf_phase_ms
     if(op=="load_material" || op=="save_material") {
         auto model=Model(document);std::size_t index=0;
         while(index<document.at("layers").size() && document.at("layers")[index].at("scapslab_id")!=request.at("layer_id"))++index;
@@ -773,13 +774,13 @@ void Operation::Execute(JobContext &ctx) {
         const auto p=Model(document);const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         auto volts=op=="band"?std::vector<double>{request.at("voltage_V").get<double>()}:make_voltage_list(p.voltage);
         for(auto &v:volts) {if(!std::isfinite(v)) throw std::invalid_argument("Invalid voltage_V");v=-v;}
-        ctx.SetStage("Preparing mesh (cancel checked after preparation)");
-        const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);
+        phase.lap("model_device");ctx.SetStage("Preparing mesh (cancel checked after preparation)");
+        const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);phase.lap("mesh");
         const bool preview=op=="run" && request.value("preview",false); // live slider preview: same mesh, every stride-th bias point, minimal output
         if(preview) {const std::size_t stride=std::size_t(std::max(1,request.value("stride",1)));std::vector<double> sub;for(std::size_t i=0;i<volts.size();++i) if(i%stride==0 || i+1==volts.size()) sub.push_back(volts[i]);volts=std::move(sub);}
         ctx.ThrowIfCancellationRequested(); ctx.SetStage("Equilibrium");
         IVSession session(device,mesh,p.temperature_K,p.solver,pc); // equilibrium + continuation (bias predictor); bit-identical to solve_iv/scaps_headless
-        output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
+        phase.lap("equilibrium");output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
         for(std::size_t i=0;i<volts.size();++i) {
             ctx.ThrowIfCancellationRequested(); ctx.SetStage("I-V point "+std::to_string(i+1)+" / "+std::to_string(volts.size()));
             IVPoint pt=session.next(volts[i]);
@@ -789,8 +790,8 @@ void Operation::Execute(JobContext &ctx) {
                 const double tj=pt.status!=SolverStatus::Converged ? NAN : ext ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
                 output["points"].push_back({{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(tj)?Json(tj):Json(nullptr)}});ctx.SetProgress(float(i+1),float(volts.size()));continue;
             }
-            const auto curves=DefectCurves(document,p,s);
-            auto gr=GenerationRecombination(document,p,device,s);
+            phase.lap("solve_points");const auto curves=DefectCurves(document,p,s);phase.lap("defect_curves");
+            auto gr=GenerationRecombination(document,p,device,s);phase.lap("gen_recomb");
             const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
             const double terminalJ=pt.status!=SolverStatus::Converged ? NAN : external ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
             const double net=gr.at("net_generation_current_A_m2");
@@ -808,7 +809,7 @@ void Operation::Execute(JobContext &ctx) {
             output["points"].push_back({{"generation_recombination",gr},{"defect_previews",curves},{"bias_id","bias-"+std::to_string(i)},{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(terminalJ)?Json(terminalJ):Json(nullptr)},
                 {"conservation_error_A_m2",pt.J_conservation_error_Am2},{"status",to_string(pt.status)},{"iterations",pt.iterations},{"residual",pt.final_residual_norm},
                 {"internal_voltage_V",-s.applied_voltage_V},{"terminal_voltage_V",external?-pt.voltage_V:-volts[i]},{"trap_occupation",s.trap_occupation},{"interface_occupation",s.interface_occupation},{"x_m",s.x_m.empty()?mesh.x_m:s.x_m},{"Ec_eV",s.Ec_eV},{"Ev_eV",s.Ev_eV},{"EFn_eV",s.EFn_eV},{"EFp_eV",s.EFp_eV},{"n_m3",s.n_m3},{"p_m3",s.p_m3}});
-            ctx.SetProgress(float(i+1),float(volts.size()));
+            phase.lap("json_points");ctx.SetProgress(float(i+1),float(volts.size()));
         }
         if(preview) {ctx.ThrowIfCancellationRequested();output["preview"]=true;output["valid"]=true;return;}
         const auto generation=generation_integrals_m2s(device,mesh,pc);std::vector<double> density;
@@ -822,6 +823,7 @@ void Operation::Execute(JobContext &ctx) {
             for(int n=0;n<=200;++n) {const double wavelength=300.+n*6.;wavelengths.push_back(wavelength);alpha.push_back(absorption_m1(layer,wavelength,pc));auto plain=layer;plain.absorption.urbach_enabled=false;baseline.push_back(absorption_m1(plain,wavelength,pc));}
             output["optics"]["absorption"].push_back({{"layer_id",document.at("layers")[i].value("scapslab_id",std::string("layer-")+std::to_string(i+1))},{"wavelength_nm",wavelengths},{"alpha_m1",alpha},{"without_tail_m1",baseline}});
         }
+        phase.lap("optics");
         if(op=="run" && p.illumination.enabled) {
             ctx.ThrowIfCancellationRequested();ctx.SetStage("Refining photovoltaic metrics");
             PhotovoltaicResult pv;const double power=incident_power_W_m2(device);
@@ -830,6 +832,7 @@ void Operation::Execute(JobContext &ctx) {
             auto finite=[](double v)->Json{return std::isfinite(v)?Json(v):Json(nullptr);};
             output["photovoltaic"]={{"status",to_string(pv.status)},{"message",pv.message},{"Voc_V",finite(-pv.Voc_V)},{"Jsc_A_m2",finite(-pv.Jsc_Am2)},{"FF_fraction",finite(pv.FF)},{"efficiency_fraction",finite(pv.eta)},{"Pmax_W_m2",finite(pv.Pmax_Wm2)},{"Vmpp_V",finite(-pv.Vmpp_V)},{"Jmpp_A_m2",finite(pv.Jmpp_Am2)}};
         }
+        phase.lap("photovoltaic");
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
         output["project_snapshot"]=document;
@@ -861,7 +864,7 @@ void Operation::Execute(JobContext &ctx) {
         }
         output["valid"]=valid;output["validity_status"]=valid?"valid":"contains_invalid_points";
         output["compute_time_ms"]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
-        output["mesh_node_count"]=output.at("mesh_x_m").size();
+        output["mesh_node_count"]=output.at("mesh_x_m").size();phase.lap("validate_snapshot");if(phase.on)output["perf_phase_ms"]=phase.log;
     }
     if(op!="save" && op!="project_save" && !op.starts_with("export_")) ctx.ThrowIfCancellationRequested();
     // typed result (S4): built here, on the job thread, so the UI thread only swaps pointers
