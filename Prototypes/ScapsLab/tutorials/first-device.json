@@ -42,38 +42,12 @@
       "timeout_s": 120
     },
     {
-      "id": "dark",
-      "target": {
-        "window": "scapslab.Illumination"
-      },
-      "instruction": "In Illumination untick Light enabled. A dark I-V needs no light.",
-      "command": {
-        "operation": "edit",
-        "patch": {
-          "illumination": {
-            "enabled": false
-          },
-          "voltage": {
-            "start_V": 0.0,
-            "stop_V": 0.1,
-            "step_V": 0.05
-          }
-        }
-      },
-      "condition": {
-        "predicate": "device.dark",
-        "op": "eq",
-        "value": true
-      },
-      "timeout_s": 120
-    },
-    {
       "id": "dark-iv",
       "target": {
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "In Run click Calculate I-V and wait for the dark I-V curve.",
+      "instruction": "In Run click Calculate I-V and wait for the I-V curve.",
       "command": {
         "operation": "run"
       },
@@ -87,9 +61,9 @@
     {
       "id": "bands",
       "target": {
-        "window": "scapslab.Results"
+        "window": "scapslab.Band diagram & profiles"
       },
-      "instruction": "Open Results (Band diagram & profiles). Move the Bias point slider and watch Ec, Ev and the Fermi levels change. Press Next.",
+      "instruction": "Open Band diagram & profiles. Move the Bias point slider and watch Ec, Ev and the Fermi levels change. Press Next.",
       "command": {
         "operation": "inspect"
       },

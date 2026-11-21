@@ -110,7 +110,7 @@
     {
       "id": "bands",
       "target": {
-        "window": "scapslab.Results"
+        "window": "scapslab.Band diagram & profiles"
       },
       "instruction": "Open Results (Band diagram & profiles) and move the Bias point slider. Look at the Ec / Ev steps at the junction. Press Next.",
       "command": {
