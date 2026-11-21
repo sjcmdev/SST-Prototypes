@@ -31,7 +31,7 @@ Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.
     if(w->Current().acResults.contains("qe") && w->Current().acResults["qe"].contains("request")) qeRequest.update(w->Current().acResults["qe"]["request"],true);
     std::snprintf(file,sizeof(file),"%s",w->path.c_str());
 }
-void Panel::Send(const Json &r) { const auto response=w->Dispatch(r); if(!response.at("ok").get<bool>()) {w->status=response.at("error").at("message");w->response=response;} }
+void Panel::Report(const Json &response) { if(!response.at("ok").get<bool>()) {w->status=response.at("error").at("message");w->response=response;} }
 void OpenLayerWindow(Workflow *w,const std::string &device,const std::string &layer) {
     const std::pair<std::string,std::string> key{device,layer};
     if(!layer.empty() && std::find(w->pinnedLayers.begin(),w->pinnedLayers.end(),key)==w->pinnedLayers.end()) w->pinnedLayers.push_back(key);
@@ -87,7 +87,7 @@ void SweepMenu(Json &object,const char *key,double scale=1,const char *title="")
         std::string error;try{(void)QuickSweep(*numericDocument,request);}catch(const std::exception &e){error=e.what();}
         if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
         ImGui::BeginDisabled(numericWorkflow->Busy() || !error.empty());
-        if(ImGui::Button("Run sweep")){(void)numericWorkflow->Dispatch(request);ImGui::CloseCurrentPopup();}ImGui::EndDisabled();break;
+        if(ImGui::Button("Run sweep")){(void)numericWorkflow->Exec(Cmd::QuickSweep::FromJson(request));ImGui::CloseCurrentPopup();}ImGui::EndDisabled();break;
     }
     ImGui::EndPopup();
 }
@@ -189,7 +189,7 @@ void ShotBar(Workflow &w,const std::string &kind) {
     ImGui::EndDisabled();
     if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Pin the current curve as a frozen overlay (Ctrl+P).\nEdits and sliders only replace the live curve.");
     if(ImGui::Shortcut(ImGuiMod_Ctrl|ImGuiKey_P,ImGuiInputFlags_RouteFocused))shot=true; // Ctrl+P = pin; Ctrl+Shift+S stays Save As
-    if(shot && live && !livePinned && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",deviceId},{"run_id",liveId},{"pinned",true}});
+    if(shot && live && !livePinned && !w.Busy())(void)w.Exec(Cmd::UpdateRun::With({{"device_id",deviceId},{"run_id",liveId},{"pinned",true}}));
     std::vector<const Json *> shots;
     for(const auto &run:history)if(run.at("pinned")==true && (run.at("kind")==kind || (kind=="iv" && run.at("kind")=="band")))shots.push_back(&run);
     ImGui::SameLine();
@@ -200,17 +200,17 @@ void ShotBar(Workflow &w,const std::string &kind) {
         for(const auto *shotRun:shots) {
             const auto &run=*shotRun;const auto id=run.at("run_id").get<std::string>();ImGui::PushID(id.c_str());
             bool visible=run.at("visible");
-            if(ImGui::Checkbox("##v",&visible) && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",deviceId},{"run_id",id},{"visible",visible}});
+            if(ImGui::Checkbox("##v",&visible) && !w.Busy())(void)w.Exec(Cmd::UpdateRun::With({{"device_id",deviceId},{"run_id",id},{"visible",visible}}));
             ImGui::SameLine();const auto c=run.at("colour").get<std::vector<float>>();ImGui::ColorButton("##c",ImVec4(c[0],c[1],c[2],c[3]),ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(12,12));
             ImGui::SameLine();char buf[256];std::snprintf(buf,sizeof(buf),"%s",(editId==id?editText:RunLabel(run)).c_str());
             ImGui::SetNextItemWidth(260);ImGui::InputText("##n",buf,sizeof(buf));
             if(ImGui::IsItemActive()){editId=id;editText=buf;}
-            if(ImGui::IsItemDeactivatedAfterEdit() && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",deviceId},{"run_id",id},{"name",std::string(buf)}});
+            if(ImGui::IsItemDeactivatedAfterEdit() && !w.Busy())(void)w.Exec(Cmd::UpdateRun::With({{"device_id",deviceId},{"run_id",id},{"name",std::string(buf)}}));
             if(ImGui::IsItemDeactivated())editId.clear();
-            ImGui::SameLine();if(ImGui::SmallButton("Delete") && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",deviceId},{"run_id",id},{"pinned",false}});
+            ImGui::SameLine();if(ImGui::SmallButton("Delete") && !w.Busy())(void)w.Exec(Cmd::UpdateRun::With({{"device_id",deviceId},{"run_id",id},{"pinned",false}}));
             ImGui::PopID();
         }
-        if(!shots.empty() && ImGui::Button("Clear all") && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",deviceId},{"unpin_kind",kind}});
+        if(!shots.empty() && ImGui::Button("Clear all") && !w.Busy())(void)w.Exec(Cmd::UpdateRun::With({{"device_id",deviceId},{"unpin_kind",kind}}));
         ImGui::EndPopup();
     }
     ImGui::PopID();
@@ -345,7 +345,7 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
     }
     for(const auto &l:e->lines) {
         ImPlot::PlotLine(l.name.c_str(),l.x.data(),l.y.data(),int(l.x.size()),{ImPlotProp_LineColor,l.colour,ImPlotProp_LineWeight,l.weight});
-        if(auto *item=ImPlot::GetItem(l.name.c_str());item && !item->Show && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",device.id},{"run_id",l.runId},{"visible",false}});
+        if(auto *item=ImPlot::GetItem(l.name.c_str());item && !item->Show && !w.Busy())(void)w.Exec(Cmd::UpdateRun::With({{"device_id",device.id},{"run_id",l.runId},{"visible",false}}));
     }
 }
 void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false,bool dashed=false) {
@@ -403,15 +403,15 @@ double PlotCacheSum() {
 void DrawHistory(Workflow &w,bool global) {
     ImGui::PushID(global?"global-history":"device-history");
     ImGui::BeginDisabled(w.Busy());
-    if(ImGui::Button(global?"Clear unpinned (all devices)":"Clear unpinned (active device)")) (void)w.Dispatch({{"operation","history_clear"},{"scope",global?"all":"device"}});
+    if(ImGui::Button(global?"Clear unpinned (all devices)":"Clear unpinned (active device)")) (void)w.Exec(Cmd::ClearHistory::With({{"scope",global?"all":"device"}}));
     ImGui::SameLine();if(ImGui::Button(global?"Clear including pinned...":"Clear active including pinned..."))ImGui::OpenPopup("Confirm clear");
     if(ImGui::BeginPopupModal("Confirm clear",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(global?"Clear all runs from every device, including pinned?":"Clear all runs from the active device, including pinned?");
-        if(ImGui::Button("Clear all")){(void)w.Dispatch({{"operation","history_clear"},{"scope",global?"all":"device"},{"include_pinned",true}});ImGui::CloseCurrentPopup();}
+        if(ImGui::Button("Clear all")){(void)w.Exec(Cmd::ClearHistory::With({{"scope",global?"all":"device"},{"include_pinned",true}}));ImGui::CloseCurrentPopup();}
         ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }
     int retention=w.project.ui.value("history_retention",5);
-    BeginRow("Automatic runs retained");if(ImGui::SliderInt("##retention",&retention,1,100)) {auto ui=w.project.ui;ui["history_retention"]=retention;(void)w.Dispatch({{"operation","project_edit"},{"ui",ui}});}EndRow();
+    BeginRow("Automatic runs retained");if(ImGui::SliderInt("##retention",&retention,1,100)) {auto ui=w.project.ui;ui["history_retention"]=retention;(void)w.Exec(Cmd::EditProject::With({{"ui",ui}}));}EndRow();
     // Commands replace device state; draw from a snapshot while dispatching edits.
     const auto devices=w.project.devices;
     for(const auto &device:devices) {
@@ -470,7 +470,7 @@ void DrawHistory(Workflow &w,bool global) {
                         if(ImGui::IsItemHovered())ImGui::SetTooltip("%s\nDouble-click to rename",label.c_str());
                         if(clicked) {
                             if(ImGui::IsMouseDoubleClicked(0)){rename=editId;focusRename=true;std::snprintf(name,sizeof(name),"%s",label.c_str());}
-                            else (void)w.Dispatch({{"operation","history_select"},{"device_id",device->id},{"run_id",run.at("run_id")}});
+                            else (void)w.Exec(Cmd::SelectRun::With({{"device_id",device->id},{"run_id",run.at("run_id")}}));
                         }
                     }
                     ImGui::TableSetColumnIndex(4);ImGui::TextUnformatted(run.at("kind").get<std::string>().c_str());
@@ -480,7 +480,7 @@ void DrawHistory(Workflow &w,bool global) {
                     if(ImGui::IsItemHovered()){std::strftime(time,sizeof(time),"%Y-%m-%d %H:%M:%S",&local);ImGui::SetTooltip("%s (local)\nElapsed: %.3g s",time,run.at("elapsed_s").get<double>());}
                     ImGui::TableSetColumnIndex(6);
                     if(!run.value("profiles_stored",true)){ImGui::TextDisabled("(i)");if(ImGui::IsItemHovered())ImGui::SetTooltip("Profiles not stored. Recalculate this model to view spatial profiles.");}
-                    if(changed && !w.Busy())(void)w.Dispatch(update);
+                    if(changed && !w.Busy())(void)w.Exec(Cmd::UpdateRun::FromJson(update));
                     ImGui::PopID();
                 };
                 std::set<std::string> groups;
@@ -626,7 +626,7 @@ void Panel::RenderContent() {
     if(w->Current().document.contains("scaps_native")) for(const auto &warning:w->Current().document.at("scaps_native").value("warnings",Json::array())) ImGui::TextWrapped("SCAPS import warning: %s",warning.get<std::string>().c_str());
     if(!pinLayer.empty() && w->project.active_device!=pinDevice) { // extra "Layer: <name>" window of a device that is not active
         ImGui::TextWrapped("This layer belongs to another device.");
-        if(ImGui::Button("Activate that device")) Send({{"operation","device_select"},{"device_id",pinDevice}});
+        if(ImGui::Button("Activate that device")) Do(Cmd::SelectDevice::With({{"device_id",pinDevice}}));
         return;
     }
     if((view==5 || view==10 || view==15 || view==16 || view==17 || view==18 || view==22 || (view>=6 && view<10)) && !w->ViewsReady()) {ImGui::TextDisabled("Preparing results...");return;} // Json views are built on a worker, never on the UI thread
@@ -678,10 +678,10 @@ void Panel::RenderContent() {
             }
             EndRow();}
             auto &l=layers[selected]; const auto id=l.at("scapslab_id");
-            if(ImGui::Button("Add")) Send({{"operation","layer"},{"action","add"}}); if(pinLayer.empty()) w->tutorialOverlay.Item("scapslab.Layers","add-layer"); ImGui::SameLine();
-            if(ImGui::Button("Remove")) Send({{"operation","layer"},{"action","remove"},{"layer_id",id}}); ImGui::SameLine();
-            if(ImGui::Button("Up") && selected>0) Send({{"operation","layer"},{"action","move"},{"layer_id",id},{"index",selected-1}}); ImGui::SameLine();
-            if(ImGui::Button("Down") && selected+1<int(layers.size())) Send({{"operation","layer"},{"action","move"},{"layer_id",id},{"index",selected+1}});
+            if(ImGui::Button("Add")) Do(Cmd::EditLayer::With({{"action","add"}})); if(pinLayer.empty()) w->tutorialOverlay.Item("scapslab.Layers","add-layer"); ImGui::SameLine();
+            if(ImGui::Button("Remove")) Do(Cmd::EditLayer::With({{"action","remove"},{"layer_id",id}})); ImGui::SameLine();
+            if(ImGui::Button("Up") && selected>0) Do(Cmd::EditLayer::With({{"action","move"},{"layer_id",id},{"index",selected-1}})); ImGui::SameLine();
+            if(ImGui::Button("Down") && selected+1<int(layers.size())) Do(Cmd::EditLayer::With({{"action","move"},{"layer_id",id},{"index",selected+1}}));
             if(pinLayer.empty()) {ImGui::SameLine();if(ImGui::Button("Open in new window")) OpenLayerWindow(w,w->project.active_device,id.get<std::string>());if(ImGui::IsItemHovered())ImGui::SetTooltip("Edit this layer in a separate window, side by side with other layers");}
             ImGui::TextDisabled("Stable ID: %s",id.get<std::string>().c_str());
             {   // Defects / interface shortcuts: edit through the Defects and Interfaces panels.
@@ -713,8 +713,8 @@ void Panel::RenderContent() {
             static int materialSelection=0;BeginRow("Material selection");ImGui::Combo("##material_selection",&materialSelection,"Both A/B\0Pure A\0Pure B\0");EndRow();
             const char *selection=materialSelection==1?"A":materialSelection==2?"B":"both";
             BeginRow("SCAPS material [.material]");
-            const bool materialLoad=ImGui::Button("Load...");w->tutorialOverlay.Item("scapslab.Layers","material-load");if(materialLoad)try {if(const auto path=OpenFileDialog({"SCAPS material","material"}))Send({{"operation","load_material"},{"layer_id",id},{"selection",selection},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}
-            ImGui::SameLine();const bool materialSave=ImGui::Button("Save...");w->tutorialOverlay.Item("scapslab.Layers","material-save");if(materialSave)try {if(const auto path=SaveFileDialog({"SCAPS material","material"},"layer.material"))Send({{"operation","save_material"},{"layer_id",id},{"selection",selection},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}EndRow();
+            const bool materialLoad=ImGui::Button("Load...");w->tutorialOverlay.Item("scapslab.Layers","material-load");if(materialLoad)try {if(const auto path=OpenFileDialog({"SCAPS material","material"}))Do(Cmd::LoadMaterial::With({{"layer_id",id},{"selection",selection},{"path",path->Utf8()}}));}catch(const std::exception &e){w->status=e.what();}
+            ImGui::SameLine();const bool materialSave=ImGui::Button("Save...");w->tutorialOverlay.Item("scapslab.Layers","material-save");if(materialSave)try {if(const auto path=SaveFileDialog({"SCAPS material","material"},"layer.material"))Do(Cmd::SaveMaterial::With({{"layer_id",id},{"selection",selection},{"path",path->Utf8()}}));}catch(const std::exception &e){w->status=e.what();}EndRow();
             char name[256]; std::snprintf(name,sizeof(name),"%s",l.at("name").get<std::string>().c_str());
             BeginRow("Name");if(ImGui::InputText("##name",name,sizeof(name),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {l["name"]=name;changed=true;++gesture;}EndRow();
             changed|=Number("Thickness [µm]",l,"thickness_m",1e6);
@@ -778,23 +778,23 @@ void Panel::RenderContent() {
             changed|=Number("Step [V]",draft["voltage"],"step_V"); changed|=Number("T [K]",draft,"temperature_K");w->tutorialOverlay.Item("scapslab.Run","temperature");
             ImGui::TextWrapped("Applied voltage: left minus right. Signed J follows the scaps_core terminal-current convention.");
             bool automatic=w->autoRecalculate,bandAutomatic=w->autoRecalculateBand;
-            if(ImGui::Checkbox("Auto##iv",&automatic)) Send({{"operation","auto_recalculate"},{"enabled",automatic}});TrackGesture();ImGui::SameLine();
+            if(ImGui::Checkbox("Auto##iv",&automatic)) Do(Cmd::SetAutoRecalculate::With({{"enabled",automatic}}));TrackGesture();ImGui::SameLine();
             ImGui::BeginDisabled(w->Busy());
-            if(ImGui::Button("Calculate I-V")) Send({{"operation","run"}});w->tutorialOverlay.Item("scapslab.Run","run");
+            if(ImGui::Button("Calculate I-V")) Do(Cmd::Run::With());w->tutorialOverlay.Item("scapslab.Run","run");
             ImGui::EndDisabled();ImGui::SameLine(0,24);
-            if(ImGui::Checkbox("Auto##band",&bandAutomatic)) Send({{"operation","auto_recalculate"},{"enabled",w->autoRecalculate},{"band_enabled",bandAutomatic}});TrackGesture();ImGui::SameLine();
+            if(ImGui::Checkbox("Auto##band",&bandAutomatic)) Do(Cmd::SetAutoRecalculate::With({{"enabled",w->autoRecalculate},{"band_enabled",bandAutomatic}}));TrackGesture();ImGui::SameLine();
             ImGui::BeginDisabled(w->Busy());
-            if(ImGui::Button("Recalculate band")) Send({{"operation","band"},{"voltage_V",w->Current().biasVoltage_V}});
+            if(ImGui::Button("Recalculate band")) Do(Cmd::RunBand::With({{"voltage_V",w->Current().biasVoltage_V}}));
             ImGui::EndDisabled();
             if(w->Busy()) ImGui::TextDisabled("Calculation active: wait or Cancel. Parameter edits cancel an outdated sweep.");
         }
-        if(changed) Send({{"operation","edit"},{"document",draft},{"gesture_id",std::to_string(gesture)}});
+        if(changed) Do(Cmd::EditDocument::With({{"document",draft},{"gesture_id",std::to_string(gesture)}}));
     }
     ImGui::EndDisabled();
     if(replacing) ImGui::TextWrapped("Project structure is changing; editing resumes when the operation finishes.");
     if(view==4 && w->ActiveJob()) {
         const auto j=w->jobs->GetJob(w->ActiveJob()); if(j) {ImGui::ProgressBar(j->totalWork>0?j->completedWork/j->totalWork:0);ImGui::TextWrapped("%s",j->currentStage.c_str());}
-        if(ImGui::Button("Cancel")) Send({{"operation","cancel"}});
+        if(ImGui::Button("Cancel")) Do(Cmd::Cancel::With());
         ImGui::TextWrapped("Cancellation takes effect after mesh preparation or the current Newton solve.");
     }
 }
@@ -838,7 +838,7 @@ bool Panel::OpticalFile(Json &object,const char *file,const char *table,const ch
             ImGui::BeginDisabled(w->Busy());
             for(const auto *format:{"csv","grd"})if(ImGui::MenuItem((std::string("Export .")+format).c_str()))try {
                 if(const auto path=SaveFileDialog({"Generation profile",format},(std::string("generation.")+format).c_str())) {
-                    Send({{"operation","export_profile"},{"parameter_id","generation_m3_s"},{"path",path->Utf8()}});
+                    Do(Cmd::ExportProfile::With({{"parameter_id","generation_m3_s"},{"path",path->Utf8()}}));
                 }
             }catch(const std::exception &e){w->status=e.what();}ImGui::EndDisabled();ImGui::EndPopup();
         }
@@ -881,7 +881,7 @@ bool Panel::Illumination(Json &draft) {
             ImGui::EndTabItem();
         }
         if(ImGui::BeginTabItem("Light I-V",nullptr,tabFlags(1))) {selectTab(1);
-            ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Calculate light I-V")) Send({{"operation","run"}});w->tutorialOverlay.Item("scapslab.Illumination","light-iv");ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"iv");ImGui::TextDisabled("Illuminated J-V curve with Voc, Jsc and MPP markers");
+            ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Calculate light I-V")) Do(Cmd::Run::With());w->tutorialOverlay.Item("scapslab.Illumination","light-iv");ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"iv");ImGui::TextDisabled("Illuminated J-V curve with Voc, Jsc and MPP markers");
             const auto &r=w->Current().result;
             const auto &live=w->Current();const bool estimating=live.liveRunning && live.pvEstimate.valid;
             if(estimating) { // photovoltaic metrics read off the sweep so far: tagged, replaced by the exact refinement of the same job
@@ -938,7 +938,7 @@ bool Panel::Illumination(Json &draft) {
             Choice("Probe mode",qeRequest,"probe_mode",{{"Constant photons","constant_flux"},{"Constant power","constant_power"}});
             Number(qeRequest["probe_mode"]=="constant_flux"?"Photon flux [m^-2 s^-1]":"Probe power [W/m^2]",qeRequest,qeRequest["probe_mode"]=="constant_flux"?"probe_photon_flux_m2_s":"probe_power_W_m2");
             ImGui::TextWrapped("Dark differential EQE at 0 V; current device temperature. Full spectrum coverage is required for integrated Jsc.");
-            ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Calculate QE")) Send(qeRequest);w->tutorialOverlay.Item("scapslab.Illumination","qe");ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"qe");ImGui::TextDisabled("External quantum efficiency vs. wavelength");
+            ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Calculate QE")) Do(Cmd::RunQe::FromJson(qeRequest));w->tutorialOverlay.Item("scapslab.Illumination","qe");ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"qe");ImGui::TextDisabled("External quantum efficiency vs. wavelength");
             if(wide) ImGui::TableNextColumn();
             if(w->Current().acResults.contains("qe")) {const auto &q=w->Current().acResults.at("qe");ImGui::TextWrapped("Effective: %s | T %.6g K | 0 V | %d samples",q.at("probe_mode").get<std::string>().c_str(),q.at("temperature_K").get<double>(),int(q.at("points").size()));Json x=Json::array(),y=Json::array();for(const auto &p:q.at("points")) {x.push_back(p.at("wavelength_nm"));y.push_back(p.at("EQE").is_number()?p.at("EQE"):Json(NAN));}
                 ImGui::TextWrapped("Integrated Jsc: %s A/m^2 | Light Jsc: %s A/m^2",q.at("integrated_Jsc_A_m2").dump().c_str(),q.at("light_Jsc_A_m2").dump().c_str());ImGui::TextWrapped("%s",q.at("integration_note").get<std::string>().c_str());if(BeginSavedPlot(*w,"QE history",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","EQE [fraction]");HistoryLines(*w,w->Current(),"qe","wavelength_nm","EQE");{std::vector<double> qx,qy;for(const auto &p:q.at("points")){qx.push_back(p.at("wavelength_nm"));qy.push_back(p.at("EQE").is_number()?p.at("EQE").get<double>():NAN);}ImPlot::PlotLine("EQE",qx.data(),qy.data(),int(qx.size()),{ImPlotProp_LineWeight,2.5f});}EndSavedPlot(*w,"QE history");}
@@ -950,7 +950,7 @@ bool Panel::Illumination(Json &draft) {
             }if(wide) ImGui::EndTable();ImGui::EndTabItem();
         }ImGui::EndTabBar();
     }
-    if(previousQe!=qeRequest && !w->Busy()) {auto actions=w->Current().actions;actions["qe"]=qeRequest;Send({{"operation","action_settings"},{"actions",actions}});}
+    if(previousQe!=qeRequest && !w->Busy()) {auto actions=w->Current().actions;actions["qe"]=qeRequest;Do(Cmd::SetActionSettings::With({{"actions",actions}}));}
     ImGui::TextWrapped("%s",w->status.c_str());return changed;
 }
 bool Panel::Absorption(Json &draft) {
@@ -1055,7 +1055,7 @@ bool Panel::ProfileEditor(Json &g,double thickness,const std::string &parameter,
                 try {if(const auto path=SaveFileDialog({"Profile",format},(std::string("profile.")+format).c_str())) {
                     Json request={{"operation","export_profile"},{"layer_id",layerId},{"parameter_id",parameter},{"path",path->Utf8()}};
                     if(parameter=="Nt_m3")request["defect_id"]=w->Current().document.at("layers")[w->Current().selectedLayer].at("defects")[selectedDefect].at("scapslab_id");
-                    Send(request);
+                    Do(Cmd::ExportProfile::FromJson(request));
                 }}catch(const std::exception &e){w->status=e.what();}
             }ImGui::EndDisabled();ImGui::EndPopup();
         }
@@ -1252,8 +1252,8 @@ void Panel::StructureEdit() {
     auto draft=dragDoc.empty()?device.document:dragDoc;
     const bool changed=Structure(draft);
     if(changed && held) {dragDoc=std::move(draft);dragDevice=device.id;return;}
-    if(changed) {dragDoc=Json();Send({{"operation","edit"},{"document",draft},{"gesture_id",std::to_string(gesture)}});return;}
-    if(!dragDoc.empty() && !held) {auto doc=std::move(dragDoc);dragDoc=Json();if(doc!=device.document)Send({{"operation","edit"},{"document",doc},{"gesture_id",std::to_string(gesture)}});}
+    if(changed) {dragDoc=Json();Do(Cmd::EditDocument::With({{"document",draft},{"gesture_id",std::to_string(gesture)}}));return;}
+    if(!dragDoc.empty() && !held) {auto doc=std::move(dragDoc);dragDoc=Json();if(doc!=device.document)Do(Cmd::EditDocument::With({{"document",doc},{"gesture_id",std::to_string(gesture)}}));}
 }
 void Panel::Results() {
     const Json *selected=nullptr;
@@ -1367,15 +1367,15 @@ void Panel::AC() {
             Number("Bias [V]",acRequest,"voltage_V"); Number("Start [Hz]",acRequest,"start_Hz"); Number("Stop [Hz]",acRequest,"stop_Hz"); Number("Log points",acRequest,"points");
         }
     }
-    if(previousRequest!=acRequest && !w->Busy()) {auto actions=w->Current().actions;actions[kind]=acRequest;Send({{"operation","action_settings"},{"actions",actions}});}
-    if(ImGui::Button(cv?"Run C-V":"Run C-f")) Send(acRequest);
+    if(previousRequest!=acRequest && !w->Busy()) {auto actions=w->Current().actions;actions[kind]=acRequest;Do(Cmd::SetActionSettings::With({{"actions",actions}}));}
+    if(ImGui::Button(cv?"Run C-V":"Run C-f")) {if(cv)Do(Cmd::RunCv::FromJson(acRequest));else Do(Cmd::RunCf::FromJson(acRequest));};
     ImGui::SameLine(); ImGui::SetNextItemWidth(220); TextInput("CSV path",csvFile,sizeof(csvFile)); ImGui::SameLine();
-    if(ImGui::Button("Export CSV")) Send({{"operation","export_ac"},{"kind",kind},{"path",csvFile}});
+    if(ImGui::Button("Export CSV")) Do(Cmd::ExportAc::With({{"kind",kind},{"path",csvFile}}));
     ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,kind);
     if(w->Busy()) {
         ImGui::TextDisabled("AC controls disabled while a job is active; wait or Cancel.");
         const auto job=w->jobs->GetJob(w->ActiveJob()); if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0); ImGui::TextWrapped("%s",job->currentStage.c_str());}
-        if(ImGui::Button("Cancel")) Send({{"operation","cancel"}});
+        if(ImGui::Button("Cancel")) Do(Cmd::Cancel::With());
     }
     const Json *snapshot=nullptr;
     if(w->Current().acResults.contains(kind)) snapshot=&w->Current().acResults.at(kind);
@@ -1412,23 +1412,23 @@ void Panel::AC() {
 void Panel::Devices() {
     // Project tree: Project > Devices > device > (Layers, Interfaces, Contacts, Illumination, Results). One line per item.
     ImGui::BeginDisabled(w->Busy());
-    if(ImGui::Button(ICON_FA_PLUS " New device")) Send({{"operation","device_add"}});w->tutorialOverlay.Item("scapslab.Project","new");ImGui::SameLine();
-    if(ImGui::Button(ICON_FA_FILE_IMPORT " Import device")) {try {if(const auto path=OpenFileDialog({"Device YAML","yaml,yml"})) Send({{"operation","device_add"},{"path",path->Utf8()}});}catch(const std::exception &e){w->status=e.what();}}
+    if(ImGui::Button(ICON_FA_PLUS " New device")) Do(Cmd::AddDevice::With());w->tutorialOverlay.Item("scapslab.Project","new");ImGui::SameLine();
+    if(ImGui::Button(ICON_FA_FILE_IMPORT " Import device")) {try {if(const auto path=OpenFileDialog({"Device YAML","yaml,yml"})) Do(Cmd::AddDevice::With({{"path",path->Utf8()}}));}catch(const std::exception &e){w->status=e.what();}}
     if(ImGui::IsItemHovered()) ImGui::SetTooltip("Import a device YAML (or use File / Import SCAPS .def). Unsupported items are reported as warnings.");
-    if(ImGui::Button("Undo")) Send({{"operation","undo"}});w->tutorialOverlay.Item("scapslab.Project","undo");
+    if(ImGui::Button("Undo")) Do(Cmd::Undo::With());w->tutorialOverlay.Item("scapslab.Project","undo");
     if(ImGui::IsItemHovered()) ImGui::SetTooltip("Undo (also restores a deleted device)");
-    ImGui::SameLine();if(ImGui::Button("Redo")) Send({{"operation","redo"}});w->tutorialOverlay.Item("scapslab.Project","redo");
+    ImGui::SameLine();if(ImGui::Button("Redo")) Do(Cmd::Redo::With());w->tutorialOverlay.Item("scapslab.Project","redo");
     ImGui::EndDisabled();
-    ImGui::SameLine();if(ImGui::Button(ICON_FA_PLAY " Run all checked") && !w->Busy()) Send({{"operation","run_all"}});
+    ImGui::SameLine();if(ImGui::Button(ICON_FA_PLAY " Run all checked") && !w->Busy()) Do(Cmd::RunAll::With());
     ImGui::SameLine();ImGui::TextDisabled("Compare: show in plots");
     if(w->Busy()) {
         const auto job=w->jobs->GetJob(w->ActiveJob());
         if(w->batchTotal) ImGui::ProgressBar(float(w->batchCompleted)/float(w->batchTotal),ImVec2(-90,0),(std::to_string(w->batchCompleted)+" / "+std::to_string(w->batchTotal)+" devices").c_str());
         else ImGui::ProgressBar(job && job->totalWork>0?float(job->completedWork/job->totalWork):0.f,ImVec2(-90,0),job?job->currentStage.c_str():"");
-        ImGui::SameLine();if(ImGui::Button("Cancel")) Send({{"operation","cancel"}});
+        ImGui::SameLine();if(ImGui::Button("Cancel")) Do(Cmd::Cancel::With());
     } else if(w->dirty || !w->status.empty()) ImGui::TextDisabled("%s%s",w->dirty?"* unsaved  ":"",w->status.c_str());
     ImGui::Separator();
-    const auto select=[&](const DeviceState &d) {if(w->project.active_device!=d.id) Send({{"operation","device_select"},{"device_id",d.id}});};
+    const auto select=[&](const DeviceState &d) {if(w->project.active_device!=d.id) Do(Cmd::SelectDevice::With({{"device_id",d.id}}));};
     const auto go=[&](int target) {if(PanelShown(target))w->focusView=target;}; // hidden panels: no jump
     // Tree node with room for inline decoration; returns {open, clicked (not the arrow)}.
     const auto node=[&](const char *id,ImGuiTreeNodeFlags flags,bool selected) {
@@ -1456,14 +1456,14 @@ void Panel::Devices() {
                 if(clicked) {select(d);go(14);}
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nStatus: %s",d.name.c_str(),d.status.c_str());
                 if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_DEVICE",d.id.c_str(),d.id.size()+1);ImGui::TextUnformatted(d.name.c_str());ImGui::EndDragDropSource();}
-                if(ImGui::BeginDragDropTarget()) {if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_DEVICE")) Send({{"operation","device_move"},{"device_id",static_cast<const char*>(payload->Data)},{"index",int(&dp-&devices[0])}});ImGui::EndDragDropTarget();}
+                if(ImGui::BeginDragDropTarget()) {if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_DEVICE")) Do(Cmd::MoveDevice::With({{"device_id",static_cast<const char*>(payload->Data)},{"index",int(&dp-&devices[0])}}));ImGui::EndDragDropTarget();}
                 if(ImGui::BeginPopupContextItem("device-menu")) {
                     select(d);
                     if(ImGui::MenuItem("Rename...")) {renameId=d.id;std::snprintf(renameBuf,sizeof(renameBuf),"%s",d.name.c_str());ImGui::CloseCurrentPopup();openRename=true;}
-                    if(ImGui::MenuItem("Duplicate")) Send({{"operation","device_duplicate"},{"device_id",d.id}});
-                    if(ImGui::MenuItem("Delete",nullptr,false,devices.size()>1)) Send({{"operation","device_remove"},{"device_id",d.id}});
+                    if(ImGui::MenuItem("Duplicate")) Do(Cmd::DuplicateDevice::With({{"device_id",d.id}}));
+                    if(ImGui::MenuItem("Delete",nullptr,false,devices.size()>1)) Do(Cmd::RemoveDevice::With({{"device_id",d.id}}));
                     ImGui::Separator();
-                    if(ImGui::MenuItem("Add layer")) {Send({{"operation","layer"},{"action","add"}});go(1);}
+                    if(ImGui::MenuItem("Add layer")) {Do(Cmd::EditLayer::With({{"action","add"}}));go(1);}
                     if(ImGui::MenuItem("Add defect")) {AddDefectTo(false,w->Current().selectedLayer);go(11);}
                     if(ImGui::MenuItem("Add interface defect")) {AddDefectTo(true,w->Current().selectedLayer);go(12);}
                     ImGui::Separator();
@@ -1478,7 +1478,7 @@ void Panel::Devices() {
                     ImGui::SetNextItemWidth(std::max(80.f,rowRight-ImGui::GetCursorPosX()-box*2));
                     const bool entered=ImGui::InputText("##inline",renameBuf,sizeof(renameBuf),ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_AutoSelectAll);
                     if(ImGui::IsKeyPressed(ImGuiKey_Escape)) inlineId.clear();
-                    else if(entered || ImGui::IsItemDeactivated()) {if(renameBuf[0] && d.name!=renameBuf) Send({{"operation","device_update"},{"device_id",d.id},{"name",renameBuf}});inlineId.clear();}
+                    else if(entered || ImGui::IsItemDeactivated()) {if(renameBuf[0] && d.name!=renameBuf) Do(Cmd::UpdateDevice::With({{"device_id",d.id},{"name",renameBuf}}));inlineId.clear();}
                 } else {
                     if(compare) ImGui::TextUnformatted((d.name+(d.dirty?" *":"")).c_str());else ImGui::TextDisabled("%s",(d.name+(d.dirty?" *":"")).c_str());
                     const bool dbl=ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0);
@@ -1490,7 +1490,7 @@ void Panel::Devices() {
                     ImGui::ProgressBar(job && job->totalWork>0?float(job->completedWork/job->totalWork):0.f,ImVec2(48,box*.35f),"");
                 }
                 ImGui::SameLine();ImGui::SetCursorPosX(rowRight-box);
-                ImGui::BeginDisabled(w->Busy());if(ImGui::Checkbox("##compare",&compare)) Send({{"operation","device_update"},{"device_id",d.id},{"compare",compare}});ImGui::EndDisabled();
+                ImGui::BeginDisabled(w->Busy());if(ImGui::Checkbox("##compare",&compare)) Do(Cmd::UpdateDevice::With({{"device_id",d.id},{"compare",compare}}));ImGui::EndDisabled();
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("Compare: show in plots");
                 if(open) {
                     const auto &doc=d.document;
@@ -1521,7 +1521,7 @@ void Panel::Devices() {
                                         if(text.substr(0,nl)==d.id && fromIndex>=0 && fromIndex!=i) {
                                             const auto min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();const float y=fromIndex>i?min.y:max.y; // lands above the row when moving up, below when moving down
                                             ImGui::GetForegroundDrawList()->AddLine(ImVec2(min.x,y),ImVec2(max.x,y),ImGui::GetColorU32(ImGuiCol_NavHighlight),2.f);
-                                            if(payload->IsDelivery()) {select(d);Send({{"operation","layer"},{"action","move"},{"layer_id",from},{"index",i}});}
+                                            if(payload->IsDelivery()) {select(d);Do(Cmd::EditLayer::With({{"action","move"},{"layer_id",from},{"index",i}}));}
                                         }
                                     }
                                     ImGui::EndDragDropTarget();
@@ -1530,7 +1530,7 @@ void Panel::Devices() {
                             if(ImGui::BeginPopupContextItem("layer-menu")) {
                                 select(d);w->Current().selectedLayer=i;
                                 if(ImGui::MenuItem("Add defect")) {AddDefectTo(false,i);go(11);}
-                                if(ImGui::MenuItem("Add layer")) {Send({{"operation","layer"},{"action","add"}});go(1);}
+                                if(ImGui::MenuItem("Add layer")) {Do(Cmd::EditLayer::With({{"action","add"}}));go(1);}
                                 if(ImGui::MenuItem("Add interface to next layer",nullptr,false,i+1<int(layers.size()))) {AddDefectTo(true,i);go(12);}
                                 if(ImGui::MenuItem("Open in new window")) OpenLayerWindow(w,d.id,l.value("scapslab_id",std::string{}));
                                 ImGui::EndPopup();
@@ -1560,7 +1560,7 @@ void Panel::Devices() {
                                         if(text.substr(0,nl)==d.id && fromIndex>=0 && fromIndex!=target) {
                                             const auto min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();
                                             ImGui::GetForegroundDrawList()->AddLine(ImVec2(min.x,max.y),ImVec2(max.x,max.y),ImGui::GetColorU32(ImGuiCol_NavHighlight),2.f);
-                                            if(payload->IsDelivery()) {select(d);Send({{"operation","layer"},{"action","move"},{"layer_id",from},{"index",target}});}
+                                            if(payload->IsDelivery()) {select(d);Do(Cmd::EditLayer::With({{"action","move"},{"layer_id",from},{"index",target}}));}
                                         }
                                     }
                                     ImGui::EndDragDropTarget();
@@ -1568,7 +1568,7 @@ void Panel::Devices() {
                                 if(ImGui::BeginPopupContextItem("interface-menu")) {
                                     select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;
                                     if(ImGui::MenuItem("Add interface defect")) {AddDefectTo(true,i);go(12);}
-                                    if(ImGui::MenuItem("Remove defects")) {auto draft=d.document;auto &arr=draft["interface_defects"];for(int k=int(arr.size())-1;k>=0;--k) if(arr[k].value("left_layer_index",-1)==i) arr.erase(arr.begin()+k);Send({{"operation","edit"},{"document",draft}});}
+                                    if(ImGui::MenuItem("Remove defects")) {auto draft=d.document;auto &arr=draft["interface_defects"];for(int k=int(arr.size())-1;k>=0;--k) if(arr[k].value("left_layer_index",-1)==i) arr.erase(arr.begin()+k);Do(Cmd::EditDocument::With({{"document",draft}}));}
                                     ImGui::EndPopup();
                                 }
                                 text(ICON_FA_ARROWS_LEFT_RIGHT " Interface "+std::to_string(i+1)+" ("+layers[i].value("name",std::string{})+" / "+layers[i+1].value("name",std::string{})+")",std::to_string(sheetIdx.size())+" defect(s)");
@@ -1650,7 +1650,7 @@ void Panel::Devices() {
         if(ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         const bool entered=ImGui::InputText("##name",renameBuf,sizeof(renameBuf),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);
         if(ImGui::Button("OK") || entered) {
-            if(renameId.empty()) Send({{"operation","project_edit"},{"name",renameBuf}});else Send({{"operation","device_update"},{"device_id",renameId},{"name",renameBuf}});
+            if(renameId.empty()) Do(Cmd::EditProject::With({{"name",renameBuf}}));else Do(Cmd::UpdateDevice::With({{"device_id",renameId},{"name",renameBuf}}));
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();if(ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
@@ -1667,15 +1667,15 @@ void Panel::AddDefectTo(bool sheet,int layer) {
     d[sheet?"id":"scapslab_id"]=prefix+std::to_string(n);
     if(sheet) {d["left_layer_index"]=layer;if(!draft.contains("interface_defects") || !draft["interface_defects"].is_array()) draft["interface_defects"]=Json::array();draft["interface_defects"].push_back(d);selectedDefect=int(draft["interface_defects"].size())-1;}
     else {draft["layers"][layer]["defects"].push_back(d);selectedDefect=int(draft["layers"][layer]["defects"].size())-1;}
-    Send({{"operation","edit"},{"document",draft}});
+    Do(Cmd::EditDocument::With({{"document",draft}}));
 }
 void Panel::Compare() {
     absoluteLog=w->project.ui.value("iv_absolute_log",true);
     static bool historyOpen=false; // one compact row: Run history toggle | Log |J| | Run all checked | Single shot | Shots
     if(ImGui::Button(historyOpen?"Run history  v":"Run history  >"))historyOpen=!historyOpen;
     ImGui::SameLine();
-    if(ImGui::Checkbox("Log |J|",&absoluteLog)) {auto ui=w->project.ui;ui["iv_absolute_log"]=absoluteLog;Send({{"operation","project_edit"},{"ui",ui}});}TrackGesture();
-    ImGui::SameLine();ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Run all checked")) Send({{"operation","run_all"}});ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"iv");
+    if(ImGui::Checkbox("Log |J|",&absoluteLog)) {auto ui=w->project.ui;ui["iv_absolute_log"]=absoluteLog;Do(Cmd::EditProject::With({{"ui",ui}}));}TrackGesture();
+    ImGui::SameLine();ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Run all checked")) Do(Cmd::RunAll::With());ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"iv");
     if(historyOpen) DrawHistory(*w);
     bool any=false;for(const auto &d:w->project.devices) any|=(w->project.compare_set.contains(d->id) || d->id==w->project.active_device) && (!d->result.empty() || !d->history.empty() || d->liveRunning);
     if(!any) {ImGui::TextWrapped("Tick 'Compare' on devices in the Project tree to overlay them.");return;}
@@ -1764,12 +1764,12 @@ void Panel::Batch() {
             } else {changed|=AxisNumber(("Start ["+selected->at("unit").get<std::string>()+"]").c_str(),axis,"start",*selected);changed|=AxisNumber(("Stop ["+selected->at("unit").get<std::string>()+"]").c_str(),axis,"stop",*selected);BeginRow("Member count");int count=axis.at("count");if(ImGui::SliderInt("##count",&count,1,100)) {axis["count"]=count;changed=true;}EndRow();}
         }ImGui::PopID();
     }
-    if(changed) Send({{"operation","batch_settings"},{"spec",spec}});
+    if(changed) Do(Cmd::SetBatchSettings::With({{"spec",spec}}));
     Json preview;std::string error;
     try {auto configured=spec;configured["columns"]=d.recorderColumns;preview=BatchPreview(d.document,configured);}catch(const std::exception &e){error=e.what();}
     if(!error.empty())ImGui::TextWrapped("Configuration: %s",error.c_str());
-    ImGui::BeginDisabled(!error.empty());if(ImGui::Button("Run batch"))Send({{"operation","run_batch"}});ImGui::EndDisabled();ImGui::EndDisabled();
-    ImGui::SameLine();ImGui::BeginDisabled(!w->AnyActive());if(ImGui::Button("Stop"))Send({{"operation","cancel"}});ImGui::EndDisabled();
+    ImGui::BeginDisabled(!error.empty());if(ImGui::Button("Run batch"))Do(Cmd::RunBatch::With());ImGui::EndDisabled();ImGui::EndDisabled();
+    ImGui::SameLine();ImGui::BeginDisabled(!w->AnyActive());if(ImGui::Button("Stop"))Do(Cmd::Cancel::With());ImGui::EndDisabled();
     if(w->ActiveJob()) {const auto job=w->jobs->GetJob(w->ActiveJob());if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0);ImGui::TextWrapped("%s",job->currentStage.c_str());}}
     ImGui::TextWrapped("%s",w->status.c_str());
     if(!preview.empty()) {
@@ -1790,11 +1790,11 @@ void Panel::Recorder() {
     for(const char *q:{"Voc","Jsc","FF","eta","J","C","G","Vbi"}) {bool enabled=std::any_of(columns.begin(),columns.end(),[&](const Json &c){return c.at("quantity")==q;});if(Toggle(q,enabled)) {changed=true;columns.erase(std::remove_if(columns.begin(),columns.end(),[&](const Json &c){return c.at("quantity")==q;}),columns.end());if(enabled) {Json c={{"id",q},{"quantity",q}};if(std::string(q)=="J" || std::string(q)=="C" || std::string(q)=="G")c["voltage_V"]=0.;if(std::string(q)=="C" || std::string(q)=="G" || std::string(q)=="Vbi")c["frequency_Hz"]=1e4;columns.push_back(c);}}}
     for(auto &c:columns) {ImGui::PushID(c.at("id").get<std::string>().c_str());if(c.contains("voltage_V"))changed|=Number((c.at("quantity").get<std::string>()+" @ bias [V]").c_str(),c,"voltage_V");if(c.contains("frequency_Hz"))changed|=Number((c.at("quantity").get<std::string>()+" @ f [Hz]").c_str(),c,"frequency_Hz");ImGui::PopID();}
     auto frequencies=Json::array();for(const auto &c:columns)if(c.contains("frequency_Hz") && std::find(frequencies.begin(),frequencies.end(),c["frequency_Hz"])==frequencies.end())frequencies.push_back(c["frequency_Hz"]);spec["frequencies_Hz"]=frequencies;
-    if(changed)Send({{"operation","batch_settings"},{"spec",spec},{"columns",columns}});
+    if(changed)Do(Cmd::SetBatchSettings::With({{"spec",spec},{"columns",columns}}));
     ImGui::TreePop();}
-    ImGui::BeginDisabled(d.batchResult.empty());if(ImGui::Button("Re-extract Recorder"))Send({{"operation","record_batch"}});ImGui::SameLine();
-    if(ImGui::Button("Export all CSV...")) {if(const auto target=SaveFileDialog({"Recorder CSV","csv"},"scapslab-batch.csv"))Send({{"operation","export_batch"},{"path",target->Utf8()}});}ImGui::SameLine();
-    if(ImGui::Button("Send to PlotLab...")) {if(const auto target=SaveFileDialog({"PlotLab workbook","plotlab"},"scapslab-batch.plotlab"))Send({{"operation","send_to_plotlab"},{"path",target->Utf8()}});}ImGui::EndDisabled();ImGui::EndDisabled();
+    ImGui::BeginDisabled(d.batchResult.empty());if(ImGui::Button("Re-extract Recorder"))Do(Cmd::RecordBatch::With());ImGui::SameLine();
+    if(ImGui::Button("Export all CSV...")) {if(const auto target=SaveFileDialog({"Recorder CSV","csv"},"scapslab-batch.csv"))Do(Cmd::ExportBatch::With({{"path",target->Utf8()}}));}ImGui::SameLine();
+    if(ImGui::Button("Send to PlotLab...")) {if(const auto target=SaveFileDialog({"PlotLab workbook","plotlab"},"scapslab-batch.plotlab"))Do(Cmd::SendToPlotLab::With({{"path",target->Utf8()}}));}ImGui::EndDisabled();ImGui::EndDisabled();
     ImGui::TextWrapped("%s",w->status.c_str());
     if(d.batchResult.empty()) {ImGui::TextUnformatted("Run a batch to populate the worksheet.");return;}
     const auto &table=d.batchResult;const auto &rows=table.at("rows");
@@ -1802,7 +1802,7 @@ void Panel::Recorder() {
         for(const char *h:{"Member","Status / error","Time [s]","Attempt"})ImGui::TableSetupColumn(h);
         for(const auto &a:table.at("spec").at("axes"))ImGui::TableSetupColumn((a.at("path").get<std::string>()+" ["+a.at("unit").get<std::string>()+"]").c_str());
         for(const auto &c:table.at("columns"))ImGui::TableSetupColumn((c.at("id").get<std::string>()+" ["+c.at("unit").get<std::string>()+"]").c_str());ImGui::TableSetupScrollFreeze(1,1);ImGui::TableHeadersRow();
-        for(std::size_t i=0;i<rows.size();++i) {const auto &r=rows[i];ImGui::PushID(int(i));ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Selectable(r.at("id").get<std::string>().c_str(),d.selectedMember==int(i)))Send({{"operation","batch_select"},{"index",i}});ImGui::TableNextColumn();ImGui::TextWrapped("%s %s %s",r.at("status").get<std::string>().c_str(),r.value("error_type",std::string{}).c_str(),r.value("message",std::string{}).c_str());ImGui::TableNextColumn();ImGui::Text("%.3g",r.at("elapsed_s").get<double>());ImGui::TableNextColumn();ImGui::Text("%d",r.value("attempt",1));for(const auto &a:table.at("spec").at("axes")) {ImGui::TableNextColumn();ImGui::Text("%.6g",r.at("parameters").at(a.at("path").get<std::string>()).get<double>());}for(const auto &c:table.at("columns")) {ImGui::TableNextColumn();const auto id=c.at("id").get<std::string>();const auto &v=r.at("values").at(id);if(v.is_number())ImGui::Text("%.6g",v.get<double>());else ImGui::TextUnformatted("--");ImGui::TextWrapped("%s",r.at("statuses").at(id).get<std::string>().c_str());}ImGui::PopID();}ImGui::EndTable();
+        for(std::size_t i=0;i<rows.size();++i) {const auto &r=rows[i];ImGui::PushID(int(i));ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Selectable(r.at("id").get<std::string>().c_str(),d.selectedMember==int(i)))Do(Cmd::SelectBatchMember::With({{"index",i}}));ImGui::TableNextColumn();ImGui::TextWrapped("%s %s %s",r.at("status").get<std::string>().c_str(),r.value("error_type",std::string{}).c_str(),r.value("message",std::string{}).c_str());ImGui::TableNextColumn();ImGui::Text("%.3g",r.at("elapsed_s").get<double>());ImGui::TableNextColumn();ImGui::Text("%d",r.value("attempt",1));for(const auto &a:table.at("spec").at("axes")) {ImGui::TableNextColumn();ImGui::Text("%.6g",r.at("parameters").at(a.at("path").get<std::string>()).get<double>());}for(const auto &c:table.at("columns")) {ImGui::TableNextColumn();const auto id=c.at("id").get<std::string>();const auto &v=r.at("values").at(id);if(v.is_number())ImGui::Text("%.6g",v.get<double>());else ImGui::TextUnformatted("--");ImGui::TextWrapped("%s",r.at("statuses").at(id).get<std::string>().c_str());}ImGui::PopID();}ImGui::EndTable();
     }
     if(table.at("columns").empty())return;recorderPlot=w->project.ui.value("recorder_plot",0);recorderPlot=std::clamp(recorderPlot,0,int(table.at("columns").size())-1);BeginRow("Plot scalar");if(ImGui::BeginCombo("##quantity",table.at("columns")[recorderPlot].at("id").get<std::string>().c_str())) {for(int i=0;i<int(table.at("columns").size());++i)if(ImGui::Selectable(table.at("columns")[i].at("id").get<std::string>().c_str(),i==recorderPlot))recorderPlot=i;ImGui::EndCombo();}EndRow();
     w->project.ui["recorder_plot"]=recorderPlot;
@@ -1825,13 +1825,13 @@ void Panel::BatchPlots() {
     }
     if(d.batchResult.empty()) {ImGui::TextUnformatted("Run a batch to overlay its curves.");return;}
     const auto &table=d.batchResult;const auto &rows=table.at("rows");d.selectedMember=std::clamp(d.selectedMember,0,int(rows.size())-1);
-    BeginRow("Selected member");if(ImGui::BeginCombo("##member",MemberLabel(rows[d.selectedMember],table.at("spec")).c_str())) {for(int i=0;i<int(rows.size());++i)if(ImGui::Selectable((MemberLabel(rows[i],table.at("spec"))+" | "+rows[i].at("status").get<std::string>()).c_str(),i==d.selectedMember))Send({{"operation","batch_select"},{"index",i}});ImGui::EndCombo();}EndRow();
+    BeginRow("Selected member");if(ImGui::BeginCombo("##member",MemberLabel(rows[d.selectedMember],table.at("spec")).c_str())) {for(int i=0;i<int(rows.size());++i)if(ImGui::Selectable((MemberLabel(rows[i],table.at("spec"))+" | "+rows[i].at("status").get<std::string>()).c_str(),i==d.selectedMember))Do(Cmd::SelectBatchMember::With({{"index",i}}));ImGui::EndCombo();}EndRow();
     const auto &selected=rows[d.selectedMember];ImGui::TextWrapped("%s | %s",selected.at("status").get<std::string>().c_str(),selected.value("message",std::string{}).c_str());
-    ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Retry selected"))Send({{"operation","retry_batch"},{"member_id",selected.at("id")}});ImGui::SameLine();if(ImGui::Button("Export selected CSV..."))if(const auto target=SaveFileDialog({"Recorder CSV","csv"},"scapslab-member.csv"))Send({{"operation","export_batch"},{"member_id",selected.at("id")},{"path",target->Utf8()}});ImGui::EndDisabled();
+    ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Retry selected"))Do(Cmd::RetryBatchMember::With({{"member_id",selected.at("id")}}));ImGui::SameLine();if(ImGui::Button("Export selected CSV..."))if(const auto target=SaveFileDialog({"Recorder CSV","csv"},"scapslab-member.csv"))Do(Cmd::ExportBatch::With({{"member_id",selected.at("id")},{"path",target->Utf8()}}));ImGui::EndDisabled();
     ImGui::TextWrapped("Colour: %s [%s]. Click near a curve sample to select. Failed members remain listed.",table.at("spec").at("axes")[0].at("path").get<std::string>().c_str(),table.at("spec").at("axes")[0].at("unit").get<std::string>().c_str());
     if(BeginSavedPlot(*w,"Batch I-V overlay",ImVec2(-1,-1))) {ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside);ImPlot::SetupAxes("Voltage [V] (left minus right)","J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);double nearest=64;int hit=-1;
         for(int i=0;i<int(rows.size());++i) {const auto &r=rows[i];if(!r.contains("curves"))continue;std::vector<double>x,y;for(const auto &p:r.at("curves").at("iv")) {const double v=p.at("voltage_V");const double j=p.at("J_Am2").is_number() && p.at("status")=="Converged"?p.at("J_Am2").get<double>():NAN;x.push_back(v);y.push_back(j);if(std::isfinite(j) && ImPlot::IsPlotHovered()) {const auto pixel=ImPlot::PlotToPixels(v,j);const auto mouse=ImGui::GetMousePos();const double dist=(pixel.x-mouse.x)*(pixel.x-mouse.x)+(pixel.y-mouse.y)*(pixel.y-mouse.y);if(dist<nearest){nearest=dist;hit=i;}}}ImPlot::PlotLine(MemberLabel(r,table.at("spec")).c_str(),x.data(),y.data(),int(x.size()),ImPlotSpec(ImPlotProp_LineColor,MemberColour(r,table),ImPlotProp_LineWeight,i==d.selectedMember?3.f:2.f));}
-        if(hit>=0 && ImGui::IsMouseClicked(0) && !w->Busy())Send({{"operation","batch_select"},{"index",hit}});EndSavedPlot(*w,"Batch I-V overlay");}
+        if(hit>=0 && ImGui::IsMouseClicked(0) && !w->Busy())Do(Cmd::SelectBatchMember::With({{"index",hit}}));EndSavedPlot(*w,"Batch I-V overlay");}
 }
 }
 
@@ -1857,10 +1857,10 @@ void Panel::GenerationRecombination() {
         const bool changed=Number("Working voltage [V]",grBias,"voltage_V");
         if(changed) {device.biasVoltage_V=grBias.at("voltage_V");device.needsBand=true;device.changedAt=std::chrono::steady_clock::now();}
         if(!w->Busy() && device.needsBand && !ImGui::IsAnyItemActive() && std::chrono::steady_clock::now()-device.changedAt>=std::chrono::milliseconds(250))
-            Send({{"operation","band"},{"voltage_V",device.biasVoltage_V}});
+            Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));
         const bool hasVoc=device.result.contains("photovoltaic") && device.result["photovoltaic"].at("Voc_V").is_number();
         ImGui::BeginDisabled(w->Busy() || !hasVoc);
-        if(ImGui::Button("Voc")) {grBias["voltage_V"]=device.result["photovoltaic"]["Voc_V"];device.biasVoltage_V=grBias.at("voltage_V");Send({{"operation","band"},{"voltage_V",device.biasVoltage_V}});}
+        if(ImGui::Button("Voc")) {grBias["voltage_V"]=device.result["photovoltaic"]["Voc_V"];device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));}
         ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Requires an idle job and a valid refined Voc from a light I-V sweep.");
         ImGui::SameLine();
         const bool hasVmp=device.result.contains("points") && std::any_of(device.result.at("points").begin(),device.result.at("points").end(),[](const Json &p){return p.value("valid",false) && p.at("J_A_m2").is_number();});
@@ -1870,7 +1870,7 @@ void Panel::GenerationRecombination() {
                 const double power=-p.at("voltage_V").get<double>()*p.at("J_A_m2").get<double>();
                 if(power>best) {best=power;grBias["voltage_V"]=p.at("voltage_V");}
             }
-            device.biasVoltage_V=grBias.at("voltage_V");Send({{"operation","band"},{"voltage_V",device.biasVoltage_V}});
+            device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));
         }
         ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Requires an idle job and valid I-V points. Selects the sampled point with maximum delivered power.");
     }
@@ -1891,7 +1891,7 @@ void Panel::GenerationRecombination() {
     ImGui::BeginDisabled(w->Busy());
     for(const auto *format:{"csv","json"}) {
         if(ImGui::Button((std::string("Export G/R ")+format).c_str())) {
-            try {if(const auto path=SaveFileDialog({"G/R results",format},(std::string("generation-recombination.")+format).c_str())) Send({{"operation","export_gr"},{"path",path->Utf8()},{"format",format},{"source",grFollow?"iv":"band"},{"point_index",index}});}
+            try {if(const auto path=SaveFileDialog({"G/R results",format},(std::string("generation-recombination.")+format).c_str())) Do(Cmd::ExportGr::With({{"path",path->Utf8()},{"format",format},{"source",grFollow?"iv":"band"},{"point_index",index}}));}
             catch(const std::exception &e){w->status=e.what();}
         }ImGui::SameLine();
     }ImGui::NewLine();ImGui::EndDisabled();

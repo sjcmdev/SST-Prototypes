@@ -3,6 +3,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Notifications/Notifier.hpp"
 #include "Events.hpp"
+#include "Commands/Store.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -222,7 +223,7 @@ int ValidateUi(const Json &ui); // returns history_retention
 Json NormalizeWorkspace(Json workspace); // validate + normalize device documents; pure, no Workflow/JobSystem
 Json SingleDeviceWorkspace(Json document,std::string projectName);
 std::string WorkspaceText(const Json &workspace);
-class Workflow final : public Layer {
+class Workflow final : public Layer, public ILabStore {
 public:
     explicit Workflow(Ref<JobSystem> jobs, Ref<CommandRegistry> registry = {}, Ref<EventBus> bus = {}, Ref<Notifier> notifier = {}); // no bus/notifier (headless, tests): own ones; events are published synchronously on the calling thread, no ProcessQueue needed
     ~Workflow() override;
@@ -233,14 +234,14 @@ public:
     DeviceState &Device(const std::string &id);
     Json Workspace(bool withResults=true) const;
     void SetWorkspace(const Json &value,bool validated=false,const std::vector<DeviceResults> *typed=nullptr); // validated: value came from NormalizeWorkspace; typed: its results already taken out by ExtractResults
-    void DeviceOp(const Json &request); // device_*/project_edit/action_settings: in place on the UI thread (no job, no workspace copy)
+    void DeviceOp(const Json &request) override; // device_*/project_edit/action_settings: in place on the UI thread (no job, no workspace copy)
     static inline std::atomic_size_t constructed{0}; // test counter: Workflow instances ever built
     Json Snapshot() const;
     std::string MemoryReport() const; // SCAPSLAB_PERF: private bytes + history/result sizes
     Json Runs() const;
     void RefreshDirty();
     void StartOperation(const Json &request, const std::string &deviceId);
-    void HistoryOp(const Json &request); // history_select/update/clear: in place on the UI thread (no workspace copy, not undoable)
+    void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy, not undoable)
     Json response;
     std::string status = "Ready", path;
     Ref<JobSystem> jobs;
@@ -268,14 +269,14 @@ public:
     Lane projectLane, saveLane;
     Lane &LaneOf(const std::string &device) {auto &l=lanes[device];l.device=device;return l;}
     void Submit(const std::string &device,Json request,std::string key={}); // queue on the device's lane (starts at once when idle); same key = newest wins
-    void CancelDevice(const std::string &device);                          // cancels that device's job and drops its queued batch runs; other lanes keep running
-    bool AnyActive() const {for(const auto &[id,l]:lanes) if(l.active) return true;return false;}
+    void CancelDevice(const std::string &device) override;                       // cancels that device's job and drops its queued batch runs; other lanes keep running
+    bool AnyActive() const override {for(const auto &[id,l]:lanes) if(l.active) return true;return false;}
     JobId LaneJob(const std::string &device) const {auto it=lanes.find(device);return it==lanes.end()?0:it->second.active;}
     const Lane *PrimaryLane() const {auto it=lanes.find(project.active_device);if(it!=lanes.end() && it->second.active) return &it->second;for(const auto &[id,l]:lanes) if(l.active) return &l;return nullptr;}
     JobId ActiveJob() const {const auto *l=PrimaryLane();return l?l->active:0;}                // the active device's job, else any running one (progress display)
     Ref<Operation> ActiveOp() const {const auto *l=PrimaryLane();return l?l->pending:Ref<Operation>{};}
     const Json *EditDraft() const;                                                            // newest queued/running edit document of the active device, or null
-    bool ReplacingProject() const;                                                            // the active device's lane runs load/project_load/layer
+    bool ReplacingProject() const override;                                                          // the active device's lane runs load/project_load/layer
     std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}
     // Live recalculation while a slider is held (latest wins, <=10/s, coarse every 4th point when the last full run took >150 ms)
     bool dragging = false, dragSeen = false, fineLock = false, liveSeen = false; // dragSeen: set by the slider helper each frame, App copies it to dragging
@@ -296,7 +297,7 @@ public:
     Tutorial::Predicates TutorialPredicates();
     std::set<std::string> menuOpened;
     void MenuHook(const std::string &root, bool open) {if(open && tutorial.Active())menuOpened.insert(root);tutorialOverlay.Item("scapslab.Menu",root);}
-    void TutorialRequest(const Json &request);
+    void TutorialRequest(const Json &request) override;
     void UpdateTutorial();
     std::string openRequest, fileAction;
     std::string recoveryPath;
@@ -306,9 +307,27 @@ public:
     bool savingAuto = false;
     unsigned epoch = 0, saveEpoch = 0; // bumped when a project is loaded/new
     bool Saving() const { return saveLane.active != 0 || !saveLane.queue.empty(); }
-    void StartSave(const Json &request);
+    void StartSave(const Json &request) override;
     void UpdateSave();
-    Json Dispatch(const Json &request);
+    Json Dispatch(const Json &request);        // JSON adapter: "operation" -> typed command (Commands/); Python, headless, tutorials
+    template<class T> Json Exec(const T &command) { // typed API: panels call Exec(Cmd::Run::Make()); same registry path, same reply as Dispatch
+        return Reply([&]{CommandContext c;c.Set<T>("args",command);return commands->Execute(CommandID{std::string("scapslab.")+T::info.op},std::move(c));});
+    }
+    Json Reply(const std::function<Result<CommandOutcome>()> &run);
+    // ILabStore (Commands/Store.hpp): what the typed commands ask of the application
+    bool DeviceRunning(const std::string &device) const override {return LaneJob(device)!=0;}
+    void RequireDevice(const std::string &device) const override;
+    std::vector<std::string> ActiveOps() const override;
+    bool EditQueued() const override;
+    void StartJob(Json request) override {StartOperation(request,project.active_device);}
+    bool CancelAll() override;
+    void DeferProjectLoad(const Json &request) override;
+    void QueueEdit(const Json &request) override;
+    void PublishSnapshot() override {response=Snapshot();}
+    void SelectDevice(const std::string &device) override;
+    void SetAutoRecalculate(bool automatic,std::optional<bool> band) override;
+    Result<void> Step(bool undo) override;
+    void RunAll() override;
     void OnUpdate(float) override;
     void UpdateOperation();
     void PullLive(Lane &lane);
@@ -319,7 +338,7 @@ public:
     std::chrono::steady_clock::time_point viewTrimAt{};
     void TrimViews();
     bool Pending() const { return Busy() || Saving(); } // calculations or saves
-    bool Busy() const {for(const auto &[id,l]:lanes) if(!l.Idle()) return true;return !projectLane.Idle();}
+    bool Busy() const override {for(const auto &[id,l]:lanes) if(!l.Idle()) return true;return !projectLane.Idle();}
     bool Busy(const std::string &device) const {auto it=lanes.find(device);return it!=lanes.end() && !it->second.Idle();}
 };
 void RegisterPython();

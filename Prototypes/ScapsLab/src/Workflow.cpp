@@ -1,5 +1,6 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
+#include "Commands/Commands.hpp"
 #include <scaps_core/api.hpp>
 #include <scaps_core/illumination.hpp>
 #include <scaps_core/device_project_def.hpp>
@@ -81,95 +82,6 @@ public:
         return edit && !gesture.empty() && gesture==edit->gesture;
     }
     Result<void> Merge(std::unique_ptr<ICommand> next) override {after=static_cast<EditRecord&>(*next).after;return {};}
-};
-class Command final : public ICommand {
-    Workflow &w;
-public:
-    Json defaultRequest;
-    explicit Command(Workflow &w,Json request=Json::object()):w(w),defaultRequest(std::move(request)) {}
-    std::string Description() const override {return "ScapsLab operation";}
-    Result<void> Execute(CommandContext &c) override {
-        const auto *r=c.TryGet<Json>("request");
-        if (!r && !defaultRequest.empty()) r=&defaultRequest;
-        if (!r) return StructuredError{ErrorCategory::Validation,Severity::Error,"Missing request","Missing JSON request","Supply a request","ScapsLab","invalid_request"};
-        if (r->at("operation")=="cancel") {
-            if(r->contains("device_id")) {const auto id=r->at("device_id").get<std::string>();(void)w.Device(id);if(!w.LaneJob(id)) return StructuredError{ErrorCategory::Validation,Severity::Error,"No running job","No running job","Start a job","ScapsLab","not_running"};w.CancelDevice(id);return {};} // one device: the other lanes keep running
-            bool any=false;
-            for(auto &[id,lane]:w.lanes) {std::erase_if(lane.queue,[](const Workflow::Queued &q){return q.request.value("batch",false);});if(lane.active && w.jobs->RequestCancel(lane.active)) any=true;}
-                        if (!any) return StructuredError{ErrorCategory::Validation,Severity::Error,"No running job","No running job","Start a job","ScapsLab","not_running"};
-            return {};
-        }
-        const std::string op=r->at("operation");
-        if(op=="project_save" || (op=="save" && std::filesystem::path(r->at("path").get<std::string>()).extension()==".scapslab")) {(void)r->at("path").get<std::string>();w.StartSave(*r);return {};}
-        if((op=="load" || op=="project_load") && w.AnyActive()) {
-            const auto calc=[](const std::string &o){return o=="run" || o=="band" || o=="cv" || o=="cf" || o=="qe" || o=="run_batch";};
-            bool onlyCalc=true;for(const auto &[id,lane]:w.lanes) if(lane.active && !calc(lane.Op())) onlyCalc=false;
-            if(onlyCalc) {
-                w.projectLane.queue.clear();w.projectLane.Enqueue(*r,"project");
-                for(auto &[id,lane]:w.lanes) {std::erase_if(lane.queue,[](const Workflow::Queued &q){return q.request.value("batch",false);});if(lane.active) (void)w.jobs->RequestCancel(lane.active);}
-                w.status="Cancelling calculation; project will open after pending edits finish";
-                return {};
-            }
-        }
-        if(op=="history_list") {if(r->contains("device_id")) (void)w.Device(r->at("device_id").get<std::string>());w.response=w.Snapshot();return {};} // S7 regression: read-only, answered inline like device_list
-        if(op=="history_select" || op=="history_clear" || op=="history_update") {w.HistoryOp(*r);return {};}
-        if(op.starts_with("tutorial_")) {w.TutorialRequest(*r);return {};}
-        if(op=="device_select") {
-            const auto queuedEdit=[&]{for(const auto &[i,lane]:w.lanes) for(const auto &q:lane.queue) if(q.request.value("operation",std::string{})=="edit") return true;return false;};
-            for(const auto &[i,lane]:w.lanes) if(lane.active) {const std::string o=lane.Op();if(o!="run" && o!="band" && o!="cv" && o!="cf") throw std::invalid_argument("Wait for the project operation before selecting a device");}
-            const auto id=r->at("device_id").get<std::string>(); (void)w.Device(id);
-            if(queuedEdit()) throw std::invalid_argument("Wait for queued edits before selecting a device");
-            w.project.active_device=id; w.projectDirty=true;w.RefreshDirty();w.response=w.Snapshot(); return {};
-        }
-        if(op=="auto_recalculate") {
-            const bool automatic=r->at("enabled").get<bool>(), band=r->value("band_enabled",w.autoRecalculateBand);
-            w.autoRecalculate=automatic;w.autoRecalculateBand=band;
-            if(w.autoRecalculate || w.autoRecalculateBand) w.Changed();
-            w.response={{"ok",true},{"auto_recalculate",w.autoRecalculate},{"auto_recalculate_band",w.autoRecalculateBand},{"error",nullptr}};
-            w.status=(w.autoRecalculate || w.autoRecalculateBand)?"Auto-recalculate enabled (250 ms debounce)":"Auto-recalculate disabled"; return {};
-        }
-        if(op=="edit" && w.ReplacingProject())
-            return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","Project structure is changing; wait before editing","Wait for the operation","ScapsLab","busy"};
-        if(w.Busy() && op=="edit") {
-            auto &lane=w.LaneOf(w.project.active_device);
-            auto candidate=w.Current().document;
-            if(lane.pending && lane.Op()=="edit") {
-                const auto &edit=lane.pending->request;
-                if(edit.contains("document")) candidate=edit.at("document");else candidate.update(edit.at("patch"),true);
-            }
-            if(!lane.queue.empty()) candidate=lane.queue.back().request.at("document");
-            if(r->contains("document")) candidate=r->at("document");else candidate.update(r->at("patch"),true);
-            auto edit=*r;edit["document"]=std::move(candidate);edit["device_id"]=w.project.active_device;
-            const auto gesture=edit.value("gesture_id",std::string{});
-            if(!gesture.empty() && !lane.queue.empty() && lane.queue.back().request.value("gesture_id",std::string{})==gesture) lane.queue.back().request=std::move(edit);
-            else lane.queue.push_back({std::move(edit),{}});
-            const std::string running=lane.Op();
-            if(lane.active && (running=="run" || running=="band" || running=="cv" || running=="cf" || running=="qe") && !(w.dragging && lane.pending->request.value("preview",false))) (void)w.jobs->RequestCancel(lane.active); // a running drag preview finishes; the newest edit supersedes it afterwards (latest wins)
-            w.Current().changedAt=std::chrono::steady_clock::now(); return {};
-        }
-        if (w.Busy()) return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","A job is still active","Wait or cancel","ScapsLab","busy"};
-        if(op=="undo" || op=="redo") {
-            auto &stack=w.preferProjectUndo?w.projectUndo:w.Current().undo;
-            const auto result=op=="undo"?stack.Undo():stack.Redo();
-            if(!result) return result;
-            w.status=w.AnyActive()?"Applying history":"History restored";
-            ++w.plotGen;++w.Current().revision;w.RefreshDirty();w.response=w.Snapshot();return {};
-        }
-        if(op=="device_add" && r->contains("path")) {auto read=*r;read["operation"]="device_read";w.StartOperation(read,w.project.active_device);return {};}
-        if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {w.DeviceOp(*r);return {};}
-        if(op=="run" && !r->value("preview",false)) {w.Current().needsRecalculate=false;w.Current().needsBand=false;}
-        if(op=="band") w.Current().needsBand=false;
-        if(op=="run_all") {
-            w.batchTotal=0;w.batchCompleted=0;w.batchResponse=Json::array();
-            std::vector<std::string> ids;
-            for(const auto &d:w.project.devices) if(w.project.compare_set.contains(d->id)) ids.push_back(d->id);
-            if(ids.empty()) throw std::invalid_argument("Select at least one device for compare");
-            w.batchTotal=ids.size();
-            for(const auto &id:ids) w.Submit(id,{{"operation","run"},{"batch",true}}); // one job per device: the lanes run in parallel
-            return {};
-        }
-        w.StartOperation(*r,w.project.active_device);return {};
-    }
 };
 }
 namespace {
@@ -1133,16 +1045,7 @@ Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry,Ref<EventBus> 
     ++constructed;
     {static std::atomic<std::uint64_t> epoch{0};plotGen=++epoch<<32;} // high bits identify this Workflow so a plot cache never serves another instance's data
     auto initial=CreateRef<DeviceState>();initial->id="device-1";initial->name="Device";project.devices.push_back(initial);project.active_device=initial->id;project.compare_set.insert(initial->id);
-    for(const auto *op:{"load_material","save_material","set_profile","load_profile","preview_profile","export_profile","tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
-        "history_list","history_update","history_select","history_clear","quick_sweep","project_new","project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def"}) {
-        const auto registered=commands->Register({CommandID{std::string("scapslab.")+op},std::string("ScapsLab ")+op,"ScapsLab","",{},CommandFlags::AsyncCapable},
-            [this,op](CommandContext &){
-                const std::string operation=op;
-                const bool menuDefault=operation=="device_add" || operation=="run" || operation=="run_batch" || operation=="cancel" || operation=="undo" || operation=="redo" || operation=="tutorial_stop";
-                return CreateUnique<Command>(*this,menuDefault?Json{{"operation",operation}}:Json::object());
-            });
-        if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
-    }
+    if(!Cmd::RegisterAll(*commands,*this)) throw std::runtime_error("Cannot register ScapsLab command"); // typed commands (Commands/); ids scapslab.<operation>
 }
 // Plot caches (Panel.cpp) follow these events. Subscribed from the UI thread by the first Panel that renders (not in the constructor:
 // Workflows are also built on worker threads, and EventBus::Subscribe is not thread-safe).
@@ -1240,12 +1143,73 @@ void Workflow::UpdateSave() {
         autosavedAt=std::chrono::steady_clock::now();StartSave({{"operation","project_save"},{"path",recoveryPath},{"autosave",true}});
     }
 }
-Json Workflow::Dispatch(const Json &r) {
-    try { CommandContext c; c.Set("request",r);
-        const auto out=commands->Execute(CommandID{"scapslab."+r.at("operation").get<std::string>()},std::move(c));
+Json Workflow::Reply(const std::function<Result<CommandOutcome>()> &run) {
+    try {
+        const auto out=run();
         if(!out) {status=out.Error().technicalDetails; return Failure("command_rejected",status);}
         return {{"ok",true},{"job_id",ActiveJob()},{"error",nullptr}};
     } catch(const std::exception &e) {return Failure("invalid_request",e.what());}
+}
+Json Workflow::Dispatch(const Json &r) { // JSON -> typed command: the registry factory of "scapslab.<operation>" parses the request into its Cmd:: type
+    return Reply([&]{CommandContext c;c.Set("request",r);return commands->Execute(CommandID{"scapslab."+r.at("operation").get<std::string>()},std::move(c));});
+}
+void Workflow::RequireDevice(const std::string &id) const {
+    if(std::none_of(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==id;})) throw std::invalid_argument("Unknown device_id: "+id);
+}
+std::vector<std::string> Workflow::ActiveOps() const {
+    std::vector<std::string> ops;for(const auto &[id,lane]:lanes) if(lane.active) ops.push_back(lane.Op());return ops;
+}
+bool Workflow::EditQueued() const {
+    for(const auto &[i,lane]:lanes) for(const auto &q:lane.queue) if(q.request.value("operation",std::string{})=="edit") return true;return false;
+}
+bool Workflow::CancelAll() {
+    bool any=false;
+    for(auto &[id,lane]:lanes) {std::erase_if(lane.queue,[](const Queued &q){return q.request.value("batch",false);});if(lane.active && jobs->RequestCancel(lane.active)) any=true;}
+    return any;
+}
+void Workflow::DeferProjectLoad(const Json &r) {
+    projectLane.queue.clear();projectLane.Enqueue(r,"project");
+    for(auto &[id,lane]:lanes) {std::erase_if(lane.queue,[](const Queued &q){return q.request.value("batch",false);});if(lane.active) (void)jobs->RequestCancel(lane.active);}
+    status="Cancelling calculation; project will open after pending edits finish";
+}
+void Workflow::QueueEdit(const Json &r) {
+    auto &lane=LaneOf(project.active_device);
+    auto candidate=Current().document;
+    if(lane.pending && lane.Op()=="edit") {
+        const auto &edit=lane.pending->request;
+        if(edit.contains("document")) candidate=edit.at("document");else candidate.update(edit.at("patch"),true);
+    }
+    if(!lane.queue.empty()) candidate=lane.queue.back().request.at("document");
+    if(r.contains("document")) candidate=r.at("document");else candidate.update(r.at("patch"),true);
+    auto edit=r;edit["document"]=std::move(candidate);edit["device_id"]=project.active_device;
+    const auto gesture=edit.value("gesture_id",std::string{});
+    if(!gesture.empty() && !lane.queue.empty() && lane.queue.back().request.value("gesture_id",std::string{})==gesture) lane.queue.back().request=std::move(edit);
+    else lane.queue.push_back({std::move(edit),{}});
+    const std::string running=lane.Op();
+    if(lane.active && (running=="run" || running=="band" || running=="cv" || running=="cf" || running=="qe") && !(dragging && lane.pending->request.value("preview",false))) (void)jobs->RequestCancel(lane.active); // a running drag preview finishes; the newest edit supersedes it afterwards (latest wins)
+    Current().changedAt=std::chrono::steady_clock::now();
+}
+void Workflow::SelectDevice(const std::string &id) {project.active_device=id;projectDirty=true;RefreshDirty();response=Snapshot();}
+void Workflow::SetAutoRecalculate(bool automatic,std::optional<bool> band) {
+    autoRecalculate=automatic;autoRecalculateBand=band.value_or(autoRecalculateBand);
+    if(autoRecalculate || autoRecalculateBand) Changed();
+    response={{"ok",true},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"error",nullptr}};
+    status=(autoRecalculate || autoRecalculateBand)?"Auto-recalculate enabled (250 ms debounce)":"Auto-recalculate disabled";
+}
+Result<void> Workflow::Step(bool undo) {
+    auto &stack=preferProjectUndo?projectUndo:Current().undo;
+    const auto result=undo?stack.Undo():stack.Redo();
+    if(!result) return result;
+    status=AnyActive()?"Applying history":"History restored";
+    ++plotGen;++Current().revision;RefreshDirty();response=Snapshot();return {};
+}
+void Workflow::RunAll() {
+    batchTotal=0;batchCompleted=0;batchResponse=Json::array();
+    std::vector<std::string> ids;
+    for(const auto &d:project.devices) if(project.compare_set.contains(d->id)) ids.push_back(d->id);
+    if(ids.empty()) throw std::invalid_argument("Select at least one device for compare");
+    batchTotal=ids.size();
+    for(const auto &id:ids) Submit(id,{{"operation","run"},{"batch",true}}); // one job per device: the lanes run in parallel
 }
 void Workflow::Changed() {
     auto &d=Current();d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();
