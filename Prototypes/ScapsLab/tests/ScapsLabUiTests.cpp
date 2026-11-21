@@ -143,7 +143,7 @@ Json RunBatchViaUi(const Json &document,const Json &spec) {
     frame();frame();const auto button=ImGui::FindWindowByName("Batch parity")->GetID("Run batch");bool found=false;
     for(float y=40;y<1000 && !found;y+=4) {io.AddMousePosEvent(40,y);frame();frame();if(GImGui->HoveredId==button) {found=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
     EXPECT_TRUE(found);while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();
-    auto result=w.Current().batchResult;ImPlot::DestroyContext();ImGui::DestroyContext();return result;
+    Json result=*w.Current().batchResult;ImPlot::DestroyContext();ImGui::DestroyContext();return result;
 }
 
 Json RunLightViaUi() {
@@ -175,7 +175,7 @@ Json RunLightViaUi() {
         }
     }
     EXPECT_TRUE(pvPlot);
-    Json result={{"document",w.Current().document},{"result",w.Current().result}};
+    Json result={{"document",w.Current().document},{"result",*w.Current().result}};
     ImPlot::DestroyContext();ImGui::DestroyContext();return result;
 }
 

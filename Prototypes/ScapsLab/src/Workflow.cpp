@@ -108,6 +108,7 @@ public:
                 return {};
             }
         }
+        if(op=="history_list") {if(r->contains("device_id")) (void)w.Device(r->at("device_id").get<std::string>());w.response=w.Snapshot();return {};} // S7 regression: read-only, answered inline like device_list
         if(op=="history_select" || op=="history_clear" || op=="history_update") {w.HistoryOp(*r);return {};}
         if(op.starts_with("tutorial_")) {w.TutorialRequest(*r);return {};}
         if(op=="device_select") {

@@ -56,6 +56,7 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
     elseif name == "ScapsLabTests" then
         files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Workspace.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp", root .. "/src/Batch.cpp", root .. "/src/ResultsIO.cpp", root .. "/src/Domain/Results.cpp", root .. "/src/Tutorials.cpp" }
         links { "GoogleTest", "GoogleTestMain" }
+        dependson { "ScapsLabHeadless" } -- EmbeddedPythonRunAndHeadlessCsv runs the headless exe
     else
         files { scaps .. "/apps/scaps_headless.cpp" }
     end
