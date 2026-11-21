@@ -26,6 +26,8 @@ project "ScapsCore"
     filter "configurations:Release or Dist"
         runtime "Release"
         optimize "On"
+        vectorextensions "AVX2"          -- numperf2: /arch:AVX2, bit-identical output, ~20% on plain pn
+        flags { "LinkTimeOptimization" } -- /GL + lib /LTCG
     filter {}
 for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
     project(name)
@@ -83,6 +85,7 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         defines { "DS_RELEASE" }
         runtime "Release"
         optimize "On"
+        flags { "LinkTimeOptimization" } -- numperf2: link-time codegen with ScapsCore /GL
     filter {}
 end
 
