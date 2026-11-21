@@ -1,6 +1,7 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Commands/Commands.hpp"
+#include "Commands/UndoOps.hpp"
 #include "Io.hpp"
 #include "Core/IO/IOLayer.hpp"
 #include "Core/Commands/SystemCommandEvents.hpp"
@@ -66,26 +67,6 @@ void Positive(double v,const char *field,bool zero=false) {
     if (!std::isfinite(v) || (zero ? v<0 : v<=0)) throw std::invalid_argument(std::string("Invalid ")+field);
 }
 Json Failure(const char *code,const std::string &message) { return {{"ok",false},{"error",{{"code",code},{"message",message}}}}; }
-class EditRecord final : public ICommand {
-    Workflow &w;
-    std::string deviceId;
-    Json before, after;
-    std::string gesture;
-    Result<void> Apply(const Json &d) {
-        w.StartOperation(Json{{"operation","edit"},{"document",d},{"history",true}},deviceId); return {};
-    }
-public:
-    EditRecord(Workflow &w,std::string deviceId,Json before,Json after,std::string gesture):w(w),deviceId(std::move(deviceId)),before(std::move(before)),after(std::move(after)),gesture(std::move(gesture)) {}
-    std::string Description() const override {return "Edit ScapsLab parameters";}
-    bool IsUndoable() const noexcept override {return true;}
-    Result<void> Execute(CommandContext &) override {return Apply(after);}
-    Result<void> Undo(CommandContext &) override {return Apply(before);}
-    bool CanMerge(const ICommand &next) const noexcept override {
-        const auto *edit=dynamic_cast<const EditRecord*>(&next);
-        return edit && !gesture.empty() && gesture==edit->gesture;
-    }
-    Result<void> Merge(std::unique_ptr<ICommand> next) override {after=static_cast<EditRecord&>(*next).after;return {};}
-};
 }
 namespace {
 Json SolverDocument(Json document) {
@@ -854,56 +835,6 @@ void Operation::Execute(JobContext &ctx) {
         if(prewarm) typedOut->View(); // panels read the table through its Json view: build it here, not on the UI thread
     }
 }
-namespace {
-// Undo record for destructive history edits (clear/delete): shares the Cow'd results, so it costs no copy.
-struct DeviceSnap {
-    std::string id,selected,status;Ref<const Json> history;DeviceResults results;
-    explicit DeviceSnap(const DeviceState &d):id(d.id),selected(d.selectedRun),status(d.status),history(d.history.share()),results(d.Results()) {}
-    void Apply(DeviceState &d) const {d.selectedRun=selected;d.status=status;d.history.adopt(history);d.SetResults(results);}
-};
-class HistoryRecord final : public ICommand {
-    Workflow &w;std::vector<DeviceSnap> before,after;
-    Result<void> Apply(const std::vector<DeviceSnap> &v) {for(const auto &s:v){s.Apply(w.Device(s.id));w.Emit(HistoryChanged(s.id));}w.projectDirty=true;w.RefreshDirty();return {};}
-public:
-    HistoryRecord(Workflow &w,std::vector<DeviceSnap> before,std::vector<DeviceSnap> after):w(w),before(std::move(before)),after(std::move(after)) {}
-    std::string Description() const override {return "Change ScapsLab history";}
-    bool IsUndoable() const noexcept override {return true;}
-    Result<void> Execute(CommandContext &) override {return Apply(after);}
-    Result<void> Undo(CommandContext &) override {return Apply(before);}
-};
-// Undo record for device rename/colour/compare/reorder and project name/ui: small value snapshots of the metadata, no workspace copy.
-struct MetaSnap {
-    std::string name,active;Json ui;std::set<std::string> compare;
-    std::vector<std::string> order;std::vector<std::tuple<std::string,Json,std::string>> meta; // per device in order: name, colour, description
-    std::vector<DeviceSnap> hist; // only when a lower history_retention trimmed runs
-    explicit MetaSnap(const Project &p):name(p.name),active(p.active_device),ui(p.ui),compare(p.compare_set) {for(const auto &d:p.devices) {order.push_back(d->id);meta.emplace_back(d->name,d->colour,d->description);}}
-};
-class MetaRecord final : public ICommand {
-    Workflow &w;MetaSnap before,after;
-    Result<void> Apply(const MetaSnap &m) {
-        auto &p=w.project;p.name=m.name;p.active_device=m.active;p.ui=m.ui;p.compare_set=m.compare;
-        std::vector<Ref<DeviceState>> sorted;
-        for(std::size_t i=0;i<m.order.size();++i) for(auto &d:p.devices) if(d->id==m.order[i]) {d->name=std::get<0>(m.meta[i]);d->colour=std::get<1>(m.meta[i]);d->description=std::get<2>(m.meta[i]);sorted.push_back(d);}
-        for(const auto &h:m.hist) h.Apply(w.Device(h.id));p.devices=std::move(sorted);w.projectDirty=true;w.RefreshDirty();w.Emit(DeviceListChanged());return {};
-    }
-public:
-    MetaRecord(Workflow &w,MetaSnap before,MetaSnap after):w(w),before(std::move(before)),after(std::move(after)) {}
-    std::string Description() const override {return "Change ScapsLab devices";}
-    bool IsUndoable() const noexcept override {return true;}
-    Result<void> Execute(CommandContext &) override {return Apply(after);}
-    Result<void> Undo(CommandContext &) override {return Apply(before);}
-};
-class ProjectRecord final : public ICommand {
-    Workflow &w;Project before,after;
-    Result<void> Apply(const Project &p) {w.project=p;w.projectDirty=true;w.RefreshDirty();return {};}
-public:
-    ProjectRecord(Workflow &w,Project before,Project after):w(w),before(std::move(before)),after(std::move(after)) {}
-    std::string Description() const override {return "Delete ScapsLab device";}
-    bool IsUndoable() const noexcept override {return true;}
-    Result<void> Execute(CommandContext &) override {return Apply(after);}
-    Result<void> Undo(CommandContext &) override {return Apply(before);}
-};
-}
 void Workflow::HistoryOp(const Json &request) {
     const auto op=request.at("operation").get<std::string>();
     const auto scope=request.value("scope",std::string("device"));
@@ -924,8 +855,8 @@ void Workflow::HistoryOp(const Json &request) {
         for(const auto *key:{"pinned","visible"}) if(request.contains(key) && !request.at(key).is_boolean()) throw std::invalid_argument(std::string(key)+" must be boolean");
         if(request.contains("name") && !request.at("name").is_string()) throw std::invalid_argument("name must be a string");
     }
-    std::vector<DeviceSnap> before,after;
-    if(op=="history_clear") for(auto *dp:targets) before.emplace_back(*dp);
+    std::vector<Undo::DeviceBefore> before; // refs only (Cow history, typed results): the undo step keeps just the delta computed below
+    for(auto *dp:targets) before.emplace_back(*dp);
     for(auto *dp:targets) {
         auto &d=*dp;
         if(op=="history_select") {d.selectedRun=request.at("run_id").get<std::string>();LimitProfiles(d);continue;}
@@ -964,7 +895,10 @@ void Workflow::HistoryOp(const Json &request) {
         }
         d.SyncRuns();LimitProfiles(d);
     }
-    if(!before.empty()) {for(auto *dp:targets)after.emplace_back(*dp);(void)projectUndo.PushExecuted(CreateUnique<HistoryRecord>(*this,std::move(before),std::move(after)));preferProjectUndo=true;}
+    {
+        auto deltas=Undo::Compare(before,*this,op=="history_clear");before.clear(); // run deltas by run_id; the shared "before" history is released here
+        if(!deltas.Empty() && projectUndo.PushExecuted(Undo::History(*this,op=="history_clear"?"Clear history":op=="history_select"?"Select run":"Update run",std::move(deltas)))) preferProjectUndo=true;
+    }
     projectDirty=true;RefreshDirty();status="Completed: "+op;
     for(auto *dp:targets) {Emit(HistoryChanged(dp->id));Emit(SelectionChanged(dp->id));}
     response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();
@@ -976,7 +910,8 @@ void Workflow::DeviceOp(const Json &request) {
     const auto at=std::find_if(devices.begin(),devices.end(),[&](const auto &d){return d->id==id;});
     const auto known=[&]{if(at==devices.end()) throw std::invalid_argument("Unknown device_id");};
     const auto checkName=[&](const char *what) {if(request.contains("name") && (!request.at("name").is_string() || request.at("name").get<std::string>().empty())) throw std::invalid_argument(std::string(what)+" name is empty");};
-    MetaSnap before(project);bool undoable=false,trimmedAny=false;std::vector<DeviceSnap> beforeHist;
+    Unique<ICommand> record; // the undo step of this operation (a small delta), pushed once the operation succeeded
+    const std::string activeBefore=project.active_device;
     if(op=="device_add" || op=="device_duplicate") {
         checkName("Device");
         auto d=CreateRef<DeviceState>();
@@ -994,32 +929,36 @@ void Workflow::DeviceOp(const Json &request) {
         static const double colours[][4]={{.25,.65,.95,1},{.95,.55,.25,1},{.4,.8,.45,1},{.8,.45,.85,1},{.9,.8,.3,1}};
         d->colour=Json::array({colours[devices.size()%5][0],colours[devices.size()%5][1],colours[devices.size()%5][2],colours[devices.size()%5][3]});d->metadataDirty=true;
         devices.push_back(d);project.active_device=d->id;project.compare_set.insert(d->id);
+        record=Undo::DeviceAdded(*this,d,devices.size()-1,activeBefore,op=="device_duplicate"?"Duplicate device":"Add device");
     } else if(op=="action_settings") {
         known();if(!request.at("actions").is_object()) throw std::invalid_argument("Invalid action list");
         ValidateActions(request.at("actions"));(*at)->actions=request.at("actions");
     } else if(op=="project_edit") {
         checkName("Project");
         if(request.contains("ui")) (void)ValidateUi(request.at("ui"));
+        const std::string nameBefore=project.name;const Json uiBefore=project.ui;
+        std::vector<Undo::DeviceBefore> trimBefore; // devices whose history a lower history_retention shortens
         if(request.contains("name")) project.name=request.at("name").get<std::string>();
-                if(request.contains("ui")) {
+        if(request.contains("ui")) {
             project.ui=request.at("ui");const int retention=project.ui.value("history_retention",5);
             for(auto &d:devices) if(d->history.size()>0) {
                 Json h=*d->history;TrimHistory(h,retention);
                 if(h.size()==d->history.size()) continue;
-                if(!trimmedAny) {trimmedAny=true;for(auto &e:devices) beforeHist.emplace_back(*e);}
+                trimBefore.emplace_back(*d);
                 d->history=std::move(h);d->SyncRuns();
                 if(std::none_of(d->history.begin(),d->history.end(),[&](const Json &r){return r.at("run_id")==d->selectedRun;}))d->selectedRun.clear();
             }
         }
-        undoable=true;
+        record=Undo::ProjectEdit(*this,nameBefore,project.name,uiBefore,project.ui,Undo::Compare(trimBefore,*this,false));
     } else if(op=="device_remove") {
         known();if(devices.size()==1) throw std::invalid_argument("Cannot delete the last device");
-        const auto beforeProject=project;
-        devices.erase(devices.begin()+(at-devices.begin()));project.compare_set.erase(id);
+        const auto removed=*at;const std::size_t index=at-devices.begin();const bool compared=project.compare_set.contains(id);
+        devices.erase(devices.begin()+index);project.compare_set.erase(id);
         if(project.active_device==id) project.active_device=devices.front()->id;
-        (void)projectUndo.PushExecuted(CreateUnique<ProjectRecord>(*this,beforeProject,project));preferProjectUndo=true;
+        record=Undo::DeviceRemoved(*this,removed,index,activeBefore,project.active_device,compared);
     } else if(op=="device_update") {
         known();auto &d=**at;checkName("Device");
+        const Undo::DeviceMeta metaBefore{d.name,d.description,d.colour,project.compare_set.contains(id)};
         if(request.contains("colour")) {
             const auto &c=request.at("colour");
             if(!c.is_array() || c.size()!=4) throw std::invalid_argument("colour must contain four RGBA values");
@@ -1030,15 +969,14 @@ void Workflow::DeviceOp(const Json &request) {
         if(request.contains("colour")) d.colour=request.at("colour");
         if(request.contains("description")) d.description=request.at("description").get<std::string>();
         if(request.contains("compare")) {project.compare_set.erase(id);if(request.at("compare").get<bool>()) project.compare_set.insert(id);}
-        d.metadataDirty=true;undoable=true;
+        d.metadataDirty=true;
+        record=Undo::DeviceUpdated(*this,id,metaBefore,Undo::DeviceMeta{d.name,d.description,d.colour,project.compare_set.contains(id)});
     } else if(op=="device_move") {
         known();const int index=request.at("index");if(index<0 || index>=int(devices.size())) throw std::invalid_argument("Invalid device index");
-        const auto d=*at;devices.erase(devices.begin()+(at-devices.begin()));devices.insert(devices.begin()+index,d);undoable=true;
+        const auto d=*at;const std::size_t from=at-devices.begin();devices.erase(devices.begin()+from);devices.insert(devices.begin()+index,d);
+        record=Undo::DeviceMoved(*this,id,from,std::size_t(index));
     } else if(op!="device_list") throw std::invalid_argument("Unknown device operation");
-    if(undoable) {
-        MetaSnap after(project);
-        if(trimmedAny) {before.hist=std::move(beforeHist);for(auto &e:devices) after.hist.emplace_back(*e);}
-        (void)projectUndo.PushExecuted(CreateUnique<MetaRecord>(*this,std::move(before),std::move(after)));preferProjectUndo=true;}
+    if(record && projectUndo.PushExecuted(std::move(record))) preferProjectUndo=true;
     if(op!="device_list") {projectDirty=true;Emit(DeviceListChanged());}
     RefreshDirty();status="Completed: "+op;
     response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();
@@ -1046,6 +984,7 @@ void Workflow::DeviceOp(const Json &request) {
 
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry,Ref<EventBus> eventBus,Ref<Notifier> note):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()),bus(eventBus?std::move(eventBus):CreateRef<EventBus>()),notifier(note?std::move(note):CreateRef<Notifier>(bus)) {
     ++constructed;
+    projectUndo.SetLimits(kUndoMaxDepth,kUndoMaxBytes);
     {static std::atomic<std::uint64_t> epoch{0};plotGen=++epoch<<32;} // high bits identify this Workflow so a plot cache never serves another instance's data
     auto initial=CreateRef<DeviceState>();initial->id="device-1";initial->name="Device";project.devices.push_back(initial);project.active_device=initial->id;project.compare_set.insert(initial->id);
     if(!Cmd::RegisterAll(*commands,*this)) throw std::runtime_error("Cannot register ScapsLab command"); // typed commands (Commands/); ids scapslab.<operation>
@@ -1277,12 +1216,54 @@ void Workflow::SetAutoRecalculate(bool automatic,std::optional<bool> band) {
     response={{"ok",true},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"error",nullptr}};
     status=(autoRecalculate || autoRecalculateBand)?"Auto-recalculate enabled (250 ms debounce)":"Auto-recalculate disabled";
 }
+namespace {
+bool IsEditOp(const std::string &op) {return op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def";}
+}
+// Undo/redo never wait for a job. Unapplied edits of the active device (running or queued document-changing jobs) are the newest thing the user did: the first
+// undo discards them (and redo has nothing to redo); with none, the step pops the preferred stack at once and cancels the device's running calculation, whose
+// result is for the old document. Auto-recalculate then starts a fresh run from the restored document.
+bool Workflow::DiscardPendingEdits(const std::string &id) {
+    auto it=lanes.find(id);if(it==lanes.end()) return false;
+    auto &l=it->second;
+    bool any=std::erase_if(l.queue,[](const Queued &q){return IsEditOp(q.request.value("operation",std::string{}));})>0;
+    if(l.active && IsEditOp(l.Op())) {l.pending->superseded=true;(void)jobs->RequestCancel(l.active);any=true;}
+    return any;
+}
+void Workflow::SupersedeJobs(const std::string &id) {
+    auto it=lanes.find(id);if(it==lanes.end() || !it->second.active || !it->second.pending) return;
+    it->second.pending->superseded=true;(void)jobs->RequestCancel(it->second.active);
+}
+void Workflow::DropDeviceLane(const std::string &id) {
+    auto it=lanes.find(id);if(it==lanes.end()) return;
+    it->second.queue.clear();SupersedeJobs(id);
+}
+bool Workflow::CanUndo() const {
+    if(const auto it=lanes.find(project.active_device);it!=lanes.end()) {
+        const auto &l=it->second;
+        if((l.active && IsEditOp(l.Op())) || std::any_of(l.queue.begin(),l.queue.end(),[](const Queued &q){return IsEditOp(q.request.value("operation",std::string{}));})) return true;
+    }
+    return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanUndo();
+}
+bool Workflow::CanRedo() const {return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanRedo();}
+void Workflow::ApplyDocument(DeviceState &d,Json document) {
+    d.document=std::move(document);
+    d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";
+    ++d.revision;Emit(DocumentEdited(d.id,d.revision));
+}
 Result<void> Workflow::Step(bool undo) {
+    const auto id=project.active_device;
+    if(DiscardPendingEdits(id)) {
+        preferProjectUndo=false;++plotGen;status=undo?"Pending edit discarded":"Nothing to redo";
+        if(undo) Changed(); // the calculation the edit cancelled is not coming back on its own: re-arm auto-recalculate
+        RefreshDirty();response=Snapshot();return {};
+    }
     auto &stack=preferProjectUndo?projectUndo:Current().undo;
+    if(undo?!stack.CanUndo():!stack.CanRedo()) return {};
+    if(!preferProjectUndo) SupersedeJobs(id);
     const auto result=undo?stack.Undo():stack.Redo();
     if(!result) return result;
-    status=AnyActive()?"Applying history":"History restored";
-    ++plotGen;++Current().revision;RefreshDirty();response=Snapshot();return {};
+    status="History restored";
+    ++plotGen;RefreshDirty();response=Snapshot();return {};
 }
 void Workflow::RunAll() {
     batchTotal=0;batchCompleted=0;batchResponse=Json::array();
@@ -1365,7 +1346,7 @@ void Workflow::OnUpdate(float) {
 // UI thread: copy the running job's partial data (<= ~10x per second; the worker only appends under a lock, no Json is built for partials).
 void Workflow::PullLive(Lane &lane) {
     const auto now=std::chrono::steady_clock::now();
-    if(!lane.pending || !lane.pending->feed || now-lane.liveAt<std::chrono::milliseconds(100)) return;
+    if(!lane.pending || !lane.pending->feed || now-lane.liveAt<std::chrono::milliseconds(100) || !HasDevice(lane.device)) return; // (the device may have left the project: undo of "add device")
     auto &feed=*lane.pending->feed;auto &d=Device(lane.device);
     std::lock_guard g(feed.lock);
     if(feed.seq==lane.liveSeq) return;
@@ -1411,12 +1392,16 @@ void Workflow::FinishOperation(Lane &L) {
     auto &pending=L.pending;const auto snapshot=jobs->GetJob(L.active);
     if(!snapshot) return;
     const auto op=pending->request.at("operation").get<std::string>();
+    if(!HasDevice(L.device)) { // the device left the project (undo of "add device") while its job ran: nothing to apply
+        L.active=0;(void)jobs->Submit(CreateRef<FreeJob>(std::vector<Ref<const ResultBase>>{},std::vector<Ref<const Json>>{},std::move(pending)));pending.reset();return;
+    }
+    const bool dropped=pending->superseded; // undo/redo changed the document under this job: its result is for an older document
     auto &d=Device(L.device);
     std::vector<Ref<const ResultBase>> held; // every result before the swap below: whoever replaces one, the last release (a multi-MB destructor) happens on a worker
     for(const auto &dev:project.devices) {held.push_back(dev->result.typed());held.push_back(dev->bandResult.typed());held.push_back(dev->batchResult.typed());for(const auto &[k,r]:dev->acResults.all()) held.push_back(r);for(const auto &[id,r]:*dev->runs) held.push_back(r);}
     if(pending->feed) {d.liveV.clear();d.liveJ.clear();d.pvEstimate=PvEstimate{};d.liveMembers.clear();d.liveMemberTotal=0;d.liveRunning=false;} // partials never outlive their job; the exact result (if any) is adopted below
     const bool outValid=pending->typedOut?pending->outputValid:pending->output.is_object() && pending->output.value("valid",false);
-            if(!pending->members.empty()) { // members were prepared on the worker; here they only enter the history
+            if(!pending->members.empty() && !dropped) { // members were prepared on the worker; here they only enter the history
                 auto runs=CreateRef<RunMap>(*d.runs);
                 for(auto &m:pending->members) {
                     const auto runId=StoreRun(d.history.mut(),"batch",m.result,m.model,pending->request,project.ui.value("history_retention",5),pending->batchGroup,&m.parameters,&m.hash);
@@ -1433,7 +1418,7 @@ void Workflow::FinishOperation(Lane &L) {
         if(snapshot->status==JobStatus::Completed) lastFullMs=isPreview?ms*stride:ms;
         if(!isPreview) {d.previewV.clear();d.previewJ.clear();}
         else { // preview: curve only, no result/history/save/events
-            if(snapshot->status==JobStatus::Completed && outValid) {
+            if(snapshot->status==JobStatus::Completed && outValid && !dropped) {
                 d.previewV.clear();d.previewJ.clear();d.previewCoarse=stride>1;
                 for(const auto &pt:pending->output.at("points")) {d.previewV.push_back(pt.at("voltage_V"));d.previewJ.push_back(pt.at("J_A_m2").is_number()?pt.at("J_A_m2").get<double>():NAN);}
                 d.status="preview";status=stride>1?"Preview (coarse, every "+std::to_string(stride)+". point); exact run on release":"Preview; exact run on release";
@@ -1441,7 +1426,7 @@ void Workflow::FinishOperation(Lane &L) {
             response=Json();L.active=0;pending.reset();return;
         }
     }
-    if(snapshot->status==JobStatus::Completed) {
+    if(snapshot->status==JobStatus::Completed && !dropped) {
         if(op=="project_new" || op=="project_load" || op=="load") {
             SetWorkspace(pending->workspace,true,&pending->loaded);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
             ++epoch;path=op=="project_new"?std::string{}:pending->request.at("path").get<std::string>();
@@ -1453,10 +1438,10 @@ void Workflow::FinishOperation(Lane &L) {
             for(const auto *key:{"name","description"}) if(pending->request.contains(key)) add[key]=pending->request.at(key);
             DeviceOp(add);
         } else {
-            if((op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") && !pending->request.value("history",false) && d.document!=pending->document) {
-                (void)d.undo.PushExecuted(CreateUnique<EditRecord>(*this,L.device,d.document,pending->document,pending->request.value("gesture_id",std::string{})));preferProjectUndo=false;
-            }
+            Unique<ICommand> editStep; // delta of the document change, pushed after the document is in place (a gesture merge compacts against it)
+            if(IsEditOp(op) && d.document!=pending->document) editStep=Undo::Edit(*this,L.device,d.document,pending->document,pending->request.value("gesture_id",std::string{}));
             d.document=pending->document;
+            if(editStep && d.undo.PushExecuted(std::move(editStep))) preferProjectUndo=false;
             const int retention=project.ui.value("history_retention",5);
             if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
                 {const auto runId=StoreRun(d.history.mut(),op=="run"?"iv":op,pending->output,d.document,pending->request,retention);
@@ -1475,7 +1460,7 @@ void Workflow::FinishOperation(Lane &L) {
                 if(outValid) Emit(RunCompleted(d.id,d.selectedRun,op=="run"?"iv":op,d.revision));
                 else {const std::string message="solver returned no valid result";Emit(RunFailed(d.id,op,message,false));notifier->Error("Calculation failed",d.name+": "+message);}
             }
-            if(op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") {
+            if(IsEditOp(op)) {
                 if(op=="import_def") {d.selectedLayer=0;d.selectedInterface=-1;}
                 d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";d.dirty=!d.undo.IsClean();
                 ++d.revision;Emit(DocumentEdited(d.id,d.revision));
@@ -1493,11 +1478,12 @@ void Workflow::FinishOperation(Lane &L) {
         if(!lightResponse && !pending->output.empty()) response["operation_result"]=pending->output;
         if(quiet) {status=keepStatus;response=keepResponse;}
     } else {
-        if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {d.batchResult.adopt(CreateRef<const BatchResult>(BatchFromJson(pending->output)));projectDirty=true;}
-        if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status=snapshot->status==JobStatus::Cancelled?(d.result.empty()?"no results":"solved"):"failed";
-        status=snapshot->errorMessage;response=Failure(snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed",status);
+        const bool wasCancelled=dropped || snapshot->status==JobStatus::Cancelled;
+        if(!dropped && (op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {d.batchResult.adopt(CreateRef<const BatchResult>(BatchFromJson(pending->output)));projectDirty=true;}
+        if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status=wasCancelled?(d.result.empty()?"no results":"solved"):"failed";
+        if(!dropped) {status=snapshot->errorMessage;response=Failure(wasCancelled?"cancelled":"operation_failed",status);} // a dropped job leaves the undo's own status and snapshot
         {
-            const bool cancelled=snapshot->status==JobStatus::Cancelled,isRun=op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe" || op=="quick_sweep" || op=="run_batch" || op=="retry_batch";
+            const bool cancelled=wasCancelled,isRun=op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe" || op=="quick_sweep" || op=="run_batch" || op=="retry_batch";
             if(isRun) Emit(RunFailed(d.id,op,status,cancelled));
             if(!cancelled && !(op=="project_save" && pending->request.value("autosave",false))) {
                 if(op=="save" || op=="project_save") Emit(ProjectSaveFailed(pending->request.value("path",std::string{}),status,false));
@@ -1511,7 +1497,7 @@ void Workflow::FinishOperation(Lane &L) {
     if(!lightResponse && (op=="run_batch" || op=="retry_batch") && response.is_object()) response["batch_result"]=*d.batchResult;
     if(pending->request.value("batch",false)) {
         ++batchCompleted;batchResponse.push_back({{"device_id",L.device},{"ok",response.at("ok")},{"error",response.at("error")}});
-        if(batchCompleted>=batchTotal) {const bool ok=std::all_of(batchResponse.begin(),batchResponse.end(),[](const Json &r){return r.at("ok").get<bool>();});response=Snapshot();response["ok"]=ok;response["runs"]=batchResponse;if(!ok)response["error"]={{"code",snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed"},{"message","One or more device runs failed"}};}
+        if(batchCompleted>=batchTotal) {const bool ok=std::all_of(batchResponse.begin(),batchResponse.end(),[](const Json &r){return r.at("ok").get<bool>();});response=Snapshot();response["ok"]=ok;response["runs"]=batchResponse;if(!ok)response["error"]={{"code",(dropped || snapshot->status==JobStatus::Cancelled)?"cancelled":"operation_failed"},{"message","One or more device runs failed"}};}
     }
     pending->typedOut.reset();pending->loaded.clear();pending->workspace=Json();
     (void)jobs->Submit(CreateRef<FreeJob>(std::move(held),std::vector<Ref<const Json>>{},std::move(pending))); // the finished Operation (its output Json can be huge) dies on a worker too

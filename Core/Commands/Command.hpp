@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -76,6 +77,8 @@ namespace SST
 		[[nodiscard]] virtual bool IsUndoable() const noexcept;
 		[[nodiscard]] virtual bool CanMerge(const ICommand &next) const noexcept;
 		[[nodiscard]] virtual Result<void> Merge(std::unique_ptr<ICommand> next);
+		// Approximate heap bytes this command keeps alive (opt-in; used by UndoStack::SetLimits). Default 0 = not counted.
+		[[nodiscard]] virtual std::size_t ByteSize() const noexcept { return 0; }
 	};
 
 	inline CommandOutcome CommandOutcome::FromCommand(const CommandID &id, const ICommand &command)
