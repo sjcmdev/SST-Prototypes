@@ -37,7 +37,7 @@ struct Rig {
     std::vector<SubscriptionHandle> subs;std::vector<std::pair<Clock::time_point,std::string>> completed;int cancelled=0,failedOther=0;
     explicit Rig(const std::vector<int> &views={0,1,4,5,10,22,18,6,8}):w(CreateRef<JobSystem>(nullptr,std::max(2u,std::thread::hardware_concurrency()))) {
         ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1920,1080);io.Fonts->AddFontDefault();io.Fonts->Build();
-        w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.WatchPlots();
+        w.lightResponse=true;if(std::getenv("SCAPSLAB_APP_VIEWS"))w.viewIdleSeconds=5;w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.WatchPlots();
         this->views=views;for(int v:views)panels.push_back(CreateRef<Panel>(&w,v));
         subs.push_back(w.bus->Subscribe<RunCompleted>([this](const RunCompleted &e){completed.push_back({Clock::now(),e.kind});}));
         subs.push_back(w.bus->Subscribe<RunFailed>([this](const RunFailed &e){e.cancelled?++cancelled:++failedOther;}));
@@ -90,7 +90,7 @@ Res Measure(Rig &r,const std::function<void()> &start,const char *execKey=nullpt
         if(k=="iv"&&d.result.contains("compute_time_ms"))j=&d.result.at("compute_time_ms");else if(k=="band"&&d.bandResult.contains("compute_time_ms"))j=&d.bandResult.at("compute_time_ms");
         else if(d.acResults.contains(k)&&d.acResults.at(k).contains("compute_time_ms"))j=&d.acResults.at(k).at("compute_time_ms");
         if(j&&j->is_number())res.execMs=j->get<double>();
-        const Json &src=k=="iv"?*d.result.share():k=="band"?*d.bandResult.share():*d.acResults.share();const Json *ph=k=="iv"||k=="band"?(src.contains("perf_phase_ms")?&src.at("perf_phase_ms"):nullptr):(src.contains(k)&&src.at(k).contains("perf_phase_ms")?&src.at(k).at("perf_phase_ms"):nullptr);
+        const Json &src=k=="iv"?d.result.json():k=="band"?d.bandResult.json():d.acResults[k];const Json *ph=src.contains("perf_phase_ms")?&src.at("perf_phase_ms"):nullptr;
         if(ph)std::printf("FEEL|phases|%s|%s\n",k.c_str(),ph->dump().c_str());}
     return res;
 }

@@ -17,6 +17,7 @@ using namespace SST;
 using namespace SST::ScapsLab;
 namespace {
 using Clock=std::chrono::steady_clock;
+void AppViews(Workflow &w){if(std::getenv("SCAPSLAB_APP_VIEWS"))w.viewIdleSeconds=5;} // SCAPSLAB_APP_VIEWS=1: configure the Workflow like App.cpp (views prewarmed on the worker, trimmed when idle)
 double Ms(Clock::time_point a){return std::chrono::duration<double,std::milli>(Clock::now()-a).count();}
 struct Timing {double wall=0,uiTotal=0,uiMax=0;};
 Timing Timed(Workflow &w,const Json &r) {
@@ -28,7 +29,7 @@ void Print(const char *name,const Timing &t) {std::printf("PERF %-28s wall %9.1f
 }
 TEST(PerfProbe,All) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
-    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;AppViews(w);w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     Print("iv default",Timed(w,{{"operation","run"}}));
     Print("iv default again",Timed(w,{{"operation","run"}}));
     Print("band",Timed(w,{{"operation","band"},{"voltage_V",0.0}}));
@@ -50,7 +51,7 @@ TEST(PerfProbe,All) {
     for(int n:{3}) {auto spec=BatchDefaults();spec["axes"][0]["count"]=n;char name[40];std::snprintf(name,sizeof(name),"batch %d members",n);Print(name,Timed(w,{{"operation","run_batch"},{"spec",spec}}));}
     Print("autosave (with batch)",Timed(w,{{"operation","project_save"},{"path",recovery},{"autosave",true}}));
     for(const auto &e:std::filesystem::directory_iterator(SCAPSLAB_EXAMPLES)) if(e.path().extension()==".scapslab") {
-        Workflow x(CreateRef<JobSystem>(nullptr,4));x.lightResponse=true;(void)Timed(x,{{"operation","project_load"},{"path",e.path().string()}});
+        Workflow x(CreateRef<JobSystem>(nullptr,4));x.lightResponse=true;AppViews(x);(void)Timed(x,{{"operation","project_load"},{"path",e.path().string()}});
         const auto name="iv "+e.path().stem().string();Print(name.c_str(),Timed(x,{{"operation","run"}}));
     }
     std::filesystem::remove(recovery);
@@ -59,7 +60,7 @@ TEST(PerfProbe,All) {
 // Nested parallelism probe (S5): 3-member batch, C-V 50 points, QE 101 points; prints wall time and process CPU time.
 TEST(PerfProbe,Nested) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
-    Workflow w(CreateRef<JobSystem>(nullptr,std::max(2u,std::thread::hardware_concurrency())));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,std::max(2u,std::thread::hardware_concurrency())));w.lightResponse=true;AppViews(w);w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     auto cpuMs=[]{FILETIME c,e,k,u;GetProcessTimes(GetCurrentProcess(),&c,&e,&k,&u);return (double(((ULONGLONG)k.dwHighDateTime<<32)|k.dwLowDateTime)+double(((ULONGLONG)u.dwHighDateTime<<32)|u.dwLowDateTime))/1e4;};
     auto run=[&](const char *name,const Json &r){const double c0=cpuMs();const auto t=Timed(w,r);std::printf("PERF nested %-18s wall %9.1f ms | CPU %9.1f ms\n",name,t.wall,cpuMs()-c0);std::fflush(stdout);};
     for(int rep=0;rep<2;++rep) {
@@ -88,7 +89,7 @@ TEST(PerfEquivalence,SingleSweepEqualsPrefixReplay) {
 }
 TEST(PerfProbe,Batch) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
-    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;AppViews(w);w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     for(int n:{1,3,8}) {auto spec=BatchDefaults();spec["axes"][0]["count"]=n;char name[40];std::snprintf(name,sizeof(name),"batch %d members",n);Print(name,Timed(w,{{"operation","run_batch"},{"spec",spec}}));
         std::printf("PERF   spec voltages: %s | elapsed_s sum %.2f\n",w.Current().batchResult.at("spec").value("voltages_V",Json{}).dump().c_str(),w.Current().batchResult.value("elapsed_s",0.));}
 }
@@ -107,7 +108,7 @@ TEST(PerfProbe,BatchEngineDirect) {
 // UI-thread cost of starting a save (snapshot) of a big project. Run: SCAPSLAB_PERF_TEST=1 ScapsLabTests --gtest_filter=PerfProbe.SaveCost
 TEST(PerfProbe,SaveCost) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
-    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;AppViews(w);w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     (void)Timed(w,{{"operation","run"}});(void)Timed(w,{{"operation","band"},{"voltage_V",0.0}});
     auto spec=BatchDefaults();spec["axes"][0]["count"]=8;(void)Timed(w,{{"operation","run_batch"},{"spec",spec}});
     std::printf("PERF workspace json %zu bytes\n",w.Workspace().dump().size());
@@ -122,7 +123,7 @@ TEST(PerfProbe,SaveCost) {
 TEST(PerfProbe,MemoryGrowth) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
     const char *project=std::getenv("SCAPSLAB_MEM_PROJECT");const int n=std::getenv("SCAPSLAB_MEM_RUNS")?std::atoi(std::getenv("SCAPSLAB_MEM_RUNS")):20;
-    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;
+    Workflow w(CreateRef<JobSystem>(nullptr,4));w.lightResponse=true;AppViews(w);
     if(project)(void)Timed(w,{{"operation","project_load"},{"path",project}});else w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     std::printf("MEM start: %s\n",w.MemoryReport().c_str());
     double clickMax=0;
@@ -140,7 +141,7 @@ TEST(PerfProbe,MemoryGrowth) {
 
 // Old runs must drop their spatial profiles (bounded memory); pinned and selected runs keep them.
 TEST(PerfEquivalence,OldRunsDropProfiles) {
-    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;AppViews(w);w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     auto doc=w.Current().document;doc["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};(void)Timed(w,{{"operation","edit"},{"document",doc}});
     auto ui=w.project.ui;ui["history_retention"]=20;(void)Timed(w,{{"operation","project_edit"},{"ui",ui}});
     for(int i=0;i<8;++i){doc["temperature_K"]=300.+i;(void)Timed(w,{{"operation","edit"},{"document",doc}});(void)Timed(w,{{"operation","run"}});}
@@ -158,7 +159,7 @@ TEST(PerfEquivalence,OldRunsDropProfiles) {
 TEST(PerfProbe,InPlaceOps) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
     const char *project=std::getenv("SCAPSLAB_MEM_PROJECT");if(!project)GTEST_SKIP()<<"set SCAPSLAB_MEM_PROJECT";
-    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;AppViews(w);
     const auto s0=Clock::now();(void)Timed(w,{{"operation","project_load"},{"path",project}});std::printf("PERF project_load wall %.1f ms\n",Ms(s0));
     auto time=[&](const char *label,const Json &r){const auto s=Clock::now();const auto out=w.Dispatch(r);std::printf("PERF %s: %.3f ms ok=%d\n",label,Ms(s),int(out.at("ok").get<bool>()));};
     const auto device=w.Current().id;
@@ -173,7 +174,7 @@ TEST(PerfProbe,InPlaceOps) {
 // S4: cost of the first Json view of a typed result (what a panel that still reads Json pays once per result). Run: SCAPSLAB_PERF_TEST=1 [SCAPSLAB_MEM_PROJECT=<file>] ScapsLabTests --gtest_filter=PerfProbe.ViewCost
 TEST(PerfProbe,ViewCost) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
-    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;AppViews(w);w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     (void)Timed(w,{{"operation","run"}});
     auto a=Clock::now();const auto &j=w.Current().result.json();const double view=Ms(a);a=Clock::now();const auto dump=w.Current().result.typed()->Dump();
     std::printf("PERF view default run: first Json view %.2f ms (Dump %.2f ms), %zu bytes of Json\n",view,Ms(a),j.dump().size());
