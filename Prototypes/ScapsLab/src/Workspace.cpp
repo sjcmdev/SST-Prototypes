@@ -174,28 +174,45 @@ Json Workflow::Workspace(bool withResults) const {
         {"history",withResults?*d->history:noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",withResults?*d->result:none},{"band_result",withResults?*d->bandResult:none},{"ac_results",withResults?*d->acResults:none},{"batch_result",withResults?*d->batchResult:none},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",withResults?d->status:std::string("no results")}});
     return {{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}};
 }
-void Workflow::SetWorkspace(const Json &value) {
-    if(value.value("schema_version",0)<0 || value.value("schema_version",0)>3) throw std::invalid_argument("Unsupported ScapsLab schema_version");
-    const auto &devices=value.at("devices");if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::invalid_argument("Expected 1..1000 devices");
-    Project checked;checked.name=value.at("name").get<std::string>();if(checked.name.empty()) throw std::invalid_argument("Project name is empty");
-    checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
-    if(!checked.ui.is_object()) throw std::invalid_argument("ui must be an object");
-    if(checked.ui.contains("history_retention") && !checked.ui.at("history_retention").is_number_integer())throw std::invalid_argument("history_retention must be an integer");
-    if(checked.ui.contains("panels")) {if(!checked.ui.at("panels").is_object())throw std::invalid_argument("panels must be an object");for(const auto &visible:checked.ui.at("panels"))if(!visible.is_boolean())throw std::invalid_argument("panel visibility must be boolean");}
-    if(checked.ui.contains("plots")) {
-        if(!checked.ui.at("plots").is_object())throw std::invalid_argument("plots must be an object");
-        for(const auto &limits:checked.ui.at("plots")) {
+// ui object checks shared by workspace validation and project_edit; returns history_retention
+int ValidateUi(const Json &ui) {
+    if(!ui.is_object()) throw std::invalid_argument("ui must be an object");
+    if(ui.contains("history_retention") && !ui.at("history_retention").is_number_integer())throw std::invalid_argument("history_retention must be an integer");
+    if(ui.contains("panels")) {if(!ui.at("panels").is_object())throw std::invalid_argument("panels must be an object");for(const auto &visible:ui.at("panels"))if(!visible.is_boolean())throw std::invalid_argument("panel visibility must be boolean");}
+    if(ui.contains("plots")) {
+        if(!ui.at("plots").is_object())throw std::invalid_argument("plots must be an object");
+        for(const auto &limits:ui.at("plots")) {
             if(!limits.is_array() || (limits.size()!=4 && limits.size()!=6))throw std::invalid_argument("plot limits require xmin, xmax, ymin, ymax and optional y2min, y2max");
             for(const auto &v:limits)if(!v.is_number() || !std::isfinite(v.get<double>()))throw std::invalid_argument("plot limits must be finite");
             if(limits[0]>=limits[1] || limits[2]>=limits[3] || (limits.size()==6 && limits[4]>=limits[5]))throw std::invalid_argument("plot limits must be ordered");
         }
     }
-    for(const auto *key:{"optical_tab","gr_tab","recorder_plot"})if(checked.ui.contains(key) && (!checked.ui.at(key).is_number_integer() || checked.ui.at(key).get<int>()<0 || checked.ui.at(key).get<int>()>10000))throw std::invalid_argument("Invalid selected tab/plot");
-    for(const auto *key:{"gr_follow","iv_absolute_log"})if(checked.ui.contains(key) && !checked.ui.at(key).is_boolean())throw std::invalid_argument("Invalid plot toggle");
-    if(checked.ui.contains("gr_hidden")){if(!checked.ui.at("gr_hidden").is_array())throw std::invalid_argument("gr_hidden must be an array");for(const auto &id:checked.ui.at("gr_hidden"))if(!id.is_string())throw std::invalid_argument("Invalid mechanism ID");}
-    if(checked.ui.contains("gr_bias") && (!checked.ui.at("gr_bias").is_object() || !checked.ui.at("gr_bias").at("voltage_V").is_number() || !std::isfinite(checked.ui.at("gr_bias").at("voltage_V").get<double>())))throw std::invalid_argument("Invalid G/R voltage_V");
-    const auto retention=checked.ui.value("history_retention",5);
+    for(const auto *key:{"optical_tab","gr_tab","recorder_plot"})if(ui.contains(key) && (!ui.at(key).is_number_integer() || ui.at(key).get<int>()<0 || ui.at(key).get<int>()>10000))throw std::invalid_argument("Invalid selected tab/plot");
+    for(const auto *key:{"gr_follow","iv_absolute_log"})if(ui.contains(key) && !ui.at(key).is_boolean())throw std::invalid_argument("Invalid plot toggle");
+    if(ui.contains("gr_hidden")){if(!ui.at("gr_hidden").is_array())throw std::invalid_argument("gr_hidden must be an array");for(const auto &id:ui.at("gr_hidden"))if(!id.is_string())throw std::invalid_argument("Invalid mechanism ID");}
+    if(ui.contains("gr_bias") && (!ui.at("gr_bias").is_object() || !ui.at("gr_bias").at("voltage_V").is_number() || !std::isfinite(ui.at("gr_bias").at("voltage_V").get<double>())))throw std::invalid_argument("Invalid G/R voltage_V");
+    const auto retention=ui.value("history_retention",5);
     if(retention<1 || retention>10000) throw std::invalid_argument("history_retention must be 1..10000");
+    return retention;
+}
+void ValidateActions(const Json &actions) {
+    if(!actions.is_object())throw std::invalid_argument("actions must be an object");
+    for(auto a=actions.begin();a!=actions.end();++a) {
+        if(!a->is_object())throw std::invalid_argument("Each action must be an object");
+        const auto expected=a.key()=="iv"?"run":a.key();
+        if(a->contains("operation") && a->at("operation")!=expected)throw std::invalid_argument("Action operation does not match its technique");
+        for(const auto *key:{"temperature_K","voltage_V","start_V","stop_V","step_V","frequency_Hz","start_Hz","stop_Hz","points","start_nm","stop_nm","probe_photon_flux_m2_s","probe_power_W_m2"})
+            if(a->contains(key) && (!a->at(key).is_number() || !std::isfinite(a->at(key).get<double>())))throw std::invalid_argument("Invalid numeric action setting");
+        if(a->contains("probe_mode") && a->at("probe_mode")!="constant_flux" && a->at("probe_mode")!="constant_power")throw std::invalid_argument("Invalid QE probe mode");
+    }
+}
+// Pure check of a whole workspace document (no live state touched, no JobSystem).
+void ValidateWorkspace(const Json &value) {
+    if(value.value("schema_version",0)<0 || value.value("schema_version",0)>3) throw std::invalid_argument("Unsupported ScapsLab schema_version");
+    const auto &devices=value.at("devices");if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::invalid_argument("Expected 1..1000 devices");
+    Project checked;checked.name=value.at("name").get<std::string>();if(checked.name.empty()) throw std::invalid_argument("Project name is empty");
+    checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
+    const auto retention=ValidateUi(checked.ui);
     std::set<std::string> ids;
     for(const auto &item:devices) {
         const auto id=item.at("id").get<std::string>();if(id.empty() || !ids.insert(id).second) throw std::invalid_argument("Invalid or duplicate device_id");
@@ -223,17 +240,7 @@ void Workflow::SetWorkspace(const Json &value) {
         }
         const auto selected=item.value("selected_run",std::string{});
         if(!selected.empty() && !runs.contains(selected)) throw std::invalid_argument("Unknown selected_run");
-        if(item.contains("actions")) {
-            const auto &actions=item.at("actions");if(!actions.is_object())throw std::invalid_argument("actions must be an object");
-            for(auto a=actions.begin();a!=actions.end();++a) {
-                if(!a->is_object())throw std::invalid_argument("Each action must be an object");
-                const auto expected=a.key()=="iv"?"run":a.key();
-                if(a->contains("operation") && a->at("operation")!=expected)throw std::invalid_argument("Action operation does not match its technique");
-                for(const auto *key:{"temperature_K","voltage_V","start_V","stop_V","step_V","frequency_Hz","start_Hz","stop_Hz","points","start_nm","stop_nm","probe_photon_flux_m2_s","probe_power_W_m2"})
-                    if(a->contains(key) && (!a->at(key).is_number() || !std::isfinite(a->at(key).get<double>())))throw std::invalid_argument("Invalid numeric action setting");
-                if(a->contains("probe_mode") && a->at("probe_mode")!="constant_flux" && a->at("probe_mode")!="constant_power")throw std::invalid_argument("Invalid QE probe mode");
-            }
-        }
+        if(item.contains("actions")) ValidateActions(item.at("actions"));
         if(item.at("name").get<std::string>().empty()) throw std::invalid_argument("Device name is empty");
         const auto &colour=item.at("colour");if(!colour.is_array() || colour.size()!=4) throw std::invalid_argument("colour must contain four RGBA values");
         for(const auto &c:colour) if(!c.is_number() || !std::isfinite(c.get<double>()) || c.get<double>()<0 || c.get<double>()>1) throw std::invalid_argument("Invalid RGBA colour");
@@ -290,7 +297,22 @@ void Workflow::SetWorkspace(const Json &value) {
     }
     if(!ids.contains(checked.active_device)) throw std::invalid_argument("Unknown active_device");
     for(const auto &id:checked.compare_set) if(!ids.contains(id)) throw std::invalid_argument("Unknown compare device_id");
-    // Validation above is complete before touching live devices or their independent history.
+}
+Json NormalizeWorkspace(Json workspace) {
+    ValidateWorkspace(workspace);
+    for(auto &device:workspace["devices"]) device["document"]=NormalizeDocument(std::move(device["document"]));
+    return workspace;
+}
+Json SingleDeviceWorkspace(Json document,std::string projectName) { // what Workspace() yields for one default device; replaces the throwaway Workflow
+    const auto name=document.value("case_id",std::string("Device"));
+    Json device={{"id","device-1"},{"name",name},{"colour",Json::array({0.25,0.65,0.95,1.0})},{"description",""},{"history",Json::array()},{"selected_run",""},{"selection",{{"layer",0},{"interface",-1},{"bias",0},{"member",0},{"voltage_V",0.}}},{"actions",Json::object()},{"document",std::move(document)},{"result",Json::object()},{"band_result",Json::object()},{"ac_results",Json::object()},{"batch_result",Json::object()},{"batch_spec",BatchDefaults()},{"recorder_columns",RecorderDefaults()},{"status","no results"}};
+    return NormalizeWorkspace({{"schema_version",3},{"name",std::move(projectName)},{"devices",Json::array({std::move(device)})},{"active_device","device-1"},{"compare_set",Json::array({"device-1"})},{"ui",Json::object()}});
+}
+void Workflow::SetWorkspace(const Json &value,bool validated) { // validated: value came from NormalizeWorkspace (already checked and normalized)
+    if(!validated) ValidateWorkspace(value);
+    const auto &devices=value.at("devices");
+    Project checked;checked.schema_version=3;checked.name=value.at("name").get<std::string>();checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
+    const auto retention=checked.ui.value("history_retention",5);
     for(const auto &item:devices) {
         const auto id=item.at("id").get<std::string>();Ref<DeviceState> state;
         for(const auto &existing:project.devices) if(existing->id==id) state=existing;
@@ -303,7 +325,7 @@ void Workflow::SetWorkspace(const Json &value) {
         state->actions=item.value("actions",Json::object());
         state->id=id;state->name=item.at("name");state->colour=item.at("colour");state->description=item.value("description",std::string{});
         state->batchResult=item.value("batch_result",Json::object());state->batchSpec=item.value("batch_spec",BatchDefaults());state->recorderColumns=item.value("recorder_columns",RecorderDefaults());
-        state->document=NormalizeDocument(item.at("document"));state->result=item.value("result",Json::object());state->bandResult=item.value("band_result",Json::object());state->acResults=item.value("ac_results",Json::object());state->status=item.value("status",std::string("no results"));
+        state->document=validated?item.at("document"):NormalizeDocument(item.at("document"));state->result=item.value("result",Json::object());state->bandResult=item.value("band_result",Json::object());state->acResults=item.value("ac_results",Json::object());state->status=item.value("status",std::string("no results"));
         checked.devices.push_back(state);
     }
     project=std::move(checked);
