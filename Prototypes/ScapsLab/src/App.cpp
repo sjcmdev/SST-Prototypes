@@ -18,6 +18,7 @@ namespace {
 class DefaultLayout final : public Layer {
     std::vector<Ref<ScapsLab::Panel>> panels;
     bool done=false, focus=false, force;
+    std::string layoutKey=ScapsLab::ExperimentalPanels()?"full1":"basic1";
 public:
     DefaultLayout(std::vector<Ref<ScapsLab::Panel>> panels,bool force):Layer("ScapsLab layout"),panels(std::move(panels)),force(force) {}
     void OnImGuiRender() override {
@@ -27,18 +28,41 @@ public:
             if(auto *fw=panels[0]->GetWorkflow();fw->focusPanel>=0) {ImGui::SetWindowFocus(panels[fw->focusPanel]->ImGuiName().c_str());fw->focusPanel=-1;}
             auto *w=panels[0]->GetWorkflow();
             if(w->focusLayers) {ImGui::SetWindowFocus(panels[w->Current().selectedInterface>=0?12:1]->ImGuiName().c_str());w->focusLayers=false;}
+            if(w->focusView>=0 && w->focusView<int(panels.size()) && !ScapsLab::PanelShown(w->focusView)) w->focusView=-1;
             if(w->focusView>=0 && w->focusView<int(panels.size())) {auto &p=panels[w->focusView];p->SetVisible(true);ImGui::SetWindowFocus(p->ImGuiName().c_str());w->focusView=-1;}
             if(w->resetLayout) {w->resetLayout=false;(void)w->commands->Execute(CommandID{"app.layout.reset"});force=true;done=false;}
             else if(focus) {ImGui::SetWindowFocus(panels[1]->ImGuiName().c_str());ImGui::SetWindowFocus(panels[5]->ImGuiName().c_str());focus=false;}return;} done=true;
         // SettingsIniData is only filled by a save, so it is empty right after the loaded layout; serialize the live settings instead.
         const std::string ini=ImGui::SaveIniSettingsToMemory();
         // Live windows always get a section, so require a saved dock assignment for a known panel.
-        const auto section=ini.find("[Window][sst-window-"+std::to_string(panels[15]->GetId())+"]");
+        const auto section=ini.find("[Window][sst-window-"+std::to_string(panels[0]->GetId())+"]");
+        if(!layoutKey.empty() && ScapsLab::UiSettingsPath().size()) {
+            // Rebuild once when the panel set (or the default layout) changed since the saved layout was made.
+            std::string text,error;ScapsLab::Json s=ScapsLab::Json::object();
+            if(TextFileIO::Load(Path{ScapsLab::UiSettingsPath()},text,error)) {try{s=ScapsLab::Json::parse(text);}catch(...){}}
+            if(!s.is_object())s=ScapsLab::Json::object();
+            if(s.value("layout_key",std::string{})!=layoutKey) {force=true;s["layout_key"]=layoutKey;(void)TextFileIO::Save(Path{ScapsLab::UiSettingsPath()},s.dump(2),error);}
+        }
         if(!force && section!=std::string::npos && ini.substr(section,ini.find("\n[",section+1)-section).find("DockId=")!=std::string::npos) return;
         const auto *vp=ImGui::GetMainViewport(); const auto root=vp->ID;
         ImGui::DockBuilderRemoveNode(root); ImGui::DockBuilderAddNode(root,ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodePos(root,vp->WorkPos); ImGui::DockBuilderSetNodeSize(root,vp->WorkSize);
         ImGuiID center=root,left,right,bottomLeft,topRight,bottomRight,iv,tree;
+        if(!ScapsLab::ExperimentalPanels()) {
+            // Basic layout: tree + editor tabs | I-V over band diagram | Run.
+            ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.22f,&left,&center);
+            ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.17f,&right,&center);
+            ImGui::DockBuilderSplitNode(left,ImGuiDir_Up,0.40f,&tree,&bottomLeft);
+            ImGui::DockBuilderSplitNode(center,ImGuiDir_Up,0.50f,&iv,&center);
+            for(std::size_t i=0;i<panels.size();++i) {
+                if(!ScapsLab::PanelShown(int(i))) continue;
+                auto &panel=panels[i]; auto state=panel->GetState();
+                state.visible=true;state.mode=WindowMode::Normal;
+                state.dockId=i==0?tree:i==4?right:i==10?iv:i==5||i==16||i==17||i==18||i==22?center:bottomLeft;
+                panel->ApplyState(state); ImGui::DockBuilderDockWindow(panel->ImGuiName().c_str(),state.dockId);
+            }
+            ImGui::DockBuilderFinish(root); focus=true; return;
+        }
         ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,0.24f,&left,&center);
         ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,0.25f,&right,&center);
         ImGui::DockBuilderSplitNode(left,ImGuiDir_Up,0.55f,&tree,&bottomLeft);
@@ -142,7 +166,7 @@ public:
                     ImGui::EndTable();
                 }
                 if(ImGui::Button("Browse...")) {try {if(const auto file=SaveFileDialog({"Results export",formats[exportFormat]},exportPath))std::snprintf(exportPath,sizeof(exportPath),"%s",file->Utf8().c_str());}catch(const std::exception &e){w.status=e.what();}}
-                ImGui::TextWrapped("CSV/JSON include point status, provenance and effective settings. Batch/Recorder is one sheet. Plots: PNG/SVG/PDF via PlotLab (one file per run).");
+                ImGui::TextWrapped("CSV/JSON include point status, provenance and effective settings. Plots: PNG/SVG/PDF via PlotLab (one file per run).");
                 ImGui::BeginDisabled(w.Busy() || runs.empty());
                 if(ImGui::Button("Export")) {ScapsLab::Json ids=ScapsLab::Json::array();if(!exportAll)ids.push_back(runs[selectedRun].at("run_id"));const auto r=w.Dispatch({{"operation","export_results"},{"path",exportPath},{"format",formats[exportFormat]},{"all",exportAll},{"run_ids",ids}});if(!r.value("ok",false))w.status=r.at("error").at("message");}
                 ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Close"))exporting=false;
@@ -168,6 +192,11 @@ public:
 void SetupApplication(Application &app) {
     using namespace ScapsLab;
     RegisterPython();
+    if(const auto config=app.GetConfigManager().lock()) {
+        UiSettingsPath()=(config->GetConfigDirectory()/Path{"scapslab-ui.json"}).Utf8();
+        std::string text,error;if(TextFileIO::Load(Path{UiSettingsPath()},text,error)) {try {ExperimentalPanels()=Json::parse(text).value("experimental_panels",false);}catch(...) {}}
+    }
+    if(std::getenv("SCAPSLAB_EXPERIMENTAL")) ExperimentalPanels()=std::string(std::getenv("SCAPSLAB_EXPERIMENTAL"))=="1";
     auto state=CreateUnique<Workflow>(app.GetJobSystemHandle().lock(),app.GetCommandRegistryHandle().lock()); auto *w=state.get();
     w->Current().document=ReadProject(SCAPSLAB_PROJECT); w->Current().name=w->Current().document.at("case_id");w->path="";
     if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Busy()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}
@@ -238,7 +267,9 @@ void SetupApplication(Application &app) {
     auto &editor=app.GetEditorLayer();
     std::vector<Ref<Panel>> panels;
     for(int v=0;v<23;++v) if(!single || std::atoi(gallery)==v) {
-        auto panel=CreateRef<Panel>(w,v,single); panels.push_back(panel); const auto id=editor.RegisterWindow(panel);
+        auto panel=CreateRef<Panel>(w,v,single); panels.push_back(panel);
+        if(!single && !PanelShown(v)) continue; // hidden in basic mode: kept only so panel indices stay valid, never registered or docked
+        const auto id=editor.RegisterWindow(panel);
         for(PanelId i=1;i<id;++i) if(auto existing=editor.FindPanel(i).lock();existing && existing->GetTitle()=="Logging Panel") existing->SetVisible(false);
     }
     if(!single) app.InsertLayerBefore(LayerId::ImGui,CreateUnique<DefaultLayout>(panels,gallery!=nullptr));
