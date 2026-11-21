@@ -1212,9 +1212,9 @@ void Workflow::UpdateOperation() {
             if(op=="batch_select") d.selectedMember=pending->request.at("index");
             if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
             if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {Take(d.batchResult);projectDirty=true;}
-            if(op=="run") {Take(d.result);d.bandResult=Json::object();}
-            if(op=="band") Take(d.bandResult);
-            if(op=="cv" || op=="cf" || op=="qe") Take(d.acResults.mut()[op]);
+            if(op=="run") {Take(d.result);d.bandResult=Json::object();(void)d.Iv();}
+            if(op=="band") {Take(d.bandResult);(void)d.Band();}
+            if(op=="cv" || op=="cf" || op=="qe") {Take(d.acResults.mut()[op]);d.acTyped[op].reset();(void)d.Ac(op);} // typed view converted once on completion
             if(op=="run" || op=="band") LimitProfiles(d);
             if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {d.actions[op=="run"?"iv":op]=pending->request;d.status=outValid?"solved":"failed";projectDirty=true;}
             if(op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") {
