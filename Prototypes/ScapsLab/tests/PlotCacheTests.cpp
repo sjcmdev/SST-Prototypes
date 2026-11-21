@@ -89,3 +89,16 @@ TEST(PlotCache,HistoryOperationsPublishEvents) {
     const auto gen=w.plotGen;ASSERT_TRUE(w.Dispatch({{"operation","history_update"},{"device_id",w.Current().id},{"run_id","cache-0"},{"visible",false}}).value("ok",false));
     EXPECT_NE(w.plotGen,gen);
 }
+TEST(PlotCache,DocumentEditsDoNotRebuildResultPlots) {
+    Ui ui;Workflow w(CreateRef<JobSystem>(nullptr,1));SeedRuns(w,3);
+    Panel panel(&w,10);
+    for(int i=0;i<3;++i)Frame(panel);
+    const int builds=PlotCacheBuildCount();const double sum=PlotCacheSum();const auto gen=w.plotGen;
+    for(int i=0;i<5;++i) { // a drag: every frame a new document, results untouched
+        auto doc=w.Current().document;doc["layers"][0]["thickness_m"]=doc["layers"][0]["thickness_m"].get<double>()*(1+.01*(i+1));
+        w.Current().document=doc;++w.Current().revision;w.Emit(DocumentEdited(w.Current().id,w.Current().revision));Frame(panel);
+    }
+    EXPECT_EQ(w.plotGen,gen) << "DocumentEdited must not invalidate result plots";
+    EXPECT_EQ(PlotCacheBuildCount(),builds);EXPECT_EQ(PlotCacheSum(),sum);
+    EXPECT_TRUE(w.Current().Stale()) << "the live curve is flagged outdated instead";
+}

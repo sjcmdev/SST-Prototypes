@@ -12,6 +12,7 @@
 #include "Domain/Results.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
 #include <chrono>
+#include <mutex>
 #include <atomic>
 #include <array>
 #include <deque>
@@ -46,7 +47,7 @@ std::string DiffLabel(const Json &previous,const Json &document);
 Json BatchPreview(const Json &document,const Json &spec);
 Json QuickSweep(const Json &document,const Json &request);
 void TrimHistory(Json &history,int retention);
-std::string StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group=""); // returns run_id; the typed result is attached by the caller (DeviceState::runs)
+std::string StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group="",const Json *parameters=nullptr,const std::string *modelHash=nullptr); // returns run_id; the typed result is attached by the caller (DeviceState::runs)
 void CompactHistory(Json &workspace);
 std::size_t PrivateBytes();
 std::size_t JsonValues(const Json &v);
@@ -62,12 +63,32 @@ std::vector<DeviceResults> ExtractResults(Json &workspace);              // move
 void AttachResults(Json &device,const Json &history,const DeviceResults &r,bool cached=false); // inverse, for save/export: typed -> Json into one device object (cached: via the results' Json views, for headless/Python where Json is the API)
 Json HistoryJson(const Json &history,const RunMap &runs,bool cached=false);                 // history with each run's "result" restored
 struct SaveRefs {Ref<const Json> history; DeviceResults results;}; // one device of a save job (immutable, shared with the UI)
+// Live hand-off from a running job to the UI (progressive I-V, photovoltaic estimate, finished batch members). The worker appends under the lock, the UI thread
+// copies a snapshot at most every ~100 ms. Nothing here is a result: it is never stored in history, saved, exported or read by an exactness-claiming readout.
+struct PvEstimate {bool valid=false;double Voc_V=NAN,Jsc_A_m2=NAN,FF=NAN,eta=NAN,Pmax_Wm2=NAN,Vmpp_V=NAN,Jmpp_A_m2=NAN;};
+PvEstimate EstimatePv(const std::vector<double> &V,const std::vector<double> &J,double incidentPower_W_m2); // from the solved sweep (plotted voltage, native terminal J), no extra solves
+struct LiveMember {int index=0;std::vector<double> v,j;};
+struct LiveFeed {
+    std::mutex lock;
+    std::uint64_t seq=0;
+    std::vector<double> v,j;           // I-V points solved so far (plotted voltage [V], terminal J [A/m^2], NaN when not converged)
+    PvEstimate pv;
+    std::vector<LiveMember> members;   // batch members finished so far
+    std::size_t memberTotal=0;
+    void Point(double V,double J) {std::lock_guard g(lock);v.push_back(V);j.push_back(J);++seq;}
+    void Estimate(const PvEstimate &e) {std::lock_guard g(lock);pv=e;++seq;}
+    void AddMember(LiveMember m) {std::lock_guard g(lock);members.push_back(std::move(m));++seq;}
+};
 class Operation final : public IJob {
 public:
     Json document, request, output, acResults, workspace, batchResult;
     Ref<const ResultBase> typedOut;       // typed form of `output` (run/band/cv/cf/qe/batch ops), built on the job thread
     std::vector<DeviceResults> loaded;    // project_load/new: typed results taken out of `workspace`
     std::vector<SaveRefs> shared;         // save jobs
+    struct Member {Json result,model,parameters;std::string hash;Ref<const BatchResult> typed;double t=0;}; // one batch member as a history run, prepared on the worker (apply only stores it)
+    std::vector<Member> members;
+    Ref<LiveFeed> feed;                   // set by Workflow::StartOperation for exact runs and batches
+    std::string batchGroup;
     Json batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
     bool slim=false, prewarm=false, outputValid=false; // prewarm: build panel Json views on the worker (UI app only)
       // slim: drop run output Json once typed (UI app); outputValid: output["valid"] read before that
@@ -172,6 +193,14 @@ struct DeviceState {
     int selectedLayer = 0, selectedInterface = -1, selectedBias = 0;
     std::chrono::steady_clock::time_point changedAt;
     std::vector<double> previewV, previewJ; // live slider-drag preview curve (J-V only): never saved, never in history/readouts/exports; cleared by the next exact run
+    // Progressive exact run (never saved/stored/exported): partial I-V, photovoltaic estimate, finished batch members. Copied from the job's LiveFeed; cleared when the job ends.
+    std::vector<double> liveV, liveJ;
+    PvEstimate pvEstimate;
+    std::vector<LiveMember> liveMembers;
+    std::size_t liveMemberTotal = 0;
+    bool liveRunning = false;
+    std::uint64_t resultRevision = 0; // d.revision the live I-V result was computed for (stale = it differs, or a recalculation is pending)
+    bool Stale() const {return !result.empty() && (needsRecalculate || resultRevision!=revision);}
     bool previewCoarse = false;
     std::uint64_t previewRev = 0; // d.revision the last preview was started for
 };
@@ -220,6 +249,7 @@ public:
     Ref<Notifier> notifier;
     template<class E> void Emit(E e) {bus->Publish(e);}
     void WatchPlots(); // UI thread: start bumping plotGen on plot-affecting events
+    std::uint64_t docGen=0;  // bumped by DocumentEdited only: result plots are keyed by plotGen (result data), so a drag does not rebuild them
     std::uint64_t plotGen=0; // S3: bumped by RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/DeviceListChanged/ProjectLoaded; panel plot caches compare it (no per-frame hashing/conversion)
     JobId active = 0;
     Ref<Operation> pending;
@@ -264,7 +294,11 @@ public:
     Json Dispatch(const Json &request);
     void OnUpdate(float) override;
     void UpdateOperation();
+    void PullLive();
+    std::uint64_t liveSeq=0;std::chrono::steady_clock::time_point liveAt{};
     double viewIdleSeconds=0;                             // >0 (UI app): free Json views of results idle that long
+    JobId warmJob=0;                                      // worker building Json views the panels need (see ViewsReady)
+    bool ViewsReady();                                    // UI app: false while a needed Json view is being built on a worker; panels draw a note instead of stalling the UI thread
     std::chrono::steady_clock::time_point viewTrimAt{};
     void TrimViews();
     bool Pending() const { return Busy() || Saving(); } // calculations or saves

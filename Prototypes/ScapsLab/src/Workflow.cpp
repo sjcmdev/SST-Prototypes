@@ -147,7 +147,7 @@ public:
             const auto result=op=="undo"?stack.Undo():stack.Redo();
             if(!result) return result;
             w.status=w.active?"Applying history":"History restored";
-            ++w.plotGen;w.RefreshDirty();w.response=w.Snapshot();return {};
+            ++w.plotGen;++w.Current().revision;w.RefreshDirty();w.response=w.Snapshot();return {};
         }
         if(op=="device_add" && r->contains("path")) {auto read=*r;read["operation"]="device_read";w.StartOperation(read,w.project.active_device);return {};}
         if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {w.DeviceOp(*r);return {};}
@@ -512,10 +512,41 @@ Json GenerationRecombination(const Json &document,const scaps_core::DeviceProjec
 }
 
 }
+// Photovoltaic metrics read off the solved sweep (linear interpolation, no extra solves): shown at once and marked "estimate"; the exact refinement replaces them.
+// Same conventions as the exact result: voltage = plotted (consumer) voltage, Jsc = -J(0), Pmax = max(-V*J), Jmpp native sign.
+PvEstimate EstimatePv(const std::vector<double> &V,const std::vector<double> &J,double power) {
+    PvEstimate e;const std::size_t n=std::min(V.size(),J.size());
+    const auto ok=[&](std::size_t i){return std::isfinite(V[i]) && std::isfinite(J[i]);};
+    double j0=NAN;
+    for(std::size_t i=0;i<n && !std::isfinite(j0);++i) {
+        if(!ok(i)) continue;
+        if(V[i]==0) j0=J[i];
+        else if(i+1<n && ok(i+1) && (V[i]<0)!=(V[i+1]<0) && V[i+1]!=0) j0=J[i]+(J[i+1]-J[i])*(0-V[i])/(V[i+1]-V[i]);
+    }
+    double voc=NAN;
+    for(std::size_t i=0;i+1<n;++i) {
+        if(!ok(i) || !ok(i+1)) continue;
+        if(J[i]==0 && V[i]!=0) {if(!std::isfinite(voc) || std::abs(V[i])<std::abs(voc)) voc=V[i];}
+        else if((J[i]<0)!=(J[i+1]<0) && J[i+1]!=0 && J[i]!=0) {const double x=V[i]+(V[i+1]-V[i])*(0-J[i])/(J[i+1]-J[i]);if(x!=0 && (!std::isfinite(voc) || std::abs(x)<std::abs(voc))) voc=x;}
+    }
+    if(!std::isfinite(j0) || !std::isfinite(voc)) return e;
+    double pmax=0,vm=NAN,jm=NAN;
+    for(std::size_t i=0;i<n;++i) {
+        if(!ok(i)) continue;
+        const double between=voc>0?(V[i]>=0 && V[i]<=voc):(V[i]<=0 && V[i]>=voc);
+        if(!between) continue;
+        if(-V[i]*J[i]>pmax) {pmax=-V[i]*J[i];vm=V[i];jm=J[i];}
+    }
+    e.Voc_V=voc;e.Jsc_A_m2=-j0;e.Pmax_Wm2=pmax>0?pmax:NAN;e.Vmpp_V=vm;e.Jmpp_A_m2=jm;
+    if(pmax>0 && j0!=0) e.FF=pmax/std::abs(voc*j0);
+    if(pmax>0 && power>0) e.eta=pmax/power;
+    e.valid=true;return e;
+}
 void Operation::Execute(JobContext &ctx) {
     using namespace scaps_core;
     const auto started=std::chrono::steady_clock::now();
     ctx.ThrowIfCancellationRequested(); const std::string op=request.at("operation");
+    struct Phase {bool on=std::getenv("SCAPSLAB_PERF_PHASES")!=nullptr;Json log=Json::object();std::chrono::steady_clock::time_point t=std::chrono::steady_clock::now();void lap(const char *n){if(!on)return;const auto now=std::chrono::steady_clock::now();log[n]=log.value(n,0.)+std::chrono::duration<double,std::milli>(now-t).count();t=now;}} phase; // opt-in per-phase timing (SCAPSLAB_PERF_PHASES=1) -> output.perf_phase_ms
     if(op=="load_material" || op=="save_material") {
         auto model=Model(document);std::size_t index=0;
         while(index<document.at("layers").size() && document.at("layers")[index].at("scapslab_id")!=request.at("layer_id"))++index;
@@ -773,24 +804,26 @@ void Operation::Execute(JobContext &ctx) {
         const auto p=Model(document);const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         auto volts=op=="band"?std::vector<double>{request.at("voltage_V").get<double>()}:make_voltage_list(p.voltage);
         for(auto &v:volts) {if(!std::isfinite(v)) throw std::invalid_argument("Invalid voltage_V");v=-v;}
-        ctx.SetStage("Preparing mesh (cancel checked after preparation)");
-        const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);
+        phase.lap("model_device");ctx.SetStage("Preparing mesh (cancel checked after preparation)");
+        const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);phase.lap("mesh");
         const bool preview=op=="run" && request.value("preview",false); // live slider preview: same mesh, every stride-th bias point, minimal output
         if(preview) {const std::size_t stride=std::size_t(std::max(1,request.value("stride",1)));std::vector<double> sub;for(std::size_t i=0;i<volts.size();++i) if(i%stride==0 || i+1==volts.size()) sub.push_back(volts[i]);volts=std::move(sub);}
         ctx.ThrowIfCancellationRequested(); ctx.SetStage("Equilibrium");
+        const bool live=feed && op=="run" && !preview,externalNetwork=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);std::vector<double> pvV,pvJ;
         IVSession session(device,mesh,p.temperature_K,p.solver,pc); // equilibrium + continuation (bias predictor); bit-identical to solve_iv/scaps_headless
-        output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
+        phase.lap("equilibrium");output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
         for(std::size_t i=0;i<volts.size();++i) {
             ctx.ThrowIfCancellationRequested(); ctx.SetStage("I-V point "+std::to_string(i+1)+" / "+std::to_string(volts.size()));
             IVPoint pt=session.next(volts[i]);
             const auto &s=pt.state;
+            if(live) {const double tj=pt.status!=SolverStatus::Converged ? NAN : externalNetwork ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();feed->Point(-volts[i],tj);pvV.push_back(-volts[i]);pvJ.push_back(tj);} // partial point for the UI: no Json
             if(preview) {
                 const bool ext=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
                 const double tj=pt.status!=SolverStatus::Converged ? NAN : ext ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
                 output["points"].push_back({{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(tj)?Json(tj):Json(nullptr)}});ctx.SetProgress(float(i+1),float(volts.size()));continue;
             }
-            const auto curves=DefectCurves(document,p,s);
-            auto gr=GenerationRecombination(document,p,device,s);
+            phase.lap("solve_points");const auto curves=DefectCurves(document,p,s);phase.lap("defect_curves");
+            auto gr=GenerationRecombination(document,p,device,s);phase.lap("gen_recomb");
             const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
             const double terminalJ=pt.status!=SolverStatus::Converged ? NAN : external ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
             const double net=gr.at("net_generation_current_A_m2");
@@ -808,9 +841,10 @@ void Operation::Execute(JobContext &ctx) {
             output["points"].push_back({{"generation_recombination",gr},{"defect_previews",curves},{"bias_id","bias-"+std::to_string(i)},{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(terminalJ)?Json(terminalJ):Json(nullptr)},
                 {"conservation_error_A_m2",pt.J_conservation_error_Am2},{"status",to_string(pt.status)},{"iterations",pt.iterations},{"residual",pt.final_residual_norm},
                 {"internal_voltage_V",-s.applied_voltage_V},{"terminal_voltage_V",external?-pt.voltage_V:-volts[i]},{"trap_occupation",s.trap_occupation},{"interface_occupation",s.interface_occupation},{"x_m",s.x_m.empty()?mesh.x_m:s.x_m},{"Ec_eV",s.Ec_eV},{"Ev_eV",s.Ev_eV},{"EFn_eV",s.EFn_eV},{"EFp_eV",s.EFp_eV},{"n_m3",s.n_m3},{"p_m3",s.p_m3}});
-            ctx.SetProgress(float(i+1),float(volts.size()));
+            phase.lap("json_points");ctx.SetProgress(float(i+1),float(volts.size()));
         }
         if(preview) {ctx.ThrowIfCancellationRequested();output["preview"]=true;output["valid"]=true;return;}
+        if(live && p.illumination.enabled) feed->Estimate(EstimatePv(pvV,pvJ,incident_power_W_m2(device))); // marked "estimate" in the UI until the exact refinement below replaces it
         const auto generation=generation_integrals_m2s(device,mesh,pc);std::vector<double> density;
         for(std::size_t i=0;i<generation.size();++i) {
             const double width=(i?std::max(0.,mesh.x_m[i]-mesh.x_m[i-1])*.5:0)+(i+1<mesh.x_m.size()?std::max(0.,mesh.x_m[i+1]-mesh.x_m[i])*.5:0);
@@ -822,6 +856,7 @@ void Operation::Execute(JobContext &ctx) {
             for(int n=0;n<=200;++n) {const double wavelength=300.+n*6.;wavelengths.push_back(wavelength);alpha.push_back(absorption_m1(layer,wavelength,pc));auto plain=layer;plain.absorption.urbach_enabled=false;baseline.push_back(absorption_m1(plain,wavelength,pc));}
             output["optics"]["absorption"].push_back({{"layer_id",document.at("layers")[i].value("scapslab_id",std::string("layer-")+std::to_string(i+1))},{"wavelength_nm",wavelengths},{"alpha_m1",alpha},{"without_tail_m1",baseline}});
         }
+        phase.lap("optics");
         if(op=="run" && p.illumination.enabled) {
             ctx.ThrowIfCancellationRequested();ctx.SetStage("Refining photovoltaic metrics");
             PhotovoltaicResult pv;const double power=incident_power_W_m2(device);
@@ -830,6 +865,7 @@ void Operation::Execute(JobContext &ctx) {
             auto finite=[](double v)->Json{return std::isfinite(v)?Json(v):Json(nullptr);};
             output["photovoltaic"]={{"status",to_string(pv.status)},{"message",pv.message},{"Voc_V",finite(-pv.Voc_V)},{"Jsc_A_m2",finite(-pv.Jsc_Am2)},{"FF_fraction",finite(pv.FF)},{"efficiency_fraction",finite(pv.eta)},{"Pmax_W_m2",finite(pv.Pmax_Wm2)},{"Vmpp_V",finite(-pv.Vmpp_V)},{"Jmpp_A_m2",finite(pv.Jmpp_Am2)}};
         }
+        phase.lap("photovoltaic");
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
         output["project_snapshot"]=document;
@@ -861,7 +897,22 @@ void Operation::Execute(JobContext &ctx) {
         }
         output["valid"]=valid;output["validity_status"]=valid?"valid":"contains_invalid_points";
         output["compute_time_ms"]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
-        output["mesh_node_count"]=output.at("mesh_x_m").size();
+        output["mesh_node_count"]=output.at("mesh_x_m").size();phase.lap("validate_snapshot");if(phase.on)output["perf_phase_ms"]=phase.log;
+    }
+    if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && output.contains("rows")) { // one history run per member, built here (the apply step only stores them)
+        batchGroup="batch-"+std::to_string(output.at("provenance").at("time_unix_ms").get<std::int64_t>());
+        const auto &rows=output.at("rows");
+        for(const auto &row:rows) {
+            if(op=="retry_batch" && row.at("id")!=request.at("member_id"))continue;
+            Member m;m.model=document;
+            for(const auto &parameter:BatchParameters(m.model)) if(row.at("parameters").contains(parameter.at("path").get<std::string>()) && row.at("parameters").at(parameter.at("path").get<std::string>())!=parameter.at("value")) m.model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=row.at("parameters").at(parameter.at("path").get<std::string>());
+            m.result=Json::object();for(const auto &[key,value]:output.items()) if(key!="rows") m.result[key]=value; /* do not copy every row per row */ m.result["rows"]=Json::array({row});m.result["project_snapshot"]=m.model;m.hash=DocumentHash(m.model);m.parameters=BatchParameters(m.model);m.result["provenance"]["device_hash"]=m.hash;
+            m.result["elapsed_s"]=row.at("elapsed_s");
+            m.t=rows.size()<2?0.:double(&row-&rows[0])/double(rows.size()-1);
+            m.typed=CreateRef<const BatchResult>(BatchFromJson(m.result));
+            if(prewarm) m.typed->View();
+            members.push_back(std::move(m));
+        }
     }
     if(op!="save" && op!="project_save" && !op.starts_with("export_")) ctx.ThrowIfCancellationRequested();
     // typed result (S4): built here, on the job thread, so the UI thread only swaps pointers
@@ -877,6 +928,7 @@ void Operation::Execute(JobContext &ctx) {
         } else if(iv) typedOut=CreateRef<const IvResult>(IvFromJson(output));else typedOut=CreateRef<const AcResult>(AcFromJson(output));
     } else if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") && output.is_object() && !output.empty()) {
         outputValid=output.value("valid",false);typedOut=CreateRef<const BatchResult>(BatchFromJson(output));
+        if(prewarm) typedOut->View(); // panels read the table through its Json view: build it here, not on the UI thread
     }
 }
 namespace {
@@ -1089,7 +1141,7 @@ Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry,Ref<EventBus> 
 void Workflow::WatchPlots() {
     if(!plotSubs.empty())return;
     const auto bump=[this](auto tag){using E=typename decltype(tag)::type;plotSubs.push_back(bus->Subscribe<E>([this](const E &){++plotGen;}));};
-    bump(std::type_identity<RunCompleted>{});bump(std::type_identity<HistoryChanged>{});bump(std::type_identity<SelectionChanged>{});bump(std::type_identity<DocumentEdited>{});bump(std::type_identity<DeviceListChanged>{});bump(std::type_identity<ProjectLoaded>{});
+    bump(std::type_identity<RunCompleted>{});bump(std::type_identity<HistoryChanged>{});bump(std::type_identity<SelectionChanged>{});plotSubs.push_back(bus->Subscribe<DocumentEdited>([this](const DocumentEdited &){++docGen;}));bump(std::type_identity<DeviceListChanged>{});bump(std::type_identity<ProjectLoaded>{});
 }
 Workflow::~Workflow() { tutorial.Stop();queuedSave=Json();queuedProject.clear();runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } while(saveJob) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} }
 void Workflow::StartOperation(const Json &r,const std::string &id) {
@@ -1100,7 +1152,8 @@ void Workflow::StartOperation(const Json &r,const std::string &id) {
     if(op=="export_results") pending->workspace=Workspace(); // the only job that still needs the whole workspace
 
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status="running";
-    const bool preview=op=="run" && r.value("preview",false);if(op=="run") runStarted=std::chrono::steady_clock::now();
+    const bool preview=op=="run" && r.value("preview",false);if((op=="run" && !preview) || op=="run_batch" || op=="quick_sweep" || op=="retry_batch") pending->feed=CreateRef<LiveFeed>();liveSeq=0;liveAt=std::chrono::steady_clock::time_point{};
+    if(op=="run") runStarted=std::chrono::steady_clock::now();
     if(op=="run" && !preview) {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
     active=jobs->Submit(pending);if(!r.value("autosave",false)){status=preview?(r.value("stride",1)>1?"Preview (coarse, every "+std::to_string(r.value("stride",1))+". point): "+d.name:"Preview: "+d.name):"Running: "+d.name;response=Json();}
 }
@@ -1163,6 +1216,24 @@ void Workflow::Changed() {
     auto &d=Current();d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();
     d.status=d.history.empty()?"no results":"previous";
 }
+namespace {
+class FreeJob final : public IJob { // last owner of replaced/dropped results: destroying a big result (megabytes of Json) takes tens of ms, so it happens here
+    std::vector<Ref<const ResultBase>> results;std::vector<Ref<const Json>> views;Ref<IJob> finished;
+public:
+    FreeJob(std::vector<Ref<const ResultBase>> r,std::vector<Ref<const Json>> v,Ref<IJob> done={}):results(std::move(r)),views(std::move(v)),finished(std::move(done)) {}
+    std::string GetName() const override {return "ScapsLab release results";}
+    std::string GetType() const override {return "scapslab.free";}
+    void Execute(JobContext &) override {results.clear();views.clear();finished.reset();}
+};
+class WarmViews final : public IJob { // builds Json views off the UI thread (ResultBase::View is thread-safe)
+    std::vector<Ref<const ResultBase>> results;
+public:
+    explicit WarmViews(std::vector<Ref<const ResultBase>> r):results(std::move(r)) {}
+    std::string GetName() const override {return "ScapsLab prepare views";}
+    std::string GetType() const override {return "scapslab.views";}
+    void Execute(JobContext &) override {for(const auto &r:results) r->View();}
+};
+}
 // UI app only (viewIdleSeconds>0): Json views of results that no panel has read for a while are freed; the typed result stays. Plot caches are keyed by view
 // addresses, so a drop bumps plotGen (they rebuild at the next frame boundary).
 void Workflow::TrimViews() {
@@ -1170,22 +1241,56 @@ void Workflow::TrimViews() {
     const auto now=std::chrono::steady_clock::now();
     if(now-viewTrimAt<std::chrono::seconds(1)) return;
     viewTrimAt=now;const auto idle=now-std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(viewIdleSeconds));
-    bool dropped=false;
-    const auto drop=[&](const ResultBase *r) {if(r) dropped|=r->DropIdleView(idle);};
+    bool dropped=false;std::vector<Ref<const Json>> dead;
+    const auto drop=[&](const ResultBase *r) {Ref<const Json> v;if(r && r->DropIdleView(idle,&v)) {dropped=true;dead.push_back(std::move(v));}};
     for(const auto &d:project.devices) {
-        drop(d->result.typed().get());drop(d->bandResult.typed().get());drop(d->batchResult.typed().get());
-        for(const auto &[k,r]:d->acResults.all()) drop(r.get());
+        if(d->id!=project.active_device) { // the active device's live results stay readable (rebuilding a view on the UI thread is a visible stall)
+            drop(d->result.typed().get());drop(d->bandResult.typed().get());drop(d->batchResult.typed().get());
+            for(const auto &[k,r]:d->acResults.all()) drop(r.get());
+        }
         for(const auto &[id,r]:*d->runs) drop(r.get());
     }
-    if(dropped) ++plotGen;
+    if(dropped) {++plotGen;(void)jobs->Submit(CreateRef<FreeJob>(std::vector<Ref<const ResultBase>>{},std::move(dead)));}
+}
+// Panels read results through Json views. When a view a panel needs is missing (trimmed while idle, history run first shown, project just loaded),
+// it is built on a worker and the panels draw a note meanwhile, so the UI thread never stalls on a Dump of a big result.
+bool Workflow::ViewsReady() {
+    if(viewIdleSeconds<=0) return true;
+    if(warmJob) {
+        const auto snap=jobs->GetJob(warmJob);
+        if(snap && (snap->status==JobStatus::Queued || snap->status==JobStatus::Running)) return false;
+        warmJob=0;++plotGen; // views exist at new addresses: plot caches rebuild
+    }
+    std::vector<Ref<const ResultBase>> missing;
+    const auto need=[&](const Ref<const ResultBase> &r) {if(r && !r->HasView()) missing.push_back(r);};
+    for(const auto &d:project.devices) {
+        if(d->id!=project.active_device && !project.compare_set.contains(d->id)) continue;
+        need(d->result.typed());need(d->bandResult.typed());need(d->batchResult.typed());
+        for(const auto &[k,r]:d->acResults.all()) need(r);
+        if(d->id==project.active_device) need(d->RunResult(d->selectedRun)); // profiles of a selected run are read as Json
+    }
+    if(missing.empty()) return true;
+    warmJob=jobs->Submit(CreateRef<WarmViews>(std::move(missing)));
+    return false;
 }
 void Workflow::OnUpdate(float) {
     static const bool perf=std::getenv("SCAPSLAB_PERF")!=nullptr; // SCAPSLAB_PERF=1: log UI-thread hitches (>2 ms) to stderr
     const auto t0=std::chrono::steady_clock::now();
     UpdateOperation();
+    const auto t1=std::chrono::steady_clock::now();
     UpdateTutorial();
     TrimViews();
-    if(perf) {const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();if(ms>2)std::fprintf(stderr,"[perf] Workflow::OnUpdate %.1f ms (status: %s)\n",ms,status.c_str());}
+    if(perf) {const auto t2=std::chrono::steady_clock::now();const double ms=std::chrono::duration<double,std::milli>(t2-t0).count();if(ms>2)std::fprintf(stderr,"[perf] Workflow::OnUpdate %.1f ms (operation %.1f, tutorial+trim %.1f) (status: %s)\n",ms,std::chrono::duration<double,std::milli>(t1-t0).count(),std::chrono::duration<double,std::milli>(t2-t1).count(),status.c_str());}
+}
+// UI thread: copy the running job's partial data (<= ~10x per second; the worker only appends under a lock, no Json is built for partials).
+void Workflow::PullLive() {
+    const auto now=std::chrono::steady_clock::now();
+    if(!pending || !pending->feed || now-liveAt<std::chrono::milliseconds(100)) return;
+    auto &feed=*pending->feed;auto &d=Device(pendingDevice);
+    std::lock_guard g(feed.lock);
+    if(feed.seq==liveSeq) return;
+    liveSeq=feed.seq;liveAt=now;d.liveRunning=true;
+    d.liveV=feed.v;d.liveJ=feed.j;d.pvEstimate=feed.pv;d.liveMembers=feed.members;d.liveMemberTotal=feed.memberTotal;
 }
 void Workflow::UpdateOperation() {
     UpdateSave();
@@ -1209,22 +1314,23 @@ void Workflow::UpdateOperation() {
         }
         return;
     }
-    const auto snapshot=jobs->GetJob(active);if(!snapshot || snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running) return;
+    const auto snapshot=jobs->GetJob(active);
+    if(pending->feed && (!snapshot || snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running)) PullLive();
+    if(!snapshot || snapshot->status==JobStatus::Queued || snapshot->status==JobStatus::Running) return;
     const auto op=pending->request.at("operation").get<std::string>();
     auto &d=Device(pendingDevice);
+    std::vector<Ref<const ResultBase>> held; // every result before the swap below: whoever replaces one, the last release (a multi-MB destructor) happens on a worker
+    for(const auto &dev:project.devices) {held.push_back(dev->result.typed());held.push_back(dev->bandResult.typed());held.push_back(dev->batchResult.typed());for(const auto &[k,r]:dev->acResults.all()) held.push_back(r);for(const auto &[id,r]:*dev->runs) held.push_back(r);}
+    if(pending->feed) {d.liveV.clear();d.liveJ.clear();d.pvEstimate=PvEstimate{};d.liveMembers.clear();d.liveMemberTotal=0;d.liveRunning=false;} // partials never outlive their job; the exact result (if any) is adopted below
     const bool outValid=pending->typedOut?pending->outputValid:pending->output.is_object() && pending->output.value("valid",false);
-            if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {
-                const auto group="batch-"+std::to_string(pending->output.at("provenance").at("time_unix_ms").get<std::int64_t>());
-                for(const auto &row:pending->output.at("rows")) {
-                    if(op=="retry_batch" && row.at("id")!=pending->request.at("member_id"))continue;
-                    auto model=pending->document;
-                    for(const auto &parameter:BatchParameters(model)) if(row.at("parameters").contains(parameter.at("path").get<std::string>()) && row.at("parameters").at(parameter.at("path").get<std::string>())!=parameter.at("value")) model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=row.at("parameters").at(parameter.at("path").get<std::string>());
-                    Json result=Json::object();for(const auto &[key,value]:pending->output.items()) if(key!="rows") result[key]=value; /* do not copy every row per row */ result["rows"]=Json::array({row});result["project_snapshot"]=model;result["provenance"]["device_hash"]=DocumentHash(model);
-                    result["elapsed_s"]=row.at("elapsed_s");
-                    const auto runId=StoreRun(d.history.mut(),"batch",result,model,pending->request,project.ui.value("history_retention",5),group);
-                    {auto runs=CreateRef<RunMap>(*d.runs);(*runs)[runId]=CreateRef<const BatchResult>(BatchFromJson(result));d.runs=std::move(runs);d.SyncRuns();}
-                    if(!d.history.empty()) {const double t=pending->output.at("rows").size()<2?0.:double(&row-&pending->output.at("rows")[0])/double(pending->output.at("rows").size()-1);d.history.mut().back()["colour"]=Json::array({.15+.7*t,.4+.3*std::sin(3.14159*t),.9-.7*t,1.});}
+            if(!pending->members.empty()) { // members were prepared on the worker; here they only enter the history
+                auto runs=CreateRef<RunMap>(*d.runs);
+                for(auto &m:pending->members) {
+                    const auto runId=StoreRun(d.history.mut(),"batch",m.result,m.model,pending->request,project.ui.value("history_retention",5),pending->batchGroup,&m.parameters,&m.hash);
+                    (*runs)[runId]=m.typed;
+                    if(!d.history.empty()) d.history.mut().back()["colour"]=Json::array({.15+.7*m.t,.4+.3*std::sin(3.14159*m.t),.9-.7*m.t,1.});
                 }
+                d.runs=std::move(runs);d.SyncRuns();
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
                 LimitProfiles(d);Emit(HistoryChanged(d.id));Emit(SelectionChanged(d.id));
             }
@@ -1268,7 +1374,7 @@ void Workflow::UpdateOperation() {
             if(op=="batch_select") d.selectedMember=pending->request.at("index");
             if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
             if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {d.batchResult.adopt(std::static_pointer_cast<const BatchResult>(pending->typedOut));projectDirty=true;Emit(RunCompleted(d.id,d.selectedRun,op,d.revision));}
-            if(op=="run") {d.result.adopt(std::static_pointer_cast<const IvResult>(pending->typedOut));d.bandResult.clear();}
+            if(op=="run") {d.result.adopt(std::static_pointer_cast<const IvResult>(pending->typedOut));d.bandResult.clear();d.resultRevision=d.revision;}
             if(op=="band") {d.bandResult.adopt(std::static_pointer_cast<const IvResult>(pending->typedOut));}
             if(op=="cv" || op=="cf" || op=="qe") d.acResults.set(op,std::static_pointer_cast<const AcResult>(pending->typedOut));
             if(op=="run" || op=="band") LimitProfiles(d);
@@ -1316,6 +1422,7 @@ void Workflow::UpdateOperation() {
         if(runQueue.empty()) {const bool ok=std::all_of(batchResponse.begin(),batchResponse.end(),[](const Json &r){return r.at("ok").get<bool>();});response=Snapshot();response["ok"]=ok;response["runs"]=batchResponse;if(!ok)response["error"]={{"code",snapshot->status==JobStatus::Cancelled?"cancelled":"operation_failed"},{"message","One or more device runs failed"}};}
     }
     pending->typedOut.reset();pending->loaded.clear();pending->workspace=Json();
+    (void)jobs->Submit(CreateRef<FreeJob>(std::move(held),std::vector<Ref<const Json>>{},std::move(pending))); // the finished Operation (its output Json can be huge) dies on a worker too
     active=0;pending.reset();
 }
 }

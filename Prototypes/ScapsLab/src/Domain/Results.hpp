@@ -19,7 +19,7 @@ public:
     virtual Json Dump() const = 0;                               // typed -> fresh Json (save, Snapshot, Python)
     virtual const PJson &MetaOf() const = 0;
     const Json &View() const;                                    // cached Json for read-only UI/test access; build cost = one Dump
-    bool DropIdleView(std::chrono::steady_clock::time_point idleSince) const; // true if a view was dropped
+    bool DropIdleView(std::chrono::steady_clock::time_point idleSince,Ref<const Json> *dropped=nullptr) const; // true if a view was dropped (handed to `dropped` when given, so the caller can free the big Json off the UI thread)
     bool HasView() const {std::lock_guard g(lock); return bool(view);}
     const Json &Provenance() const {static const Json none; const auto &m = MetaOf().prim; return m.is_object() && m.contains("provenance") ? m.at("provenance") : none;}
 private:
@@ -87,5 +87,7 @@ bool PointArray(const IvPoint &p, const std::string &key, std::vector<double> &o
 const PJson *ChildOf(const PJson &obj, const std::string &key);                         // packed object member (e.g. rest -> generation_recombination)
 bool NumbersOf(const PJson &obj, const std::string &key, std::vector<double> &out);    // numeric array member of a packed object (Column or short plain array)
 Ref<const IvResult> DropProfiles(const IvResult &r); // spatial profiles removed (mesh, per-point arrays/objects); curve and scalar metrics stay
+struct BatchCurve {std::vector<double> v,j;std::vector<char> converged;};
+std::vector<BatchCurve> BatchIvCurves(const BatchResult &r);   // rows[*].curves.iv as voltage_V / J_Am2 / status=="Converged" columns, read straight from the packed table (no Json is built); a row without curves gives an empty curve
 bool HasProfiles(const IvResult &r);                 // mesh_x_m present and points present (what DropProfiles needs)
 } // namespace SST::ScapsLab

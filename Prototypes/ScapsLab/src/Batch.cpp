@@ -136,11 +136,17 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
         std::vector<Json> solved(points.size());std::vector<char> ready(points.size(),0);
         auto wanted=[&](std::size_t i){return !(op=="retry_batch" && o.output["rows"][i].at("id")!=o.request.at("member_id"));};
         std::atomic<std::size_t> finished{0};
+        if(o.feed) {std::lock_guard g(o.feed->lock);o.feed->memberTotal=points.size();}
         // Core ParallelFor: caller + child jobs on the JobSystem (no raw threads); cancel skips remaining members -> Cancelled rows.
         ParallelFor(ctx,points.size(),[&](std::size_t i){
             if(wanted(i)) {
                 auto single=spec;for(auto &axis:single["axes"]) {axis["values"]=Json::array({points[i].at(axis.at("path").get<std::string>())});axis.erase("count");axis.erase("start");axis.erase("stop");}
                 solved[i]=Json::parse(scaps_core::run_batch_json(o.document.dump(),single.dump())).at("rows")[0];ready[i]=1;
+                if(o.feed) { // finished member goes to the UI at once (curve only; marked "running" there, never stored)
+                    LiveMember m;m.index=int(i);
+                    if(solved[i].contains("curves") && solved[i].at("curves").contains("iv")) for(const auto &pt:solved[i].at("curves").at("iv")) {m.v.push_back(pt.at("voltage_V").get<double>());m.j.push_back(pt.value("status",std::string{})=="Converged" && pt.at("J_Am2").is_number()?pt.at("J_Am2").get<double>():double(NAN));}
+                    o.feed->AddMember(std::move(m));
+                }
             }
             ctx.SetStage("Members "+std::to_string(++finished)+" / "+std::to_string(points.size()));
         });
