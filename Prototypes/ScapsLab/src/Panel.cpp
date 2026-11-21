@@ -1300,7 +1300,15 @@ void Panel::Devices() {
                     const auto layers=doc.is_object() && doc.contains("layers")?doc.at("layers"):Json::array();
                     const auto sheets=doc.is_object()?doc.value("interface_defects",Json::array()):Json::array();
                     if(ImGui::TreeNodeEx("##layers",ImGuiTreeNodeFlags_DefaultOpen|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow)) {
-                        text(ICON_FA_LAYER_GROUP " Layers ("+std::to_string(layers.size())+")");
+                        text(ICON_FA_LAYER_GROUP " Structure ("+std::to_string(layers.size())+" layers)");
+                        if(PanelShown(2)) { // contacts are the first and last items of the stack
+                            const auto contact=[&](const char *label,const char *id) {
+                                ImGui::PushID(id);const auto [co,cc]=node("##contact",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)co;
+                                if(cc) {select(d);go(2);}
+                                text(label);ImGui::PopID();
+                            };
+                            contact(ICON_FA_PLUG " Left contact (front)","left");
+                        }
                         for(int i=0;i<int(layers.size());++i) {
                             const auto &l=layers[i];const auto &defects=l.value("defects",Json::array());ImGui::PushID(i);
                             const auto [lopen,lclick]=node("##layer",defects.empty()?ImGuiTreeNodeFlags_Leaf:ImGuiTreeNodeFlags_None,active && d.selectedLayer==i && d.selectedInterface<0);
@@ -1326,6 +1334,7 @@ void Panel::Devices() {
                                 select(d);w->Current().selectedLayer=i;
                                 if(ImGui::MenuItem("Add defect")) {AddDefectTo(false,i);go(11);}
                                 if(ImGui::MenuItem("Add layer")) {Send({{"operation","layer"},{"action","add"}});go(1);}
+                                if(ImGui::MenuItem("Add interface to next layer",nullptr,false,i+1<int(layers.size()))) {AddDefectTo(true,i);go(12);}
                                 if(ImGui::MenuItem("Open in new window")) OpenLayerWindow(w,d.id,l.value("scapslab_id",std::string{}));
                                 ImGui::EndPopup();
                             }
@@ -1340,21 +1349,47 @@ void Panel::Devices() {
                                 ImGui::TreePop();
                             }
                             ImGui::PopID();
+                            std::vector<int> sheetIdx;for(int k=0;k<int(sheets.size());++k) if(sheets[k].value("left_layer_index",-1)==i) sheetIdx.push_back(k);
+                            if(i+1<int(layers.size()) && !sheetIdx.empty()) { // interface shown inline only when it has defects; not draggable, but a drop here maps to the layer move index
+                                ImGui::PushID(1000+i);
+                                const auto [iopen,iclick]=node("##interface",ImGuiTreeNodeFlags_DefaultOpen,active && d.selectedInterface==i);
+                                if(iclick) {select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;go(12);}
+                                if(ImGui::BeginDragDropTarget()) {
+                                    if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_LAYER",ImGuiDragDropFlags_AcceptBeforeDelivery|ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
+                                        const std::string text=static_cast<const char*>(payload->Data);const auto nl=text.find('\n');
+                                        const std::string from=text.substr(nl+1);int fromIndex=-1;
+                                        for(int k=0;k<int(layers.size());++k) if(layers[k].value("scapslab_id",std::string{})==from) fromIndex=k;
+                                        const int target=fromIndex<=i?i:i+1;
+                                        if(text.substr(0,nl)==d.id && fromIndex>=0 && fromIndex!=target) {
+                                            const auto min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();
+                                            ImGui::GetForegroundDrawList()->AddLine(ImVec2(min.x,max.y),ImVec2(max.x,max.y),ImGui::GetColorU32(ImGuiCol_NavHighlight),2.f);
+                                            if(payload->IsDelivery()) {select(d);Send({{"operation","layer"},{"action","move"},{"layer_id",from},{"index",target}});}
+                                        }
+                                    }
+                                    ImGui::EndDragDropTarget();
+                                }
+                                if(ImGui::BeginPopupContextItem("interface-menu")) {
+                                    select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;
+                                    if(ImGui::MenuItem("Add interface defect")) {AddDefectTo(true,i);go(12);}
+                                    if(ImGui::MenuItem("Remove defects")) {auto draft=d.document;auto &arr=draft["interface_defects"];for(int k=int(arr.size())-1;k>=0;--k) if(arr[k].value("left_layer_index",-1)==i) arr.erase(arr.begin()+k);Send({{"operation","edit"},{"document",draft}});}
+                                    ImGui::EndPopup();
+                                }
+                                text(ICON_FA_ARROWS_LEFT_RIGHT " Interface "+std::to_string(i+1)+" ("+layers[i].value("name",std::string{})+" / "+layers[i+1].value("name",std::string{})+")",std::to_string(sheetIdx.size())+" defect(s)");
+                                if(iopen) {
+                                    for(const int k:sheetIdx) {
+                                        ImGui::PushID(k);const auto [dopen,dclick]=node("##idefect",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)dopen;
+                                        if(dclick) {select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;selectedDefect=k;go(12);}
+                                        text(ICON_FA_CIRCLE_DOT " "+sheets[k].value("id",std::string("defect")));ImGui::PopID();
+                                    }
+                                    ImGui::TreePop();
+                                }
+                                ImGui::PopID();
+                            }
                         }
+                        if(PanelShown(2)) {ImGui::PushID("right");const auto [co,cc]=node("##contact",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)co;if(cc) {select(d);go(2);}text(ICON_FA_PLUG " Right contact (back)");ImGui::PopID();}
                         ImGui::TreePop();
                     }
-                    if(layers.size()>1 && ImGui::TreeNodeEx("##interfaces",ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow)) {
-                        text("Interfaces ("+std::to_string(layers.size()-1)+")");
-                        for(int i=0;i+1<int(layers.size());++i) {
-                            int count=0;for(const auto &s:sheets) count+=s.value("left_layer_index",-1)==i;
-                            ImGui::PushID(i);const auto [iopen,iclick]=node("##interface",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,active && d.selectedInterface==i);(void)iopen;
-                            if(iclick) {select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;go(12);}
-                            if(ImGui::BeginPopupContextItem("interface-menu")) {select(d);if(ImGui::MenuItem("Add interface defect")) {AddDefectTo(true,i);go(12);}ImGui::EndPopup();}
-                            text(layers[i].value("name",std::string{})+" / "+layers[i+1].value("name",std::string{}),count?std::to_string(count)+" defect(s)":"");ImGui::PopID();
-                        }
-                        ImGui::TreePop();
-                    }
-                    for(const auto &[label,target]:{std::pair<const char*,int>{ICON_FA_PLUG " Contacts",2},{ICON_FA_SUN " Illumination",19}}) {
+                    for(const auto &[label,target]:{std::pair<const char*,int>{ICON_FA_SUN " Illumination",19}}) {
                         if(!PanelShown(target)) continue;
                         ImGui::PushID(target);const auto [lopen,lclick]=node("##leaf",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)lopen;
                         if(lclick) {select(d);go(target);}

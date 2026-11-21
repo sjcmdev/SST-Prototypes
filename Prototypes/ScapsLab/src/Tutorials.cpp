@@ -160,7 +160,7 @@ void Workflow::UpdateTutorial() {
 }
 Json VerifyTutorial(const std::string &id) {
     Workflow workflow(CreateRef<JobSystem>(nullptr,1));
-    workflow.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    workflow.Current().document=NewDeviceDocument();
     const auto started=workflow.Dispatch({{"operation","tutorial_start"},{"tutorial_id",id},{"mode","verify"}});
     if (!started.value("ok",false)) return {{"schema_version",1},{"tutorial_id",id},{"status","failed"},{"ok",false},{"error",started.at("error")},{"steps",Json::array()}};
     while (workflow.tutorial.Automatic() || workflow.Pending()) {
