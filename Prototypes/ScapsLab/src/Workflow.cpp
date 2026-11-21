@@ -20,6 +20,7 @@
 #include <fstream>
 #include <numbers>
 #include <thread>
+#include "Core/JobSystem/ParallelFor.hpp"
 #include <mutex>
 #include <exception>
 namespace SST::ScapsLab {
@@ -804,12 +805,7 @@ void Operation::Execute(JobContext &ctx) {
         ctx.SetStage("AC solve ("+std::to_string(total)+" points)");
         if(op=="cf") acs=solve_ac_spectrum(device,mesh,dcs.front(),frequencies,1e-3,pc); // core parallelises the frequencies
         else {
-            std::atomic<std::size_t> next{0};std::exception_ptr failure;std::mutex failureLock;
-            auto work=[&]{for(std::size_t i;(i=next.fetch_add(1))<total;) {try {acs[i]=solve_ac_spectrum(device,mesh,dcs[i],{frequencies[0]},1e-3,pc).front();} catch(...) {std::lock_guard g(failureLock);if(!failure)failure=std::current_exception();next=total;}}};
-            std::vector<std::thread> pool;const auto threads=std::min<std::size_t>(total,std::max(1u,std::thread::hardware_concurrency()));
-            for(std::size_t t=1;t<threads;++t) pool.emplace_back(work);
-            work();for(auto &t:pool) t.join();
-            if(failure) std::rethrow_exception(failure);
+            ParallelFor(ctx,total,[&](std::size_t i){acs[i]=solve_ac_spectrum(device,mesh,dcs[i],{frequencies[0]},1e-3,pc).front();});
         }
         ctx.ThrowIfCancellationRequested();
         for(std::size_t i=0;i<total;++i) {
