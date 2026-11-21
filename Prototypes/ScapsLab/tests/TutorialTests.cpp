@@ -134,7 +134,8 @@ TEST(ScapsLabTutorial,LearnPersistsProgressAndVerifyDoesNotWriteUserConfig) {
     w.tutorialProgressPath=path.string();
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","first-device"}}).value("ok",false));
     w.OnUpdate(0);w.Current().name="Tutorial: First device"; // the user finishes step 1 after the lesson started
-    w.OnUpdate(0);ASSERT_TRUE(std::filesystem::exists(path));
+    w.OnUpdate(0);while(w.IoPending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));} // S10: progress is written asynchronously
+    ASSERT_TRUE(std::filesystem::exists(path));
     const auto progress=w.tutorialProgress;EXPECT_EQ(progress.at("first-device").at("step_index"),1);
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_stop"}}).value("ok",false));
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","first-device"},{"resume",true}}).value("ok",false));

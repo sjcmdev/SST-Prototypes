@@ -1,5 +1,6 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
+#include "Io.hpp"
 #include <scaps_core/illumination.hpp>
 #include <fstream>
 #include <set>
@@ -150,8 +151,7 @@ void Workflow::UpdateTutorial() {
             if (report.at("status")=="passed") progress["step_index"]=0;
             tutorialProgress[report.at("tutorial_id").get<std::string>()]=progress;
             if (!tutorialProgressPath.empty()) {
-                std::string error;
-                if (!TextFileIO::Save(Path{tutorialProgressPath}, tutorialProgress.dump(2), error)) status="Tutorial progress: "+error;
+                AsyncIo("Tutorial progress",[file=tutorialProgressPath,text=tutorialProgress.dump(2)]()->std::string {std::string error;return Io::Save(file,text,error)?std::string{}:error;});
             }
         }
         if (!tutorial.Active()) {autoRecalculate=tutorialAuto;autoRecalculateBand=tutorialBand;}

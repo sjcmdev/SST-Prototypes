@@ -3,6 +3,7 @@
 #include "Core/App/Application.hpp"
 #include "Core/Presentation/EditorLayer.hpp"
 #include "Core/IO/TextFileIO.hpp"
+#include "Io.hpp"
 #include <imgui_internal.h>
 #include "Core/Presentation/Panels/HostedWindows.hpp"
 #include <fstream>
@@ -32,11 +33,7 @@ class TutorialUi final : public Layer {
     const Json catalog=TutorialCatalog();
     // Basic mode: a lesson is listed only if every panel it targets is shown (hidden lessons stay in code).
     void SaveExperimental() {
-        if(UiSettingsPath().empty())return;
-        Json s=Json::object();std::string text,error;
-        if(TextFileIO::Load(Path{UiSettingsPath()},text,error)) {try{s=Json::parse(text);}catch(...){}}
-        if(!s.is_object())s=Json::object();
-        s["experimental_panels"]=ExperimentalPanels();(void)TextFileIO::Save(Path{UiSettingsPath()},s.dump(2),error);
+        w.settings["experimental_panels"]=ExperimentalPanels();w.SaveSettings();
     }
     bool LessonShown(const std::string &id) const {
         for(const auto &step:TutorialDefinition(id).at("steps")) {
@@ -55,7 +52,7 @@ public:
             const auto userDirectory=layout.Empty()?config->GetPaths().userConfigDirectory:layout.parent_path();
             w.tutorialProgressPath=(userDirectory/Path{"scapslab-tutorials.json"}).Utf8();
             std::string source,error;
-            if(TextFileIO::Load(Path{w.tutorialProgressPath},source,error)) {
+            if(Io::Load(w.tutorialProgressPath,source,error)) {
                 try {
                     const auto value=Json::parse(source);
                     if(!value.is_object())throw std::invalid_argument("Expected an object");
@@ -89,7 +86,7 @@ public:
             std::tuple{"export_results","Export results...",""},std::tuple{"import_def","Import SCAPS .def...",""},std::tuple{"export_def","Export SCAPS .def...",""}})
             menu(std::string("scapslab.file.")+action,std::string("File/")+label,[&w,action]{w.fileAction=action;},shortcut,idle);
         menu("scapslab.file.include_results","File/Include results in project",[&w]{w.includeResults=!w.includeResults;},"",idle,[&w]{return w.includeResults;});
-        menu("scapslab.file.recover","File/Recover autosave...",[&w]{w.fileAction="recover";},"",[&w]{return !w.Busy() && !w.recoveryPath.empty() && std::filesystem::exists(w.recoveryPath);});
+        menu("scapslab.file.recover","File/Recover autosave...",[&w]{w.fileAction="recover";},"",[&w]{return !w.Busy() && w.recoveryAvailable;});
         menu("scapslab.file.exit","File/Exit",[&w]{w.fileAction="exit";});
         for(int i=0;i<10;++i) menu("scapslab.recent."+std::to_string(i),"",[&w,i]{if(i<int(w.recent.size()))w.openRequest=w.recent[i];},"",[&w,i]{return !w.Busy() && i<int(w.recent.size());});
         if(std::filesystem::exists(ExamplesDirectory())) for(const auto &entry:std::filesystem::directory_iterator(ExamplesDirectory())) if(entry.path().extension()==".scapslab") {

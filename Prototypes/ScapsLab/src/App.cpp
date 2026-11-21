@@ -5,6 +5,8 @@
 #include <GLFW/glfw3.h>
 #include "Core/Presentation/EditorLayer.hpp"
 #include "Panel.hpp"
+#include "Io.hpp"
+#include "Core/IO/IOLayer.hpp"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <cstdlib>
@@ -36,12 +38,9 @@ public:
         const std::string ini=ImGui::SaveIniSettingsToMemory();
         // Live windows always get a section, so require a saved dock assignment for a known panel.
         const auto section=ini.find("[Window][sst-window-"+std::to_string(panels[0]->GetId())+"]");
-        if(!layoutKey.empty() && ScapsLab::UiSettingsPath().size()) {
+        if(auto *w=panels[0]->GetWorkflow();!layoutKey.empty() && !w->settingsPath.empty()) {
             // Rebuild once when the panel set (or the default layout) changed since the saved layout was made.
-            std::string text,error;ScapsLab::Json s=ScapsLab::Json::object();
-            if(TextFileIO::Load(Path{ScapsLab::UiSettingsPath()},text,error)) {try{s=ScapsLab::Json::parse(text);}catch(...){}}
-            if(!s.is_object())s=ScapsLab::Json::object();
-            if(s.value("layout_key",std::string{})!=layoutKey) {force=true;s["layout_key"]=layoutKey;(void)TextFileIO::Save(Path{ScapsLab::UiSettingsPath()},s.dump(2),error);}
+            if(w->settings.value("layout_key",std::string{})!=layoutKey) {force=true;w->settings["layout_key"]=layoutKey;w->SaveSettings();}
         }
         if(!force && section!=std::string::npos && ini.substr(section,ini.find("\n[",section+1)-section).find("DockId=")!=std::string::npos) return;
         const auto *vp=ImGui::GetMainViewport(); const auto root=vp->ID;
@@ -83,8 +82,6 @@ class ScapsCloseGuard final : public Layer {
     std::vector<Ref<ScapsLab::Panel>> panels;
     ScapsLab::Json appliedPanels;
     std::string opening;
-    Path recentPath;
-    ScapsLab::Json savedRecent;
     std::string appliedLayout;
     bool exporting=false, exportAll=false;
     int exportFormat=0, selectedRun=0;
@@ -95,14 +92,14 @@ class ScapsCloseGuard final : public Layer {
             if(saveAs || target.empty()) {const auto file=SaveFileDialog({"ScapsLab project","scapslab"},"Untitled.scapslab");if(!file)return false;target=file->Utf8();}
             if(std::filesystem::path(target).extension()!=".scapslab") target+=".scapslab";
             std::size_t iniSize=0;const auto *ini=ImGui::SaveIniSettingsToMemory(&iniSize);w.project.ui["imgui_ini"]=std::string(ini,iniSize);appliedLayout=std::string(ini,iniSize); /* live layout: do not reload what we just captured (reset after Save) */
-            const auto response=w.Dispatch({{"operation","project_save"},{"path",target},{"include_results",w.includeResults}});return response.at("ok").get<bool>();
+            app.GetEventBusRef()->PublishNew<ScapsLab::ProjectSaveRequested>(target,w.includeResults);return w.ioResult.value("ok",false);
         } catch(const std::exception &e) {w.status=e.what();return false;}
     }
     void Proceed() {
-        if(!w.recoveryPath.empty() && opening!=w.recoveryPath) {std::error_code ec;if(w.path.empty() || !std::filesystem::equivalent(w.path,w.recoveryPath,ec))std::filesystem::remove(w.recoveryPath,ec);}
+        if(!w.recoveryPath.empty() && opening!=w.recoveryPath) w.DropRecovery(w.path);
         if(closing) {w.dirty=false;app.Shutdown();}
         else if(creating) {(void)w.Dispatch({{"operation","project_new"}});creating=false;}
-        else if(!opening.empty()) {(void)w.Dispatch({{"operation","project_load"},{"path",opening}});opening.clear();}
+        else if(!opening.empty()) {app.GetEventBusRef()->PublishNew<ScapsLab::ProjectOpenRequested>(opening);opening.clear();}
     }
 public:
     ScapsCloseGuard(Application &app,ScapsLab::Workflow &w,std::vector<Ref<ScapsLab::Panel>> panels):Layer("ScapsLab file actions"),app(app),w(w),panels(std::move(panels)) {
@@ -110,10 +107,7 @@ public:
             if(ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || this->w.tutorial.Active() || this->requested || this->exporting) return 0.;
             return this->w.Pending() || this->w.warmJob ? 0.05 : 0.5;});
         app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Pending())return true;creating=false;closing=true;requested=true;return false;});
-        if(const auto config=app.GetConfigManager().lock()) recentPath=config->GetConfigDirectory()/Path{"scapslab-recent.json"};
-        std::string text,error;if(TextFileIO::Load(recentPath,text,error)) {try {const auto items=ScapsLab::Json::parse(text);if(items.is_array() && items.size()<=10 && std::all_of(items.begin(),items.end(),[](const auto &p){return p.is_string();})) w.recent=items;}catch(...) {}}
-        savedRecent=w.recent;
-        if(!recentPath.Empty()) {w.recoveryPath=(recentPath.parent_path()/Path{"scapslab-recovery.scapslab"}).Utf8();if(std::filesystem::exists(w.recoveryPath))w.status="Autosave found: File > Recover autosave";}
+        if(const auto config=app.GetConfigManager().lock()) w.SetRecentPath((config->GetConfigDirectory()/Path{"scapslab-recent.json"}).Utf8()); // async read/write; Workflow::OnUpdate persists changes
     }
     void OnImGuiRender() override {
         w.interacting=ImGui::IsAnyItemActive();w.dragging=std::exchange(w.dragSeen,false); // dragSeen: a slider was held last frame
@@ -129,12 +123,11 @@ public:
         const auto layout=w.project.ui.value("imgui_ini",std::string{});
         if(!layout.empty() && layout!=appliedLayout && !w.Busy()) {ImGui::LoadIniSettingsFromMemory(layout.c_str(),layout.size());appliedLayout=layout;}
         if(auto *window=glfwGetCurrentContext()) glfwSetWindowTitle(window,(w.project.name+(w.dirty?" *":"")+" - ScapsLab").c_str());
-        if(w.recent!=savedRecent) {std::string error;if(TextFileIO::Save(recentPath,w.recent.dump(2),error))savedRecent=w.recent;else w.status=error;}
         if(!ImGui::GetIO().WantTextInput) {
             if(ImGui::IsKeyPressed(ImGuiKey_F,false) && !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyAlt) w.fineLock=!w.fineLock; // F = fine slider mode (touchpads)
             for(const auto &[chord,id]:{
                 std::pair{ImGuiMod_Ctrl | ImGuiKey_Z,"scapslab.undo"},std::pair{ImGuiMod_Ctrl | ImGuiKey_Y,"scapslab.redo"},
-                std::pair{ImGuiMod_Ctrl | ImGuiKey_N,"scapslab.file.new"},std::pair{ImGuiMod_Ctrl | ImGuiKey_S,"scapslab.file.save"},
+                std::pair{ImGuiMod_Ctrl | ImGuiKey_N,"scapslab.file.new"}, // Ctrl+S: Core's global binding -> CoreEvents::ProjectSaveRequested -> Workflow::RegisterIo
                 std::pair{ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S,"scapslab.file.save_as"},std::pair{ImGuiMod_Ctrl | ImGuiKey_O,"scapslab.file.open"}})
                 if(ImGui::Shortcut(chord) && w.commands->CanExecute(CommandID{id}))(void)w.commands->Execute(CommandID{id});
         }
@@ -172,7 +165,7 @@ public:
                 if(ImGui::Button("Browse...")) {try {if(const auto file=SaveFileDialog({"Results export",formats[exportFormat]},exportPath))std::snprintf(exportPath,sizeof(exportPath),"%s",file->Utf8().c_str());}catch(const std::exception &e){w.status=e.what();}}
                 ImGui::TextWrapped("CSV/JSON include point status, provenance and effective settings. Plots: PNG/SVG/PDF via PlotLab (one file per run).");
                 ImGui::BeginDisabled(w.Busy() || runs.empty());
-                if(ImGui::Button("Export")) {ScapsLab::Json ids=ScapsLab::Json::array();if(!exportAll)ids.push_back(runs[selectedRun].at("run_id"));const auto r=w.Dispatch({{"operation","export_results"},{"path",exportPath},{"format",formats[exportFormat]},{"all",exportAll},{"run_ids",ids}});if(!r.value("ok",false))w.status=r.at("error").at("message");}
+                if(ImGui::Button("Export")) {std::vector<std::string> ids;if(!exportAll)ids.push_back(runs[selectedRun].at("run_id").get<std::string>());app.GetEventBusRef()->PublishNew<ScapsLab::ProjectExportRequested>(exportPath,formats[exportFormat],exportAll,ids);}
                 ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Close"))exporting=false;
                 ImGui::TextWrapped("%s",w.status.c_str());
             }ImGui::End();
@@ -198,12 +191,20 @@ public:
 void SetupApplication(Application &app) {
     using namespace ScapsLab;
     RegisterPython();
+    std::string startupSettings;
     if(const auto config=app.GetConfigManager().lock()) {
         UiSettingsPath()=(config->GetConfigDirectory()/Path{"scapslab-ui.json"}).Utf8();
-        std::string text,error;if(TextFileIO::Load(Path{UiSettingsPath()},text,error)) {try {ExperimentalPanels()=Json::parse(text).value("experimental_panels",false);}catch(...) {}}
+        startupSettings=UiSettingsPath(); // read below, once the Workflow exists (start-up read, before the first frame)
     }
     if(std::getenv("SCAPSLAB_EXPERIMENTAL")) ExperimentalPanels()=std::string(std::getenv("SCAPSLAB_EXPERIMENTAL"))=="1";
     auto state=CreateUnique<Workflow>(app.GetJobSystemHandle().lock(),app.GetCommandRegistryHandle().lock(),app.GetEventBusRef(),app.GetNotifierRef()); auto *w=state.get();
+    w->RegisterIo(app.GetIOLayer());
+    if(!startupSettings.empty()) {
+        w->settingsPath=startupSettings;std::string text,error;
+        if(Io::Load(startupSettings,text,error)) {try {w->settings=Json::parse(text);}catch(...) {}}
+        if(!w->settings.is_object()) w->settings=Json::object();
+        ExperimentalPanels()=w->settings.value("experimental_panels",false);
+    }
     w->Current().document=NewDeviceDocument(); w->Current().name=w->Current().document.at("case_id");w->path="";
     if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}
     const char *gallery=std::getenv("SCAPSLAB_GALLERY_PANEL");

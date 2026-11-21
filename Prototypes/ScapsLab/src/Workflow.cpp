@@ -1,5 +1,8 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
+#include "Io.hpp"
+#include "Core/IO/IOLayer.hpp"
+#include "Core/Commands/SystemCommandEvents.hpp"
 #include <scaps_core/api.hpp>
 #include <scaps_core/illumination.hpp>
 #include <scaps_core/device_project_def.hpp>
@@ -56,7 +59,7 @@ YAML::Node ToYaml(const Json &j) {
 }
 std::string Text(const Json &j) { YAML::Emitter e; e.SetDoublePrecision(17); e << ToYaml(j); if (!e.good()) throw std::runtime_error(e.GetLastError()); return e.c_str(); }
 void SaveText(const std::filesystem::path &p,const std::string &text) {
-    std::string error; if (!TextFileIO::Save(Path{p},text,error)) throw std::runtime_error(error);
+    std::string error; if (!Io::Save(p,text,error)) throw std::runtime_error(error);
 }
 void Positive(double v,const char *field,bool zero=false) {
     if (!std::isfinite(v) || (zero ? v<0 : v<=0)) throw std::invalid_argument(std::string("Invalid ")+field);
@@ -664,7 +667,7 @@ void Operation::Execute(JobContext &ctx) {
     }
     else if(op=="project_load" || op=="load") {
         const auto file=request.at("path").get<std::string>();
-        std::string source,error;if(!TextFileIO::Load(Path{file},source,error)) throw std::runtime_error(error);
+        std::string source,error;if(!Io::Load(file,source,error)) throw std::runtime_error(error);
         auto raw=source.find_first_not_of(" \t\r\n")!=std::string::npos && source[source.find_first_not_of(" \t\r\n")]=='{'?Json::parse(source):FromYaml(YAML::Load(source));
         if(raw.contains("devices")) {workspace=UnpackResults(raw);workspace["schema_version"]=raw.value("schema_version",0);workspace=NormalizeWorkspace(std::move(workspace));}
         else workspace=SingleDeviceWorkspace(ReadProject(file),std::filesystem::path(file).stem().string());
@@ -1144,6 +1147,80 @@ Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry,Ref<EventBus> 
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
     }
 }
+namespace {
+class IoJob final : public IJob {
+    std::string name;std::function<std::string()> fn;Ref<std::string> error;
+public:
+    IoJob(std::string n,std::function<std::string()> f,Ref<std::string> e):name(std::move(n)),fn(std::move(f)),error(std::move(e)) {}
+    std::string GetName() const override {return "ScapsLab IO: "+name;}
+    std::string GetType() const override {return "scapslab.io";}
+    void Execute(JobContext &) override {try{*error=fn();}catch(const std::exception &e){*error=e.what();}}
+};
+}
+void Workflow::AsyncIo(std::string what,std::function<std::string()> fn,std::function<void()> done) {
+    auto error=CreateRef<std::string>();
+    const auto id=jobs->Submit(CreateRef<IoJob>(what,std::move(fn),error));
+    ioTasks.push_back({id,std::move(what),std::move(error),std::move(done)});
+}
+void Workflow::PollIo() {
+    for(std::size_t i=0;i<ioTasks.size();) {
+        const auto live=jobs->TryGetStatus(ioTasks[i].id);
+        if(live && (*live==JobStatus::Queued || *live==JobStatus::Running)) {++i;continue;}
+        auto task=std::move(ioTasks[i]);ioTasks.erase(ioTasks.begin()+i);
+        if(!task.error->empty()) notifier->Warning(task.what+" failed",*task.error,NotificationCategory::Project);
+        if(task.done) task.done();
+    }
+}
+void Workflow::TouchRecent(const std::string &file) {
+    recent.erase(std::remove(recent.begin(),recent.end(),Json(file)),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
+}
+void Workflow::SetRecentPath(const std::string &file) {
+    recentPath=file;if(file.empty()) return;
+    const auto directory=std::filesystem::path(file).parent_path();
+    recoveryPath=(directory/"scapslab-recovery.scapslab").string();
+    recentLoaded=false;auto loaded=CreateRef<Json>(Json::array());
+    AsyncIo("Read recent files",[file,loaded]()->std::string {
+        std::string text,error;if(!Io::Load(file,text,error)) return {}; // a missing file is the first start
+        try {auto items=Json::parse(text);if(items.is_array() && items.size()<=10 && std::all_of(items.begin(),items.end(),[](const auto &p){return p.is_string();})) *loaded=std::move(items);}catch(...) {}
+        return {};
+    },[this,loaded]{ // entries added meanwhile stay in front
+        for(const auto &item:*loaded) if(recent.size()<10 && std::find(recent.begin(),recent.end(),item)==recent.end()) recent.push_back(item);
+        savedRecent=*loaded;recentLoaded=true;
+    });
+    const auto recovery=recoveryPath;
+    auto found=CreateRef<bool>(false);
+    AsyncIo("Look for autosave",[recovery,found]()->std::string {*found=Io::Exists(recovery);return {};},[this,found]{
+        if(*found) {recoveryAvailable=true;status="Autosave found: File > Recover autosave";notifier->Info("Autosave found","File > Recover autosave",NotificationCategory::Project);}
+    });
+}
+void Workflow::PersistRecent() {
+    if(recentPath.empty() || !recentLoaded || recentWriting || recent==savedRecent) return;
+    recentWriting=true;savedRecent=recent; // a failed write is reported once and retried only after the next change
+    AsyncIo("Write recent files",[file=recentPath,text=recent.dump(2)]()->std::string {std::string error;return Io::Save(file,text,error)?std::string{}:error;},[this]{recentWriting=false;});
+}
+void Workflow::SaveSettings() {
+    if(settingsPath.empty()) return;
+    if(settingsWriting) {settingsDirty=true;return;}
+    settingsWriting=true;settingsDirty=false;
+    AsyncIo("Write settings",[file=settingsPath,text=settings.dump(2)]()->std::string {std::string error;return Io::Save(file,text,error)?std::string{}:error;},[this]{settingsWriting=false;if(settingsDirty)SaveSettings();});
+}
+void Workflow::DropRecovery(const std::string &keep) {
+    if(recoveryPath.empty()) return;
+    if(keep!=recoveryPath) recoveryAvailable=false;
+    AsyncIo("Remove autosave",[recovery=recoveryPath,keep]()->std::string {
+        std::error_code ec;if(!keep.empty() && std::filesystem::equivalent(keep,recovery,ec)) return {};
+        Io::Remove(recovery);return {};
+    });
+}
+void Workflow::RegisterIo(IOLayer &io) {
+    io.RegisterHandler<CoreEvents::ProjectSaveRequested>([this](const CoreEvents::ProjectSaveRequested &) {fileAction="save";}); // Core Ctrl+S / project.save: the UI layer picks the target (dialog when untitled)
+    io.RegisterHandler<ProjectSaveRequested>([this](const ProjectSaveRequested &e) {ioResult=Dispatch({{"operation","project_save"},{"path",e.path},{"include_results",e.includeResults}});});
+    io.RegisterHandler<ProjectOpenRequested>([this](const ProjectOpenRequested &e) {ioResult=Dispatch({{"operation","project_load"},{"path",e.path}});});
+    io.RegisterHandler<ProjectExportRequested>([this](const ProjectExportRequested &e) {
+        ioResult=Dispatch({{"operation","export_results"},{"path",e.path},{"format",e.format},{"all",e.all},{"run_ids",e.runIds}});
+        if(!ioResult.value("ok",false)) status=ioResult.at("error").at("message");
+    });
+}
 // Plot caches (Panel.cpp) follow these events. Subscribed from the UI thread by the first Panel that renders (not in the constructor:
 // Workflows are also built on worker threads, and EventBus::Subscribe is not thread-safe).
 void Workflow::WatchPlots() {
@@ -1156,6 +1233,7 @@ Workflow::~Workflow() {
     for(auto &[id,l]:lanes) {l.queue.clear();if(l.active) (void)jobs->RequestCancel(l.active);}
     while(AnyActive()) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     while(saveLane.active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+    while(!ioTasks.empty()) {PollIo(); std::this_thread::sleep_for(std::chrono::milliseconds(2));}
 }
 void Workflow::Submit(const std::string &device,Json request,std::string key) {
     auto &l=LaneOf(device);
@@ -1221,18 +1299,21 @@ void Workflow::UpdateSave() {
             if(!autosave) {
                 const auto file=op->request.at("path").get<std::string>();
                 if(sameProject) path=file;
-                recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
-                if(!recoveryPath.empty()) {std::error_code ec;if(!std::filesystem::equivalent(file,recoveryPath,ec))std::filesystem::remove(recoveryPath,ec);}
+                TouchRecent(file);DropRecovery(file);
                 status="Saved "+op->output.at("path").get<std::string>()+" ("+std::to_string(op->output.at("size_bytes").get<std::size_t>())+" bytes)";
                 Emit(ProjectSaved(file,false));
                 if(!AnyActive()) {response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();if(!lightResponse)response["operation_result"]=op->output;}
-            } else Emit(ProjectSaved(op->request.value("path",std::string{}),true));
+            } else {autosaveFailing=false;recoveryAvailable=true;Emit(ProjectSaved(op->request.value("path",std::string{}),true));}
         } else if(!autosave) {
             if(sameProject) projectDirty=true;
             status=snapshot?snapshot->errorMessage:std::string("Save failed");
             if(!AnyActive()) response=Failure("operation_failed",status);
             Emit(ProjectSaveFailed(op->request.value("path",std::string{}),status,false));notifier->Error("Save failed",status,NotificationCategory::Project);
-        } else Emit(ProjectSaveFailed(op->request.value("path",std::string{}),snapshot?snapshot->errorMessage:std::string("Save failed"),true)); // autosave: event only, no toast (Notifier has no dedupe yet)
+        } else { // autosave: one warning per failing streak (the next try is 30 s later; a success re-arms it)
+            const auto message=snapshot?snapshot->errorMessage:std::string("Save failed");
+            Emit(ProjectSaveFailed(op->request.value("path",std::string{}),message,true));
+            if(!autosaveFailing) {autosaveFailing=true;notifier->Warning("Autosave failed",message,NotificationCategory::Project);}
+        }
         RefreshDirty();
     }
     if(!saveLane.active && !saveLane.queue.empty()) {auto next=std::move(saveLane.queue.front().request);saveLane.queue.clear();StartSave(next);return;}
@@ -1311,7 +1392,7 @@ bool Workflow::ViewsReady() {
 void Workflow::OnUpdate(float) {
     static const bool perf=std::getenv("SCAPSLAB_PERF")!=nullptr; // SCAPSLAB_PERF=1: log UI-thread hitches (>2 ms) to stderr
     const auto t0=std::chrono::steady_clock::now();
-    UpdateOperation();
+    UpdateOperation();PollIo();PersistRecent();
     const auto t1=std::chrono::steady_clock::now();
     UpdateTutorial();
     TrimViews();
@@ -1439,12 +1520,12 @@ void Workflow::FinishOperation(Lane &L) {
             if(op=="save" && project.devices.size()==1) {d.dirty=false;d.metadataDirty=false;d.undo.MarkClean();}
         }
         if((op=="load" || op=="project_load" || op=="save" || op=="project_save") && !pending->request.value("autosave",false)) {
-            const auto file=pending->request.at("path");if(op=="save" || op=="project_save") Emit(ProjectSaved(file.get<std::string>(),false));recent.erase(std::remove(recent.begin(),recent.end(),file),recent.end());recent.insert(recent.begin(),file);if(recent.size()>10) recent.erase(recent.end()-1);
+            const auto file=pending->request.at("path");if(op=="save" || op=="project_save") Emit(ProjectSaved(file.get<std::string>(),false));TouchRecent(file.get<std::string>());
         }
         const bool quiet=op=="project_save" && pending->request.value("autosave",false);const auto keepStatus=status;const auto keepResponse=quiet?response:Json();RefreshDirty();status="Completed: "+op;response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();
         if(pending->output.contains("size_bytes")) status="Saved "+pending->output.at("path").get<std::string>()+" ("+std::to_string(pending->output.at("size_bytes").get<std::size_t>())+" bytes)";
         if(op=="project_load" && !recoveryPath.empty() && pending->request.at("path")==recoveryPath) {path.clear();projectDirty=true;RefreshDirty();response=Snapshot();status="Recovered unsaved project; use Save As";}
-        if(op=="project_save" && !pending->request.value("autosave",false) && !recoveryPath.empty()) {std::error_code ec;if(!std::filesystem::equivalent(path,recoveryPath,ec))std::filesystem::remove(recoveryPath,ec);}
+        if(op=="project_save" && !pending->request.value("autosave",false)) DropRecovery(path);
         if(!lightResponse && !pending->output.empty()) response["operation_result"]=pending->output;
         if(quiet) {status=keepStatus;response=keepResponse;}
     } else {

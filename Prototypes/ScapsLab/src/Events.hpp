@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <utility>
+#include <vector>
 // ScapsLab domain events. Published on the UI thread by Workflow (UpdateOperation/UpdateSave) after the state is mutated.
 // Payloads are ids/revisions only; consumers read the new state from Workflow.
 namespace SST::ScapsLab {
@@ -25,4 +26,8 @@ struct ProjectLoaded final : BusEvent {std::string path; explicit ProjectLoaded(
 struct ProjectSaved final : BusEvent {std::string path; bool autosave=false; ProjectSaved(std::string p,bool a):path(std::move(p)),autosave(a) {}};
 struct ProjectSaveFailed final : BusEvent {std::string path, message; bool autosave=false; ProjectSaveFailed(std::string p,std::string m,bool a):path(std::move(p)),message(std::move(m)),autosave(a) {}};
 struct ProjectDirtyChanged final : BusEvent {bool dirty=false; explicit ProjectDirtyChanged(bool d):dirty(d) {}};
+// S10: requests handled by Workflow::RegisterIo (IOLayer handlers; same pattern as CapLab/JFM). Panels/menus publish these instead of touching files.
+struct ProjectSaveRequested final : BusEvent {std::string path; bool includeResults=true; ProjectSaveRequested(std::string p,bool r=true):path(std::move(p)),includeResults(r) {}};
+struct ProjectOpenRequested final : BusEvent {std::string path; explicit ProjectOpenRequested(std::string p):path(std::move(p)) {}};
+struct ProjectExportRequested final : BusEvent {std::string path,format; bool all=false; std::vector<std::string> runIds; ProjectExportRequested(std::string p,std::string f,bool a,std::vector<std::string> ids):path(std::move(p)),format(std::move(f)),all(a),runIds(std::move(ids)) {}};
 }
