@@ -91,6 +91,7 @@ void SweepMenu(Json &object,const char *key,double scale=1,const char *title="")
     }
     ImGui::EndPopup();
 }
+template<class S> bool Is(const Json &j,const S &s) {return j.is_string() && j.template get_ref<const std::string &>()==s;} // Json string == s without building a temporary Json (no allocation)
 const Json &HistoryResult(const DeviceState &device,const Json &run) {
     const auto &live=run.at("kind")=="band"?device.bandResult:device.result;
     if(!run.value("profiles_stored",true) && !live.empty() && live.at("provenance")==run.at("provenance"))return live;
@@ -100,9 +101,9 @@ bool Archived(const DeviceState &,const Json &,const std::string &) {return fals
 // True when the selected run is an I-V/band run that is not the live result (so the live curve and other runs are drawn dimmed).
 bool SelectedOffLive(const DeviceState &device,const std::string &kind) {
     if(device.selectedRun.empty())return false;
-    for(const auto &run:device.history) if(run.at("run_id")==device.selectedRun) {
-        if(run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="band"))return false;
-        const auto &live=run.at("kind")=="band"?device.bandResult:device.result;
+    for(const auto &run:device.history) if(Is(run.at("run_id"),device.selectedRun)) {
+        if(!Is(run.at("kind"),kind) && !(kind=="iv" && Is(run.at("kind"),"band")))return false;
+        const auto &live=Is(run.at("kind"),"band")?device.bandResult:device.result;
         return live.empty() || !live.contains("provenance") || live.at("provenance")!=run.at("provenance");
     }
     return false;
@@ -112,11 +113,11 @@ ImPlotSpec LiveStyle(const DeviceState &device,float weight) {
     if(!SelectedOffLive(device,"iv"))return {ImPlotProp_LineWeight,weight};
     const auto c=device.colour.get<std::vector<float>>();return {ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],.3f),ImPlotProp_LineWeight,weight};
 }
-bool ShowRun(const Json &run) {return run.value("pinned",false) || run.at("kind")=="batch";}
+bool ShowRun(const Json &run) {return run.value("pinned",false) || Is(run.at("kind"),"batch");}
 const Json *LiveRun(const DeviceState &d,const std::string &kind) {
     const Json *res=kind=="iv"?&*d.result:d.acResults.contains(kind)?&d.acResults.at(kind):nullptr;
     if(!res || res->empty() || !res->contains("provenance"))return nullptr;
-    for(auto it=d.history.rbegin();it!=d.history.rend();++it)if(it->at("kind")==kind && it->at("provenance")==res->at("provenance"))return &*it;
+    for(auto it=d.history.rbegin();it!=d.history.rend();++it)if(Is(it->at("kind"),kind) && it->at("provenance")==res->at("provenance"))return &*it;
     return nullptr;
 }
 // Colour scheme for all plots versus x (one table; Ec/n blue, Ev/p red, G green, one colour per recombination mechanism).
@@ -208,71 +209,150 @@ void ShotBar(Workflow &w,const std::string &kind) {
     }
     ImGui::PopID();
 }
+// S3 plot caches: everything a plot draws per frame is read from here. Entries are keyed by Json node address / device and dropped when
+// Workflow::plotGen changes (RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/... events), so draw paths do no JSON->vector
+// conversion, no DocumentHash and no allocation once warm. The cache is only valid for the Workflow currently rendering (numericWorkflow).
+// Test hook (S3): called with true/false around the plot-data paths (cache lookups and drawing cached lines) so a test can count allocations there.
+void (*PlotDataHook)(bool)=nullptr;
+struct PlotDataScope {PlotDataScope() {if(PlotDataHook)PlotDataHook(true);} ~PlotDataScope() {if(PlotDataHook)PlotDataHook(false);}};
+struct Cols {std::vector<double> a,b,c;int n=0;std::size_t size=0;};
+struct HLine {std::string name,runId;std::vector<double> x,y;ImVec4 colour;float weight=1.5f;};
+struct HEntry {const DeviceState *dev=nullptr;std::string kind,xkey,ykey,selected;bool absolute=false;double scale=1.;int bias=0;bool profiles=false,gr=false,dashed=false;std::vector<HLine> lines;};
+struct PlotCache {
+    std::uint64_t gen=~0ull;int frame=-1;
+    std::map<std::tuple<const Json *,int,double>,Cols> cols;
+    std::vector<HEntry> entries;
+};
+inline int &PlotCacheBuilds() {static int n=0;return n;} // test hook: number of cache (re)builds
+PlotCache &Cache() {
+    static PlotCache c;
+    // Invalidate at a frame boundary only (or when another Workflow renders): an event published mid-frame (e.g. a legend click dispatching
+    // history_update) must not free vectors the running draw code still references; it is picked up on the next frame.
+    if(numericWorkflow && c.gen!=numericWorkflow->plotGen && (c.frame!=ImGui::GetFrameCount() || (c.gen>>32)!=(numericWorkflow->plotGen>>32))) {c.cols.clear();c.entries.clear();c.gen=numericWorkflow->plotGen;}
+    c.frame=ImGui::GetFrameCount();
+    return c;
+}
+template<class F> Cols &Derived(const Json &node,int tag,F &&build,double param=0.) {
+    auto &cols=Cache().cols;const auto key=std::make_tuple(&node,tag,param);
+    auto found=cols.find(key);
+    if(found==cols.end() || found->second.size!=node.size()) {Cols c;build(c);c.size=node.size();++PlotCacheBuilds();found=cols.insert_or_assign(key,std::move(c)).first;}
+    return found->second;
+}
+// Numeric array as doubles, scaled; mode 0 raw, 1 v<=0 -> NaN, 2 non-finite or v<=0 -> NaN, 3 all NaN (invalid curve).
+const std::vector<double> &Vec(const Json &node,double scale=1.,int mode=0) {
+    PlotDataScope scope;
+    return Derived(node,mode,[&](Cols &c){
+        c.a=node.get<std::vector<double>>();
+        for(auto &v:c.a) {v*=scale;if(mode==1?v<=0:mode==2?(!std::isfinite(v) || v<=0):mode==3)v=NAN;}
+    },scale).a;
+}
+// Live I-V curve (a=V, b=J or |J|, n=invalid points) and AC curve (a=x, b=y of this view, c=G/omega, n=invalid points) of a result's points array.
+const Cols &IvCols(const Json &points,bool absolute) {
+    PlotDataScope scope;
+    return Derived(points,100,[&](Cols &c){
+        for(const auto &pt:points) {
+            c.a.push_back(pt.at("voltage_V"));const bool valid=pt.value("valid",false) && pt.at("J_A_m2").is_number();
+            if(!valid) ++c.n;
+            const double current=valid?pt.at("J_A_m2").get<double>():NAN;
+            c.b.push_back(absolute?(current==0?NAN:std::abs(current)):current);
+        }
+    },absolute?1.:0.);
+}
+const Cols &AcCols(const Json &points,int view) {
+    PlotDataScope scope;
+    const bool cv=view<8;const char *key=view==7?"inverse_C2_F_minus2":view==9?"G_over_omega_F":"capacitance_F";
+    return Derived(points,200+view,[&](Cols &c){
+        for(const auto &pt:points) {
+            const bool valid=pt.value("valid",false);if(!valid) ++c.n;
+            c.a.push_back(pt.at(cv?"voltage_V":"frequency_Hz"));c.b.push_back(valid && pt.at(key).is_number()?pt.at(key).get<double>():NAN);
+            c.c.push_back(valid && pt.at("G_over_omega_F").is_number()?pt.at("G_over_omega_F").get<double>():NAN);
+        }
+    });
+}
 void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,const char *xkey,const char *ykey,bool absolute=false,double scale=1.) {
-    static int hashFrame=-1;static const void *hashDevice=nullptr;static std::string frameHash; // document hash once per frame, not per run
-    if(hashFrame!=ImGui::GetFrameCount() || hashDevice!=&device) {hashFrame=ImGui::GetFrameCount();hashDevice=&device;frameHash=DocumentHash(device.document);}
-    const std::string &currentHash=frameHash;
-    const bool dim=SelectedOffLive(device,kind); // a selected non-live run is highlighted, the rest dimmed
-    for(const auto &run:device.history) {
-        const bool chosen=dim && run.at("run_id")==device.selectedRun;
-        if(!run.at("visible").get<bool>() || (!ShowRun(run) && !chosen) || (run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="batch")))continue;
-        // Curve arrays are cached per immutable run (extracting them from JSON every frame was a major UI cost).
-        static std::map<std::string,std::pair<std::vector<double>,std::vector<double>>> cache;
-        const auto cacheKey=device.id+"|"+run.at("run_id").get<std::string>()+"|"+run.at("time_unix_ms").dump()+"|"+run.value("model_hash",std::string{})+"|"+xkey+"|"+ykey+(absolute?"|abs":"|lin")+"|"+std::to_string(scale);
-        auto found=cache.find(cacheKey);
-        if(found==cache.end()) {
-            if(cache.size()>2000)cache.clear();
+    PlotDataScope scope;
+    auto &entries=Cache().entries;HEntry *e=nullptr;
+    for(auto &c:entries) if(c.dev==&device && !c.profiles && c.absolute==absolute && c.scale==scale && c.kind==kind && c.xkey==xkey && c.ykey==ykey && c.selected==device.selectedRun) {e=&c;break;}
+    if(!e) {
+        ++PlotCacheBuilds();e=&entries.emplace_back();e->dev=&device;e->kind=kind;e->xkey=xkey;e->ykey=ykey;e->selected=device.selectedRun;e->absolute=absolute;e->scale=scale;
+        const bool dim=SelectedOffLive(device,kind); // a selected non-live run is highlighted, the rest dimmed
+        std::string currentHash;bool hashed=false;
+        for(const auto &run:device.history) {
+            const bool chosen=dim && run.at("run_id")==device.selectedRun;
+            if(!run.at("visible").get<bool>() || (!ShowRun(run) && !chosen) || (run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="batch")))continue;
             const auto &result=HistoryResult(device,run);Json points=Json::array();
             if(run.at("kind")=="batch") {
                 for(const auto &row:result.at("rows")) if(row.contains("curves")) for(auto point:row.at("curves").at("iv")) {point["J_A_m2"]=point.at("J_Am2");point["valid"]=point.at("status")=="Converged";points.push_back(point);}
             } else points=result.value("points",Json::array());
-            std::vector<double>x,y;
+            HLine l;
             for(const auto &point:points) {
                 if(!point.contains(xkey) || !point.at(xkey).is_number())continue;
                 const double value=point.value("valid",false) && point.contains(ykey) && point.at(ykey).is_number()?point.at(ykey).get<double>():NAN;
-                x.push_back(point.at(xkey));y.push_back(absolute?(value==0?NAN:std::abs(value)):value*scale);
+                l.x.push_back(point.at(xkey));l.y.push_back(absolute?(value==0?NAN:std::abs(value)):value*scale);
             }
-            found=cache.emplace(cacheKey,std::make_pair(std::move(x),std::move(y))).first;
+            if(l.x.empty())continue;
+            if(!hashed) {currentHash=DocumentHash(device.document);hashed=true;}
+            const auto c=run.at("colour").get<std::vector<float>>();
+            const bool selected=run.at("run_id")==device.selectedRun;
+            l.colour=ImVec4(c[0],c[1],c[2],dim&&!selected?.3f:c[3]);l.weight=selected?4.f:1.5f;l.runId=run.at("run_id").get<std::string>();
+            l.name=device.name+" / "+RunLabel(run)+(run.at("model_hash")!=currentHash?" (previous)":"")+(std::string(ykey)=="G_over_omega_F"?" G/omega":"")+"##"+l.runId+"/"+ykey;
+            e->lines.push_back(std::move(l));
         }
-        const auto &x=found->second.first;const auto &y=found->second.second;
-        if(x.empty())continue;
-        const auto c=run.at("colour").get<std::vector<float>>();
-        const bool selected=run.at("run_id")==device.selectedRun;
-        const ImVec4 lineColour(c[0],c[1],c[2],dim&&!selected?.3f:c[3]);
-        const auto name=device.name+" / "+RunLabel(run)+(run.at("model_hash")!=currentHash?" (previous)":"")+(std::string(ykey)=="G_over_omega_F"?" G/omega":"")+"##"+run.at("run_id").get<std::string>()+"/"+ykey;
-        ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,lineColour,ImPlotProp_LineWeight,selected?4.f:1.5f});
-        if(auto *item=ImPlot::GetItem(name.c_str());item && !item->Show && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",device.id},{"run_id",run.at("run_id")},{"visible",false}});
+    }
+    for(const auto &l:e->lines) {
+        ImPlot::PlotLine(l.name.c_str(),l.x.data(),l.y.data(),int(l.x.size()),{ImPlotProp_LineColor,l.colour,ImPlotProp_LineWeight,l.weight});
+        if(auto *item=ImPlot::GetItem(l.name.c_str());item && !item->Show && !w.Busy())(void)w.Dispatch({{"operation","history_update"},{"device_id",device.id},{"run_id",l.runId},{"visible",false}});
     }
 }
 void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false,bool dashed=false) {
+    PlotDataScope scope;
     const auto &device=w.Current();
-    for(const auto &run:device.history) {
-        if(!run.at("visible").get<bool>() || !ShowRun(run) || run.at("run_id")==device.selectedRun || (run.at("kind")!="iv" && run.at("kind")!="band") || !HistoryResult(device,run).contains("points"))continue;
-        const auto &points=HistoryResult(device,run).at("points");if(points.empty())continue;
-        const auto &point=points[std::clamp(device.selectedBias,0,int(points.size())-1)];
-        if(!point.value("valid",false))continue;
-        const auto &profile=gr?point.value("generation_recombination",Json::object()):point;
-        if(!profile.contains("x_m") || !profile.contains(field))continue;
-        auto x=profile.at("x_m").get<std::vector<double>>(),y=profile.at(field).get<std::vector<double>>();if(x.size()!=y.size())continue;
-        for(auto &v:x)v*=1e6;for(auto &v:y){v*=scale;if(gr && v<=0)v=NAN;}
-        const auto c=run.at("colour").get<std::vector<float>>();const bool sel=run.at("run_id")==device.selectedRun;
-        const ImVec4 colour=sel?XColour(field):ImVec4(c[0],c[1],c[2],c[3]);  // selected run uses the physics colours, others their run colour
-        const auto label=std::string(field)+" / "+RunLabel(run)+"##"+run.at("run_id").get<std::string>();
-        ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(colour.x,colour.y,colour.z,dashed?.6f:1.f),ImPlotProp_LineWeight,sel?3.f:1.f});
-        if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,colour);ImPlot::PopPlotClipRect();}
+    auto &entries=Cache().entries;HEntry *e=nullptr;
+    for(auto &c:entries) if(c.dev==&device && c.profiles && c.gr==gr && c.dashed==dashed && c.scale==scale && c.bias==device.selectedBias && c.ykey==field && c.selected==device.selectedRun) {e=&c;break;}
+    if(!e) {
+        ++PlotCacheBuilds();e=&entries.emplace_back();e->dev=&device;e->profiles=true;e->gr=gr;e->dashed=dashed;e->scale=scale;e->bias=device.selectedBias;e->ykey=field;e->selected=device.selectedRun;
+        for(const auto &run:device.history) {
+            if(!run.at("visible").get<bool>() || !ShowRun(run) || run.at("run_id")==device.selectedRun || (run.at("kind")!="iv" && run.at("kind")!="band") || !HistoryResult(device,run).contains("points"))continue;
+            const auto &points=HistoryResult(device,run).at("points");if(points.empty())continue;
+            const auto &point=points[std::clamp(device.selectedBias,0,int(points.size())-1)];
+            if(!point.value("valid",false))continue;
+            const auto &profile=gr?point.value("generation_recombination",Json::object()):point;
+            if(!profile.contains("x_m") || !profile.contains(field))continue;
+            HLine l;l.x=profile.at("x_m").get<std::vector<double>>();l.y=profile.at(field).get<std::vector<double>>();if(l.x.size()!=l.y.size())continue;
+            for(auto &v:l.x)v*=1e6;for(auto &v:l.y){v*=scale;if(gr && v<=0)v=NAN;}
+            const auto c=run.at("colour").get<std::vector<float>>();
+            l.colour=ImVec4(c[0],c[1],c[2],c[3]); // the selected run is never in this list, so it keeps its run colour
+            l.name=std::string(field)+" / "+RunLabel(run)+"##"+run.at("run_id").get<std::string>();
+            e->lines.push_back(std::move(l));
+        }
+    }
+    for(const auto &l:e->lines) {
+        ImPlot::PlotLine(l.name.c_str(),l.x.data(),l.y.data(),int(l.x.size()),{ImPlotProp_LineColor,ImVec4(l.colour.x,l.colour.y,l.colour.z,dashed?.6f:1.f),ImPlotProp_LineWeight,1.f});
+        if(dashed){ImPlot::PushPlotClipRect();DashedLine(l.x,l.y,l.colour);ImPlot::PopPlotClipRect();}
     }
 }
 bool BeginSavedPlot(Workflow &w,const char *title,ImVec2 size) {
-    const auto plots=w.project.ui.value("plots",Json::object());
-    if(plots.contains(title)) {const auto &v=plots.at(title);ImPlot::SetNextAxesLimits(v.at(0),v.at(1),v.at(2),v.at(3),ImPlotCond_Once);if(v.size()==6)ImPlot::SetNextAxisLimits(ImAxis_Y2,v.at(4),v.at(5),ImPlotCond_Once);}
+    if(const auto plots=w.project.ui.find("plots");plots!=w.project.ui.end() && plots->contains(title)) {const auto &v=plots->at(title);ImPlot::SetNextAxesLimits(v.at(0),v.at(1),v.at(2),v.at(3),ImPlotCond_Once);if(v.size()==6)ImPlot::SetNextAxisLimits(ImAxis_Y2,v.at(4),v.at(5),ImPlotCond_Once);}
     return ImPlot::BeginPlot(title,size);
 }
 void EndSavedPlot(Workflow &w,const char *title) {
     const auto limits=ImPlot::GetPlotLimits(ImAxis_X1,ImAxis_Y1);
-    auto state=Json::array({limits.X.Min,limits.X.Max,limits.Y.Min,limits.Y.Max});
-    if(ImPlot::GetCurrentPlot()->Axes[ImAxis_Y2].Enabled) {const auto secondary=ImPlot::GetPlotLimits(ImAxis_X1,ImAxis_Y2);state.push_back(secondary.Y.Min);state.push_back(secondary.Y.Max);}
-    if(w.project.ui["plots"][title]!=state){w.project.ui["plots"][title]=state;w.projectDirty=true;w.RefreshDirty();}ImPlot::EndPlot();
+    double state[6]={limits.X.Min,limits.X.Max,limits.Y.Min,limits.Y.Max};std::size_t n=4;
+    if(ImPlot::GetCurrentPlot()->Axes[ImAxis_Y2].Enabled) {const auto secondary=ImPlot::GetPlotLimits(ImAxis_X1,ImAxis_Y2);state[4]=secondary.Y.Min;state[5]=secondary.Y.Max;n=6;}
+    const Json *stored=nullptr; // compare in place: building a Json array every frame was a per-frame allocation in every plot
+    if(const auto plots=w.project.ui.find("plots");plots!=w.project.ui.end()) if(const auto it=plots->find(title);it!=plots->end())stored=&*it;
+    bool same=stored && stored->is_array() && stored->size()==n;
+    for(std::size_t i=0;same && i<n;++i)same=(*stored)[i]==state[i];
+    if(!same){auto saved=Json::array();for(std::size_t i=0;i<n;++i)saved.push_back(state[i]);w.project.ui["plots"][title]=std::move(saved);w.projectDirty=true;w.RefreshDirty();}ImPlot::EndPlot();
 }
+}
+int PlotCacheBuildCount() {return PlotCacheBuilds();}
+void SetPlotDataHook(void (*hook)(bool)) {PlotDataHook=hook;}
+double PlotCacheSum() {
+    double sum=0;const auto add=[&](const std::vector<double> &v){for(double d:v)if(std::isfinite(d))sum+=d;};
+    for(const auto &[key,c]:Cache().cols){add(c.a);add(c.b);add(c.c);}
+    for(const auto &e:Cache().entries)for(const auto &l:e.lines){add(l.x);add(l.y);}
+    return sum;
 }
 void DrawHistory(Workflow &w,bool global) {
     ImGui::PushID(global?"global-history":"device-history");
@@ -441,6 +521,7 @@ static bool Choice(const char *label,Json &j,const char *key,std::initializer_li
 void Panel::RenderContent() {
     struct PerfScope {const char *n;std::chrono::steady_clock::time_point t=std::chrono::steady_clock::now();~PerfScope(){static const bool on=std::getenv("SCAPSLAB_PERF")!=nullptr;if(on)SST::PerfAdd(std::string("panel ")+n,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t).count());}} perfScope{names[view]};
     w->tutorialOverlay.Window(std::string("scapslab.")+names[view]);
+    w->WatchPlots();
     numericWorkflow=w;numericDocument=nullptr;
     struct ResetNumeric {~ResetNumeric(){numericDocument=nullptr;numericWorkflow=nullptr;}} resetNumeric;
     if(!placed && !gallery) {auto s=GetState();const auto *vp=ImGui::GetMainViewport();s.x+=vp->Pos.x;s.y+=vp->Pos.y;ApplyState(s);placed=true;}
@@ -632,9 +713,10 @@ bool FileField(const char *label,Json &j,const char *key) {
     BeginRow(label);const bool changed=ImGui::InputText("##path",text,sizeof(text),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);EndRow();
     if(changed) {j[key]=text;++gesture;}return changed;
 }
-void PlotJson(const char *title,const char *xLabel,const char *yLabel,const Json &x,const Json &y,bool log=false,float height=190) {
-    auto xs=x.get<std::vector<double>>(),ys=y.get<std::vector<double>>();
-    if(log) for(auto &v:ys) if(v<=0) v=NAN;
+void PlotJson(const char *title,const char *xLabel,const char *yLabel,const Json &x,const Json &y,bool log=false,float height=190,bool persistent=false) {
+    // persistent: x/y live inside a stored result, so their vectors come from the plot cache; otherwise (per-frame temporaries) convert here
+    std::vector<double> xl,yl;if(!persistent) {xl=x.get<std::vector<double>>();yl=y.get<std::vector<double>>();if(log) for(auto &v:yl) if(v<=0) v=NAN;}
+    const auto &xs=persistent?Vec(x):xl,&ys=persistent?Vec(y,1.,log?1:0):yl;
     if(ImPlot::BeginPlot(title,ImVec2(-1,height))) {ImPlot::SetupAxes(xLabel,yLabel,ImPlotAxisFlags_None,ImPlotAxisFlags_None);if(log) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);ImPlot::PlotLine(title,xs.data(),ys.data(),int(xs.size()));ImPlot::EndPlot();}
 }
 }
@@ -702,7 +784,7 @@ bool Panel::Illumination(Json &draft) {
             changed|=OpticalFile(light,"front_filter_file","front_filter_nm_fraction","ftr","Front transmission [.ftr]");changed|=OpticalFile(light,"back_filter_file","back_filter_nm_fraction","ftr","Back reflection [.ftr]");
             if(wide) ImGui::TableNextColumn();
             const auto &r=w->Current().bandResult.contains("optics")?w->Current().bandResult:w->Current().result;
-            if(r.contains("optics")) {const auto &o=r.at("optics");ImGui::Text("Incident power %.6g W/m^2",o.at("incident_power_W_m2").get<double>());PlotJson("G(x)","x [m]","G [m^-3 s^-1]",o.at("x_m"),o.at("generation_m3_s"),false,330);}
+            if(r.contains("optics")) {const auto &o=r.at("optics");ImGui::Text("Incident power %.6g W/m^2",o.at("incident_power_W_m2").get<double>());PlotJson("G(x)","x [m]","G [m^-3 s^-1]",o.at("x_m"),o.at("generation_m3_s"),false,330,true);}
             else ImGui::TextWrapped("Generation preview updates after automatic band calculation.");
             if(wide) ImGui::EndTable();
             ImGui::EndTabItem();
@@ -796,7 +878,7 @@ bool Panel::Absorption(Json &draft) {
     if(wide) ImGui::TableNextColumn();
     const auto &r=w->Current().bandResult.contains("optics")?w->Current().bandResult:w->Current().result;
     if(r.contains("optics")) for(const auto &curve:r.at("optics").at("absorption")) if(curve.at("layer_id")==layers[selected].at("scapslab_id")) {
-        auto x=curve.at("wavelength_nm").get<std::vector<double>>(),y=curve.at("alpha_m1").get<std::vector<double>>(),base=curve.at("without_tail_m1").get<std::vector<double>>();for(auto &v:y) if(v<=0) v=NAN;for(auto &v:base) if(v<=0) v=NAN;
+        const auto &x=Vec(curve.at("wavelength_nm")),&y=Vec(curve.at("alpha_m1"),1.,1),&base=Vec(curve.at("without_tail_m1"),1.,1);
         if(BeginSavedPlot(*w,"Absorption preview",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","alpha [m^-1]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);ImPlot::PlotLine("With tail",x.data(),y.data(),int(x.size()));ImPlot::PlotLine("Without tail",x.data(),base.data(),int(x.size()));EndSavedPlot(*w,"Absorption preview");}
     }if(wide) ImGui::EndTable();return changed;
 }
@@ -988,15 +1070,14 @@ void Panel::Preview(bool sheet) {
     for(const auto &c:point.at("defect_previews")) {
         if(c.at("sheet").get<bool>()!=sheet) continue;
         if(sheet?c.at("left_layer_index")!=w->Current().selectedInterface:c.at("layer_id")!=w->Current().document.at("layers")[w->Current().selectedLayer].at("scapslab_id")) continue;
-        const auto id=c.at("id").get<std::string>();auto x=c.at("energy_eV").get<std::vector<double>>(),y=c.at(sheet?"density_m2_eV":"density_m3_eV").get<std::vector<double>>();
-        for(auto &v:y) v*=sheet?1e-4:1e-6;
+        const auto id=c.at("id").get<std::string>();const auto *xp=&Vec(c.at("energy_eV")),*yp=&Vec(c.at(sheet?"density_m2_eV":"density_m3_eV"),sheet?1e-4:1e-6);
         ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);
         if(c.at("single").get<bool>()) {const double e=c.at("level_energy_eV");ImPlot::PlotInfLines((id+" (discrete Nt)").c_str(),&e,1);if(c.contains("second_level_energy_eV")) {const double e2=c.at("second_level_energy_eV");ImPlot::PlotInfLines((id+" second transition").c_str(),&e2,1);}}
-        else ImPlot::PlotLine(id.c_str(),x.data(),y.data(),int(x.size()));
-        if(!edgesDrawn) {const auto edges=c.at("band_edges_eV").get<std::vector<double>>();for(int e=0;e<int(edges.size());++e) {const char *labels[]={"EvL","EcL","EvR","EcR"};ImPlot::PlotInfLines(sheet?labels[e]:e==0?"Ev":"Ec",&edges[e],1,ImPlotSpec(ImPlotProp_LineColor,ImVec4(.9f,.85f,.4f,1),ImPlotProp_LineWeight,2));ImPlot::TagX(edges[e],ImVec4(.5f,.45f,.15f,1),"%s",sheet?labels[e]:e==0?"Ev":"Ec");}edgesDrawn=true;}
+        else ImPlot::PlotLine(id.c_str(),xp->data(),yp->data(),int(xp->size()));
+        if(!edgesDrawn) {const auto &edges=Vec(c.at("band_edges_eV"));for(int e=0;e<int(edges.size());++e) {const char *labels[]={"EvL","EcL","EvR","EcR"};ImPlot::PlotInfLines(sheet?labels[e]:e==0?"Ev":"Ec",&edges[e],1,ImPlotSpec(ImPlotProp_LineColor,ImVec4(.9f,.85f,.4f,1),ImPlotProp_LineWeight,2));ImPlot::TagX(edges[e],ImVec4(.5f,.45f,.15f,1),"%s",sheet?labels[e]:e==0?"Ev":"Ec");}edgesDrawn=true;}
         if(point.at("status")=="Converged") {
-            x=c.at("occupation_energy_eV").get<std::vector<double>>();y.clear();for(const auto &v:c.at("occupation")) y.push_back(v.is_number()?v.get<double>():NAN);
-            ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlotSpec occupationStyle(ImPlotProp_LineWeight,2,ImPlotProp_Marker,ImPlotMarker_None);ImPlot::PlotLine((id+(c.at("amphoteric").get<bool>() && c.at("correlated").get<bool>()?" P-":" f")).c_str(),x.data(),y.data(),int(x.size()),occupationStyle);
+            xp=&Vec(c.at("occupation_energy_eV"));yp=&Derived(c.at("occupation"),160,[&](Cols &o){for(const auto &v:c.at("occupation")) o.a.push_back(v.is_number()?v.get<double>():NAN);}).a;
+            ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlotSpec occupationStyle(ImPlotProp_LineWeight,2,ImPlotProp_Marker,ImPlotMarker_None);ImPlot::PlotLine((id+(c.at("amphoteric").get<bool>() && c.at("correlated").get<bool>()?" P-":" f")).c_str(),xp->data(),yp->data(),int(xp->size()),occupationStyle);
         }
     }EndSavedPlot(*w,"Nt(E) and occupancy");ImPlot::PopStyleVar();
 }
@@ -1097,13 +1178,7 @@ void Panel::Results() {
     }
     if(view==10) {
         Toggle("Log |J|",absoluteLog);
-        std::vector<double> v,j; int failed=0;
-        for(const auto &pt:points) {
-            v.push_back(pt.at("voltage_V"));const bool valid=pt.value("valid",false) && pt.at("J_A_m2").is_number();
-            if(!valid) ++failed;
-            const double current=valid?pt.at("J_A_m2").get<double>():NAN;
-            j.push_back(absoluteLog?(current==0?NAN:std::abs(current)):current);
-        }
+        const auto &ivc=IvCols(points,absoluteLog);const auto &v=ivc.a,&j=ivc.b;const int failed=ivc.n;
         ImGui::TextWrapped("Curve validity: %s | %d / %d valid points; invalid points masked",result.value("validity_status",std::string("unknown")).c_str(),int(points.size())-failed,int(points.size()));
         if(ImGui::CollapsingHeader("Per-point convergence")) {
             for(const auto &pt:points) ImGui::TextWrapped("%s | %.5g V | %s | %s",pt.at("bias_id").get<std::string>().c_str(),pt.at("voltage_V").get<double>(),pt.at("status").get<std::string>().c_str(),pt.at("validity_status").get<std::string>().c_str());
@@ -1123,7 +1198,7 @@ void Panel::Results() {
         return;
     }
     if(p.at("status")!="Converged" || p.at("J_A_m2").is_null()) {ImGui::TextWrapped("This bias did not converge; profiles are masked. Select a converged bias.");return;}
-    auto x=p.at("x_m").get<std::vector<double>>();for(auto &value:x)value*=1e6;
+    const auto &x=Vec(p.at("x_m"),1e6);
     if(x.empty()) return;
     // Bands and Carriers share the free height; the splitter fraction is kept in project.ui["band_split"].
     const float splitterH=8.f,availH=std::max(160.f,ImGui::GetContentRegionAvail().y-splitterH-2*ImGui::GetStyle().ItemSpacing.y);
@@ -1134,9 +1209,9 @@ void Panel::Results() {
         ImPlot::SetupAxes("Position [um]","Energy [eV]");ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
         const double end=total*1e6,metal=end*.04;
         FitWhenChanged("bands",ImAxis_X1,end,-metal,end+metal);
-        {double lo=1e300,hi=-1e300;for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) for(double v:p.at(key).get<std::vector<double>>()) if(std::isfinite(v)){lo=std::min(lo,v);hi=std::max(hi,v);}
+        {double lo=1e300,hi=-1e300;for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) for(double v:Vec(p.at(key))) if(std::isfinite(v)){lo=std::min(lo,v);hi=std::max(hi,v);}
         if(hi>lo){const double m=.05*(hi-lo);FitWhenChanged("bands",ImAxis_Y1,lo*7.31+hi+p.at("voltage_V").get<double>()*1e-3,lo-m,hi+m);}}
-        for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(Archived(w->Current(),result,profileKind))continue;const auto y=p.at(key).get<std::vector<double>>();if(y.size()==x.size()){const auto c=XColour(key);ImPlot::PlotLine(key,x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c.x,c.y,c.z,dashed?.6f:1.f),ImPlotProp_LineWeight,2.f});if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,c);ImPlot::PopPlotClipRect();}}}
+        for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(p.at(key));if(y.size()==x.size()){const auto c=XColour(key);ImPlot::PlotLine(key,x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c.x,c.y,c.z,dashed?.6f:1.f),ImPlotProp_LineWeight,2.f});if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,c);ImPlot::PopPlotClipRect();}}}
         const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();
         ImPlot::PushPlotClipRect();
         for(int side=0;side<2;++side) {
@@ -1145,7 +1220,7 @@ void Panel::Results() {
             draw->AddRectFilled(a,b,IM_COL32(255,176,66,38));
             const double phi=result.at("contact_phi_eV")[side];
             const double chi=layers[side?layers.size()-1:0].at("material").at("chi_eV");
-            const auto ec=p.at("Ec_eV").get<std::vector<double>>();
+            const auto &ec=Vec(p.at("Ec_eV"));
             if(!ec.empty()) {
                 const double ef=(side?ec.back():ec.front())+chi-phi;const double xx[]={lo,hi},yy[]={ef,ef};
                 const bool flatContact=contactDoc.at(side?"right":"left").value("flat_band",false);
@@ -1164,9 +1239,9 @@ void Panel::Results() {
         ImPlot::SetupAxes("Position [um]","Density [cm^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupAxisFormat(ImAxis_Y1,[](double value,char *buffer,int size,void*) {return std::snprintf(buffer,size,"1e%.0f",std::log10(value));});
         ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);FitWhenChanged("carriers",ImAxis_X1,total*1e6,0,total*1e6);
-        {double lo=1e300,hi=0;for(const auto *key:{"n_m3","p_m3"}) for(double v:p.at(key).get<std::vector<double>>()) if(std::isfinite(v) && v>0){lo=std::min(lo,v*1e-6);hi=std::max(hi,v*1e-6);}
+        {double lo=1e300,hi=0;for(const auto *key:{"n_m3","p_m3"}) for(double v:Vec(p.at(key))) if(std::isfinite(v) && v>0){lo=std::min(lo,v*1e-6);hi=std::max(hi,v*1e-6);}
         if(hi>0)FitWhenChanged("carriers",ImAxis_Y1,std::log10(lo)*7.31+std::log10(hi)+p.at("voltage_V").get<double>()*1e-3,std::max(lo,hi*1e-16),hi*3);}
-        for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;auto y=p.at(key).get<std::vector<double>>();for(auto &value:y)value*=1e-6;if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
+        for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(p.at(key),1e-6);if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
         DrawLayerRegions(layers);EndSavedPlot(*w,"Carriers");
     }
 }
@@ -1201,13 +1276,8 @@ void Panel::AC() {
     ImGui::TextWrapped("Curve validity: %s (1%% conservation gate)",data.value("validity_status",std::string("unknown")).c_str());
     const auto &first=points.front();
     ImGui::Text("Result: %.6g K | %s = %.6g %s | %d points",first.at("temperature_K").get<double>(),cv?"f":"V",first.at(cv?"frequency_Hz":"voltage_V").get<double>(),cv?"Hz":"V",int(points.size()));
-    std::vector<double> x,y,g; int failed=0;
+    const int failed=AcCols(points,view).n;
     const char *key=view==7?"inverse_C2_F_minus2":view==9?"G_over_omega_F":"capacitance_F";
-    for(const auto &pt:points) {
-        const bool valid=pt.value("valid",false); if(!valid) ++failed;
-        x.push_back(pt.at(cv?"voltage_V":"frequency_Hz")); y.push_back(valid && pt.at(key).is_number()?pt.at(key).get<double>():NAN);
-        g.push_back(valid && pt.at("G_over_omega_F").is_number()?pt.at("G_over_omega_F").get<double>():NAN);
-    }
     if(failed) ImGui::TextWrapped("%d invalid points (convergence/current conservation); raw CSV rows retain validity flags.",failed);
     if(ImGui::CollapsingHeader("Per-point convergence"))
         for(const auto &pt:points) ImGui::TextWrapped("%s | %.5g V | %.5g Hz | %s | %s",pt.at("point_id").get<std::string>().c_str(),pt.at("voltage_V").get<double>(),pt.at("frequency_Hz").get<double>(),pt.at("status").get<std::string>().c_str(),pt.at("validity_status").get<std::string>().c_str());
@@ -1222,7 +1292,7 @@ void Panel::AC() {
                 ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);HistoryLines(*w,*d,kind,cv?"voltage_V":"frequency_Hz",key);
                 if(view==6 || view==8){ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);HistoryLines(*w,*d,kind,cv?"voltage_V":"frequency_Hz","G_over_omega_F");}if(Archived(*d,d->acResults.at(kind),kind))continue;
             }
-            std::vector<double> xx,yy,gg;for(const auto &pt:d->acResults.at(kind).at("points")) {xx.push_back(pt.at(cv?"voltage_V":"frequency_Hz"));yy.push_back(pt.value("valid",false) && pt.at(key).is_number()?pt.at(key).get<double>():NAN);gg.push_back(pt.value("valid",false) && pt.at("G_over_omega_F").is_number()?pt.at("G_over_omega_F").get<double>():NAN);}
+            const auto &ac=AcCols(d->acResults.at(kind).at("points"),view);const auto &xx=ac.a,&yy=ac.b,&gg=ac.c;
             const auto c=d->colour.get<std::vector<float>>();const auto label=d->name+"##"+d->id;
             ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);ImPlot::PlotLine(label.c_str(),xx.data(),yy.data(),int(xx.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,2.5f});
             if(view==6 || view==8) {ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlot::PlotLine((d->name+" G/omega##"+d->id).c_str(),xx.data(),gg.data(),int(xx.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,2.5f});}
@@ -1514,9 +1584,10 @@ void Panel::Compare() {
         if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         for(const auto &d:w->project.devices) if((w->project.compare_set.contains(d->id) || d->id==w->project.active_device) && (!d->result.empty() || !d->history.empty())) {
             if(d->result.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);continue;}
-            std::vector<double> x,y;for(const auto &pt:d->result.at("points")) {x.push_back(pt.at("voltage_V"));double j=pt.value("valid",false) && pt.at("J_A_m2").is_number()?pt.at("J_A_m2").get<double>():NAN;y.push_back(absoluteLog?(j==0?NAN:std::abs(j)):j);}
+            const auto &ivc=IvCols(d->result.at("points"),absoluteLog);const auto &x=ivc.a,&y=ivc.b;
             if(!d->history.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);if(Archived(*d,d->result,"iv"))continue;}
-            const auto c=d->colour.get<std::vector<float>>();const auto label=d->name+"##"+d->id;
+            const float c[4]={d->colour[0].get<float>(),d->colour[1].get<float>(),d->colour[2].get<float>(),d->colour[3].get<float>()};
+            static std::string label;label=d->name;label+="##";label+=d->id; // reused buffer: no per-frame allocation
             ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],SelectedOffLive(*d,"iv")?.3f:c[3]),ImPlotProp_LineWeight,2.5f});
             if(d->id==w->project.active_device && !x.empty()) {
                 int bias=std::clamp(d->selectedBias,0,int(x.size())-1);double voltage=x[bias];
@@ -1714,9 +1785,9 @@ void Panel::GenerationRecombination() {
     // data windows: left axis 12 decades below the max visible bulk rate; right axis only when a sheet channel is visible
     double bulkMax=0,sheetMax=0;
     if(valid) {
-        if(showGeneration) for(double v:gr.at("generation_m3_s").get<std::vector<double>>()) if(std::isfinite(v))bulkMax=std::max(bulkMax,v);
+        if(showGeneration) for(double v:Vec(gr.at("generation_m3_s"))) if(std::isfinite(v))bulkMax=std::max(bulkMax,v);
         for(const auto &c:gr.at("channels")) if(!grHidden.contains(c.at("mechanism").get<std::string>()) && c.value("valid",false)) {
-            const bool sh=!c.at("R_sheet_m2_s").empty();for(double v:c.at(sh?"R_sheet_m2_s":"R_m3_s").get<std::vector<double>>()) if(std::isfinite(v))(sh?sheetMax:bulkMax)=std::max(sh?sheetMax:bulkMax,v);
+            const bool sh=!c.at("R_sheet_m2_s").empty();for(double v:Vec(c.at(sh?"R_sheet_m2_s":"R_m3_s"))) if(std::isfinite(v))(sh?sheetMax:bulkMax)=std::max(sh?sheetMax:bulkMax,v);
         }
     }
     const double totalUm=[&]{double t=0;for(const auto &l:snapshot.at("project_snapshot").at("layers"))t+=l.at("thickness_m").get<double>()*1e6;return t;}();
@@ -1728,8 +1799,7 @@ void Panel::GenerationRecombination() {
         if(bulkMax>0)FitWhenChanged("gr",ImAxis_Y1,bulkMax,bulkMax*1e-12,bulkMax*5);
         if(sheetMax>0){ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);FitWhenChanged("gr",ImAxis_Y2,sheetMax,sheetMax*1e-8,sheetMax*5);}
         auto plot=[&](const std::string &name,const Json &xx,const Json &yy,bool sheet,bool curveValid,int shade=0) {
-            auto x=xx.get<std::vector<double>>(),y=yy.get<std::vector<double>>();if(x.size()!=y.size())return;
-            for(auto &v:x)v*=1e6;for(auto &v:y)if(!curveValid || !std::isfinite(v) || v<=0)v=NAN;
+            const auto &x=Vec(xx,1e6),&y=Vec(yy,1.,curveValid?2:3);if(x.size()!=y.size())return;
             if(sheet && sheetMax<=0)return;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
             const auto mech=name.substr(0,name.find(' '));const ImPlotSpec style(ImPlotProp_LineColor,XColour(mech,shade),ImPlotProp_LineWeight,2.f,ImPlotProp_MarkerFillColor,XColour(mech,shade),ImPlotProp_MarkerLineColor,XColour(mech,shade));
             if(sheet)ImPlot::PlotScatter(name.c_str(),x.data(),y.data(),int(x.size()),style);else ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),style);
@@ -1745,8 +1815,7 @@ void Panel::GenerationRecombination() {
             for(const auto &channel:p.at("generation_recombination").at("channels")) {
                 if(grHidden.contains(channel.at("mechanism").get<std::string>()))continue;
                 const bool sheet=!channel.at("R_sheet_m2_s").empty();
-                auto x=channel.at("x_m").get<std::vector<double>>(),y=channel.at(sheet?"R_sheet_m2_s":"R_m3_s").get<std::vector<double>>();if(x.size()!=y.size())continue;
-                for(auto &v:x)v*=1e6;for(auto &v:y)if(!channel.value("valid",false) || v<=0)v=NAN;
+                const auto &x=Vec(channel.at("x_m"),1e6),&y=Vec(channel.at(sheet?"R_sheet_m2_s":"R_m3_s"),1.,channel.value("valid",false)?1:3);if(x.size()!=y.size())continue;
                 const auto label=channel.at("mechanism").get<std::string>()+" / "+channel.at("id").get<std::string>()+" / "+RunLabel(run)+"##"+run.at("run_id").get<std::string>();
                 if(sheet && sheetMax<=0)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
                 const auto mechName=channel.at("mechanism").get<std::string>();const ImVec4 lc=selectedRun?XColour(mechName,shadeOf[mechName]++):ImVec4(colour[0],colour[1],colour[2],colour[3]);ImPlotSpec style(ImPlotProp_LineColor,lc,ImPlotProp_LineWeight,selectedRun?2.5f:1.f,ImPlotProp_MarkerFillColor,lc,ImPlotProp_MarkerLineColor,lc);

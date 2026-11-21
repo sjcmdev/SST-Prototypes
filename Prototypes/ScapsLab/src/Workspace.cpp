@@ -175,6 +175,7 @@ Json Workflow::Workspace(bool withResults) const {
     return {{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}};
 }
 void Workflow::SetWorkspace(const Json &value) {
+    ++plotGen;
     if(value.value("schema_version",0)<0 || value.value("schema_version",0)>3) throw std::invalid_argument("Unsupported ScapsLab schema_version");
     const auto &devices=value.at("devices");if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::invalid_argument("Expected 1..1000 devices");
     Project checked;checked.name=value.at("name").get<std::string>();if(checked.name.empty()) throw std::invalid_argument("Project name is empty");
