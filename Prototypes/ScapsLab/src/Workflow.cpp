@@ -379,6 +379,7 @@ Json NormalizeDocument(Json document) {
     }
     return document;
 }
+Json NewDeviceDocument() {auto d=ReadProject(SCAPSLAB_PROJECT);for(const auto *side:{"left","right"}) d["contacts"][side]["flat_band"]=true;return d;}
 void WriteProject(const Json &j,const std::string &path) { (void)Model(j); SaveText(Path{path}.Native(),Text(SolverDocument(j))); }
 namespace {
 Json DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::DeviceState &state) {
@@ -616,7 +617,7 @@ void Operation::Execute(JobContext &ctx) {
         output={{"warnings",imported.scaps_native.warnings}};
     } else if(op=="export_def") {export_def(Model(document),request.at("path").get<std::string>());output={{"warnings",Model(document).scaps_native.warnings}};}
     else if(op=="project_new") {
-        Workflow fresh(CreateRef<JobSystem>(nullptr,1));fresh.Current().document=ReadProject(SCAPSLAB_PROJECT);
+        Workflow fresh(CreateRef<JobSystem>(nullptr,1));fresh.Current().document=NewDeviceDocument();
         fresh.Current().name=fresh.Current().document.at("case_id");workspace=fresh.Workspace();
     }
     else if(op=="project_load" || op=="load") {
@@ -691,7 +692,7 @@ void Operation::Execute(JobContext &ctx) {
         if(op=="device_add" || op=="device_duplicate") {
             Json d;
             if(op=="device_duplicate") {if(at==devices.end()) throw std::invalid_argument("Unknown device_id");d=*at;}
-            else { const auto doc=request.contains("path")?ReadProject(request.at("path").get<std::string>()):request.contains("document")?SelfContained(request.at("document")):ReadProject(SCAPSLAB_PROJECT);
+            else { const auto doc=request.contains("path")?ReadProject(request.at("path").get<std::string>()):request.contains("document")?SelfContained(request.at("document")):NewDeviceDocument();
                 d={{"document",doc},{"name",doc.value("case_id",std::string("Device"))},{"description",request.value("description",std::string{})}}; }
             static std::atomic_uint64_t sequence{0};
             d["history"]=Json::array();d["selected_run"]="";

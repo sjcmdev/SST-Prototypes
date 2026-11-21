@@ -890,3 +890,9 @@ TEST(ScapsLabSave,AutosaveOfLargeProjectKeepsResults) {
     EXPECT_EQ(loaded.Current().batchResult.at("rows").size(),3u);EXPECT_FALSE(loaded.Current().history.empty());
     std::filesystem::remove(recovery);
 }
+
+TEST(ScapsLabNewDevice,ContactsDefaultToFlatBand) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=NewDeviceDocument();
+    ASSERT_TRUE(Execute(w,{{"operation","device_add"}}).at("ok").get<bool>());
+    for(const auto *side:{"left","right"}) EXPECT_TRUE(w.Current().document.at("contacts").at(side).value("flat_band",false));
+}

@@ -15,6 +15,7 @@
 namespace SST::ScapsLab {
 using Json = nlohmann::json;
 Json ReadProject(const std::string &path);
+Json NewDeviceDocument(); // template device with SCAPS-like flat-band contacts (engine default and example decks untouched)
 Json NormalizeDocument(Json document);
 scaps_core::Profile ProfileFromJson(const Json &spec, bool logarithmic=false);
 Json ProfileFromFile(const std::string &path, bool logarithmic=false);
