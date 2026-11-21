@@ -37,8 +37,15 @@ TEST(TutorialEngine,LearnNeverAutoAdvancesOnAlreadyTrueStepAndSupportsBackSkipSh
     t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_TRUE(t.Active());EXPECT_TRUE(t.AlreadyDone());EXPECT_EQ(t.Report().at("step_index"),0);
     t.Skip();EXPECT_EQ(t.Report().at("step_index"),1);t.Back();EXPECT_EQ(t.Report().at("step_index"),0);EXPECT_FALSE(t.CanGoBack());
     value=0;t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_FALSE(t.AlreadyDone());
-    t.ShowMe();t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_EQ(executions,1);
-    value=2;t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_EQ(t.Report().at("step_index"),1);
+    t.ShowMe();t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_EQ(executions,0);EXPECT_TRUE(t.ShowMeBusy());EXPECT_GE(t.ShowMeAnim(),0.);
+    std::this_thread::sleep_for(std::chrono::milliseconds(int(Tutorial::kAnimS*1000)+100));
+    t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_EQ(executions,1);
+    value=2;t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_TRUE(t.ShowMeHold());t.Tick(predicates,execute,false,{{"ok",true}});
+    EXPECT_FALSE(t.ShownMe());EXPECT_EQ(t.Report().at("step_index"),0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(int(Tutorial::kHoldS*1000)+100));
+    t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_TRUE(t.ShownMe());EXPECT_TRUE(t.AlreadyDone());
+    t.Tick(predicates,execute,false,{{"ok",true}});EXPECT_EQ(t.Report().at("step_index"),0); // never auto-advances after Show me
+    t.Skip();EXPECT_EQ(t.Report().at("step_index"),1);
 }
 TEST(TutorialEngine,VerifyWaitsForJobThenChecksAndReportsSkippedSteps) {
     int value=0,executions=0;Tutorial t;Tutorial::Predicates predicates{{"value",[&]{return Json(value);}}};
@@ -268,6 +275,28 @@ TEST(ScapsLabTutorial,CoachAvoidsTargetRowAndArrowAvoidsButtonAtViewportEdges) {
             }
             ui.Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);
         }
+    }
+    }glfwDestroyWindow(window);glfwTerminate();
+}
+
+// The user may drag/resize the coach: the avoid-target logic only chooses the initial place.
+TEST(ScapsLabTutorial,CoachKeepsUserPlacementAfterDrag) {
+    Threading::SetMainThread();ASSERT_TRUE(glfwInit());glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);
+    auto *window=glfwCreateWindow(1200,740,"Coach drag",nullptr,nullptr);ASSERT_NE(window,nullptr);glfwMakeContextCurrent(window);
+    ASSERT_NE(gladLoadGL(glfwGetProcAddress),0);
+    { Testing::UiScreenshotContext ui({.nativeWindow=window});auto &io=ImGui::GetIO();io.DisplaySize=ImVec2(1200,740);
+    Tutorial tutorial;TutorialOverlay overlay;tutorial.Start(Definition(),"learn",{{"value",[]{return Json(0);}}});
+    const auto name=HostedEditorWindow("Tutorial coach###sst-tutorial").ImGuiName();
+    ImVec2 moved(0,0),movedSize(0,0);
+    for(int frame=0;frame<12;++frame) {
+        ImGui_ImplOpenGL3_NewFrame();io.DeltaTime=1.f/60;ImGui::NewFrame();
+        ImGui::SetNextWindowPos(ImVec2(10,10));ImGui::SetNextWindowSize(ImVec2(240,160));
+        ImGui::Begin("Target");ImGui::Button("Button");overlay.Item("test","button");ImGui::End();
+        (void)overlay.Draw(tutorial);
+        const auto *coach=ImGui::FindWindowByName(name.c_str());ASSERT_NE(coach,nullptr);
+        if(frame==4) {const auto before=coach->Pos;EXPECT_GT(before.x,10.f);moved=ImVec2(before.x+37,before.y+41);movedSize=ImVec2(coach->Size.x+30,coach->Size.y+20);ImGui::SetWindowPos(const_cast<ImGuiWindow*>(coach),moved);ImGui::SetWindowSize(const_cast<ImGuiWindow*>(coach),movedSize);}
+        if(frame>=7) {EXPECT_NEAR(coach->Pos.x,moved.x,1.5f);EXPECT_NEAR(coach->Pos.y,moved.y,1.5f);EXPECT_NEAR(coach->Size.x,movedSize.x,1.5f);EXPECT_NEAR(coach->Size.y,movedSize.y,1.5f);EXPECT_TRUE(overlay.LastGeometry().arrow);}
+        ui.Render();
     }
     }glfwDestroyWindow(window);glfwTerminate();
 }

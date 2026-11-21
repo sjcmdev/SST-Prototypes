@@ -125,6 +125,7 @@ public:
     Ref<CommandRegistry> commands;
     JobId active = 0;
     Ref<Operation> pending;
+    std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}
     bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false, resetLayout = false, pendingSheet = false;
     int focusView = -1, focusPanel = -1, pendingDefect = -1;
     bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true, lightResponse = false;

@@ -31,6 +31,10 @@ Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.
     std::snprintf(file,sizeof(file),"%s",w->path.c_str());
 }
 void Panel::Send(const Json &r) { const auto response=w->Dispatch(r); if(!response.at("ok").get<bool>()) {w->status=response.at("error").at("message");w->response=response;} }
+void OpenLayerWindow(Workflow *w,const std::string &device,const std::string &layer) {
+    const std::pair<std::string,std::string> key{device,layer};
+    if(!layer.empty() && std::find(w->pinnedLayers.begin(),w->pinnedLayers.end(),key)==w->pinnedLayers.end()) w->pinnedLayers.push_back(key);
+}
 namespace {
 void BeginRow(const char *label) {ImGui::PushID(label);sst::ui::widgets::BeginLabelledRow(label);}
 void EndRow() {sst::ui::widgets::EndLabelledRow();ImGui::PopID();}
@@ -422,6 +426,11 @@ void Panel::RenderContent() {
      if(const auto it=subtitles.find(view);it!=subtitles.end())ImGui::TextDisabled("%s",it->second);}
     if(view==4 || view==5 || (w->response.is_object() && !w->response.value("ok",true))) ImGui::TextWrapped("%s",w->status.c_str()); ImGui::Separator();
     if(w->Current().document.contains("scaps_native")) for(const auto &warning:w->Current().document.at("scaps_native").value("warnings",Json::array())) ImGui::TextWrapped("SCAPS import warning: %s",warning.get<std::string>().c_str());
+    if(!pinLayer.empty() && w->project.active_device!=pinDevice) { // extra "Layer: <name>" window of a device that is not active
+        ImGui::TextWrapped("This layer belongs to another device.");
+        if(ImGui::Button("Activate that device")) Send({{"operation","device_select"},{"device_id",pinDevice}});
+        return;
+    }
     if(view==16) {Batch();return;}
     if(view==17) {Recorder();return;}
     if(view==18) {BatchPlots();return;}
@@ -463,16 +472,19 @@ void Panel::RenderContent() {
             if(open) ImGui::TextUnformatted("Rsh = infinite Ohm");else ImGui::Text("Rsh = %.6g Ohm",e.at("shunt_ohm_m2").get<double>()/area);
         } else if(view==14) changed|=Structure(draft);
         else if(view==1) {
-            auto &layers=draft["layers"]; auto &selected=w->Current().selectedLayer; selected=std::clamp(selected,0,int(layers.size())-1);
-            BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {
+            auto &layers=draft["layers"]; int pinned=0; auto &selected=pinLayer.empty()?w->Current().selectedLayer:pinned; // pinned window: layer found by stable ID, independent of the tree selection
+            if(!pinLayer.empty()) for(int i=0;i<int(layers.size());++i) if(layers[i].at("scapslab_id")==pinLayer) pinned=i;
+            selected=std::clamp(selected,0,int(layers.size())-1);
+            if(pinLayer.empty()) {BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {
                 for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i); if(ImGui::Selectable(layers[i].at("name").get<std::string>().c_str(),selected==i)) selected=i; ImGui::PopID();} ImGui::EndCombo();
             }
-            EndRow();
+            EndRow();}
             auto &l=layers[selected]; const auto id=l.at("scapslab_id");
-            if(ImGui::Button("Add")) Send({{"operation","layer"},{"action","add"}}); w->tutorialOverlay.Item("scapslab.Layers","add-layer"); ImGui::SameLine();
+            if(ImGui::Button("Add")) Send({{"operation","layer"},{"action","add"}}); if(pinLayer.empty()) w->tutorialOverlay.Item("scapslab.Layers","add-layer"); ImGui::SameLine();
             if(ImGui::Button("Remove")) Send({{"operation","layer"},{"action","remove"},{"layer_id",id}}); ImGui::SameLine();
             if(ImGui::Button("Up") && selected>0) Send({{"operation","layer"},{"action","move"},{"layer_id",id},{"index",selected-1}}); ImGui::SameLine();
             if(ImGui::Button("Down") && selected+1<int(layers.size())) Send({{"operation","layer"},{"action","move"},{"layer_id",id},{"index",selected+1}});
+            if(pinLayer.empty()) {ImGui::SameLine();if(ImGui::Button("Open in new window")) OpenLayerWindow(w,w->project.active_device,id.get<std::string>());if(ImGui::IsItemHovered())ImGui::SetTooltip("Edit this layer in a separate window, side by side with other layers");}
             ImGui::TextDisabled("Stable ID: %s",id.get<std::string>().c_str());
             {   // Defects / interface shortcuts: edit through the Defects and Interfaces panels.
                 static std::string picked;const bool last=selected+1>=int(layers.size());
@@ -1190,12 +1202,12 @@ void Panel::Devices() {
         return std::pair{open,ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen()};
     };
     const auto text=[&](const std::string &label,const std::string &dim={}) {ImGui::SameLine(0,4);ImGui::TextUnformatted(label.c_str());if(!dim.empty()){ImGui::SameLine(0,8);ImGui::TextDisabled("%s",dim.c_str());}};
-    static std::string renameId;static char renameBuf[256]{};
+    static std::string renameId,inlineId;static char renameBuf[256]{};static bool openRename=false,focusInline=false; // OpenPopup must run at the modal's own ID scope, not inside the tree's PushID
     const auto devices=w->project.devices; // commands replace device state: iterate a snapshot
     if(ImGui::TreeNodeEx("##project",ImGuiTreeNodeFlags_DefaultOpen|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow)) {
         text(ICON_FA_FOLDER_OPEN " "+w->project.name+(w->dirty?" *":""));
         if(ImGui::BeginPopupContextItem("project-menu")) {
-            if(ImGui::MenuItem("Rename project...")) {renameId="";std::snprintf(renameBuf,sizeof(renameBuf),"%s",w->project.name.c_str());ImGui::CloseCurrentPopup();ImGui::OpenPopup("Rename##dialog");}
+            if(ImGui::MenuItem("Rename project...")) {renameId="";std::snprintf(renameBuf,sizeof(renameBuf),"%s",w->project.name.c_str());ImGui::CloseCurrentPopup();openRename=true;}
             if(ImGui::MenuItem("Save")) w->fileAction="save";
             if(ImGui::MenuItem("Open...")) w->fileAction="open";
             ImGui::EndPopup();
@@ -1213,7 +1225,7 @@ void Panel::Devices() {
                 if(ImGui::BeginDragDropTarget()) {if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_DEVICE")) Send({{"operation","device_move"},{"device_id",static_cast<const char*>(payload->Data)},{"index",int(&dp-&devices[0])}});ImGui::EndDragDropTarget();}
                 if(ImGui::BeginPopupContextItem("device-menu")) {
                     select(d);
-                    if(ImGui::MenuItem("Rename...")) {renameId=d.id;std::snprintf(renameBuf,sizeof(renameBuf),"%s",d.name.c_str());ImGui::CloseCurrentPopup();ImGui::OpenPopup("Rename##dialog");}
+                    if(ImGui::MenuItem("Rename...")) {renameId=d.id;std::snprintf(renameBuf,sizeof(renameBuf),"%s",d.name.c_str());ImGui::CloseCurrentPopup();openRename=true;}
                     if(ImGui::MenuItem("Duplicate")) Send({{"operation","device_duplicate"},{"device_id",d.id}});
                     if(ImGui::MenuItem("Delete",nullptr,false,devices.size()>1)) Send({{"operation","device_remove"},{"device_id",d.id}});
                     ImGui::Separator();
@@ -1227,7 +1239,18 @@ void Panel::Devices() {
                 const auto c=d.colour.get<std::vector<float>>();bool compare=w->project.compare_set.contains(d.id);
                 ImGui::SameLine(0,4);ImGui::ColorButton("##colour",ImVec4(c[0],c[1],c[2],c[3]),ImGuiColorEditFlags_NoTooltip|ImGuiColorEditFlags_NoPicker,ImVec2(box*.6f,box*.6f));
                 ImGui::SameLine(0,4);
-                if(compare) ImGui::TextUnformatted((d.name+(d.dirty?" *":"")).c_str());else ImGui::TextDisabled("%s",(d.name+(d.dirty?" *":"")).c_str());
+                if(inlineId==d.id) { // inline rename (double-click or F2): Enter/click away commits, Esc cancels
+                    if(focusInline){ImGui::SetKeyboardFocusHere();focusInline=false;}
+                    ImGui::SetNextItemWidth(std::max(80.f,rowRight-ImGui::GetCursorPosX()-box*2));
+                    const bool entered=ImGui::InputText("##inline",renameBuf,sizeof(renameBuf),ImGuiInputTextFlags_EnterReturnsTrue|ImGuiInputTextFlags_AutoSelectAll);
+                    if(ImGui::IsKeyPressed(ImGuiKey_Escape)) inlineId.clear();
+                    else if(entered || ImGui::IsItemDeactivated()) {if(renameBuf[0] && d.name!=renameBuf) Send({{"operation","device_update"},{"device_id",d.id},{"name",renameBuf}});inlineId.clear();}
+                } else {
+                    if(compare) ImGui::TextUnformatted((d.name+(d.dirty?" *":"")).c_str());else ImGui::TextDisabled("%s",(d.name+(d.dirty?" *":"")).c_str());
+                    const bool dbl=ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0);
+                    const bool f2=active && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F2);
+                    if(dbl || f2) {inlineId=d.id;focusInline=true;std::snprintf(renameBuf,sizeof(renameBuf),"%s",d.name.c_str());}
+                }
                 if(w->Busy() && w->pendingDevice==d.id) {
                     const auto job=w->jobs->GetJob(w->active);ImGui::SameLine(0,6);
                     ImGui::ProgressBar(job && job->totalWork>0?float(job->completedWork/job->totalWork):0.f,ImVec2(48,box*.35f),"");
@@ -1245,10 +1268,28 @@ void Panel::Devices() {
                             const auto &l=layers[i];const auto &defects=l.value("defects",Json::array());ImGui::PushID(i);
                             const auto [lopen,lclick]=node("##layer",defects.empty()?ImGuiTreeNodeFlags_Leaf:ImGuiTreeNodeFlags_None,active && d.selectedLayer==i && d.selectedInterface<0);
                             if(lclick) {select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;go(1);}
+                            { // drag a layer onto another row of the same device: reorder through the layer "move" operation (stable IDs kept)
+                                const std::string payloadText=d.id+"\n"+l.value("scapslab_id",std::string{});
+                                if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_LAYER",payloadText.c_str(),payloadText.size()+1);ImGui::TextUnformatted(l.value("name",std::string("layer")).c_str());ImGui::EndDragDropSource();}
+                                if(ImGui::BeginDragDropTarget()) {
+                                    if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_LAYER",ImGuiDragDropFlags_AcceptBeforeDelivery|ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
+                                        const std::string text=static_cast<const char*>(payload->Data);const auto nl=text.find('\n');
+                                        const std::string from=text.substr(nl+1);int fromIndex=-1;
+                                        for(int k=0;k<int(layers.size());++k) if(layers[k].value("scapslab_id",std::string{})==from) fromIndex=k;
+                                        if(text.substr(0,nl)==d.id && fromIndex>=0 && fromIndex!=i) {
+                                            const auto min=ImGui::GetItemRectMin(),max=ImGui::GetItemRectMax();const float y=fromIndex>i?min.y:max.y; // lands above the row when moving up, below when moving down
+                                            ImGui::GetForegroundDrawList()->AddLine(ImVec2(min.x,y),ImVec2(max.x,y),ImGui::GetColorU32(ImGuiCol_NavHighlight),2.f);
+                                            if(payload->IsDelivery()) {select(d);Send({{"operation","layer"},{"action","move"},{"layer_id",from},{"index",i}});}
+                                        }
+                                    }
+                                    ImGui::EndDragDropTarget();
+                                }
+                            }
                             if(ImGui::BeginPopupContextItem("layer-menu")) {
                                 select(d);w->Current().selectedLayer=i;
                                 if(ImGui::MenuItem("Add defect")) {AddDefectTo(false,i);go(11);}
                                 if(ImGui::MenuItem("Add layer")) {Send({{"operation","layer"},{"action","add"}});go(1);}
+                                if(ImGui::MenuItem("Open in new window")) OpenLayerWindow(w,d.id,l.value("scapslab_id",std::string{}));
                                 ImGui::EndPopup();
                             }
                             char thickness[48];std::snprintf(thickness,sizeof(thickness),"%.3g um",l.value("thickness_m",0.)*1e6);
@@ -1308,6 +1349,7 @@ void Panel::Devices() {
         }
         ImGui::TreePop();
     }
+    if(openRename) {openRename=false;ImGui::OpenPopup("Rename##dialog");}
     if(ImGui::BeginPopupModal("Rename##dialog",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(renameId.empty()?"Rename project":"Rename device");
         if(ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();

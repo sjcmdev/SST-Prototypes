@@ -1109,10 +1109,11 @@ void Workflow::UpdateOperation() {
             const auto before=Workspace();SetWorkspace(pending->workspace);
             if(op!="history_list") {projectDirty=true;(void)projectUndo.PushExecuted(CreateUnique<WorkspaceRecord>(*this,before,Workspace()));preferProjectUndo=true;}
         } else if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {
-            const auto before=project;SetWorkspace(pending->workspace);
+            const auto before=project;const auto beforeWorkspace=Workspace();SetWorkspace(pending->workspace);
             if(op!="device_list") projectDirty=true;
             if(op=="device_add" || op=="device_duplicate") Current().metadataDirty=true;
             if(op=="device_update") Device(pending->request.value("device_id",project.active_device)).metadataDirty=true;
+            if(op=="device_update" || op=="device_move" || op=="project_edit") {(void)projectUndo.PushExecuted(CreateUnique<WorkspaceRecord>(*this,beforeWorkspace,Workspace()));preferProjectUndo=true;} // rename / compare / colour / reorder are undoable
             if(op=="device_remove") {(void)projectUndo.PushExecuted(CreateUnique<ProjectRecord>(*this,before,project));preferProjectUndo=true;}
         } else {
             if((op=="edit" || op=="load_material" || op=="set_profile" || op=="load_profile" || op=="layer" || op=="import_def") && !pending->request.value("history",false) && d.document!=pending->document) {

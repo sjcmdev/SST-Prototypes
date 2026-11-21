@@ -92,6 +92,19 @@ TEST(ScapsLab,EditsStableIdsValidationAndCancellation) {
     std::string error,text;ASSERT_TRUE(TextFileIO::Save(Path{path},"original",error));EXPECT_THROW(WriteProject(bad,path.string()),std::exception);
     ASSERT_TRUE(TextFileIO::Load(Path{path},text,error));EXPECT_EQ(text,"original");std::filesystem::remove(path);
 }
+TEST(ScapsLab,DeviceRenameAndLayerReorderAreUndoable) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    const auto device=w.project.active_device;const auto oldName=w.Current().name;
+    ASSERT_TRUE(Execute(w,{{"operation","device_update"},{"device_id",device},{"name","Renamed device"}}).at("ok").get<bool>());
+    EXPECT_EQ(w.Current().name,"Renamed device");
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().name,oldName);
+    ASSERT_TRUE(Execute(w,{{"operation","redo"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().name,"Renamed device");
+    ASSERT_TRUE(Execute(w,{{"operation","layer"},{"action","add"}}).at("ok").get<bool>());
+    const auto before=w.Current().document["layers"];const auto id=before[1]["scapslab_id"];
+    ASSERT_TRUE(Execute(w,{{"operation","layer"},{"action","move"},{"layer_id",id},{"index",0}}).at("ok").get<bool>());
+    EXPECT_EQ(w.Current().document["layers"][0]["scapslab_id"],id);
+    ASSERT_TRUE(Execute(w,{{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.Current().document["layers"],before); // one undo step
+}
 TEST(ScapsLab,EmbeddedPythonRunAndHeadlessCsv) {
 #if DS_PYTHON_CAPI_AVAILABLE
     const auto uiDocument=ReadProject(SCAPSLAB_PROJECT);auto uiSpec=BatchDefaults();uiSpec["voltages_V"]=Json::array({0.,0.05});
