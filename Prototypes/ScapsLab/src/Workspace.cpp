@@ -309,6 +309,7 @@ Json SingleDeviceWorkspace(Json document,std::string projectName) { // what Work
     return NormalizeWorkspace({{"schema_version",3},{"name",std::move(projectName)},{"devices",Json::array({std::move(device)})},{"active_device","device-1"},{"compare_set",Json::array({"device-1"})},{"ui",Json::object()}});
 }
 void Workflow::SetWorkspace(const Json &value,bool validated) { // validated: value came from NormalizeWorkspace (already checked and normalized)
+    ++plotGen;
     if(!validated) ValidateWorkspace(value);
     const auto &devices=value.at("devices");
     Project checked;checked.schema_version=3;checked.name=value.at("name").get<std::string>();checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());

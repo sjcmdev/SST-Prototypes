@@ -147,7 +147,7 @@ public:
             const auto result=op=="undo"?stack.Undo():stack.Redo();
             if(!result) return result;
             w.status=w.active?"Applying history":"History restored";
-            w.RefreshDirty();w.response=w.Snapshot();return {};
+            ++w.plotGen;w.RefreshDirty();w.response=w.Snapshot();return {};
         }
         if(op=="device_add" && r->contains("path")) {auto read=*r;read["operation"]="device_read";w.StartOperation(read,w.project.active_device);return {};}
         if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {w.DeviceOp(*r);return {};}
@@ -877,7 +877,7 @@ struct DeviceSnap {
 };
 class HistoryRecord final : public ICommand {
     Workflow &w;std::vector<DeviceSnap> before,after;
-    Result<void> Apply(const std::vector<DeviceSnap> &v) {for(const auto &s:v)s.Apply(w.Device(s.id));w.projectDirty=true;w.RefreshDirty();return {};}
+    Result<void> Apply(const std::vector<DeviceSnap> &v) {for(const auto &s:v){s.Apply(w.Device(s.id));w.Emit(HistoryChanged(s.id));}w.projectDirty=true;w.RefreshDirty();return {};}
 public:
     HistoryRecord(Workflow &w,std::vector<DeviceSnap> before,std::vector<DeviceSnap> after):w(w),before(std::move(before)),after(std::move(after)) {}
     std::string Description() const override {return "Change ScapsLab history";}
@@ -1061,6 +1061,7 @@ void Workflow::DeviceOp(const Json &request) {
 
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry,Ref<EventBus> eventBus,Ref<Notifier> note):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()),bus(eventBus?std::move(eventBus):CreateRef<EventBus>()),notifier(note?std::move(note):CreateRef<Notifier>(bus)) {
     ++constructed;
+    {static std::atomic<std::uint64_t> epoch{0};plotGen=++epoch<<32;} // high bits identify this Workflow so a plot cache never serves another instance's data
     auto initial=CreateRef<DeviceState>();initial->id="device-1";initial->name="Device";project.devices.push_back(initial);project.active_device=initial->id;project.compare_set.insert(initial->id);
     for(const auto *op:{"load_material","save_material","set_profile","load_profile","preview_profile","export_profile","tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
         "history_list","history_update","history_select","history_clear","quick_sweep","project_new","project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def"}) {
@@ -1072,6 +1073,13 @@ Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry,Ref<EventBus> 
             });
         if(!registered) throw std::runtime_error("Cannot register ScapsLab command");
     }
+}
+// Plot caches (Panel.cpp) follow these events. Subscribed from the UI thread by the first Panel that renders (not in the constructor:
+// Workflows are also built on worker threads, and EventBus::Subscribe is not thread-safe).
+void Workflow::WatchPlots() {
+    if(!plotSubs.empty())return;
+    const auto bump=[this](auto tag){using E=typename decltype(tag)::type;plotSubs.push_back(bus->Subscribe<E>([this](const E &){++plotGen;}));};
+    bump(std::type_identity<RunCompleted>{});bump(std::type_identity<HistoryChanged>{});bump(std::type_identity<SelectionChanged>{});bump(std::type_identity<DocumentEdited>{});bump(std::type_identity<DeviceListChanged>{});bump(std::type_identity<ProjectLoaded>{});
 }
 Workflow::~Workflow() { tutorial.Stop();queuedSave=Json();queuedProject.clear();runQueue.clear();edits.clear();if(active) { (void)jobs->RequestCancel(active); while(active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} } while(saveJob) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));} }
 void Workflow::StartOperation(const Json &r,const std::string &id) {

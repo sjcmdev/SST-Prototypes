@@ -153,6 +153,8 @@ public:
     Ref<EventBus> bus;
     Ref<Notifier> notifier;
     template<class E> void Emit(E e) {bus->Publish(e);}
+    void WatchPlots(); // UI thread: start bumping plotGen on plot-affecting events
+    std::uint64_t plotGen=0; // S3: bumped by RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/DeviceListChanged/ProjectLoaded; panel plot caches compare it (no per-frame hashing/conversion)
     JobId active = 0;
     Ref<Operation> pending;
     std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}
@@ -166,6 +168,7 @@ public:
     Json batchResponse;
     std::size_t batchTotal = 0, batchCompleted = 0;
     Json recent = Json::array();
+    std::vector<SubscriptionHandle> plotSubs; // keep last: unsubscribes before the other members go
     Tutorial tutorial;
     TutorialOverlay tutorialOverlay;
     Json tutorialProgress = Json::object();
