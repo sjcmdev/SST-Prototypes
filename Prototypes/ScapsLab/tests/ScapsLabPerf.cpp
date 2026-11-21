@@ -153,3 +153,19 @@ TEST(PerfEquivalence,OldRunsDropProfiles) {
     (void)Timed(w,{{"operation","history_update"},{"run_id",newest},{"pinned",true}});
     (void)Timed(w,{{"operation","history_clear"},{"run_ids",Json::array({oldest})}});EXPECT_EQ(w.Current().history.size(),7);EXPECT_EQ(w.Current().selectedRun,"");
 }
+
+// S7: in-place store ops must not scale with project size. Run: SCAPSLAB_PERF_TEST=1 SCAPSLAB_MEM_PROJECT=<file.scapslab> ScapsLabTests --gtest_filter=PerfProbe.InPlaceOps
+TEST(PerfProbe,InPlaceOps) {
+    if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
+    const char *project=std::getenv("SCAPSLAB_MEM_PROJECT");if(!project)GTEST_SKIP()<<"set SCAPSLAB_MEM_PROJECT";
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;
+    const auto s0=Clock::now();(void)Timed(w,{{"operation","project_load"},{"path",project}});std::printf("PERF project_load wall %.1f ms\n",Ms(s0));
+    auto time=[&](const char *label,const Json &r){const auto s=Clock::now();const auto out=w.Dispatch(r);std::printf("PERF %s: %.3f ms ok=%d\n",label,Ms(s),int(out.at("ok").get<bool>()));};
+    const auto device=w.Current().id;
+    if(!w.Current().history.empty()) {const auto run=w.Current().history.front().at("run_id");
+        time("history_update(visible)",{{"operation","history_update"},{"device_id",device},{"run_id",run},{"visible",true}});
+        time("history_select",{{"operation","history_select"},{"device_id",device},{"run_id",run}});}
+    time("device_update(rename)",{{"operation","device_update"},{"device_id",device},{"name","Perf rename"}});
+    time("device_move",{{"operation","device_move"},{"device_id",device},{"index",0}});
+    time("project_edit(name)",{{"operation","project_edit"},{"name","Perf project"}});
+}

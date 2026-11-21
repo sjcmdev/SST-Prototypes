@@ -954,3 +954,26 @@ TEST(ScapsLab,TypedResultsRoundtripJson) {
     EXPECT_TRUE(std::isnan(r.points[0].J_A_m2));EXPECT_TRUE(std::isnan(r.points[0].x_m[1]));EXPECT_EQ(r.points[0].iterations,7);EXPECT_EQ(r.mesh_x_m.size(),2u);
     EXPECT_EQ(ToJson(r).dump(),j.dump());EXPECT_EQ(ToJson(IvFromJson(Json::object())),Json::object());
 }
+TEST(ScapsLab,InPlaceDeviceOpsUndoAndNoThrowawayWorkflows) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    const auto built=Workflow::constructed.load();
+    const auto first=w.project.active_device;
+    ASSERT_TRUE(w.Dispatch({{"operation","device_duplicate"},{"name","Second"}}).at("ok").get<bool>());
+    EXPECT_EQ(w.active,0u);EXPECT_EQ(w.project.devices.size(),2u);const auto second=w.project.active_device;
+    ASSERT_TRUE(w.Dispatch({{"operation","device_update"},{"device_id",second},{"name","Renamed"},{"colour",{.1,.2,.3,1.}}}).at("ok").get<bool>());
+    ASSERT_TRUE(w.Dispatch({{"operation","device_move"},{"device_id",second},{"index",0}}).at("ok").get<bool>());
+    EXPECT_EQ(w.project.devices[0]->id,second);
+    ASSERT_TRUE(w.Dispatch({{"operation","project_edit"},{"name","Renamed project"}}).at("ok").get<bool>());
+    EXPECT_FALSE(w.Dispatch({{"operation","device_update"},{"device_id",second},{"name",""}}).at("ok").get<bool>());EXPECT_EQ(w.Device(second).name,"Renamed");
+    ASSERT_TRUE(w.Dispatch({{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.project.name,"Untitled project");
+    ASSERT_TRUE(w.Dispatch({{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.project.devices[0]->id,first);
+    ASSERT_TRUE(w.Dispatch({{"operation","undo"}}).at("ok").get<bool>());EXPECT_EQ(w.Device(second).name,"Second");
+    ASSERT_TRUE(w.Dispatch({{"operation","redo"}}).at("ok").get<bool>());EXPECT_EQ(w.Device(second).name,"Renamed");
+    const auto file=Temp("scapslab-inplace.scapslab");
+    ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",file.string()}}).at("ok").get<bool>());
+    ASSERT_TRUE(Execute(w,{{"operation","project_new"}}).at("ok").get<bool>());
+    ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).at("ok").get<bool>());
+    EXPECT_EQ(w.project.devices.size(),2u);
+    EXPECT_EQ(Workflow::constructed.load(),built); // no throwaway Workflow (and so no JobSystem) on new/load/ops
+    std::filesystem::remove(file);
+}

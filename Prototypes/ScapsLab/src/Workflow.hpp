@@ -12,6 +12,7 @@
 #include "Domain/Results.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
 #include <chrono>
+#include <atomic>
 #include <array>
 #include <deque>
 #include <set>
@@ -120,6 +121,11 @@ std::filesystem::path ExamplesDirectory();
 std::string DocumentHash(const Json &document);
 Json PackResults(const Json &value);
 Json UnpackResults(const Json &value);
+void ValidateWorkspace(const Json &workspace); // throws std::invalid_argument; touches no live state
+void ValidateActions(const Json &actions);
+int ValidateUi(const Json &ui); // returns history_retention
+Json NormalizeWorkspace(Json workspace); // validate + normalize device documents; pure, no Workflow/JobSystem
+Json SingleDeviceWorkspace(Json document,std::string projectName);
 std::string WorkspaceText(const Json &workspace);
 class Workflow final : public Layer {
 public:
@@ -131,7 +137,9 @@ public:
     DeviceState &Current();
     DeviceState &Device(const std::string &id);
     Json Workspace(bool withResults=true) const;
-    void SetWorkspace(const Json &value);
+    void SetWorkspace(const Json &value,bool validated=false); // validated: value came from NormalizeWorkspace
+    void DeviceOp(const Json &request); // device_*/project_edit/action_settings: in place on the UI thread (no job, no workspace copy)
+    static inline std::atomic_size_t constructed{0}; // test counter: Workflow instances ever built
     Json Snapshot() const;
     std::string MemoryReport() const; // SCAPSLAB_PERF: private bytes + history/result sizes
     Json Runs() const;
