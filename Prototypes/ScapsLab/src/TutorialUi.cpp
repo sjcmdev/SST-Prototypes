@@ -79,8 +79,9 @@ public:
                 throw std::runtime_error("Cannot register menu: "+id);
         };
         auto idle=[&w]{return !w.Busy();};
-        auto operation=[&](const char *op,const char *path,const char *shortcut="",std::function<bool()> enabled={}) {
-            if(!w.commands->SetMenu(CommandID{std::string("scapslab.")+op},path,shortcut,std::move(enabled))) throw std::runtime_error("Cannot configure menu");
+        auto operation=[&](const char *op,std::function<bool()> enabled,const char *path="") { // menu path and shortcut come from the typed command's Info (Commands/Commands.hpp); only `enabled` is app state
+            const CommandID id{std::string("scapslab.")+op};const auto meta=w.commands->GetMeta(id);
+            if(!meta || !w.commands->SetMenu(id,*path?path:meta.Value().menuPath,meta.Value().shortcut,std::move(enabled))) throw std::runtime_error("Cannot configure menu");
         };
         menu("scapslab.file.new","File/New",[&w]{w.fileAction="new";},"Ctrl+N",idle);
         (void)w.commands->SetMenu(CommandID{"app.layout.reset"},"");
@@ -95,11 +96,11 @@ public:
         if(std::filesystem::exists(ExamplesDirectory())) for(const auto &entry:std::filesystem::directory_iterator(ExamplesDirectory())) if(entry.path().extension()==".scapslab") {
             const auto path=entry.path();const std::string stem=path.stem().string();menu("scapslab.example."+stem,"File/Examples/"+stem+(!ExperimentalPanels() && stem=="05-capacitance-ready"?" (needs experimental panels)":""),[&w,path]{w.openRequest=path.string();},"",idle);
         }
-        operation("undo","Edit/Undo","Ctrl+Z",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanUndo();});
-        operation("redo","Edit/Redo","Ctrl+Y",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanRedo();});
+        operation("undo",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanUndo();});
+        operation("redo",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanRedo();});
         menu("scapslab.history.clear","Edit/Clear history...",[this]{clear=true;});
-        operation("run","Simulate/Calculate I-V","",idle);if(ExperimentalPanels())operation("run_batch","Simulate/Run batch","",idle);
-        operation("cancel","Simulate/Stop","",[&w]{return w.AnyActive();});
+        operation("run",idle);if(ExperimentalPanels())operation("run_batch",idle,"Simulate/Run batch");
+        operation("cancel",[&w]{return w.AnyActive();});
         menu("scapslab.view.experimental","View/Show experimental panels (applies after restart)",[this]{ExperimentalPanels()=!ExperimentalPanels();SaveExperimental();this->w.status="Experimental panels "+std::string(ExperimentalPanels()?"on":"off")+": restart ScapsLab to apply";},"",{},[]{return ExperimentalPanels();});
         for(const auto &panel:this->panels) if(panel->GetId()) menu("scapslab.view."+std::to_string(panel->GetId()),"View/"+panel->GetTitle(),[panel]{panel->SetVisible(!panel->IsVisible());},"",{},[panel]{return panel->IsVisible();});
         WindowId top=0;for(const auto &p:this->panels)top=std::max(top,p->GetId());
@@ -112,7 +113,7 @@ public:
             const std::string id=lesson.at("tutorial_id"),title=lesson.at("title");
             menu("scapslab.lesson."+id+".verify","Help/Developer/Verify tutorials/"+title,[&w,id]{w.TutorialRequest({{"operation","tutorial_start"},{"tutorial_id",id},{"mode","verify"}});},"",[&w]{return !w.Busy() && !w.tutorial.Active();});
         }
-        operation("tutorial_stop","Tutorials/Stop tutorial","",[&w]{return w.tutorial.Active();});
+        operation("tutorial_stop",[&w]{return w.tutorial.Active();});
     }
     // One extra Layers editor per pinned layer; it follows the layer by ID and disappears with it.
     void DrawLayerWindows() {

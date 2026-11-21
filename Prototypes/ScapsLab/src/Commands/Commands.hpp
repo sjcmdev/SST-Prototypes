@@ -1,0 +1,157 @@
+#pragma once
+// S8: typed ScapsLab commands. One struct per user-visible action: `info` (op = legacy JSON "operation", palette name, menu path, shortcut),
+// typed factories (Make/With), FromJson/ToJson (the JSON adapter used by Workflow::Dispatch and the Python/headless contract) and
+// Execute(ILabStore&), which only decides (reject / queue / start) and asks the store to act. Nothing here touches a JobSystem.
+// The command carries its request as Json (`args`): the job and `d.actions` keep reading the exact legacy request, so saved projects do not change.
+#include "Commands/Store.hpp"
+#include "Core/Commands/CommandRegistry.hpp"
+#include <functional>
+namespace SST::ScapsLab::Cmd {
+using Out = Result<void>;
+struct Info {
+    const char *op, *name, *description, *menu = "", *shortcut = "";
+    bool hidden = false;      // needs arguments: not offered in the command palette
+    bool menuDefault = false; // runs with no arguments from a menu/palette
+    bool legacy = false;      // explicit legacy JSON handler (no typed arguments)
+};
+Out Reject(const char *code, std::string title, std::string details, std::string hint = "Wait or cancel");
+Out Job(ILabStore &store, Json request); // busy gate + job on the active device
+Json Merge(Json args, const char *op);   // args + "operation"
+template<class D> struct Req {           // JSON-backed request: exact round trip of whatever the caller sent
+    Json args = Json::object();
+    static D With(Json a = Json::object()) {D d;d.args = a.is_object() ? std::move(a) : Json::object();d.args.erase("operation");return d;}
+    static D FromJson(const Json &j) {return With(j);}
+    Json ToJson() const {return Merge(args, D::info.op);}
+    Out Execute(ILabStore &s) const {return Job(s, ToJson());}
+};
+#define SL_JOB(T, ...) struct T : Req<T> {static constexpr Info info{__VA_ARGS__};}
+// Calculations (Run.cpp)
+struct Run : Req<Run> {
+    static constexpr Info info{"run", "Calculate I-V", "Calculate the J-V curve of the active device", "Simulate/Calculate I-V", "", false, true};
+    static Run Make() {return {};}
+    static Run Preview(int stride) {return With({{"preview", true}, {"stride", stride}});}
+};
+struct RunBand : Req<RunBand> {
+    static constexpr Info info{"band", "Calculate band diagram", "Band diagram at one bias", "", "", true};
+    static RunBand Make(double voltage_V) {return With({{"voltage_V", voltage_V}});}
+};
+SL_JOB(RunCv, "cv", "Calculate C-V", "Capacitance-voltage sweep", "", "", true);
+SL_JOB(RunCf, "cf", "Calculate C-f", "Capacitance-frequency sweep", "", "", true);
+SL_JOB(RunQe, "qe", "Calculate QE", "External quantum efficiency", "", "", true);
+SL_JOB(RunBatch, "run_batch", "Run batch", "Run the batch of the active device", "", "", false, true);
+SL_JOB(RetryBatchMember, "retry_batch", "Retry batch member", "Recalculate one batch member", "", "", true);
+SL_JOB(RecordBatch, "record_batch", "Re-extract recorder columns", "Rebuild the recorder table of the finished batch");
+SL_JOB(PreviewBatch, "preview_batch", "Preview batch", "Member list of a batch spec", "", "", true);
+SL_JOB(QuickSweep, "quick_sweep", "Quick parameter sweep", "Sweep one parameter around its value", "", "", true);
+SL_JOB(BatchParameters, "batch_parameters", "List batch parameters", "Sweepable parameters of the active device");
+SL_JOB(SelectBatchMember, "batch_select", "Select batch member", "Show one batch member", "", "", true);
+SL_JOB(SetBatchSettings, "batch_settings", "Batch settings", "Store the batch spec and recorder columns", "", "", true);
+SL_JOB(Inspect, "inspect", "Inspect device model", "Validate the active device and report its model");
+struct RunAll : Req<RunAll> {
+    static constexpr Info info{"run_all", "Calculate all compared devices", "One run per device checked for compare", "", "", false, true};
+    Out Execute(ILabStore &s) const;
+};
+struct Cancel : Req<Cancel> {
+    static constexpr Info info{"cancel", "Stop", "Cancel running jobs", "Simulate/Stop", "", false, true};
+    static Cancel Device(const std::string &id) {return With({{"device_id", id}});}
+    Out Execute(ILabStore &s) const;
+};
+struct SetAutoRecalculate : Req<SetAutoRecalculate> {
+    static constexpr Info info{"auto_recalculate", "Auto-recalculate", "Recalculate when the document changes", "", "", true};
+    static SetAutoRecalculate Make(bool enabled, std::optional<bool> band = {}) {auto c = With({{"enabled", enabled}});if(band)c.args["band_enabled"] = *band;return c;}
+    Out Execute(ILabStore &s) const;
+};
+// Document and history (Edit.cpp)
+struct EditDocument : Req<EditDocument> {
+    static constexpr Info info{"edit", "Edit device", "Replace the device document or apply a patch", "", "", true};
+    static EditDocument Replace(Json document, std::string gesture = {}) {auto c = With({{"document", std::move(document)}});if(!gesture.empty())c.args["gesture_id"] = std::move(gesture);return c;}
+    static EditDocument Patch(Json patch) {return With({{"patch", std::move(patch)}});}
+    Out Execute(ILabStore &s) const;
+};
+SL_JOB(EditLayer, "layer", "Edit layer", "Add, remove or move a layer", "", "", true);
+SL_JOB(LoadMaterial, "load_material", "Load layer material", "Read a SCAPS .material into a layer", "", "", true);
+SL_JOB(SaveMaterial, "save_material", "Save layer material", "Write a layer as SCAPS .material", "", "", true);
+SL_JOB(SetProfile, "set_profile", "Set profile", "Store a grading / defect profile", "", "", true);
+SL_JOB(LoadProfile, "load_profile", "Load profile file", "Read a profile from a file", "", "", true);
+SL_JOB(PreviewProfile, "preview_profile", "Preview profile", "Profile samples over the layer", "", "", true);
+SL_JOB(ImportDef, "import_def", "Import SCAPS definition", "Replace the active device from a SCAPS .def", "", "", true);
+struct Undo : Req<Undo> {
+    static constexpr Info info{"undo", "Undo", "Undo the last edit", "Edit/Undo", "Ctrl+Z", false, true};
+    Out Execute(ILabStore &s) const;
+};
+struct Redo : Req<Redo> {
+    static constexpr Info info{"redo", "Redo", "Redo the last undone edit", "Edit/Redo", "Ctrl+Y", false, true};
+    Out Execute(ILabStore &s) const;
+};
+struct ListHistory : Req<ListHistory> {
+    static constexpr Info info{"history_list", "List history", "Run history of a device", "", "", true};
+    Out Execute(ILabStore &s) const;
+};
+struct SelectRun : Req<SelectRun> {
+    static constexpr Info info{"history_select", "Select run", "Show a stored run", "", "", true};
+    static SelectRun Make(const std::string &device, const std::string &run) {return With({{"device_id", device}, {"run_id", run}});}
+    Out Execute(ILabStore &s) const {s.HistoryOp(ToJson());return {};}
+};
+struct UpdateRun : Req<UpdateRun> {
+    static constexpr Info info{"history_update", "Update run", "Pin, rename, hide or recolour a stored run", "", "", true};
+    Out Execute(ILabStore &s) const {s.HistoryOp(ToJson());return {};}
+};
+struct ClearHistory : Req<ClearHistory> {
+    static constexpr Info info{"history_clear", "Clear history", "Delete stored runs", "", "", true};
+    Out Execute(ILabStore &s) const {s.HistoryOp(ToJson());return {};}
+};
+// Devices and project metadata (in place on the UI thread)
+#define SL_DEVICE(T, ...) struct T : Req<T> {static constexpr Info info{__VA_ARGS__}; Out Execute(ILabStore &s) const;}
+SL_DEVICE(AddDevice, "device_add", "New device", "Add a device (from a file when path is given)", "", "", false, true);
+SL_DEVICE(DuplicateDevice, "device_duplicate", "Duplicate device", "Copy a device", "", "", true);
+SL_DEVICE(RemoveDevice, "device_remove", "Delete device", "Remove a device", "", "", true);
+SL_DEVICE(UpdateDevice, "device_update", "Update device", "Rename, recolour or toggle compare", "", "", true);
+SL_DEVICE(MoveDevice, "device_move", "Move device", "Reorder devices", "", "", true);
+SL_DEVICE(ListDevices, "device_list", "List devices", "Devices of the project", "", "", true);
+SL_DEVICE(EditProject, "project_edit", "Edit project", "Rename the project or change its ui settings", "", "", true);
+SL_DEVICE(SetActionSettings, "action_settings", "Action settings", "Store the run settings of a device", "", "", true);
+struct SelectDevice : Req<SelectDevice> {
+    static constexpr Info info{"device_select", "Select device", "Make a device the active one", "", "", true};
+    static SelectDevice Make(const std::string &id) {return With({{"device_id", id}});}
+    Out Execute(ILabStore &s) const;
+};
+// Project and files (Project.cpp). Save/load/export implementations stay where they are; these wrap them.
+SL_JOB(NewProject, "project_new", "New project", "Replace the project with an empty one", "", "", false, true);
+struct LoadProject : Req<LoadProject> {
+    static constexpr Info info{"project_load", "Open project file", "Open a .scapslab project", "", "", true};
+    static LoadProject Make(const std::string &path) {return With({{"path", path}});}
+    Out Execute(ILabStore &s) const;
+};
+struct LoadDocument : Req<LoadDocument> {
+    static constexpr Info info{"load", "Open device or project file", "Open a device YAML or a .scapslab project", "", "", true};
+    Out Execute(ILabStore &s) const;
+};
+struct SaveProject : Req<SaveProject> {
+    static constexpr Info info{"project_save", "Save project file", "Save the project (own save lane)", "", "", true};
+    static SaveProject Make(const std::string &path, bool includeResults) {return With({{"path", path}, {"include_results", includeResults}});}
+    Out Execute(ILabStore &s) const;
+};
+struct SaveDocument : Req<SaveDocument> {
+    static constexpr Info info{"save", "Save device or project file", "Save the device YAML or a .scapslab project", "", "", true};
+    Out Execute(ILabStore &s) const;
+};
+SL_JOB(ExportAc, "export_ac", "Export C-V / C-f CSV", "Write an AC result as CSV", "", "", true);
+SL_JOB(ExportGr, "export_gr", "Export generation-recombination", "Write G/R results", "", "", true);
+SL_JOB(ExportResults, "export_results", "Export results", "Write runs as CSV/JSON", "", "", true);
+SL_JOB(ExportBatch, "export_batch", "Export batch CSV", "Write the recorder table", "", "", true);
+SL_JOB(ExportProfile, "export_profile", "Export profile", "Write a profile as text", "", "", true);
+SL_JOB(ExportDef, "export_def", "Export SCAPS definition", "Write the device as SCAPS .def", "", "", true);
+SL_JOB(SendToPlotLab, "send_to_plotlab", "Send batch to PlotLab", "Write a PlotLab workbook", "", "", true);
+// Tutorials: JSON-driven by design (the tutorial player replays recorded requests): explicit legacy handlers.
+#define SL_LEGACY(T, ...) struct T : Req<T> {static constexpr Info info{__VA_ARGS__}; Out Execute(ILabStore &s) const {s.TutorialRequest(ToJson());return {};}}
+SL_LEGACY(TutorialStart, "tutorial_start", "Start tutorial", "Tutorial request (legacy JSON handler)", "", "", true, false, true);
+SL_LEGACY(TutorialStop, "tutorial_stop", "Stop tutorial", "Stop the running tutorial", "Tutorials/Stop tutorial", "", false, true, true);
+SL_LEGACY(TutorialState, "tutorial_state", "Tutorial state", "Tutorial request (legacy JSON handler)", "", "", true, false, true);
+SL_LEGACY(TutorialList, "tutorial_list", "List tutorials", "Tutorial request (legacy JSON handler)", "", "", true, false, true);
+#undef SL_JOB
+#undef SL_DEVICE
+#undef SL_LEGACY
+struct Entry {const Info *info;};
+const std::vector<Entry> &Table();                                      // every typed command, in registration order
+Result<void> RegisterAll(CommandRegistry &registry, ILabStore &store);  // id "scapslab.<op>"; factories read a typed T ("args") or the legacy JSON ("request")
+}

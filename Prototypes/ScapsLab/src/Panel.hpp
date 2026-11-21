@@ -1,5 +1,6 @@
 ﻿#pragma once
 #include "Workflow.hpp"
+#include "Commands/Commands.hpp"
 #include <cmath>
 #include <algorithm>
 #include "Core/Presentation/Panels/EditorWindow.hpp"
@@ -66,7 +67,8 @@ private:
     void StructureEdit();
     void Preview(bool interface);
     int selectedDefect=0;
-    void Send(const Json &request);
+    void Report(const Json &response);                                  // failed command: status + response
+    template<class T> void Do(const T &command) {Report(w->Exec(command));} // typed command (Commands/Commands.hpp)
     void Results();
     void GenerationRecombination();
     bool grFollow=true;

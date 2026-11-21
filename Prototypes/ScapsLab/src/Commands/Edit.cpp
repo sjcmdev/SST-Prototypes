@@ -1,0 +1,51 @@
+#include "Commands/Commands.hpp"
+#include <stdexcept>
+// Document, undo/redo, history and device commands. Bodies that mutate state live in the store (Workflow); the commands only decide.
+namespace SST::ScapsLab::Cmd {
+Out EditDocument::Execute(ILabStore &s) const {
+    if(s.ReplacingProject()) return Reject("busy", "Busy", "Project structure is changing; wait before editing", "Wait for the operation");
+    if(s.Busy()) {s.QueueEdit(ToJson());return {};} // a job runs: the edit queues behind it (latest wins per gesture)
+    s.StartJob(ToJson());
+    return {};
+}
+Out Undo::Execute(ILabStore &s) const {
+    if(s.Busy()) return Reject("busy", "Busy", "A job is still active", "Wait or cancel");
+    return s.Step(true);
+}
+Out Redo::Execute(ILabStore &s) const {
+    if(s.Busy()) return Reject("busy", "Busy", "A job is still active", "Wait or cancel");
+    return s.Step(false);
+}
+Out ListHistory::Execute(ILabStore &s) const {
+    if(args.contains("device_id")) s.RequireDevice(args.at("device_id").get<std::string>());
+    s.PublishSnapshot(); // read-only: answered inline
+    return {};
+}
+Out SelectDevice::Execute(ILabStore &s) const {
+    for(const auto &op : s.ActiveOps())
+        if(op != "run" && op != "band" && op != "cv" && op != "cf") throw std::invalid_argument("Wait for the project operation before selecting a device");
+    const auto id = args.at("device_id").get<std::string>();
+    s.RequireDevice(id);
+    if(s.EditQueued()) throw std::invalid_argument("Wait for queued edits before selecting a device");
+    s.SelectDevice(id);
+    return {};
+}
+namespace {
+Out InPlace(ILabStore &s, const Json &request) {
+    if(s.Busy()) return Reject("busy", "Busy", "A job is still active", "Wait or cancel");
+    s.DeviceOp(request);
+    return {};
+}
+}
+Out AddDevice::Execute(ILabStore &s) const {
+    if(args.contains("path")) {auto read = ToJson();read["operation"] = "device_read";return Job(s, std::move(read));} // only the file read runs as a job
+    return InPlace(s, ToJson());
+}
+Out DuplicateDevice::Execute(ILabStore &s) const {return InPlace(s, ToJson());}
+Out RemoveDevice::Execute(ILabStore &s) const {return InPlace(s, ToJson());}
+Out UpdateDevice::Execute(ILabStore &s) const {return InPlace(s, ToJson());}
+Out MoveDevice::Execute(ILabStore &s) const {return InPlace(s, ToJson());}
+Out ListDevices::Execute(ILabStore &s) const {return InPlace(s, ToJson());}
+Out EditProject::Execute(ILabStore &s) const {return InPlace(s, ToJson());}
+Out SetActionSettings::Execute(ILabStore &s) const {return InPlace(s, ToJson());}
+}

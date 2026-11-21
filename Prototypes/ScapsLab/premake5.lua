@@ -56,7 +56,7 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         debugdir ("%{cfg.targetdir}")
         postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/PrototypeTemplate/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/python" "%{cfg.targetdir}/python"', '{COPYDIR} "' .. root .. '/examples" "%{cfg.targetdir}/examples"', '{COPYDIR} "' .. root .. '/tutorials" "%{cfg.targetdir}/tutorials"' }
     elseif name == "ScapsLabTests" then
-        files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Workspace.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp", root .. "/src/Batch.cpp", root .. "/src/ResultsIO.cpp", root .. "/src/Domain/Results.cpp", root .. "/src/Domain/Packed.cpp", root .. "/src/Tutorials.cpp" }
+        files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Commands/*.cpp", root .. "/src/Workspace.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp", root .. "/src/Batch.cpp", root .. "/src/ResultsIO.cpp", root .. "/src/Domain/Results.cpp", root .. "/src/Domain/Packed.cpp", root .. "/src/Tutorials.cpp" }
         links { "GoogleTest", "GoogleTestMain" }
         dependson { "ScapsLabHeadless" } -- EmbeddedPythonRunAndHeadlessCsv runs the headless exe
     else
