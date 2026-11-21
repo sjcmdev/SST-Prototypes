@@ -4,6 +4,7 @@
 #include <fstream>
 
 #include "Core/Platform/PlatformPythonRuntime.hpp"
+#include "Core/Platform/ProcessRunner.hpp"
 
 namespace SST::Platform
 {
@@ -37,17 +38,14 @@ namespace SST::Platform
 		return {};
 	}
 
-	static Path findNearbyVenvHome(Path root)
+	Path FindNearbyVenvRoot(Path root)
 	{
 		for (int depth = 0; depth < 8 && !root.Empty(); ++depth)
 		{
-			const Path dotVenvHome = readVenvHome(root / ".venv");
-			if (!dotVenvHome.Empty())
-				return dotVenvHome;
-
-			const Path venvHome = readVenvHome(root / "venv");
-			if (!venvHome.Empty())
-				return venvHome;
+			if (!readVenvHome(root / ".venv").Empty())
+				return root / ".venv";
+			if (!readVenvHome(root / "venv").Empty())
+				return root / "venv";
 
 			const Path parent = root.parent_path();
 			if (parent == root)
@@ -55,6 +53,42 @@ namespace SST::Platform
 			root = parent;
 		}
 
+		return {};
+	}
+
+	Path GetVenvSitePackages(const Path &venvRoot)
+	{
+		if (venvRoot.Empty())
+			return {};
+		const Path windowsSite = venvRoot / "Lib" / "site-packages";
+		if (FileSystem::Exists(windowsSite.Native()))
+			return windowsSite;
+		std::error_code error;
+		for (const auto &entry : std::filesystem::directory_iterator((venvRoot / "lib").Native(), error))
+		{
+			const Path candidate = Path::FromResolved(entry.path()) / "site-packages";
+			if (FileSystem::Exists(candidate.Native()))
+				return candidate;
+		}
+		return {};
+	}
+
+	// Search order: next to the executable (dev builds sit inside the repo, so this finds the repo .venv), then the CWD.
+	static Path findVenvRoot()
+	{
+		if (const auto exe = CurrentExecutablePath())
+		{
+			const Path found = FindNearbyVenvRoot(exe->parent_path());
+			if (!found.Empty())
+				return found;
+		}
+		return FindNearbyVenvRoot(Path::FromResolved(FileSystem::CurrentPath()));
+	}
+
+	static Path exeRelativeAppPythonRoot()
+	{
+		if (const auto exe = CurrentExecutablePath())
+			return exe->parent_path() / "install" / "app" / "python";
 		return {};
 	}
 
@@ -87,6 +121,10 @@ namespace SST::Platform
 
 	Path GetAppPythonRoot()
 	{
+		// A distributed app may be launched from any CWD: prefer the folder next to the executable.
+		const Path exeRoot = exeRelativeAppPythonRoot();
+		if (!exeRoot.Empty() && FileSystem::Exists(exeRoot.Native()))
+			return exeRoot;
 		return Path("install") / "app" / "python";
 	}
 
@@ -122,7 +160,14 @@ namespace SST::Platform
 
 	Path ResolveEmbeddedPythonHome()
 	{
-		const Path venvHome = findNearbyVenvHome(Path::FromResolved(FileSystem::CurrentPath()));
+		// A runtime bundled with the app always wins over a development venv.
+		const Path exeRoot = exeRelativeAppPythonRoot();
+		if (!exeRoot.Empty() && FileSystem::Exists((exeRoot / "windows").Native()))
+			return exeRoot / "windows";
+		if (!exeRoot.Empty() && FileSystem::Exists(exeRoot.Native()))
+			return exeRoot;
+
+		const Path venvHome = readVenvHome(findVenvRoot());
 		if (!venvHome.Empty() && FileSystem::Exists(venvHome.Native()))
 			return venvHome;
 
@@ -135,6 +180,14 @@ namespace SST::Platform
 			return appRoot;
 
 		return {};
+	}
+
+	Path ResolveEmbeddedPythonSitePackages()
+	{
+		const Path exeRoot = exeRelativeAppPythonRoot();
+		if (!exeRoot.Empty() && FileSystem::Exists(exeRoot.Native()))
+			return {}; // bundled runtime carries its own Lib/site-packages under PYTHONHOME
+		return GetVenvSitePackages(findVenvRoot());
 	}
 
 	void SetPythonHomeEnvironment(const Path &pythonHome)

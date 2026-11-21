@@ -2,6 +2,7 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include "Core/Platform/PlatformPythonRuntime.hpp"
 #include <scaps_core/api.hpp>
 #include <scaps_core/grading.hpp>
 #include <sst/plotlab/Engine.hpp>
@@ -976,4 +977,15 @@ TEST(ScapsLab,InPlaceDeviceOpsUndoAndNoThrowawayWorkflows) {
     EXPECT_EQ(w.project.devices.size(),2u);
     EXPECT_EQ(Workflow::constructed.load(),built); // no throwaway Workflow (and so no JobSystem) on new/load/ops
     std::filesystem::remove(file);
+}
+
+TEST(CorePythonRuntime,VenvSitePackagesFoundFromNestedDir) {
+    const auto root=Temp("sst_pyvenv_test"); std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root/".venv"/"Lib"/"site-packages"); std::filesystem::create_directories(root/"a"/"b");
+    std::ofstream(root/".venv"/"pyvenv.cfg")<<"home = C:\base\python\nversion_info = 3.13.2\n";
+    const auto venv=Platform::FindNearbyVenvRoot(Path::FromResolved(root/"a"/"b"));
+    ASSERT_FALSE(venv.Empty()); EXPECT_EQ(venv.Native(),root/".venv");
+    EXPECT_EQ(Platform::GetVenvSitePackages(venv).Native(),root/".venv"/"Lib"/"site-packages");
+    EXPECT_TRUE(Platform::GetVenvSitePackages(Path{}).Empty());
+    std::filesystem::remove_all(root);
 }

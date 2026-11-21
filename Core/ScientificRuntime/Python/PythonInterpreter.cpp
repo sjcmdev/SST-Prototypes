@@ -48,6 +48,18 @@ namespace SST
 		if (!Py_IsInitialized())
 			Py_InitializeEx(0);
 
+		if (Py_IsInitialized() && !g_ReleasedMainThreadState)
+		{
+			const Path sitePackages = Platform::ResolveEmbeddedPythonSitePackages();
+			if (!sitePackages.Empty())
+			{
+				std::string dir = sitePackages.Utf8();
+				std::replace(dir.begin(), dir.end(), '\\', '/');
+				PyRun_SimpleString(("import site; site.addsitedir(r'" + dir + "')").c_str());
+				DS_LOG_INFO("PythonInterpreter added venv site-packages {}", dir);
+			}
+		}
+
 		if (!Py_IsInitialized())
 		{
 			return MakePythonUnavailableError(
