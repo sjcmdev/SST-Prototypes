@@ -897,7 +897,7 @@ void Workflow::HistoryOp(const Json &request) {
     }
     {
         auto deltas=Undo::Compare(before,*this,op=="history_clear");before.clear(); // run deltas by run_id; the shared "before" history is released here
-        if(!deltas.Empty() && projectUndo.PushExecuted(Undo::History(*this,op=="history_clear"?"Clear history":op=="history_select"?"Select run":"Update run",std::move(deltas)))) preferProjectUndo=true;
+        if(op!="history_select" && !deltas.Empty() && projectUndo.PushExecuted(Undo::History(*this,op=="history_clear"?"Clear history":"Update run",std::move(deltas)))) preferProjectUndo=true; // selecting a run is navigation, not an undoable edit (as before S9)
     }
     projectDirty=true;RefreshDirty();status="Completed: "+op;
     for(auto *dp:targets) {Emit(HistoryChanged(dp->id));Emit(SelectionChanged(dp->id));}

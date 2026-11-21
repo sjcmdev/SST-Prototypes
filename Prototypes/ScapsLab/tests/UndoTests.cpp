@@ -239,13 +239,14 @@ TEST(ScapsLabUndo, RemovedDeviceComesBackWithItsOwnUndoStack) {
     ASSERT_TRUE(Ok(Go(w, {{"operation", "device_remove"}, {"device_id", second}})));ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));
     ASSERT_EQ(w.project.devices.size(), 2u);EXPECT_EQ(w.Device(second).undo.GetUndoDepth(), 2u);EXPECT_EQ(w.Device(second).document.at("temperature_K"), 312.5);
 }
-TEST(ScapsLabUndo, HistorySelectUpdateClearAndRetentionTrimAreUndoableWithExactRestore) {
+TEST(ScapsLabUndo, HistoryUpdateClearAndRetentionTrimAreUndoableSelectIsNot) {
     Workflow w(CreateRef<JobSystem>(nullptr, 1));Fast(w);
     auto ui = w.project.ui;ui["history_retention"] = 10;ASSERT_TRUE(Ok(Go(w, {{"operation", "project_edit"}, {"ui", ui}})));
     for(int i = 0; i < 4; ++i) {ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", 300.5 + i}}}})));ASSERT_TRUE(Ok(Go(w, {{"operation", "run"}})));}
     ASSERT_EQ(w.Current().history.size(), 4u);
     const auto first = w.Current().history.front().at("run_id");const auto second = w.Current().history[1].at("run_id");
-    ExpectExact(w, {{"operation", "history_select"}, {"run_id", first}}, "history_select");
+    {const auto depth = w.projectUndo.GetUndoDepth();ASSERT_TRUE(Ok(Go(w, {{"operation", "history_select"}, {"run_id", first}})));
+     EXPECT_EQ(w.projectUndo.GetUndoDepth(), depth) << "selecting a run must not create an undo step";EXPECT_EQ(w.Current().selectedRun, first.get<std::string>());}
     ExpectExact(w, {{"operation", "history_update"}, {"run_id", second}, {"pinned", true}, {"name", "Keep"}, {"visible", false}, {"colour", {.2, .4, .6, 1.}}}, "history_update (pin/hide/rename)");
     ExpectExact(w, {{"operation", "history_clear"}, {"run_ids", Json::array({first})}}, "delete one run");
     ExpectExact(w, {{"operation", "history_clear"}}, "clear unpinned");
