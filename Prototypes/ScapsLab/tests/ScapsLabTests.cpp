@@ -928,6 +928,7 @@ TEST(ScapsLab,EventsAndNotifierSequence) {
     EXPECT_TRUE(w.notifier->GetHistory().empty());
     EXPECT_FALSE(Execute(w,{{"operation","project_load"},{"path",Temp("scapslab-missing.scapslab").string()}}).at("ok").get<bool>());
     ASSERT_EQ(w.notifier->GetHistory().size(),1u);EXPECT_EQ(w.notifier->GetHistory()[0].severity,NotificationSeverity::Error);EXPECT_EQ(w.notifier->GetHistory()[0].title,"Load failed");
+}
 TEST(ScapsLab,TypedResultsRoundtripJson) {
     auto same=[](const Json &typed,const Json &src){EXPECT_EQ(typed.dump(),Json::parse(src.dump()).dump());}; // dump normalises NaN to null
     std::size_t checked=0;
