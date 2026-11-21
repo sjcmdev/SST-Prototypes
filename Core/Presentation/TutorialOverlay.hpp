@@ -20,7 +20,9 @@ private:
     std::map<std::string, Target> targets;
     bool highlighted = false;
     Geometry geometry;
-    bool reposition = false;
+    bool reposition = false, userMoved = false, baseline = false;
+    ImVec2 basePos, baseSize;
+    ImVec4 userRect{-1, -1, 0, 0}; // x, y, w, h of the coach after the user moved/resized it
     std::string placedStep;
     HostedEditorWindow coach{"Tutorial coach###sst-tutorial", true, true};
 };

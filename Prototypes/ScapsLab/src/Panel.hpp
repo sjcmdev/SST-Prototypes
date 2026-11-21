@@ -4,6 +4,7 @@
 namespace SST {class Application;}
 namespace SST::ScapsLab {
 void DrawHistory(Workflow &workflow,bool global=false);
+void OpenLayerWindow(Workflow *w,const std::string &device,const std::string &layer); // adds an extra pinned "Layer: <name>" editor (drawn by the tutorial/UI layer)
 // Basic mode (owner 2026-11-21): only these panels (indices into Panel.cpp names[]) are created/docked/listed in View. The rest stay in code.
 inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,14,16,17,18,22}; // all except C-V, Mott-Schottky, C-f, G-omega-f, History, Illumination, Absorption, Grading
 inline bool &ExperimentalPanels() {static bool on=false;return on;} // View > Show experimental panels; persisted in app settings, applied at start
@@ -15,10 +16,12 @@ public:
     void RenderContent() override;
     bool IsDirty() const override {return view==0 && w->dirty;}
     Workflow *GetWorkflow() const {return w;}
+    void PinLayer(const std::string &device,const std::string &layer) {pinDevice=device;pinLayer=layer;} // extra Layers window: edits this layer only
     void SelectGradingParameter(const std::string &key) {gradingParameter=key;} // what the user does before a Grading step
 private:
     Workflow *w;
     int view;
+    std::string pinDevice,pinLayer;
     bool absoluteLog=false, placed=false, gallery=false;
     char file[1024]{}, csvFile[1024]="scapslab-ac.csv";
     Json acRequest;

@@ -25,7 +25,8 @@ class TutorialUi final : public Layer {
     Ref<WindowWorkspace> windows;
     std::vector<Ref<Panel>> panels;
     std::string focusedStep;
-    HostedWindows tutorialWindows;
+    HostedWindows tutorialWindows,layerWindows;
+    std::map<std::string,Ref<Panel>> layerPanels; // extra pinned Layers editors, keyed by layer ID
     bool about=false,clear=false,reportOpen=true,lessons=false;
     Json savedRecent;
     const Json catalog=TutorialCatalog();
@@ -113,6 +114,24 @@ public:
         }
         operation("tutorial_stop","Tutorials/Stop tutorial","",[&w]{return w.tutorial.Active();});
     }
+    // One extra Layers editor per pinned layer; it follows the layer by ID and disappears with it.
+    void DrawLayerWindows() {
+        layerWindows.BeginFrame();
+        for(auto it=w.pinnedLayers.begin();it!=w.pinnedLayers.end();) {
+            std::string name;
+            for(const auto &d:w.project.devices) if(d->id==it->first && d->document.is_object() && d->document.contains("layers"))
+                for(const auto &l:d->document.at("layers")) if(l.value("scapslab_id",std::string{})==it->second) name=l.value("name",std::string("layer"));
+            if(name.empty()) {layerPanels.erase(it->second);it=w.pinnedLayers.erase(it);continue;} // device or layer deleted
+            auto &panel=layerPanels[it->second];
+            if(!panel) {panel=CreateRef<Panel>(&w,1);panel->PinLayer(it->first,it->second);}
+            bool open=true;
+            ImGui::SetNextWindowSize(ImVec2(420,520),ImGuiCond_FirstUseEver);
+            layerWindows.Render("Layer: "+name+"###sst-layer-"+it->second,open,0,[&]{panel->RenderContent();},true);
+            if(!open) {layerPanels.erase(it->second);it=w.pinnedLayers.erase(it);continue;}
+            ++it;
+        }
+        layerWindows.EndFrame();
+    }
     void OnImGuiRender() override {
         tutorialWindows.BeginFrame();
         if(savedRecent!=w.recent) {
@@ -171,6 +190,7 @@ public:
             }
         }
         tutorialWindows.EndFrame();
+        DrawLayerWindows();
         if(about) {if(ImGui::Begin("About ScapsLab",&about,ImGuiWindowFlags_AlwaysAutoResize))ImGui::TextUnformatted("ScapsLab\nSemiconductor Studio\nDevice simulation with scaps_core");ImGui::End();}
         if(clear) {if(ImGui::Begin("Clear history",&clear))DrawHistory(w,true);ImGui::End();}
     }

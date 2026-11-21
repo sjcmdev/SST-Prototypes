@@ -44,21 +44,26 @@ void Tutorial::Start(Json data, const std::string &newMode, const Predicates &pr
         ValidateCondition(step.at("condition"), predicates);
     }
     definition = std::move(data); mode = newMode; index = resume; state = "running";
-    submitted = false; showMe = false; results = Json::array(); started = std::chrono::steady_clock::now();
+    submitted = false; ResetShowMe(); results = Json::array(); started = std::chrono::steady_clock::now();
     preds = predicates; entryMet = Check(definition.at("steps").at(index).at("condition"), predicates);
+}
+double Tutorial::ShowMeAnim() const {
+    if (phase != 1) return -1;
+    const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - phaseStart).count() / kAnimS;
+    return t >= 1 ? -1 : t;
 }
 const Tutorial::Json *Tutorial::Step() const { return Active() ? &definition.at("steps").at(index) : nullptr; }
 void Tutorial::Stop() { if (Active()) state = "stopped"; }
 void Tutorial::Back() {
     if (!CanGoBack()) return;
     --index; if (results.size() > index) results.erase(results.begin() + index, results.end());
-    submitted = false; showMe = false; entryMet = Check(definition.at("steps").at(index).at("condition"), preds);
+    submitted = false; ResetShowMe(); entryMet = Check(definition.at("steps").at(index).at("condition"), preds);
 }
 void Tutorial::Skip() {
     if (!Active() || mode != "learn") return;
     results.push_back({{"step_id", definition.at("steps")[index].at("id")}, {"status", "SKIP"}, {"error", nullptr}});
     if (++index == definition.at("steps").size()) state = "passed";
-    submitted = false; showMe = false; entryMet = state == "running" && Check(definition.at("steps").at(index).at("condition"), preds);
+    submitted = false; ResetShowMe(); entryMet = state == "running" && Check(definition.at("steps").at(index).at("condition"), preds);
 }
 void Tutorial::FinishStep(bool pass, const std::string &code, const std::string &message) {
     results.push_back({{"step_id", definition.at("steps")[index].at("id")}, {"status", pass ? "PASS" : "FAIL"},
@@ -69,7 +74,7 @@ void Tutorial::FinishStep(bool pass, const std::string &code, const std::string 
         state = "failed"; return;
     }
     if (++index == definition.at("steps").size()) state = "passed";
-    submitted = false; showMe = false; started = std::chrono::steady_clock::now();
+    submitted = false; ResetShowMe(); started = std::chrono::steady_clock::now();
     entryMet = state == "running" && Check(definition.at("steps").at(index).at("condition"), preds);
 }
 void Tutorial::Tick(const Predicates &predicates, const std::function<Json(const Json &)> &execute, bool busy, const Json &response) {
@@ -78,7 +83,15 @@ void Tutorial::Tick(const Predicates &predicates, const std::function<Json(const
         const auto &step = *Step();
         if (mode == "learn") {
             if (busy) return;
-            if (showMe) { showMe = false; (void)execute(step.at("command")); return; }
+            if (phase == 1) {
+                if (ShowMeAnim() >= 0) return;
+                showMe = false; (void)execute(step.at("command")); phase = 2; return;
+            }
+            if (phase == 2) { phase = 3; phaseStart = std::chrono::steady_clock::now(); return; }
+            if (phase == 3) {
+                if (std::chrono::duration<double>(std::chrono::steady_clock::now() - phaseStart).count() < kHoldS) return;
+                phase = 0; shownMe = entryMet = true; return; // done: the user presses Next
+            }
             // A condition that already held when the step began needs the user's Next; it never auto-advances.
             if (!Check(step.at("condition"), predicates)) entryMet = false;
             else if (!entryMet) FinishStep(true);
