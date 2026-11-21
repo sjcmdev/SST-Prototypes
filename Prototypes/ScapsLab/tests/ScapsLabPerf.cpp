@@ -5,6 +5,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <thread>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
 #include <scaps_core/api.hpp>
 #include <scaps_core/batch.hpp>
 #include <scaps_core/device_project_def.hpp>
@@ -50,6 +54,20 @@ TEST(PerfProbe,All) {
         const auto name="iv "+e.path().stem().string();Print(name.c_str(),Timed(x,{{"operation","run"}}));
     }
     std::filesystem::remove(recovery);
+}
+
+// Nested parallelism probe (S5): 3-member batch, C-V 50 points, QE 101 points; prints wall time and process CPU time.
+TEST(PerfProbe,Nested) {
+    if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
+    Workflow w(CreateRef<JobSystem>(nullptr,std::max(2u,std::thread::hardware_concurrency())));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    auto cpuMs=[]{FILETIME c,e,k,u;GetProcessTimes(GetCurrentProcess(),&c,&e,&k,&u);return (double(((ULONGLONG)k.dwHighDateTime<<32)|k.dwLowDateTime)+double(((ULONGLONG)u.dwHighDateTime<<32)|u.dwLowDateTime))/1e4;};
+    auto run=[&](const char *name,const Json &r){const double c0=cpuMs();const auto t=Timed(w,r);std::printf("PERF nested %-18s wall %9.1f ms | CPU %9.1f ms\n",name,t.wall,cpuMs()-c0);std::fflush(stdout);};
+    for(int rep=0;rep<2;++rep) {
+        auto spec=BatchDefaults();spec["axes"][0]["count"]=3;
+        run("batch 3 members",{{"operation","run_batch"},{"spec",spec}});
+        run("cv 50 points",{{"operation","cv"},{"temperature_K",300},{"start_V",0},{"stop_V",0.49},{"step_V",0.01},{"frequency_Hz",1e6}});
+        run("qe 101 points",{{"operation","qe"},{"start_nm",350.},{"stop_nm",1100.},{"points",101}});
+    }
 }
 
 // The single-continuation I-V (illuminated / Rs / Rsh) must equal the old per-point prefix replay exactly.

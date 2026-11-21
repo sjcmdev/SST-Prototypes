@@ -9,6 +9,7 @@
 #include <sstream>
 #include <atomic>
 #include <thread>
+#include "Core/JobSystem/ParallelFor.hpp"
 #include <mutex>
 #include <exception>
 #include <iomanip>
@@ -134,24 +135,15 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
         // Members are independent: solve them on a small thread pool, then merge rows in order (progress/cancel via the main thread).
         std::vector<Json> solved(points.size());std::vector<char> ready(points.size(),0);
         auto wanted=[&](std::size_t i){return !(op=="retry_batch" && o.output["rows"][i].at("id")!=o.request.at("member_id"));};
-        std::atomic<std::size_t> next{0},finished{0};std::atomic<bool> stop{false};std::exception_ptr failure;std::mutex failureLock;
-        auto work=[&]{
-            for(std::size_t i;(i=next.fetch_add(1))<points.size();) {
-                if(!wanted(i)) {++finished;continue;}
-                if(stop) {++finished;continue;}
-                try {auto single=spec;for(auto &axis:single["axes"]) {axis["values"]=Json::array({points[i].at(axis.at("path").get<std::string>())});axis.erase("count");axis.erase("start");axis.erase("stop");}
-                    solved[i]=Json::parse(scaps_core::run_batch_json(o.document.dump(),single.dump())).at("rows")[0];ready[i]=1;}
-                catch(...) {std::lock_guard g(failureLock);if(!failure)failure=std::current_exception();stop=true;}
-                ++finished;
+        std::atomic<std::size_t> finished{0};
+        // Core ParallelFor: caller + child jobs on the JobSystem (no raw threads); cancel skips remaining members -> Cancelled rows.
+        ParallelFor(ctx,points.size(),[&](std::size_t i){
+            if(wanted(i)) {
+                auto single=spec;for(auto &axis:single["axes"]) {axis["values"]=Json::array({points[i].at(axis.at("path").get<std::string>())});axis.erase("count");axis.erase("start");axis.erase("stop");}
+                solved[i]=Json::parse(scaps_core::run_batch_json(o.document.dump(),single.dump())).at("rows")[0];ready[i]=1;
             }
-        };
-        {
-            std::vector<std::thread> pool;const auto threads=std::min<std::size_t>(points.size(),std::max(1u,std::thread::hardware_concurrency()));
-            for(std::size_t t=0;t<threads;++t) pool.emplace_back(work);
-            while(finished<points.size()) {if(ctx.IsCancellationRequested())stop=true;ctx.SetStage("Members "+std::to_string(finished.load())+" / "+std::to_string(points.size()));ctx.SetProgress(float(finished.load()),float(points.size()));std::this_thread::sleep_for(std::chrono::milliseconds(20));}
-            for(auto &t:pool) t.join();
-        }
-        if(failure) std::rethrow_exception(failure);
+            ctx.SetStage("Members "+std::to_string(++finished)+" / "+std::to_string(points.size()));
+        });
         for(std::size_t i=0;i<points.size();++i) {
             if(!wanted(i))continue;
             Json row;
