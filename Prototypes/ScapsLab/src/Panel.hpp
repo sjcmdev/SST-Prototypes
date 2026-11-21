@@ -1,5 +1,7 @@
 ﻿#pragma once
 #include "Workflow.hpp"
+#include <cmath>
+#include <algorithm>
 #include "Core/Presentation/Panels/EditorWindow.hpp"
 namespace SST {class Application;}
 namespace SST::ScapsLab {
@@ -13,6 +15,24 @@ inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,16,17,18,22}; // al
 inline bool &ExperimentalPanels() {static bool on=false;return on;} // View > Show experimental panels; persisted in app settings, applied at start
 inline std::string &UiSettingsPath() {static std::string path;return path;}
 inline bool PanelShown(int view) {if(ExperimentalPanels())return true;for(const int p:kBasicPanels)if(p==view)return true;return false;}
+// Slider maths (UI-free, unit-tested). Position t in [0,1]: linear, or logarithmic (decades) for log sliders.
+struct SliderMap {
+    double lo=0,hi=1;bool log=false;
+    double ToT(double v) const {const double t=log?(std::log(std::max(v,lo))-std::log(lo))/(std::log(hi)-std::log(lo)):(v-lo)/(hi-lo);return std::clamp(t,0.,1.);}
+    double FromT(double t) const {t=std::clamp(t,0.,1.);return log?lo*std::exp(t*(std::log(hi)-std::log(lo))):lo+t*(hi-lo);}
+    double Step(double v,double steps) const {return log?std::clamp(v*std::pow(10.,.01*steps),lo,hi):std::clamp(v+.01*steps*(hi-lo),lo,hi);} // arrow/wheel: 1% of range, log: 0.01 decade
+};
+// One slider drag. Native (ImGui) value until a fine modifier is used; then relative to the cursor and the value at the moment the speed changed (no jump).
+struct SliderDrag {
+    double start=0,anchorT=0,scale=1;float anchorX=0;bool relative=false;
+    void Begin(double value) {start=value;relative=false;scale=1;}
+    double Update(const SliderMap &m,double native,double before,float mouseX,float widthPx,double wantedScale) {
+        if(!relative && wantedScale==1) return native;
+        if(!relative || wantedScale!=scale) {relative=true;scale=wantedScale;anchorT=m.ToT(before);anchorX=mouseX;return before;}
+        return m.FromT(anchorT+double(mouseX-anchorX)*scale/std::max(1.f,widthPx));
+    }
+};
+inline double SliderScale(bool shift,bool ctrl,bool lock) {return shift&&ctrl?.01:(shift||lock)?.1:1.;} // Shift = 10x slower, Ctrl+Shift = 100x, F toggle = Shift
 class Panel final : public EditorWindow {
 public:
     Panel(Workflow *workflow, int view, bool gallery=false);

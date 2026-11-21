@@ -108,6 +108,9 @@ struct DeviceState {
     double biasVoltage_V = 0;
     int selectedLayer = 0, selectedInterface = -1, selectedBias = 0;
     std::chrono::steady_clock::time_point changedAt;
+    std::vector<double> previewV, previewJ; // live slider-drag preview curve (J-V only): never saved, never in history/readouts/exports; cleared by the next exact run
+    bool previewCoarse = false;
+    std::uint64_t previewRev = 0; // d.revision the last preview was started for
 };
 void LimitProfiles(DeviceState &d,int keep=3);
 struct Project {
@@ -158,6 +161,9 @@ public:
     JobId active = 0;
     Ref<Operation> pending;
     std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}
+    // Live recalculation while a slider is held (latest wins, <=10/s, coarse every 4th point when the last full run took >150 ms)
+    bool dragging = false, dragSeen = false, fineLock = false, liveSeen = false; // dragSeen: set by the slider helper each frame, App copies it to dragging
+    double lastFullMs = 0; unsigned previewsStarted = 0; std::chrono::steady_clock::time_point lastLive, runStarted;
     bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false, resetLayout = false, pendingSheet = false;
     int focusView = -1, focusPanel = -1, pendingDefect = -1;
     bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true, lightResponse = false;
