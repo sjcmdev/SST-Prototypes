@@ -1,5 +1,6 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
+#include "Io.hpp"
 #include "Prototypes/PlotLab/src/PlotLabExport.hpp"
 #include <algorithm>
 #include <cmath>
@@ -46,7 +47,7 @@ std::string Csv(const Json &value) {
     std::string out="\"";for(char c:value.get<std::string>()) {out+=c;if(c=='"') out+='"';}return out+'"';
 }
 void Save(const std::string &path,const std::string &text) {
-    std::string error;if(!TextFileIO::Save(Path{path},text,error)) throw std::runtime_error(error);
+    std::string error;if(!Io::Save(path,text,error)) throw std::runtime_error(error);
 }
 }
 Json ExportResults(const Json &workspace,const Json &request) {

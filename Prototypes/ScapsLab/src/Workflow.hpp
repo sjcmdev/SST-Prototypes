@@ -18,8 +18,10 @@
 #include <array>
 #include <deque>
 #include <set>
+#include <functional>
 #include <map>
 #include <scaps_core/device_project.hpp>
+namespace SST {class IOLayer;}
 namespace SST::ScapsLab {
 using Json = nlohmann::json;
 Json ReadProject(const std::string &path);
@@ -288,6 +290,22 @@ public:
     Json batchResponse;
     std::size_t batchTotal = 0, batchCompleted = 0;
     Json recent = Json::array();
+    // S10: disk IO never runs on the UI thread. AsyncIo runs `fn` on a worker (non-empty return = error -> warning toast), `done` runs on the UI thread afterwards.
+    // Settings/recent/recovery/tutorial-progress writes and the project save/load/export jobs all go through Io:: (Io.hpp), which tests watch.
+    void AsyncIo(std::string what,std::function<std::string()> fn,std::function<void()> done={});
+    void PollIo();
+    struct IoTask {JobId id; std::string what; Ref<std::string> error; std::function<void()> done;};
+    std::vector<IoTask> ioTasks;
+    bool IoPending() const {return !ioTasks.empty();}
+    std::string recentPath; Json savedRecent=Json::array(); bool recentLoaded=true, recentWriting=false, recoveryAvailable=false, autosaveFailing=false;
+    void SetRecentPath(const std::string &file);  // loads the recent list + probes the autosave file asynchronously; later changes of `recent` are written asynchronously
+    void PersistRecent();
+    std::string settingsPath; Json settings=Json::object(); bool settingsWriting=false, settingsDirty=false; // app settings (scapslab-ui.json): loaded at start-up, writes are async and never overlap
+    void SaveSettings();
+    void TouchRecent(const std::string &file);
+    void DropRecovery(const std::string &keep);   // removes the autosave file unless `keep` is that file
+    void RegisterIo(IOLayer &io);                 // IOLayer handlers: Core ProjectSaveRequested, ScapsLab Project{Save,Open,Export}Requested
+    Json ioResult;                                // Dispatch result of the last IOLayer handler
     std::vector<SubscriptionHandle> plotSubs; // keep last: unsubscribes before the other members go
     Tutorial tutorial;
     TutorialOverlay tutorialOverlay;

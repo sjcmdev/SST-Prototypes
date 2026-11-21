@@ -1,5 +1,6 @@
 #include "Workflow.hpp"
 #include "Core/IO/TextFileIO.hpp"
+#include "Io.hpp"
 #include <scaps_core/batch.hpp>
 #include <scaps_core/api.hpp>
 #include <sst/plotlab/Engine.hpp>
@@ -29,7 +30,7 @@ Json SelectedTable(const Json &table,const Json &request) {
     if(request.contains("member_id")) {selected["rows"]=Json::array();for(const auto &r:table.at("rows")) if(r.at("id")==request.at("member_id")) selected["rows"].push_back(r);if(selected["rows"].empty())throw std::invalid_argument("Unknown member_id");}
     return selected;
 }
-void Save(const std::string &path,const std::string &text) {std::string error;if(!TextFileIO::Save(Path{path},text,error)) throw std::runtime_error(error);}
+void Save(const std::string &path,const std::string &text) {std::string error;if(!Io::Save(path,text,error)) throw std::runtime_error(error);}
 void Workbook(const Json &table,const std::string &path) {
     namespace pl=sst::plotlab;
     pl::Project project("ScapsLab batch");const auto book=project.reserveId(),sheet=project.reserveId();
