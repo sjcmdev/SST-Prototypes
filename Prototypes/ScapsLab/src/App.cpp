@@ -116,7 +116,7 @@ public:
         if(!recentPath.Empty()) {w.recoveryPath=(recentPath.parent_path()/Path{"scapslab-recovery.scapslab"}).Utf8();if(std::filesystem::exists(w.recoveryPath))w.status="Autosave found: File > Recover autosave";}
     }
     void OnImGuiRender() override {
-        w.interacting=ImGui::IsAnyItemActive();
+        w.interacting=ImGui::IsAnyItemActive();w.dragging=std::exchange(w.dragSeen,false); // dragSeen: a slider was held last frame
         if(std::getenv("SCAPSLAB_PERF")) { // frame-time log: avg/max over 2 s windows
             static double sum=0,mx=0;static int n=0;static auto last=std::chrono::steady_clock::now();
             const double ms=ImGui::GetIO().DeltaTime*1000.;sum+=ms;mx=std::max(mx,ms);++n;
@@ -131,6 +131,7 @@ public:
         if(auto *window=glfwGetCurrentContext()) glfwSetWindowTitle(window,(w.project.name+(w.dirty?" *":"")+" - ScapsLab").c_str());
         if(w.recent!=savedRecent) {std::string error;if(TextFileIO::Save(recentPath,w.recent.dump(2),error))savedRecent=w.recent;else w.status=error;}
         if(!ImGui::GetIO().WantTextInput) {
+            if(ImGui::IsKeyPressed(ImGuiKey_F,false) && !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyAlt) w.fineLock=!w.fineLock; // F = fine slider mode (touchpads)
             for(const auto &[chord,id]:{
                 std::pair{ImGuiMod_Ctrl | ImGuiKey_Z,"scapslab.undo"},std::pair{ImGuiMod_Ctrl | ImGuiKey_Y,"scapslab.redo"},
                 std::pair{ImGuiMod_Ctrl | ImGuiKey_N,"scapslab.file.new"},std::pair{ImGuiMod_Ctrl | ImGuiKey_S,"scapslab.file.save"},

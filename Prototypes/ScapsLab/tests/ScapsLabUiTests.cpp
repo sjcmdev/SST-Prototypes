@@ -329,3 +329,81 @@ TEST(ScapsLab,ProfilePreviewRightClickOpensExportMenu) {
     }
     ImPlot::DestroyContext();ImGui::DestroyContext();
 }
+
+// ---- slslide: live slider drag, fine mode, log sliders, Esc revert, latest-wins previews ----
+TEST(ScapsLab,SliderFineModeScalesRelativeMotionWithoutJumps) {
+    const SliderMap m{0,10,false};SliderDrag d;d.Begin(5);const float width=1000;
+    EXPECT_EQ(SliderScale(false,false,false),1.);EXPECT_EQ(SliderScale(true,false,false),.1);EXPECT_EQ(SliderScale(true,true,false),.01);EXPECT_EQ(SliderScale(false,false,true),.1);
+    EXPECT_EQ(d.Update(m,6.5,5,100,width,1.),6.5)<<"native drag untouched until a modifier is used";
+    // Shift pressed: the cursor-absolute native value (9) is ignored; no jump from the last value (6.5).
+    EXPECT_EQ(d.Update(m,9.,6.5,300,width,.1),6.5);
+    EXPECT_EQ(d.Update(m,9.,6.5,300,width,.1),6.5);
+    const double fine=d.Update(m,0,6.5,400,width,.1);
+    EXPECT_NEAR(fine,6.5+.1,1e-9)<<"100 px at 10x finer = 1/10 of the normal 1.0 per 100 px";
+    // Shift released at the same cursor position: continue from the current value (no jump), then full speed, relative.
+    EXPECT_EQ(d.Update(m,2.,fine,400,width,1.),fine);
+    EXPECT_NEAR(d.Update(m,2.,fine,500,width,1.),fine+100/width*10,1e-9);
+    SliderDrag e;e.Begin(5);(void)e.Update(m,5,5,0,width,.01);EXPECT_NEAR(e.Update(m,5,5,100,width,.01),5+.01,1e-9)<<"Ctrl+Shift: 100x slower";
+    SliderDrag n;n.Begin(5);(void)n.Update(m,5,5,0,width,1.);(void)n.Update(m,5,5,0,width,.1);EXPECT_NEAR(n.Update(m,5,5,100,width,.1),5.1,1e-9)<<"Shift: 10x slower";
+}
+TEST(ScapsLab,LogSliderRoundTripsValueToPositionToValue) {
+    const SliderMap m{1e-30,1e21,true};
+    for(const double v:{1e-30,3.3e-20,1.,2.5e5,1e14,9.99e20,1e21}) EXPECT_NEAR(m.FromT(m.ToT(v))/v,1.,1e-12)<<v;
+    EXPECT_NEAR(m.ToT(1e-30),0,1e-15);EXPECT_NEAR(m.ToT(1e21),1,1e-15);EXPECT_NEAR(m.ToT(1.),30./51.,1e-12);
+    EXPECT_NEAR(m.Step(1e14,1)/1e14,std::pow(10.,.01),1e-12)<<"arrow step = 0.01 decade";EXPECT_NEAR(m.Step(1e14,.1)/1e14,std::pow(10.,.001),1e-12);
+    const SliderMap lin{0,10,false};EXPECT_NEAR(lin.Step(5,1),5.1,1e-12);EXPECT_NEAR(lin.Step(5,.1),5.01,1e-12);EXPECT_EQ(lin.Step(9.99,5),10.);
+}
+TEST(ScapsLab,EscapeDuringSliderDragRestoresTheStartValue) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,900);io.Fonts->AddFontDefault();io.Fonts->Build();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);const auto original=w.Current().document;Panel panel(&w,4);
+    auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(900,800));ImGui::Begin("Esc drag");panel.RenderContent();ImGui::End();ImGui::Render();};
+    frame();frame();const auto id=ImHashStr("##value",0,ImHashStr("T [K]",0,ImGui::FindWindowByName("Esc drag")->GetID("T [K]")));
+    ImVec2 at;bool found=false;for(float y=30;y<500 && !found;y+=2) {io.AddMousePosEvent(450,y);frame();frame();if(GImGui->HoveredId==id) {found=true;at=ImVec2(450,y);}}
+    ASSERT_TRUE(found);
+    io.AddMouseButtonEvent(0,true);frame();io.AddMousePosEvent(at.x-150,at.y);frame();frame();io.AddMousePosEvent(at.x-250,at.y);frame();
+    EXPECT_TRUE(w.dragSeen)<<"a held slider announces itself to the workflow";
+    EXPECT_NE(w.edits.empty()?w.Current().document["temperature_K"].get<double>():w.edits.back().at("document")["temperature_K"].get<double>(),original["temperature_K"].get<double>());
+    io.AddKeyEvent(ImGuiKey_Escape,true);frame();io.AddKeyEvent(ImGuiKey_Escape,false);frame();io.AddMouseButtonEvent(0,false);frame();
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_EQ(w.Current().document["temperature_K"],original["temperature_K"]);EXPECT_EQ(w.Current().document,original);
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}
+namespace {
+Json TinyDevice() {auto d=ReadProject(SCAPSLAB_PROJECT);d["voltage"]={{"start_V",0.0},{"stop_V",0.8},{"step_V",0.1}};return d;}
+void Settle(Workflow &w,int maxMs=60000) {for(int i=0;i<maxMs && (w.Pending() || w.Current().needsRecalculate);++i) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}}
+}
+TEST(ScapsLab,LiveDragLatestWinsStartsFewJobsAndEndsWithTheExactFinalRun) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=TinyDevice();w.autoRecalculate=true;
+    ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
+    const auto baseline=w.Current().history.size();ASSERT_EQ(baseline,1u);
+    w.dragging=true;const auto t0=std::chrono::steady_clock::now();
+    for(int i=0;i<30;++i) {
+        auto doc=w.Current().document;doc["temperature_K"]=300.+i;
+        EXPECT_TRUE(w.Dispatch({{"operation","edit"},{"document",doc},{"gesture_id","drag"}}).at("ok").get<bool>());
+        for(int k=0;k<5;++k) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    }
+    const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
+    EXPECT_LE(w.previewsStarted,unsigned(ms/100)+2)<<"<=10 per second, never queued; ms="<<ms;
+    EXPECT_EQ(w.Current().history.size(),baseline)<<"previews never enter history";
+    auto last=w.edits.empty()?w.Current().document:w.edits.back().at("document");last["temperature_K"]=329.;
+    w.dragging=false;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",last},{"gesture_id","drag"}}).at("ok").get<bool>());
+    Settle(w);
+    EXPECT_EQ(w.Current().result.at("project_snapshot").at("temperature_K").get<double>(),329.)<<"exact run of the final value";
+    EXPECT_TRUE(w.Current().previewV.empty());EXPECT_EQ(w.Current().history.size(),baseline+1);
+    Workflow ref(CreateRef<JobSystem>(nullptr,1));ref.Current().document=w.Current().document;ASSERT_TRUE(ref.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(ref);
+    ASSERT_EQ(w.Current().result.at("points").size(),ref.Current().result.at("points").size());
+    for(std::size_t i=0;i<ref.Current().result.at("points").size();++i) EXPECT_EQ(w.Current().result.at("points")[i].at("J_A_m2"),ref.Current().result.at("points")[i].at("J_A_m2"));
+}
+TEST(ScapsLab,CoarsePreviewIsNeverSavedStoredOrUsedForReadouts) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=TinyDevice();w.autoRecalculate=true;
+    ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
+    const Json resultBefore=*w.Current().result,historyBefore=*w.Current().history;
+    w.lastFullMs=1000;w.dragging=true;auto doc=w.Current().document;doc["temperature_K"]=310.;
+    ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",doc},{"gesture_id","drag"}}).at("ok").get<bool>());
+    for(int i=0;i<20000 && w.Current().previewV.empty();++i) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    auto &d=w.Current();ASSERT_FALSE(d.previewV.empty());
+    EXPECT_TRUE(d.previewCoarse);EXPECT_LT(d.previewV.size(),resultBefore.at("points").size());EXPECT_EQ(d.status,"preview");EXPECT_NE(w.status.find("Preview"),std::string::npos);
+    EXPECT_EQ(*d.result,resultBefore);EXPECT_EQ(*d.history,historyBefore);
+    const auto saved=w.Workspace(true).dump();EXPECT_EQ(saved.find("previewV"),std::string::npos);EXPECT_EQ(saved.find("\"preview\":true"),std::string::npos);
+    w.dragging=false;Settle(w);EXPECT_TRUE(d.previewV.empty());EXPECT_EQ(d.status,"solved");
+}

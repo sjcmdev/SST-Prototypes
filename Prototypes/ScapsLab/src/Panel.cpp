@@ -264,6 +264,17 @@ const Cols &IvCols(const Json &points,bool absolute) {
         }
     },absolute?1.:0.);
 }
+// Live slider-drag preview (DeviceState::previewV/J, never stored): dashed curve + "preview" badge over the I-V plot; call between BeginPlot/EndPlot.
+void PreviewOverlay(const DeviceState &d,bool absolute) {
+    if(d.previewV.empty()) return;
+    std::vector<double> x,y;const std::size_t n=d.previewV.size();
+    auto J=[&](std::size_t i){const double j=d.previewJ[i];return absolute?(j==0?double(NAN):std::abs(j)):j;};
+    if(d.previewCoarse) {for(std::size_t i=0;i+1<n;i+=2) {x.push_back(d.previewV[i]);y.push_back(J(i));x.push_back(d.previewV[i+1]);y.push_back(J(i+1));x.push_back(d.previewV[i+1]);y.push_back(double(NAN));}} // dashes: every other segment
+    else for(std::size_t i=0;i<n;++i) {x.push_back(d.previewV[i]);y.push_back(J(i));}
+    ImPlot::PlotLine("preview##live",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(1.f,.55f,.1f,1.f),ImPlotProp_LineWeight,2.f});
+    const char *text=d.previewCoarse?"PREVIEW (coarse, exact on release)":"PREVIEW (exact on release)";const ImVec2 origin=ImPlot::GetPlotPos(),size=ImGui::CalcTextSize(text);
+    auto *list=ImPlot::GetPlotDrawList();list->AddRectFilled(ImVec2(origin.x+8,origin.y+8),ImVec2(origin.x+20+size.x,origin.y+14+size.y),IM_COL32(255,140,25,230),4.f);list->AddText(ImVec2(origin.x+14,origin.y+11),IM_COL32(0,0,0,255),text);
+}
 const Cols &AcCols(const Json &points,int view) {
     PlotDataScope scope;
     const bool cv=view<8;const char *key=view==7?"inverse_C2_F_minus2":view==9?"G_over_omega_F":"capacitance_F";
@@ -476,26 +487,70 @@ void DrawHistory(Workflow &w,bool global) {
     }
     ImGui::EndDisabled();ImGui::PopID();
 }
+// Slider with live-drag features: relative Shift / Ctrl+Shift / F fine mode, Esc revert, drag tooltip, arrows and Ctrl+wheel steps. Returns true when value changed.
+static bool Slide(const char *id,double &value,const SliderMap &m,const char *format) {
+    static ImGuiID dragId=0;static SliderDrag drag;
+    const double before=value;double v=value;auto &io=ImGui::GetIO();
+    const bool nativeChanged=ImGui::SliderScalar(id,ImGuiDataType_Double,&v,&m.lo,&m.hi,format,m.log?ImGuiSliderFlags_Logarithmic:ImGuiSliderFlags_None);
+    const ImGuiID item=ImGui::GetItemID();const bool typing=ImGui::TempInputIsActive(item),active=ImGui::IsItemActive() && !typing && ImGui::IsMouseDown(0);
+    const bool lock=numericWorkflow && numericWorkflow->fineLock;
+    bool changed=nativeChanged;value=v;    if(active) {
+        if(numericWorkflow) numericWorkflow->dragSeen=true;
+        if(dragId!=item) {dragId=item;drag.Begin(before);}
+        const float width=ImGui::GetItemRectSize().x-ImGui::GetStyle().GrabMinSize;
+        value=drag.Update(m,v,before,io.MousePos.x,width,SliderScale(io.KeyShift,io.KeyCtrl,lock));changed=value!=before;
+        if(ImGui::IsKeyPressed(ImGuiKey_Escape,false)) {value=drag.start;changed=value!=before;ImGui::ClearActiveID();dragId=0;ImGui::SetTooltip("Cancelled");}
+        else {
+            char a[48],b[48];std::snprintf(a,sizeof(a),"%.4g",drag.start);std::snprintf(b,sizeof(b),"%.4g",value);
+            if(m.log) ImGui::SetTooltip("%s -> %s  (x%.3g)%s",a,b,drag.start>0?value/drag.start:0.,drag.relative?"  [fine]":"");
+            else ImGui::SetTooltip("%s -> %s  (%+.3g)%s",a,b,value-drag.start,drag.relative?"  [fine]":"");
+        }
+    } else {
+        if(dragId==item) dragId=0;
+        if(!typing && (ImGui::IsItemHovered() || ImGui::IsItemFocused())) {
+            const double fine=io.KeyShift?.1:1.;double steps=0;
+            if(ImGui::IsKeyPressed(ImGuiKey_RightArrow,true)) steps+=1;
+            if(ImGui::IsKeyPressed(ImGuiKey_LeftArrow,true)) steps-=1;
+            if(ImGui::IsItemHovered() && io.KeyCtrl && io.MouseWheel!=0) steps+=io.MouseWheel;
+            if(steps!=0) {value=m.Step(value,steps*fine);changed=value!=before;}
+        }
+    }
+    return changed;
+}
+// Log slider range in display units (key-specific so a decade is a useful number of pixels).
+static SliderMap LogMap(const std::string &k) {
+    if(k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3") return {1,1e24,true};
+    if(k=="Nt_m3") return {1,1e28,true};
+    if(k=="Nt_m2" || k=="peak_density_m2_eV") return {1,1e22,true};
+    if(k.find("sigma_")!=std::string::npos) return {1e-30,1e-10,true};
+    if(k=="Sn_m_s" || k=="Sp_m_s") return {1e-6,1e8,true};
+    if(k=="series_ohm_m2" || k=="area_m2") return {1e-6,1e4,true};
+    if(k=="shunt_ohm_m2") return {1e-2,1e10,true};
+    if(k=="thickness_m") return {1e-3,1e3,true};
+    if(k.find("vth_")==0) return {1e2,1e8,true};
+    if(k=="frequency_Hz" || k=="start_Hz" || k=="stop_Hz") return {1e-2,1e12,true};
+    if(k=="residual_tolerance" || k=="adaptive_target_relative_J_error") return {1e-18,1,true};
+    if(k=="uniform_generation_m3_s") return {1e-30,1e36,true};
+    return {1e-30,1e21,true};
+}
 static bool Number(const char *label,Json &j,const char *key,double scale=1) {
     const auto &n=j.at(key); if(!n.is_number()) return false;
     const std::string k=key; double value=n.get<double>()*scale;
     const bool logarithmic=k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3" || k=="Sn_m_s" || k=="Sp_m_s" ||
         k=="residual_tolerance" || k=="adaptive_target_relative_J_error" || k=="frequency_Hz" || k=="start_Hz" || k=="stop_Hz" || k=="dose_m2" || k=="surface_density_m3" || k=="uniform_generation_m3_s" || k.find("vth_")==0;
     BeginRow(label);ImGui::BeginGroup(); bool changed=false;
-    if(logarithmic || k=="Nt_m3" || k=="Nt_m2" || k=="peak_density_m2_eV" || k.find("sigma_")!=std::string::npos || k=="area_m2" || k=="series_ohm_m2" || k=="shunt_ohm_m2" || k=="probe_photon_flux_m2_s" || k=="probe_power_W_m2" || k.find("_m1")!=std::string::npos || k=="intensity_multiplier") {
+    if(logarithmic || k=="Nt_m3" || k=="Nt_m2" || k=="peak_density_m2_eV" || k.find("sigma_")!=std::string::npos || k=="area_m2" || k=="series_ohm_m2" || k=="shunt_ohm_m2" || k=="probe_photon_flux_m2_s" || k=="probe_power_W_m2" || k.find("_m1")!=std::string::npos || k=="intensity_multiplier" || k=="thickness_m") {
         const bool density=k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3";
         const bool zeroAllowed=k=="Nd_m3" || k=="Na_m3" || k=="Sn_m_s" || k=="Sp_m_s" || k=="series_ohm_m2" || k=="Nt_m3" || k=="Nt_m2" || k=="peak_density_m2_eV" || k.find("sigma_")!=std::string::npos || k.find("_m1")!=std::string::npos || k=="intensity_multiplier";
         bool zero=value==0;
         if(zeroAllowed) {ImGui::TextUnformatted("Zero");ImGui::SameLine();changed=ImGui::Checkbox("##zero",&zero);TrackGesture();ImGui::SameLine();}
-        int exponent=value>0?int(std::floor(std::log10(value))):(density?14:0);
-        float mantissa=value>0?float(value/std::pow(10.,exponent)):1.f;
+        double v=value>0?value:(density?1e14:1.);
         ImGui::BeginDisabled(zero);
-        ImGui::SetNextItemWidth(std::max(40.f,(ImGui::GetContentRegionAvail().x-ImGui::GetStyle().ItemSpacing.x)*.64f));
-        changed|=ImGui::SliderFloat("##mantissa",&mantissa,1.f,9.99f,"mantissa %.2f");TrackGesture();if(ImGui::IsItemHovered()) ImGui::SetTooltip("Mantissa: Ctrl+click for exact typing.");ImGui::SameLine();
-        ImGui::SetNextItemWidth(-1);changed|=ImGui::SliderInt("##exponent",&exponent,density?0:-30,density?23:k=="uniform_generation_m3_s"?35:20,"10^%d");TrackGesture();
+        ImGui::SetNextItemWidth(-1);
+        changed|=Slide("##value",v,LogMap(k),zero?"0":"%.3g");TrackGesture();
         ImGui::EndDisabled();
         if(zero) ImGui::TextWrapped("Clear Zero to edit.");
-        if(changed) value=zero?0:double(mantissa)*std::pow(10.,exponent);
+        if(changed) value=zero?0:v;
     } else if(k=="points_per_layer" || k=="points" || k=="max_newton_iterations") {
         int v=int(value);const int minimum=k=="points_per_layer"?3:k=="points"?2:1;
         ImGui::SetNextItemWidth(-1);
@@ -517,9 +572,9 @@ static bool Number(const char *label,Json &j,const char *key,double scale=1) {
         else if(k=="gaussian_width" || k=="tail_width") {lo=1;hi=20;}
         else {lo=-5;hi=5;}
         ImGui::SetNextItemWidth(-1);
-        changed=ImGui::SliderScalar("##value",ImGuiDataType_Double,&value,&lo,&hi,"%.4g");TrackGesture();
+        changed=Slide("##value",value,{lo,hi,false},"%.4g");TrackGesture();
     }
-    if(ImGui::IsItemHovered()) ImGui::SetTooltip("Ctrl+click to enter an exact value. Values are validated before applying.");
+    if(ImGui::IsItemHovered() && !ImGui::IsItemActive()) ImGui::SetTooltip("Ctrl+click: exact value. Shift: 10x finer, Ctrl+Shift: 100x, F: fine toggle. Esc while dragging: cancel. Arrows / Ctrl+wheel: step (Shift: finer).");
     ImGui::EndGroup();SweepMenu(j,key,scale,label);EndRow();
     if(changed) j[key]=(k=="points_per_layer" || k=="points" || k=="max_newton_iterations")?Json(std::int64_t(value/scale)):Json(value/scale);
     return changed;
@@ -538,6 +593,7 @@ void Panel::RenderContent() {
     struct ResetNumeric {~ResetNumeric(){numericDocument=nullptr;numericWorkflow=nullptr;}} resetNumeric;
     if(!placed && !gallery) {auto s=GetState();const auto *vp=ImGui::GetMainViewport();s.x+=vp->Pos.x;s.y+=vp->Pos.y;ApplyState(s);placed=true;}
     ImGui::TextDisabled("SCAPSLAB / %s",names[view]);
+    if(w->fineLock || ImGui::GetIO().KeyShift) {ImGui::SameLine();ImGui::TextColored(ImVec4(1.f,.75f,.2f,1.f),"[FINE%s]",w->fineLock?" lock, F":"");}
     {static const std::map<int,const char*> subtitles={{5,"Spatial profiles (bands, carriers) vs. position x at the selected bias point"},{6,"Capacitance vs. DC bias at fixed frequency"},{7,"1/C^2 vs. DC bias (built-in potential, doping)"},{8,"Capacitance and G/omega vs. frequency at fixed bias"},{9,"G/omega vs. frequency at fixed bias"},{10,"J-V curve of the checked devices; marker = selected bias point"},{22,"Generation and recombination rates vs. position x at the selected bias point"}};
      if(const auto it=subtitles.find(view);it!=subtitles.end()) { // compact header: help text is a tooltip on (?), status stays on the same grey line
          ImGui::SameLine();ImGui::TextDisabled("(?)");if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",it->second);
@@ -1199,7 +1255,7 @@ void Panel::Results() {
             ImPlot::SetupAxes("Voltage [V]",absoluteLog?"|J| [A/m^2]":"Signed J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
             if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
             HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",absoluteLog);if(!Archived(w->Current(),result,"iv"))ImPlot::PlotLine("I-V",v.data(),j.data(),int(v.size()),LiveStyle(w->Current(),2.f));
-            ImPlot::PlotScatter("Selected bias",&v[bias],&j[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});
+            PreviewOverlay(w->Current(),absoluteLog);ImPlot::PlotScatter("Selected bias",&v[bias],&j[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});
             double selectedVoltage=v[bias];
             if(ImPlot::DragLineX(1,&selectedVoltage,ImVec4(1,.7f,.3f,1))) {
                 bias=int(std::min_element(v.begin(),v.end(),[&](double a,double b){return std::abs(a-selectedVoltage)<std::abs(b-selectedVoltage);})-v.begin());
@@ -1601,6 +1657,7 @@ void Panel::Compare() {
             const float c[4]={d->colour[0].get<float>(),d->colour[1].get<float>(),d->colour[2].get<float>(),d->colour[3].get<float>()};
             static std::string label;label=d->name;label+="##";label+=d->id; // reused buffer: no per-frame allocation
             ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],SelectedOffLive(*d,"iv")?.3f:c[3]),ImPlotProp_LineWeight,2.5f});
+            if(d->id==w->project.active_device) PreviewOverlay(*d,absoluteLog);
             if(d->id==w->project.active_device && !x.empty()) {
                 int bias=std::clamp(d->selectedBias,0,int(x.size())-1);double voltage=x[bias];
                 ImPlot::PlotScatter("Selected bias",&x[bias],&y[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});

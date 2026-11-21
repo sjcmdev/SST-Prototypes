@@ -138,7 +138,7 @@ public:
             const auto gesture=edit.value("gesture_id",std::string{});
             if(!gesture.empty() && !w.edits.empty() && w.edits.back().value("gesture_id",std::string{})==gesture) w.edits.back()=std::move(edit);
             else w.edits.push_back(std::move(edit));
-            if(w.active && (w.pending->request.at("operation")=="run" || w.pending->request.at("operation")=="band" || w.pending->request.at("operation")=="cv" || w.pending->request.at("operation")=="cf" || w.pending->request.at("operation")=="qe")) (void)w.jobs->RequestCancel(w.active);
+            if(w.active && (w.pending->request.at("operation")=="run" || w.pending->request.at("operation")=="band" || w.pending->request.at("operation")=="cv" || w.pending->request.at("operation")=="cf" || w.pending->request.at("operation")=="qe") && !(w.dragging && w.pending->request.value("preview",false))) (void)w.jobs->RequestCancel(w.active); // a running drag preview finishes; the newest edit supersedes it afterwards (latest wins)
             w.Current().changedAt=std::chrono::steady_clock::now(); return {};
         }
         if (w.Busy()) return StructuredError{ErrorCategory::Validation,Severity::Error,"Busy","A job is still active","Wait or cancel","ScapsLab","busy"};
@@ -151,7 +151,7 @@ public:
         }
         if(op=="device_add" && r->contains("path")) {auto read=*r;read["operation"]="device_read";w.StartOperation(read,w.project.active_device);return {};}
         if(op.starts_with("device_") || op=="project_edit" || op=="action_settings") {w.DeviceOp(*r);return {};}
-        if(op=="run") {w.Current().needsRecalculate=false;w.Current().needsBand=false;}
+        if(op=="run" && !r->value("preview",false)) {w.Current().needsRecalculate=false;w.Current().needsBand=false;}
         if(op=="band") w.Current().needsBand=false;
         if(op=="run_all") {
             w.batchTotal=0;w.batchCompleted=0;w.batchResponse=Json::array();
@@ -775,6 +775,8 @@ void Operation::Execute(JobContext &ctx) {
         for(auto &v:volts) {if(!std::isfinite(v)) throw std::invalid_argument("Invalid voltage_V");v=-v;}
         ctx.SetStage("Preparing mesh (cancel checked after preparation)");
         const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);
+        const bool preview=op=="run" && request.value("preview",false); // live slider preview: same mesh, every stride-th bias point, minimal output
+        if(preview) {const std::size_t stride=std::size_t(std::max(1,request.value("stride",1)));std::vector<double> sub;for(std::size_t i=0;i<volts.size();++i) if(i%stride==0 || i+1==volts.size()) sub.push_back(volts[i]);volts=std::move(sub);}
         ctx.ThrowIfCancellationRequested(); ctx.SetStage("Equilibrium");
         IVSession session(device,mesh,p.temperature_K,p.solver,pc); // equilibrium + continuation (bias predictor); bit-identical to solve_iv/scaps_headless
         output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
@@ -782,6 +784,11 @@ void Operation::Execute(JobContext &ctx) {
             ctx.ThrowIfCancellationRequested(); ctx.SetStage("I-V point "+std::to_string(i+1)+" / "+std::to_string(volts.size()));
             IVPoint pt=session.next(volts[i]);
             const auto &s=pt.state;
+            if(preview) {
+                const bool ext=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
+                const double tj=pt.status!=SolverStatus::Converged ? NAN : ext ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
+                output["points"].push_back({{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(tj)?Json(tj):Json(nullptr)}});ctx.SetProgress(float(i+1),float(volts.size()));continue;
+            }
             const auto curves=DefectCurves(document,p,s);
             auto gr=GenerationRecombination(document,p,device,s);
             const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
@@ -803,6 +810,7 @@ void Operation::Execute(JobContext &ctx) {
                 {"internal_voltage_V",-s.applied_voltage_V},{"terminal_voltage_V",external?-pt.voltage_V:-volts[i]},{"trap_occupation",s.trap_occupation},{"interface_occupation",s.interface_occupation},{"x_m",s.x_m.empty()?mesh.x_m:s.x_m},{"Ec_eV",s.Ec_eV},{"Ev_eV",s.Ev_eV},{"EFn_eV",s.EFn_eV},{"EFp_eV",s.EFp_eV},{"n_m3",s.n_m3},{"p_m3",s.p_m3}});
             ctx.SetProgress(float(i+1),float(volts.size()));
         }
+        if(preview) {ctx.ThrowIfCancellationRequested();output["preview"]=true;output["valid"]=true;return;}
         const auto generation=generation_integrals_m2s(device,mesh,pc);std::vector<double> density;
         for(std::size_t i=0;i<generation.size();++i) {
             const double width=(i?std::max(0.,mesh.x_m[i]-mesh.x_m[i-1])*.5:0)+(i+1<mesh.x_m.size()?std::max(0.,mesh.x_m[i+1]-mesh.x_m[i])*.5:0);
@@ -1092,8 +1100,9 @@ void Workflow::StartOperation(const Json &r,const std::string &id) {
     if(op=="export_results") pending->workspace=Workspace(); // the only job that still needs the whole workspace
 
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status="running";
-    if(op=="run") {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
-    active=jobs->Submit(pending);if(!r.value("autosave",false)){status="Running: "+d.name;response=Json();}
+    const bool preview=op=="run" && r.value("preview",false);if(op=="run") runStarted=std::chrono::steady_clock::now();
+    if(op=="run" && !preview) {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
+    active=jobs->Submit(pending);if(!r.value("autosave",false)){status=preview?(r.value("stride",1)>1?"Preview (coarse, every "+std::to_string(r.value("stride",1))+". point): "+d.name:"Preview: "+d.name):"Running: "+d.name;response=Json();}
 }
 void Workflow::StartSave(const Json &r) {
     const bool autosave=r.value("autosave",false);
@@ -1180,14 +1189,20 @@ void Workflow::OnUpdate(float) {
 }
 void Workflow::UpdateOperation() {
     UpdateSave();
+    if(active && pending && !dragging && pending->request.value("preview",false)) (void)jobs->RequestCancel(active); // slider released: drop the preview, the exact run follows
     if(!active) {
         if(!edits.empty()) {auto edit=std::move(edits.front());edits.pop_front();StartOperation(edit,edit.value("device_id",project.active_device));}
         else if(!queuedProject.empty()) {auto request=std::move(queuedProject);queuedProject=Json();StartOperation(request,project.active_device);}
         else if(!runQueue.empty()) {const auto id=runQueue.front();runQueue.pop_front();StartOperation({{"operation","run"},{"batch",true}},id);}
         else {
             auto &d=Current();
-            if(autoRecalculate && d.needsRecalculate && !interacting && std::chrono::steady_clock::now()-d.changedAt>=std::chrono::milliseconds(250)) {
-                d.needsRecalculate=false;(void)Dispatch({{"operation","run"}});
+            const auto now=std::chrono::steady_clock::now();
+            if(autoRecalculate && dragging && d.needsRecalculate && d.revision!=d.previewRev && now-lastLive>=std::chrono::milliseconds(100)) { // live preview: previous run finished (never queued), <=10/s
+                const double estimate=lastFullMs>0?lastFullMs:d.result.value("compute_time_ms",0.);
+                lastLive=now;d.previewRev=d.revision;liveSeen=true;++previewsStarted;
+                (void)Dispatch({{"operation","run"},{"preview",true},{"stride",estimate>150?4:1}});
+            } else if(autoRecalculate && d.needsRecalculate && !interacting && !dragging && now-d.changedAt>=std::chrono::milliseconds(liveSeen?100:250)) {
+                d.needsRecalculate=false;liveSeen=false;(void)Dispatch({{"operation","run"}});
             } else if(autoRecalculateBand && d.needsBand && !interacting && std::chrono::steady_clock::now()-d.changedAt>=std::chrono::milliseconds(250)) {
                 d.needsBand=false;(void)Dispatch({{"operation","band"},{"voltage_V",d.biasVoltage_V}});
             }
@@ -1213,6 +1228,20 @@ void Workflow::UpdateOperation() {
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
                 LimitProfiles(d);Emit(HistoryChanged(d.id));Emit(SelectionChanged(d.id));
             }
+    if(op=="run") { // timing for the live-preview policy; an exact run retires the preview curve
+        const bool isPreview=pending->request.value("preview",false);const int stride=std::max(1,pending->request.value("stride",1));
+        const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-runStarted).count();
+        if(snapshot->status==JobStatus::Completed) lastFullMs=isPreview?ms*stride:ms;
+        if(!isPreview) {d.previewV.clear();d.previewJ.clear();}
+        else { // preview: curve only, no result/history/save/events
+            if(snapshot->status==JobStatus::Completed && outValid) {
+                d.previewV.clear();d.previewJ.clear();d.previewCoarse=stride>1;
+                for(const auto &pt:pending->output.at("points")) {d.previewV.push_back(pt.at("voltage_V"));d.previewJ.push_back(pt.at("J_A_m2").is_number()?pt.at("J_A_m2").get<double>():NAN);}
+                d.status="preview";status=stride>1?"Preview (coarse, every "+std::to_string(stride)+". point); exact run on release":"Preview; exact run on release";
+            } else {d.status=d.result.empty()?"no results":"previous";status="Preview dropped";}
+            response=Json();active=0;pending.reset();return;
+        }
+    }
     if(snapshot->status==JobStatus::Completed) {
         if(op=="project_new" || op=="project_load" || op=="load") {
             SetWorkspace(pending->workspace,true,&pending->loaded);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
