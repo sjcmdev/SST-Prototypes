@@ -242,7 +242,7 @@ public:
     void StartOperation(const Json &request, const std::string &deviceId);
     void HistoryOp(const Json &request); // history_select/update/clear: in place on the UI thread (no workspace copy, not undoable)
     Json response;
-    std::string status = "Ready", path, pendingDevice;
+    std::string status = "Ready", path;
     Ref<JobSystem> jobs;
     Ref<CommandRegistry> commands;
     Ref<EventBus> bus;
@@ -251,19 +251,39 @@ public:
     void WatchPlots(); // UI thread: start bumping plotGen on plot-affecting events
     std::uint64_t docGen=0;  // bumped by DocumentEdited only: result plots are keyed by plotGen (result data), so a drag does not rebuild them
     std::uint64_t plotGen=0; // S3: bumped by RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/DeviceListChanged/ProjectLoaded; panel plot caches compare it (no per-frame hashing/conversion)
-    JobId active = 0;
-    Ref<Operation> pending;
+    // S6: one lane per device (serial inside, parallel across devices). `lanes[""]`-style project lane is `projectLane`: project-level
+    // requests (load while calculating) wait there until every device lane is idle; the save job has its own lane `saveLane`.
+    struct Queued {Json request; std::string key;}; // key: a newer queued request with the same non-empty key replaces this one (latest wins)
+    struct Lane {
+        std::string device; JobId active=0; Ref<Operation> pending; std::deque<Queued> queue;
+        std::uint64_t liveSeq=0; std::chrono::steady_clock::time_point liveAt{}, runStarted{};
+        bool Idle() const {return !active && queue.empty();}
+        void Enqueue(Json request,std::string key={}) { // coalescing: only the newest request per key stays queued
+            if(!key.empty()) std::erase_if(queue,[&](const Queued &q){return q.key==key;});
+            queue.push_back({std::move(request),std::move(key)});
+        }
+        std::string Op() const {return pending?pending->request.value("operation",std::string{}):std::string{};}
+    };
+    std::map<std::string,Lane> lanes; // device id -> lane
+    Lane projectLane, saveLane;
+    Lane &LaneOf(const std::string &device) {auto &l=lanes[device];l.device=device;return l;}
+    void Submit(const std::string &device,Json request,std::string key={}); // queue on the device's lane (starts at once when idle); same key = newest wins
+    void CancelDevice(const std::string &device);                          // cancels that device's job and drops its queued batch runs; other lanes keep running
+    bool AnyActive() const {for(const auto &[id,l]:lanes) if(l.active) return true;return false;}
+    JobId LaneJob(const std::string &device) const {auto it=lanes.find(device);return it==lanes.end()?0:it->second.active;}
+    const Lane *PrimaryLane() const {auto it=lanes.find(project.active_device);if(it!=lanes.end() && it->second.active) return &it->second;for(const auto &[id,l]:lanes) if(l.active) return &l;return nullptr;}
+    JobId ActiveJob() const {const auto *l=PrimaryLane();return l?l->active:0;}                // the active device's job, else any running one (progress display)
+    Ref<Operation> ActiveOp() const {const auto *l=PrimaryLane();return l?l->pending:Ref<Operation>{};}
+    const Json *EditDraft() const;                                                            // newest queued/running edit document of the active device, or null
+    bool ReplacingProject() const;                                                            // the active device's lane runs load/project_load/layer
     std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}
     // Live recalculation while a slider is held (latest wins, <=10/s, coarse every 4th point when the last full run took >150 ms)
     bool dragging = false, dragSeen = false, fineLock = false, liveSeen = false; // dragSeen: set by the slider helper each frame, App copies it to dragging
-    double lastFullMs = 0; unsigned previewsStarted = 0; std::chrono::steady_clock::time_point lastLive, runStarted;
+    double lastFullMs = 0; unsigned previewsStarted = 0; std::chrono::steady_clock::time_point lastLive;
     bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false, resetLayout = false, pendingSheet = false;
     int focusView = -1, focusPanel = -1, pendingDefect = -1;
     bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true, lightResponse = false;
     UndoStack projectUndo;
-    std::deque<Json> edits;
-    Json queuedProject;
-    std::deque<std::string> runQueue;
     Json batchResponse;
     std::size_t batchTotal = 0, batchCompleted = 0;
     Json recent = Json::array();
@@ -282,27 +302,25 @@ public:
     std::string recoveryPath;
     std::chrono::steady_clock::time_point autosavedAt=std::chrono::steady_clock::now();
     void Changed();
-    // Save/autosave run as their own Core job beside `active`; one at a time, the next request is coalesced.
-    JobId saveJob = 0;
-    Ref<Operation> savePending;
-    Json queuedSave;
+    // Save/autosave run as their own Core job (saveLane) beside the calculation lanes; one at a time, the next request is coalesced.
     bool savingAuto = false;
     unsigned epoch = 0, saveEpoch = 0; // bumped when a project is loaded/new
-    bool Saving() const { return saveJob != 0 || !queuedSave.empty(); }
+    bool Saving() const { return saveLane.active != 0 || !saveLane.queue.empty(); }
     void StartSave(const Json &request);
     void UpdateSave();
     Json Dispatch(const Json &request);
     void OnUpdate(float) override;
     void UpdateOperation();
-    void PullLive();
-    std::uint64_t liveSeq=0;std::chrono::steady_clock::time_point liveAt{};
+    void PullLive(Lane &lane);
+    void FinishOperation(Lane &lane);
     double viewIdleSeconds=0;                             // >0 (UI app): free Json views of results idle that long
     JobId warmJob=0;                                      // worker building Json views the panels need (see ViewsReady)
     bool ViewsReady();                                    // UI app: false while a needed Json view is being built on a worker; panels draw a note instead of stalling the UI thread
     std::chrono::steady_clock::time_point viewTrimAt{};
     void TrimViews();
     bool Pending() const { return Busy() || Saving(); } // calculations or saves
-    bool Busy() const { return active != 0 || !queuedProject.empty() || !edits.empty() || !runQueue.empty(); }
+    bool Busy() const {for(const auto &[id,l]:lanes) if(!l.Idle()) return true;return !projectLane.Idle();}
+    bool Busy(const std::string &device) const {auto it=lanes.find(device);return it!=lanes.end() && !it->second.Idle();}
 };
 void RegisterPython();
 Json TutorialDefinition(const std::string &id);

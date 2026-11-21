@@ -184,7 +184,7 @@ TEST(ScapsLab,AutoRecalculateCancelsAndDebounces) {
     ASSERT_TRUE(w.Dispatch({{"operation","auto_recalculate"},{"enabled",true}}).at("ok").get<bool>());
     w.OnUpdate(0);EXPECT_FALSE(w.Pending());
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
-    const auto obsolete=w.active;
+    const auto obsolete=w.ActiveJob();
     ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"patch",{{"temperature_K",301}}}}).at("ok").get<bool>());
     ASSERT_TRUE(w.jobs->ResumeAllJobs());
     while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
@@ -327,7 +327,7 @@ TEST(ScapsLab,MultiDeviceIsolationHistoryAndOwnership) {
     ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run_all"}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>());ASSERT_TRUE(w.jobs->ResumeAllJobs());
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_TRUE(w.runQueue.empty());EXPECT_EQ(w.response.at("error").at("code"),"cancelled");EXPECT_EQ(w.response.at("runs").size(),1u);
+    EXPECT_FALSE(w.Busy());EXPECT_EQ(w.response.at("error").at("code"),"cancelled");EXPECT_EQ(w.response.at("runs").size(),2u);
 }
 TEST(ScapsLab,EveryExampleSolvesAndRoundtripsBitwise) {
     std::size_t projects=0,devices=0;
@@ -440,7 +440,7 @@ TEST(ScapsLab,BatchFailedRowsRecorderRetryPersistenceAndPlotLab) {
 }
 TEST(ScapsLab,BatchStopRetainsCompletedAndCancelledMembers) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);auto spec=BatchDefaults();spec["axes"][0]["count"]=100;spec["voltages_V"]=Json::array({0.,0.05});ASSERT_TRUE(w.Dispatch({{"operation","run_batch"},{"spec",spec}}).at("ok").get<bool>());
-    bool progressed=false;for(int i=0;i<20000 && w.active;++i) {const auto job=w.jobs->GetJob(w.active);if(job && job->completedWork>=1){progressed=true;break;}w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}ASSERT_TRUE(progressed);ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>());while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    bool progressed=false;for(int i=0;i<20000 && w.ActiveJob();++i) {const auto job=w.jobs->GetJob(w.ActiveJob());if(job && job->completedWork>=1){progressed=true;break;}w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}ASSERT_TRUE(progressed);ASSERT_TRUE(w.Dispatch({{"operation","cancel"}}).at("ok").get<bool>());while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.response.at("error").at("code"),"cancelled");ASSERT_EQ(w.Current().batchResult.at("rows").size(),100);EXPECT_EQ(w.Current().batchResult.at("rows")[0].at("status"),"Converged");EXPECT_EQ(w.Current().batchResult.at("rows").back().at("status"),"Cancelled");
 }
 
@@ -772,7 +772,7 @@ TEST(ScapsLab,LegacyWorkspaceIlluminationDefaultsAndLoadDuringCalculation) {
         EXPECT_THROW(legacy["devices"][0]["document"].at("illumination").at("mode"),Json::out_of_range);
         const auto file=Temp("scapslab-legacy-mode.scapslab");{std::ofstream out(file);out<<legacy.dump();}
         w.Current().document["voltage"]={{"start_V",0.},{"stop_V",0.1},{"step_V",0.01}};
-        ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok"));ASSERT_NE(w.active,0u);
+        ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok"));ASSERT_NE(w.ActiveJob(),0u);
         ASSERT_TRUE(w.Dispatch({{"operation",operation},{"path",file.string()}}).at("ok"));
         EXPECT_NE(w.status.find("Cancelling"),std::string::npos);
         while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
@@ -865,9 +865,9 @@ TEST(ScapsLabSave,SaveDuringRunStoresSnapshotState) {
     ASSERT_TRUE(Execute(w,{{"operation","run"}}).value("ok",false));
     const auto before=w.Current().history.size(),pointsBefore=w.Current().result.at("points").size();ASSERT_EQ(before,1u);
     const auto file=Temp("slsave-during-run.scapslab");std::filesystem::remove(file);
-    ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());ASSERT_NE(w.active,0u);
+    ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());ASSERT_NE(w.ActiveJob(),0u);
     ASSERT_TRUE(w.Dispatch({{"operation","project_save"},{"path",file.string()}}).at("ok").get<bool>());
-    EXPECT_NE(w.active,0u);EXPECT_TRUE(w.Saving());EXPECT_EQ(w.status,"Saving...");
+    EXPECT_NE(w.ActiveJob(),0u);EXPECT_TRUE(w.Saving());EXPECT_EQ(w.status,"Saving...");
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().history.size(),2u);EXPECT_TRUE(w.dirty); // the run finished after the snapshot
     ASSERT_TRUE(std::filesystem::exists(file));
@@ -882,7 +882,7 @@ TEST(ScapsLabSave,AutosaveOfLargeProjectKeepsResults) {
     auto spec=BatchDefaults();spec["axes"][0]["count"]=3;ASSERT_TRUE(Execute(w,{{"operation","run_batch"},{"spec",spec}}).value("ok",false));
     const auto recovery=Temp("slsave-autosave.scapslab");std::filesystem::remove(recovery);
     w.recoveryPath=recovery.string();w.autosavedAt=std::chrono::steady_clock::now()-std::chrono::seconds(31);
-    ASSERT_TRUE(w.dirty);w.OnUpdate(0);EXPECT_TRUE(w.Saving());EXPECT_EQ(w.active,0u);
+    ASSERT_TRUE(w.dirty);w.OnUpdate(0);EXPECT_TRUE(w.Saving());EXPECT_EQ(w.ActiveJob(),0u);
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_TRUE(w.dirty); // autosave never cleans the project
     Workflow loaded(CreateRef<JobSystem>(nullptr,2));loaded.lightResponse=true;
@@ -981,7 +981,7 @@ TEST(ScapsLab,InPlaceDeviceOpsUndoAndNoThrowawayWorkflows) {
     const auto built=Workflow::constructed.load();
     const auto first=w.project.active_device;
     ASSERT_TRUE(w.Dispatch({{"operation","device_duplicate"},{"name","Second"}}).at("ok").get<bool>());
-    EXPECT_EQ(w.active,0u);EXPECT_EQ(w.project.devices.size(),2u);const auto second=w.project.active_device;
+    EXPECT_EQ(w.ActiveJob(),0u);EXPECT_EQ(w.project.devices.size(),2u);const auto second=w.project.active_device;
     ASSERT_TRUE(w.Dispatch({{"operation","device_update"},{"device_id",second},{"name","Renamed"},{"colour",{.1,.2,.3,1.}}}).at("ok").get<bool>());
     ASSERT_TRUE(w.Dispatch({{"operation","device_move"},{"device_id",second},{"index",0}}).at("ok").get<bool>());
     EXPECT_EQ(w.project.devices[0]->id,second);

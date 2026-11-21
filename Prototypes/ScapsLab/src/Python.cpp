@@ -19,7 +19,7 @@ NB_MODULE(sst_scapslab, m) {
             s.OnUpdate(0); Json j={{"running",s.Pending() || s.tutorial.Automatic()},{"auto_recalculate_pending",(s.autoRecalculate && s.Current().needsRecalculate) || (s.autoRecalculateBand && s.Current().needsBand)},{"status",s.status},{"response",s.response}};
             j["tutorial"]=s.tutorial.Report();
             j["batch_progress"]={{"completed",s.batchCompleted},{"total",s.batchTotal}};
-            if(s.active) { const auto p=s.jobs->GetJob(s.active); if(p) j["progress"]={{"completed",p->completedWork},{"total",p->totalWork},{"stage",p->currentStage}}; }
+            if(const auto aj=s.ActiveJob()) { const auto p=s.jobs->GetJob(aj); if(p) j["progress"]={{"completed",p->completedWork},{"total",p->totalWork},{"stage",p->currentStage}}; }
             return j.dump();
         });
 }

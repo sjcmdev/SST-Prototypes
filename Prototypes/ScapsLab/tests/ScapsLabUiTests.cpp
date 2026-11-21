@@ -362,7 +362,7 @@ TEST(ScapsLab,EscapeDuringSliderDragRestoresTheStartValue) {
     ASSERT_TRUE(found);
     io.AddMouseButtonEvent(0,true);frame();io.AddMousePosEvent(at.x-150,at.y);frame();frame();io.AddMousePosEvent(at.x-250,at.y);frame();
     EXPECT_TRUE(w.dragSeen)<<"a held slider announces itself to the workflow";
-    EXPECT_NE(w.edits.empty()?w.Current().document["temperature_K"].get<double>():w.edits.back().at("document")["temperature_K"].get<double>(),original["temperature_K"].get<double>());
+    EXPECT_NE((w.EditDraft()?*w.EditDraft():w.Current().document)["temperature_K"].get<double>(),original["temperature_K"].get<double>());
     io.AddKeyEvent(ImGuiKey_Escape,true);frame();io.AddKeyEvent(ImGuiKey_Escape,false);frame();io.AddMouseButtonEvent(0,false);frame();
     while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().document["temperature_K"],original["temperature_K"]);EXPECT_EQ(w.Current().document,original);
@@ -385,7 +385,7 @@ TEST(ScapsLab,LiveDragLatestWinsStartsFewJobsAndEndsWithTheExactFinalRun) {
     const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
     EXPECT_LE(w.previewsStarted,unsigned(ms/100)+2)<<"<=10 per second, never queued; ms="<<ms;
     EXPECT_EQ(w.Current().history.size(),baseline)<<"previews never enter history";
-    auto last=w.edits.empty()?w.Current().document:w.edits.back().at("document");last["temperature_K"]=329.;
+    auto last=w.EditDraft()?*w.EditDraft():w.Current().document;last["temperature_K"]=329.;
     w.dragging=false;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",last},{"gesture_id","drag"}}).at("ok").get<bool>());
     Settle(w);
     EXPECT_EQ(w.Current().result.at("project_snapshot").at("temperature_K").get<double>(),329.)<<"exact run of the final value";
