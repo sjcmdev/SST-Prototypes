@@ -44,16 +44,16 @@ struct Rig {
     }
     ~Rig(){subs.clear();while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(2));}ImPlot::DestroyContext();ImGui::DestroyContext();}
     void Input(){activeUntil=Clock::now()+std::chrono::milliseconds(400);}
-    void Track(){if(w.pending && w.pending.get()!=lastPending){lastPending=w.pending.get();++started[w.pending->request.value("operation",std::string{})];}if(!w.pending)lastPending=nullptr;}
+    void Track(){if(w.ActiveOp() && w.ActiveOp().get()!=lastPending){lastPending=w.ActiveOp().get();++started[w.ActiveOp()->request.value("operation",std::string{})];}if(!w.ActiveOp())lastPending=nullptr;}
     // One app frame: Workflow::OnUpdate then every panel (draw lists built, no GPU). Returns UI-thread work in ms.
     double Frame() {
-        const auto a=Clock::now();if(w.active)if(const auto snap=w.jobs->GetJob(w.active);snap&&snap->status==JobStatus::Completed){snapQueue=std::chrono::duration<double,std::milli>(snap->startedAt-snap->createdAt).count();snapRun=std::chrono::duration<double,std::milli>(snap->finishedAt-snap->startedAt).count();}
+        const auto a=Clock::now();if(w.ActiveJob())if(const auto snap=w.jobs->GetJob(w.ActiveJob());snap&&snap->status==JobStatus::Completed){snapQueue=std::chrono::duration<double,std::milli>(snap->startedAt-snap->createdAt).count();snapRun=std::chrono::duration<double,std::milli>(snap->finishedAt-snap->startedAt).count();}
         w.interacting=held;w.OnUpdate(0);Track();const auto b=Clock::now();
         auto &io=ImGui::GetIO();io.DeltaTime=1.f/60;ImGui::NewFrame();int i=0;
         for(auto &p:panels){ImGui::SetNextWindowPos(ImVec2(float(i%3)*640,float(i/3)*360));ImGui::SetNextWindowSize(ImVec2(630,350));
             ImGui::Begin(("rig"+std::to_string(i)).c_str(),nullptr,ImGuiWindowFlags_NoSavedSettings);const auto tp=Clock::now();p->RenderContent();if(sinkPanel)(*sinkPanel)[views[size_t(i)]].push_back(Since(tp));ImGui::End();++i;}
         ImGui::Render();const double ms=Since(a),apply=Since(a,b);frameEnd=Clock::now();lastWork=ms;lastApply=apply;if(sink)sink->push_back(ms);if(sinkApply)sinkApply->push_back(apply);
-        const double wait=held||Clock::now()<activeUntil?16.:w.Pending()?50.:500.;if(std::getenv("SCAPSLAB_FEEL_TRACE"))std::printf("TRACE work=%.2f wait=%.0f pending=%d active=%llu\n",ms,wait,int(w.Pending()),(unsigned long long)w.active);const double rest=wait-ms;if(rest>0)std::this_thread::sleep_for(std::chrono::duration<double,std::milli>(rest));
+        const double wait=held||Clock::now()<activeUntil?16.:w.Pending()?50.:500.;if(std::getenv("SCAPSLAB_FEEL_TRACE"))std::printf("TRACE work=%.2f wait=%.0f pending=%d active=%llu\n",ms,wait,int(w.Pending()),(unsigned long long)w.ActiveJob());const double rest=wait-ms;if(rest>0)std::this_thread::sleep_for(std::chrono::duration<double,std::milli>(rest));
         return ms;
     }
     Json Send(const Json &r){const auto t=Clock::now();const auto out=w.Dispatch(r);if(sinkDispatch)sinkDispatch->push_back(Since(t));Track();Input();return out;}
@@ -70,7 +70,7 @@ Res Measure(Rig &r,const std::function<void()> &start,const char *execKey=nullpt
     Res res;std::vector<double> fr;r.sink=&fr;const auto gen0=r.w.plotGen;const size_t c0=r.completed.size();const int cancel0=r.cancelled;const auto s0=r.started;
     const double cpu0=CpuMs();const auto t0=Clock::now();start();const double dispatchMs=Since(t0);r.Input();
     // watcher: exact moment the worker finished (independent of the UI cadence)
-    std::atomic<bool> stop{false};std::atomic<double> doneMs{-1};const auto id=r.w.active;
+    std::atomic<bool> stop{false};std::atomic<double> doneMs{-1};const auto id=r.w.ActiveJob();
     std::thread watcher([&]{if(!id)return;while(!stop){if(const auto snap=r.w.jobs->GetJob(id);snap&&snap->status!=JobStatus::Queued&&snap->status!=JobStatus::Running){doneMs=Since(t0);return;}std::this_thread::sleep_for(std::chrono::microseconds(300));}});
     bool seen=false;double apply=0,render=0,first=-1;int quiet=0;
     for(;;) {

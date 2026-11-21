@@ -53,6 +53,7 @@ namespace SST
 		[[nodiscard]] bool IsQueueFull() const;
 
 		[[nodiscard]] std::optional<JobSnapshot> GetJob(JobId id) const;
+		[[nodiscard]] std::optional<JobStatus> TryGetStatus(JobId id) const; // status only: no snapshot/string copies (cheap per-frame checks)
 		[[nodiscard]] std::vector<JobSnapshot> GetAllJobs() const;
 		[[nodiscard]] std::vector<JobSnapshot> GetActiveJobs() const;
 		[[nodiscard]] std::vector<JobSnapshot> GetFinishedJobs() const;

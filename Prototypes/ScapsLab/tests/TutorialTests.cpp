@@ -148,7 +148,7 @@ TEST(ScapsLabTutorial,LearnPersistsProgressAndVerifyDoesNotWriteUserConfig) {
 TEST(ScapsLabTutorial,NewProjectUsesJobPathAndResetsProjectState) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
     w.path="previous.scapslab";w.project.name="Previous";w.projectDirty=true;
-    const auto started=w.Dispatch({{"operation","project_new"}});ASSERT_TRUE(started.value("ok",false));EXPECT_NE(w.active,0);
+    const auto started=w.Dispatch({{"operation","project_new"}});ASSERT_TRUE(started.value("ok",false));EXPECT_NE(w.ActiveJob(),0);
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.value("ok",false))<<w.response.dump();EXPECT_TRUE(w.path.empty());EXPECT_FALSE(w.dirty);
     EXPECT_EQ(w.project.name,"Untitled project");EXPECT_EQ(w.project.devices.size(),1);EXPECT_TRUE(w.Current().history.empty());

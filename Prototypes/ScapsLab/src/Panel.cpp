@@ -639,12 +639,11 @@ void Panel::RenderContent() {
     if(view==5) {Results();return;}
     if(view==22) {GenerationRecombination();return;}
     if(view>=6 && view<10) {AC();return;}
-    const bool replacing=w->pending && (w->pending->request.at("operation")=="project_load" || w->pending->request.at("operation")=="load" || w->pending->request.at("operation")=="layer");
+    const bool replacing=w->ReplacingProject();
     ImGui::BeginDisabled(replacing);
     if(w->Current().document.is_object()) {
         auto draft=w->Current().document;
-        if(!w->edits.empty()) draft=w->edits.back().at("document");
-        else if(w->pending && w->pendingDevice==w->project.active_device && w->pending->request.value("operation",std::string{})=="edit" && w->pending->request.contains("document")) draft=w->pending->request.at("document");
+        if(const auto *queued=w->EditDraft()) draft=*queued;
         numericDocument=&draft;
         bool changed=false;
         if(view==19) changed|=Illumination(draft);
@@ -793,8 +792,8 @@ void Panel::RenderContent() {
     }
     ImGui::EndDisabled();
     if(replacing) ImGui::TextWrapped("Project structure is changing; editing resumes when the operation finishes.");
-    if(view==4 && w->active) {
-        const auto j=w->jobs->GetJob(w->active); if(j) {ImGui::ProgressBar(j->totalWork>0?j->completedWork/j->totalWork:0);ImGui::TextWrapped("%s",j->currentStage.c_str());}
+    if(view==4 && w->ActiveJob()) {
+        const auto j=w->jobs->GetJob(w->ActiveJob()); if(j) {ImGui::ProgressBar(j->totalWork>0?j->completedWork/j->totalWork:0);ImGui::TextWrapped("%s",j->currentStage.c_str());}
         if(ImGui::Button("Cancel")) Send({{"operation","cancel"}});
         ImGui::TextWrapped("Cancellation takes effect after mesh preparation or the current Newton solve.");
     }
@@ -1375,7 +1374,7 @@ void Panel::AC() {
     ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,kind);
     if(w->Busy()) {
         ImGui::TextDisabled("AC controls disabled while a job is active; wait or Cancel.");
-        const auto job=w->jobs->GetJob(w->active); if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0); ImGui::TextWrapped("%s",job->currentStage.c_str());}
+        const auto job=w->jobs->GetJob(w->ActiveJob()); if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0); ImGui::TextWrapped("%s",job->currentStage.c_str());}
         if(ImGui::Button("Cancel")) Send({{"operation","cancel"}});
     }
     const Json *snapshot=nullptr;
@@ -1423,7 +1422,7 @@ void Panel::Devices() {
     ImGui::SameLine();if(ImGui::Button(ICON_FA_PLAY " Run all checked") && !w->Busy()) Send({{"operation","run_all"}});
     ImGui::SameLine();ImGui::TextDisabled("Compare: show in plots");
     if(w->Busy()) {
-        const auto job=w->jobs->GetJob(w->active);
+        const auto job=w->jobs->GetJob(w->ActiveJob());
         if(w->batchTotal) ImGui::ProgressBar(float(w->batchCompleted)/float(w->batchTotal),ImVec2(-90,0),(std::to_string(w->batchCompleted)+" / "+std::to_string(w->batchTotal)+" devices").c_str());
         else ImGui::ProgressBar(job && job->totalWork>0?float(job->completedWork/job->totalWork):0.f,ImVec2(-90,0),job?job->currentStage.c_str():"");
         ImGui::SameLine();if(ImGui::Button("Cancel")) Send({{"operation","cancel"}});
@@ -1486,8 +1485,8 @@ void Panel::Devices() {
                     const bool f2=active && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F2);
                     if(dbl || f2) {inlineId=d.id;focusInline=true;std::snprintf(renameBuf,sizeof(renameBuf),"%s",d.name.c_str());}
                 }
-                if(w->Busy() && w->pendingDevice==d.id) {
-                    const auto job=w->jobs->GetJob(w->active);ImGui::SameLine(0,6);
+                if(w->LaneJob(d.id)) {
+                    const auto job=w->jobs->GetJob(w->LaneJob(d.id));ImGui::SameLine(0,6);
                     ImGui::ProgressBar(job && job->totalWork>0?float(job->completedWork/job->totalWork):0.f,ImVec2(48,box*.35f),"");
                 }
                 ImGui::SameLine();ImGui::SetCursorPosX(rowRight-box);
@@ -1770,8 +1769,8 @@ void Panel::Batch() {
     try {auto configured=spec;configured["columns"]=d.recorderColumns;preview=BatchPreview(d.document,configured);}catch(const std::exception &e){error=e.what();}
     if(!error.empty())ImGui::TextWrapped("Configuration: %s",error.c_str());
     ImGui::BeginDisabled(!error.empty());if(ImGui::Button("Run batch"))Send({{"operation","run_batch"}});ImGui::EndDisabled();ImGui::EndDisabled();
-    ImGui::SameLine();ImGui::BeginDisabled(!w->active);if(ImGui::Button("Stop"))Send({{"operation","cancel"}});ImGui::EndDisabled();
-    if(w->active) {const auto job=w->jobs->GetJob(w->active);if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0);ImGui::TextWrapped("%s",job->currentStage.c_str());}}
+    ImGui::SameLine();ImGui::BeginDisabled(!w->AnyActive());if(ImGui::Button("Stop"))Send({{"operation","cancel"}});ImGui::EndDisabled();
+    if(w->ActiveJob()) {const auto job=w->jobs->GetJob(w->ActiveJob());if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0);ImGui::TextWrapped("%s",job->currentStage.c_str());}}
     ImGui::TextWrapped("%s",w->status.c_str());
     if(!preview.empty()) {
         ImGui::TextWrapped("Preview: %zu members x %zu biases x (DC + %zu AC frequencies) = %zu samples. Polarity: left minus right.",preview.at("member_count").get<std::size_t>(),preview.at("bias_count").get<std::size_t>(),preview.at("frequency_count").get<std::size_t>(),preview.at("sample_count").get<std::size_t>());

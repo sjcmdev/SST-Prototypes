@@ -304,6 +304,16 @@ namespace SST
 		return it->second.snapshot;
 	}
 
+	std::optional<JobStatus> JobSystem::TryGetStatus(JobId id) const
+	{
+		std::lock_guard<std::mutex> lock(m_RecordsMutex);
+		auto it = m_Records.find(id);
+		if (it == m_Records.end())
+			return std::nullopt;
+
+		return it->second.snapshot.status;
+	}
+
 	std::vector<JobSnapshot> JobSystem::GetAllJobs() const
 	{
 		ZoneScoped;

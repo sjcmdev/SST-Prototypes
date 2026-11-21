@@ -99,7 +99,7 @@ public:
         operation("redo","Edit/Redo","Ctrl+Y",[&w]{return !w.Busy() && (w.preferProjectUndo?w.projectUndo:w.Current().undo).CanRedo();});
         menu("scapslab.history.clear","Edit/Clear history...",[this]{clear=true;});
         operation("run","Simulate/Calculate I-V","",idle);if(ExperimentalPanels())operation("run_batch","Simulate/Run batch","",idle);
-        operation("cancel","Simulate/Stop","",[&w]{return w.active!=0;});
+        operation("cancel","Simulate/Stop","",[&w]{return w.AnyActive();});
         menu("scapslab.view.experimental","View/Show experimental panels (applies after restart)",[this]{ExperimentalPanels()=!ExperimentalPanels();SaveExperimental();this->w.status="Experimental panels "+std::string(ExperimentalPanels()?"on":"off")+": restart ScapsLab to apply";},"",{},[]{return ExperimentalPanels();});
         for(const auto &panel:this->panels) if(panel->GetId()) menu("scapslab.view."+std::to_string(panel->GetId()),"View/"+panel->GetTitle(),[panel]{panel->SetVisible(!panel->IsVisible());},"",{},[panel]{return panel->IsVisible();});
         WindowId top=0;for(const auto &p:this->panels)top=std::max(top,p->GetId());
