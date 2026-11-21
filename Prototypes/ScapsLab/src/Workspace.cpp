@@ -139,22 +139,24 @@ std::string DiffLabel(const Json &previous,const Json &document) {
     }
     return label;
 }
-std::string StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group) {
+std::string StoreRun(Json &history,const std::string &kind,const Json &result,const Json &document,const Json &request,int retention,const std::string &group,const Json *parameters,const std::string *modelHash) {
     static std::atomic_uint64_t sequence{0};
     const auto id="run-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"-"+std::to_string(sequence++);
-    const auto previous=history.empty()?document:history.back().at("document");
+    const Json &previous=history.empty()?document:history.back().at("document"); // a reference: nothing below touches `history` before the push_back
     auto changes=Json::array();std::string label;
-    for(const auto &parameter:BatchParameters(document)) {
+    Json computed;if(!parameters) computed=BatchParameters(document); // batch members hand over theirs, computed on the worker
+    for(const auto &parameter:parameters?*parameters:computed) {
         const Json::json_pointer pointer(parameter.at("pointer").get<std::string>());
         if(previous.contains(pointer) && previous.at(pointer)!=parameter.at("value")) {
             changes.push_back({{"parameter_id",parameter.at("id")},{"unit",parameter.at("unit")},{"before",previous.at(pointer)},{"after",parameter.at("value")}});
             if(!label.empty()) label+=", ";label+=ParameterLabel(parameter.at("path"),parameter.at("unit"),parameter.at("value"),previous.at(pointer));
         }
     }
-    if(label.empty()) label=history.empty()?"Initial run":previous==document?"Same parameters":"Model changed: "+Json::diff(previous,document).front().at("path").get<std::string>();
+    const auto modelDiff=Json::diff(previous,document);
+    if(label.empty()) label=history.empty()?"Initial run":previous==document?"Same parameters":"Model changed: "+modelDiff.front().at("path").get<std::string>();
     const double t=double(sequence%12)/12.;
     Json colour=Json::array({.5+.45*std::cos(6.283*t),.5+.45*std::cos(6.283*(t-.333)),.5+.45*std::cos(6.283*(t+.333)),1.});
-    history.push_back({{"run_id",id},{"kind",kind},{"model_hash",DocumentHash(document)},{"document",document},{"diff",changes},{"model_diff",Json::diff(previous,document)},{"label",label},{"request",request},{"time_unix_ms",result.at("provenance").at("time_unix_ms")},{"elapsed_s",result.value("elapsed_s",result.value("compute_time_ms",0.)/1000.)},{"provenance",result.at("provenance")},{"pinned",false},{"name",""},{"visible",true},{"colour",colour},{"group_id",group}});
+    history.push_back({{"run_id",id},{"kind",kind},{"model_hash",modelHash?*modelHash:DocumentHash(document)},{"document",document},{"diff",changes},{"model_diff",modelDiff},{"label",label},{"request",request},{"time_unix_ms",result.at("provenance").at("time_unix_ms")},{"elapsed_s",result.value("elapsed_s",result.value("compute_time_ms",0.)/1000.)},{"provenance",result.at("provenance")},{"pinned",false},{"name",""},{"visible",true},{"colour",colour},{"group_id",group}});
     TrimHistory(history,retention);
     return id;
 }

@@ -128,6 +128,44 @@ AcResult AcFromJson(Json &&j) {return FromJson(j, acTop, acFields);}
 BatchResult BatchFromJson(const Json &j) {BatchResult r; r.body = Pack(j); return r;}
 Json IvResult::Dump() const {return To(*this, ivTop, ivFields);}
 Json AcResult::Dump() const {return To(*this, acTop, acFields);}
+namespace {
+struct Node {const PJson *p = nullptr; const Json *j = nullptr;}; // a packed node or a plain Json value
+Node Step(Node n, const std::string &key) {
+    if (n.p) {
+        if (const auto *k = ChildOf(*n.p, key)) return {k, nullptr};
+        if (n.p->prim.is_object() && n.p->prim.contains(key)) return {nullptr, &n.p->prim.at(key)};
+        return {};
+    }
+    if (n.j && n.j->is_object() && n.j->contains(key)) return {nullptr, &n.j->at(key)};
+    return {};
+}
+} // namespace
+static void CurvePoint(BatchCurve &c, const Json &o) {
+    if (!o.is_object() || !o.contains("voltage_V") || !o.at("voltage_V").is_number()) return;
+    const bool num = o.contains("J_Am2") && o.at("J_Am2").is_number();
+    c.v.push_back(o.at("voltage_V").get<double>());
+    c.j.push_back(num ? o.at("J_Am2").get<double>() : double(NAN));
+    c.converged.push_back(o.contains("status") && o.at("status") == "Converged");
+}
+static BatchCurve CurveOf(const Node &iv) {
+    BatchCurve c;
+    if (iv.p && iv.p->kind == PJson::Kind::Arr) for (const auto &k : iv.p->kids) CurvePoint(c, k.second.prim);   // scalars of a packed point stay in prim
+    else if (iv.p && iv.p->prim.is_array()) for (const auto &e : iv.p->prim) CurvePoint(c, e);
+    else if (iv.j && iv.j->is_array()) for (const auto &e : *iv.j) CurvePoint(c, e);
+    return c;
+}
+std::vector<BatchCurve> BatchIvCurves(const BatchResult &r) {
+    std::vector<BatchCurve> out;
+    const Node rows = Step({&r.body, nullptr}, "rows");
+    if (rows.p && rows.p->kind == PJson::Kind::Arr) {
+        for (const auto &k : rows.p->kids) out.push_back(CurveOf(Step(Step({&k.second, nullptr}, "curves"), "iv")));
+    } else if (rows.j && rows.j->is_array()) {
+        for (const auto &row : *rows.j) out.push_back(CurveOf(Step(Step({nullptr, &row}, "curves"), "iv")));
+    } else if (rows.p && rows.p->prim.is_array()) {
+        for (const auto &row : rows.p->prim) out.push_back(CurveOf(Step(Step({nullptr, &row}, "curves"), "iv")));
+    }
+    return out;
+}
 bool HasProfiles(const IvResult &r) {return (r.has >> 31 & 1u) && ((r.has & 1u) || (r.meta.prim.is_object() && r.meta.prim.contains("mesh_x_m")));}
 Ref<const IvResult> DropProfiles(const IvResult &r) {
     auto out = CreateRef<IvResult>(r);
@@ -142,9 +180,10 @@ const Json &ResultBase::View() const {
     used = std::chrono::steady_clock::now();
     return *view;
 }
-bool ResultBase::DropIdleView(std::chrono::steady_clock::time_point idleSince) const {
+bool ResultBase::DropIdleView(std::chrono::steady_clock::time_point idleSince,Ref<const Json> *dropped) const {
     std::lock_guard g(lock);
     if (!view || used > idleSince) return false;
+    if (dropped) *dropped = std::move(view); else view.reset();
     view.reset(); return true;
 }
 } // namespace SST::ScapsLab

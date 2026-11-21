@@ -108,7 +108,7 @@ public:
     ScapsCloseGuard(Application &app,ScapsLab::Workflow &w,std::vector<Ref<ScapsLab::Panel>> panels):Layer("ScapsLab file actions"),app(app),w(w),panels(std::move(panels)) {
         if(!std::getenv("SCAPSLAB_GALLERY_EXPORT") && !std::getenv("SCAPSLAB_NO_IDLE_THROTTLE")) app.SetIdleWaitProvider([this]()->double { // idle: sleep until input; job running: ~20 fps
             if(ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || this->w.tutorial.Active() || this->requested || this->exporting) return 0.;
-            return this->w.Pending() ? 0.05 : 0.5;});
+            return this->w.Pending() || this->w.warmJob ? 0.05 : 0.5;});
         app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Pending())return true;creating=false;closing=true;requested=true;return false;});
         if(const auto config=app.GetConfigManager().lock()) recentPath=config->GetConfigDirectory()/Path{"scapslab-recent.json"};
         std::string text,error;if(TextFileIO::Load(recentPath,text,error)) {try {const auto items=ScapsLab::Json::parse(text);if(items.is_array() && items.size()<=10 && std::all_of(items.begin(),items.end(),[](const auto &p){return p.is_string();})) w.recent=items;}catch(...) {}}
