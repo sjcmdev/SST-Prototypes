@@ -12,6 +12,7 @@
 #include "Core/Presentation/Tutorial.hpp"
 #include "Domain/Results.hpp"
 #include "Domain/ProjectDraft.hpp"
+#include "PlotSettings.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
 #include <algorithm>
 #include <chrono>
@@ -233,7 +234,7 @@ Json PackResults(const Json &value);
 Json UnpackResults(const Json &value);
 void ValidateWorkspace(const Json &workspace); // throws std::invalid_argument; touches no live state
 void ValidateActions(const Json &actions);
-int ValidateUi(const Json &ui); // returns history_retention
+int ValidateUi(const Json &ui,bool strictPlotRanges=true); // returns history_retention
 Json NormalizeWorkspace(Json workspace); // validate + normalize device documents; pure, no Workflow/JobSystem
 Json SingleDeviceWorkspace(Json document,std::string projectName);
 std::string WorkspaceText(const Json &workspace);
@@ -266,6 +267,8 @@ public:
     void WatchPlots(); // UI thread: start bumping plotGen on plot-affecting events
     std::uint64_t docGen=0;  // bumped by DocumentEdited only: result plots are keyed by plotGen (result data), so a drag does not rebuild them
     std::uint64_t plotGen=0; // S3: bumped by RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/DeviceListChanged/ProjectLoaded; panel plot caches compare it (no per-frame hashing/conversion)
+    PlotSession plotSession;
+    bool plotPreferences=false;
     // S6: one lane per device (serial inside, parallel across devices). `lanes[""]`-style project lane is `projectLane`: project-level
     // requests (load while calculating) wait there until every device lane is idle; the save job has its own lane `saveLane`.
     struct Queued {Json request; std::string key;}; // key: a newer queued request with the same non-empty key replaces this one (latest wins)

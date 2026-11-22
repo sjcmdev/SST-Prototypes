@@ -82,6 +82,7 @@ public:
         };
         menu("scapslab.file.new","File/New",[&w]{w.fileAction="new";},"Ctrl+N",idle);
         (void)w.commands->SetMenu(CommandID{"app.layout.reset"},"");
+        menu("scapslab.view.plot_settings","View/Plot settings",[&w]{w.plotPreferences=true;});
         menu("scapslab.view.reset","View/Reset layout",[&w]{w.resetLayout=true;});
         for(const auto &[action,label,shortcut]:{std::tuple{"open","Open...","Ctrl+O"},std::tuple{"save","Save","Ctrl+S"},std::tuple{"save_as","Save As...","Ctrl+Shift+S"},
             std::tuple{"export_results","Export results...",""},std::tuple{"import_def","Import SCAPS .def...",""},std::tuple{"export_def","Export SCAPS .def...",""}})

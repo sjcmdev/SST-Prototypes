@@ -188,7 +188,8 @@ Json RunLightViaUi() {
     bool pvPlot=false;
     for(int i=0;i<GImPlot->Plots.GetBufSize();++i) if(auto *plot=GImPlot->Plots.GetByIndex(i);plot && plot->HasTitle() && std::string(plot->GetTitle())=="Light I-V") {
         pvPlot=true;const double jsc=w.Current().result.at("photovoltaic").at("Jsc_A_m2").get<double>()*.1;
-        EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Min,-1.2*jsc,1e-10);EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Max,jsc,1e-10);
+        const double padding=2.2*jsc*w.plotSession.settings.margin*.01;
+        EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Min,-1.2*jsc-padding,1e-10);EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Max,jsc+padding,1e-10);
         EXPECT_STREQ(plot->GetAxisLabel(plot->Axes[ImAxis_Y1]),"J [mA/cm^2]");
         for(const auto *label:{"Voc","Jsc","MPP"}) {
             bool found=false;for(int item=0;item<plot->Items.GetLegendCount();++item)found|=std::string(plot->Items.GetLegendLabel(item))==label;
