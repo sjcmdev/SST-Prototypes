@@ -11,7 +11,7 @@ NB_MODULE(sst_scapslab, m) {
         .def("__init__",[](Workflow *self,const std::string &document) {
             auto parsed=Json::parse(document);if(parsed.is_null()) parsed=ReadProject(SCAPSLAB_PROJECT);
             const auto hardware=std::thread::hardware_concurrency();
-            new(self) Workflow(CreateRef<JobSystem>(nullptr,hardware>1?hardware-1:1)); if(parsed.is_object() && parsed.contains("devices")) self->SetWorkspace(UnpackResults(parsed));else self->Current().document=NormalizeDocument(SelfContained(std::move(parsed)));
+            new(self) Workflow(CreateRef<JobSystem>(nullptr,hardware>1?hardware-1:1)); if(parsed.is_object() && parsed.contains("devices")) self->SetWorkspace(UnpackResults(parsed));else self->Current().SetDocument(NormalizeDocument(SelfContained(std::move(parsed))));
         })
         .def("start",[](Workflow &s,const std::string &request) {
             try {return s.Dispatch(Json::parse(request)).dump();}

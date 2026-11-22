@@ -78,36 +78,36 @@ Json TutorialCatalog() {
 }
 Tutorial::Predicates Workflow::TutorialPredicates() {
     return {
-        {"profile.loaded", [this] {const auto &layer=Current().document.at("layers")[0];return Json(layer.contains("grading") && layer.at("grading").contains("Na_m3") && layer.at("grading").at("Na_m3").value("law",std::string{})=="table");}},
-        {"defect.law", [this] {const auto &defects=Current().document.at("layers")[0].value("defects",Json::array());return defects.empty()?Json(""):Json(defects[0].value("density_profile_m3",Json::object()).value("law",std::string{}));}},
-        {"defect.profile_file", [this] {const auto &defects=Current().document.at("layers")[0].value("defects",Json::array());return Json(!defects.empty() && defects[0].value("density_profile_m3",Json::object()).value("law",std::string{})=="table");}},
-        {"illumination.generation_file", [this] {return Json(Current().document.value("illumination",Json::object()).value("mode",std::string{})=="generation_file" && !Current().document.at("illumination").value("generation_m_m3s",Json::array()).empty());}},
-        {"illumination.spectrum_points", [this] {return Json(Current().document.value("illumination",Json::object()).value("spectrum_nm_W_m2",Json::array()).size());}},
-        {"absorption.file_points", [this] {return Json(Current().document.at("layers")[0].value("absorption",Json::object()).value("table_nm_m1",Json::array()).size());}},
-        {"grading.law", [this] {return Json(Current().document.at("layers")[0].value("grading",Json::object()).value("Na_m3",Json::object()).value("law",std::string{}));}},
-        {"device.temperature_K", [this] { return Current().document.at("temperature_K"); }},
+        {"profile.loaded", [this] {const auto &layer=Current().Document().at("layers")[0];return Json(layer.contains("grading") && layer.at("grading").contains("Na_m3") && layer.at("grading").at("Na_m3").value("law",std::string{})=="table");}},
+        {"defect.law", [this] {const auto &defects=Current().Document().at("layers")[0].value("defects",Json::array());return defects.empty()?Json(""):Json(defects[0].value("density_profile_m3",Json::object()).value("law",std::string{}));}},
+        {"defect.profile_file", [this] {const auto &defects=Current().Document().at("layers")[0].value("defects",Json::array());return Json(!defects.empty() && defects[0].value("density_profile_m3",Json::object()).value("law",std::string{})=="table");}},
+        {"illumination.generation_file", [this] {return Json(Current().Document().value("illumination",Json::object()).value("mode",std::string{})=="generation_file" && !Current().Document().at("illumination").value("generation_m_m3s",Json::array()).empty());}},
+        {"illumination.spectrum_points", [this] {return Json(Current().Document().value("illumination",Json::object()).value("spectrum_nm_W_m2",Json::array()).size());}},
+        {"absorption.file_points", [this] {return Json(Current().Document().at("layers")[0].value("absorption",Json::object()).value("table_nm_m1",Json::array()).size());}},
+        {"grading.law", [this] {return Json(Current().Document().at("layers")[0].value("grading",Json::object()).value("Na_m3",Json::object()).value("law",std::string{}));}},
+        {"device.temperature_K", [this] { return Current().Document().at("temperature_K"); }},
         {"history.count", [this] {return Json(Current().history.size());}},
         {"export.file_count", [] {int n=0;for(const auto *name:{"scapslab-tutorial-profile.csv","scapslab-tutorial-profile.grd"})if(std::filesystem::exists(TutorialExportPath(name)))++n;return Json(n);}},
-        {"illumination.filter_points", [this] {return Json(Current().document.value("illumination",Json::object()).value("front_filter_nm_fraction",Json::array()).size());}},
-        {"defect.optical_points", [this] {const auto &defects=Current().document.at("layers")[0].value("defects",Json::array());return Json(defects.empty()?0:defects[0].value("optical",Json::object()).value("electron_table_nm_m2",Json::array()).size());}},
-        {"layer.Eg_eV", [this] {return Current().document.at("layers")[0].at("material").at("Eg_eV");}},
+        {"illumination.filter_points", [this] {return Json(Current().Document().value("illumination",Json::object()).value("front_filter_nm_fraction",Json::array()).size());}},
+        {"defect.optical_points", [this] {const auto &defects=Current().Document().at("layers")[0].value("defects",Json::array());return Json(defects.empty()?0:defects[0].value("optical",Json::object()).value("electron_table_nm_m2",Json::array()).size());}},
+        {"layer.Eg_eV", [this] {return Current().Document().at("layers")[0].at("material").at("Eg_eV");}},
         {"material.file_exists", [] {return Json(std::filesystem::exists(TutorialExportPath("scapslab-tutorial.material")));}},
         {"menu.File", [this] {return Json(menuOpened.contains("File"));}},{"menu.Edit", [this] {return Json(menuOpened.contains("Edit"));}},
         {"menu.View", [this] {return Json(menuOpened.contains("View"));}},{"menu.Simulate", [this] {return Json(menuOpened.contains("Simulate"));}},
         {"menu.Tools", [this] {return Json(menuOpened.contains("Tools"));}},{"menu.Tutorials", [this] {return Json(menuOpened.contains("Tutorials"));}},
-        {"layer2.Eg_eV", [this] {const auto &l=Current().document.at("layers");return l.size()>1?l[1].at("material").at("Eg_eV"):Json(0);}},
-        {"layer1.Na_m3", [this] {return Current().document.at("layers")[0].at("doping").at("Na_m3");}},
-        {"defect.count", [this] {return Json(Current().document.at("layers")[0].value("defects",Json::array()).size());}},
-        {"defect.Nt_m3", [this] {const auto &d=Current().document.at("layers")[0].value("defects",Json::array());return d.empty()?Json(0):d[0].at("Nt_m3");}},
-        {"interface_defect.count", [this] {return Json(Current().document.value("interface_defects",Json::array()).size());}},
-        {"interface_defect.Nt_m2", [this] {const auto &d=Current().document.value("interface_defects",Json::array());return d.empty()?Json(0):d[0].at("Nt_m2");}},
-        {"contact.left_phi_eV", [this] {return Current().document.at("contacts").at("left").at("phi_m_eV");}},
-        {"contact.left_flat_band", [this] {return Json(Current().document.at("contacts").at("left").value("flat_band",false));}},
-        {"contact.right_Sn_m_s", [this] {return Current().document.at("contacts").at("right").at("Sn_m_s");}},
+        {"layer2.Eg_eV", [this] {const auto &l=Current().Document().at("layers");return l.size()>1?l[1].at("material").at("Eg_eV"):Json(0);}},
+        {"layer1.Na_m3", [this] {return Current().Document().at("layers")[0].at("doping").at("Na_m3");}},
+        {"defect.count", [this] {return Json(Current().Document().at("layers")[0].value("defects",Json::array()).size());}},
+        {"defect.Nt_m3", [this] {const auto &d=Current().Document().at("layers")[0].value("defects",Json::array());return d.empty()?Json(0):d[0].at("Nt_m3");}},
+        {"interface_defect.count", [this] {return Json(Current().Document().value("interface_defects",Json::array()).size());}},
+        {"interface_defect.Nt_m2", [this] {const auto &d=Current().Document().value("interface_defects",Json::array());return d.empty()?Json(0):d[0].at("Nt_m2");}},
+        {"contact.left_phi_eV", [this] {return Current().Document().at("contacts").at("left").at("phi_m_eV");}},
+        {"contact.left_flat_band", [this] {return Json(Current().Document().at("contacts").at("left").value("flat_band",false));}},
+        {"contact.right_Sn_m_s", [this] {return Current().Document().at("contacts").at("right").at("Sn_m_s");}},
         {"device.name", [this] { return Json(Current().name); }},
-        {"device.layer_count", [this] { return Json(Current().document.at("layers").size()); }},
-        {"device.dark", [this] { return Json(!Current().document.value("illumination", Json::object()).value("enabled", false)); }},
-        {"device.light", [this] { return Json(Current().document.value("illumination", Json::object()).value("enabled", false)); }},
+        {"device.layer_count", [this] { return Json(Current().Document().at("layers").size()); }},
+        {"device.dark", [this] { return Json(!Current().Document().value("illumination", Json::object()).value("enabled", false)); }},
+        {"device.light", [this] { return Json(Current().Document().value("illumination", Json::object()).value("enabled", false)); }},
         {"result.iv.valid", [this] { return Json(Current().result.value("valid", false)); }},
         {"result.iv.Voc_V", [this] { return Current().result.value("photovoltaic", Json::object()).value("Voc_V", Json(nullptr)); }},
         {"result.iv.Jsc_A_m2", [this] { return Current().result.value("photovoltaic", Json::object()).value("Jsc_A_m2", Json(nullptr)); }},
@@ -160,7 +160,7 @@ void Workflow::UpdateTutorial() {
 }
 Json VerifyTutorial(const std::string &id) {
     Workflow workflow(CreateRef<JobSystem>(nullptr,1));
-    workflow.Current().document=NewDeviceDocument();
+    workflow.Current().SetDocument(NewDeviceDocument());
     const auto started=workflow.Dispatch({{"operation","tutorial_start"},{"tutorial_id",id},{"mode","verify"}});
     if (!started.value("ok",false)) return {{"schema_version",1},{"tutorial_id",id},{"status","failed"},{"ok",false},{"error",started.at("error")},{"steps",Json::array()}};
     while (workflow.tutorial.Automatic() || workflow.Pending()) {

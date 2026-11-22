@@ -6,8 +6,8 @@
 namespace SST::ScapsLab::Undo {
 std::size_t JsonBytes(const Json &j); // approximate heap size of a Json tree (undo byte accounting)
 
-// Document edit: forward/back json patches (Json::diff). Same non-empty gesture on the same device merges into one step (one slider drag = one undo step).
-Unique<ICommand> Edit(Workflow &w, std::string device, const Json &before, const Json &after, std::string gesture);
+// Document edit: typed field and structural deltas. Same non-empty gesture on the same device merges into one step (one slider drag = one undo step).
+Unique<ICommand> Edit(Workflow &w, std::string device, const ProjectDraft &before, const ProjectDraft &after, std::string gesture);
 
 // History delta of one device, keyed by run_id: erased entries (with their typed results), inserted entries, entry patches, plus selection/status and,
 // for a clear, the live results. Built by comparing the device before and after the in-place operation.

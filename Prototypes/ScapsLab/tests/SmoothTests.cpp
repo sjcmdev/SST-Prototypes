@@ -46,7 +46,7 @@ TEST(Smooth,EditMakesResultStaleUntilNextRun) {
     Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;
     (void)w.Dispatch({{"operation","project_load"},{"path",Example("11-si-pn-am15")}});Wait(w);
     (void)w.Dispatch({{"operation","run"}});Wait(w);EXPECT_FALSE(w.Current().Stale());
-    auto doc=w.Current().document;doc["layers"][0]["thickness_m"]=doc["layers"][0]["thickness_m"].get<double>()*1.1;
+    auto doc=w.Current().Document();doc["layers"][0]["thickness_m"]=doc["layers"][0]["thickness_m"].get<double>()*1.1;
     (void)w.Dispatch({{"operation","edit"},{"document",doc}});Wait(w);EXPECT_TRUE(w.Current().Stale());
     (void)w.Dispatch({{"operation","run"}});Wait(w);EXPECT_FALSE(w.Current().Stale());
 }

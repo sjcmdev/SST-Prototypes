@@ -22,37 +22,24 @@ Json Concat(const Json &a, const Json &b) {Json r = a;for(const auto &op : b) r.
 
 // ---- document edit ------------------------------------------------------------------------------------------------------------------------------------
 class EditCmd final : public ICommand {
-    Workflow &w;std::string device, gesture;Json fwd, back;std::size_t bytes = 0;
-    void Measure() {bytes = sizeof(*this) + JsonBytes(fwd) + JsonBytes(back);}
-    Result<void> Apply(const Json &patch) {
-        try {
-            auto &d = w.Device(device);
-            w.ApplyDocument(d, d.document.patch(patch)); // patch() builds a new document: a failing patch leaves the old one untouched
-            return {};
-        } catch(const std::exception &e) {return Failed(e);}
+    Workflow &w;std::string device,gesture;DraftDelta delta;
+    Result<void> Apply(bool forward) {
+        try {auto& d=w.Device(device);w.ApplyDraft(d,delta.Apply(*d.draft,forward));return {};}catch(const std::exception& e){return Failed(e);}
     }
 public:
-    EditCmd(Workflow &w, std::string device, Json fwd, Json back, std::string gesture) : w(w), device(std::move(device)), gesture(std::move(gesture)), fwd(std::move(fwd)), back(std::move(back)) {Measure();}
+    EditCmd(Workflow& w,std::string device,DraftDelta delta,std::string gesture):w(w),device(std::move(device)),gesture(std::move(gesture)),delta(std::move(delta)) {}
     std::string Description() const override {return "Edit parameters";}
     bool IsUndoable() const noexcept override {return true;}
-    Result<void> Execute(CommandContext &) override {return Apply(fwd);}
-    Result<void> Undo(CommandContext &) override {return Apply(back);}
-    std::size_t ByteSize() const noexcept override {return bytes;}
-    bool CanMerge(const ICommand &next) const noexcept override {
-        const auto *e = dynamic_cast<const EditCmd *>(&next);
-        return e && !gesture.empty() && gesture == e->gesture && device == e->device;
-    }
-    // The newest step was just applied, so the live document is its "after". The merged step is the net change original -> live: one patch pair, however long the drag.
+    Result<void> Execute(CommandContext&) override {return Apply(true);}
+    Result<void> Undo(CommandContext&) override {return Apply(false);}
+    std::size_t ByteSize() const noexcept override {return sizeof(*this)+delta.Bytes();}
+    bool CanMerge(const ICommand& next) const noexcept override {const auto* e=dynamic_cast<const EditCmd*>(&next);return e && !gesture.empty() && gesture==e->gesture && device==e->device;}
     Result<void> Merge(Unique<ICommand> next) override {
-        const auto &n = static_cast<const EditCmd &>(*next);
-        Json f = Concat(fwd, n.fwd), b = Concat(n.back, back); // always valid: patches compose by concatenation
         try {
-            const Json &live = w.Device(device).document;
-            const Json original = live.patch(b);
-            if(original.patch(f) == live) {f = Json::diff(original, live);b = Json::diff(live, original);} // compact (net change only)
-        } catch(const std::exception &) {}
-        fwd = std::move(f);back = std::move(b);Measure();
-        return {};
+            const auto& n=static_cast<const EditCmd&>(*next);const auto& live=*w.Device(device).draft;
+            const auto previous=n.delta.Apply(live,false);const auto original=delta.Apply(*previous,false);
+            delta=CompareDrafts(*original,live);return {};
+        }catch(const std::exception& e){return Failed(e);}
     }
 };
 
@@ -202,8 +189,8 @@ public:
     std::size_t ByteSize() const noexcept override {return sizeof(*this) + device.capacity();}
 };
 }
-Unique<ICommand> Edit(Workflow &w, std::string device, const Json &before, const Json &after, std::string gesture) {
-    return CreateUnique<EditCmd>(w, std::move(device), Json::diff(before, after), Json::diff(after, before), std::move(gesture));
+Unique<ICommand> Edit(Workflow &w, std::string device, const ProjectDraft &before, const ProjectDraft &after, std::string gesture) {
+    return CreateUnique<EditCmd>(w, std::move(device), CompareDrafts(before,after), std::move(gesture));
 }
 Deltas Compare(const std::vector<DeviceBefore> &before, Workflow &w, bool withLiveResults) {
     Deltas out;

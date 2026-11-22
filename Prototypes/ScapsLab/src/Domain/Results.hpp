@@ -4,6 +4,7 @@
 // that still read Json. ToJson(FromJson(j)) dumps identically to j: modelled keys keep their presence bit, unmodelled keys live in PJson
 // `rest`/`meta`, non-finite doubles are written as null (what Json::dump does anyway), integers are never turned into doubles.
 #include "Domain/Packed.hpp"
+#include "Domain/BatchDraft.hpp"
 #include <chrono>
 #include <cstdint>
 #include <mutex>
@@ -111,7 +112,10 @@ struct AcResult final : ResultBase { // cv, cf, qe
     Json Dump() const override;
     const PJson &MetaOf() const override {return meta;}
 };
-struct BatchResult final : ResultBase { // sweep/batch table (rows, curves, spec, columns) and single-row batch runs of the history
+struct BatchResult final : ResultBase {
+    std::shared_ptr<const ProjectDraft> projectSnapshot;
+    std::shared_ptr<const BatchDraft> batchDraft;
+    std::shared_ptr<const RecorderDraft> recorderDraft; // sweep/batch table (rows, curves, spec, columns) and single-row batch runs of the history
     PJson body; // metadata; legacy files retain their lossless packed representation
     std::vector<Ref<const scaps_core::BatchRow>> rows;
     Json legacySchema;

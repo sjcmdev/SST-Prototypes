@@ -1,3 +1,4 @@
+#include "DocumentFixture.hpp"
 // S9: command-based undo with deltas. Core UndoStack limits (opt-in), random edit undo/redo property, gesture merge, stack size, synchronous undo, exact
 // restore of device/history/project operations.
 #include <gtest/gtest.h>
@@ -18,7 +19,7 @@ Json Go(Workflow &w, const Json &r) {
 void Drain(Workflow &w) {while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}}
 bool Ok(const Json &j) {return j.at("ok").get<bool>();}
 Workflow &Fast(Workflow &w) { // short sweep: a run takes a few ms
-    w.Current().document = ReadProject(SCAPSLAB_PROJECT);w.Current().document["voltage"] = {{"start_V", 0.}, {"stop_V", .1}, {"step_V", .05}};return w;
+    w.Current().SetDocument( ReadProject(SCAPSLAB_PROJECT));EditFixture(w.Current(),[&](Json& document){document["voltage"]= {{"start_V", 0.}, {"stop_V", .1}, {"step_V", .05}};});return w;
 }
 
 // ---- Core UndoStack limits ----------------------------------------------------------------------------------------------------------------------------
@@ -73,14 +74,14 @@ TEST(UndoStackLimits, MergeGrowthIsCappedAndCleanPointFollowsTheDrop) {
 
 // ---- random edits: N undos == original (bit for bit), N redos == final -----------------------------------------------------------------------------------
 TEST(ScapsLabUndo, RandomEditsUndoToTheOriginalAndRedoToTheFinalBitForBit) {
-    Workflow w(CreateRef<JobSystem>(nullptr, 1));w.Current().document = ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr, 1));w.Current().SetDocument( ReadProject(SCAPSLAB_PROJECT));
     std::mt19937_64 rng(20261121);
     const auto uniform = [&](double lo, double hi) {return std::uniform_real_distribution<double>(lo, hi)(rng);};
-    std::vector<std::string> states{w.Current().document.dump()}; // document after each undo step (index = steps applied)
+    std::vector<std::string> states{w.Current().Document().dump()}; // document after each undo step (index = steps applied)
     std::string lastGesture;int gestureNo = 0,edits = 0;
     for(int i = 0; i < 120; ++i) {
         const int kind = int(rng() % 9);Json request;std::string gesture;
-        auto doc = w.Current().document;const auto layers = doc.at("layers").size();
+        auto doc = w.Current().Document();const auto layers = doc.at("layers").size();
         if(kind == 8 && layers < 5) request = {{"operation", "layer"}, {"action", "add"}};
         else if(kind == 7 && layers > 1) request = {{"operation", "layer"}, {"action", "remove"}, {"layer_id", doc["layers"].back().at("scapslab_id")}};
         else {
@@ -96,9 +97,9 @@ TEST(ScapsLabUndo, RandomEditsUndoToTheOriginalAndRedoToTheFinalBitForBit) {
             }
             request = {{"operation", "edit"}, {"document", doc}, {"gesture_id", gesture}};
         }
-        const auto before = w.Current().document.dump();
+        const auto before = w.Current().Document().dump();
         const auto out = Go(w, request);ASSERT_TRUE(Ok(out)) << out.dump();
-        const auto after = w.Current().document.dump();if(after == before) continue;
+        const auto after = w.Current().Document().dump();if(after == before) continue;
         ++edits;
         const auto g = request.value("gesture_id", std::string{});
         if(!g.empty() && g == lastGesture) states.back() = after;else states.push_back(after);
@@ -106,33 +107,33 @@ TEST(ScapsLabUndo, RandomEditsUndoToTheOriginalAndRedoToTheFinalBitForBit) {
     }
     ASSERT_GT(edits, 60);ASSERT_EQ(w.Current().undo.GetUndoDepth(), states.size() - 1);
     const auto depth = states.size() - 1;
-    for(std::size_t k = depth; k-- > 0;) {ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));ASSERT_EQ(w.Current().document.dump(), states[k]) << "undo to step " << k;}
+    for(std::size_t k = depth; k-- > 0;) {ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));ASSERT_EQ(w.Current().Document().dump(), states[k]) << "undo to step " << k;}
     EXPECT_FALSE(w.Current().undo.CanUndo());
-    for(std::size_t k = 1; k <= depth; ++k) {ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));ASSERT_EQ(w.Current().document.dump(), states[k]) << "redo to step " << k;}
+    for(std::size_t k = 1; k <= depth; ++k) {ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));ASSERT_EQ(w.Current().Document().dump(), states[k]) << "redo to step " << k;}
     // a random walk over the same stack lands on the recorded state every time
     std::size_t at = depth;
     for(int i = 0; i < 200; ++i) {
         const bool undo = at == 0 ? false : at == depth ? true : rng() % 2;
         ASSERT_TRUE(Ok(Go(w, {{"operation", undo ? "undo" : "redo"}})));at += undo ? std::size_t(-1) : 1;
-        ASSERT_EQ(w.Current().document.dump(), states[at]);
+        ASSERT_EQ(w.Current().Document().dump(), states[at]);
     }
     std::cout << "UNDO_PROPERTY edits=" << edits << " steps=" << depth << " stack_bytes=" << w.Current().undo.GetByteSize() << std::endl;
 }
 
 // ---- gesture merge -----------------------------------------------------------------------------------------------------------------------------------
 TEST(ScapsLabUndo, OneDragIsOneStepAndTheMergedPatchStaysSmall) {
-    Workflow w(CreateRef<JobSystem>(nullptr, 1));Fast(w);const auto original = w.Current().document;
+    Workflow w(CreateRef<JobSystem>(nullptr, 1));Fast(w);const auto original = w.Current().Document();
     for(int i = 0; i < 60; ++i) ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", 301. + i * .37}}}, {"gesture_id", "drag"}})));
     ASSERT_EQ(w.Current().undo.GetUndoDepth(), 1u);
     EXPECT_LT(w.Current().undo.GetByteSize(), 2048u) << "a 60-tick drag keeps one patch pair, not 60";
-    const auto last = w.Current().document;
-    ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));EXPECT_EQ(w.Current().document.dump(), original.dump());
-    ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));EXPECT_EQ(w.Current().document.dump(), last.dump());
+    const auto last = w.Current().Document();
+    ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));EXPECT_EQ(w.Current().Document().dump(), original.dump());
+    ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));EXPECT_EQ(w.Current().Document().dump(), last.dump());
     // Esc revert: the value returns to where the gesture started; still one step, and undo/redo stay exact
     for(const double t : {320., 330., 300.}) ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", t}}}, {"gesture_id", "esc"}})));
     EXPECT_EQ(w.Current().undo.GetUndoDepth(), 2u);
-    ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));EXPECT_EQ(w.Current().document.dump(), last.dump());
-    ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));EXPECT_EQ(w.Current().document.at("temperature_K"), 300.);
+    ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));EXPECT_EQ(w.Current().Document().dump(), last.dump());
+    ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));EXPECT_EQ(w.Current().Document().at("temperature_K"), 300.);
     // a different gesture, or none, never merges
     ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", 311.5}}}, {"gesture_id", "other"}})));
     ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", 312.5}}}})));
@@ -141,11 +142,11 @@ TEST(ScapsLabUndo, OneDragIsOneStepAndTheMergedPatchStaysSmall) {
 
 // ---- stack size --------------------------------------------------------------------------------------------------------------------------------------
 TEST(ScapsLabUndo, TwoHundredEditsStayUnderOneMegabyte) {
-    Workflow w(CreateRef<JobSystem>(nullptr, 1));w.Current().document = ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr, 1));w.Current().SetDocument( ReadProject(SCAPSLAB_PROJECT));
     // heaviest document: the embedded AM1.5G spectrum is what a snapshot undo would copy per edit
     ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"illumination", {{"scapslab_spectrum", "AM1.5G"}}}}}})));
     w.Current().undo.Clear();
-    const auto docBytes = Undo::JsonBytes(w.Current().document);
+    const auto docBytes = Undo::JsonBytes(w.Current().Document());
     for(int i = 0; i < 200; ++i) ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", 250.1 + i * .31}}}})));
     ASSERT_EQ(w.Current().undo.GetUndoDepth(), 200u);
     const auto bytes = w.Current().undo.GetByteSize();
@@ -157,7 +158,7 @@ TEST(ScapsLabUndo, TwoHundredEditsStayUnderOneMegabyte) {
 
 // ---- undo is synchronous ---------------------------------------------------------------------------------------------------------------------------------
 TEST(ScapsLabUndo, UndoNeedsNoJobAndCancelsTheRunningCalculationOfThatDevice) {
-    Workflow w(CreateRef<JobSystem>(nullptr, 1));Fast(w);const auto original = w.Current().document;
+    Workflow w(CreateRef<JobSystem>(nullptr, 1));Fast(w);const auto original = w.Current().Document();
     ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", 310.5}}}})));
     ASSERT_TRUE(w.jobs->PauseAllJobs()); // nothing can finish: whatever happens next is the caller's thread alone
     ASSERT_TRUE(w.Dispatch({{"operation", "run"}}).at("ok").get<bool>());const auto running = w.ActiveJob();ASSERT_NE(running, 0u);
@@ -165,12 +166,12 @@ TEST(ScapsLabUndo, UndoNeedsNoJobAndCancelsTheRunningCalculationOfThatDevice) {
     const auto out = w.Dispatch({{"operation", "undo"}});
     const auto ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     ASSERT_TRUE(Ok(out)) << out.dump();
-    EXPECT_EQ(w.Current().document.dump(), original.dump()) << "applied during the call, with the job queue paused";
+    EXPECT_EQ(w.Current().Document().dump(), original.dump()) << "applied during the call, with the job queue paused";
     EXPECT_LT(ms, 50.) << "undo latency";std::cout << "UNDO_LATENCY_MS " << ms << std::endl;
     ASSERT_TRUE(w.jobs->ResumeAllJobs());Drain(w);
     EXPECT_EQ(w.jobs->GetJob(running)->status, JobStatus::Cancelled);EXPECT_TRUE(w.Current().result.empty()) << "a result for the undone document must not be adopted";
-    EXPECT_EQ(w.Current().document.dump(), original.dump());
-    ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));EXPECT_EQ(w.Current().document.at("temperature_K"), 310.5);
+    EXPECT_EQ(w.Current().Document().dump(), original.dump());
+    ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));EXPECT_EQ(w.Current().Document().at("temperature_K"), 310.5);
 }
 TEST(ScapsLabUndo, UndoDiscardsAnUnappliedEditInsteadOfPoppingTheStack) {
     Workflow w(CreateRef<JobSystem>(nullptr, 1));Fast(w);
@@ -182,8 +183,8 @@ TEST(ScapsLabUndo, UndoDiscardsAnUnappliedEditInsteadOfPoppingTheStack) {
     ASSERT_TRUE(Ok(w.Dispatch({{"operation", "undo"}})));
     EXPECT_EQ(w.Current().undo.GetUndoDepth(), 2u) << "the pending edit was discarded, nothing was popped";
     ASSERT_TRUE(w.jobs->ResumeAllJobs());Drain(w);
-    EXPECT_EQ(w.Current().document.at("temperature_K"), 302.5) << "the discarded edit never lands";EXPECT_EQ(w.Current().undo.GetUndoDepth(), 2u);
-    ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));EXPECT_EQ(w.Current().document.at("temperature_K"), 301.5);
+    EXPECT_EQ(w.Current().Document().at("temperature_K"), 302.5) << "the discarded edit never lands";EXPECT_EQ(w.Current().undo.GetUndoDepth(), 2u);
+    ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));EXPECT_EQ(w.Current().Document().at("temperature_K"), 301.5);
 }
 TEST(ScapsLabUndo, UndoOnOneDeviceLeavesTheOtherDevicesCalculationAlone) {
     Workflow w(CreateRef<JobSystem>(nullptr, 2));Fast(w);const auto first = w.project.active_device;
@@ -193,7 +194,7 @@ TEST(ScapsLabUndo, UndoOnOneDeviceLeavesTheOtherDevicesCalculationAlone) {
     ASSERT_TRUE(w.jobs->PauseAllJobs());
     w.Submit(second, {{"operation", "run"}});const auto otherJob = w.LaneJob(second);ASSERT_NE(otherJob, 0u);
     ASSERT_TRUE(Ok(w.Dispatch({{"operation", "undo"}})));
-    EXPECT_EQ(w.Device(first).document.at("temperature_K"), 300) << "undone at once while the other device's job is pending";
+    EXPECT_EQ(w.Device(first).Document().at("temperature_K"), 300) << "undone at once while the other device's job is pending";
     ASSERT_TRUE(w.jobs->ResumeAllJobs());Drain(w);
     EXPECT_EQ(w.jobs->GetJob(otherJob)->status, JobStatus::Completed);EXPECT_FALSE(w.Device(second).result.empty());
 }
@@ -237,7 +238,7 @@ TEST(ScapsLabUndo, RemovedDeviceComesBackWithItsOwnUndoStack) {
     ASSERT_TRUE(Ok(Go(w, {{"operation", "device_duplicate"}})));const auto second = w.project.active_device;
     for(const double t : {311.5, 312.5}) ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", t}}}})));
     ASSERT_TRUE(Ok(Go(w, {{"operation", "device_remove"}, {"device_id", second}})));ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));
-    ASSERT_EQ(w.project.devices.size(), 2u);EXPECT_EQ(w.Device(second).undo.GetUndoDepth(), 2u);EXPECT_EQ(w.Device(second).document.at("temperature_K"), 312.5);
+    ASSERT_EQ(w.project.devices.size(), 2u);EXPECT_EQ(w.Device(second).undo.GetUndoDepth(), 2u);EXPECT_EQ(w.Device(second).Document().at("temperature_K"), 312.5);
 }
 TEST(ScapsLabUndo, HistoryUpdateClearAndRetentionTrimAreUndoableSelectIsNot) {
     Workflow w(CreateRef<JobSystem>(nullptr, 1));Fast(w);

@@ -259,7 +259,7 @@ void SetupApplication(Application &app) {
         ExperimentalPanels()=w->settings.value("experimental_panels",false);
         if(w->settings.contains("session"))w->plotSession.settings.Read(w->settings["session"]);
     }
-    w->Current().document=NewDeviceDocument(); w->Current().name=w->Current().document.at("case_id");w->path="";
+    w->Current().SetDocument(NewDeviceDocument()); w->Current().name=w->Current().Document().at("case_id");w->path="";
     if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}
     const char *gallery=std::getenv("SCAPSLAB_GALLERY_PANEL");
     w->lightResponse=true;w->viewIdleSeconds=5; // S4: Json views of idle results are freed (typed results stay)
@@ -267,7 +267,7 @@ void SetupApplication(Application &app) {
     w->autoRecalculate=true;
     ImGui::GetIO().ConfigDebugHighlightIdConflicts=true;
     if(gallery && std::atoi(gallery)>=11 && std::atoi(gallery)<=14) {
-        auto draft=w->Current().document;
+        auto draft=w->Current().Document();
         draft["layers"][0]["defects"]=Json::array();
         for(const auto *shape:{"gaussian","cb_tail","vb_tail"}) {
             auto d=NewDefect();d["scapslab_id"]=std::string("preview-")+shape;d["energy_distribution"]=shape;d["Nt_m3"]=1e17;
@@ -288,7 +288,7 @@ void SetupApplication(Application &app) {
         while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     if(gallery && std::atoi(gallery)==22 && startupFile.empty()) {
-        auto draft=w->Current().document;draft["external"]["series_ohm_m2"]=1e-5;draft["external"]["shunt_ohm_m2"]=1.;
+        auto draft=w->Current().Document();draft["external"]["series_ohm_m2"]=1e-5;draft["external"]["shunt_ohm_m2"]=1.;
         for(int i=0;i<2;++i) {auto defect=NewDefect();defect["scapslab_id"]="gr-defect-"+std::to_string(i);defect["Nt_m3"]=1e17;draft["layers"][0]["defects"].push_back(defect);}
         for(auto &layer:draft["layers"]) layer["recombination"]={{"radiative_cm3_s",1e-14},{"auger_n_cm6_s",2.8e-31},{"auger_p_cm6_s",1e-31}};
         auto sheet=NewDefect(true);sheet["id"]="gr-interface";sheet["Nt_m2"]=1e10;draft["interface_defects"].push_back(sheet);
@@ -317,7 +317,7 @@ void SetupApplication(Application &app) {
     if(gallery && startupFile.empty() && (!single || (std::atoi(gallery)>=6 && std::atoi(gallery)<10))) {
         for(const auto *kind:{"cv","cf"}) {
             (void)w->Dispatch({{"operation",kind},{"start_V",-0.5},{"stop_V",0.5},{"step_V",0.05},{"frequency_Hz",1e4},
-                {"voltage_V",0.0},{"start_Hz",10.0},{"stop_Hz",1e7},{"points",61},{"temperature_K",w->Current().document.at("temperature_K")}});
+                {"voltage_V",0.0},{"start_Hz",10.0},{"stop_Hz",1e7},{"points",61},{"temperature_K",w->Current().Document().at("temperature_K")}});
             while(w->Pending()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
         }
     }

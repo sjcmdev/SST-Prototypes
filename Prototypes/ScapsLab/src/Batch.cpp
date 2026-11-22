@@ -80,77 +80,54 @@ Json BatchParameters(const Json &document) {
     };
     visit(document,"","","","");return result;
 }
-Json BatchPreview(const Json &document,const Json &input) {
-    auto spec=input;if(!spec.contains("include_curves"))spec["include_curves"]=true;spec["threads"]=1;
-    const auto mode=spec.value("mode",std::string("nested"));if(mode!="nested" && mode!="together")throw std::invalid_argument("Mode must be nested or together");
-    if(!spec.contains("axes") || !spec.at("axes").is_array() || spec.at("axes").empty() || spec.at("axes").size()>2) throw std::invalid_argument("Select one or two axes");
-    const auto parameters=BatchParameters(document);Json combinations=Json::array({Json::object()});std::set<std::string> seen;
-    for(auto &axis:spec["axes"]) {
-        const auto found=std::find_if(parameters.begin(),parameters.end(),[&](const Json &p){return axis.contains("parameter_id")?p.at("id")==axis.at("parameter_id"):p.at("path")==axis.at("path");});
-        if(found==parameters.end())throw std::invalid_argument("Unknown numeric parameter; select it from the project tree");
-        const auto path=found->at("path").get<std::string>();if(!seen.insert(path).second)throw std::invalid_argument("Axes must use different parameters");
-        axis["path"]=path;axis["parameter_id"]=found->at("id");axis["unit"]=found->at("unit");
-        Json values=Json::array();
-        if(axis.contains("values")) values=axis.at("values");
-        else {if(!axis.at("count").is_number_integer())throw std::invalid_argument("Member count must be an integer");const auto n=axis.at("count").get<int>();const double a=axis.at("start"),b=axis.at("stop");const auto spacing=axis.value("spacing",std::string("linear"));if(n<1 || n>10000 || !std::isfinite(a) || !std::isfinite(b) || (spacing!="linear" && spacing!="log") || (spacing=="log" && (a<=0 || b<=0)))throw std::invalid_argument("Invalid axis range/count/spacing");for(int i=0;i<n;++i) {const double t=n==1?0:double(i)/(n-1);values.push_back(i==0?a:i==n-1?b:spacing=="log"?std::exp(std::lerp(std::log(a),std::log(b),t)):std::lerp(a,b,t));}}
-        if(!values.is_array() || values.empty() || values.size()>10000)throw std::invalid_argument("Axis requires 1..10000 values");
-        for(const auto &v:values) if(!v.is_number() || !std::isfinite(v.get<double>()))throw std::invalid_argument("Axis values must be finite numbers");
-        if(mode=="together") {if(combinations.size()==1 && combinations[0].empty())combinations=Json::array();if(combinations.empty())for(const auto &v:values)combinations.push_back(Json::object());if(combinations.size()!=values.size())throw std::invalid_argument("Together axes require equal counts");for(std::size_t i=0;i<values.size();++i)combinations[i][path]=values[i];}
-        else {if(combinations.size()>10000/values.size())throw std::invalid_argument("Maximum 10000 members");auto expanded=Json::array();for(const auto &c:combinations)for(const auto &v:values) {auto p=c;p[path]=v;expanded.push_back(p);}combinations=std::move(expanded);}
-    }
-    auto volts=spec.value("voltages_V",Json::array());if(!spec.contains("voltages_V")) {const auto p=Model(document);for(double v:scaps_core::make_voltage_list(p.voltage))volts.push_back(v);}
-    if(!volts.is_array() || volts.empty() || volts.size()>10001)throw std::invalid_argument("Voltage sampling requires 1..10001 points");
-    for(const auto &v:volts)if(!v.is_number() || !std::isfinite(v.get<double>()))throw std::invalid_argument("Invalid voltage sample");
-    auto frequencies=spec.value("frequencies_Hz",Json::array());if(!frequencies.is_array() || frequencies.size()>1000)throw std::invalid_argument("Invalid frequency sampling");for(const auto &f:frequencies)if(!f.is_number() || !std::isfinite(f.get<double>()) || f.get<double>()<=0)throw std::invalid_argument("Frequency must be positive");
-    spec["columns"]=spec.value("columns",RecorderDefaults());
-    (void)RecorderColumns(spec["columns"]);
-    // Acquire requested Recorder samples inside the declared range; never extrapolate.
-    const auto [low,high]=std::minmax_element(volts.begin(),volts.end());const double first=low->get<double>(),last=high->get<double>();
-    for(const auto &column:spec["columns"]) {
-        if(column.contains("voltage_V")) {const double v=column.at("voltage_V");if(v>=first && v<=last && std::find(volts.begin(),volts.end(),v)==volts.end()) for(std::size_t i=1;i<volts.size();++i) {const double a=volts[i-1],b=volts[i];if(v>=std::min(a,b) && v<=std::max(a,b)) {volts.insert(volts.begin()+i,v);break;}}}
-        if(column.contains("frequency_Hz") && std::find(frequencies.begin(),frequencies.end(),column.at("frequency_Hz"))==frequencies.end()) frequencies.push_back(column.at("frequency_Hz"));
-    }
-    if(volts.size()>10001 || frequencies.size()>1000)throw std::invalid_argument("Recorder samples exceed batch sampling limits");
-    spec["voltages_V"]=volts;spec["frequencies_Hz"]=frequencies;
-    return {{"spec",spec},{"combinations",combinations},{"member_count",combinations.size()},{"bias_count",volts.size()},{"frequency_count",frequencies.size()},{"sample_count",combinations.size()*volts.size()*(1+frequencies.size())},{"voltages_V",volts},{"frequencies_Hz",frequencies},{"time_estimate_s",nullptr},{"time_estimate_status","unavailable before first run"}};
-}
-Json QuickSweep(const Json &document,const Json &request) {
-    const auto parameters=BatchParameters(document);
-    auto parameter=std::find_if(parameters.begin(),parameters.end(),[&](const Json &p){return p.at("id")==request.at("parameter_id");});
-    if(parameter==parameters.end())throw std::invalid_argument("Unknown parameter_id");
-    const double centre=parameter->at("value"),delta=request.at("delta_native_units");
-    if(!std::isfinite(delta) || delta<=0)throw std::invalid_argument("delta must be positive, in the parameter's native unit");
-    auto spec=BatchDefaults();spec["axes"]=Json::array({{{"parameter_id",request.at("parameter_id")},{"start",centre-delta},{"stop",centre+delta},{"count",request.value("points",5)},{"spacing",request.value("spacing",std::string("linear"))}}});
-    if(request.contains("voltages_V"))spec["voltages_V"]=request.at("voltages_V");
-    if(request.contains("frequencies_Hz"))spec["frequencies_Hz"]=request.at("frequencies_Hz");
-    return BatchPreview(document,spec).at("spec");
-}
-bool BatchOperation(Operation &o,JobContext &ctx) {
-    const auto op=o.request.at("operation").get<std::string>();
-    if(op=="batch_select") {const int i=o.request.at("index");if(i<0 || !o.batchInput || i>=int(o.batchInput->rows.size()))throw std::invalid_argument("Unknown member index");}
-    else if(op=="batch_parameters") o.output=BatchParameters(o.document);
-    else if(op=="batch_settings") {
-        o.batchSpec=o.request.value("spec",o.batchSpec);o.recorderColumns=o.request.value("columns",o.recorderColumns);
-        const auto &axes=o.batchSpec.at("axes");
-        if(!o.batchSpec.is_object() || !axes.is_array() || axes.empty() || axes.size()>2)throw std::invalid_argument("Settings require one or two axis objects");
-        for(const auto &axis:axes) {
-            if(!axis.is_object() || !axis.at("parameter_id").is_string())throw std::invalid_argument("Select a stable parameter_id from the project tree");
-            if(axis.contains("values")) {if(!axis.at("values").is_array())throw std::invalid_argument("Values must be a numeric list");for(const auto &v:axis.at("values"))if(!v.is_number() || !std::isfinite(v.get<double>()))throw std::invalid_argument("Values must be finite numbers");}
-            else if(!axis.at("start").is_number() || !axis.at("stop").is_number() || !axis.at("count").is_number_integer())throw std::invalid_argument("Range requires numeric start/stop and integer count");
+std::vector<NumericParameter> ProjectParameters(const ProjectDraft& draft) {
+    std::vector<NumericParameter> result;
+    for(const auto& [path,value]:ProjectNumbers(draft.project)) {
+        std::string id=path,pointer="/",label;
+        for(char c:path){if(c=='.' || c=='[')pointer+='/';else if(c!=']')pointer+=c;}
+        if(path.starts_with("layers["))for(std::size_t i=0;i<draft.layers.size();++i) {
+            const auto prefix="layers["+std::to_string(i)+"]";if(!path.starts_with(prefix+"."))continue;
+            id="layers["+draft.layers[i].id+"]"+path.substr(prefix.size());
+            for(std::size_t k=0;k<draft.layers[i].defects.size();++k) {const auto marker=".defects["+std::to_string(k)+"]";if(const auto at=id.find(marker);at!=id.npos)id.replace(at,marker.size(),".defects["+draft.layers[i].defects[k].id+"]");}
+            label="layers / "+draft.project.layers[i].name+" / "+path.substr(prefix.size()+1);break;
         }
-        (void)RecorderColumns(o.recorderColumns);
-        auto spec=o.batchSpec;spec["columns"]=o.recorderColumns;
-        try {o.output=BatchPreview(o.document,spec);}catch(const std::invalid_argument &e) {o.output={{"configuration_error",e.what()}};}
+        if(path.starts_with("interface_defects["))for(std::size_t i=0;i<draft.project.interface_defects.size();++i) {const auto prefix="interface_defects["+std::to_string(i)+"]";if(path.starts_with(prefix+".")){id="interface_defects["+draft.project.interface_defects[i].id+"]"+path.substr(prefix.size());break;}}
+        if(label.empty())label=path;
+        result.push_back({id,path,pointer,label,Unit(path),value});
+    }
+    return result;
+}
+Json BatchParameters(const ProjectDraft& draft) {Json out=Json::array();for(const auto& p:ProjectParameters(draft))out.push_back({{"id",p.id},{"path",p.path},{"pointer",p.pointer},{"label",p.label},{"unit",p.unit},{"value",p.value}});return out;}
+Json BatchPreview(const Json& document,const Json& input) {return BatchPreview(*DraftFromDocument(document),input);}
+Json QuickSweep(const Json& document,const Json& input) {return QuickSweep(*DraftFromDocument(document),input);}
+Json BatchPreview(const ProjectDraft& document,const Json& input) {
+    const auto draft=ReadBatchDraft(input);const auto columns=input.contains("columns")?ReadRecorderDraft(input.at("columns")):CreateRef<const RecorderDraft>();return BatchPlanJson(PrepareBatch(document,*draft,*columns));
+}
+Json QuickSweep(const ProjectDraft& document,const Json& request) {
+    auto draft=PrepareQuickSweep(document,request.at("parameter_id"),request.at("delta_native_units"),request.value("points",5),request.value("spacing",std::string("linear")));
+    if(request.contains("voltages_V"))draft.voltages_V=request.at("voltages_V").get<std::vector<double>>();if(request.contains("frequencies_Hz"))draft.frequencies_Hz=request.at("frequencies_Hz").get<std::vector<double>>();return BatchPlanJson(PrepareBatch(document,draft,RecorderDraft{})).at("spec");
+}
+bool BatchOperation(Operation& o,JobContext& ctx) {
+    const auto op=o.request.at("operation").get<std::string>();
+    if(op=="batch_select"){const int i=o.request.at("index");if(i<0 || !o.batchInput || i>=int(o.batchInput->rows.size()))throw std::invalid_argument("Unknown member index");}
+    else if(op=="batch_parameters")o.output=BatchParameters(*o.draft);
+    else if(op=="batch_settings") {
+        try{o.output=BatchPlanJson(PrepareBatch(*o.draft,*o.batch,*o.recorder));}catch(const std::invalid_argument& e){o.output={{"configuration_error",e.what()}};}
     }
     else if(op=="quick_sweep" || op=="preview_batch" || op=="run_batch" || op=="retry_batch") {
         if(op=="retry_batch" && !o.batchInput)throw std::invalid_argument("No batch to retry");
-        auto spec=op=="quick_sweep"?QuickSweep(o.document,o.request):op=="retry_batch"?o.batchInput->Schema().at("spec"):o.request.value("spec",o.batchSpec);
-        spec["columns"]=op=="retry_batch"?o.batchInput->Schema().at("columns"):o.request.value("columns",o.recorderColumns);
-        const auto plan=BatchPreview(o.document,spec);spec=plan.at("spec");
-        if(op=="preview_batch") {o.output=plan;return true;}
-        if(!o.draft)o.draft=DraftFromDocument(o.document);
-        const auto &points=plan.at("combinations");
-        auto table=CreateRef<BatchResult>();table->native=true;
+        auto config=op=="retry_batch"?o.batchInput->batchDraft:o.batch;auto recorder=op=="retry_batch"?o.batchInput->recorderDraft:o.recorder;
+        if(!config || !recorder || !o.draft)throw std::invalid_argument("Batch has no typed project/settings snapshot");
+        if(op=="quick_sweep") {
+            auto quick=PrepareQuickSweep(*o.draft,o.request.at("parameter_id"),o.request.at("delta_native_units"),o.request.value("points",5),o.request.value("spacing",std::string("linear")));
+            if(o.request.contains("voltages_V"))quick.voltages_V=o.request.at("voltages_V").get<std::vector<double>>();if(o.request.contains("frequencies_Hz"))quick.frequencies_Hz=o.request.at("frequencies_Hz").get<std::vector<double>>();config=CreateRef<const BatchDraft>(std::move(quick));
+        }
+        std::optional<BatchPlan> prepared;
+        try{prepared=PrepareBatch(*o.draft,*config,*recorder);}catch(const std::invalid_argument& e){if(op!="preview_batch")throw;o.output={{"configuration_error",e.what()}};return true;}
+        const auto& plan=*prepared;if(op=="preview_batch"){o.output=BatchPlanJson(plan);return true;}
+        const auto spec=BatchPlanJson(plan).at("spec");const auto& points=plan.combinations;
+        o.document=DraftDocument(*o.draft); // legacy history/provenance metadata; solver setup stays typed
+        auto table=CreateRef<BatchResult>();table->native=true;table->projectSnapshot=o.draft;table->batchDraft=CreateRef<const BatchDraft>(plan.spec);table->recorderDraft=CreateRef<const RecorderDraft>(plan.recorder);
         auto metadata=op=="retry_batch" ? o.batchInput->Schema() : Json{{"schema_version",1},{"spec",spec},{"columns",NormalizedColumns(spec.at("columns"))},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"elapsed_s",0.},{"project_snapshot",o.document},{"provenance",{{"device_hash",DocumentHash(o.document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}}}};
         if(op=="retry_batch")table->rows=o.batchInput->rows;else table->rows.resize(points.size());
         if(op=="retry_batch" && (!o.batchInput->native || o.batchInput->legacyBase)) {
@@ -158,14 +135,10 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
             table->replacedRows.push_back(o.request.at("member_id").get<std::string>());
         }
         if(op=="retry_batch" && std::none_of(table->rows.begin(),table->rows.end(),[&](const auto& r){return r->id==o.request.at("member_id").get<std::string>();}))throw std::invalid_argument("Unknown member_id");
-        const auto parameters=BatchParameters(o.document);
-        scaps_core::BatchSpec typedSpec;typedSpec.voltages_V=spec.at("voltages_V").get<std::vector<double>>();typedSpec.frequencies_Hz=spec.at("frequencies_Hz").get<std::vector<double>>();typedSpec.columns=RecorderColumns(spec.at("columns"));
-        typedSpec.photovoltaic=true;typedSpec.photovoltaic_voltage_limit_V=spec.value("photovoltaic_voltage_limit_V",2.);
-        if(spec.contains("incident_power_W_m2"))typedSpec.incident_power_W_m2=spec.at("incident_power_W_m2");
-        if(spec.contains("mesh_coordinates_m"))typedSpec.mesh_coordinates_m=spec.at("mesh_coordinates_m").get<std::vector<double>>();
+        const auto parameters=ProjectParameters(*o.draft);auto typedSpec=plan.engine;
         scaps_core::BatchOptions options;options.include_curves=true;options.parallel_member=true;
         options.include_conditioning_profiles=o.jsonResponse;
-        if(o.jsonResponse && spec.value("include_curves",true))options.profile_biases=typedSpec.voltages_V;
+        if(o.jsonResponse && plan.spec.include_curves)options.profile_biases=typedSpec.voltages_V;
         o.batchGroup="batch-"+std::to_string(metadata.at("provenance").at("time_unix_ms").get<std::int64_t>());
         o.members.resize(points.size());
         std::atomic<std::size_t> finished{0};
@@ -175,33 +148,26 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
             if(wanted(i)) {
                 auto model=o.document;auto row=CreateRef<scaps_core::BatchRow>();
                 for(const auto& parameter:parameters) {
-                    const std::string path=parameter.at("path");
-                    if(points[i].contains(path) && points[i].at(path)!=parameter.at("value")) {
-                        model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=points[i].at(path);
+                    const auto& path=parameter.path;
+                    if(points[i].contains(path) && points[i].at(path)!=parameter.value) {
+                        model[Json::json_pointer(parameter.pointer)]=points[i].at(path);
                     }
                 }
                 try {
                     auto project=o.draft->project;
-                    for(const auto& parameter:parameters) {
-                        const std::string path=parameter.at("path"),pointer=parameter.at("pointer");
-                        if(!points[i].contains(path) || points[i].at(path)==parameter.at("value"))continue;
-                        const bool extension=std::any_of(o.draft->extensions.begin(),o.draft->extensions.end(),[&](const auto& field){return pointer==field.first || pointer.starts_with(field.first+"/");});
-                        if(!extension)SetProjectParameter(project,path,points[i].at(path).get<double>());
-                    }
-                    for(const auto& [path,value]:points[i].items())if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
-                    auto memberSpec=typedSpec;
-                    if(spec.contains("metastable"))memberSpec.conditioning=BatchConditioningModel(project,spec.at("metastable"));
-                    memberSpec.initial_state=BatchInitialStateModel(project,spec);
+                    for(const auto& [path,value]:points[i])if(value!=ProjectParameter(project,path))SetProjectParameter(project,path,value);
+                    for(const auto& [path,value]:points[i])if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
+                    auto memberSpec=PrepareBatchMember(project,plan.spec,typedSpec);
                     *row=scaps_core::run_batch_member(project,memberSpec,options);
                     row->project_hash=scaps_core::batch_project_hash(project);
                 }
                 catch(const std::exception& e) {row->status="Failed";const auto* typed=dynamic_cast<const scaps_core::DefError*>(&e);row->error_type=typed?typed->code:"invalid_parameter";row->message=e.what();scaps_core::record_batch(*row,typedSpec.columns);}
                 row->id="point_"+std::to_string(i);row->attempt=op=="retry_batch"?table->rows[i]->attempt+1:1;
-                for(const auto& [key,value]:points[i].items())row->parameters[key]=value.get<double>();
+                for(const auto& [key,value]:points[i])row->parameters[key]=value;
                 table->rows[i]=row;
                 auto& member=o.members[i];member.model=std::move(model);member.hash=DocumentHash(member.model);member.parameters=BatchParameters(member.model);member.t=points.size()<2?0.:double(i)/double(points.size()-1);
                 auto memberMeta=metadata;memberMeta["project_snapshot"]=member.model;memberMeta["provenance"]["device_hash"]=member.hash;memberMeta["elapsed_s"]=row->elapsed_s;
-                auto memberResult=CreateRef<BatchResult>();memberResult->native=true;memberResult->body.prim=std::move(memberMeta);memberResult->rows.push_back(row);member.typed=std::move(memberResult);
+                auto memberResult=CreateRef<BatchResult>();memberResult->native=true;memberResult->projectSnapshot=o.draft;memberResult->batchDraft=table->batchDraft;memberResult->recorderDraft=table->recorderDraft;memberResult->body.prim=std::move(memberMeta);memberResult->rows.push_back(row);member.typed=std::move(memberResult);
                 member.result={{"provenance",member.typed->Schema().at("provenance")},{"elapsed_s",row->elapsed_s}};
                 if(o.feed) {LiveMember m;m.index=int(i);std::vector<double> v,j;for(const auto& p:row->iv){v.push_back(p.voltage_V);j.push_back(p.status==scaps_core::SolverStatus::Converged?p.J_Am2:double(NAN));}m.v=Column::Intern(std::move(v));m.j=Column::Intern(std::move(j));o.feed->AddMember(std::move(m));}
             }
@@ -211,7 +177,7 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
         for(std::size_t i=0;i<points.size();++i) {
             if(!table->rows[i]) {
                 auto row=CreateRef<scaps_core::BatchRow>();row->id="point_"+std::to_string(i);row->status="Cancelled";row->error_type="cancelled";row->message="Stopped before this member";
-                for(const auto& [key,value]:points[i].items())row->parameters[key]=value.get<double>();
+                for(const auto& [key,value]:points[i])row->parameters[key]=value;
                 for(const auto& c:typedSpec.columns)row->values[c.id]={NAN,"cancelled"};table->rows[i]=std::move(row);
             }
             if(wanted(i))elapsed+=table->rows[i]->elapsed_s;
@@ -224,8 +190,8 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
         if(!o.batchInput)throw std::invalid_argument("No current batch results");
         auto table=CreateRef<BatchResult>();table->native=true;auto metadata=o.batchInput->Schema();
         if(!o.batchInput->native || o.batchInput->legacyBase){table->legacyBase=o.batchInput->legacyBase?o.batchInput->legacyBase:o.batchInput;table->replacedRows=o.batchInput->replacedRows;}
-        const auto input=o.request.value("columns",o.recorderColumns);const auto columns=RecorderColumns(input);metadata["columns"]=NormalizedColumns(input);
-        Ref<const ProjectDraft> replayDraft;
+        const auto& columns=o.recorder->columns;metadata["columns"]=NormalizedColumns(RecorderDraftJson(*o.recorder));table->projectSnapshot=o.batchInput->projectSnapshot;table->batchDraft=o.batchInput->batchDraft;table->recorderDraft=o.recorder;
+        const auto replayDraft=o.batchInput->projectSnapshot;
         for(const auto& source:o.batchInput->rows) {
             ctx.ThrowIfCancellationRequested();
             if(source->status=="Converged" && !source->curves_retained)throw std::invalid_argument("recording again requires include_curves=true");
@@ -238,19 +204,13 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
                 }
             }
             if(!missing.empty()) {
-                if(!replayDraft)replayDraft=DraftFromDocument(metadata.at("project_snapshot"));
+                if(!replayDraft || !o.batchInput->batchDraft)throw std::invalid_argument("Batch has no typed replay snapshot");
                 auto project=replayDraft->project;
-                for(const auto& parameter:BatchParameters(metadata.at("project_snapshot"))) {
-                    const std::string path=parameter.at("path"),pointer=parameter.at("pointer");
-                    if(!source->parameters.contains(path))continue;
-                    const bool extension=std::any_of(replayDraft->extensions.begin(),replayDraft->extensions.end(),[&](const auto& field){return pointer==field.first || pointer.starts_with(field.first+"/");});
-                    if(!extension)std::visit([&](const auto& value){if constexpr(std::is_arithmetic_v<std::decay_t<decltype(value)>>)SetProjectParameter(project,path,static_cast<double>(value));else throw std::invalid_argument("Expected numeric batch parameter: "+path);},source->parameters.at(path));
-                }
-                scaps_core::BatchSpec spec;spec.voltages_V=metadata.at("spec").at("voltages_V").get<std::vector<double>>();spec.columns=std::move(missing);
-                if(metadata.at("spec").contains("mesh_coordinates_m"))spec.mesh_coordinates_m=metadata.at("spec").at("mesh_coordinates_m").get<std::vector<double>>();
+                const auto parameters=ProjectNumbers(project);
+                for(const auto& [path,value]:source->parameters)if(parameters.contains(path))std::visit([&](const auto& number){if constexpr(std::is_arithmetic_v<std::decay_t<decltype(number)>>)SetProjectParameter(project,path,double(number));else throw std::invalid_argument("Expected numeric batch parameter: "+path);},value);
+                const auto& config=*o.batchInput->batchDraft;scaps_core::BatchSpec spec;spec.voltages_V=config.voltages_V.value_or(scaps_core::make_voltage_list(project.voltage));spec.columns=std::move(missing);spec.mesh_coordinates_m=config.mesh_coordinates_m;
                 for(const auto& [path,value]:source->parameters)if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
-                if(metadata.at("spec").contains("metastable"))spec.conditioning=BatchConditioningModel(project,metadata.at("spec").at("metastable"));
-                spec.initial_state=BatchInitialStateModel(project,metadata.at("spec"));
+                spec=PrepareBatchMember(project,config,std::move(spec));
                 const auto samples=scaps_core::run_batch_member(project,spec,fetch);
                 if(samples.status!="Converged")throw std::runtime_error("Profile acquisition failed: "+samples.status+" "+samples.message);
                 for(auto& point:row->iv)for(const auto& sample:samples.iv)if(sample.voltage_V==point.voltage_V && sample.profiles) {

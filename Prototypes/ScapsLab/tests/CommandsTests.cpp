@@ -216,7 +216,7 @@ TEST(CommandAdapter, DispatchReachesTheTypedCommandsAndKeepsTheReplyShape) {
 }
 TEST(CommandAdapter, TypedRunProducesTheSameResultAsJson) {
     Workflow a(CreateRef<JobSystem>(nullptr, 1)), b(CreateRef<JobSystem>(nullptr, 1));
-    for(auto *w : {&a, &b}) {w->lightResponse = true;w->Current().document = ReadProject(SCAPSLAB_PROJECT);}
+    for(auto *w : {&a, &b}) {w->lightResponse = true;w->Current().SetDocument( ReadProject(SCAPSLAB_PROJECT));}
     ASSERT_TRUE(a.Exec(Cmd::Run::Make()).at("ok").get<bool>());ASSERT_TRUE(b.Dispatch({{"operation", "run"}}).at("ok").get<bool>());
     for(auto *w : {&a, &b}) {for(int i = 0; i < 20000 && w->Pending(); ++i) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}ASSERT_FALSE(w->Pending());}
     ASSERT_FALSE(a.Current().result.empty());

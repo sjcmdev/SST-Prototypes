@@ -71,15 +71,6 @@ Json SolverDocument(Json document) {
     return document;
 }
 }
-scaps_core::DeviceProject BatchModel(const Json& document) {return scaps_core::device_project_from_node(ToYaml(SolverDocument(document)));}
-scaps_core::BatchConditioning BatchConditioningModel(const scaps_core::DeviceProject& project,const Json& spec) {
-    auto node=ToYaml(spec);
-    return scaps_core::batch_conditioning_from_node(project,node);
-}
-Ref<const scaps_core::BatchInitialState> BatchInitialStateModel(const scaps_core::DeviceProject& project,const Json& spec) {
-    if(!spec.contains("initial_state") && !spec.contains("initial_state_file") && !spec.value("export_initial_state_wp2",false))return {};
-    return scaps_core::batch_initial_state_from_node(project,ToYaml(spec));
-}
 scaps_core::DeviceProject Model(const Json &j) {
     if(j.contains("constants_mode") && j.at("constants_mode")!="codata" && j.at("constants_mode")!="scaps_compat") throw std::invalid_argument("Unknown constants_mode");
     if(j.contains("mobility_temperature_model") && j.at("mobility_temperature_model")!="constant" && j.at("mobility_temperature_model")!="sqrt_T" && j.at("mobility_temperature_model")!="caughey_thomas_T") throw std::invalid_argument("Unknown mobility_temperature_model");
@@ -116,28 +107,6 @@ scaps_core::DeviceProject Model(const Json &j) {
         (p.voltage.stop_V-p.voltage.start_V)*p.voltage.step_V<0 || std::abs((p.voltage.stop_V-p.voltage.start_V)/p.voltage.step_V)>10000) throw std::invalid_argument("Invalid voltage sweep (maximum 10001 points)");
     (void)scaps_core::make_device_from_project(p); return p;
 }
-std::shared_ptr<const ProjectDraft> DraftFromDocument(const Json& document) {
-    auto draft=std::make_shared<ProjectDraft>();draft->project=Model(document);
-    for(const auto& layer:document.at("layers")) {
-        DraftIdentity identity{layer.value("scapslab_id",std::string{}),layer.value("name",std::string{})};
-        for(const auto& defect:layer.value("defects",Json::array()))identity.defects.push_back({defect.value("scapslab_id",std::string{}),defect.value("label",std::string{})});
-        draft->layers.push_back(std::move(identity));
-    }
-    const auto fields=ProjectFieldPaths(draft->project);
-    const auto collect=[&](auto&& self,const Json& source,const std::string& path,const std::string& pointer)->void {
-        if(source.is_object())for(const auto& [key,value]:source.items()) {
-            if(key=="scapslab_id" || (path.empty() && key=="scaps_native"))continue;
-            std::string escaped;for(char c:key)escaped+=c=='~'?"~0":c=='/'?"~1":std::string(1,c);
-            const auto child=pointer+"/"+escaped;
-            const auto field=path.empty()?key:path+"."+key;
-            const auto next=fields.lower_bound(field+".");
-            if(key.find_first_of(".[]")!=std::string::npos || (!fields.contains(field) && (next==fields.end() || !next->starts_with(field+"."))))draft->extensions[child]=value;
-            else self(self,value,field,child);
-        }
-        else if(source.is_array())for(std::size_t i=0;i<source.size();++i)self(self,source[i],path+"["+std::to_string(i)+"]",pointer+"/"+std::to_string(i));
-    };
-    collect(collect,document,"","");return draft;
-}
 const Json &PointAtBias(const Json &sweep,const Json &band,int selected) {
     if(sweep.empty()) return band.at("points").at(0);
     const auto &points=sweep.at("points");const auto &point=points.at(std::clamp(selected,0,int(points.size())-1));
@@ -165,11 +134,13 @@ void ChangeSheetDistribution(Json &d,const std::string &shape,const std::string 
     const bool integrated=shape=="single" || convention=="integrated_sheet";
     d["Nt_m2"]=integrated?total:0.;d["peak_density_m2_eV"]=integrated?0.:total/width(shape);
 }
-Json AM15Spectrum() {
-    return Json::array({
+const scaps_core::OpticalTable& AM15SpectrumValues() {
+    static const scaps_core::OpticalTable values={
 #include "AM15.inc"
-    });
+    };return values;
 }
+Json AM15Spectrum() {return AM15SpectrumValues();}
+
 Json SelfContained(Json j) {
     auto embed=[](Json &object,const char *file,const char *table,auto reader) {
         if(object.contains(file) && object.at(file).is_string() && !object.at(file).get<std::string>().empty()) {
@@ -223,6 +194,30 @@ scaps_core::Profile ProfileFromJson(const Json &spec,bool logarithmic) {
     p.shared_offset_m=spec.value("shared_offset_m",0.);p.shared_thickness_m=spec.value("shared_thickness_m",0.);
     scaps_core::validate_profile(p);return p;
 }
+ProfileFileData ReadProfileFile(const std::string& path,bool logarithmic) {
+    ProfileFileData out;out.profile=scaps_core::read_grading_file(path,logarithmic);out.profile.source_file=path;
+    std::ifstream input(path);std::string line;std::vector<double> coordinates;
+    while(std::getline(input,line)){std::istringstream row(line);double x,y;if(row>>x>>y)coordinates.push_back(x);}
+    if(!std::is_sorted(coordinates.begin(),coordinates.end()) || coordinates.size()!=out.profile.coordinate.size())out.warnings.push_back("Sorted profile points; kept the first occurrence of duplicate coordinates.");return out;
+}
+ProfileSamplesData ProfileSamples(const scaps_core::Profile& p,double thickness,const scaps_core::Profile* composition) {
+    Positive(thickness,"thickness_m");scaps_core::validate_profile(p);if(composition)scaps_core::validate_profile(*composition);
+    ProfileSamplesData out;out.source_file=p.source_file;out.source_point_count=p.coordinate.size();
+    for(int i=0;i<=200;++i) {const double at=thickness*i/200.;out.x_m.push_back(at);const double coordinate=composition?scaps_core::evaluate_position_profile(*composition,at,thickness):at/thickness;out.value_SI.push_back(p.composition_dependent?scaps_core::evaluate_profile(p,coordinate):scaps_core::evaluate_position_profile(p,at,thickness));}return out;
+}
+scaps_core::Profile ResolveSharedProfile(scaps_core::Profile profile,const ProjectDraft& draft,const std::string& layerId,const std::string& parameter) {
+    if(!profile.shared_range)return profile;
+    const auto device=scaps_core::make_device_from_project(draft.project);
+    for(std::size_t i=0;i<device.layers.size();++i)if(draft.layers[i].id==layerId && device.layers[i].grading) {
+        const auto& g=*device.layers[i].grading;const auto& resolved=parameter=="composition"?g.composition:parameter=="Na_m3"?g.Na_m3:g.Nd_m3;
+        if(resolved){profile.left=resolved->left;profile.right=resolved->right;profile.shared_range=false;profile.shared_offset_m=resolved->shared_offset_m;profile.shared_thickness_m=resolved->shared_thickness_m;}
+    }return profile;
+}
+void ExportProfile(const ProfileSamplesData& samples,const std::string& path,const std::string& parameter) {
+    const bool grd=std::filesystem::path(path).extension()==".grd";std::ostringstream out;out<<std::setprecision(17);
+    if(grd)out<<"position: absolute\ninterpolation: linear\nrange: this layer only\n";else out<<"x_m,"<<parameter<<'\n';
+    for(std::size_t i=0;i<samples.x_m.size();++i)out<<samples.x_m[i]*(grd?1e6:1.)<<(grd?" ":",")<<samples.value_SI[i]<<'\n';SaveText(path,out.str());
+}
 Json ProfileFromFile(const std::string &path,bool logarithmic) {
     const auto p=scaps_core::read_grading_file(path,logarithmic);
     std::ifstream input(path);std::string line;std::vector<double> coordinates;
@@ -244,7 +239,7 @@ Json ProfileSamples(const Json &spec,double thickness,const Json &composition) {
 }
 Json ResolveSharedProfile(Json spec,const Json &document,const std::string &layerId,const std::string &parameter) {
     if(!spec.value("shared_range",false))return spec;
-    const auto device=scaps_core::make_device_from_project(Model(document));
+    const auto device=scaps_core::make_device_from_project(DraftFromDocument(document)->project);
     for(std::size_t i=0;i<device.layers.size();++i)if(document.at("layers")[i].at("scapslab_id")==layerId && device.layers[i].grading) {
         const auto &g=*device.layers[i].grading;
         const auto &p=parameter=="composition"?g.composition:parameter=="Na_m3"?g.Na_m3:g.Nd_m3;
@@ -315,45 +310,47 @@ Json NormalizeDocument(Json document) {
 Json NewDeviceDocument() {auto d=ReadProject(SCAPSLAB_PROJECT);for(const auto *side:{"left","right"}) d["contacts"][side]["flat_band"]=true;return d;}
 void WriteProject(const Json &j,const std::string &path) { (void)Model(j); SaveText(Path{path}.Native(),Text(SolverDocument(j))); }
 namespace {
-std::vector<DefectPreview> DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::DeviceState &state) {
+std::vector<DefectPreview> DefectCurves(const ProjectDraft &draft,const scaps_core::DeviceProject &p,const scaps_core::DeviceState &state) {
     using namespace scaps_core;
     std::vector<DefectPreview> curves; const auto pc=physical_constants(p.constants_mode);
-    auto curve=[&](const Json &d,double ev,double ec,double ei,double total,bool sheet) {
-        const auto shape=d.value("energy_distribution",std::string("single"));
-        const double offset=d.value("energy_offset_eV",0.0),width=d.value("characteristic_energy_eV",0.05);
+    auto curve=[&](const auto &d,const std::string& id,double ev,double ec,double ei,double total) {
+        constexpr bool sheet=std::is_same_v<std::decay_t<decltype(d)>,ProjectInterfaceDefect>;
+        const auto shape=d.energy_distribution;
+        const double offset=d.energy_offset_eV,width=d.characteristic_energy_eV;
         double center=ei+offset;
-        if(sheet) {
-            const int ref=d.value("energy_reference",7);
-            const int l=d.at("left_layer_index"); const auto &a=p.layers[l].material,&b=p.layers[l+1].material;
+        if constexpr(sheet) {
+            const int ref=d.energy_reference;
+            const int l=d.left_layer_index; const auto &a=p.layers[l].material,&b=p.layers[l+1].material;
             const auto ta=evaluate_thermal_material(a,p.temperature_K,pc),tb=evaluate_thermal_material(b,p.temperature_K,pc);
             const double va=-a.chi_eV-a.Eg_eV,vb=-b.chi_eV-b.Eg_eV,ca=-a.chi_eV,cb=-b.chi_eV;
             center=(ref==3?std::max(va,vb):ref==4?std::min(ca,cb):ref==5?Ei_of(ca,va,ta.Nc_m3,ta.Nv_m3,ta.Vt_V):ref==6?Ei_of(cb,vb,tb.Nc_m3,tb.Nv_m3,tb.Vt_V):ref==8?vb:ref==9?.5*(std::max(va,vb)+std::min(ca,cb)):va)+(ref==4?-offset:offset);
         } else {
-            const auto ref=d.value("energy_reference",std::string("relative_to_Ei"));
-            center=ref=="relative_to_Ec"?ec-offset:ref=="relative_to_Ev"?ev+offset:ei+offset;
+            const auto ref=d.energy_reference;
+            center=ref==DefectEnergyReference::RelativeToEc?ec-offset:ref==DefectEnergyReference::RelativeToEv?ev+offset:ei+offset;
         }
         const bool single=shape=="single",gaussian=shape=="gaussian",cb=shape=="cb_tail",vb=shape=="vb_tail";
-        double lo=std::max(ev,center-(cb?d.value("tail_width",7.0)*width:vb?0:.5*width*(gaussian?d.value("gaussian_width",6.0):1)));
-        double hi=std::min(ec,center+(vb?d.value("tail_width",7.0)*width:cb?0:.5*width*(gaussian?d.value("gaussian_width",6.0):1)));
+        double lo=std::max(ev,center-(cb?d.tail_width*width:vb?0:.5*width*(gaussian?d.gaussian_width:1)));
+        double hi=std::min(ec,center+(vb?d.tail_width*width:cb?0:.5*width*(gaussian?d.gaussian_width:1)));
         // Interface quadrature spans its reference-coordinate interval, without bulk gap clipping.
-        if(sheet) {lo=center-.5*width*(gaussian?d.value("gaussian_width",6.0):1);hi=2*center-lo;}
+        if constexpr(sheet) {lo=center-.5*width*(gaussian?d.gaussian_width:1);hi=2*center-lo;}
         auto mass=[&](double e) {return gaussian?.5*std::erf((e-center)/width):cb?std::exp((e-center)/width):vb?-std::exp((center-e)/width):(e-center)/width;};
         double amplitude=total/width;
-        if(sheet && d.value("density_convention",std::string("scaps_peak"))=="scaps_peak") amplitude=d.value("peak_density_m2_eV",0.0)*(gaussian?std::sqrt(std::numbers::pi):1);
-        else if((sheet || d.value("distribution_normalization",std::string("scaps"))=="normalized_continuum") && hi>lo) amplitude/=mass(hi)-mass(lo);
-        DefectPreview c;c.id=d.at(sheet?"id":"scapslab_id");c.label=d.value("label",d.value("id",std::string("Defect")));c.sheet=sheet;c.Ev_eV=ev;c.Ec_eV=ec;
-        c.single=single;c.level_energy_eV=center;c.Nt=total;c.amphoteric=d.value("amphoteric",false);c.correlated=d.value("correlated",true);
+        if constexpr(sheet) {if(d.density_convention=="scaps_peak")amplitude=d.peak_density_m2_eV*(gaussian?std::sqrt(std::numbers::pi):1);else if(hi>lo)amplitude/=mass(hi)-mass(lo);}
+        else if(d.distribution_normalization=="normalized_continuum" && hi>lo)amplitude/=mass(hi)-mass(lo);
+        DefectPreview c;c.id=id;c.sheet=sheet;c.Ev_eV=ev;c.Ec_eV=ec;
+        if constexpr(sheet)c.label=d.id;else {c.label=d.label;c.amphoteric=d.amphoteric;c.correlated=d.correlated;}
+        c.single=single;c.level_energy_eV=center;c.Nt=total;
         if(!single) for(int i=0;i<=400;++i) {
             const double e=ev+(ec-ev)*i/400.;double value=0;
             if(e>=lo && e<=hi) value=amplitude*(gaussian?std::exp(-std::pow((e-center)/width,2))/std::sqrt(std::numbers::pi):cb?std::exp((e-center)/width):vb?std::exp((center-e)/width):1);
             c.energy_eV.push_back(e-ev);c.density.push_back(value);
         }
         c.level_energy_eV=center-ev;c.band_edges_eV={0.,ec-ev};
-        if(sheet) {
-            const int l=d.at("left_layer_index");const auto &a=p.layers[l].material,&b=p.layers[l+1].material;
+        if constexpr(sheet) {
+            const int l=d.left_layer_index;const auto &a=p.layers[l].material,&b=p.layers[l+1].material;
             c.band_edges_eV={-a.chi_eV-a.Eg_eV-ev,-a.chi_eV-ev,-b.chi_eV-b.Eg_eV-ev,-b.chi_eV-ev};
         }
-        if(d.value("amphoteric",false)) c.second_level_energy_eV=center-ev+(d.at("second_energy_offset_eV").get<double>()-offset)*(d.value("energy_reference",std::string("relative_to_Ei"))=="relative_to_Ec"?-1:1);
+        if constexpr(!sheet)if(d.amphoteric)c.second_level_energy_eV=center-ev+(d.second_energy_offset_eV-offset)*(d.energy_reference==DefectEnergyReference::RelativeToEc?-1:1);
         return c;
     };
     double x=0;
@@ -367,8 +364,8 @@ std::vector<DefectPreview> DefectCurves(const Json &document,const scaps_core::D
         for(std::size_t di=0;di<l.defects.size();++di) {
             auto isolated=p;isolated.interface_defects.clear();for(auto &layer:isolated.layers) layer.defects.clear();isolated.layers[li].defects={l.defects[di]};
             const auto levels=make_device_from_project(isolated).layers[li].defects;
-            auto c=curve(document.at("layers")[li].at("defects")[di],ev,ec,ei,l.defects[di].Nt_m3,false);
-            c.layer_id=document.at("layers")[li].at("scapslab_id");
+            auto c=curve(l.defects[di],draft.layers[li].defects[di].id,ev,ec,ei,l.defects[di].Nt_m3);
+            c.layer_id=draft.layers[li].id;
             for(std::size_t k=0;k<levels.size();++k) {
                 const auto &level=levels[k];const double e=level.energy_reference==DefectEnergyReference::RelativeToEc?ec-level.energy_offset_eV:level.energy_reference==DefectEnergyReference::RelativeToEv?ev+level.energy_offset_eV:ei+level.energy_offset_eV;
                 c.occupation_energy_eV.push_back(e-ev);
@@ -381,11 +378,11 @@ std::vector<DefectPreview> DefectCurves(const Json &document,const scaps_core::D
     for(std::size_t i=0;i<p.interface_defects.size();++i) {
         const auto &d=p.interface_defects[i];const auto &a=p.layers[d.left_layer_index].material,&b=p.layers[d.left_layer_index+1].material;
         const double ev=std::min(-a.chi_eV-a.Eg_eV,-b.chi_eV-b.Eg_eV),ec=std::max(-a.chi_eV,-b.chi_eV);
-        auto c=curve(document.at("interface_defects")[i],ev,ec,(ev+ec)*.5,d.Nt_m2,true);c.left_layer_index=d.left_layer_index;
+        auto c=curve(d,d.id,ev,ec,(ev+ec)*.5,d.Nt_m2);c.left_layer_index=d.left_layer_index;
         auto isolated=p;isolated.interface_defects={d};const auto levels=make_device_from_project(isolated).interface_defects;
         for(std::size_t k=0;k<levels.size();++k) {
-            auto sample=document.at("interface_defects")[i];sample["energy_offset_eV"]=levels[k].energy_offset_eV;
-            const auto single=curve(sample,ev,ec,(ev+ec)*.5,d.Nt_m2,true);
+            auto sample=d;sample.energy_offset_eV=levels[k].energy_offset_eV;
+            const auto single=curve(sample,sample.id,ev,ec,(ev+ec)*.5,d.Nt_m2);
             c.occupation_energy_eV.push_back(single.level_energy_eV);
             c.occupation.push_back(offset+k<state.interface_occupation.size()?state.interface_occupation[offset+k]:double(NAN));
         }
@@ -394,14 +391,14 @@ std::vector<DefectPreview> DefectCurves(const Json &document,const scaps_core::D
     }
     return curves;
 }
-GenerationRecombinationResult GenerationRecombination(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::Device1D &device,const scaps_core::DeviceState &state) {
+GenerationRecombinationResult GenerationRecombination(const ProjectDraft &draft,const scaps_core::DeviceProject &p,const scaps_core::Device1D &device,const scaps_core::DeviceState &state) {
     using namespace scaps_core;
     const auto mesh=mesh_from_coordinates(device,state.x_m);
     const auto pc=physical_constants(p.constants_mode);
     const auto generation=generation_integrals_m2s(device,mesh,pc);
     GenerationRecombinationResult out;out.x_m=Column::Intern(state.x_m);std::vector<double> density;
     double generated=0,recombined=0;
-    for(std::size_t l=0;l<p.layers.size();++l) out.layers.push_back({document.at("layers")[l].at("scapslab_id").get<std::string>()});
+    for(std::size_t l=0;l<p.layers.size();++l) out.layers.push_back({draft.layers[l].id});
     for(std::size_t i=0;i<generation.size();++i) {
         const double dx=.5*((i?mesh.edges[i-1].h_m:0)+(i+1<mesh.size()?mesh.edges[i].h_m:0));
         density.push_back(dx>0?generation[i]/dx:0.);
@@ -410,8 +407,8 @@ GenerationRecombinationResult GenerationRecombination(const Json &document,const
     }
     for(const auto &channel:state.recombination) {
         std::string id=channel.id;int layer=-1,defect=-1;
-        if(channel.mechanism=="srh_bulk" && std::sscanf(id.c_str(),"layer:%d/defect:%d",&layer,&defect)==2 && layer>=0 && defect>=0 && layer<int(p.layers.size()) && defect<int(document.at("layers")[layer].at("defects").size()))
-            id=document.at("layers")[layer].at("defects")[defect].at("scapslab_id");
+        if(channel.mechanism=="srh_bulk" && std::sscanf(id.c_str(),"layer:%d/defect:%d",&layer,&defect)==2 && layer>=0 && defect>=0 && layer<int(p.layers.size()) && defect<int(draft.layers[layer].defects.size()))
+            id=draft.layers[layer].defects[defect].id;
         std::vector<LayerCurrent> byLayer;double sum=0;
         for(std::size_t l=0;l<p.layers.size();++l) {
             double value=0;
@@ -423,7 +420,7 @@ GenerationRecombinationResult GenerationRecombination(const Json &document,const
                 // Sheet loss belongs to the left layer; never count it twice.
                 for(std::size_t i=0;i+1<mesh.size();++i) if(mesh.x_m[i]==channel.x_m.front() && mesh.edges[i].h_m==0 && mesh.nodes[i].layer_index==l) value+=channel.integrated_current_A_m2;
             }
-            sum+=value;byLayer.push_back({document.at("layers")[l].at("scapslab_id").get<std::string>(),value});
+            sum+=value;byLayer.push_back({draft.layers[l].id,value});
             auto &row=out.layers[l];row.recombination_current_A_m2+=value;
             row.mechanisms[channel.mechanism]+=value;
         }
@@ -474,67 +471,56 @@ void Operation::Execute(JobContext &ctx) {
     using namespace scaps_core;
     const auto started=std::chrono::steady_clock::now();
     ctx.ThrowIfCancellationRequested(); const std::string op=request.at("operation");
+    if(draft && (op.starts_with("export_") || op=="save"))document=DraftDocument(*draft);
     struct Phase {bool on=std::getenv("SCAPSLAB_PERF_PHASES")!=nullptr;Json log=Json::object();std::chrono::steady_clock::time_point t=std::chrono::steady_clock::now();void lap(const char *n){if(!on)return;const auto now=std::chrono::steady_clock::now();log[n]=log.value(n,0.)+std::chrono::duration<double,std::milli>(now-t).count();t=now;}} phase; // opt-in per-phase timing (SCAPSLAB_PERF_PHASES=1) -> output.perf_phase_ms
     if(op=="load_material" || op=="save_material") {
-        auto model=Model(document);std::size_t index=0;
-        while(index<document.at("layers").size() && document.at("layers")[index].at("scapslab_id")!=request.at("layer_id"))++index;
+        auto next=CreateRef<ProjectDraft>(*draft);auto& model=next->project;std::size_t index=0;
+        while(index<next->layers.size() && next->layers[index].id!=request.at("layer_id").get<std::string>())++index;
         if(index==model.layers.size())throw std::invalid_argument("Unknown layer_id");
         const auto selected=request.value("selection",std::string("both"));
         if(selected!="both" && selected!="A" && selected!="B")throw std::invalid_argument("selection must be A, B or both");
         const auto selection=selected=="A"?MaterialSelection::PureA:selected=="B"?MaterialSelection::PureB:MaterialSelection::Both;
         if(op=="save_material")write_scaps_material(make_scaps_material(model.layers[index]),request.at("path").get<std::string>(),selection);
-        else {
-            apply_scaps_material(read_scaps_material(request.at("path").get<std::string>()),model.layers[index],selection);
-            const auto full=FromYaml(device_project_to_node(model));
-            auto candidate=document;auto &layer=candidate["layers"][index];
-            for(const auto *key:{"material","grading","absorption","recombination"}){layer.erase(key);if(full.at("layers")[index].contains(key))layer[key]=full.at("layers")[index].at(key);}
-            (void)Model(candidate);document=std::move(candidate);
-        }
+        else {apply_scaps_material(read_scaps_material(request.at("path").get<std::string>()),model.layers[index],selection);ValidateDraft(*next);draft=std::move(next);}
         output={{"path",request.at("path")},{"selection",selected}};return;
     }
     if(op=="set_profile" || op=="load_profile" || op=="preview_profile" || op=="export_profile") {
-        auto candidate=document;Json *target=nullptr;Json composition=Json::object();double thickness=0.;
-        const auto parameter=request.at("parameter_id").get<std::string>();
-        if(parameter=="generation_m3_s") {
-            for(const auto &l:candidate.at("layers"))thickness+=l.at("thickness_m").get<double>();
-            target=&candidate["illumination"];
-        } else {
-            for(auto &layer:candidate["layers"]) if(layer.at("scapslab_id")==request.at("layer_id")) {
-                thickness=layer.at("thickness_m");composition=layer.value("grading",Json::object()).value("composition",Json::object());
-                if(parameter=="Nt_m3") {
-                    for(auto &d:layer["defects"])if(d.at("scapslab_id")==request.at("defect_id"))target=&d["density_profile_m3"];
-                } else {
-                    const std::set<std::string> supported={"composition","Eg_eV","chi_eV","eps_r","Nd_m3","Na_m3","Nc_ref_m3","Nv_ref_m3","mu_n_m2_V_s","mu_p_m2_V_s","vth_n_ref_m_s","vth_p_ref_m_s"};
-                    if(!supported.contains(parameter))throw std::invalid_argument("Unsupported parameter_id");
-                    target=&layer["grading"][parameter];
-                }
+        auto next=CreateRef<ProjectDraft>(*draft);auto& project=next->project;std::optional<Profile>* target=nullptr;const Profile* composition=nullptr;double thickness=0.;
+        const auto parameter=request.at("parameter_id").get<std::string>();std::string layerId=request.value("layer_id",std::string{});
+        if(parameter=="generation_m3_s") {for(const auto& l:project.layers)thickness+=l.thickness_m;}
+        else {
+            for(std::size_t i=0;i<next->layers.size();++i)if(next->layers[i].id==layerId) {
+                auto& layer=project.layers[i];thickness=layer.thickness_m;
+                if(layer.grading && layer.grading->composition)composition=&*layer.grading->composition;
+                if(parameter=="Nt_m3") {for(std::size_t k=0;k<next->layers[i].defects.size();++k)if(next->layers[i].defects[k].id==request.at("defect_id").get<std::string>())target=&layer.defects[k].density_profile_m3;}
+                else {if(!layer.grading)layer.grading.emplace();target=&GradingProfile(*layer.grading,parameter);}
             }
+            if(!target)throw std::invalid_argument("Unknown layer_id or defect_id");
         }
-        if(!target)throw std::invalid_argument("Unknown layer_id or defect_id");
         if(op=="set_profile" || op=="load_profile") {
             if(parameter=="generation_m3_s") {
-                (*target)["mode"]="generation_file";
-                (*target)["generation_m_m3s"]=op=="load_profile"?Json(read_scaps_generation(request.at("path"))):request.at("generation_m_m3s");
-                (*target)["generation_file"]="";
-                if(op=="load_profile")(*target)["scapslab_generation_file"]=request.at("path");
-            } else *target=op=="load_profile"?ProfileFromFile(request.at("path"),parameter.find("_m3")!=std::string::npos):request.at("profile");
-            if(op=="load_profile" && target->contains("source_file") && !request.value("project_path",std::string{}).empty()) {
-                std::error_code ec;const auto relative=std::filesystem::relative(request.at("path").get<std::string>(),std::filesystem::path(request.at("project_path").get<std::string>()).parent_path(),ec);if(!ec)(*target)["source_file"]=relative.generic_string();
-            }
-            candidate=SelfContained(std::move(candidate));(void)Model(candidate);document=std::move(candidate);output={{"parameter_id",parameter}};
-        } else {
-            if(parameter=="generation_m3_s") {
-                Json spec={{"law","table"},{"position_relative",false},{"coordinate",Json::array()},{"value",Json::array()}};
-                for(const auto &point:target->at("generation_m_m3s")){spec["coordinate"].push_back(point[0].get<double>()*1e6);spec["value"].push_back(point[1]);}
-                output=ProfileSamples(spec,thickness);
+                project.illumination.mode="generation_file";project.illumination.generation_m_m3s=op=="load_profile"?read_scaps_generation(request.at("path")):request.at("generation_m_m3s").get<OpticalTable>();project.illumination.generation_file.clear();
+                if(op=="load_profile")next->extensions["/illumination/scapslab_generation_file"]=request.at("path");
             } else {
-                if(target->is_null())throw std::invalid_argument("Profile is not active");auto spec=*target;
-                if(parameter!="composition" && parameter!="Nd_m3" && parameter!="Na_m3" && parameter!="Nt_m3")spec["composition_dependent"]=true;
-                output=ProfileSamples(ResolveSharedProfile(spec,document,request.at("layer_id"),parameter),thickness,ResolveSharedProfile(composition,document,request.at("layer_id"),"composition"));
+                if(op=="load_profile") {
+                    auto loaded=ReadProfileFile(request.at("path"),parameter.find("_m3")!=std::string::npos);*target=std::move(loaded.profile);
+                    const auto field=ProjectFieldPath(project,&**target);std::string pointer="/";for(char c:field){if(c=='.' || c=='[')pointer+='/';else if(c!=']')pointer+=c;}next->extensions[pointer+"/scapslab_warnings"]=loaded.warnings;
+                }else *target=ProfileFromJson(request.at("profile"));
+                if(op=="load_profile" && !request.value("project_path",std::string{}).empty()) {std::error_code ec;const auto relative=std::filesystem::relative(request.at("path").get<std::string>(),std::filesystem::path(request.at("project_path").get<std::string>()).parent_path(),ec);if(!ec)(*target)->source_file=relative.generic_string();}
             }
-            output["parameter_id"]=parameter;
+            ValidateDraft(*next);draft=std::move(next);output={{"parameter_id",parameter}};
+        }else {
+            ProfileSamplesData samples;
+            if(parameter=="generation_m3_s") {
+                Profile profile;profile.law=GradingLaw::Table;profile.position_relative=false;for(const auto& [x,value]:project.illumination.generation_m_m3s){profile.coordinate.push_back(x*1e6);profile.value.push_back(value);}samples=ProfileSamples(profile,thickness);
+            }else {
+                if(!*target)throw std::invalid_argument("Profile is not active");auto profile=**target;
+                if(parameter!="composition" && parameter!="Nd_m3" && parameter!="Na_m3" && parameter!="Nt_m3")profile.composition_dependent=true;
+                profile=ResolveSharedProfile(std::move(profile),*next,layerId,parameter);auto c=composition?std::optional<Profile>(ResolveSharedProfile(*composition,*next,layerId,"composition")):std::nullopt;samples=ProfileSamples(profile,thickness,c?&*c:nullptr);
+            }
+            output={{"x_m",samples.x_m},{"value_SI",samples.value_SI},{"source_file",samples.source_file},{"source_point_count",samples.source_point_count},{"parameter_id",parameter}};
             output["value_unit"]=parameter=="generation_m3_s"?"m^-3 s^-1":parameter.find("_m3")!=std::string::npos?"m^-3":parameter.find("_eV")!=std::string::npos?"eV":parameter.find("_m2_V_s")!=std::string::npos?"m^2/(V s)":parameter.find("vth_")==0?"m/s":"1";
-            if(op=="export_profile")ExportProfile(output,request.at("path"));
+            if(op=="export_profile")ExportProfile(samples,request.at("path"),parameter);
         }
         return;
     }
@@ -576,11 +562,11 @@ void Operation::Execute(JobContext &ctx) {
     }
     else if(op=="import_def") {
         const auto imported=import_def(request.at("path").get<std::string>(),request.value("scaps_root",std::string{}));
-        document=ImportProject(FromYaml(device_project_to_node(imported)),std::filesystem::temp_directory_path());
+        draft=DraftFromProject(imported);
         output={{"warnings",imported.scaps_native.warnings}};
-    } else if(op=="export_def") {export_def(Model(document),request.at("path").get<std::string>());output={{"warnings",Model(document).scaps_native.warnings}};}
+    } else if(op=="export_def") {export_def(draft->project,request.at("path").get<std::string>());output={{"warnings",draft->project.scaps_native.warnings}};}
     else if(op=="project_new") {
-        workspace=SingleDeviceWorkspace(NewDeviceDocument(),"Untitled project");loaded=ExtractResults(workspace);
+        workspace=SingleDeviceWorkspace(NewDeviceDocument(),"Untitled project");for(const auto& d:workspace.at("devices"))loadedDrafts.push_back(DraftFromDocument(d.at("document")));loaded=ExtractResults(workspace);
     }
     else if(op=="project_load" || op=="load") {
         const auto file=request.at("path").get<std::string>();
@@ -588,6 +574,7 @@ void Operation::Execute(JobContext &ctx) {
         auto raw=source.find_first_not_of(" \t\r\n")!=std::string::npos && source[source.find_first_not_of(" \t\r\n")]=='{'?Json::parse(source):FromYaml(YAML::Load(source));
         if(raw.contains("devices")) {workspace=UnpackResults(raw);workspace["schema_version"]=raw.value("schema_version",0);workspace=NormalizeWorkspace(std::move(workspace));}
         else workspace=SingleDeviceWorkspace(ReadProject(file),std::filesystem::path(file).stem().string());
+        for(const auto& d:workspace.at("devices"))loadedDrafts.push_back(DraftFromDocument(d.at("document")));
         loaded=ExtractResults(workspace); // typed results leave the Json here, on the job thread
     }
     else if(op=="project_save" || (op=="save" && std::filesystem::path(request.at("path").get<std::string>()).extension()==".scapslab")) {
@@ -600,34 +587,11 @@ void Operation::Execute(JobContext &ctx) {
         ctx.ThrowIfCancellationRequested();SaveText(Path{request.at("path").get<std::string>()}.Native(),text);
         output={{"path",std::filesystem::absolute(request.at("path").get<std::string>()).string()},{"size_bytes",text.size()},{"save_status","saved"}};
     }
-    else if(op=="device_read") document=ReadProject(request.at("path").get<std::string>()); // device_add from a file: only the read runs as a job
+    else if(op=="device_read") {document=ReadProject(request.at("path").get<std::string>());draft=DraftFromDocument(document);} // device_add from a file: only the read runs as a job
     else if (op=="save") WriteProject(document,request.at("path").get<std::string>());
-    else if (op=="edit") { auto candidate=document; const auto &patch=request.contains("document")?request.at("document"):request.at("patch");
-        if (!patch.is_object()) throw std::invalid_argument("patch must be an object");
-        if(request.contains("document")) candidate=patch; else candidate.update(patch,true);
-        if(request.contains("pointer_set")) for(const auto &s:request.at("pointer_set")) candidate[Json::json_pointer(s.at("path").get<std::string>())]=s.at("value"); // tutorials: "Show me" for array fields
-        if(patch.contains("illumination") && patch.at("illumination").value("scapslab_spectrum",std::string{})=="AM1.5G") {
-            auto &light=candidate["illumination"];light["mode"]="spectrum";light["spectrum_file"]="";light["spectrum_nm_W_m2"]=AM15Spectrum();
-        }
-        candidate=NormalizeDocument(SelfContained(std::move(candidate)));(void)Model(candidate); document=std::move(candidate);
-    } else if (op=="layer") {
-        auto &layers=document["layers"]; const std::string action=request.at("action");
-        if(action!="add" && !document.value("interface_defects",Json::array()).empty()) throw std::invalid_argument("Remove interface defects before removing or reordering layers; interface attachment must be preserved");
-        if (action=="add") { auto l=layers.back(); unsigned n=1; std::set<std::string> ids;
-            for (const auto &v:layers) ids.insert(v.at("scapslab_id"));
-            while (ids.contains("layer-"+std::to_string(n))) ++n;
-            l["scapslab_id"]="layer-"+std::to_string(n); l["name"]="New layer";
-            for(auto &d:l["defects"]) d["scapslab_id"]=l["scapslab_id"].get<std::string>()+"-"+d.at("scapslab_id").get<std::string>();
-            layers.push_back(l);
-        } else {
-            auto it=std::find_if(layers.begin(),layers.end(),[&](const auto &l){return l.at("scapslab_id")==request.at("layer_id");});
-            if (it==layers.end()) throw std::invalid_argument("Unknown layer_id");
-            if (action=="remove") { if(layers.size()==1) throw std::invalid_argument("Cannot remove last layer"); layers.erase(it); }
-            else if (action=="move") { const auto index=request.at("index").get<int>(); if(index<0 || index>=int(layers.size())) throw std::invalid_argument("Invalid layer index");
-                auto l=*it; layers.erase(it); layers.insert(layers.begin()+index,l);
-            } else throw std::invalid_argument("Unknown layer action");
-        }
-        document=SelfContained(std::move(document));(void)Model(document);
+    else if(op=="edit") {if(!draft)throw std::invalid_argument("No device document");ValidateDraft(*draft);
+    }else if(op=="layer") {
+        auto next=CreateRef<ProjectDraft>(*draft);EditLayer(*next,request.at("action"),request.value("layer_id",std::string{}),request.value("index",0));ValidateDraft(*next);draft=std::move(next);
     } else if (op=="export_ac") {
         const auto kind=request.at("kind").get<std::string>();
         if ((kind!="cv" && kind!="cf") || !acResults.contains(kind)) throw std::invalid_argument("No AC result for kind");
@@ -644,7 +608,7 @@ void Operation::Execute(JobContext &ctx) {
         }
         ctx.ThrowIfCancellationRequested(); SaveText(Path{request.at("path").get<std::string>()}.Native(),csv.str());
     } else if (op=="cv" || op=="cf") {
-        if(!draft)draft=DraftFromDocument(document);const auto& p=draft->project;const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        if(!draft)throw std::invalid_argument("No device document");const auto& p=draft->project;const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         const double T=request.at("temperature_K"); Positive(T,"temperature_K");
         std::vector<double> volts, frequencies;
         if(op=="cv") {
@@ -693,7 +657,7 @@ void Operation::Execute(JobContext &ctx) {
             ctx.SetProgress(float(i+1),float(total));
         }
     } else if(op=="qe") {
-        if(!draft)draft=DraftFromDocument(document);const auto& p=draft->project;auto device=make_device_from_project(p);const auto pc=physical_constants(p.constants_mode);
+        if(!draft)throw std::invalid_argument("No device document");const auto& p=draft->project;auto device=make_device_from_project(p);const auto pc=physical_constants(p.constants_mode);
         const double first=request.value("start_nm",350.),last=request.value("stop_nm",1100.);
         const auto countValue=request.value("points",Json(31));if(!countValue.is_number_integer() || countValue.get<double>()<2 || countValue.get<double>()>1001) throw std::invalid_argument("QE points must be an integer in 2..1001");
         const int count=countValue.get<int>();const double probe=request.value(request.value("probe_mode",std::string("constant_flux"))=="constant_flux"?"probe_photon_flux_m2_s":"probe_power_W_m2",request.value("probe_mode",std::string("constant_flux"))=="constant_flux"?1e16:1e-3);
@@ -729,7 +693,7 @@ void Operation::Execute(JobContext &ctx) {
         output["light_Jsc_A_m2"]=sc.status==SolverStatus::Converged?Json(-sc.J_total_Am2):Json(nullptr);
         output["integration_note"]="Dark differential EQE weighted by incident spectrum bins; full spectral coverage required. Finite-light nonlinear response can differ.";
     } else if (op=="run" || op=="band") {
-        if(!draft)draft=DraftFromDocument(document);const auto& p=draft->project;const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        if(!draft)throw std::invalid_argument("No device document");const auto& p=draft->project;const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         auto volts=op=="band"?std::vector<double>{request.at("voltage_V").get<double>()}:make_voltage_list(p.voltage);
         for(auto &v:volts) {if(!std::isfinite(v)) throw std::invalid_argument("Invalid voltage_V");v=-v;}
         phase.lap("model_device");ctx.SetStage("Preparing mesh (cancel checked after preparation)");
@@ -752,8 +716,8 @@ void Operation::Execute(JobContext &ctx) {
                 const double tj=pt.status!=SolverStatus::Converged ? NAN : ext ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
                 IvPoint point;point.has=(1u<<3)|(1u<<4);point.voltage_V=-volts[i];point.J_A_m2=tj;result->points.push_back(std::move(point));ctx.SetProgress(float(i+1),float(volts.size()));continue;
             }
-            phase.lap("solve_points");auto curves=DefectCurves(document,p,s);phase.lap("defect_curves");
-            auto gr=GenerationRecombination(document,p,device,s);phase.lap("gen_recomb");
+            phase.lap("solve_points");auto curves=DefectCurves(*draft,p,s);phase.lap("defect_curves");
+            auto gr=GenerationRecombination(*draft,p,device,s);phase.lap("gen_recomb");
             const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
             const double terminalJ=pt.status!=SolverStatus::Converged ? NAN : external ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
             const double net=gr.net_generation_current_A_m2;
@@ -791,7 +755,7 @@ void Operation::Execute(JobContext &ctx) {
         for(std::size_t i=0;i<device.layers.size();++i) {
             auto layer=device.layers[i];std::vector<double> wavelengths,alpha,baseline;
             for(int n=0;n<=200;++n) {const double wavelength=300.+n*6.;wavelengths.push_back(wavelength);alpha.push_back(absorption_m1(layer,wavelength,pc));auto plain=layer;plain.absorption.urbach_enabled=false;baseline.push_back(absorption_m1(plain,wavelength,pc));}
-            result->optics->absorption.push_back({document.at("layers")[i].value("scapslab_id",std::string("layer-")+std::to_string(i+1)),Column::Intern(std::move(wavelengths)),Column::Intern(std::move(alpha)),Column::Intern(std::move(baseline))});
+            result->optics->absorption.push_back({draft->layers[i].id,Column::Intern(std::move(wavelengths)),Column::Intern(std::move(alpha)),Column::Intern(std::move(baseline))});
         }
         phase.lap("optics");
         if(op=="run" && p.illumination.enabled) {
@@ -804,6 +768,7 @@ void Operation::Execute(JobContext &ctx) {
         phase.lap("photovoltaic");
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
     if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {
+        document=DraftDocument(*draft); // legacy history/provenance adapter; solver and panels consume the typed snapshot
         output["project_snapshot"]=document;
         output["provenance"]={{"device_hash",DocumentHash(document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},
             {"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}};
@@ -890,7 +855,7 @@ void Workflow::HistoryOp(const Json &request) {
     for(auto *dp:targets) {Emit(HistoryChanged(dp->id));Emit(SelectionChanged(dp->id));}
     response=lightResponse?Json{{"ok",true},{"error",nullptr}}:Snapshot();
 }
-void Workflow::DeviceOp(const Json &request) {
+void Workflow::DeviceOp(const Json &request,Ref<const ProjectDraft> importedDraft) {
     const auto op=request.at("operation").get<std::string>();
     const std::string id=request.value("device_id",project.active_device);
     auto &devices=project.devices;
@@ -904,11 +869,12 @@ void Workflow::DeviceOp(const Json &request) {
         auto d=CreateRef<DeviceState>();
         if(op=="device_duplicate") {
             known();const auto &src=**at;
-            d->name=src.name+" copy";d->description=src.description;d->document=src.document;d->actions=src.actions;d->batchSpec=src.batchSpec;d->recorderColumns=src.recorderColumns;
+            d->name=src.name+" copy";d->description=src.description;d->SetDraft(src.draft);d->actions=src.actions;d->SetBatch(src.batch);d->SetRecorder(src.recorder);
             d->batchResult.adopt(src.batchResult.share());d->selectedLayer=src.selectedLayer;d->selectedInterface=src.selectedInterface;d->selectedBias=src.selectedBias;d->selectedMember=src.selectedMember;d->biasVoltage_V=src.biasVoltage_V;
         } else {
-            const auto doc=request.value("loaded",false)?request.at("document"):request.contains("document")?SelfContained(request.at("document")):NewDeviceDocument();
-            (void)Model(doc);d->document=NormalizeDocument(doc);d->name=doc.value("case_id",std::string("Device"));d->description=request.value("description",std::string{});
+            if(importedDraft)d->SetDraft(std::move(importedDraft));
+            else {const auto doc=request.contains("document")?SelfContained(request.at("document")):NewDeviceDocument();d->SetDocument(NormalizeDocument(doc));}
+            d->name=d->draft->project.case_id;d->description=request.value("description",std::string{});
         }
         if(request.contains("name")) d->name=request.at("name").get<std::string>();
         static std::atomic_uint64_t sequence{0};
@@ -1074,19 +1040,31 @@ void Workflow::CancelDevice(const std::string &device) {
     std::erase_if(it->second.queue,[](const Queued &q){return q.request.value("batch",false);});
     if(it->second.active) (void)jobs->RequestCancel(it->second.active);
 }
-const Json *Workflow::EditDraft() const {
-    auto it=lanes.find(project.active_device);if(it==lanes.end()) return nullptr;
-    const auto &l=it->second;
-    if(!l.queue.empty()) return &l.queue.back().request.at("document");
-    if(l.pending && l.Op()=="edit" && l.pending->request.contains("document")) return &l.pending->request.at("document");
+const ProjectDraft *Workflow::EditDraft() const {
+    auto it=lanes.find(project.active_device);if(it==lanes.end())return nullptr;
+    const auto& lane=it->second;
+    if(!lane.queue.empty() && lane.queue.back().draft)return lane.queue.back().draft.get();
+    if(lane.pending && lane.Op()=="edit")return lane.pending->draft.get();
     return nullptr;
+}
+namespace {
+Ref<const ProjectDraft> ReadDraftEdit(const ProjectDraft* source,const Json& request) {
+    Ref<const ProjectDraft> result;
+    if(request.contains("document"))result=DraftFromDocument(SelfContained(request.at("document")));
+    else {if(!source)throw std::invalid_argument("No device document");result=PatchDraft(*source,request.at("patch"),request.value("pointer_set",Json::array()));}
+    const auto& patch=request.contains("document")?request.at("document"):request.at("patch");
+    if(patch.contains("illumination") && patch.at("illumination").value("scapslab_spectrum",std::string{})=="AM1.5G") {
+        auto next=CreateRef<ProjectDraft>(*result);next->project.illumination.mode="spectrum";next->project.illumination.spectrum_file.clear();next->project.illumination.spectrum_nm_W_m2=AM15SpectrumValues();result=std::move(next);
+    }
+    return result;
+}
 }
 bool Workflow::ReplacingProject() const {
     auto it=lanes.find(project.active_device);if(it==lanes.end() || !it->second.active) return false;
     const std::string op=it->second.Op();return op=="project_load" || op=="load" || op=="layer";
 }
-void Workflow::StartOperation(const Json &r,const std::string &id) {
-    auto &d=Device(id);auto &L=LaneOf(id);if(L.active) throw std::invalid_argument("A job is still active on this device");L.pending=CreateRef<Operation>(d.document,r);auto &pending=L.pending;pending->jsonResponse=!lightResponse;const std::string op0=r.at("operation");if(op0.starts_with("export_"))pending->acResults=d.acResults.json();if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchInput=d.batchResult.typed();pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
+void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const ProjectDraft> edit,Ref<const BatchDraft> batch,Ref<const RecorderDraft> recorder) {
+    auto &d=Device(id);auto &L=LaneOf(id);if(L.active) throw std::invalid_argument("A job is still active on this device");L.pending=CreateRef<Operation>(d.draft,r);auto &pending=L.pending;pending->jsonResponse=!lightResponse;const std::string op0=r.at("operation");if(op0=="edit"){pending->draft=edit?std::move(edit):ReadDraftEdit(d.draft.get(),r);pending->request.erase("document");pending->request.erase("patch");pending->request.erase("pointer_set");}if(op0.starts_with("export_"))pending->acResults=d.acResults.json();if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchInput=d.batchResult.typed();pending->batch=batch?std::move(batch):r.contains("spec")?ReadBatchDraft(r.at("spec")):d.batch;pending->recorder=recorder?std::move(recorder):r.contains("columns")?ReadRecorderDraft(r.at("columns")):d.recorder;
     const std::string op=r.at("operation");
     if(op=="load_profile")pending->request["project_path"]=path;
     if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?*d.bandResult:*d.result;}
@@ -1106,7 +1084,7 @@ void Workflow::StartSave(const Json &r) {
         if(!autosave) status="Saving... (queued)";
         return;
     }
-    auto op=CreateRef<Operation>(Current().document,r);op->request["operation"]="project_save";
+    auto op=CreateRef<Operation>(Current().draft,r);op->request["operation"]="project_save";
     op->workspace=Workspace(false);
     for(std::size_t i=0;i<project.devices.size();++i) {
         const auto &d=*project.devices[i];op->workspace["devices"][i]["selected_run"]=d.selectedRun;
@@ -1180,21 +1158,21 @@ void Workflow::DeferProjectLoad(const Json &r) {
     for(auto &[id,lane]:lanes) {std::erase_if(lane.queue,[](const Queued &q){return q.request.value("batch",false);});if(lane.active) (void)jobs->RequestCancel(lane.active);}
     status="Cancelling calculation; project will open after pending edits finish";
 }
-void Workflow::QueueEdit(const Json &r) {
-    auto &lane=LaneOf(project.active_device);
-    auto candidate=Current().document;
-    if(lane.pending && lane.Op()=="edit") {
-        const auto &edit=lane.pending->request;
-        if(edit.contains("document")) candidate=edit.at("document");else candidate.update(edit.at("patch"),true);
-    }
-    if(!lane.queue.empty()) candidate=lane.queue.back().request.at("document");
-    if(r.contains("document")) candidate=r.at("document");else candidate.update(r.at("patch"),true);
-    auto edit=r;edit["document"]=std::move(candidate);edit["device_id"]=project.active_device;
-    const auto gesture=edit.value("gesture_id",std::string{});
-    if(!gesture.empty() && !lane.queue.empty() && lane.queue.back().request.value("gesture_id",std::string{})==gesture) lane.queue.back().request=std::move(edit);
-    else lane.queue.push_back({std::move(edit),{}});
-    const std::string running=lane.Op();
-    if(lane.active && (running=="run" || running=="band" || running=="cv" || running=="cf" || running=="qe") && !(dragging && (lane.pending->request.value("preview",false) || lane.pending->request.value("live",false)))) (void)jobs->RequestCancel(lane.active); // a running drag preview finishes; the newest edit supersedes it afterwards (latest wins)
+void Workflow::BatchTyped(Ref<const BatchDraft> batch,Ref<const RecorderDraft> recorder) {StartOperation({{"operation","batch_settings"}},project.active_device,{},std::move(batch),std::move(recorder));}
+void Workflow::QueueEdit(const Json& request) {
+    const auto* latest=EditDraft();const auto source=latest?latest:Current().draft.get();
+    if(!source)throw std::invalid_argument("No device document");
+    EditTyped(ReadDraftEdit(source,request),request.value("gesture_id",std::string{}));
+}
+void Workflow::EditTyped(Ref<const ProjectDraft> draft,const std::string& gesture) {
+    ValidateDraft(*draft);
+    auto& lane=LaneOf(project.active_device);
+    Json request={{"operation","edit"},{"device_id",project.active_device},{"gesture_id",gesture}};
+    if(!lane.active && lane.queue.empty()){StartOperation(request,project.active_device,std::move(draft));return;}
+    if(!gesture.empty() && !lane.queue.empty() && lane.queue.back().request.value("gesture_id",std::string{})==gesture)lane.queue.back()={std::move(request),{},std::move(draft)};
+    else lane.queue.push_back({std::move(request),{},std::move(draft)});
+    const auto running=lane.Op();
+    if(lane.active && (running=="run" || running=="band" || running=="cv" || running=="cf" || running=="qe") && !(dragging && (lane.pending->request.value("preview",false) || lane.pending->request.value("live",false))))(void)jobs->RequestCancel(lane.active);
     Current().changedAt=std::chrono::steady_clock::now();
 }
 void Workflow::SelectDevice(const std::string &id) {project.active_device=id;projectDirty=true;RefreshDirty();response=Snapshot();}
@@ -1233,8 +1211,8 @@ bool Workflow::CanUndo() const {
     return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanUndo();
 }
 bool Workflow::CanRedo() const {return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanRedo();}
-void Workflow::ApplyDocument(DeviceState &d,Json document) {
-    d.document=std::move(document);
+void Workflow::ApplyDraft(DeviceState &d,Ref<const ProjectDraft> draft) {
+    d.SetDraft(std::move(draft));
     d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";
     ++d.revision;Emit(DocumentEdited(d.id,d.revision));
 }
@@ -1330,7 +1308,7 @@ void Workflow::UpdateOperation() {
         } else if(!L.queue.empty()) {
             busy=true;
             auto next=std::move(L.queue.front());L.queue.pop_front();
-            try {StartOperation(next.request,L.device);} catch(const std::exception &e) {status=e.what();}
+            try {StartOperation(next.request,L.device,next.draft);} catch(const std::exception &e) {status=e.what();}
         }
     }
     for(auto it=lanes.begin();it!=lanes.end();) it=(it->second.Idle() && !std::ranges::any_of(project.devices,[&](const auto &d){return d->id==it->first;}))?lanes.erase(it):std::next(it); // lanes of devices that left the project
@@ -1395,29 +1373,29 @@ void Workflow::FinishOperation(Lane &L) {
     }
     if(snapshot->status==JobStatus::Completed && !dropped) {
         if(op=="project_new" || op=="project_load" || op=="load") {
-            SetWorkspace(pending->workspace,true,&pending->loaded);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
+            SetWorkspace(pending->workspace,true,&pending->loaded,&pending->loadedDrafts);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
             ++epoch;path=op=="project_new"?std::string{}:pending->request.at("path").get<std::string>();
             if(op!="project_new" && std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
             for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();device->needsBand=false;device->needsRecalculate=false;}
             Emit(ProjectLoaded(path));Emit(DeviceListChanged());
         } else if(op=="device_read") {
-            Json add={{"operation","device_add"},{"document",pending->document},{"loaded",true}};
+            Json add={{"operation","device_add"},{"loaded",true}};
             for(const auto *key:{"name","description"}) if(pending->request.contains(key)) add[key]=pending->request.at(key);
-            DeviceOp(add);
+            DeviceOp(add,pending->draft);
         } else {
             Unique<ICommand> editStep; // delta of the document change, pushed after the document is in place (a gesture merge compacts against it)
-            if(IsEditOp(op) && d.document!=pending->document) editStep=Undo::Edit(*this,L.device,d.document,pending->document,pending->request.value("gesture_id",std::string{}));
-            d.document=pending->document;
+            if(IsEditOp(op) && d.draft && pending->draft && !CompareDrafts(*d.draft,*pending->draft).Empty()) editStep=Undo::Edit(*this,L.device,*d.draft,*pending->draft,pending->request.value("gesture_id",std::string{}));
+            if(IsEditOp(op))d.SetDraft(pending->draft);
             if(editStep && d.undo.PushExecuted(std::move(editStep))) preferProjectUndo=false;
             const int retention=project.ui.value("history_retention",5);
             if((op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") && !liveBand) {
-                {const auto runId=StoreRun(d.history.mut(),op=="run"?"iv":op,pending->output,d.document,pending->request,retention);
+                {const auto runId=StoreRun(d.history.mut(),op=="run"?"iv":op,pending->output,d.Document(),pending->request,retention);
                     auto runs=CreateRef<RunMap>(*d.runs);(*runs)[runId]=pending->typedOut;d.runs=std::move(runs);d.SyncRuns();}
                 d.selectedRun=d.history.empty()?"":d.history.back().at("run_id").get<std::string>();
                 Emit(HistoryChanged(d.id));Emit(SelectionChanged(d.id));
             }
             if(op=="batch_select") d.selectedMember=pending->request.at("index");
-            if(op=="batch_settings") {d.batchSpec=pending->batchSpec;d.recorderColumns=pending->recorderColumns;projectDirty=true;}
+            if(op=="batch_settings") {d.SetBatch(pending->batch);d.SetRecorder(pending->recorder);projectDirty=true;}
             if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {d.batchResult.adopt(std::static_pointer_cast<const BatchResult>(pending->typedOut));projectDirty=true;Emit(RunCompleted(d.id,d.selectedRun,op,d.revision));}
             if(op=="run") {d.result.adopt(std::static_pointer_cast<const IvResult>(pending->typedOut));d.bandResult.clear();d.resultRevision=d.revision;}
             if(op=="band") {d.bandResult.adopt(std::static_pointer_cast<const IvResult>(pending->typedOut));if(liveBand)d.bandRevision=pending->request.value("rev",std::uint64_t(0));}

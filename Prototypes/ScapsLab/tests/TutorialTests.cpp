@@ -99,7 +99,7 @@ TEST_P(ScapsLabTutorialVerify,HeadlessCommandsAndRealSolverPassEveryStep) {
 INSTANTIATE_TEST_SUITE_P(AllThree,ScapsLabTutorialVerify,testing::ValuesIn(kLessons));
 TEST_P(ScapsLabTutorialVerify,LearnAndDemoUseTheSameCommandsAndPassEveryStep) {
     for(const auto *mode:{"learn","demo"}) {
-        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
         ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id",GetParam()},{"mode",mode}}).value("ok",false));
         int ticks=0;
         while(w.tutorial.Active() || w.Pending()) {
@@ -119,7 +119,7 @@ TEST_P(ScapsLabTutorialVerify,LearnAndDemoUseTheSameCommandsAndPassEveryStep) {
     }
 }
 TEST(ScapsLabTutorial,StopRestoresAutomaticSettingsAndInvalidInputIsTyped) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.autoRecalculate=true;
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));w.autoRecalculate=true;
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_stop"}}).value("ok",false));EXPECT_TRUE(w.autoRecalculate);
     EXPECT_FALSE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","../bad"}}).value("ok",true));
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","first-device"}}).value("ok",false));
@@ -130,7 +130,7 @@ TEST(ScapsLabTutorial,LearnPersistsProgressAndVerifyDoesNotWriteUserConfig) {
     const auto path=std::filesystem::path(SCAPSLAB_TUTORIAL_ARTIFACTS)/"progress-test.json";
     std::filesystem::create_directories(path.parent_path());
     std::error_code ec;std::filesystem::remove(path,ec);
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     w.tutorialProgressPath=path.string();
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","first-device"}}).value("ok",false));
     w.OnUpdate(0);w.Current().name="Tutorial: First device"; // the user finishes step 1 after the lesson started
@@ -147,7 +147,7 @@ TEST(ScapsLabTutorial,LearnPersistsProgressAndVerifyDoesNotWriteUserConfig) {
     std::filesystem::remove(path,ec);
 }
 TEST(ScapsLabTutorial,NewProjectUsesJobPathAndResetsProjectState) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     w.path="previous.scapslab";w.project.name="Previous";w.projectDirty=true;
     const auto started=w.Dispatch({{"operation","project_new"}});ASSERT_TRUE(started.value("ok",false));EXPECT_NE(w.ActiveJob(),0);
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
@@ -161,7 +161,7 @@ TEST(ScapsLabTutorial,OffscreenHighlightedActualControlScreenshot) {
     ASSERT_NE(gladLoadGL(glfwGetProcAddress),0);
     { Testing::UiScreenshotContext ui({.nativeWindow=window});auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,740);io.ConfigDebugHighlightIdConflicts=true;
 
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     ASSERT_TRUE(w.Dispatch({{"operation","tutorial_start"},{"tutorial_id","first-device"}}).value("ok",false));
     ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.device_add"},"File/New","Ctrl+N"));
     ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.run"},"Simulate/Calculate I-V"));
@@ -193,17 +193,17 @@ TEST(ScapsLabHistory,OffscreenCompactTable) {
     ASSERT_NE(gladLoadGL(glfwGetProcAddress),0);
     { Testing::UiScreenshotContext ui({.nativeWindow=window});auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1280,900);io.ConfigDebugHighlightIdConflicts=true;
 
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().name="Reference device";
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));w.Current().name="Reference device";
     w.project.ui["history_retention"]=20;
     for(int i=0;i<20;++i) {
-        auto document=w.Current().document;document["temperature_K"]=300.+i;
+        auto document=w.Current().Document();document["temperature_K"]=300.+i;
         StoreRun(w.Current().history.mut(),"iv",{{"provenance",{{"time_unix_ms",1795161600000LL+i*1000}}}},document,Json::object(),20,i>=15?"temperature-sweep":"");
         w.Current().history.mut().back()["profiles_stored"]=false;
     }
     w.Current().history.mut().front()["name"]="Reference";w.Current().history.mut().front()["pinned"]=true;
     w.Current().history.mut()[1]["visible"]=false;
     w.Current().selectedRun=w.Current().history.front().at("run_id");
-    auto second=CreateRef<DeviceState>();second->id="second";second->name="Second device";second->document=w.Current().document;
+    auto second=CreateRef<DeviceState>();second->id="second";second->name="Second device";second->SetDraft(w.Current().draft);
     second->history=Json::array({w.Current().history.back()});w.project.devices.push_back(second);
     const auto before=w.Workspace();
     std::set<ImGuiID> hovered;
@@ -313,7 +313,7 @@ TEST_P(ScapsLabTutorialUi,EveryStepTargetIsVisibleAndArrowTipClearsIt) {
     auto *window=glfwCreateWindow(1400,1100,"Tutorial targets",nullptr,nullptr);ASSERT_NE(window,nullptr);glfwMakeContextCurrent(window);
     ASSERT_NE(gladLoadGL(glfwGetProcAddress),0);
     { Testing::UiScreenshotContext ui({.nativeWindow=window});auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1400,1100);
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     SetCommandMenuHook([&](const std::string &root,bool open){w.MenuHook(root,open);});
     ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.device_add"},"File/New","Ctrl+N"));
     ASSERT_TRUE(w.commands->SetMenu(CommandID{"scapslab.run"},"Simulate/Calculate I-V"));
@@ -375,7 +375,7 @@ TEST(ScapsLabLive,OffscreenLayerSlidersAndLiveBandScreenshots) {
     auto *window=glfwCreateWindow(1100,820,"live offscreen",nullptr,nullptr);ASSERT_NE(window,nullptr);glfwMakeContextCurrent(window);ASSERT_NE(gladLoadGL(glfwGetProcAddress),0);
     { Testing::UiScreenshotContext ui({.nativeWindow=window});auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1100,820);io.ConfigDebugHighlightIdConflicts=true;
     Workflow w(CreateRef<JobSystem>(nullptr,2));auto doc=ReadProject(SCAPSLAB_PROJECT);doc["voltage"]={{"start_V",0.0},{"stop_V",0.6},{"step_V",0.1}};
-    w.Current().document=doc;w.WatchPlots();w.autoRecalculate=false;w.autoRecalculateBand=true;
+    w.Current().SetDocument(doc);w.WatchPlots();w.autoRecalculate=false;w.autoRecalculateBand=true;
     auto registry=CreateRef<CommandRegistry>();ApplicationDetail::RegisterScreenshotCommand(registry,w.jobs);
     auto shot=[&](Panel &panel,const char *title,const char *file,int frames) {
         for(int f=0;f<frames;++f) {
@@ -391,7 +391,7 @@ TEST(ScapsLabLive,OffscreenLayerSlidersAndLiveBandScreenshots) {
     ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
     for(int i=0;i<60000 && (w.Pending() || !w.ViewsReady());++i){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     shot(band,"Band diagram & profiles","sllive1-band-before.png",8);
-    auto d=w.Current().document;const double nd=d["layers"][0]["doping"]["Nd_m3"].get<double>();d["layers"][0]["doping"]["Nd_m3"]=std::max(nd,1e21)*1000.;
+    auto d=w.Current().Document();const double nd=d["layers"][0]["doping"]["Nd_m3"].get<double>();d["layers"][0]["doping"]["Nd_m3"]=std::max(nd,1e21)*1000.;
     ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d}}).at("ok").get<bool>());
     for(int i=0;i<60000 && !w.Current().BandFresh();++i){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_TRUE(w.Current().BandFresh());

@@ -1,3 +1,4 @@
+#include "DocumentFixture.hpp"
 #include <gtest/gtest.h>
 #include "Workflow.hpp"
 #include <chrono>
@@ -57,7 +58,7 @@ TEST(ScapsLabExamples,GenerateTeachingExamples) {
     };
     for(const auto &s:specs) {
         Workflow w(CreateRef<JobSystem>(nullptr,1));
-        w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+        w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
         auto defPath=s.def;
         if(s.def.find("Aissat")!=std::string::npos) { // this older deck codes the interface-defect energy reference as 0 (above Ev); the importer wants 7 (above EV left)
             std::ifstream in(s.def);std::string text((std::istreambuf_iterator<char>(in)),std::istreambuf_iterator<char>());
@@ -65,10 +66,10 @@ TEST(ScapsLabExamples,GenerateTeachingExamples) {
             ASSERT_NE(at,std::string::npos);text.replace(at,std::string("Reference for defect energy : 0").size(),"Reference for defect energy : 7");
             defPath=(std::filesystem::temp_directory_path()/"cigs-iface7.def").string();std::ofstream(defPath)<<text;
         }
-        if(s.def.ends_with(".yaml")) w.Current().document=ReadProject(s.def);
+        if(s.def.ends_with(".yaml")) w.Current().SetDocument(ReadProject(s.def));
         else ASSERT_TRUE(Exec(w,{{"operation","import_def"},{"path",defPath}}).value("ok",false))<<w.response.dump();
         if(s.def.find("Aissat")!=std::string::npos) // the deck gives A = 1e7 /(m sqrt(eV)), B = 0 for all layers; the importer leaves the old-style lines unread
-            for(auto &layer:w.Current().document["layers"]) {layer["absorption"]["model"]="sqrt";layer["absorption"]["A_m1_eV_half"]=1e7;layer["absorption"]["B_m1_eV_minus_half"]=0.;}
+            EditFixture(w.Current(),[&](Json& document){for(auto& layer:document["layers"]){layer["absorption"]["model"]="sqrt";layer["absorption"]["A_m1_eV_half"]=1e7;layer["absorption"]["B_m1_eV_minus_half"]=0.;}});
         const auto edit=Exec(w,{{"operation","edit"},{"patch",s.patch}});ASSERT_TRUE(edit.value("ok",false))<<edit.dump();
         w.Current().name=s.name;w.Current().description=s.description;
         auto workspace=w.Workspace();workspace["name"]=s.project;
