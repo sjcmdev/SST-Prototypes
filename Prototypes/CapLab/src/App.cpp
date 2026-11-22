@@ -35,7 +35,7 @@ public:
         if (TextFileIO::Load(profilePath,text,error)) {
             try {
                 auto checked=state.Document().project;
-                checked.importProfiles=sst::plotlab::importProfilesFromJson(text); Validate(checked);
+                checked.importProfiles=Prototypes::CapLab::ReadImportProfiles(text); Validate(checked);
                 state.Document().project.importProfiles=std::move(checked.importProfiles);
             }
             catch (const std::exception &e) {state.status=e.what();}
@@ -43,7 +43,7 @@ public:
     }
     void OnImGuiRender() override {
         if (state.profileRevision!=savedProfileRevision) {
-            const auto profiles=sst::plotlab::importProfilesJson(state.Document().project.importProfiles);
+            const auto profiles=Prototypes::CapLab::WriteImportProfiles(state.Document().project.importProfiles);
             std::string error;
             if (TextFileIO::Save(profilePath,profiles,error)) savedProfileRevision=state.profileRevision;
             else state.status=error;

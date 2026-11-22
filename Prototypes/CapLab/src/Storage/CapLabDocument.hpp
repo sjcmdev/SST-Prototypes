@@ -21,6 +21,21 @@ namespace SST::Prototypes::CapLab
         pl::Id id, sample_id, frequency, capacitance, resistance;
         std::optional<double> temperature_K;
     };
+    struct ImportProfile
+    {
+        pl::ImportOptions parser;
+        Json options = Json::object();
+        std::optional<std::string> encodedOptions;
+    };
+    struct WorksheetSource
+    {
+        std::vector<std::size_t> rows;
+        bool hasRows = false;
+        std::map<std::string,std::optional<double>> temperatures;
+        std::map<std::string,std::uint64_t> integerTemperatures;
+        std::shared_ptr<const Json> provenance;
+        std::shared_ptr<const pl::Parameters> encoded;
+    };
     struct Project
     {
         Ref<pl::Project> engine = CreateRef<pl::Project>("CapLab");
@@ -28,8 +43,28 @@ namespace SST::Prototypes::CapLab
         std::vector<FrequencySweep> sweeps;
         Json measurements = Json::array(), historical = Json::array(), imports = Json::array(), analyses = Json::array(), defects = Json::array(), circuits = Json::array(), comparisons = Json::array();
         pl::Id graph = 0;
-        pl::ImportProfiles importProfiles;
+        std::map<std::string,ImportProfile> importProfiles;
+        std::map<pl::Id,WorksheetSource> sources;
     };
+    inline pl::Id NextEntityId(const pl::Project &p)
+    {
+        // PlotLab exposes reservations through its detached operation snapshot.
+        try { return p.operationSnapshot()->reserveId(); }
+        catch (const std::overflow_error &) { return (std::numeric_limits<pl::Id>::max)(); }
+    }
+    inline Ref<pl::Project> CloneEngine(const pl::Project &p)
+    {
+        Ref<pl::Project> result=p.operationSnapshot();
+        result->setAutoRecompute(p.autoRecompute());
+        return result;
+    }
+    inline Project CloneProject(const Project &p, pl::Id minimumNextId = 0)
+    {
+        auto result=p;
+        result.engine=CloneEngine(*p.engine);
+        for (auto next=NextEntityId(*p.engine); next<minimumNextId; ++next) result.engine->reserveId();
+        return result;
+    }
     inline Json Nullable(std::optional<double> value) { return value ? Json(*value) : Json(nullptr); }
     inline std::optional<double> Optional(const Json &value)
     {
@@ -40,9 +75,11 @@ namespace SST::Prototypes::CapLab
     }
     inline void Validate(const Project &p)
     {
-        (void)pl::importProfilesJson(p.importProfiles);
         for (const auto &[name,profile]:p.importProfiles) {
-            const auto options=Json::parse(profile.extra.at("options"));
+            const auto &parser=profile.parser;
+            if (name.empty() || name.size()>128 || static_cast<unsigned>(parser.header)>2 || static_cast<unsigned>(parser.units)>2 ||
+                (parser.decimal && parser.decimal!='.' && parser.decimal!=',')) throw std::runtime_error("Invalid import profile.");
+            const auto &options=profile.options;
             if (!options.is_object() || (options.contains("profile") && !options.at("profile").is_string()))
                 throw std::runtime_error("Invalid CapLab format profile options.");
         }
@@ -62,7 +99,7 @@ namespace SST::Prototypes::CapLab
             const auto &sheet = std::get<pl::Worksheet>(p.engine->object(s.id).data);
             if (sheet.source.at("profile") != "lab_as_cp_rp") throw std::runtime_error("Unsupported frequency sweep variant.");
             if (sheet.rows.empty()) throw std::runtime_error("Empty sweep.");
-            const auto rows = Json::parse(sheet.source.at("source_rows")).get<std::vector<std::size_t>>();
+            const auto &rows = p.sources.at(s.id).rows;
             if (rows.size() != sheet.rows.size() || std::set<std::size_t>(rows.begin(), rows.end()).size() != rows.size() || rows.front() == 0) throw std::runtime_error("Invalid source row mapping.");
             std::set<pl::Id> columns;
             for (const auto &[id, unit] : {std::pair{s.frequency, "Hz"}, {s.capacitance, "F"}, {s.resistance, "Ohm"}})
@@ -385,25 +422,84 @@ namespace SST::Prototypes::CapLab
             for (const auto &source:c.at("analysis_ids")) if (!source.is_number_unsigned()) throw std::runtime_error("Invalid comparison analysis ID.");
         }
     }
-    inline std::string Serialize(const Project &p)
+    inline std::string WriteImportProfiles(const std::map<std::string,ImportProfile> &value)
+    {
+        pl::ImportProfiles profiles;
+        for (const auto &[name,profile]:value) {
+            auto parser=profile.parser; parser.extra["options"]=profile.encodedOptions ? *profile.encodedOptions : profile.options.dump();
+            profiles.emplace(name,std::move(parser));
+        }
+        return pl::importProfilesJson(profiles);
+    }
+    inline std::map<std::string,ImportProfile> ReadImportProfiles(const std::string &text)
+    {
+        std::map<std::string,ImportProfile> result;
+        for (auto &[name,parser]:pl::importProfilesFromJson(text)) {
+            const auto encoded=parser.extra.at("options");
+            auto options=Json::parse(encoded); parser.extra.erase("options");
+            result.emplace(name,ImportProfile{std::move(parser),std::move(options),encoded});
+        }
+        return result;
+    }
+    // Legacy string fields belong to the file/Python schema, never the live worksheet.
+    inline pl::Parameters SourceParameters(const Project &p, pl::Id id)
+    {
+        auto result=std::get<pl::Worksheet>(p.engine->object(id).data).source;
+        if (const auto found=p.sources.find(id); found!=p.sources.end()) {
+            const auto &source=found->second;
+            auto encoded=[&](const std::string &key) {return source.encoded && source.encoded->contains(key);};
+            if (source.hasRows && !encoded("source_rows")) result["source_rows"]=Json(source.rows).dump();
+            for (const auto &[key,value]:source.temperatures) if (!encoded(key))
+                result[key]=source.integerTemperatures.contains(key) ? Json(source.integerTemperatures.at(key)).dump() : Nullable(value).dump();
+            if (source.provenance && !encoded("provenance")) result["provenance"]=source.provenance->dump();
+            if (source.encoded) for (const auto &[key,value]:*source.encoded) result[key]=value;
+        }
+        return result;
+    }
+    inline Json ProjectJson(const Project &p, bool includeEngine = true)
     {
         Validate(p);
         Json samples = Json::array(), sweeps = Json::array();
         for (const auto &s : p.samples) samples.push_back({{"id",s.id},{"name",s.name},{"area_m2",Nullable(s.area_m2)},{"metadata",s.metadata}});
         for (const auto &s : p.sweeps) sweeps.push_back({{"id",s.id},{"sample_id",s.sample_id},{"variant","Cp_Rp"},
             {"frequency",s.frequency},{"capacitance",s.capacitance},{"resistance",s.resistance},{"temperature_K",Nullable(s.temperature_K)}});
-        Json result{{"import_profiles",Json::parse(pl::importProfilesJson(p.importProfiles))},{"circuits",p.circuits},{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
-            {"samples",samples},{"sweeps",sweeps},{"graph",p.graph},{"engine",Json::parse(p.engine->toJson())},{"measurements",p.measurements},{"historical",p.historical},{"imports",p.imports},{"analyses",p.analyses},{"defects",p.defects}};
+        Json result{{"import_profiles",Json::parse(WriteImportProfiles(p.importProfiles))},{"circuits",p.circuits},{"schema_version",1},{"id",p.engine->id()},{"name",p.engine->name()},
+            {"samples",samples},{"sweeps",sweeps},{"graph",p.graph},{"measurements",p.measurements},{"historical",p.historical},{"imports",p.imports},{"analyses",p.analyses},{"defects",p.defects}};
+        if (includeEngine) {
+            auto engine=Json::parse(p.engine->toJson());
+            for (auto &object:engine.at("objects")) if (object.contains("source")) object["source"]=SourceParameters(p,object.at("id"));
+            result["engine"]=std::move(engine);
+        }
         if (!p.comparisons.empty()) result["comparisons"]=p.comparisons;
-        return result.dump();
+        return result;
     }
-    inline Project Parse(const std::string &text)
+    inline std::string Serialize(const Project &p) { return ProjectJson(p).dump(); }
+    inline Project ProjectFromJson(const Json &j)
     {
-        const auto j = Json::parse(text);
         if (j.at("schema_version") != 1) throw std::runtime_error("Unsupported CapLab schema; file will not be overwritten.");
         Project p;
-        p.importProfiles=pl::importProfilesFromJson(j.value("import_profiles",Json::object()).dump());
-        p.engine = CreateRef<pl::Project>(pl::Project::fromJson(j.at("engine").dump()));
+        p.importProfiles=ReadImportProfiles(j.value("import_profiles",Json::object()).dump());
+        auto engine=j.at("engine");
+        for (auto &object:engine.at("objects")) if (object.contains("source")) {
+            auto &fields=object.at("source");
+            WorksheetSource source;
+            pl::Parameters encoded;
+            for (auto key:{"source_rows","temperature_K","temperature_header_K","temperature_filename_K","provenance"})
+                if (fields.contains(key)) encoded[key]=fields.at(key).get<std::string>();
+            if (!encoded.empty()) source.encoded=std::make_shared<const pl::Parameters>(std::move(encoded));
+            if (fields.contains("source_rows")) {
+                source.rows=Json::parse(fields.at("source_rows").get<std::string>()).get<std::vector<std::size_t>>();
+                source.hasRows=true; fields.erase("source_rows");
+            }
+            for (auto key:{"temperature_K","temperature_header_K","temperature_filename_K"}) if (fields.contains(key)) {
+                source.temperatures[key]=Optional(Json::parse(fields.at(key).get<std::string>())); fields.erase(key);
+            }
+            if (fields.contains("provenance")) {
+                source.provenance=std::make_shared<const Json>(Json::parse(fields.at("provenance").get<std::string>())); fields.erase("provenance");
+            }
+            p.sources.emplace(object.at("id").get<pl::Id>(),std::move(source));
+        }
+        p.engine = CreateRef<pl::Project>(pl::Project::fromJson(engine.dump()));
         if (j.at("id") != p.engine->id() || j.at("name") != p.engine->name()) throw std::runtime_error("Project identity mismatch.");
         p.graph = j.at("graph").get<pl::Id>();
         for (const auto &s : j.at("samples")) p.samples.push_back({s.at("id").get<pl::Id>(),s.at("name").get<std::string>(),Optional(s.at("area_m2")),s.value("metadata",Json::object())});
@@ -423,6 +519,7 @@ namespace SST::Prototypes::CapLab
         Validate(p);
         return p;
     }
+    inline Project Parse(const std::string &text) { return ProjectFromJson(Json::parse(text)); }
     struct CapLabDocument : DocumentState
     {
         std::uint64_t handle = 0;

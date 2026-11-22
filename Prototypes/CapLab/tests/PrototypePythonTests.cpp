@@ -29,7 +29,7 @@ namespace SST::Prototypes::CapLab
             CapLabWorkflow cold(jobs,bus,undo); RegisterCommands(commands,bus,cold);
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto& e) {cold.Start(e.operation,e.target);});
             CommandContext request; request.Set("path",Path{std::filesystem::path(SST_PROTOTYPE_PYTHON_ROOT).parent_path()/"tests/fixtures/m2/samples_Cd_diffusion.json"});
-            cold.importOptions=R"({"profile":"propho_json"})";
+            cold.importOptions=Json::parse(R"({"profile":"propho_json"})");
             ASSERT_TRUE(commands->Execute(CommandID{"caplab.preview"},std::move(request)));
             bus->ProcessQueue(); jobs->Shutdown(); cold.OnUpdate(0);
             ASSERT_TRUE(cold.preview) << cold.status;
@@ -91,7 +91,7 @@ namespace SST::Prototypes::CapLab
             };
             render();
             const Path path{std::filesystem::path(SST_PROTOTYPE_PYTHON_ROOT).parent_path()/"tests/fixtures"/filename};
-            if (path.Native().extension()==".json") w.importOptions=R"({"profile":"propho_json"})";
+            if (path.Native().extension()==".json") w.importOptions=Json::parse(R"({"profile":"propho_json"})");
             CommandContext request; request.Set("path",path);
             ASSERT_TRUE(commands->Execute(CommandID{"caplab.preview"},std::move(request)));
             bus->ProcessQueue(); ASSERT_NE(w.activeJob,0);
@@ -113,7 +113,7 @@ namespace SST::Prototypes::CapLab
             auto commands=CreateRef<CommandRegistry>(); auto undo=CreateRef<UndoStack>();
             CapLabWorkflow invalid(jobs,bus,undo); RegisterCommands(commands,bus,invalid);
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto& e) {invalid.Start(e.operation,e.target);});
-            if (path.Native().extension()==".json") invalid.importOptions=R"({"profile":"propho_json"})";
+            if (path.Native().extension()==".json") invalid.importOptions=Json::parse(R"({"profile":"propho_json"})");
             CommandContext request; request.Set("path",path);
             ASSERT_TRUE(commands->Execute(CommandID{"caplab.preview"},std::move(request)));
             bus->ProcessQueue(); jobs->Shutdown();
@@ -148,7 +148,7 @@ namespace SST::Prototypes::CapLab
         const auto series=project.series(project.children(layer).at(0));
         const auto &spec=std::get<pl::Layer>(project.object(layer).data).spec;
         workflow.view.viewport=sst::ui::plot::ResolveBounds(spec,&series,1,workflow.view);
-        DocumentJob exportJob(Operation::Export,"",Path{FileSystem::TempDirectoryPath()/"caplab-cf-test.png"});
+        DocumentJob exportJob(Operation::Export,Project{},Path{FileSystem::TempDirectoryPath()/"caplab-cf-test.png"});
         exportJob.snapshot=pl::snapshotGraph(project,workflow.Document().project.graph,workflow.view);
         JobContext context({}, {}, {}, {}, [] {return false;});
         ASSERT_NO_THROW(exportJob.Execute(context));
@@ -177,8 +177,9 @@ namespace SST::Prototypes::CapLab
             ASSERT_TRUE(commands->Execute(CommandID{"caplab.export"},std::move(request)));
             bus->ProcessQueue(); ASSERT_NE(workflow.activeJob,0) << workflow.status;
             workflow.jobs->Shutdown(); workflow.OnUpdate(0);
-            ASSERT_TRUE(workflow.exportResult.contains("graphs")) << workflow.status;
-            const Path output{workflow.exportResult.at("graphs").at(0).at("path").get<std::string>()};
+            ASSERT_TRUE(workflow.graphExport.batch) << workflow.status;
+            ASSERT_EQ(workflow.graphExport.graphs.size(),1);
+            const auto &output=workflow.graphExport.graphs[0].path;
             EXPECT_GT(std::filesystem::file_size(output.Native()),500);
             EXPECT_TRUE(FileSystem::Remove(output.Native()));
         }
@@ -190,7 +191,7 @@ namespace SST::Prototypes::CapLab
         CapLabWorkflow bundleWorkflow(bundleJobs,bundleBus,bundleUndo);
         RegisterCommands(bundleCommands,bundleBus,bundleWorkflow);
         auto analysisRequest=bundleBus->Subscribe<DocumentRequested>([&](const auto &e) { bundleWorkflow.Start(e.operation,e.target); });
-        bundleWorkflow.importOptions = R"({"profile":"propho_dl","temperature_K":360,"frequency_Hz":1000})";
+        bundleWorkflow.importOptions = Json::parse(R"({"profile":"propho_dl","temperature_K":360,"frequency_Hz":1000})");
         bundleWorkflow.Start(Operation::Preview,Path{std::filesystem::path(SST_PROTOTYPE_PYTHON_ROOT).parent_path()/"tests/fixtures/m2/#132_DL_1e3Hz_360K.dat"});
         bundleJobs->Shutdown(); bundleWorkflow.OnUpdate(0);
         ASSERT_TRUE(bundleWorkflow.preview) << bundleWorkflow.status;
@@ -228,7 +229,7 @@ namespace SST::Prototypes::CapLab
         EXPECT_EQ(bundleWorkflow.Document().project.analyses.size(),1);
         EXPECT_NE(bundleWorkflow.status.find("Stale revision"),std::string::npos);
         JobContext cancelled({}, {}, {}, {}, [] {return true;});
-        DocumentJob cancelledAnalysis(Operation::Analyze,analyzed);
+        DocumentJob cancelledAnalysis(Operation::Analyze,Parse(analyzed));
         cancelledAnalysis.analysisOptions=bundleWorkflow.analysisOptions;
         EXPECT_ANY_THROW(cancelledAnalysis.Execute(cancelled));
 
@@ -290,7 +291,7 @@ namespace SST::Prototypes::CapLab
         workflow.Document().project.sweeps[0].temperature_K=101; RefreshAnalyses(workflow.Document().project);
         EXPECT_EQ(workflow.Document().project.analyses[1]["status"],"stale");
         JobContext m4context({}, {}, {}, {}, [] {return false;});
-        DocumentJob changedPoint(Operation::Analyze,Serialize(workflow.Document().project));
+        DocumentJob changedPoint(Operation::Analyze,CloneProject(workflow.Document().project));
         changedPoint.analysisOptions=workflow.analysisOptions;
         EXPECT_ANY_THROW(changedPoint.Execute(m4context));
         workflow.Document().project=Parse(savedInputs);

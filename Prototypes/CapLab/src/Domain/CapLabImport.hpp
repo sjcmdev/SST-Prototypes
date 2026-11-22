@@ -26,45 +26,52 @@ namespace SST::Prototypes::CapLab
                 return p.object(o->parent).parent;
         throw std::runtime_error("Imported measurement has no graph.");
     }
-    inline pl::Table PreviewTable(const Json &preview, std::optional<double> temperature)
+    inline void ValidatePreview(const Json &preview, std::optional<double> temperature)
     {
         Optional(Nullable(temperature));
-        const auto values = preview.at("columns").get<std::vector<std::vector<double>>>();
+        const auto &values = preview.at("columns");
         const auto rows = preview.at("source_rows").get<std::vector<std::size_t>>();
-        if (values.size() < 3 || values.front().empty() || rows.size() != values.front().size() ||
+        if (!values.is_array() || values.size() < 3 || values.front().empty() || rows.size() != values.front().size() ||
             std::set<std::size_t>(rows.begin(),rows.end()).size() != rows.size() || (!rows.empty() && rows.front() == 0))
             throw std::runtime_error("Expected nonempty f, Cp, Rp columns and source rows.");
+        for (std::size_t i = 0; i < values.size(); ++i)
+        {
+            if (!values[i].is_array() || values[i].size() != rows.size()) throw std::runtime_error("Unequal AS columns.");
+            for (const auto &cell : values[i]) {
+                const double v=cell.get<double>();
+                if (!std::isfinite(v) || ((i == 0 || i == 2) && v <= 0)) throw std::runtime_error("Invalid AS value.");
+            }
+        }
+        if (preview.at("profile") != "lab_as_cp_rp") throw std::runtime_error("Select the lab Cp/Rp profile explicitly.");
+    }
+    inline pl::Table PreviewTable(const Json &preview, std::optional<double> temperature)
+    {
+        ValidatePreview(preview,temperature);
+        auto values=preview.at("columns").get<std::vector<std::vector<double>>>();
         pl::Table table;
         for (std::size_t i = 0; i < values.size(); ++i)
         {
-            if (values[i].size() != rows.size()) throw std::runtime_error("Unequal AS columns.");
-            for (double v : values[i])
-                if (!std::isfinite(v) || ((i == 0 || i == 2) && v <= 0)) throw std::runtime_error("Invalid AS value.");
             pl::Column c;
             c.units = i == 0 ? "Hz" : i == 1 ? "F" : i == 2 ? "Ohm" : "";
             c.role = i == 0 ? pl::Role::X : i == 1 ? pl::Role::Y : pl::Role::None;
-            c.values = values[i];
+            c.values = std::move(values[i]);
             table.columns.push_back(std::move(c));
             table.names.push_back(i == 0 ? "Frequency" : i == 1 ? "Cp" : i == 2 ? "Rp" : "Source" + std::to_string(i+1));
         }
-        if (preview.at("profile") != "lab_as_cp_rp") throw std::runtime_error("Select the lab Cp/Rp profile explicitly.");
         table.source = {{"profile","lab_as_cp_rp"},{"version","1"},{"path",preview.at("source").get<std::string>()},
-            {"sha256",preview.at("sha256").get<std::string>()},{"source_rows",preview.at("source_rows").dump()},
+            {"sha256",preview.at("sha256").get<std::string>()},
             {"header",preview.at("header").get<std::string>()},{"decimal",preview.at("decimal").get<std::string>()},
-            {"temperature_K",Nullable(temperature).dump()},{"temperature_header_K",preview.at("temperature_K").dump()},
-            {"temperature_filename_K",preview.at("suggested_temperature_K").dump()},{"temperature_source","preview_confirmed"},
+            {"temperature_source","preview_confirmed"},
             {"units","Hz,F,Ohm"},{"conversions","none (SI)"}};
         return table;
     }
-    class CFTemplate final : public pl::PlotTemplate
+    class CFTemplate final
     {
     public:
-        std::string typeId() const override { return "caplab.cf"; }
-        unsigned version() const override { return 1; }
-        std::vector<pl::ColumnRequirement> requirements() const override { return {{"x",pl::Role::X,true,"Hz"},{"y",pl::Role::Y,true,"F"}}; }
-        pl::Operation instantiate(pl::Project &p, pl::Id folder, pl::Id sheet, const std::map<std::string,pl::Id> &columns,
-                                  const pl::Parameters &parameters) const override
+        std::vector<pl::ColumnRequirement> requirements() const { return {{"x",pl::Role::X,true,"Hz"},{"y",pl::Role::Y,true,"F"}}; }
+        pl::Operation instantiate(Project &project, pl::Id sheet, const std::map<std::string,pl::Id> &columns, pl::Id graph) const
         {
+            auto &p=*project.engine;
             for (const auto &r : requirements())
             {
                 const auto &o = p.object(columns.at(r.name));
@@ -73,7 +80,6 @@ namespace SST::Prototypes::CapLab
             }
             pl::Id layer;
             std::vector<pl::Object> objects;
-            pl::Id graph = std::stoull(parameters.at("graph"));
             if (!IsCFGraph(p,graph)) {
                 graph=0;
                 for (const auto &[id,o]:p.objects()) if (std::holds_alternative<pl::Graph>(o->data) && IsCFGraph(p,id)) {graph=id; break;}
@@ -86,18 +92,18 @@ namespace SST::Prototypes::CapLab
                 l.spec.x.scale = sst::ui::plot::AxisScale::Log10;
                 FormatCompareAxes(l.spec);
                 l.spec.autoFit = sst::ui::plot::AutoFit::Once;
-                objects = {{id,folder,"C-f",0,pl::Graph{}},{layer,id,"C-f",0,l}};
+                objects = {{id,p.root(),"C-f",0,pl::Graph{}},{layer,id,"C-f",0,l}};
             }
             pl::Plot series{sheet,columns.at("x"),columns.at("y")};
             series.kind = sst::ui::plot::SeriesKind::LineScatter;
             series.style.color = {0.12f,0.45f,0.78f,1}; series.style.lineWidthPt = 1;
             series.style.marker = sst::ui::plot::Marker::Circle; series.style.markerSizePt = 4;
-            const auto &source = std::get<pl::Worksheet>(p.object(sheet).data).source;
+            const auto &source = project.sources.at(sheet);
             std::string name = p.object(p.object(sheet).parent).name;
             Json temperature = nullptr;
-            if (source.contains("temperature_K")) temperature = Json::parse(source.at("temperature_K"));
-            if (source.contains("provenance")) {
-                const auto metadata = Json::parse(source.at("provenance"));
+            if (source.temperatures.contains("temperature_K")) temperature = Nullable(source.temperatures.at("temperature_K"));
+            if (source.provenance) {
+                const auto &metadata = *source.provenance;
                 const auto path = Path::FromResolved(std::filesystem::u8path(metadata.at("source").get<std::string>()).stem());
                 if (!path.Empty()) name = path.Utf8();
                 temperature = metadata.at("temperature_K");
@@ -112,7 +118,7 @@ namespace SST::Prototypes::CapLab
     class ImportChange
     {
     public:
-        ImportChange(Project &p, const Json &preview, std::optional<double> temperature, const pl::PlotTemplate &preset)
+        ImportChange(Project &p, const Json &preview, std::optional<double> temperature, const CFTemplate &preset)
             : target(p), oldGraph(p.graph)
         {
             auto table = PreviewTable(preview,temperature);
@@ -127,23 +133,29 @@ namespace SST::Prototypes::CapLab
                 const auto cols = p.engine->children(sheet);
                 sample = {book,name,{}};
                 sweep = {sheet,book,cols.at(0),cols.at(1),cols.at(2),temperature};
-                graph = preset.instantiate(*p.engine,p.engine->root(),sheet,{{"x",sweep.frequency},{"y",sweep.capacitance}},{{"graph",std::to_string(oldGraph)}});
+                source.rows=preview.at("source_rows").get<std::vector<std::size_t>>(); source.hasRows=true;
+                source.temperatures={{"temperature_K",temperature},{"temperature_header_K",Optional(preview.at("temperature_K"))},
+                    {"temperature_filename_K",Optional(preview.at("suggested_temperature_K"))}};
+                p.sources[sheet]=source;
+                graph = preset.instantiate(p,sheet,{{"x",sweep.frequency},{"y",sweep.capacitance}},oldGraph);
                 graph.apply(*p.engine);
             }
-            catch (...) { data.undo(*p.engine); throw; }
+            catch (...) { if (sweep.id) p.sources.erase(sweep.id); data.undo(*p.engine); throw; }
             newGraph = MeasurementGraph(*p.engine,sweep.id);
             Finish();
         }
-        void Redo() { data.apply(*target.engine); graph.apply(*target.engine); Finish(); }
+        void Redo() { data.apply(*target.engine); graph.apply(*target.engine); target.sources[sweep.id]=source; Finish(); }
         void Undo()
         {
             graph.undo(*target.engine); data.undo(*target.engine);
+            target.sources.erase(sweep.id);
             target.samples.pop_back(); target.sweeps.pop_back(); target.graph = oldGraph;
         }
     private:
         Project &target;
         pl::Operation data, graph;
         Sample sample{}; FrequencySweep sweep{};
+        WorksheetSource source;
         pl::Id oldGraph = 0, newGraph = 0;
         void Finish() { target.samples.push_back(sample); target.sweeps.push_back(sweep); target.graph = newGraph; }
     };

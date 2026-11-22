@@ -89,16 +89,16 @@ TEST(CapLabSources, NamedProfileUsesEngineOptionsAndUndo) {
     EXPECT_THROW(pl::importProfilesFromJson(R"({"x":{"delimiter":"xx","decimal":".","header":0,"units":0,"extra":{}}})"),std::exception);
     EXPECT_THROW(pl::importProfilesJson({{"",options}}),std::exception);
     auto invalid=FixtureProject(); auto broken=options; broken.extra["options"]="[";
-    invalid.importProfiles["broken"]=broken;
+    invalid.importProfiles["broken"]={broken,Json::array()};
     EXPECT_THROW(Serialize(invalid),std::exception);
     auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>(); auto undo=CreateRef<UndoStack>();
     auto commands=CreateRef<CommandRegistry>(); CapLabWorkflow state(jobs,bus,undo); RegisterCommands(commands,bus,state);
-    state.importOptions=options.extra.at("options"); state.decimal=',';
+    state.importOptions=Json::parse(options.extra.at("options")); state.decimal=',';
     CommandContext context; context.Set("request",Json{{"action","save"},{"name","lab"}});
     ASSERT_TRUE(commands->Execute(CommandID{"caplab.profile"},std::move(context)));
     const auto restored=Parse(Serialize(state.Document().project)).importProfiles.at("lab");
-    EXPECT_EQ(restored.decimal,',');
-    EXPECT_EQ(Json::parse(restored.extra.at("options")),Json::parse(options.extra.at("options")));
+    EXPECT_EQ(restored.parser.decimal,',');
+    EXPECT_EQ(restored.options,Json::parse(options.extra.at("options")));
     ASSERT_TRUE(undo->Undo()); EXPECT_TRUE(state.Document().project.importProfiles.empty());
     ASSERT_TRUE(undo->Redo()); EXPECT_EQ(state.Document().project.importProfiles.size(),1);
 }

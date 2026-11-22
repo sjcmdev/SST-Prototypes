@@ -5,6 +5,8 @@
 #include "Domain/CapLabAnalysis.hpp"
 #include "CapLabCommands.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
+#include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
+#include <sst/plotlab/SnapshotJson.hpp>
 #include <sst/physics/capacitance.hpp>
 #include <sst/physics/arrhenius.hpp>
 #include <sst/physics/materials.hpp>
@@ -167,17 +169,18 @@ NB_MODULE(sst_caplab, module)
             if (operation=="tree" || operation=="select") {
                 CommandContext context; context.Set("edit",operation=="tree" ? r.at("edit") : r.at("selection"));
                 const auto result=commands->Execute(CommandID{operation=="tree" ? "caplab.tree" : "caplab.select"},std::move(context));
-                if (!result) return Json{{"ok",false},{"project",Json::parse(Serialize(state.Document().project))},
+                if (!result) return Json{{"ok",false},{"project",ProjectJson(state.Document().project)},
                     {"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}}.dump();
             } else if (operation=="new" || operation=="activate" || operation=="close" || operation=="close_decision" || operation=="workspace") {
                 CommandContext context; context.Set("request",r);
                 const auto result=commands->Execute(CommandID{"caplab.workspace"},std::move(context));
-                if (!result) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(Serialize(state.Document().project))},
+                if (!result) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",ProjectJson(state.Document().project)},
                     {"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}}.dump();
                 if (state.activeJob) { jobs->Shutdown(); state.OnUpdate(0); }
-                if (state.failure) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(Serialize(state.Document().project))},
+                if (state.failure) return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",ProjectJson(state.Document().project)},
                     {"error",{{"code",state.failure->code},{"message",state.status}}}}.dump();
             } else if (operation=="plot") {
+                if (r.contains("view")) state.plotView=pl::viewStateFromJson(r.at("view").dump());
                 state.analysisOptions=r;
                 if (r.value("cancel",false)) (void)jobs->PauseAllJobs();
                 const auto result=commands->Execute(CommandID{"caplab.plot"});
@@ -192,7 +195,7 @@ NB_MODULE(sst_caplab, module)
                 response["graph_id"]=state.Document().project.graph;
 
             } else if (operation=="profile") {
-                if (r.contains("options")) state.importOptions=r.at("options").dump();
+                if (r.contains("options")) state.importOptions=r.at("options");
                 if (r.contains("decimal")) {
                     const auto decimal=r.at("decimal").get<std::string>();
                     if (decimal!="." && decimal!=",") throw std::runtime_error("decimal must be . or ,");
@@ -201,14 +204,14 @@ NB_MODULE(sst_caplab, module)
                 CommandContext context; context.Set("request",r);
                 const auto result=commands->Execute(CommandID{"caplab.profile"},std::move(context));
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
-                response["options"]=Json::parse(state.importOptions.empty() ? "{}" : state.importOptions);
+                response["options"]=state.importOptions;
                 response["decimal"]=std::string(1,state.decimal);
             } else if (operation=="reimport" || operation=="relink" || operation=="accept_source") {
                 state.sourceMetadataConfirmed=r.value("confirm_metadata_conflicts",false);
                 if (operation=="accept_source") {
                     const auto &draft=r.at("draft");
-                    if (Json::parse(Serialize(state.Document().project))!=draft.at("base_project")) throw std::runtime_error("Stale source diff");
-                    state.sourceDraft=Parse(draft.at("project").dump()); state.sourceDiff=draft.at("diff");
+                    if (ProjectJson(state.Document().project)!=draft.at("base_project")) throw std::runtime_error("Stale source diff");
+                    state.sourceDraft=ProjectFromJson(draft.at("project")); state.sourceDiff=draft.at("diff");
                     state.sourceRelink=draft.at("provenance_only"); state.sourceRevision=state.Document().revision;
                     const auto result=commands->Execute(CommandID{"caplab.accept_source"});
                     if (!result) return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}}.dump();
@@ -234,7 +237,7 @@ NB_MODULE(sst_caplab, module)
                     state.OnUpdate(0);
                     if (!state.sourceDraft) return Json{{"ok",false},{"project",Json::parse(project)},
                         {"error",{{"code",jobs->GetJob(id) && jobs->GetJob(id)->status==JobStatus::Cancelled ? "cancelled" : "caplab.source"},{"message",state.status}}}}.dump();
-                    response["source_draft"]={{"base_project",Json::parse(Serialize(state.Document().project))},{"project",Json::parse(Serialize(*state.sourceDraft))},
+                    response["source_draft"]={{"base_project",ProjectJson(state.Document().project)},{"project",ProjectJson(*state.sourceDraft)},
                         {"diff",state.sourceDiff},{"provenance_only",state.sourceRelink}};
                 }
             } else if (operation=="export" || operation=="save" || operation=="save_as" || operation=="open" || operation=="import" || operation=="preview") {
@@ -250,10 +253,10 @@ NB_MODULE(sst_caplab, module)
                 }
                 if (operation!="import" && operation!="preview" && path.Empty()) throw std::runtime_error("Provide path");
                 if (path.Empty() && sources.empty()) throw std::runtime_error("Provide path or paths");
-                if ((operation=="import" || operation=="preview") && r.contains("options")) state.importOptions=r.at("options").dump();
+                if ((operation=="import" || operation=="preview") && r.contains("options")) state.importOptions=r.at("options");
                 if (r.contains("format_profile")) {
                     const auto &profile=state.Document().project.importProfiles.at(r.at("format_profile").get<std::string>());
-                    state.importOptions=profile.extra.at("options"); state.decimal=profile.decimal;
+                    state.importOptions=profile.options; state.decimal=profile.parser.decimal;
                 }
                 if (r.contains("graph_id")) state.Document().project.graph=r.at("graph_id").get<pl::Id>();
                 Validate(state.Document().project);
@@ -354,7 +357,7 @@ NB_MODULE(sst_caplab, module)
                         return response.dump();
                     }
                 }
-                response["export"]=state.exportResult;
+                response["export"]=state.graphExport.graphs.empty() ? state.exportResult : GraphExportJson(state.graphExport);
             } else if (operation=="edit_defect" || operation=="area" || operation=="delete_measurement") {
                 CommandContext context;
                 std::string command="caplab.defect";
@@ -368,8 +371,8 @@ NB_MODULE(sst_caplab, module)
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
             } else if (operation=="accept_fit" || operation=="accept_preview") {
                 const auto &draft=r.at("draft");
-                if (Json::parse(Serialize(state.Document().project))!=draft.at("base_project")) throw std::runtime_error("Stale fit draft");
-                state.analysisDraft=Parse(draft.at("project").dump());
+                if (ProjectJson(state.Document().project)!=draft.at("base_project")) throw std::runtime_error("Stale fit draft");
+                state.analysisDraft=ProjectFromJson(draft.at("project"));
                 state.analysisRevision=state.Document().revision;
                 const auto result=commands->Execute(SST::CommandID{"caplab.accept_analysis"});
                 if (!result) throw std::runtime_error(result.Error().technicalDetails);
@@ -399,10 +402,10 @@ NB_MODULE(sst_caplab, module)
                         {"error",{{"code",job && job->status==SST::JobStatus::Cancelled ? "cancelled" : operation=="analyze" ? "analysis_failed" : operation=="fit" ? "fit_failed" : (operation=="walter" || operation=="integrate_saved_walter") ? "walter_failed" : "simulation_failed"},{"message",state.status}}}}.dump();
             } else throw std::runtime_error("Unknown CapLab operation");
             response["draft"]=state.analysisDraft ? Json{{"base_project",Json::parse(project)},
-                {"project",Json::parse(Serialize(*state.analysisDraft))}} : Json(nullptr);
+                {"project",ProjectJson(*state.analysisDraft)}} : Json(nullptr);
             response["workspace"]=state.WorkspaceJson();
             response["selection"]=state.SelectionJson();
-            response.update(Json{{"ok",true},{"project",Json::parse(Serialize(state.Document().project))},{"error",nullptr}});
+            response.update(Json{{"ok",true},{"project",ProjectJson(state.Document().project)},{"error",nullptr}});
         } catch (const std::exception &e) {
             response={{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}};
         }
@@ -413,6 +416,21 @@ NB_MODULE(sst_caplab, module)
 #endif
 namespace SST::Prototypes::CapLab
 {
+    void ExportGraphs(const GraphExportResult &result, double dpi, JobContext &context)
+    {
+        std::vector<PlotExportRequest> exports;
+        for (const auto &graph:result.graphs)
+            exports.push_back({pl::SnapshotJson(*graph.snapshot),graph.path.Native(),graph.path.extension().Utf8().substr(1),dpi});
+        ExportPlotsJson(context,exports);
+    }
+    Json GraphExportJson(const GraphExportResult &result)
+    {
+        if (!result.batch) return Json::parse(pl::SnapshotJson(*result.graphs.at(0).snapshot));
+        Json response{{"graphs",Json::array()}};
+        for (const auto &graph:result.graphs) response["graphs"].push_back({{"graph_id",graph.snapshot->graph},
+            {"path",graph.path.Utf8()},{"snapshot",Json::parse(pl::SnapshotJson(*graph.snapshot))}});
+        return response;
+    }
     void RegisterPrototypePythonModule()
     {
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -437,12 +455,11 @@ namespace SST::Prototypes::CapLab
             const auto local=executable.Value().parent_path().Join("python");
             const std::string root=FileSystem::Exists(local.Join("caplab").Native()) ? local.Utf8() : SST_PROTOTYPE_PYTHON_ROOT;
             if (!nb::cast<bool>(paths.attr("__contains__")(root))) paths.attr("insert")(0,root);
-            Json data=Json::parse(Serialize(project)); data.erase("engine"); data["measurement_data"]=Json::array();
+            Json data=ProjectJson(project,false); data["measurement_data"]=Json::array();
             for (const auto &m : project.measurements) data["measurement_data"].push_back(AnalysisMeasurement(project,m.at("id").get<pl::Id>()));
             for (const auto &m : project.sweeps) {
                 auto measurement=AnalysisMeasurement(project,m.id);
-                const auto &sheet=std::get<pl::Worksheet>(project.engine->object(m.id).data);
-                measurement["provenance"]=sheet.source;
+                measurement["provenance"]=SourceParameters(project,m.id);
                 for (const auto cid : project.engine->children(m.id)) if (cid!=m.frequency && cid!=m.capacitance && cid!=m.resistance) {
                     const auto &object=project.engine->object(cid);
                     if (const auto *column=std::get_if<pl::Column>(&object.data)) {
@@ -487,7 +504,7 @@ namespace SST::Prototypes::CapLab
         throw std::runtime_error("Embedded Python unavailable.");
 #endif
     }
-    Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const std::string &options, bool provenanceOnly)
+    Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const Json &options, bool provenanceOnly)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
         if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python is unavailable; rebuild with embedding.");
@@ -506,7 +523,7 @@ namespace SST::Prototypes::CapLab
             const std::function<bool()> cancel = [&] { return context.IsCancellationRequested(); };
             const std::function<void(double)> progress = [&](double v) { context.SetProgress(float(v),1); };
             // nanobind must be initialized before converting std::function callbacks.
-            const auto result = nb::module_::import_("caplab").attr("preview_json")(text,source.Utf8(),std::string(1,decimal),cancel,progress,options,provenanceOnly);
+            const auto result = nb::module_::import_("caplab").attr("preview_json")(text,source.Utf8(),std::string(1,decimal),cancel,progress,options.empty() ? "" : options.dump(),provenanceOnly);
             return Json::parse(nb::cast<std::string>(result));
         }
         catch (const nb::python_error &e)

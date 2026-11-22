@@ -18,7 +18,7 @@ namespace SST::Prototypes::CapLab
             throw std::runtime_error("Invalid import columns.");
         pl::Table table;
         table.names = names;
-        table.source = {{"profile",m.at("profile").get<std::string>()},{"provenance",m.dump()}};
+        table.source = {{"profile",m.at("profile").get<std::string>()}};
         for (std::size_t i = 0; i < values.size(); ++i)
         {
             if (values[i].size() != rows.size()) throw std::runtime_error("Unequal import columns.");
@@ -36,7 +36,7 @@ namespace SST::Prototypes::CapLab
     public:
         BundleChange(Project &p, const Json &preview) : target(p), before(p)
         {
-            auto draft = Parse(Serialize(p));
+            auto draft = CloneProject(p);
             std::vector<pl::Id> sampleIds;
             std::vector<std::map<std::string,std::vector<pl::Id>>> legacy;
             for (const auto &s : preview.at("samples"))
@@ -51,6 +51,7 @@ namespace SST::Prototypes::CapLab
                 {
                     const auto table = MeasurementTable(m);
                     const auto sheet = draft.engine->reserveId();
+                    draft.sources[sheet].provenance=std::make_shared<const Json>(m);
                     pl::Worksheet worksheet; worksheet.source = table.source;
                     for (std::size_t r = 0; r < m.at("source_rows").size(); ++r) worksheet.rows.push_back(draft.engine->reserveId());
                     const auto rowIds = worksheet.rows;
@@ -74,8 +75,8 @@ namespace SST::Prototypes::CapLab
                     if (m.contains("legacy_collection")) legacy.back()[m.at("legacy_collection").get<std::string>()].push_back(sheet);
                     if (m.at("kind") == "FrequencySweep" && m.at("variant") != "ReZ_ImZ")
                     {
-                        auto opGraph = CFTemplate{}.instantiate(*draft.engine,draft.engine->root(),sheet,
-                            {{"x",cols.at(0).get<pl::Id>()},{"y",cols.at(1).get<pl::Id>()}},{{"graph",std::to_string(draft.graph)}});
+                        auto opGraph = CFTemplate{}.instantiate(draft,sheet,
+                            {{"x",cols.at(0).get<pl::Id>()},{"y",cols.at(1).get<pl::Id>()}},draft.graph);
                         opGraph.apply(*draft.engine);
                         draft.graph = MeasurementGraph(*draft.engine,sheet);
                     }

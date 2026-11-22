@@ -9,8 +9,6 @@
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/IO/RecentFiles.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
-#include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
-#include <sst/plotlab/SnapshotJson.hpp>
 #include <cctype>
 namespace SST::Prototypes::CapLab
 {
@@ -24,8 +22,8 @@ namespace SST::Prototypes::CapLab
             context.SetStage("Checking source provenance");
             std::string text;
             if (!TextFileIO::Load(path,text,error)) throw std::runtime_error(error);
-            const auto origin=ReadLabAS(text,path,decimal,context,"",true);
-            auto draft=Parse(input); RelinkSource(draft,measurementId,origin);
+            const auto origin=ReadLabAS(text,path,decimal,context,Json::object(),true);
+            auto draft=std::move(input); RelinkSource(draft,measurementId,origin);
             preview={{"measurement_id",measurementId},{"source",path.Utf8()},{"provenance_only",true}};
             context.ThrowIfCancellationRequested(); opened=std::move(draft); context.SetProgress(1,1); return;
         }
@@ -48,29 +46,29 @@ namespace SST::Prototypes::CapLab
                 sourcePreviews = PreviewSources<Json>(context, collected, [&](const ImportSource &source) -> Result<Json> {
                     std::string content, readError;
                     if (!TextFileIO::Load(source.path, content, readError)) throw std::runtime_error(readError);
-                    std::string parserOptions = importOptions;
+                    auto parserOptions = importOptions;
                     if (parserOptions.empty()) {
                         auto extension = source.path.extension().Utf8();
                         std::transform(extension.begin(),extension.end(),extension.begin(),[](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                        if (extension == ".json") parserOptions=R"({"profile":"propho_json"})";
-                        else if (extension == ".cf") parserOptions=R"({"profile":"scaps_cf"})";
-                        else if (extension == ".cv") parserOptions=R"({"profile":"scaps_cv"})";
+                        if (extension == ".json") parserOptions={{"profile","propho_json"}};
+                        else if (extension == ".cf") parserOptions={{"profile","scaps_cf"}};
+                        else if (extension == ".cv") parserOptions={{"profile","scaps_cv"}};
                     }
-                    pl::ImportOptions options; options.decimal=decimal;
-                    options.extra["path"]=source.path.Utf8(); options.extra["options"]=parserOptions;
-                    const auto table = importer->preview(content, options, {
-                        [&] { return context.IsCancellationRequested(); }, {}});
-                    Json value = Json::parse(table.source.at("preview_json"));
+                    auto value = importer->preview(content,source.path,decimal,parserOptions,context);
                     // Validate before rendering metadata from an untrusted file.
                     if (value.contains("samples")) { Project checked; BundleChange validation(checked,value); }
-                    else if (!Optional(value.at("temperature_K"))) (void)Optional(value.at("suggested_temperature_K"));
+                    else {
+                        const auto temperature=Optional(value.at("temperature_K"));
+                        ValidatePreview(value,temperature);
+                        if (!temperature) (void)Optional(value.at("suggested_temperature_K"));
+                    }
                     return value;
                 });
                 if (sourcePreviews.empty()) throw std::runtime_error("No supported CapLab data files were found.");
                 for (const auto &item : sourcePreviews) if (item.value) { preview=*item.value; break; }
                 if (operation==Operation::Reimport) {
                     if (sourcePreviews.size()!=1 || !sourcePreviews[0].value) throw std::runtime_error("Source preview failed: "+(sourcePreviews[0].error ? sourcePreviews[0].error->technicalDetails : std::string{}));
-                    auto draft=Parse(input);
+                    auto draft=std::move(input);
                     const auto imported=preview;
                     preview=ReplaceMeasurement(draft,measurementId,imported);
                     preview["import_preview"]=imported;
@@ -80,15 +78,15 @@ namespace SST::Prototypes::CapLab
         }
         else if (operation == Operation::Plot)
         {
-            auto p=Parse(input);
+            auto p=std::move(input);
             context.ThrowIfCancellationRequested();
-            BuildCompareGraph(p,analysisOptions);
+            BuildCompareGraph(p,analysisOptions,plotView);
             context.ThrowIfCancellationRequested();
             opened=std::move(p);
         }
         else if (operation == Operation::Analyze)
         {
-            auto p = Parse(input);
+            auto p = std::move(input);
             Json measurement;
             if (analysisOptions.at("type")=="WalterSaved") {
                 bool found=false;
@@ -179,7 +177,7 @@ namespace SST::Prototypes::CapLab
         }
         else if (operation == Operation::Save)
         {
-            auto project = Parse(input);
+            auto project = std::move(input);
             if (FileSystem::Exists(path.Native()))
             {
                 std::string existing;
@@ -194,27 +192,20 @@ namespace SST::Prototypes::CapLab
         {
             const auto format=path.Native().extension().string();
             if (format==".csv" || format==".xlsx") {
-                preview=ExportData(Parse(input),path,context);
+                preview=ExportData(input,path,context);
             } else {
             if (format!=".png" && format!=".svg" && format!=".pdf") throw std::runtime_error("Choose CSV, XLSX, PNG, SVG or PDF export.");
             if (!snapshot && snapshots.empty()) throw std::runtime_error("No current graph snapshot.");
-            std::vector<PlotExportRequest> exports;
-            auto add = [&](const pl::GraphSnapshot& graph, const std::filesystem::path& destination) {
-                auto text = pl::SnapshotJson(graph);
-                exports.push_back({text, destination, format.substr(1), dpi});
-                return Json::parse(text);
-            };
-            if (snapshots.empty()) preview=add(*snapshot,path.Native());
+            if (snapshots.empty()) graphExport.graphs.push_back({snapshot,path});
             else {
-                preview={{"graphs",Json::array()}};
+                graphExport.batch=true;
                 for (const auto& graph : snapshots) {
                     auto destination=path.Native().parent_path() / path.Native().stem();
                     destination+=std::filesystem::path("-"+std::to_string(graph->graph)+format);
-                    auto result=add(*graph,destination);
-                    preview["graphs"].push_back({{"graph_id",graph->graph},{"path",Path::FromResolved(destination).Utf8()},{"snapshot",std::move(result)}});
+                    graphExport.graphs.push_back({graph,Path::FromResolved(destination)});
                 }
             }
-            ExportPlotsJson(context,exports);
+            ExportGraphs(graphExport,dpi,context);
             }
         }
         if (!saveCommitted && operation!=Operation::Export) context.ThrowIfCancellationRequested();
@@ -246,7 +237,7 @@ namespace SST::Prototypes::CapLab
                 }
                 auto options=meta.value("parser_options",Json::object()); options["profile"]=meta.at("profile");
                 if (!meta.contains("parser_options") && meta.contains("temperature_K") && !meta.at("temperature_K").is_null()) options["temperature_K"]=meta.at("temperature_K");
-                importOptions=options.dump(); decimal=meta.value("decimal",std::string("."))[0];
+                importOptions=std::move(options); decimal=meta.value("decimal",std::string("."))[0];
                 sourceDraft.reset(); sourceDiff=nullptr;
                 sourceMetadataConfirmed=false;
             }
@@ -286,8 +277,9 @@ namespace SST::Prototypes::CapLab
                 if (document.project.graph && view.viewport) StoreGraphView(document.project.graph,view);
                 for (const auto &[id,value]:graphViews) StoreGraphView(id,value);
             }
-            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Analyze || operation == Operation::Plot || operation == Operation::Save || operation == Operation::Reimport || operation == Operation::Relink ? Serialize(EditSnapshot()) : operation == Operation::Export ? Serialize(document.project) : "",target);
+            auto job = CreateRef<DocumentJob>(operation,operation == Operation::Analyze || operation == Operation::Plot || operation == Operation::Save || operation == Operation::Reimport || operation == Operation::Relink ? EditSnapshot() : operation == Operation::Export ? CloneProject(document.project) : Project{},target);
             job->measurementId=sourceMeasurement;
+            job->plotView=plotView;
             job->analysisOptions = analysisOptions; job->analysisOptions["input_revision"] = document.revision;
             job->sources=std::move(sources); job->recursive=recursive;
             job->decimal = decimal; job->importOptions = importOptions; job->importer = labImporter;
@@ -376,16 +368,13 @@ namespace SST::Prototypes::CapLab
     }
     Project CapLabWorkflow::EditSnapshot() const
     {
-        auto value=Json::parse(Serialize(Document().project));
-        value["engine"]["nextId"]=std::max(Document().identityHighWater,value.at("engine").at("nextId").get<pl::Id>());
-        return Parse(value.dump());
+        return CloneProject(Document().project,Document().identityHighWater);
     }
     void CapLabWorkflow::Changed(bool inputsChanged)
     {
         auto &document = Document();
         if (inputsChanged) ++document.inputRevision;
-        auto engine=Json::parse(document.project.engine->toJson());
-        document.identityHighWater=std::max(document.identityHighWater,engine.at("nextId").get<pl::Id>());
+        document.identityHighWater=std::max(document.identityHighWater,NextEntityId(*document.project.engine));
         RefreshAnalyses(document.project);
         RefreshComparisonLabels(document.project);
         ReconcileSelection();
@@ -404,7 +393,7 @@ namespace SST::Prototypes::CapLab
         else if (job->status == JobStatus::Completed)
         {
             status = "Completed.";
-            if (pending->operation == Operation::Export) {status = "Exported."; exportResult=pending->preview;}
+            if (pending->operation == Operation::Export) {status = "Exported."; exportResult=std::move(pending->preview); graphExport=std::move(pending->graphExport);}
             else if (document.revision != pendingRevision ||
                 (pending->analysisOptions.value("preview",false) && document.selectionRevision!=pendingSelectionRevision) ||
                 (pending->operation==Operation::Preview && !previewGeneration.IsCurrent(pendingGeneration))) status = "Stale revision: result discarded.";
@@ -533,7 +522,7 @@ namespace SST::Prototypes::CapLab
     {
         Json projects = Json::array();
         for (const auto &d : workspace.projects) projects.push_back({{"project_id",d.handle},
-            {"project",Json::parse(Serialize(d.project))},{"path",d.path ? Json(d.path->Utf8()) : Json(nullptr)},
+            {"project",ProjectJson(d.project)},{"path",d.path ? Json(d.path->Utf8()) : Json(nullptr)},
             {"revision",d.revision},{"saved_revision",d.savedRevision},{"dirty",d.IsDirty()},
             {"next_entity_id",d.identityHighWater},
             {"selection",{{"kind",d.selectionKind},{"sample_id",d.selectedSample},{"measurement_id",d.selectedMeasurement},
@@ -550,9 +539,12 @@ namespace SST::Prototypes::CapLab
                 throw std::runtime_error("Project IDs and revisions must be nonnegative integers.");
             CapLabDocument d; d.handle = item.at("project_id").get<std::uint64_t>();
             if (!d.handle || d.handle == UINT64_MAX || restored.Find(d.handle)) throw std::runtime_error("Invalid or duplicate project_id.");
-            d.project = Parse(item.at("project").dump());
             if (item.contains("next_entity_id") && !item.at("next_entity_id").is_number_unsigned()) throw std::runtime_error("Invalid next_entity_id.");
             d.identityHighWater=item.value("next_entity_id",pl::Id{0});
+            auto project=item.at("project");
+            // Reconcile an external workspace counter once, before native Undo snapshots.
+            if (project.at("engine").at("nextId").get<pl::Id>()<d.identityHighWater) project["engine"]["nextId"]=d.identityHighWater;
+            d.project = ProjectFromJson(project);
             if (item.contains("selection")) {
                 const auto &s=item.at("selection");
                 d.selectionKind=s.value("kind",std::string{}); d.selectedSample=s.value("sample_id",pl::Id{0});
@@ -661,7 +653,7 @@ void CapLabWorkflow::Select(const Json &request) {
                 if (m.at("names").at(0)=="f") axes.spec.x.scale=sst::ui::plot::AxisScale::Log10;
                 auto op=p.engine->change("Measurement plot",{{graph,p.engine->root(),"Measurement "+std::to_string(id),0,pl::Graph{}},
                     {layer,graph,"Measured",0,axes},{p.engine->reserveId(),layer,"Measured",0,pl::Plot{id,columns[0],columns[1]}}});
-                op.apply(*p.engine); d.Changed(); d.identityHighWater=Json::parse(p.engine->toJson()).at("nextId");
+                op.apply(*p.engine); d.Changed(); d.identityHighWater=NextEntityId(*p.engine);
             }
         }
     } else {
@@ -710,10 +702,10 @@ void CapLabWorkflow::StoreGraphView(pl::Id graph, const sst::ui::plot::PlotViewS
     auto &p=*engine;
     auto layer=p.object(p.children(graph).at(0));
     auto &saved=std::get<pl::Layer>(layer.data).view;
-    if (pl::viewStateJson(saved)==pl::viewStateJson(value)) return;
+    if (SameStoredView(saved,value)) return;
     const bool hadView=saved.viewport.has_value();
     saved=value;
-    if (engine.use_count()>1) engine=CreateRef<pl::Project>(pl::Project::fromJson(engine->toJson()));
+    if (engine.use_count()>1) engine=CloneEngine(*engine);
     engine->change("Graph view",{std::move(layer)}).apply(*engine);
     if (hadView) Document().Changed();
 }

@@ -94,6 +94,7 @@ inline void DuplicateSample(Project &p, pl::Id source, const std::string &name) 
             for (const auto &[key,value]:copy) values.emplace(mapped(key),value);
         };
         if (auto *w=std::get_if<pl::Worksheet>(&o.data)) {
+            if (const auto fields=p.sources.find(oldId); fields!=p.sources.end()) p.sources[newId]=fields->second;
             for (auto &r:w->rows) r=mapped(r);
             for (auto &parameter:w->parameters) parameter.id=mapped(parameter.id);
             remapKeys(w->masks);

@@ -10,7 +10,7 @@
 namespace SST::Prototypes::CapLab {
 inline std::string CompareStatus(const Project &p, const Json &record) {
     for (const auto &input:record.at("inputs")) {
-        try {if (AnalysisMeasurement(p,input.at("id")).dump()!=input.dump()) return "stale";}
+        try {if (AnalysisMeasurement(p,input.at("id"))!=input) return "stale";}
         catch (const std::exception &) {return "missing_input";}
     }
     for (const auto &id:record.at("analysis_ids")) {
@@ -37,7 +37,7 @@ inline void RefreshComparisonLabels(Project &p) {
     if (!changed.empty()) p.engine->change("Comparison source status",std::move(changed)).apply(*p.engine);
 }
 // Uses stored columns/results only; this operation never fits or invents material constants.
-inline void BuildCompareGraph(Project &p, const Json &request) {
+inline void BuildCompareGraph(Project &p, const Json &request, const std::optional<sst::ui::plot::PlotViewState> &requestedView = {}) {
     for (const char *key:{"measurement_ids","analysis_ids","graph_ids"})
         if (request.contains(key) && !request.at(key).is_array()) throw std::runtime_error(std::string(key)+" must be an array of IDs.");
     if (request.contains("action") && request.at("action")!="view") throw std::runtime_error("Unknown plot action.");
@@ -47,7 +47,8 @@ inline void BuildCompareGraph(Project &p, const Json &request) {
         auto layer=p.engine->object(p.engine->children(graph).at(0));
         auto &data=std::get<pl::Layer>(layer.data);
         if (request.contains("view")) {
-            auto view=pl::viewStateFromJson(request.at("view").dump());
+            if (!requestedView) throw std::runtime_error("Missing typed plot view.");
+            auto view=*requestedView;
             if (view.viewport && ((data.spec.x.scale==sst::ui::plot::AxisScale::Log10 && view.viewport->minX<=0) ||
                 (data.spec.y.scale==sst::ui::plot::AxisScale::Log10 && view.viewport->minY<=0))) throw std::runtime_error("Logarithmic view ranges must be positive.");
             for (const auto &[key,visible]:view.visibility) {
@@ -233,8 +234,8 @@ inline void BuildCompareGraph(Project &p, const Json &request) {
             auto temperature=t;
             if (analysis->at("type")=="Walter" && curveIndex<analysis->at("spectra").size()) temperature=analysis->at("spectra").at(curveIndex).value("temperature_K",Json(nullptr));
             const auto sheet=std::get<pl::Plot>(p.engine->object(plot).data).worksheet;
-            const auto &metadata=std::get<pl::Worksheet>(p.engine->object(sheet).data).source;
-            if (metadata.contains("temperature_K")) temperature=Json::parse(metadata.at("temperature_K"));
+            const auto metadata=p.sources.find(sheet);
+            if (metadata!=p.sources.end() && metadata->second.temperatures.contains("temperature_K")) temperature=Nullable(metadata->second.temperatures.at("temperature_K"));
             append(AnalysisSample(*analysis),temperature,plot,std::move(curve),p.engine->object(plot).name+" / "+analysis->at("status").get<std::string>(),id);
             ++curveIndex;
         }

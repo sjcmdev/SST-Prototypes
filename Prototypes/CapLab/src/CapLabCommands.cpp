@@ -138,7 +138,7 @@ public:
             if (const auto *name=context.TryGet<std::string>("target_sample_name"); name && !name->empty()) {
                 if (target) throw std::runtime_error("Choose a target sample ID or a new sample name, not both.");
                 EditProjectTree(draft,{{"action","create_sample"},{"name",*name}}); target=draft.samples.back().id;
-                const auto options=Json::parse(state.importOptions.empty() ? "{}" : state.importOptions);
+                const auto options=state.importOptions;
                 if (options.contains("area_m2")) EditProjectTree(draft,{{"action","sample_metadata"},{"sample_id",target},{"area_m2",options.at("area_m2")}});
             }
             if (target) FindSample(draft,target);
@@ -147,7 +147,7 @@ public:
                 std::set<pl::Id> original;
                 for (const auto &s:draft.samples) original.insert(s.id);
                 if (preview.contains("samples")) { BundleChange change(draft,preview); }
-                else { ImportChange change(draft,preview,temperature,state.templates.find("caplab.cf",1)); }
+                else { ImportChange change(draft,preview,temperature,CFTemplate{}); }
                 if (target) {
                     if (preview.contains("samples") && !preview.value("historical",Json::array()).empty())
                         throw std::runtime_error("Historical bundles retain their own samples; move measurements explicitly after import.");
@@ -200,14 +200,13 @@ public:
                 if (!request) throw std::runtime_error("Missing profile request.");
                 auto draft=state.EditSnapshot(); const std::string name=request->at("name");
                 if (request->at("action")=="save") {
-                    const auto settings=Json::parse(state.importOptions.empty() ? "{}" : state.importOptions);
+                    const auto settings=state.importOptions;
                     if (!settings.is_object()) throw std::runtime_error("Parser options must be a JSON object.");
-                    pl::ImportOptions options; options.decimal=state.decimal; options.extra["options"]=settings.dump();
+                    ImportProfile options; options.parser.decimal=state.decimal; options.options=settings;
                     draft.importProfiles[name]=std::move(options);
-                    (void)pl::importProfilesJson(draft.importProfiles);
                 } else if (request->at("action")=="load") {
                     const auto &options=draft.importProfiles.at(name);
-                    state.importOptions=options.extra.at("options"); state.decimal=options.decimal;
+                    state.importOptions=options.options; state.decimal=options.parser.decimal;
                     state.ClearPreview(); return {};
                 } else if (request->at("action")=="delete") {
                     if (!draft.importProfiles.erase(name)) throw std::runtime_error("Unknown format profile.");

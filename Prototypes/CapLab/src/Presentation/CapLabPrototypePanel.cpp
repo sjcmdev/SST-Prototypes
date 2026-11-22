@@ -45,7 +45,7 @@ void CapLabPrototypePanel::RenderImport() {
     ImGui::SeparatorText("Import settings and metadata");
     Json options=Json::object();
     const bool custom=savedFormat.empty();
-    if (!custom) options=Json::parse(formats.at(savedFormat).extra.at("options"));
+    if (!custom) options=formats.at(savedFormat).options;
     if (custom) {
     bool comma = state->decimal == ',';
     if (sst::ui::widgets::Checkbox("Decimal comma (semicolon/whitespace columns)", &comma)) state->decimal = comma ? ',' : '.';
@@ -53,7 +53,7 @@ void CapLabPrototypePanel::RenderImport() {
     const char *profiles[] = {"Lab AS Cp/Rp (SI)", "Lab AS Cp/Rp (mapped)", "Converted AS C/G", "ProPho DL/CV", "Lab CV", "Lab DLCP raw", "Lab IS Z", "Lab IS C/G", "Lab IS Cp/Rp", "SCAPS .cf", "SCAPS .cv", "ProPho manifest / project"};
     const char *keys[] = {"", "lab_as_cp_rp", "converted_as_c_g", "propho_dl", "lab_cv", "lab_dlcp_raw", "lab_is_z", "lab_is_c_g", "lab_is_cp_rp", "scaps_cf", "scaps_cv", "propho_json"};
     if (state->preview && !state->importOptions.empty()) {
-        const auto importedProfile=Json::parse(state->importOptions).value("profile",std::string{});
+        const auto importedProfile=state->importOptions.value("profile",std::string{});
         for (int i=1;i<IM_ARRAYSIZE(keys);++i) if (importedProfile==keys[i]) profile=i;
     }
     static int mapping[5] = {1,2,3,4,5}, unitChoice[5] = {}, sign = -1, amplitude = 0, asVariant = -1;
@@ -153,7 +153,7 @@ void CapLabPrototypePanel::RenderImport() {
     const int selectedProfile=[&] {const auto key=options.value("profile",std::string{}); return key=="propho_json" ? 11 : 1;}();
     sst::ui::widgets::Text("Format name",formatName,sizeof(formatName));
     if (ImGui::Button("Save named format") && formatName[0]) {
-        state->importOptions=options.dump();
+        state->importOptions=options;
         CommandContext context; context.Set("request",Json{{"action","save"},{"name",formatName}});
         (void)commands->Execute(CommandID{"caplab.profile"},std::move(context));
     }
@@ -164,13 +164,13 @@ void CapLabPrototypePanel::RenderImport() {
     }
     ImGui::EndDisabled();
     if (ImGui::Button("Read import preview...")) {
-        state->importOptions = options.dump();
+        state->importOptions = options;
         CommandContext c; c.Set("recursive",state->recursiveImport);
         (void)commands->Execute(CommandID{"caplab.preview"},std::move(c));
     }
     ImGui::SameLine();
     if (ImGui::Button("Read folders...")) {
-        state->importOptions=options.dump();
+        state->importOptions=options;
         CommandContext c; c.Set("recursive",state->recursiveImport);
         (void)commands->Execute(CommandID{"caplab.preview_folder"},std::move(c));
     }
@@ -248,13 +248,13 @@ void CapLabPrototypePanel::RenderImport() {
             }
             if (!preview.at("historical").empty()) ImGui::TextUnformatted("Saved ProPho fits, results and selections will be imported as historical.");
             ImGui::TextWrapped("To correct metadata, mapping or units, change import fields and read preview again. Filename values are suggestions only.");
-            auto previousOptions=Json::parse(state->importOptions.empty() ? "{}" : state->importOptions);
+            auto previousOptions=state->importOptions;
             if (selectedProfile!=11 && !previousOptions.contains("exclude_rows")) previousOptions["exclude_rows"]=Json::array();
             if (selectedProfile!=11 && !options.contains("exclude_rows")) options["exclude_rows"]=Json::array();
             const bool settingsChanged = previousOptions != options || preview.value("decimal",std::string(1,state->decimal)) != std::string(1,state->decimal);
             if (ImGui::Button("Refresh preview with current fields")) {
                 const Path source{preview.at("source").get<std::string>()};
-                state->importOptions = options.dump(); state->Start(Operation::Preview,{},state->previewInputs.empty() ? std::vector<Path>{source} : state->previewInputs,state->previewRecursive);
+                state->importOptions = options; state->Start(Operation::Preview,{},state->previewInputs.empty() ? std::vector<Path>{source} : state->previewInputs,state->previewRecursive);
             }
             ImGui::BeginDisabled(settingsChanged);
             sst::ui::widgets::Checkbox("Confirm metadata conflicts",&state->metadataConfirmed);

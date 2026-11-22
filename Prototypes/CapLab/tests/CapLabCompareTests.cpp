@@ -88,7 +88,7 @@ TEST(CapLabCompare, ImpedancePlotsUseIndependentAnalyticValues) {
 TEST(CapLabCompare, PerGraphViewsSurviveSwitchSaveAndOpen) {
     auto p=FixtureProject(); const auto first=p.graph;
     pl::ImportOptions options; options.decimal=','; options.extra["options"]=R"({"profile":"lab_as_cp_rp"})";
-    p.importProfiles["lab"]=options;
+    p.importProfiles["lab"]={options,Json::parse(options.extra.at("options"))};
     BuildCompareGraph(p,Json{{"plot_type","Nyquist"},{"measurement_ids",{p.sweeps[0].id}}}); const auto second=p.graph;
     CapLabWorkflow w(CreateRef<JobSystem>(nullptr,1)); w.Document().project=p;
     w.view.viewport=sst::ui::plot::Bounds{1,3,2,4}; w.view.fitted=true;
@@ -99,7 +99,7 @@ TEST(CapLabCompare, PerGraphViewsSurviveSwitchSaveAndOpen) {
     EXPECT_FALSE(w.view.visibility.at(p.engine->series(plot).id));
     auto reopened=Parse(Serialize(w.Document().project));
     EXPECT_EQ(reopened.comparisons,p.comparisons);
-    EXPECT_EQ(pl::importProfilesJson(reopened.importProfiles),pl::importProfilesJson(p.importProfiles));
+    EXPECT_EQ(ProjectJson(reopened).at("import_profiles"),ProjectJson(p).at("import_profiles"));
     for (auto graph:{first,second}) EXPECT_TRUE(std::get<pl::Layer>(reopened.engine->object(reopened.engine->children(graph)[0]).data).view.viewport);
 }
 TEST(CapLabCompare, InitialFitDoesNotDirtyAnOpenedProjectButZoomDoes) {
@@ -134,7 +134,7 @@ TEST(CapLabCompare, CommandJobPublishesOneUndoEntryAndCancellationKeepsProject) 
     EXPECT_TRUE(undo->CanUndo()); ASSERT_TRUE(undo->Undo()); EXPECT_EQ(Serialize(w.Document().project),before);
     ASSERT_TRUE(undo->Redo()); EXPECT_EQ(w.Document().project.comparisons.size(),1);
     JobContext cancel({}, {}, {}, {}, [] {return true;});
-    DocumentJob job(Operation::Plot,before); job.analysisOptions=w.analysisOptions;
+    DocumentJob job(Operation::Plot,Parse(before)); job.analysisOptions=w.analysisOptions;
     EXPECT_THROW(job.Execute(cancel),JobCancelledException);
 }
 TEST(CapLabCompare, BrowserAndDirectActionsRenderWithoutIdConflicts) {

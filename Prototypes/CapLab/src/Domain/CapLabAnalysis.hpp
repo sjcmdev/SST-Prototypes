@@ -25,7 +25,7 @@ inline Json AnalysisMeasurement(const Project &p, pl::Id id) {
         for (const auto &sample : p.samples) if (sample.id==m.sample_id) {
             data["area_m2"]=Nullable(sample.area_m2); data["sample_metadata"]=sample.metadata;
         }
-        data["source_rows"]=Json::parse(std::get<pl::Worksheet>(p.engine->object(id).data).source.at("source_rows"));
+        data["source_rows"]=p.sources.at(id).rows;
         for (auto cid : {m.frequency,m.capacitance,m.resistance}) data["columns"].push_back(std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(cid).data).values));
         return data;
     }
@@ -130,7 +130,10 @@ inline pl::Id AnalysisPlot(Project &p, pl::Id workbook, const Json &spec) {
     for (const auto &curve : spec.at("curves")) {
         auto sheet = p.engine->reserveId(), x = p.engine->reserveId(), y = p.engine->reserveId();
         pl::Worksheet w;
-        if (curve.contains("temperature_K")) w.source["temperature_K"]=curve.at("temperature_K").dump();
+        if (curve.contains("temperature_K")) {
+            p.sources[sheet].temperatures["temperature_K"]=Optional(curve.at("temperature_K"));
+            if (curve.at("temperature_K").is_number_integer()) p.sources[sheet].integerTemperatures["temperature_K"]=curve.at("temperature_K").get<std::uint64_t>();
+        }
         for (std::size_t i=0; i<curve.at("x").size(); ++i) w.rows.push_back(p.engine->reserveId());
         pl::Column cx, cy; auto values=[](const Json &array) {std::vector<double> out; for (const auto &v : array) out.push_back(v.is_null() ? std::numeric_limits<double>::quiet_NaN() : v.get<double>()); return out;};
         cx.values=values(curve.at("x")); cy.values=values(curve.at("y"));

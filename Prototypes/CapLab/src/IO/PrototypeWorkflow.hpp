@@ -19,24 +19,26 @@ namespace SST::Prototypes::CapLab
     class DocumentJob final : public IJob
     {
     public:
-        DocumentJob(Operation operation, std::string input, Path path = {}) : operation(operation), input(std::move(input)), path(std::move(path)) {}
+        DocumentJob(Operation operation, Project input, Path path = {}) : operation(operation), input(std::move(input)), path(std::move(path)) {}
         std::string GetName() const override { return "CapLab document"; }
         std::string GetType() const override { return "caplab.document"; }
         void Execute(JobContext &context) override;
         Operation operation;
-        std::string input;
+        Project input;
         Path path;
         Json preview;
         std::vector<Path> sources;
         bool recursive = false;
         std::vector<ImportPreviewItem<Json>> sourcePreviews;
         Json analysisOptions;
+        std::optional<sst::ui::plot::PlotViewState> plotView;
         pl::Id measurementId=0;
-        std::shared_ptr<const pl::Importer> importer = std::make_shared<LabASImporter>();
+        std::shared_ptr<const LabASImporter> importer = std::make_shared<LabASImporter>();
         std::optional<Project> opened;
         char decimal = '.';
-        std::string importOptions;
+        Json importOptions = Json::object();
         bool saveCommitted = false;
+        GraphExportResult graphExport;
         std::shared_ptr<const pl::GraphSnapshot> snapshot;
         std::vector<std::shared_ptr<const pl::GraphSnapshot>> snapshots;
         double dpi = 300;
@@ -47,7 +49,7 @@ namespace SST::Prototypes::CapLab
         Json pendingCandidate;
         explicit CapLabWorkflow(Ref<JobSystem> jobs, Ref<EventBus> bus = {}, Ref<UndoStack> undo = {})
             : Layer("CapLabWorkflow"), jobs(std::move(jobs)), bus(std::move(bus)), undo(std::move(undo))
-        { templates.add(std::make_shared<CFTemplate>()); importers.add(labImporter); (void)workspace.Open(CapLabDocument{}); }
+        { (void)workspace.Open(CapLabDocument{}); }
         void Start(Operation operation, Path target = {}, std::vector<Path> sources = {}, bool recursive = false);
         void SelectPreview(int index);
         void ClearPreview();
@@ -87,15 +89,15 @@ namespace SST::Prototypes::CapLab
         Ref<JobSystem> jobs;
         Ref<EventBus> bus;
         Ref<UndoStack> undo;
-        pl::PlotTemplateRegistry templates;
-        std::shared_ptr<const pl::Importer> labImporter = std::make_shared<LabASImporter>();
-        pl::ImporterRegistry importers;
+        std::shared_ptr<const LabASImporter> labImporter = std::make_shared<LabASImporter>();
         JobId activeJob = 0;
         std::string status;
         std::optional<StructuredError> failure;
         Json analysisOptions = Json::object();
+        std::optional<sst::ui::plot::PlotViewState> plotView;
         bool analysisQueued = false;
         Json exportResult;
+        GraphExportResult graphExport;
         std::optional<Project> analysisDraft;
         std::uint64_t analysisRevision = 0;
         Ref<CommandRegistry> commands;
@@ -111,7 +113,7 @@ namespace SST::Prototypes::CapLab
         std::uint64_t previewRevision = 0;
         std::optional<double> temperature;
         char decimal = '.';
-        std::string importOptions;
+        Json importOptions = Json::object();
         sst::ui::plot::PlotViewState view;
         std::map<pl::Id, sst::ui::plot::PlotViewState> graphViews;
         std::vector<pl::Id> exportGraphs;

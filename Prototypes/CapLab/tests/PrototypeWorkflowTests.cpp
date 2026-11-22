@@ -18,8 +18,8 @@ TEST(CapLabWorkflow, SaveOpenRoundtripWithoutSource) {
     const auto path=Temp("caplab-roundtrip.json");
     JobContext ctx({}, {}, {}, {}, [] {return false;});
     const auto text=Serialize(FixtureProject());
-    DocumentJob save(Operation::Save,text,path); save.Execute(ctx); EXPECT_TRUE(save.saveCommitted);
-    DocumentJob open(Operation::Open,"",path); open.Execute(ctx);
+    DocumentJob save(Operation::Save,Parse(text),path); save.Execute(ctx); EXPECT_TRUE(save.saveCommitted);
+    DocumentJob open(Operation::Open,Project{},path); open.Execute(ctx);
     ASSERT_TRUE(open.opened); EXPECT_EQ(Json::parse(Serialize(*open.opened)),Json::parse(text));
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
@@ -27,21 +27,21 @@ TEST(CapLabWorkflow, CancelAndSaveFailurePreserveDestination) {
     const auto path=Temp("caplab-cancel.json"); std::string error,text;
     ASSERT_TRUE(TextFileIO::Save(path,"original",error));
     JobContext cancel({}, {}, {}, {}, [] {return true;});
-    DocumentJob save(Operation::Save,Serialize(FixtureProject()),path);
+    DocumentJob save(Operation::Save,CloneProject(FixtureProject()),path);
     EXPECT_THROW(save.Execute(cancel),JobCancelledException);
     ASSERT_TRUE(TextFileIO::Load(path,text,error)); EXPECT_EQ(text,"original");
     JobContext ctx({}, {}, {}, {}, [] {return false;});
     EXPECT_THROW(save.Execute(ctx),std::exception); EXPECT_FALSE(save.saveCommitted);
     ASSERT_TRUE(TextFileIO::Load(path,text,error)); EXPECT_EQ(text,"original");
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
-    DocumentJob invalid(Operation::Save,Serialize(FixtureProject()),Temp(""));
+    DocumentJob invalid(Operation::Save,CloneProject(FixtureProject()),Temp(""));
     EXPECT_THROW(invalid.Execute(ctx),std::exception); EXPECT_FALSE(invalid.saveCommitted);
 }
 TEST(CapLabWorkflow, NewerSchemaCannotBeOverwritten) {
     const auto path=Temp("caplab-future.json"); std::string error,text;
     ASSERT_TRUE(TextFileIO::Save(path,"{\"schema_version\":2}",error));
     JobContext ctx({}, {}, {}, {}, [] {return false;});
-    DocumentJob save(Operation::Save,Serialize(FixtureProject()),path);
+    DocumentJob save(Operation::Save,CloneProject(FixtureProject()),path);
     EXPECT_THROW(save.Execute(ctx),std::exception);
     ASSERT_TRUE(TextFileIO::Load(path,text,error)); EXPECT_EQ(text,"{\"schema_version\":2}");
     EXPECT_TRUE(FileSystem::Remove(path.Native()));
@@ -82,7 +82,7 @@ TEST(CapLabWorkflow, SaveUsesSnapshotAndDoesNotClearLaterEdit) {
 TEST(CapLabWorkflow, CancellationAfterReplacementIsCommitted) {
     bool cancel=false; JobContext ctx([&](float done,float) {cancel=done==1;}, {}, {}, {}, [&] {return cancel;});
     const auto path=Temp("caplab-committed.json");
-    DocumentJob save(Operation::Save,Serialize(FixtureProject()),path); save.Execute(ctx);
+    DocumentJob save(Operation::Save,CloneProject(FixtureProject()),path); save.Execute(ctx);
     EXPECT_TRUE(cancel); EXPECT_TRUE(save.saveCommitted); EXPECT_TRUE(FileSystem::Remove(path.Native()));
 }
 TEST(CapLabCommands, ConfirmImportUsesCoreUndoAndRejectsStalePreview) {
@@ -171,9 +171,9 @@ TEST(CapLabWorkflow, UnicodeImportAndProjectRoundtrip) {
     EXPECT_EQ(project.engine->object(project.engine->children(project.engine->root()).front()).name,Path::FromResolved(name).Utf8());
     const Path target{directory/(name.native()+std::filesystem::path(".caplab").native())};
     JobContext context({}, {}, {}, {}, [] {return false;});
-    DocumentJob save(Operation::Save,Serialize(project),target); save.Execute(context);
+    DocumentJob save(Operation::Save,CloneProject(project),target); save.Execute(context);
     ASSERT_TRUE(save.saveCommitted);
-    DocumentJob open(Operation::Open,"",target); open.Execute(context);
+    DocumentJob open(Operation::Open,Project{},target); open.Execute(context);
     ASSERT_TRUE(open.opened);
     EXPECT_EQ(Serialize(*open.opened),Serialize(project));
     EXPECT_EQ(std::get<pl::Worksheet>(open.opened->engine->object(open.opened->sweeps[0].id).data).source.at("path"),source.Utf8());

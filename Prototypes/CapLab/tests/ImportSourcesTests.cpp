@@ -137,16 +137,12 @@ namespace SST::Prototypes::CapLab
         EXPECT_DOUBLE_EQ(state.view.viewport->minX,1); EXPECT_DOUBLE_EQ(state.view.viewport->maxY,4);
     }
 
-    class FixtureImporter final : public pl::Importer
+    class FixtureImporter final : public LabASImporter
     {
     public:
-        std::string typeId() const override {return "fixture";}
-        unsigned version() const override {return 1;}
         bool recognizes(std::string_view, std::string_view) const override {return true;}
-        pl::Table preview(std::string_view,const pl::ImportOptions &,const pl::WorkContext &) const override
-        { pl::Table table; table.source["preview_json"]=FixturePreview().dump(); return table; }
-        pl::Table read(std::string_view text,const pl::ImportOptions &options,const pl::WorkContext &work) const override
-        {return preview(text,options,work);}
+        Json preview(std::string_view,const Path &,char,const Json &,JobContext &) const override
+        { return FixturePreview(); }
     };
 
 #ifdef _WIN32
@@ -156,7 +152,7 @@ namespace SST::Prototypes::CapLab
         const HANDLE file=CreateFileW(locked.Native().c_str(),GENERIC_READ,0,nullptr,OPEN_EXISTING,0,nullptr);
         ASSERT_NE(file,INVALID_HANDLE_VALUE);
         struct Close { HANDLE file; ~Close() {CloseHandle(file);} } close{file};
-        DocumentJob job(Operation::Preview,""); job.sources={good,locked};
+        DocumentJob job(Operation::Preview,Project{}); job.sources={good,locked};
         job.importer=std::make_shared<FixtureImporter>();
         JobContext context({},{},{},{},[] {return false;});
         ASSERT_NO_THROW(job.Execute(context)); ASSERT_EQ(job.sourcePreviews.size(),2);

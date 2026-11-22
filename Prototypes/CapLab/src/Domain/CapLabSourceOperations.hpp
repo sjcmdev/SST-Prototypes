@@ -5,9 +5,10 @@ namespace SST::Prototypes::CapLab {
 inline Json SourceMetadata(const Project &p, pl::Id id) {
     (void)AnalysisMeasurement(p,id);
     const auto &source=std::get<pl::Worksheet>(p.engine->object(id).data).source;
-    if (source.contains("provenance")) return Json::parse(source.at("provenance"));
+    const auto &fields=p.sources.at(id);
+    if (fields.provenance) return *fields.provenance;
     return {{"source",source.at("path")},{"sha256",source.at("sha256")},{"profile",source.at("profile")},
-        {"decimal",source.at("decimal")},{"temperature_K",Json::parse(source.at("temperature_K"))}};
+        {"decimal",source.at("decimal")},{"temperature_K",Nullable(fields.temperatures.at("temperature_K"))}};
 }
 inline void ConfirmMetadata(const Json &preview, bool confirmed) {
     if (confirmed) return;
@@ -57,7 +58,8 @@ inline Json ReplaceMeasurement(Project &p, pl::Id id, const Json &preview) {
         Json rows=Json::array(); for (const auto &r:group.at("rows")) rows.push_back(sheet.rows.at(r.get<std::size_t>()));
         group.erase("rows"); group["row_ids"]=std::move(rows);
     }
-    table.source["provenance"]=meta.dump(); sheet.source=table.source;
+    p.sources[id]=WorksheetSource{};
+    p.sources[id].provenance=std::make_shared<const Json>(meta); sheet.source=table.source;
     std::vector<pl::Id> columns;
     for (const auto &item:p.measurements) if (item.at("id")==id) columns=item.at("columns").get<std::vector<pl::Id>>();
     if (columns.empty()) columns=legacyColumns;
@@ -133,7 +135,14 @@ inline void RelinkSource(Project &p, pl::Id id, const Json &preview) {
     std::vector<pl::Object> objects;
     for (const auto &[key,value]:p.engine->objects()) if (const auto *sheet=std::get_if<pl::Worksheet>(&value->data)) {
         auto object=*value; auto &source=std::get<pl::Worksheet>(object.data).source;
-        if (source.contains("provenance")) {auto meta=Json::parse(source.at("provenance")); relink(meta); source["provenance"]=meta.dump();}
+        if (auto found=p.sources.find(key); found!=p.sources.end() && found->second.provenance) {
+            auto meta=*found->second.provenance; relink(meta);
+            found->second.provenance=std::make_shared<const Json>(std::move(meta));
+            if (found->second.encoded) {
+                auto encoded=*found->second.encoded; encoded.erase("provenance");
+                found->second.encoded=std::make_shared<const pl::Parameters>(std::move(encoded));
+            }
+        }
         if (source.contains("path") && source.at("path")==old.get<std::string>()) source["path"]=replacement.get<std::string>();
         if (source!=sheet->source) objects.push_back(std::move(object));
     }
