@@ -68,5 +68,5 @@ TEST(PerformanceGuard, Sweep5BatchMemoryPlateau) {
     perfguard::Plateau("ScapsLab.sweep5",[&]{
         ASSERT_TRUE(Cmd::RunBatch::With().Execute(w));Wait(w);
         ASSERT_TRUE(w.Current().batchResult.typed());ASSERT_EQ(w.Current().batchResult.typed()->rows.size(),342u);
-    },4608ull*1024*1024);
+    },32ull*1024*1024);
 }
