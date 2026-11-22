@@ -1,3 +1,4 @@
+#include <scaps_core/boundary_probe.hpp>
 #include "Domain/Results.hpp"
 #include <algorithm>
 #include <cmath>
@@ -242,7 +243,7 @@ const IvPoint& PointAtBias(const IvResult& sweep,const IvResult& band,int select
     const auto& point=sweep.points.at(std::clamp(selected,0,int(sweep.points.size())-1));
     return !band.points.empty() && band.points[0].voltage_V==point.voltage_V?band.points[0]:point;
 }
-Json BatchRowJson(const scaps_core::BatchRow& row) {
+Json BatchRowJson(const scaps_core::BatchRow& row) {SCAPS_BOUNDARY_RESULT();
     Json parameters=Json::object();for(const auto& [key,value]:row.parameters)std::visit([&](const auto& v){parameters[key]=v;},value);
     Json out={{"id",row.id},{"parameters",std::move(parameters)},{"status",row.status},{"error_type",row.error_type},{"message",row.message},{"elapsed_s",row.elapsed_s},{"attempt",row.attempt},{"values",Json::object()},{"statuses",Json::object()}};
     if(!row.project_hash.empty())out["project_hash"]=row.project_hash;
@@ -285,7 +286,7 @@ Json BatchRowJson(const scaps_core::BatchRow& row) {
     }
     return out;
 }
-Json BatchResult::Dump() const {
+Json BatchResult::Dump() const {SCAPS_BOUNDARY_RESULT();
     auto out=legacyBase?legacyBase->Dump():Unpack(body);
     if(legacyBase) {
         // Preserve opaque file fields until the save/Python edge; internal Recorder/retry keeps shared typed rows.
@@ -304,7 +305,7 @@ Json BatchResult::Dump() const {
     }else if(native){out["rows"]=Json::array();for(const auto& row:rows)out["rows"].push_back(BatchRowJson(*row));}
     return out;
 }
-Json IvResult::Dump() const {
+Json IvResult::Dump() const {SCAPS_BOUNDARY_RESULT();
     auto out=To(*this,ivTop,ivFields);
     if(optics && !preserve_optics) {
         Json curves=Json::array();for(const auto& c:optics->absorption)curves.push_back({{"layer_id",c.layer_id},{"wavelength_nm",c.wavelength_nm.get()},{"alpha_m1",c.alpha_m1.get()},{"without_tail_m1",c.without_tail_m1.get()}});
@@ -313,7 +314,7 @@ Json IvResult::Dump() const {
     if(photovoltaic && !preserve_photovoltaic) {const auto& p=*photovoltaic;out["photovoltaic"]={{"status",scaps_core::to_string(p.status)},{"message",p.message},{"Voc_V",FiniteOrNull(-p.Voc_V)},{"Jsc_A_m2",FiniteOrNull(-p.Jsc_Am2)},{"FF_fraction",FiniteOrNull(p.FF)},{"efficiency_fraction",FiniteOrNull(p.eta)},{"Pmax_W_m2",FiniteOrNull(p.Pmax_Wm2)},{"Vmpp_V",FiniteOrNull(-p.Vmpp_V)},{"Jmpp_A_m2",FiniteOrNull(p.Jmpp_Am2)}};}
     return out;
 }
-Json AcResult::Dump() const {return To(*this, acTop, acFields);}
+Json AcResult::Dump() const {SCAPS_BOUNDARY_RESULT();return To(*this, acTop, acFields);}
 namespace {
 struct Node {const PJson *p = nullptr; const Json *j = nullptr;}; // a packed node or a plain Json value
 Node Step(Node n, const std::string &key) {
