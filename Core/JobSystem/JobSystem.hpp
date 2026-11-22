@@ -79,6 +79,7 @@ namespace SST
 		void threadCountWorkerLoop(std::stop_token stopToken);
 
 		// Job state mutation helpers (records/logs/progress).
+		void trimHistory() const; // m_RecordsMutex held; retired children remain waitable.
 		void markRunning(JobId id, const Time::TimePoint &startedAt);
 		void updateProgress(JobId id, float completedWork, float totalWork);
 		void updateStage(JobId id, const std::string &stage);
@@ -120,7 +121,7 @@ namespace SST
 
 		// Job record storage.
 		mutable std::mutex m_RecordsMutex;
-		std::unordered_map<JobId, JobRecord> m_Records;
+		mutable std::unordered_map<JobId, JobRecord> m_Records;
 
 		// Delayed submission storage and dispatcher.
 		mutable std::mutex m_DelayedMutex;

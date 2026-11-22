@@ -88,12 +88,23 @@ namespace SST
 			return id < other.id;
 		}
 	};
+	// Unowned finished metadata is capped independently of active work/adoption; each text field is at most 4 KiB.
+	inline constexpr std::size_t JobHistoryLimit = 256;
+	inline constexpr std::size_t JobTextLimit = 4096;
+	inline std::string JobHistoryText(const std::string &text)
+	{
+		if (text.size() <= JobTextLimit) return text;
+		auto begin=text.size()-JobTextLimit+12;
+		while(begin<text.size() && (static_cast<unsigned char>(text[begin])&0xC0)==0x80)++begin;
+		return "[truncated] " + text.substr(begin);
+	}
+
 	struct JobRecord
 	{
 		JobSnapshot snapshot;
 		std::vector<JobLogEntry> logs;
 		Ref<std::atomic_bool> cancellationRequested = CreateRef<std::atomic_bool>(false);
-		Ref<IJob> job;
+		WeakRef<IJob> job; // Retry/Resume require a live consumer-owned request.
 	};
 
 	class JobCancelledException final : public std::runtime_error

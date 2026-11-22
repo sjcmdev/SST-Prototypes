@@ -98,6 +98,7 @@ namespace SST
 		[[nodiscard]] Result<bool> RemoveEntry(JobId id);
 
 	private:
+		void trimHistory(); // m_Mutex held; active children are never removed.
 		void onQueued(const JobQueuedEvent &event);
 		void onStarted(const JobStartedEvent &event);
 		void onProgress(const JobProgressEvent &event);
