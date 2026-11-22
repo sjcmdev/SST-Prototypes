@@ -401,3 +401,96 @@ TEST(CapLabISFit, JacobianCovarianceMatchesIndependentResistorEstimate) {
     EXPECT_EQ(singular.at("covariance_status"),"rank_deficient_or_invalid_jacobian");
 }
 }
+#include "Domain/PreparedISModel.hpp"
+#include <bit>
+#include <cstdint>
+#include <chrono>
+namespace SST::Prototypes::CapLab {
+TEST(CapLabISPrepared, LargestFixtureFitMatchesBaselineBits) {
+    std::ifstream stream(std::filesystem::path(SST_PROTOTYPE_PYTHON_ROOT).parent_path()/"tests/fixtures/prepared-is-fit.json");
+    ASSERT_TRUE(stream);
+    Json fixture; stream >> fixture;
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    std::size_t evaluations=0;
+    const auto start=std::chrono::steady_clock::now();
+    const auto result=FitIS(fixture.at("measurement"),fixture.at("circuit"),fixture.at("settings"),context,
+        [&](const auto &,auto,double) {++evaluations;});
+    const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+    std::function<void(const Json &,const Json &)> bits=[&](const Json &a,const Json &b) {
+        ASSERT_EQ(a,b);
+        if (a.is_number_float() || b.is_number_float()) EXPECT_EQ(std::bit_cast<std::uint64_t>(a.get<double>()),std::bit_cast<std::uint64_t>(b.get<double>()));
+        else if (a.is_array()) for (std::size_t i=0;i<a.size();++i) bits(a[i],b[i]);
+        else if (a.is_object()) for (const auto &[key,value] : a.items()) bits(value,b.at(key));
+    };
+    for (const auto &[key,value] : fixture.at("expected").items()) bits(value,result.at(key));
+    EXPECT_GT(evaluations,100);
+    std::cout << "PreparedIS largest_fixture points=" << result.at("frequency_Hz").size()
+        << " objective_evaluations=" << evaluations << " seconds=" << seconds << " evaluations_per_second=" << evaluations/seconds << '\n';
+    auto frequency=result.at("frequency_Hz").get<std::vector<double>>();
+    frequency.resize((frequency.size()+5)/6);
+    std::vector<std::complex<double>> measured;
+    for (std::size_t i=0;i<frequency.size();++i)
+        measured.emplace_back(result["measured_ReZ_Ohm"][i].get<double>(),result["measured_ImZ_Ohm"][i].get<double>());
+    PreparedISModel chunk(ReadCircuit(fixture.at("circuit").at("schematic")),frequency,std::move(measured),result.at("temperature_K"),result.at("bias_V"));
+    const auto chunkStart=std::chrono::steady_clock::now();
+    for (int i=0;i<32;++i) ASSERT_TRUE(chunk.evaluate(context));
+    std::cout << "PreparedIS serial_chunk points=" << frequency.size() << " milliseconds="
+        << std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-chunkStart).count()/32 << '\n';
+}
+TEST(CapLabISPrepared, ReusesCompilationAndBufferWithBitwiseLegacyResiduals) {
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    const std::vector<double> f{.01,1,100,1e4,1e7};
+    for (const auto topology : {"R0", "R0-p(R1,C1)", "R0-p(R1,CPE1)-W1", "R0-L1-C1", "R0-D1", "R0-S1"}) {
+        auto c=Circuit(topology), m=Measurement(f);
+        std::vector<std::complex<double>> measured(f.size(),{100.,0.});
+        int compilations=0;
+        PreparedISModel prepared(ReadCircuit(c.at("schematic")),f,measured,270.,-.15,
+            [&](const auto &definition,const auto &registry,auto &sink) {
+                ++compilations;
+                return circuitcore::Simulator::compile(definition,registry,sink);
+            });
+        const auto *buffer=prepared.residuals().data();
+        std::vector<std::size_t> slots;
+        for (std::size_t i=0;i<c["schematic"]["elements"].size();++i) slots.push_back(prepared.bind(i,"value"));
+        for (double scale : {1.,.8,1.2,1.}) {
+            for (std::size_t i=0;i<slots.size();++i) {
+                const double value=c["schematic"]["elements"][i]["value"].get<double>()*scale;
+                prepared.set(slots[i],value);
+                c["schematic"]["elements"][i]["value"]=value;
+            }
+            ASSERT_TRUE(prepared.evaluate(context)) << topology;
+            const auto reference=SimulateIS(m,c,Json::object(),context,false);
+            ASSERT_EQ(reference.at("status"),"valid") << topology;
+            for (std::size_t i=0;i<f.size();++i) {
+                EXPECT_EQ(std::bit_cast<std::uint64_t>(prepared.residuals()[i].real()),std::bit_cast<std::uint64_t>(reference["residual_ReZ_Ohm"][i].get<double>()));
+                EXPECT_EQ(std::bit_cast<std::uint64_t>(prepared.residuals()[i].imag()),std::bit_cast<std::uint64_t>(reference["residual_ImZ_Ohm"][i].get<double>()));
+            }
+            EXPECT_EQ(compilations,1); EXPECT_EQ(buffer,prepared.residuals().data());
+        }
+        EXPECT_EQ(prepared.evaluations(),4);
+    }
+}
+TEST(CapLabISPrepared, EveryFitEvaluationMatchesLegacyScoreBits) {
+    JobContext context({}, {}, {}, {}, [] {return false;});
+    for (bool noisy : {false,true}) {
+        const auto m=RandlesMeasurement(noisy), c=RandlesStart();
+        auto settings=FitSettings(); settings["max_iterations"]=50;
+        std::size_t evaluations=0;
+        const auto result=FitIS(m,c,settings,context,[&](const auto &document,auto residuals,double score) {
+            auto candidate=c; candidate["schematic"]=CircuitJson(document);
+            const auto old=SimulateIS(m,candidate,settings,context,false);
+            double expected=0;
+            for (std::size_t i=0;i<residuals.size();++i) {
+                const double re=old["residual_ReZ_Ohm"][i], im=old["residual_ImZ_Ohm"][i];
+                EXPECT_EQ(std::bit_cast<std::uint64_t>(residuals[i].real()),std::bit_cast<std::uint64_t>(re));
+                EXPECT_EQ(std::bit_cast<std::uint64_t>(residuals[i].imag()),std::bit_cast<std::uint64_t>(im));
+                const double weight=std::max(std::hypot(old["measured_ReZ_Ohm"][i].get<double>(),old["measured_ImZ_Ohm"][i].get<double>()),1.);
+                const double wr=re/weight, wi=im/weight; expected+=wr*wr+wi*wi;
+            }
+            EXPECT_EQ(std::bit_cast<std::uint64_t>(score),std::bit_cast<std::uint64_t>(expected));
+            ++evaluations;
+        });
+        EXPECT_GT(evaluations,50); EXPECT_EQ(result.at("status"),"valid");
+    }
+}
+}

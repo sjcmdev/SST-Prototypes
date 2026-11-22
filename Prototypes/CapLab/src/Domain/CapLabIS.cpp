@@ -1,4 +1,5 @@
 #include "Domain/CapLabIS.hpp"
+#include "Domain/PreparedISModel.hpp"
 #include "AnalysisRunner.h"
 #include <sst/physics/impedance.hpp>
 #include <complex>
@@ -104,7 +105,7 @@ Json ISCurve(const std::string &kind, const std::string &name, const std::vector
     return {{"name",name},{"x",x},{"y",y},{"fit",model}};
 }
 }
-Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &context, bool plots) {
+static Json SimulateISResult(const Json &m, const Json &c, const Json &settings, JobContext &context, bool plots, const PreparedISModel *prepared) {
     using namespace circuitcore;
     using namespace sst::physics;
     const bool measuredGrid=!m.is_null();
@@ -136,6 +137,7 @@ Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &
     };
     // The registry must outlive the compiled circuit. The virtual source applies
     // the measured bias and supplies a unit AC voltage; it is never persisted.
+    if (!prepared) {
     auto registry=DeviceRegistry::createWithBuiltinDevices();
     auto built=ccui::compileDocument(ReadCircuit(c.at("schematic")),true);
     DiagnosticSink sink;
@@ -185,6 +187,20 @@ Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &
         }
         context.SetProgress(float(i+1)/f.size(),1);
     }
+    } else {
+        for (const auto &entry : prepared->diagnostics()) {
+            const auto &d=entry.value;
+            out["diagnostics"].push_back({{"code",Code(d.code)},{"message",d.message},
+                {"row_id",entry.row ? m.at("row_ids").at(*entry.row) : Json(nullptr)},
+                {"severity",d.severity==DiagnosticSeverity::Error ? "error" : "warning"}});
+        }
+        for (std::size_t i=0;i<f.size();++i) {
+            const auto measured=prepared->measured()[i], model=prepared->model()[i], residual=prepared->residuals()[i];
+            out["measured_ReZ_Ohm"].push_back(measured.real()); out["measured_ImZ_Ohm"].push_back(measured.imag());
+            out["model_ReZ_Ohm"].push_back(model.real()); out["model_ImZ_Ohm"].push_back(model.imag());
+            out["residual_ReZ_Ohm"].push_back(residual.real()); out["residual_ImZ_Ohm"].push_back(residual.imag());
+        }
+    }
     if (plots) for (const auto &kind : {"Nyquist","Bode magnitude","Bode phase","C-f","G/omega-f","ReZ residual","ImZ residual"}) {
         const std::string k=kind;
         if (!measuredGrid && k.ends_with("residual")) continue;
@@ -201,6 +217,9 @@ Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &
         out["plots"].push_back(std::move(plot));
     }
     context.ThrowIfCancellationRequested(); return out;
+}
+Json SimulateIS(const Json &m, const Json &c, const Json &settings, JobContext &context, bool plots) {
+    return SimulateISResult(m,c,settings,context,plots,nullptr);
 }
 void OverlayISMeasurement(Json &out, const Json &m) {
     if (m.at("sample_id")!=out.at("sample_id")) throw std::runtime_error("Overlay requires the same sample");
@@ -231,7 +250,7 @@ void OverlayISMeasurement(Json &out, const Json &m) {
 }
 }
 namespace SST::Prototypes::CapLab {
-Json FitIS(const Json &measurement, const Json &circuit, const Json &settings, JobContext &context) {
+Json FitIS(const Json &measurement, const Json &circuit, const Json &settings, JobContext &context, const ISEvaluationObserver &observer) {
     context.ThrowIfCancellationRequested();
     auto m=measurement;
     const double floor=settings.at("Z_floor_Ohm");
@@ -312,10 +331,53 @@ Json FitIS(const Json &measurement, const Json &circuit, const Json &settings, J
     // SST-CapLab Spec 4.3: modulus-weighted complex residual sum, not statistical chi-squared.
     std::vector<double> weights;
     JobContext evaluation({}, {}, {}, {}, [&] {return context.IsCancellationRequested();});
-    const auto initial=SimulateIS(m,circuit,settings,evaluation,false);
-    if (initial.at("status")!="valid") throw std::runtime_error("Invalid initial simulation/measurement: "+initial.at("diagnostics").dump());
-    for (std::size_t i=0;i<initial.at("frequency_Hz").size();++i)
-        weights.push_back(selectedSigma.empty() ? std::max(std::hypot(initial.at("measured_ReZ_Ohm").at(i).get<double>(),initial.at("measured_ImZ_Ohm").at(i).get<double>()),floor) : selectedSigma[i]);
+    if (m.at("kind")!="FrequencySweep" || m.at("sample_id")!=circuit.at("sample_id")) throw std::runtime_error("Circuit requires a same-sample FrequencySweep");
+    if (settings.contains("frequency_Hz") || settings.contains("frequency_sweep")) throw std::runtime_error("Measured grid cannot be combined with an explicit grid");
+    const auto frequency=ISColumn(m,"f","Hz");
+    if (frequency.empty() || frequency.size()>1201 || frequency.size()!=m.at("row_ids").size()) throw std::runtime_error("IS requires 1..1201 frequencies");
+    const std::string variant=m.at("variant");
+    if (variant!="ReZ_ImZ" && variant!="C_G" && variant!="Cp_Rp") throw std::runtime_error("Unsupported IS variant");
+    const auto a=ISColumn(m,variant=="ReZ_ImZ" ? "ReZ" : "C",variant=="ReZ_ImZ" ? "Ohm" : "F");
+    const auto b=ISColumn(m,variant=="ReZ_ImZ" ? "ImZ" : variant=="C_G" ? "G" : "Rp",variant=="C_G" ? "S" : "Ohm");
+    if (a.size()!=frequency.size() || b.size()!=frequency.size()) throw std::runtime_error("Unequal IS columns");
+    auto invalidInitial=[&] {
+        const auto initial=SimulateIS(m,circuit,settings,evaluation,false);
+        throw std::runtime_error("Invalid initial simulation/measurement: "+initial.at("diagnostics").dump());
+    };
+    std::vector<std::complex<double>> measured;
+    for (std::size_t i=0;i<frequency.size();++i) {
+        std::complex<double> z;
+        try {
+            z=variant=="ReZ_ImZ" ? std::complex<double>{a[i],b[i]} :
+                sst::physics::reciprocalImmittance(sst::physics::parallelAdmittance(frequency[i],a[i],variant=="C_G" ? b[i] : sst::physics::parallelConductance(b[i])));
+            (void)sst::physics::reciprocalImmittance(z);
+        } catch (const std::exception &) {invalidInitial();}
+        measured.push_back(z);
+        weights.push_back(selectedSigma.empty() ? std::max(std::hypot(z.real(),z.imag()),floor) : selectedSigma[i]);
+    }
+    PreparedISModel prepared(document,frequency,std::move(measured),Condition(m,settings,"temperature_K",true),Condition(m,settings,"bias_V",false));
+    std::vector<std::size_t> slots;
+    std::vector<double> minimum,maximum,offsets;
+    for (std::size_t i=0;i<specs.size();++i) {
+        slots.push_back(prepared.bind(elements[i],fields[i]));
+        minimum.push_back(specs[i].at("min")); maximum.push_back(specs[i].at("max"));
+        offsets.push_back(specs[i].at("start").get<double>()==0 ? 1. : 0.);
+    }
+    bool evaluationValid=false;
+    auto evaluate=[&] {
+        evaluationValid=prepared.evaluate(evaluation);
+        if (!evaluationValid) return std::numeric_limits<double>::infinity();
+        double sum=0;
+        const auto residuals=prepared.residuals();
+        for (std::size_t i=0;i<weights.size();++i) {
+            const double re=residuals[i].real()/weights[i], im=residuals[i].imag()/weights[i];
+            sum+=re*re+im*im;
+        }
+        if (observer) observer(prepared.document(),residuals,sum);
+        return sum;
+    };
+    const double initialScore=evaluate();
+    if (!evaluationValid) invalidInitial();
     auto score=[&](const Json &r) {
         if (r.at("status")!="valid") return std::numeric_limits<double>::infinity();
         double sum=0;
@@ -329,7 +391,9 @@ Json FitIS(const Json &measurement, const Json &circuit, const Json &settings, J
     sst::math::SANelderMead optimizer(parameters,[&](const auto &values) {
         context.ThrowIfCancellationRequested();
         try {
-            const double s=score(SimulateIS(m,candidate(values),settings,evaluation,false));
+            for (std::size_t i=0;i<values.size();++i) if (parameters[i].free)
+                prepared.set(slots[i],std::clamp((values[i]-offsets[i])*scales[i],minimum[i],maximum[i]));
+            const double s=evaluate();
             if (!std::isfinite(s)) ++invalid;
             return s;
         } catch (const JobCancelledException &) {throw;}
@@ -345,13 +409,16 @@ Json FitIS(const Json &measurement, const Json &circuit, const Json &settings, J
     }
     if (optimizer.bestChiSquared()<=tolerance) stop="score_tolerance";
     auto fitted=candidate(optimizer.bestFullParams());
-    auto out=SimulateIS(m,fitted,settings,evaluation);
+    for (std::size_t i=0;i<specs.size();++i)
+        prepared.set(slots[i],fitted.at("schematic").at("elements").at(elements[i]).at(fields[i]));
+    if (!prepared.evaluate(evaluation,true)) throw std::runtime_error("No valid fitted simulation");
+    auto out=SimulateISResult(m,fitted,settings,evaluation,true,&prepared);
     if (out.at("status")!="valid" || !std::isfinite(score(out))) throw std::runtime_error("No valid fitted simulation");
     out["inputs"]=Json::array({measurement}); out["initial_circuit"]=circuit;
     out["model"]="CircuitCore-AC-fit"; out["optimizer"]="SST-Math SANelderMead";
     out["weighting"]=selectedSigma.empty() ? "modulus_floor" : "sigma_Ohm";
     out["Z_floor_Ohm"]=floor; out["scale_Ohm"]=weights;
-    out["score"]=score(out); out["initial_score"]=score(initial); out["score_kind"]="weighted_complex_residual_sum";
+    out["score"]=score(out); out["initial_score"]=initialScore; out["score_kind"]="weighted_complex_residual_sum";
     out["stop_status"]=stop; out["iterations"]=optimizer.iteration(); out["invalid_evaluations"]=invalid;
     out["covariance"]=nullptr;
     out["covariance_status"]="insufficient_degrees_of_freedom";
@@ -368,23 +435,27 @@ Json FitIS(const Json &measurement, const Json &circuit, const Json &settings, J
         // Differentiate in scaled coordinates; convert covariance back to each parameter's SI units.
         std::vector<std::vector<double>> jacobian(n,std::vector<double>(rows));
         bool valid=true;
+        for (std::size_t i=0;i<specs.size();++i) prepared.set(slots[i],specs[i].at("fitted").get<double>());
+        std::vector<std::complex<double>> leftResiduals(weights.size());
         for (std::size_t j=0;j<n;++j) {
             context.ThrowIfCancellationRequested();
             const auto i=free[j];
             const double value=specs[i]["fitted"], lo=specs[i]["min"], hi=specs[i]["max"];
             const double step=std::cbrt(std::numeric_limits<double>::epsilon())*scales[i];
             const double a=std::max(lo,value-step), b=std::min(hi,value+step);
-            auto left=fitted, right=fitted;
-            left["schematic"]["elements"][elements[i]][fields[i]]=a;
-            right["schematic"]["elements"][elements[i]][fields[i]]=b;
-            Json l,r;
-            try {l=SimulateIS(m,left,settings,evaluation,false); r=SimulateIS(m,right,settings,evaluation,false);}
+            bool leftValid=false, rightValid=false;
+            try {
+                prepared.set(slots[i],a); leftValid=prepared.evaluate(evaluation);
+                std::copy(prepared.residuals().begin(),prepared.residuals().end(),leftResiduals.begin());
+                prepared.set(slots[i],b); rightValid=prepared.evaluate(evaluation);
+                prepared.set(slots[i],value);
+            }
             catch (const JobCancelledException&) {throw;}
             catch (const std::exception&) {valid=false; break;}
-            if (b<=a || l.at("status")!="valid" || r.at("status")!="valid") {valid=false; break;}
+            if (b<=a || !leftValid || !rightValid) {valid=false; break;}
             for (std::size_t k=0;k<weights.size();++k) for (int part=0;part<2;++part) {
-                const char* key=part ? "residual_ImZ_Ohm" : "residual_ReZ_Ohm";
-                jacobian[j][2*k+part]=(r.at(key).at(k).get<double>()-l.at(key).at(k).get<double>())*scales[i]/((b-a)*weights[k]);
+                const auto r=prepared.residuals()[k], l=leftResiduals[k];
+                jacobian[j][2*k+part]=((part ? r.imag() : r.real())-(part ? l.imag() : l.real()))*scales[i]/((b-a)*weights[k]);
             }
         }
         std::vector<std::vector<double>> matrix(n,std::vector<double>(2*n));
