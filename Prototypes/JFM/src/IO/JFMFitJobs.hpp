@@ -9,7 +9,6 @@
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 #include <mutex>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <vector>
 
@@ -18,7 +17,6 @@ namespace SST { class CommandRegistry; class JobSystem; }
 namespace SST::Prototypes::JFM
 {
     void ConfigureJFMFitServices(WeakRef<CommandRegistry> commands, WeakRef<JobSystem> jobs);
-	[[nodiscard]] nlohmann::json RunJFMFitRequest(const nlohmann::json &request);
 	struct JFMFitWorkItem
 	{
 		JFMCharacteristicRef ref;

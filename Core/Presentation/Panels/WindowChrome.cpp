@@ -7,6 +7,124 @@
 
 namespace SST
 {
+    // Mirrors the native ImGui settings objects, without serializing a workspace switch.
+    struct ImGuiLayout {
+        struct Window { std::string name; ImGuiWindowSettings settings; };
+        struct Table { ImGuiTableSettings settings; std::vector<ImGuiTableColumnSettings> columns; };
+        struct Dock {
+            ImGuiID id, parent, selected, parentWindow;
+            ImGuiDockNodeFlags flags;
+            ImGuiAxis split;
+            ImVec2ih pos, size, sizeRef;
+        };
+        std::vector<Window> windows;
+        std::vector<Table> tables;
+        std::vector<Dock> docks;
+        ImGuiConfigFlags flags = 0;
+        bool tableHandler = false;
+    };
+    namespace {
+        Ref<ImGuiLayout> CaptureImGuiLayout() {
+            auto &g = *GImGui;
+            // ImGui normally synchronizes these native objects just before writing INI.
+            for (auto *w : g.Windows) if (!(w->Flags & ImGuiWindowFlags_NoSavedSettings)) {
+                auto *s = ImGui::FindWindowSettingsByWindow(w);
+                if (!s) { s = ImGui::CreateNewWindowSettings(w->Name); w->SettingsOffset = g.SettingsWindows.offset_from_ptr(s); }
+                s->Pos = ImVec2ih(ImVec2(w->Pos.x - w->ViewportPos.x, w->Pos.y - w->ViewportPos.y)); s->Size = ImVec2ih(w->SizeFull);
+                s->ViewportId = w->ViewportId; s->ViewportPos = ImVec2ih(w->ViewportPos);
+                s->DockId = w->DockId; s->ClassId = w->WindowClass.ClassId; s->DockOrder = w->DockOrder;
+                s->Collapsed = w->Collapsed; s->IsChild = w->RootWindow != w; s->WantDelete = false;
+            }
+            auto layout = CreateRef<ImGuiLayout>(); layout->flags = g.IO.ConfigFlags;
+            layout->tableHandler = ImGui::FindSettingsHandler("Table") != nullptr;
+            for (auto *s = g.SettingsWindows.begin(); s; s = g.SettingsWindows.next_chunk(s))
+                if (!s->WantDelete) layout->windows.push_back({s->GetName(), *s});
+            for (auto *s = g.SettingsTables.begin(); s; s = g.SettingsTables.next_chunk(s))
+                if (s->ID) layout->tables.push_back({*s, {s->GetColumnSettings(), s->GetColumnSettings() + s->ColumnsCount}});
+            auto visit = [&](auto &&self, ImGuiDockNode *node) -> void {
+                layout->docks.push_back({node->ID, node->ParentNode ? node->ParentNode->ID : 0, node->SelectedTabId,
+                    node->IsDockSpace() && node->HostWindow && node->HostWindow->ParentWindow ? node->HostWindow->ParentWindow->ID : 0,
+                    node->LocalFlags & ImGuiDockNodeFlags_SavedFlagsMask_, node->IsSplitNode() ? node->SplitAxis : ImGuiAxis_None,
+                    ImVec2ih(node->Pos), ImVec2ih(node->Size), ImVec2ih(node->SizeRef)});
+                for (auto *child : node->ChildNodes) if (child) self(self, child);
+            };
+            for (const auto &pair : g.DockContext.Nodes.Data)
+                if (auto *node = static_cast<ImGuiDockNode *>(pair.val_p); node && node->IsRootNode()) visit(visit, node);
+            return layout;
+        }
+        void RestoreImGuiLayout(const ImGuiLayout &layout) {
+            auto &g = *GImGui;
+            ImGui::DockContextClearNodes(&g, 0, true);
+            for (const auto &w : layout.windows) {
+                auto *s = ImGui::FindWindowSettingsByID(w.settings.ID);
+                if (!s) s = ImGui::CreateNewWindowSettings(w.name.c_str());
+                *s = w.settings; s->WantApply = true;
+            }
+            if (layout.tableHandler && !ImGui::FindSettingsHandler("Table")) ImGui::TableSettingsAddSettingsHandler();
+            for (const auto &t : layout.tables) {
+                auto *s = ImGui::TableSettingsFindByID(t.settings.ID);
+                if (s && s->ColumnsCountMax < t.settings.ColumnsCount) { s->ID = 0; s = nullptr; }
+                if (!s) s = ImGui::TableSettingsCreate(t.settings.ID, t.settings.ColumnsCount);
+                const auto capacity = s->ColumnsCountMax;
+                *s = t.settings; s->ColumnsCountMax = capacity; s->WantApply = true;
+                std::copy(t.columns.begin(), t.columns.end(), s->GetColumnSettings());
+            }
+            for (const auto &d : layout.docks) {
+                ImGui::DockBuilderAddNode(d.id);
+                ImGui::DockBuilderGetNode(d.id)->SetLocalFlags(d.flags);
+            }
+            for (const auto &d : layout.docks) {
+                auto *node = ImGui::DockBuilderGetNode(d.id);
+                node->ParentNode = d.parent ? ImGui::DockBuilderGetNode(d.parent) : nullptr;
+                if (node->ParentNode) node->ParentNode->ChildNodes[node->ParentNode->ChildNodes[0] ? 1 : 0] = node;
+                node->Pos = ImVec2(d.pos.x, d.pos.y); node->Size = ImVec2(d.size.x, d.size.y); node->SizeRef = ImVec2(d.sizeRef.x, d.sizeRef.y);
+                node->AuthorityForPos = node->AuthorityForSize = node->AuthorityForViewport = ImGuiDataAuthority_DockNode;
+                node->SelectedTabId = d.selected; node->SplitAxis = d.split;
+                auto *root = ImGui::DockNodeGetRootNode(node);
+                char host[32]; ImFormatString(host, sizeof(host), "##DockNode_%02X", root->ID);
+                node->HostWindow = ImGui::FindWindowByName(host);
+            }
+            if (auto *handler = ImGui::FindSettingsHandler("Window")) handler->ApplyAllFn(&g, handler);
+            if (auto *handler = ImGui::FindSettingsHandler("Table")) handler->ApplyAllFn(&g, handler);
+            for (const auto &d : layout.docks) if (!d.parent) ImGui::DockBuilderFinish(d.id);
+        }
+        struct IniContext {
+            ImGuiContext *previous = ImGui::GetCurrentContext(), *temporary;
+            IniContext(ImGuiConfigFlags flags) {
+                temporary = ImGui::CreateContext(previous ? previous->IO.Fonts : nullptr);
+                ImGui::SetCurrentContext(temporary); temporary->IO.IniFilename = nullptr; temporary->IO.ConfigFlags = flags;
+                temporary->SettingsLoaded = true;
+            }
+            ~IniContext() { ImGui::DestroyContext(temporary); ImGui::SetCurrentContext(previous); }
+        };
+        std::string EncodeImGuiLayout(const ImGuiLayout &layout) {
+            IniContext context(layout.flags);
+            RestoreImGuiLayout(layout);
+            std::string ini = ImGui::SaveIniSettingsToMemory();
+            // A temporary IO context has no live DockSpace host window.
+            for (const auto &dock : layout.docks) if (!dock.parent && dock.parentWindow) {
+                char id[32], parent[32];
+                ImFormatString(id, sizeof(id), " ID=0x%08X", dock.id);
+                ImFormatString(parent, sizeof(parent), " Window=0x%08X", dock.parentWindow);
+                if (auto pos = ini.find(id); pos != std::string::npos) ini.insert(pos + std::strlen(id), parent);
+            }
+            return ini;
+        }
+        Ref<const ImGuiLayout> DecodeImGuiLayout(const std::string &ini) {
+            IniContext context(ImGui::GetIO().ConfigFlags);
+            if (!ImGui::FindSettingsHandler("Table")) ImGui::TableSettingsAddSettingsHandler();
+            ImGui::LoadIniSettingsFromMemory(ini.c_str(), ini.size());
+            auto layout = CaptureImGuiLayout();
+            // ImGui consumes this file field when rebuilding nodes but does not retain it on a node.
+            for (auto &dock : layout->docks) if (!dock.parent) {
+                char id[32]; ImFormatString(id, sizeof(id), " ID=0x%08X Window=", dock.id);
+                if (auto pos = ini.find(id); pos != std::string::npos)
+                    std::sscanf(ini.c_str() + pos + std::strlen(id), "0x%X", &dock.parentWindow);
+            }
+            return layout;
+        }
+    }
+
     namespace
     {
         bool chromeButton(ImGuiWindow *window, const char *label, const ImRect &rect, bool enabled, const char *tooltip)
@@ -310,22 +428,21 @@ namespace SST
         {
             if (request.shortName.empty() || request.shortName.size() >= 256) return StructuredError{ErrorCategory::Validation,
                 Severity::Error, "Invalid workspace name.", {}, {}, "WindowWorkspace"};
-            m_CapturingIni = true;
-            const std::string ini = ImGui::SaveIniSettingsToMemory();
-            m_CapturingIni = false;
-            m_Workspaces[request.shortName] = {Save(), ini}; return {};
+            m_Workspaces[request.shortName] = {CaptureLayout(), CaptureImGuiLayout()}; return {};
         }
         auto it = m_Workspaces.find(request.shortName);
         if (it == m_Workspaces.end()) return StructuredError{ErrorCategory::Validation, Severity::Error,
             "Workspace does not exist.", {}, {}, "WindowWorkspace"};
-        auto result = Load(it->second.first);
-        if (result) ImGui::LoadIniSettingsFromMemory(it->second.second.c_str());
+        auto result = LoadLayout(it->second.first);
+        if (result) RestoreImGuiLayout(*it->second.second);
         return result;
     }
     std::string WindowWorkspace::SettingsPayload() const
     {
         if (!m_FrozenSettings.empty()) return m_FrozenSettings;
-        return nlohmann::json{{"state", Save()}, {"workspaces", m_Workspaces}}.dump();
+        nlohmann::json named = nlohmann::json::object();
+        for (const auto &[name, saved] : m_Workspaces) named[name] = {SaveLayout(saved.first), EncodeImGuiLayout(*saved.second)};
+        return nlohmann::json{{"state", Save()}, {"workspaces", std::move(named)}}.dump();
     }
     void WindowWorkspace::FreezeSettings() { m_FrozenSettings = SettingsPayload(); }
     void WindowWorkspace::InstallSettingsHandler()
@@ -349,7 +466,12 @@ namespace SST
             try
             {
                 const auto data = nlohmann::json::parse(std::exchange(workspace.m_PendingSettings, {}));
-                auto named = data.at("workspaces").get<decltype(workspace.m_Workspaces)>();
+                decltype(workspace.m_Workspaces) named;
+                for (const auto &[name, saved] : data.at("workspaces").items()) {
+                    auto layout = workspace.ParseLayout(saved.at(0).get<std::string>());
+                    if (!layout) throw std::runtime_error(layout.Error().userMessage);
+                    named[name] = {std::move(*layout), DecodeImGuiLayout(saved.at(1).get<std::string>())};
+                }
                 const auto result = workspace.Load(data.at("state").get<std::string>());
                 if (result) workspace.m_Workspaces = std::move(named);
                 else workspace.m_Error = result.Error().userMessage;

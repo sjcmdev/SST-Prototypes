@@ -36,11 +36,16 @@ namespace SST
         bool PreserveIdentity() const { return m_PreserveIdentity; }
         bool claimed = false;
     protected:
-        std::string SaveViewState() const override { return m_PreserveIdentity ? "legacy" : "instance"; }
-        bool LoadViewState(const std::string &state) override
-        {
-            if (state != "legacy" && state != "instance") return false;
-            m_PreserveIdentity = state == "legacy"; return true;
+        std::any CaptureViewState() const override { return m_PreserveIdentity; }
+        bool RestoreViewState(const std::any &state) override {
+            const auto *value = std::any_cast<bool>(&state);
+            if (!value) return false;
+            m_PreserveIdentity = *value; return true;
+        }
+        std::string EncodeViewState(const std::any &state) const override { return std::any_cast<bool>(state) ? "legacy" : "instance"; }
+        std::any DecodeViewState(const std::string &state) const override {
+            if (state != "legacy" && state != "instance") throw std::invalid_argument("Invalid hosted view state");
+            return state == "legacy";
         }
     private:
         void RenderContent() override { m_Rendered = true; (*m_Content)(); }

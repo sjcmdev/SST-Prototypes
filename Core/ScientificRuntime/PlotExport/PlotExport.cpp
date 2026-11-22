@@ -63,7 +63,8 @@ void ExportPlotsJson(JobContext& context, std::span<const PlotExportRequest> req
         nb::list exports;
         for (const auto& request : requests) {
             nb::dict item;
-            item["snapshot"] = json.attr("loads")(nb::str(request.snapshotJson.c_str()));
+            item["snapshot"] = request.pythonSnapshot ? request.pythonSnapshot() :
+                json.attr("loads")(nb::str(request.snapshotJson.c_str()));
             const auto raw = request.destination.u8string();
             item["destination"] = nb::str(reinterpret_cast<const char*>(raw.c_str()));
             item["format"] = nb::str(request.format.c_str());

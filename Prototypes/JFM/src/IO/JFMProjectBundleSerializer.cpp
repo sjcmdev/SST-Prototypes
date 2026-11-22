@@ -738,6 +738,16 @@ namespace SST::Prototypes::JFM
 		}
 	} // namespace
 
+	namespace {
+		void SetBundleCollectionStyle(YAML::Node node)
+		{
+			if (!node.IsMap() && !node.IsSequence()) return;
+			node.SetStyle(node.size() ? YAML::EmitterStyle::Block : YAML::EmitterStyle::Flow);
+			if (node.IsMap()) for (const auto &item : node) SetBundleCollectionStyle(item.second);
+			else for (const auto &item : node) SetBundleCollectionStyle(item);
+		}
+	}
+
 	Result<JFMProjectBundleSaveResult> JFMProjectBundleSerializer::Save(const Path &root, const JFMProjectBundleSnapshot &snapshot)
 	{
 		try
@@ -755,10 +765,8 @@ namespace SST::Prototypes::JFM
 				info.monteCarlo.reset();
 			}
 
-			auto serializedProject = JFMProjectYamlSerializer::Serialize(project);
-			if (!serializedProject)
-				return serializedProject.Error();
-			YAML::Node projectNode = YAML::Load(serializedProject.Value());
+			YAML::Node projectNode = JFMProjectYamlSerializer::ToNode(project);
+			SetBundleCollectionStyle(projectNode);
 			projectNode["bundle_schema_version"] = 1;
 			projectNode["analysis"]["fitting"] = "analysis/fitting.yaml";
 			projectNode["analysis"]["arrhenius"] = "analysis/arrhenius.yaml";
@@ -826,7 +834,7 @@ namespace SST::Prototypes::JFM
 			if (!TextFileIO::Load(root / Path("project.yaml"), text, error))
 				return BundleError("project.yaml could not be loaded.", error);
 			const YAML::Node projectNode = YAML::Load(text);
-			auto project = JFMProjectYamlSerializer::Deserialize(text);
+			auto project = JFMProjectYamlSerializer::FromNode(projectNode);
 			if (!project)
 				return project.Error();
 

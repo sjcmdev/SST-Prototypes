@@ -30,12 +30,12 @@ namespace SST::Prototypes::JFM
 		return child.as<TValue>();
 	}
 
-	void emitStringMap(YAML::Emitter &out, const std::unordered_map<std::string, std::string> &values)
+	YAML::Node stringMapNode(const std::unordered_map<std::string, std::string> &values)
 	{
-		out << YAML::BeginMap;
+		YAML::Node node(YAML::NodeType::Map);
 		for (const auto &[key, value] : values)
-			out << YAML::Key << key << YAML::Value << value;
-		out << YAML::EndMap;
+			node[key] = value;
+		return node;
 	}
 
 	std::unordered_map<std::string, std::string> readStringMap(const YAML::Node &node)
@@ -49,13 +49,10 @@ namespace SST::Prototypes::JFM
 		return values;
 	}
 
-	void emitOptionalDouble(YAML::Emitter &out, const char *key, const std::optional<double> &value)
+	void emitOptionalDouble(YAML::Node &out, const char *key, const std::optional<double> &value)
 	{
-		out << YAML::Key << key << YAML::Value;
-		if (value.has_value())
-			out << *value;
-		else
-			out << YAML::Null;
+		if (value) out[key] = *value;
+		else out[key] = YAML::Node(YAML::NodeType::Null);
 	}
 
 	std::optional<double> readOptionalDouble(const YAML::Node &node, const char *key)
@@ -97,29 +94,30 @@ namespace SST::Prototypes::JFM
 		return legacyIdFromText(child.as<std::string>());
 	}
 
-	void emitImportOptions(YAML::Emitter &out, const JFMImportOptions &options)
+	YAML::Node importOptionsNode(const JFMImportOptions &options)
 	{
-		out << YAML::BeginMap;
-		out << YAML::Key << "parser" << YAML::Value << options.parser;
-		out << YAML::Key << "name_pattern" << YAML::Value << options.namePattern;
-		out << YAML::Key << "short_name_pattern" << YAML::Value << options.shortNamePattern;
-		out << YAML::Key << "variable_delimiter" << YAML::Value << options.variableDelimiter;
-		out << YAML::Key << "delimiter" << YAML::Value << options.delimiter;
-		out << YAML::Key << "decimal_separator" << YAML::Value << options.decimalSeparator;
-		out << YAML::Key << "temperature_extraction" << YAML::Value << options.temperatureExtraction;
-		out << YAML::Key << "custom_script_path" << YAML::Value << options.customScriptPath;
-		out << YAML::Key << "variables" << YAML::Value << YAML::BeginSeq;
+		YAML::Node node(YAML::NodeType::Map);
+		node["parser"] = options.parser;
+		node["name_pattern"] = options.namePattern;
+		node["short_name_pattern"] = options.shortNamePattern;
+		node["variable_delimiter"] = options.variableDelimiter;
+		node["delimiter"] = options.delimiter;
+		node["decimal_separator"] = options.decimalSeparator;
+		node["temperature_extraction"] = options.temperatureExtraction;
+		node["custom_script_path"] = options.customScriptPath;
+		YAML::Node variablesNode(YAML::NodeType::Sequence);
 		for (const JFMNameVariableRule &rule : options.customVariables)
 		{
-			out << YAML::BeginMap;
-			out << YAML::Key << "name" << YAML::Value << rule.name;
-			out << YAML::Key << "source" << YAML::Value << rule.source;
-			out << YAML::Key << "token_index" << YAML::Value << rule.tokenIndex;
-			out << YAML::Key << "substring_start" << YAML::Value << rule.substringStart;
-			out << YAML::Key << "substring_length" << YAML::Value << rule.substringLength;
-			out << YAML::EndMap;
+			YAML::Node variableNode(YAML::NodeType::Map);
+			variableNode["name"] = rule.name;
+			variableNode["source"] = rule.source;
+			variableNode["token_index"] = rule.tokenIndex;
+			variableNode["substring_start"] = rule.substringStart;
+			variableNode["substring_length"] = rule.substringLength;
+			variablesNode.push_back(variableNode);
 		}
-		out << YAML::EndSeq << YAML::EndMap;
+		node["variables"] = variablesNode;
+		return node;
 	}
 
 	JFMImportOptions readImportOptions(const YAML::Node &node, const std::string &fallbackParser)
@@ -150,33 +148,33 @@ namespace SST::Prototypes::JFM
 		return options;
 	}
 
-	void emitPrefitState(YAML::Emitter &out, const JFMPrefitState &prefit)
+	YAML::Node prefitStateNode(const JFMPrefitState &prefit)
 	{
-		out << YAML::BeginMap;
-		out << YAML::Key << "model" << YAML::Value << prefit.modelId;
-		out << YAML::Key << "status" << YAML::Value << prefit.status;
-		emitOptionalDouble(out, "manual_lower_voltage", prefit.manualLowerVoltage);
-		emitOptionalDouble(out, "manual_upper_voltage", prefit.manualUpperVoltage);
-		out << YAML::Key << "fit_range" << YAML::Value << YAML::BeginMap;
-		out << YAML::Key << "lower_index" << YAML::Value << prefit.fitRange.lowerIndex;
-		out << YAML::Key << "upper_index" << YAML::Value << prefit.fitRange.upperIndex;
-		out << YAML::Key << "lower_voltage" << YAML::Value << prefit.fitRange.lowerVoltage;
-		out << YAML::Key << "upper_voltage" << YAML::Value << prefit.fitRange.upperVoltage;
-		out << YAML::Key << "reason" << YAML::Value << prefit.fitRange.reason;
-		out << YAML::EndMap;
-		out << YAML::Key << "parameters" << YAML::Value << YAML::BeginMap;
+		YAML::Node node(YAML::NodeType::Map);
+		node["model"] = prefit.modelId;
+		node["status"] = prefit.status;
+		emitOptionalDouble(node, "manual_lower_voltage", prefit.manualLowerVoltage);
+		emitOptionalDouble(node, "manual_upper_voltage", prefit.manualUpperVoltage);
+		YAML::Node rangeNode(YAML::NodeType::Map);
+		rangeNode["lower_index"] = prefit.fitRange.lowerIndex;
+		rangeNode["upper_index"] = prefit.fitRange.upperIndex;
+		rangeNode["lower_voltage"] = prefit.fitRange.lowerVoltage;
+		rangeNode["upper_voltage"] = prefit.fitRange.upperVoltage;
+		rangeNode["reason"] = prefit.fitRange.reason;
+		node["fit_range"] = rangeNode;
+		YAML::Node parametersNode(YAML::NodeType::Map);
 		for (const auto &[name, estimate] : prefit.parameters)
 		{
-			out << YAML::Key << name << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "value" << YAML::Value << estimate.value;
-			emitOptionalDouble(out, "standard_error", estimate.standardError);
-			out << YAML::Key << "source" << YAML::Value << estimate.source;
-			out << YAML::Key << "warnings" << YAML::Value << estimate.warnings;
-			out << YAML::EndMap;
+			YAML::Node estimateNode(YAML::NodeType::Map);
+			estimateNode["value"] = estimate.value;
+			emitOptionalDouble(estimateNode, "standard_error", estimate.standardError);
+			estimateNode["source"] = estimate.source;
+			estimateNode["warnings"] = estimate.warnings;
+			parametersNode[name] = estimateNode;
 		}
-		out << YAML::EndMap;
-		out << YAML::Key << "warnings" << YAML::Value << prefit.warnings;
-		out << YAML::EndMap;
+		node["parameters"] = parametersNode;
+		node["warnings"] = prefit.warnings;
+		return node;
 	}
 
 	std::optional<JFMPrefitState> readPrefitState(const YAML::Node &node)
@@ -214,49 +212,49 @@ namespace SST::Prototypes::JFM
 		return prefit;
 	}
 
-	void emitFitState(YAML::Emitter &out, const JFMFitState &fit)
+	YAML::Node fitStateNode(const JFMFitState &fit)
 	{
-		out << YAML::BeginMap;
-		out << YAML::Key << "model" << YAML::Value << fit.modelId;
-		out << YAML::Key << "status" << YAML::Value << fit.status;
-		out << YAML::Key << "fit_range" << YAML::Value << YAML::BeginMap;
-		out << YAML::Key << "lower_index" << YAML::Value << fit.fitRange.lowerIndex;
-		out << YAML::Key << "upper_index" << YAML::Value << fit.fitRange.upperIndex;
-		out << YAML::Key << "lower_voltage" << YAML::Value << fit.fitRange.lowerVoltage;
-		out << YAML::Key << "upper_voltage" << YAML::Value << fit.fitRange.upperVoltage;
-		out << YAML::Key << "reason" << YAML::Value << fit.fitRange.reason;
-		out << YAML::EndMap;
-		out << YAML::Key << "parameters" << YAML::Value << YAML::BeginMap;
+		YAML::Node node(YAML::NodeType::Map);
+		node["model"] = fit.modelId;
+		node["status"] = fit.status;
+		YAML::Node rangeNode(YAML::NodeType::Map);
+		rangeNode["lower_index"] = fit.fitRange.lowerIndex;
+		rangeNode["upper_index"] = fit.fitRange.upperIndex;
+		rangeNode["lower_voltage"] = fit.fitRange.lowerVoltage;
+		rangeNode["upper_voltage"] = fit.fitRange.upperVoltage;
+		rangeNode["reason"] = fit.fitRange.reason;
+		node["fit_range"] = rangeNode;
+		YAML::Node parametersNode(YAML::NodeType::Map);
 		for (const auto &[name, estimate] : fit.parameters)
 		{
-			out << YAML::Key << name << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "value" << YAML::Value << estimate.value;
-			emitOptionalDouble(out, "standard_error", estimate.standardError);
-			out << YAML::Key << "source" << YAML::Value << estimate.source;
-			out << YAML::Key << "warnings" << YAML::Value << estimate.warnings;
-			out << YAML::EndMap;
+			YAML::Node estimateNode(YAML::NodeType::Map);
+			estimateNode["value"] = estimate.value;
+			emitOptionalDouble(estimateNode, "standard_error", estimate.standardError);
+			estimateNode["source"] = estimate.source;
+			estimateNode["warnings"] = estimate.warnings;
+			parametersNode[name] = estimateNode;
 		}
-		out << YAML::EndMap;
-		out << YAML::Key << "chi_squared" << YAML::Value << fit.chiSquared;
-		out << YAML::Key << "reduced_chi_squared" << YAML::Value << fit.reducedChiSquared;
-		out << YAML::Key << "iterations" << YAML::Value << fit.iterations;
-		out << YAML::Key << "converged" << YAML::Value << fit.converged;
-		out << YAML::Key << "fit_method" << YAML::Value << fit.fitMethod;
-		out << YAML::Key << "stop_reason" << YAML::Value << fit.stopReason;
-		out << YAML::Key << "accepted" << YAML::Value << fit.accepted;
-		out << YAML::Key << "flat_directions" << YAML::Value << fit.flatDirections;
-		out << YAML::Key << "lm_status" << YAML::Value << fit.lmStatus;
-		out << YAML::Key << "backend" << YAML::Value << fit.backend;
-        out << YAML::Key << "objective_mode" << YAML::Value << fit.objective.mode;
-        out << YAML::Key << "objective_current_unit" << YAML::Value << fit.objective.currentUnit;
-        out << YAML::Key << "objective_shift" << YAML::Value << fit.objective.shift;
-        out << YAML::Key << "objective_sigma_absolute" << YAML::Value << fit.objective.sigmaAbsolute;
-        out << YAML::Key << "objective_sigma_relative" << YAML::Value << fit.objective.sigmaRelative;
-        out << YAML::Key << "objective_switch_k" << YAML::Value << fit.objective.switchK;
-        out << YAML::Key << "objective_linear_points" << YAML::Value << fit.objective.linearPoints;
-        out << YAML::Key << "objective_log_points" << YAML::Value << fit.objective.logPoints;
-		out << YAML::Key << "warnings" << YAML::Value << fit.warnings;
-		out << YAML::EndMap;
+		node["parameters"] = parametersNode;
+		node["chi_squared"] = fit.chiSquared;
+		node["reduced_chi_squared"] = fit.reducedChiSquared;
+		node["iterations"] = fit.iterations;
+		node["converged"] = fit.converged;
+		node["fit_method"] = fit.fitMethod;
+		node["stop_reason"] = fit.stopReason;
+		node["accepted"] = fit.accepted;
+		node["flat_directions"] = fit.flatDirections;
+		node["lm_status"] = fit.lmStatus;
+		node["backend"] = fit.backend;
+		node["objective_mode"] = fit.objective.mode;
+		node["objective_current_unit"] = fit.objective.currentUnit;
+		node["objective_shift"] = fit.objective.shift;
+		node["objective_sigma_absolute"] = fit.objective.sigmaAbsolute;
+		node["objective_sigma_relative"] = fit.objective.sigmaRelative;
+		node["objective_switch_k"] = fit.objective.switchK;
+		node["objective_linear_points"] = fit.objective.linearPoints;
+		node["objective_log_points"] = fit.objective.logPoints;
+		node["warnings"] = fit.warnings;
+		return node;
 	}
 
 	std::optional<JFMFitState> readFitState(const YAML::Node &node)
@@ -310,30 +308,30 @@ namespace SST::Prototypes::JFM
 		return fit;
 	}
 
-	void emitMonteCarloState(YAML::Emitter &out, const JFMMonteCarloState &state)
+	YAML::Node monteCarloStateNode(const JFMMonteCarloState &state)
 	{
-		out << YAML::BeginMap;
-		out << YAML::Key << "model" << YAML::Value << state.modelId;
-		out << YAML::Key << "status" << YAML::Value << state.status;
-		out << YAML::Key << "sample_count" << YAML::Value << state.sampleCount;
-		out << YAML::Key << "accepted_count" << YAML::Value << state.acceptedCount;
-        out << YAML::Key << "converged_count" << YAML::Value << state.convergedCount;
-		out << YAML::Key << "noise_percent" << YAML::Value << state.noisePercent;
-		out << YAML::Key << "start_perturbation_percent" << YAML::Value << state.startPerturbationPercent;
-		out << YAML::Key << "seed" << YAML::Value << state.seed;
-		out << YAML::Key << "backend" << YAML::Value << state.backend;
-        out << YAML::Key << "objective_mode" << YAML::Value << state.objective.mode;
-        out << YAML::Key << "objective_current_unit" << YAML::Value << state.objective.currentUnit;
-        out << YAML::Key << "objective_shift" << YAML::Value << state.objective.shift;
-        out << YAML::Key << "objective_sigma_absolute" << YAML::Value << state.objective.sigmaAbsolute;
-        out << YAML::Key << "objective_sigma_relative" << YAML::Value << state.objective.sigmaRelative;
-        out << YAML::Key << "objective_switch_k" << YAML::Value << state.objective.switchK;
-        out << YAML::Key << "objective_linear_points" << YAML::Value << state.objective.linearPoints;
-        out << YAML::Key << "objective_log_points" << YAML::Value << state.objective.logPoints;
-		out << YAML::Key << "output_path" << YAML::Value << state.outputPath.Utf8();
-		out << YAML::Key << "total_milliseconds" << YAML::Value << state.totalMilliseconds;
-		out << YAML::Key << "warnings" << YAML::Value << state.warnings;
-		out << YAML::EndMap;
+		YAML::Node node(YAML::NodeType::Map);
+		node["model"] = state.modelId;
+		node["status"] = state.status;
+		node["sample_count"] = state.sampleCount;
+		node["accepted_count"] = state.acceptedCount;
+		node["converged_count"] = state.convergedCount;
+		node["noise_percent"] = state.noisePercent;
+		node["start_perturbation_percent"] = state.startPerturbationPercent;
+		node["seed"] = state.seed;
+		node["backend"] = state.backend;
+		node["objective_mode"] = state.objective.mode;
+		node["objective_current_unit"] = state.objective.currentUnit;
+		node["objective_shift"] = state.objective.shift;
+		node["objective_sigma_absolute"] = state.objective.sigmaAbsolute;
+		node["objective_sigma_relative"] = state.objective.sigmaRelative;
+		node["objective_switch_k"] = state.objective.switchK;
+		node["objective_linear_points"] = state.objective.linearPoints;
+		node["objective_log_points"] = state.objective.logPoints;
+		node["output_path"] = state.outputPath.Utf8();
+		node["total_milliseconds"] = state.totalMilliseconds;
+		node["warnings"] = state.warnings;
+		return node;
 	}
 
 	std::optional<JFMMonteCarloState> readMonteCarloState(const YAML::Node &node)
@@ -377,60 +375,55 @@ namespace SST::Prototypes::JFM
 			: JFMGroupingMode::NumericStep;
 	}
 
-	void emitCharacteristicInfo(YAML::Emitter &out, const JFMCharacteristicInfo &characteristic)
+	YAML::Node characteristicInfoNode(const JFMCharacteristicInfo &characteristic)
 	{
-		out << YAML::BeginMap;
-		out << YAML::Key << "id" << YAML::Value << characteristic.id;
-		out << YAML::Key << "name" << YAML::Value << characteristic.name;
-		out << YAML::Key << "measurement" << YAML::Value << characteristic.measurement;
-		out << YAML::Key << "source_path" << YAML::Value << characteristic.sourcePath.Utf8();
-		out << YAML::Key << "source_record_key" << YAML::Value << characteristic.sourceRecordKey;
-		out << YAML::Key << "parser" << YAML::Value << characteristic.parser;
-		out << YAML::Key << "import" << YAML::Value;
-		emitImportOptions(out, characteristic.importOptions);
-		emitOptionalDouble(out, "temperature_K", characteristic.temperatureK);
-		out << YAML::Key << "temperature_source" << YAML::Value << characteristic.temperatureSource;
-		out << YAML::Key << "metadata" << YAML::Value;
-		emitStringMap(out, characteristic.metadata);
-		out << YAML::Key << "columns" << YAML::Value << YAML::BeginSeq;
+		YAML::Node node(YAML::NodeType::Map);
+		node["id"] = characteristic.id;
+		node["name"] = characteristic.name;
+		node["measurement"] = characteristic.measurement;
+		node["source_path"] = characteristic.sourcePath.Utf8();
+		node["source_record_key"] = characteristic.sourceRecordKey;
+		node["parser"] = characteristic.parser;
+		node["import"] = importOptionsNode(characteristic.importOptions);
+		emitOptionalDouble(node, "temperature_K", characteristic.temperatureK);
+		node["temperature_source"] = characteristic.temperatureSource;
+		node["metadata"] = stringMapNode(characteristic.metadata);
+		YAML::Node columnsNode(YAML::NodeType::Sequence);
 		for (const JFMColumn &column : characteristic.columns)
 		{
-			out << YAML::BeginMap;
-			out << YAML::Key << "name" << YAML::Value << column.name;
-			out << YAML::Key << "unit" << YAML::Value << column.unit;
-			out << YAML::Key << "role" << YAML::Value << column.role;
-			out << YAML::EndMap;
+			YAML::Node columnNode(YAML::NodeType::Map);
+			columnNode["name"] = column.name;
+			columnNode["unit"] = column.unit;
+			columnNode["role"] = column.role;
+			columnsNode.push_back(columnNode);
 		}
-		out << YAML::EndSeq;
-		out << YAML::Key << "sweep" << YAML::Value << YAML::BeginMap;
-		out << YAML::Key << "direction" << YAML::Value << characteristic.sweep.direction;
-		emitOptionalDouble(out, "v_start", characteristic.sweep.vStart);
-		emitOptionalDouble(out, "v_stop", characteristic.sweep.vStop);
-		out << YAML::Key << "n_points" << YAML::Value << characteristic.sweep.pointCount;
-		out << YAML::EndMap;
-		out << YAML::Key << "qc" << YAML::Value << YAML::BeginMap;
-		out << YAML::Key << "non_monotonic_sweep" << YAML::Value << characteristic.qc.nonMonotonicSweep;
-		out << YAML::Key << "missing_temperature" << YAML::Value << characteristic.qc.hasMissingTemperature;
-		out << YAML::Key << "warnings" << YAML::Value << characteristic.qc.warnings;
-		out << YAML::EndMap;
+		node["columns"] = columnsNode;
+		YAML::Node sweepNode(YAML::NodeType::Map);
+		sweepNode["direction"] = characteristic.sweep.direction;
+		emitOptionalDouble(sweepNode, "v_start", characteristic.sweep.vStart);
+		emitOptionalDouble(sweepNode, "v_stop", characteristic.sweep.vStop);
+		sweepNode["n_points"] = characteristic.sweep.pointCount;
+		node["sweep"] = sweepNode;
+		YAML::Node qcNode(YAML::NodeType::Map);
+		qcNode["non_monotonic_sweep"] = characteristic.qc.nonMonotonicSweep;
+		qcNode["missing_temperature"] = characteristic.qc.hasMissingTemperature;
+		qcNode["warnings"] = characteristic.qc.warnings;
+		node["qc"] = qcNode;
 		if (characteristic.prefit)
 		{
-			out << YAML::Key << "prefit" << YAML::Value;
-			emitPrefitState(out, *characteristic.prefit);
+			node["prefit"] = prefitStateNode(*characteristic.prefit);
 		}
 		if (characteristic.fit)
 		{
-			out << YAML::Key << "fit" << YAML::Value;
-			emitFitState(out, *characteristic.fit);
+			node["fit"] = fitStateNode(*characteristic.fit);
 		}
 		if (characteristic.monteCarlo)
 		{
-			out << YAML::Key << "monte_carlo" << YAML::Value;
-			emitMonteCarloState(out, *characteristic.monteCarlo);
+			node["monte_carlo"] = monteCarloStateNode(*characteristic.monteCarlo);
 		}
-		out << YAML::Key << "raw_data" << YAML::Value << "external_only";
-		out << YAML::Key << "raw_point_count" << YAML::Value << characteristic.sweep.pointCount;
-		out << YAML::EndMap;
+		node["raw_data"] = "external_only";
+		node["raw_point_count"] = characteristic.sweep.pointCount;
+		return node;
 	}
 
 	JFMCharacteristicInfo readCharacteristicInfo(const YAML::Node &characteristicNode)
@@ -473,98 +466,118 @@ namespace SST::Prototypes::JFM
 		return characteristic;
 	}
 
+	YAML::Node JFMProjectYamlSerializer::ToNode(const JFMProject &project)
+	{
+		YAML::Node node(YAML::NodeType::Map);
+		node["schema_version"] = JFMProjectSchemaVersion;
+		YAML::Node projectNode(YAML::NodeType::Map);
+		projectNode["id"] = project.id;
+		projectNode["name"] = project.name;
+		projectNode["metadata"] = stringMapNode(project.metadata);
+		node["project"] = projectNode;
+
+		YAML::Node characteristicsNode(YAML::NodeType::Sequence);
+		for (const JFMCharacteristicInfo &characteristic : project.characteristics)
+			characteristicsNode.push_back(characteristicInfoNode(characteristic));
+		node["characteristics"] = characteristicsNode;
+
+		YAML::Node groupsNode(YAML::NodeType::Sequence);
+		for (const JFMGroup &group : project.groups)
+		{
+			YAML::Node groupNode(YAML::NodeType::Map);
+			groupNode["id"] = group.id;
+			groupNode["name"] = group.name;
+			groupNode["parent_id"] = group.parentId;
+			groupNode["metadata"] = stringMapNode(group.metadata);
+			groupsNode.push_back(groupNode);
+		}
+		node["groups"] = groupsNode;
+
+		YAML::Node seriesNode(YAML::NodeType::Sequence);
+		for (const JFMSeries &series : project.series)
+		{
+			YAML::Node seriesItemNode(YAML::NodeType::Map);
+			seriesItemNode["id"] = series.id;
+			seriesItemNode["name"] = series.name;
+			seriesItemNode["group_id"] = series.groupId;
+			seriesItemNode["metadata"] = stringMapNode(series.metadata);
+			YAML::Node membersNode(YAML::NodeType::Sequence);
+			for (const CharacteristicId &characteristicId : series.characteristicIds)
+				membersNode.push_back(characteristicId);
+			seriesItemNode["characteristics"] = membersNode;
+			seriesNode.push_back(seriesItemNode);
+		}
+		node["series"] = seriesNode;
+
+		YAML::Node fitRunsNode(YAML::NodeType::Sequence);
+		for (const JFMFitRun &run : project.fitRuns)
+		{
+			YAML::Node fitRunNode(YAML::NodeType::Map);
+			fitRunNode["id"] = run.id;
+			fitRunNode["name"] = run.name;
+			fitRunNode["status"] = run.status;
+			fitRunsNode.push_back(fitRunNode);
+		}
+		node["fit_runs"] = fitRunsNode;
+
+		YAML::Node monteCarloRunsNode(YAML::NodeType::Sequence);
+		for (const JFMMonteCarloRun &run : project.monteCarloRuns)
+		{
+			YAML::Node monteCarloRunNode(YAML::NodeType::Map);
+			monteCarloRunNode["id"] = run.id;
+			monteCarloRunNode["name"] = run.name;
+			monteCarloRunNode["status"] = run.status;
+			monteCarloRunsNode.push_back(monteCarloRunNode);
+		}
+		node["monte_carlo_runs"] = monteCarloRunsNode;
+
+		YAML::Node derivedAnalysesNode(YAML::NodeType::Sequence);
+		for (const JFMDerivedAnalysis &analysis : project.derivedAnalyses)
+		{
+			YAML::Node analysisNode(YAML::NodeType::Map);
+			analysisNode["id"] = analysis.id;
+			analysisNode["name"] = analysis.name;
+			analysisNode["status"] = analysis.status;
+			derivedAnalysesNode.push_back(analysisNode);
+		}
+		node["derived_analyses"] = derivedAnalysesNode;
+
+		YAML::Node scriptsNode(YAML::NodeType::Sequence);
+		for (const JFMScriptInfo &script : project.scripts)
+		{
+			YAML::Node scriptNode(YAML::NodeType::Map);
+			scriptNode["id"] = script.id;
+			scriptNode["name"] = script.name;
+			scriptNode["path"] = script.path.Utf8();
+			scriptNode["enabled"] = script.enabled;
+			scriptNode["reload_count"] = script.reloadCount;
+			scriptsNode.push_back(scriptNode);
+		}
+		node["scripts"] = scriptsNode;
+
+		YAML::Node groupingsNode(YAML::NodeType::Sequence);
+		for (const JFMGroupingDefinition &grouping : project.groupings)
+		{
+			YAML::Node groupingNode(YAML::NodeType::Map);
+			groupingNode["id"] = grouping.id;
+			groupingNode["name"] = grouping.name;
+			groupingNode["source_series"] = grouping.sourceSeriesIds;
+			groupingNode["metadata_key"] = grouping.metadataKey;
+			groupingNode["mode"] = groupingModeName(grouping.mode);
+			groupingNode["numeric_step"] = grouping.numericStep;
+			groupingNode["include_missing"] = grouping.includeMissing;
+			groupingsNode.push_back(groupingNode);
+		}
+		node["groupings"] = groupingsNode;
+		return node;
+	}
+
 	Result<std::string> JFMProjectYamlSerializer::Serialize(const JFMProject &project)
 	{
 		try
 		{
 			YAML::Emitter out;
-			out << YAML::BeginMap;
-			out << YAML::Key << "schema_version" << YAML::Value << JFMProjectSchemaVersion;
-			out << YAML::Key << "project" << YAML::Value << YAML::BeginMap;
-			out << YAML::Key << "id" << YAML::Value << project.id;
-			out << YAML::Key << "name" << YAML::Value << project.name;
-			out << YAML::Key << "metadata" << YAML::Value;
-			emitStringMap(out, project.metadata);
-			out << YAML::EndMap;
-
-			out << YAML::Key << "characteristics" << YAML::Value << YAML::BeginSeq;
-			for (const JFMCharacteristicInfo &characteristic : project.characteristics)
-				emitCharacteristicInfo(out, characteristic);
-			out << YAML::EndSeq;
-
-			out << YAML::Key << "groups" << YAML::Value << YAML::BeginSeq;
-			for (const JFMGroup &group : project.groups)
-			{
-				out << YAML::BeginMap;
-				out << YAML::Key << "id" << YAML::Value << group.id;
-				out << YAML::Key << "name" << YAML::Value << group.name;
-				out << YAML::Key << "parent_id" << YAML::Value << group.parentId;
-				out << YAML::Key << "metadata" << YAML::Value;
-				emitStringMap(out, group.metadata);
-				out << YAML::EndMap;
-			}
-			out << YAML::EndSeq;
-
-			out << YAML::Key << "series" << YAML::Value << YAML::BeginSeq;
-			for (const JFMSeries &series : project.series)
-			{
-				out << YAML::BeginMap;
-				out << YAML::Key << "id" << YAML::Value << series.id;
-				out << YAML::Key << "name" << YAML::Value << series.name;
-				out << YAML::Key << "group_id" << YAML::Value << series.groupId;
-				out << YAML::Key << "metadata" << YAML::Value;
-				emitStringMap(out, series.metadata);
-				out << YAML::Key << "characteristics" << YAML::Value << YAML::BeginSeq;
-				for (const CharacteristicId &characteristicId : series.characteristicIds)
-					out << characteristicId;
-				out << YAML::EndSeq;
-				out << YAML::EndMap;
-			}
-			out << YAML::EndSeq;
-
-			out << YAML::Key << "fit_runs" << YAML::Value << YAML::BeginSeq;
-			for (const JFMFitRun &run : project.fitRuns)
-				out << YAML::BeginMap << YAML::Key << "id" << YAML::Value << run.id << YAML::Key << "name" << YAML::Value << run.name << YAML::Key << "status" << YAML::Value << run.status << YAML::EndMap;
-			out << YAML::EndSeq;
-
-			out << YAML::Key << "monte_carlo_runs" << YAML::Value << YAML::BeginSeq;
-			for (const JFMMonteCarloRun &run : project.monteCarloRuns)
-				out << YAML::BeginMap << YAML::Key << "id" << YAML::Value << run.id << YAML::Key << "name" << YAML::Value << run.name << YAML::Key << "status" << YAML::Value << run.status << YAML::EndMap;
-			out << YAML::EndSeq;
-
-			out << YAML::Key << "derived_analyses" << YAML::Value << YAML::BeginSeq;
-			for (const JFMDerivedAnalysis &analysis : project.derivedAnalyses)
-				out << YAML::BeginMap << YAML::Key << "id" << YAML::Value << analysis.id << YAML::Key << "name" << YAML::Value << analysis.name << YAML::Key << "status" << YAML::Value << analysis.status << YAML::EndMap;
-			out << YAML::EndSeq;
-
-			out << YAML::Key << "scripts" << YAML::Value << YAML::BeginSeq;
-			for (const JFMScriptInfo &script : project.scripts)
-			{
-				out << YAML::BeginMap;
-				out << YAML::Key << "id" << YAML::Value << script.id;
-				out << YAML::Key << "name" << YAML::Value << script.name;
-				out << YAML::Key << "path" << YAML::Value << script.path.Utf8();
-				out << YAML::Key << "enabled" << YAML::Value << script.enabled;
-				out << YAML::Key << "reload_count" << YAML::Value << script.reloadCount;
-				out << YAML::EndMap;
-			}
-			out << YAML::EndSeq;
-
-			out << YAML::Key << "groupings" << YAML::Value << YAML::BeginSeq;
-			for (const JFMGroupingDefinition &grouping : project.groupings)
-			{
-				out << YAML::BeginMap;
-				out << YAML::Key << "id" << YAML::Value << grouping.id;
-				out << YAML::Key << "name" << YAML::Value << grouping.name;
-				out << YAML::Key << "source_series" << YAML::Value << grouping.sourceSeriesIds;
-				out << YAML::Key << "metadata_key" << YAML::Value << grouping.metadataKey;
-				out << YAML::Key << "mode" << YAML::Value << groupingModeName(grouping.mode);
-				out << YAML::Key << "numeric_step" << YAML::Value << grouping.numericStep;
-				out << YAML::Key << "include_missing" << YAML::Value << grouping.includeMissing;
-				out << YAML::EndMap;
-			}
-			out << YAML::EndSeq;
-			out << YAML::EndMap;
+			out << ToNode(project);
 
 			if (!out.good())
 				return makeYamlError("Project serialization failed.", out.GetLastError());
@@ -578,9 +591,14 @@ namespace SST::Prototypes::JFM
 
 	Result<JFMProject> JFMProjectYamlSerializer::Deserialize(const std::string &text)
 	{
+		try { return FromNode(YAML::Load(text)); }
+		catch (const std::exception &error) { return makeYamlError("Project load failed.", error.what()); }
+	}
+
+	Result<JFMProject> JFMProjectYamlSerializer::FromNode(const YAML::Node &root)
+	{
 		try
 		{
-			const YAML::Node root = YAML::Load(text);
 			if (!root || !root.IsMap())
 				return makeYamlError("Project load failed.", "Root YAML node is not a map.");
 
