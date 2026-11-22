@@ -14,6 +14,27 @@
 #include <scaps_core/device_project_yaml.hpp>
 using namespace SST;
 using namespace SST::ScapsLab;
+TEST(TypedBoundary, PanelsReadTypedResultsWithoutJsonViews) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,1000);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
+    {
+        Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.autoRecalculate=false;w.autoRecalculateBand=false;w.viewIdleSeconds=5;
+        w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().document["mesh"]["points_per_layer"]=21;w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};
+        const auto execute=[&](Json request){EXPECT_TRUE(w.Dispatch(request).value("ok",false));while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response;};
+        execute({{"operation","run"}});execute({{"operation","band"},{"voltage_V",0.}});
+        execute({{"operation","cv"},{"temperature_K",300.},{"start_V",0.},{"stop_V",.01},{"step_V",.01},{"frequency_Hz",1e3}});
+        execute({{"operation","cf"},{"temperature_K",300.},{"voltage_V",0.},{"start_Hz",100.},{"stop_Hz",1000.},{"points",3}});
+        execute({{"operation","qe"},{"start_nm",500.},{"stop_nm",700.},{"points",3}});
+        auto spec=BatchDefaults();spec["axes"][0]["count"]=2;execute({{"operation","run_batch"},{"spec",spec}});
+        for(int view:{2,5,6,7,8,9,10,11,12,17,18,19,20,22}) {
+            Panel panel(&w,view);for(int frame=0;frame<2;++frame){io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowSize(ImVec2(1100,900));ImGui::Begin("Typed boundary panels");panel.RenderContent();ImGui::End();ImGui::Render();}
+        }
+        EXPECT_TRUE(w.ViewsReady());EXPECT_EQ(w.warmJob,0u);
+        EXPECT_FALSE(w.Current().Iv()->HasView());EXPECT_FALSE(w.Current().Band()->HasView());EXPECT_FALSE(w.Current().batchResult.typed()->HasView());
+        for(const auto& [kind,result]:w.Current().acResults.all())EXPECT_FALSE(result->HasView());
+        for(const auto& [id,result]:*w.Current().runs)EXPECT_FALSE(result->HasView());
+    }
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}
 TEST(ScapsLab,ProjectTitleAndTabHaveNoConflictingIds) {
     ImGui::CreateContext();ImPlot::CreateContext();
     auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1280,800);

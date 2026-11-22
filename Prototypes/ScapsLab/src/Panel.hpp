@@ -62,6 +62,8 @@ private:
     void Batch();
     void Recorder();
     void BatchPlots();
+    WeakRef<const BatchResult> batchPlotSource;
+    std::vector<BatchCurve> batchPlotCurves;
     char parameterSearch[128]{};
     int recorderPlot=0, opticalTab=-1, grTab=-1;
     bool Defects(Json &draft,bool interface);

@@ -197,6 +197,10 @@ void SetupApplication(Application &app) {
         startupSettings=UiSettingsPath(); // read below, once the Workflow exists (start-up read, before the first frame)
     }
     if(std::getenv("SCAPSLAB_EXPERIMENTAL")) ExperimentalPanels()=std::string(std::getenv("SCAPSLAB_EXPERIMENTAL"))=="1";
+    if(auto jobs=app.GetJobSystemHandle().lock()) {
+        const auto hardware=std::thread::hardware_concurrency();
+        if(hardware>1 && jobs->GetThreadCount()<hardware-1)(void)jobs->SetThreadCount(hardware-1);
+    }
     auto state=CreateUnique<Workflow>(app.GetJobSystemHandle().lock(),app.GetCommandRegistryHandle().lock(),app.GetEventBusRef(),app.GetNotifierRef()); auto *w=state.get();
     w->RegisterIo(app.GetIOLayer());
     if(!startupSettings.empty()) {

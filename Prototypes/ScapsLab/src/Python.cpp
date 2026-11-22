@@ -1,5 +1,6 @@
 ﻿#include "Workflow.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
+#include <thread>
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
@@ -9,7 +10,8 @@ NB_MODULE(sst_scapslab, m) {
     nb::class_<Workflow>(m,"Session")
         .def("__init__",[](Workflow *self,const std::string &document) {
             auto parsed=Json::parse(document);if(parsed.is_null()) parsed=ReadProject(SCAPSLAB_PROJECT);
-            new(self) Workflow(CreateRef<JobSystem>(nullptr,1)); if(parsed.is_object() && parsed.contains("devices")) self->SetWorkspace(UnpackResults(parsed));else self->Current().document=NormalizeDocument(SelfContained(std::move(parsed)));
+            const auto hardware=std::thread::hardware_concurrency();
+            new(self) Workflow(CreateRef<JobSystem>(nullptr,hardware>1?hardware-1:1)); if(parsed.is_object() && parsed.contains("devices")) self->SetWorkspace(UnpackResults(parsed));else self->Current().document=NormalizeDocument(SelfContained(std::move(parsed)));
         })
         .def("start",[](Workflow &s,const std::string &request) {
             try {return s.Dispatch(Json::parse(request)).dump();}

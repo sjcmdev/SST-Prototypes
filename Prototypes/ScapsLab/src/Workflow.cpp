@@ -30,15 +30,6 @@
 #include <exception>
 namespace SST::ScapsLab {
 namespace {
-struct Temporary {
-    std::filesystem::path path;
-    Temporary() {
-        static std::atomic_uint64_t next{0};
-        path = std::filesystem::temp_directory_path() / ("scapslab-" +
-            std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + "-" + std::to_string(next++) + ".yaml");
-    }
-    ~Temporary() { std::error_code ec; std::filesystem::remove(path, ec); }
-};
 Json FromYaml(const YAML::Node &n) {
     if (n.IsNull()) return nullptr;
     if (n.IsSequence()) { auto a=Json::array(); for (const auto &v:n) a.push_back(FromYaml(v)); return a; }
@@ -57,7 +48,10 @@ YAML::Node ToYaml(const Json &j) {
     if (j.is_null()) return YAML::Node(YAML::NodeType::Null);
     if (j.is_string()) { const auto s=j.get<std::string>(); YAML::Node n(s);
         if (s!=".inf" && s!="-.inf" && s!=".nan") n.SetTag("tag:yaml.org,2002:str"); return n; }
-    return YAML::Load(j.dump());
+    if(j.is_boolean())return YAML::Node(j.get<bool>());
+    if(j.is_number_integer())return YAML::Node(j.get<std::int64_t>());
+    if(j.is_number_unsigned())return YAML::Node(j.get<std::uint64_t>());
+    YAML::Node n(j.get<double>());n.SetTag("tag:yaml.org,2002:float");return n;
 }
 std::string Text(const Json &j) { YAML::Emitter e; e.SetDoublePrecision(17); e << ToYaml(j); if (!e.good()) throw std::runtime_error(e.GetLastError()); return e.c_str(); }
 void SaveText(const std::filesystem::path &p,const std::string &text) {
@@ -77,6 +71,13 @@ Json SolverDocument(Json document) {
     return document;
 }
 }
+scaps_core::DeviceProject BatchModel(const Json& document) {return scaps_core::device_project_from_node(ToYaml(SolverDocument(document)));}
+scaps_core::BatchConditioning BatchConditioningModel(const scaps_core::DeviceProject& project,const Json& spec) {
+    auto node=ToYaml(spec);
+    if(!node["transitions"] && !project.metastable_transitions.empty())node["transitions"]=scaps_core::device_project_to_node(project)["metastable_transitions"];
+    return scaps_core::batch_conditioning_from_node(project,node);
+}
+Ref<const scaps_core::BatchInitialState> BatchInitialStateModel(const scaps_core::DeviceProject& project,const Json& spec) {return scaps_core::batch_initial_state_from_node(project,ToYaml(spec));}
 scaps_core::DeviceProject Model(const Json &j) {
     if(j.contains("constants_mode") && j.at("constants_mode")!="codata" && j.at("constants_mode")!="scaps_compat") throw std::invalid_argument("Unknown constants_mode");
     if(j.contains("mobility_temperature_model") && j.at("mobility_temperature_model")!="constant" && j.at("mobility_temperature_model")!="sqrt_T" && j.at("mobility_temperature_model")!="caughey_thomas_T") throw std::invalid_argument("Unknown mobility_temperature_model");
@@ -86,7 +87,7 @@ scaps_core::DeviceProject Model(const Json &j) {
         if(!std::set<std::string>{"relative_to_Ei","relative_to_Ec","relative_to_Ev"}.contains(d.value("energy_reference",std::string("relative_to_Ei")))) throw std::invalid_argument("Unknown defect energy_reference");
         if(!std::set<std::string>{"neutral","donor_like","acceptor_like"}.contains(d.value("charge_type",std::string("neutral")))) throw std::invalid_argument("Unknown defect charge_type");
     }
-    Temporary t; SaveText(t.path,Text(SolverDocument(j))); auto p=scaps_core::load_device_project_yaml(t.path);
+    auto p=scaps_core::device_project_from_node(ToYaml(SolverDocument(j)),std::filesystem::temp_directory_path());
     if (p.schema_version!=1) throw std::invalid_argument("Unsupported project schema_version");
     Positive(p.temperature_K,"temperature_K"); Positive(p.solver.residual_tolerance,"residual_tolerance");
     if (p.layers.empty() || p.layers.size()>100) throw std::invalid_argument("Expected 1..100 layers");
@@ -235,10 +236,9 @@ void ExportProfile(const Json &samples,const std::string &path) {
     for(std::size_t i=0;i<samples.at("x_m").size();++i) out<<samples.at("x_m")[i].get<double>()*(grd?1e6:1.)<<(grd?" ":",")<<samples.at("value_SI")[i].get<double>()<<'\n';
     SaveText(path,out.str());
 }
-Json ReadProject(const std::string &path) {
-    auto raw=FromYaml(YAML::LoadFile(path));
+namespace {
+Json ImportProject(Json raw,const std::filesystem::path& base) {
     if(raw.value("schema_version",0)==0) raw["schema_version"]=1;
-    const auto base=std::filesystem::absolute(path).parent_path();
     auto anchor=[&](Json &object,const char *key) {if(object.contains(key) && object[key].is_string() && !object[key].get<std::string>().empty()) object[key]=(base/std::filesystem::path(object[key].get<std::string>())).lexically_normal().string();};
     if(raw.contains("illumination")) for(const auto *key:{"spectrum_file","generation_file","front_filter_file","back_filter_file"}) anchor(raw["illumination"],key);
     for(auto &layer:raw["layers"]) {anchor(layer,"material_file");if(layer.contains("absorption")) anchor(layer["absorption"],"file");if(layer.contains("grading")) for(auto &profile:layer["grading"]) anchor(profile,"file");}
@@ -250,8 +250,7 @@ Json ReadProject(const std::string &path) {
     if(raw.contains("mesh")) anchor(raw["mesh"],"scaps_numerical_definition");
     raw=SelfContained(std::move(raw));
     const auto p=Model(raw);
-    Temporary t; scaps_core::save_device_project_yaml(p,t.path);
-    auto full=FromYaml(YAML::LoadFile(t.path.string()));
+    auto full=FromYaml(scaps_core::device_project_to_node(p));
     // JSON array updates replace layers; retain the core defaults within each layer.
     for(auto &l:raw["layers"]) l.erase("material_file");
     if(raw.contains("mesh")) raw["mesh"].erase("scaps_numerical_definition");
@@ -275,13 +274,15 @@ Json ReadProject(const std::string &path) {
     }
     return full;
 }
+}
+Json ReadProject(const std::string &path) {return ImportProject(FromYaml(YAML::LoadFile(path)),std::filesystem::absolute(path).parent_path());}
 Json NormalizeDocument(Json document) {
     // Older workspace documents bypass ReadProject's Core defaults.
     if(!document.contains("illumination") || !document.at("illumination").contains("mode") ||
         !document.at("illumination").contains("intensity_multiplier") || !document.at("illumination").contains("uniform_generation_m3_s") ||
         !document.at("illumination").contains("front_transmission") || !document.at("illumination").contains("wavelength_nm")) {
-        const auto model=Model(document);Temporary t;scaps_core::save_device_project_yaml(model,t.path);
-        auto light=FromYaml(YAML::LoadFile(t.path.string())).at("illumination");
+        const auto model=Model(document);
+        auto light=FromYaml(scaps_core::device_project_to_node(model)).at("illumination");
         if(document.contains("illumination")) light.update(document.at("illumination"),true);
         document["illumination"]=std::move(light);
     }
@@ -290,9 +291,9 @@ Json NormalizeDocument(Json document) {
 Json NewDeviceDocument() {auto d=ReadProject(SCAPSLAB_PROJECT);for(const auto *side:{"left","right"}) d["contacts"][side]["flat_band"]=true;return d;}
 void WriteProject(const Json &j,const std::string &path) { (void)Model(j); SaveText(Path{path}.Native(),Text(SolverDocument(j))); }
 namespace {
-Json DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::DeviceState &state) {
+std::vector<DefectPreview> DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::DeviceState &state) {
     using namespace scaps_core;
-    Json curves=Json::array(); const auto pc=physical_constants(p.constants_mode);
+    std::vector<DefectPreview> curves; const auto pc=physical_constants(p.constants_mode);
     auto curve=[&](const Json &d,double ev,double ec,double ei,double total,bool sheet) {
         const auto shape=d.value("energy_distribution",std::string("single"));
         const double offset=d.value("energy_offset_eV",0.0),width=d.value("characteristic_energy_eV",0.05);
@@ -316,20 +317,19 @@ Json DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const 
         double amplitude=total/width;
         if(sheet && d.value("density_convention",std::string("scaps_peak"))=="scaps_peak") amplitude=d.value("peak_density_m2_eV",0.0)*(gaussian?std::sqrt(std::numbers::pi):1);
         else if((sheet || d.value("distribution_normalization",std::string("scaps"))=="normalized_continuum") && hi>lo) amplitude/=mass(hi)-mass(lo);
-        Json c={{"id",d.at(sheet?"id":"scapslab_id")},{"label",d.value("label",d.value("id",std::string("Defect")))},{"sheet",sheet},{"Ev_eV",ev},{"Ec_eV",ec},
-            {"energy_eV",Json::array()},{sheet?"density_m2_eV":"density_m3_eV",Json::array()},{"occupation_energy_eV",Json::array()},{"occupation",Json::array()},
-            {"single",single},{"level_energy_eV",center},{sheet?"Nt_m2":"Nt_m3",total},{"amphoteric",d.value("amphoteric",false)},{"correlated",d.value("correlated",true)}};
+        DefectPreview c;c.id=d.at(sheet?"id":"scapslab_id");c.label=d.value("label",d.value("id",std::string("Defect")));c.sheet=sheet;c.Ev_eV=ev;c.Ec_eV=ec;
+        c.single=single;c.level_energy_eV=center;c.Nt=total;c.amphoteric=d.value("amphoteric",false);c.correlated=d.value("correlated",true);
         if(!single) for(int i=0;i<=400;++i) {
             const double e=ev+(ec-ev)*i/400.;double value=0;
             if(e>=lo && e<=hi) value=amplitude*(gaussian?std::exp(-std::pow((e-center)/width,2))/std::sqrt(std::numbers::pi):cb?std::exp((e-center)/width):vb?std::exp((center-e)/width):1);
-            c["energy_eV"].push_back(e-ev);c[sheet?"density_m2_eV":"density_m3_eV"].push_back(value);
+            c.energy_eV.push_back(e-ev);c.density.push_back(value);
         }
-        c["level_energy_eV"]=center-ev;c["band_edges_eV"]={0.,ec-ev};
+        c.level_energy_eV=center-ev;c.band_edges_eV={0.,ec-ev};
         if(sheet) {
             const int l=d.at("left_layer_index");const auto &a=p.layers[l].material,&b=p.layers[l+1].material;
-            c["band_edges_eV"]={-a.chi_eV-a.Eg_eV-ev,-a.chi_eV-ev,-b.chi_eV-b.Eg_eV-ev,-b.chi_eV-ev};
+            c.band_edges_eV={-a.chi_eV-a.Eg_eV-ev,-a.chi_eV-ev,-b.chi_eV-b.Eg_eV-ev,-b.chi_eV-ev};
         }
-        if(d.value("amphoteric",false)) c["second_level_energy_eV"]=center-ev+(d.at("second_energy_offset_eV").get<double>()-offset)*(d.value("energy_reference",std::string("relative_to_Ei"))=="relative_to_Ec"?-1:1);
+        if(d.value("amphoteric",false)) c.second_level_energy_eV=center-ev+(d.at("second_energy_offset_eV").get<double>()-offset)*(d.value("energy_reference",std::string("relative_to_Ei"))=="relative_to_Ec"?-1:1);
         return c;
     };
     double x=0;
@@ -344,11 +344,11 @@ Json DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const 
             auto isolated=p;isolated.interface_defects.clear();for(auto &layer:isolated.layers) layer.defects.clear();isolated.layers[li].defects={l.defects[di]};
             const auto levels=make_device_from_project(isolated).layers[li].defects;
             auto c=curve(document.at("layers")[li].at("defects")[di],ev,ec,ei,l.defects[di].Nt_m3,false);
-            c["layer_id"]=document.at("layers")[li].at("scapslab_id");
+            c.layer_id=document.at("layers")[li].at("scapslab_id");
             for(std::size_t k=0;k<levels.size();++k) {
                 const auto &level=levels[k];const double e=level.energy_reference==DefectEnergyReference::RelativeToEc?ec-level.energy_offset_eV:level.energy_reference==DefectEnergyReference::RelativeToEv?ev+level.energy_offset_eV:ei+level.energy_offset_eV;
-                c["occupation_energy_eV"].push_back(e-ev);
-                c["occupation"].push_back(node<state.trap_occupation.size() && levelOffset+k<state.trap_occupation[node].size()?Json(state.trap_occupation[node][levelOffset+k]):Json(nullptr));
+                c.occupation_energy_eV.push_back(e-ev);
+                c.occupation.push_back(node<state.trap_occupation.size() && levelOffset+k<state.trap_occupation[node].size()?state.trap_occupation[node][levelOffset+k]:double(NAN));
             }
             levelOffset+=levels.size();curves.push_back(std::move(c));
         }
@@ -357,38 +357,38 @@ Json DefectCurves(const Json &document,const scaps_core::DeviceProject &p,const 
     for(std::size_t i=0;i<p.interface_defects.size();++i) {
         const auto &d=p.interface_defects[i];const auto &a=p.layers[d.left_layer_index].material,&b=p.layers[d.left_layer_index+1].material;
         const double ev=std::min(-a.chi_eV-a.Eg_eV,-b.chi_eV-b.Eg_eV),ec=std::max(-a.chi_eV,-b.chi_eV);
-        auto c=curve(document.at("interface_defects")[i],ev,ec,(ev+ec)*.5,d.Nt_m2,true);c["left_layer_index"]=d.left_layer_index;
+        auto c=curve(document.at("interface_defects")[i],ev,ec,(ev+ec)*.5,d.Nt_m2,true);c.left_layer_index=d.left_layer_index;
         auto isolated=p;isolated.interface_defects={d};const auto levels=make_device_from_project(isolated).interface_defects;
         for(std::size_t k=0;k<levels.size();++k) {
             auto sample=document.at("interface_defects")[i];sample["energy_offset_eV"]=levels[k].energy_offset_eV;
             const auto single=curve(sample,ev,ec,(ev+ec)*.5,d.Nt_m2,true);
-            c["occupation_energy_eV"].push_back(single.at("level_energy_eV"));
-            c["occupation"].push_back(offset+k<state.interface_occupation.size()?Json(state.interface_occupation[offset+k]):Json(nullptr));
+            c.occupation_energy_eV.push_back(single.level_energy_eV);
+            c.occupation.push_back(offset+k<state.interface_occupation.size()?state.interface_occupation[offset+k]:double(NAN));
         }
-        double integrated=0;for(const auto &level:levels) integrated+=level.Nt_m2;c["Nt_m2"]=integrated;
+        double integrated=0;for(const auto &level:levels) integrated+=level.Nt_m2;c.Nt=integrated;
         offset+=levels.size();curves.push_back(std::move(c));
     }
     return curves;
 }
-Json GenerationRecombination(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::Device1D &device,const scaps_core::DeviceState &state) {
+GenerationRecombinationResult GenerationRecombination(const Json &document,const scaps_core::DeviceProject &p,const scaps_core::Device1D &device,const scaps_core::DeviceState &state) {
     using namespace scaps_core;
     const auto mesh=mesh_from_coordinates(device,state.x_m);
     const auto pc=physical_constants(p.constants_mode);
     const auto generation=generation_integrals_m2s(device,mesh,pc);
-    Json out={{"channels",Json::array()},{"layers",Json::array()},{"x_m",state.x_m},{"generation_m3_s",Json::array()}};
+    GenerationRecombinationResult out;out.x_m=Column::Intern(state.x_m);std::vector<double> density;
     double generated=0,recombined=0;
-    for(std::size_t l=0;l<p.layers.size();++l) out["layers"].push_back({{"layer_id",document.at("layers")[l].at("scapslab_id")},{"generation_current_A_m2",0.},{"recombination_current_A_m2",0.},{"mechanisms",Json::object()}});
+    for(std::size_t l=0;l<p.layers.size();++l) out.layers.push_back({document.at("layers")[l].at("scapslab_id").get<std::string>()});
     for(std::size_t i=0;i<generation.size();++i) {
         const double dx=.5*((i?mesh.edges[i-1].h_m:0)+(i+1<mesh.size()?mesh.edges[i].h_m:0));
-        out["generation_m3_s"].push_back(dx>0?generation[i]/dx:0.);
+        density.push_back(dx>0?generation[i]/dx:0.);
         const double j=pc.q_C*generation[i];generated+=j;
-        auto &value=out["layers"][mesh.nodes[i].layer_index]["generation_current_A_m2"];value=value.get<double>()+j;
+        out.layers[mesh.nodes[i].layer_index].generation_current_A_m2+=j;
     }
     for(const auto &channel:state.recombination) {
         std::string id=channel.id;int layer=-1,defect=-1;
         if(channel.mechanism=="srh_bulk" && std::sscanf(id.c_str(),"layer:%d/defect:%d",&layer,&defect)==2 && layer>=0 && defect>=0 && layer<int(p.layers.size()) && defect<int(document.at("layers")[layer].at("defects").size()))
             id=document.at("layers")[layer].at("defects")[defect].at("scapslab_id");
-        Json byLayer=Json::array();double sum=0;
+        std::vector<LayerCurrent> byLayer;double sum=0;
         for(std::size_t l=0;l<p.layers.size();++l) {
             double value=0;
             for(std::size_t i=0;i<channel.R_m3_s.size();++i) if(mesh.nodes[i].layer_index==l) {
@@ -399,19 +399,19 @@ Json GenerationRecombination(const Json &document,const scaps_core::DeviceProjec
                 // Sheet loss belongs to the left layer; never count it twice.
                 for(std::size_t i=0;i+1<mesh.size();++i) if(mesh.x_m[i]==channel.x_m.front() && mesh.edges[i].h_m==0 && mesh.nodes[i].layer_index==l) value+=channel.integrated_current_A_m2;
             }
-            sum+=value;byLayer.push_back({{"layer_id",document.at("layers")[l].at("scapslab_id")},{"current_A_m2",value}});
-            auto &row=out["layers"][l];row["recombination_current_A_m2"]=row["recombination_current_A_m2"].get<double>()+value;
-            auto &mechanisms=row["mechanisms"];mechanisms[channel.mechanism]=mechanisms.value(channel.mechanism,0.)+value;
+            sum+=value;byLayer.push_back({document.at("layers")[l].at("scapslab_id").get<std::string>(),value});
+            auto &row=out.layers[l];row.recombination_current_A_m2+=value;
+            row.mechanisms[channel.mechanism]+=value;
         }
         recombined+=channel.integrated_current_A_m2;
-        out["channels"].push_back({{"id",id},{"engine_id",channel.id},{"mechanism",channel.mechanism},{"x_m",channel.x_m.empty()?state.x_m:channel.x_m},
-            {"R_m3_s",channel.R_m3_s},{"R_sheet_m2_s",channel.R_sheet_m2_s},{"integrated_current_A_m2",channel.integrated_current_A_m2},{"by_layer",byLayer},
-            {"layer_sum_relative_error",std::abs(sum-channel.integrated_current_A_m2)/std::max(1e-30,std::abs(channel.integrated_current_A_m2))}});
+        RecombinationChannel c;c.id=std::move(id);c.engine_id=channel.id;c.mechanism=channel.mechanism;
+        c.x_m=Column::Intern(channel.x_m.empty()?state.x_m:channel.x_m);c.R_m3_s=Column::Intern(channel.R_m3_s);c.R_sheet_m2_s=Column::Intern(channel.R_sheet_m2_s);
+        c.integrated_current_A_m2=channel.integrated_current_A_m2;c.by_layer=std::move(byLayer);c.layer_sum_relative_error=std::abs(sum-channel.integrated_current_A_m2)/std::max(1e-30,std::abs(channel.integrated_current_A_m2));
+        out.channels.push_back(std::move(c));
     }
-    out["generation_current_A_m2"]=generated;out["recombination_current_A_m2"]=recombined;out["net_generation_current_A_m2"]=generated-recombined;
-    out["contact_recombination"]=Json::array();
-    for(const auto &c:state.contact_recombination) out["contact_recombination"].push_back({{"id",c.id},{"electron_current_A_m2",c.electron_current_A_m2},{"hole_current_A_m2",c.hole_current_A_m2}});
-    out["sheet_layer_convention"]="interface assigned to left layer";
+    out.generation_m3_s=Column::Intern(std::move(density));out.generation_current_A_m2=generated;out.recombination_current_A_m2=recombined;out.net_generation_current_A_m2=generated-recombined;
+    out.contact_recombination=state.contact_recombination;
+
     return out;
 }
 
@@ -461,7 +461,7 @@ void Operation::Execute(JobContext &ctx) {
         if(op=="save_material")write_scaps_material(make_scaps_material(model.layers[index]),request.at("path").get<std::string>(),selection);
         else {
             apply_scaps_material(read_scaps_material(request.at("path").get<std::string>()),model.layers[index],selection);
-            Temporary t;save_device_project_yaml(model,t.path);const auto full=FromYaml(YAML::LoadFile(t.path.string()));
+            const auto full=FromYaml(device_project_to_node(model));
             auto candidate=document;auto &layer=candidate["layers"][index];
             for(const auto *key:{"material","grading","absorption","recombination"}){layer.erase(key);if(full.at("layers")[index].contains(key))layer[key]=full.at("layers")[index].at(key);}
             (void)Model(candidate);document=std::move(candidate);
@@ -551,8 +551,8 @@ void Operation::Execute(JobContext &ctx) {
         SaveText(Path{request.at("path").get<std::string>()}.Native(),text);
     }
     else if(op=="import_def") {
-        Temporary temporary; const auto imported=import_def(request.at("path").get<std::string>(),request.value("scaps_root",std::string{}));
-        save_device_project_yaml(imported,temporary.path);document=ReadProject(temporary.path.string());
+        const auto imported=import_def(request.at("path").get<std::string>(),request.value("scaps_root",std::string{}));
+        document=ImportProject(FromYaml(device_project_to_node(imported)),std::filesystem::temp_directory_path());
         output={{"warnings",imported.scaps_native.warnings}};
     } else if(op=="export_def") {export_def(Model(document),request.at("path").get<std::string>());output={{"warnings",Model(document).scaps_native.warnings}};}
     else if(op=="project_new") {
@@ -565,7 +565,6 @@ void Operation::Execute(JobContext &ctx) {
         if(raw.contains("devices")) {workspace=UnpackResults(raw);workspace["schema_version"]=raw.value("schema_version",0);workspace=NormalizeWorkspace(std::move(workspace));}
         else workspace=SingleDeviceWorkspace(ReadProject(file),std::filesystem::path(file).stem().string());
         loaded=ExtractResults(workspace); // typed results leave the Json here, on the job thread
-        if(prewarm) for(const auto &l:loaded) {if(l.result)l.result->View();if(l.band)l.band->View();} // pre-warm panel views off the UI thread
     }
     else if(op=="project_save" || (op=="save" && std::filesystem::path(request.at("path").get<std::string>()).extension()==".scapslab")) {
         if(!shared.empty()) {auto &devs=workspace["devices"];for(std::size_t i=0;i<shared.size();++i) AttachResults(devs[i],*shared[i].history,shared[i].results);shared.clear();}
@@ -645,8 +644,8 @@ void Operation::Execute(JobContext &ctx) {
         ctx.SetStage("Preparing AC mesh (cancel checked after preparation)");
         const auto mesh=prepare_mesh(device,p.mesh,volts,{T},p.solver,pc);
         ctx.ThrowIfCancellationRequested();
-        output={{"kind",op},{"mesh_x_m",mesh.x_m},{"area_m2",device.external.area_m2},{"points",Json::array()},
-            {"voltage_convention","consumer: left minus right; Y = G + j omega C"}};
+        auto result=CreateRef<AcResult>();result->has=7u|(1u<<31);result->mesh_x_m=Column::Intern(mesh.x_m);result->kind=op;result->area_m2=device.external.area_m2;typedOut=result;
+        output={{"voltage_convention","consumer: left minus right; Y = G + j omega C"}};
         const auto total=op=="cv"?volts.size():frequencies.size();
         auto finite=[](double x)->Json {return std::isfinite(x)?Json(x):Json(nullptr);};
         // One DC continuation (C-V) or one operating point (C-f); AC solves are independent, so run them in parallel.
@@ -664,9 +663,9 @@ void Operation::Execute(JobContext &ctx) {
         ctx.ThrowIfCancellationRequested();
         for(std::size_t i=0;i<total;++i) {
             const auto &dc=dcs[op=="cv"?i:0];const auto &ac=acs[i];
-            output["points"].push_back({{"point_id",op+"-"+std::to_string(i)},{"voltage_V",-ac.voltage_V},{"terminal_voltage_V",-dc.voltage_V},{"internal_voltage_V",-dc.state.applied_voltage_V},{"frequency_Hz",ac.frequency_Hz},{"temperature_K",T},
-                {"capacitance_F",finite(ac.C_F)},{"conductance_S",finite(ac.G_S)},{"G_over_omega_F",finite(ac.G_S/(2*std::numbers::pi*ac.frequency_Hz))},
-                {"inverse_C2_F_minus2",finite(1/(ac.C_F*ac.C_F))},{"status",to_string(ac.status)},{"conservation_relative",finite(ac.current_conservation_relative)}});
+            AcPoint point;point.has=((1u<<13)-1)|(1u<<15);point.point_id=op+"-"+std::to_string(i);point.voltage_V=-ac.voltage_V;point.terminal_voltage_V=-dc.voltage_V;point.internal_voltage_V=-dc.state.applied_voltage_V;point.frequency_Hz=ac.frequency_Hz;point.temperature_K=T;
+            point.capacitance_F=ac.C_F;point.conductance_S=ac.G_S;point.G_over_omega_F=ac.G_S/(2*std::numbers::pi*ac.frequency_Hz);point.inverse_C2_F_minus2=1/(ac.C_F*ac.C_F);point.status=to_string(ac.status);point.conservation_relative=ac.current_conservation_relative;
+            point.valid=ac.status==SolverStatus::Converged && std::isfinite(point.conservation_relative) && point.conservation_relative<=.01 && std::isfinite(ac.C_F) && std::isfinite(ac.G_S);point.validity_status=ac.status!=SolverStatus::Converged?"solver_failed":point.valid?"valid":"current_unresolved";result->points.push_back(std::move(point));
             ctx.SetProgress(float(i+1),float(total));
         }
     } else if(op=="qe") {
@@ -679,15 +678,16 @@ void Operation::Execute(JobContext &ctx) {
         Positive(probe,"probe_value");if(mode!="constant_flux" && mode!="constant_power") throw std::invalid_argument("Unknown QE probe_mode");
         const auto mesh=prepare_mesh(device,p.mesh,{0.},{p.temperature_K},p.solver,pc);
         auto dark=device;dark.illumination.enabled=false;
-        output={{"request",request},{"kind","qe"},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"probe_mode",mode},{mode=="constant_flux"?"probe_photon_flux_m2_s":"probe_power_W_m2",probe},{"temperature_K",p.temperature_K},{"voltage_V",0.},{"background","dark"}};
+        auto result=CreateRef<AcResult>();result->has=3u|(1u<<31);result->mesh_x_m=Column::Intern(mesh.x_m);result->kind="qe";typedOut=result;
+        output={{"request",request},{"probe_mode",mode},{mode=="constant_flux"?"probe_photon_flux_m2_s":"probe_power_W_m2",probe},{"temperature_K",p.temperature_K},{"voltage_V",0.},{"background","dark"}};
         OpticalTable response;
         std::vector<double> wavelengths;for(int i=0;i<count;++i) wavelengths.push_back(first+(last-first)*i/(count-1));
         ctx.SetStage("QE sweep ("+std::to_string(count)+" wavelengths)");
         const auto qes=solve_qe(dark,mesh,wavelengths,mode,probe,0.,p.temperature_K,p.solver,pc);ctx.ThrowIfCancellationRequested();
         for(int i=0;i<count;++i) {
             const double wavelength=wavelengths[i];const auto &q=qes[i];
-            output["points"].push_back({{"point_id","qe-"+std::to_string(i)},{"voltage_V",0.},{"terminal_voltage_V",0.},{"internal_voltage_V",std::isfinite(q.internal_voltage_V)?Json(-q.internal_voltage_V):Json(nullptr)},{"temperature_K",p.temperature_K},{"wavelength_nm",q.wavelength_nm},{"EQE",std::isfinite(q.EQE)?Json(q.EQE):Json(nullptr)},
-                {"incident_photon_flux_m2_s",q.incident_photon_flux_m2_s},{"probe_power_W_m2",q.probe_power_W_m2},{"status",to_string(q.status)}});
+            AcPoint point;point.has=((1u<<6)-1)|(1u<<7)|(1u<<13)|(1u<<14)|(1u<<15)|(1u<<16)|(1u<<17);point.point_id="qe-"+std::to_string(i);point.voltage_V=0;point.terminal_voltage_V=0;point.internal_voltage_V=-q.internal_voltage_V;point.temperature_K=p.temperature_K;point.wavelength_nm=q.wavelength_nm;point.EQE=q.EQE;point.incident_photon_flux_m2_s=q.incident_photon_flux_m2_s;point.probe_power_W_m2=q.probe_power_W_m2;point.status=to_string(q.status);
+            point.valid=q.status==SolverStatus::Converged && std::isfinite(q.EQE);point.validity_status=q.status!=SolverStatus::Converged?"solver_failed":point.valid?"valid":"current_unresolved";result->points.push_back(std::move(point));
             response.emplace_back(wavelength,q.EQE);ctx.SetProgress(float(i+1),float(count));
         }
         bool covered=true;double integrated=0;
@@ -715,7 +715,9 @@ void Operation::Execute(JobContext &ctx) {
         ctx.ThrowIfCancellationRequested(); ctx.SetStage("Equilibrium");
         const bool live=feed && op=="run" && !preview,externalNetwork=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);std::vector<double> pvV,pvJ;
         IVSession session(device,mesh,p.temperature_K,p.solver,pc); // equilibrium + continuation (bias predictor); bit-identical to solve_iv/scaps_headless
-        phase.lap("equilibrium");output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"mesh_x_m",mesh.x_m},{"points",Json::array()},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
+        auto result=CreateRef<IvResult>();result->has=1u|(1u<<31);result->mesh_x_m=Column::Intern(mesh.x_m);typedOut=result;
+        phase.lap("equilibrium");output={{"contact_phi_eV",{device.contact_left.phi_m_eV,device.contact_right.phi_m_eV}},{"voltage_convention","consumer: left minus right; J: scaps_core signed terminal current"}};
+
         for(std::size_t i=0;i<volts.size();++i) {
             ctx.ThrowIfCancellationRequested(); ctx.SetStage("I-V point "+std::to_string(i+1)+" / "+std::to_string(volts.size()));
             IVPoint pt=session.next(volts[i]);
@@ -724,41 +726,48 @@ void Operation::Execute(JobContext &ctx) {
             if(preview) {
                 const bool ext=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
                 const double tj=pt.status!=SolverStatus::Converged ? NAN : ext ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
-                output["points"].push_back({{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(tj)?Json(tj):Json(nullptr)}});ctx.SetProgress(float(i+1),float(volts.size()));continue;
+                IvPoint point;point.has=(1u<<3)|(1u<<4);point.voltage_V=-volts[i];point.J_A_m2=tj;result->points.push_back(std::move(point));ctx.SetProgress(float(i+1),float(volts.size()));continue;
             }
-            phase.lap("solve_points");const auto curves=DefectCurves(document,p,s);phase.lap("defect_curves");
+            phase.lap("solve_points");auto curves=DefectCurves(document,p,s);phase.lap("defect_curves");
             auto gr=GenerationRecombination(document,p,device,s);phase.lap("gen_recomb");
             const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
             const double terminalJ=pt.status!=SolverStatus::Converged ? NAN : external ? pt.J_total_Am2 : s.Jn_Am2.front()+s.Jp_Am2.front();
-            const double net=gr.at("net_generation_current_A_m2");
+            const double net=gr.net_generation_current_A_m2;
             // Native J = G-R - right electron removal - left hole removal + shunt.
             double contactLoss=0;for(const auto &c:s.contact_recombination) contactLoss+=c.id=="right"?c.electron_current_A_m2:c.hole_current_A_m2;
             const double predicted=net-contactLoss+pt.J_shunt_Am2;
             const double budgetError=std::abs(predicted-terminalJ)/std::max({1e-30,std::abs(net),std::abs(contactLoss),std::abs(pt.J_shunt_Am2),std::abs(terminalJ)});
-            gr["contact_loss_current_A_m2"]=contactLoss;
-            gr["shunt_current_A_m2"]=pt.J_shunt_Am2;
-            gr["series_current_A_m2"]=pt.series_current_density_A_m2();
-            gr["predicted_terminal_current_A_m2"]=predicted;
-            gr["terminal_budget_identity"]="J = G - R - right.electron - left.hole + J_shunt (native current sign)";
-            gr["terminal_budget_relative_error"]=std::isfinite(budgetError)?Json(budgetError):Json(nullptr);
-            gr["terminal_budget_valid"]=std::isfinite(budgetError) && budgetError<=1e-6;
-            output["points"].push_back({{"generation_recombination",gr},{"defect_previews",curves},{"bias_id","bias-"+std::to_string(i)},{"voltage_V",-volts[i]},{"J_A_m2",std::isfinite(terminalJ)?Json(terminalJ):Json(nullptr)},
-                {"conservation_error_A_m2",pt.J_conservation_error_Am2},{"status",to_string(pt.status)},{"iterations",pt.iterations},{"residual",pt.final_residual_norm},
-                {"internal_voltage_V",-s.applied_voltage_V},{"terminal_voltage_V",external?-pt.voltage_V:-volts[i]},{"trap_occupation",s.trap_occupation},{"interface_occupation",s.interface_occupation},{"x_m",s.x_m.empty()?mesh.x_m:s.x_m},{"Ec_eV",s.Ec_eV},{"Ev_eV",s.Ev_eV},{"EFn_eV",s.EFn_eV},{"EFp_eV",s.EFp_eV},{"n_m3",s.n_m3},{"p_m3",s.p_m3}});
+            gr.contact_loss_current_A_m2=contactLoss;gr.shunt_current_A_m2=pt.J_shunt_Am2;gr.series_current_A_m2=pt.series_current_density_A_m2();
+            gr.predicted_terminal_current_A_m2=predicted;gr.terminal_budget_relative_error=budgetError;gr.terminal_budget_valid=std::isfinite(budgetError) && budgetError<=1e-6;
+            IvPoint point;point.has=(1u<<18)-1;point.bias_id="bias-"+std::to_string(i);point.voltage_V=-volts[i];point.J_A_m2=terminalJ;
+            point.conservation_error_A_m2=pt.J_conservation_error_Am2;point.status=to_string(pt.status);point.iterations=pt.iterations;point.residual=pt.final_residual_norm;
+            point.internal_voltage_V=-s.applied_voltage_V;point.terminal_voltage_V=external?-pt.voltage_V:-volts[i];
+            point.valid=pt.status==SolverStatus::Converged && std::isfinite(terminalJ) && std::isfinite(pt.J_conservation_error_Am2) && pt.J_conservation_error_Am2<=std::max(1e-10,std::abs(terminalJ)*.01);
+            point.validity_status=pt.status!=SolverStatus::Converged?"solver_failed":point.valid?"valid":"current_unresolved";gr.valid=point.valid;
+            for(auto& channel:gr.channels) {
+                bool finite=std::isfinite(channel.integrated_current_A_m2);
+                for(const auto* values:{&channel.R_m3_s,&channel.R_sheet_m2_s})for(double value:values->get())finite &=std::isfinite(value);
+                channel.valid=point.valid && finite && channel.layer_sum_relative_error<=1e-6;channel.validity_status=channel.valid?"valid":!point.valid?point.validity_status:"channel_budget_unresolved";
+            }
+            auto details=CreateRef<IvDetails>();details->generation_recombination=std::move(gr);details->defect_previews=std::move(curves);
+            details->trap_occupation=std::move(pt.state.trap_occupation);details->interface_occupation=std::move(pt.state.interface_occupation);point.details=std::move(details);
+            point.x_m=s.x_m.empty()?result->mesh_x_m:Column::Intern(std::move(pt.state.x_m));
+            point.Ec_eV=Column::Intern(std::move(pt.state.Ec_eV));point.Ev_eV=Column::Intern(std::move(pt.state.Ev_eV));point.EFn_eV=Column::Intern(std::move(pt.state.EFn_eV));point.EFp_eV=Column::Intern(std::move(pt.state.EFp_eV));
+            point.n_m3=Column::Intern(std::move(pt.state.n_m3));point.p_m3=Column::Intern(std::move(pt.state.p_m3));result->points.push_back(std::move(point));
             phase.lap("json_points");ctx.SetProgress(float(i+1),float(volts.size()));
         }
-        if(preview) {ctx.ThrowIfCancellationRequested();output["preview"]=true;output["valid"]=true;return;}
+        if(preview) {ctx.ThrowIfCancellationRequested();output["preview"]=true;output["valid"]=true;outputValid=true;result->meta.prim=output;return;}
         if(live && p.illumination.enabled) feed->Estimate(EstimatePv(pvV,pvJ,incident_power_W_m2(device))); // marked "estimate" in the UI until the exact refinement below replaces it
         const auto generation=generation_integrals_m2s(device,mesh,pc);std::vector<double> density;
         for(std::size_t i=0;i<generation.size();++i) {
             const double width=(i?std::max(0.,mesh.x_m[i]-mesh.x_m[i-1])*.5:0)+(i+1<mesh.x_m.size()?std::max(0.,mesh.x_m[i+1]-mesh.x_m[i])*.5:0);
             density.push_back(width>0?generation[i]/width:0.);
         }
-        output["optics"]={{"x_m",mesh.x_m},{"generation_m3_s",density},{"absorption",Json::array()},{"incident_power_W_m2",incident_power_W_m2(device)}};
+        result->optics=OpticsResult{result->mesh_x_m,Column::Intern(std::move(density)),incident_power_W_m2(device)};
         for(std::size_t i=0;i<device.layers.size();++i) {
             auto layer=device.layers[i];std::vector<double> wavelengths,alpha,baseline;
             for(int n=0;n<=200;++n) {const double wavelength=300.+n*6.;wavelengths.push_back(wavelength);alpha.push_back(absorption_m1(layer,wavelength,pc));auto plain=layer;plain.absorption.urbach_enabled=false;baseline.push_back(absorption_m1(plain,wavelength,pc));}
-            output["optics"]["absorption"].push_back({{"layer_id",document.at("layers")[i].value("scapslab_id",std::string("layer-")+std::to_string(i+1))},{"wavelength_nm",wavelengths},{"alpha_m1",alpha},{"without_tail_m1",baseline}});
+            result->optics->absorption.push_back({document.at("layers")[i].value("scapslab_id",std::string("layer-")+std::to_string(i+1)),Column::Intern(std::move(wavelengths)),Column::Intern(std::move(alpha)),Column::Intern(std::move(baseline))});
         }
         phase.lap("optics");
         if(op=="run" && p.illumination.enabled) {
@@ -766,8 +775,7 @@ void Operation::Execute(JobContext &ctx) {
             PhotovoltaicResult pv;const double power=incident_power_W_m2(device);
             if(power>0) pv=solve_photovoltaic(device,mesh,-p.voltage.stop_V,p.temperature_K,power,p.solver,pc);
             else pv.message="Photovoltaic metrics require a positive, known incident power [W/m^2]";
-            auto finite=[](double v)->Json{return std::isfinite(v)?Json(v):Json(nullptr);};
-            output["photovoltaic"]={{"status",to_string(pv.status)},{"message",pv.message},{"Voc_V",finite(-pv.Voc_V)},{"Jsc_A_m2",finite(-pv.Jsc_Am2)},{"FF_fraction",finite(pv.FF)},{"efficiency_fraction",finite(pv.eta)},{"Pmax_W_m2",finite(pv.Pmax_Wm2)},{"Vmpp_V",finite(-pv.Vmpp_V)},{"Jmpp_A_m2",finite(pv.Jmpp_Am2)}};
+            result->photovoltaic=std::move(pv);
         }
         phase.lap("photovoltaic");
     } else if(op!="inspect") throw std::invalid_argument("Unknown operation");
@@ -776,63 +784,18 @@ void Operation::Execute(JobContext &ctx) {
         output["provenance"]={{"device_hash",DocumentHash(document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},
             {"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}};
         bool valid=true;
-        for(auto &point:output["points"]) {
-            const bool converged=point.at("status")=="Converged";
-            const double conservation=!point.contains("conservation_relative")?0:point.at("conservation_relative").is_number()?point.at("conservation_relative").get<double>():NAN;
-            bool physical=converged && std::isfinite(conservation) && conservation<=0.01;
-            if(point.contains("J_A_m2")) {
-                const double current=point.at("J_A_m2").is_number()?std::abs(point.at("J_A_m2").get<double>()):0;
-                physical=physical && point.at("J_A_m2").is_number() && point.at("conservation_error_A_m2").is_number() && point.at("conservation_error_A_m2").get<double>()<=std::max(1e-10,current*0.01);
-            }
-            if(point.contains("EQE")) physical=physical && point.at("EQE").is_number();
-            if(point.contains("capacitance_F")) physical=physical && point.at("capacitance_F").is_number() && point.at("conductance_S").is_number();
-            point["valid"]=physical;point["validity_status"]=!converged?"solver_failed":physical?"valid":"current_unresolved";
-            if(point.contains("generation_recombination")) {
-                auto &gr=point["generation_recombination"];
-                for(auto &channel:gr["channels"]) {
-                    bool finite=channel["integrated_current_A_m2"].is_number() && std::isfinite(channel["integrated_current_A_m2"].get<double>());
-                    for(const auto *key:{"R_m3_s","R_sheet_m2_s"}) for(const auto &v:channel[key]) finite &= v.is_number() && std::isfinite(v.get<double>());
-                    const bool curveValid=physical && finite && channel["layer_sum_relative_error"].get<double>()<=1e-6;
-                    channel["valid"]=curveValid;channel["validity_status"]=curveValid?"valid":!physical?point["validity_status"].get<std::string>():"channel_budget_unresolved";
-                }
-                gr["valid"]=physical;
-            }
-            valid &= physical;
-        }
+        if(const auto iv=std::dynamic_pointer_cast<const IvResult>(typedOut))for(const auto& point:iv->points)valid &=point.valid;
+        if(const auto ac=std::dynamic_pointer_cast<const AcResult>(typedOut))for(const auto& point:ac->points)valid &=point.valid;
         output["valid"]=valid;output["validity_status"]=valid?"valid":"contains_invalid_points";
         output["compute_time_ms"]=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
-        output["mesh_node_count"]=output.at("mesh_x_m").size();phase.lap("validate_snapshot");if(phase.on)output["perf_phase_ms"]=phase.log;
-    }
-    if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && output.contains("rows")) { // one history run per member, built here (the apply step only stores them)
-        batchGroup="batch-"+std::to_string(output.at("provenance").at("time_unix_ms").get<std::int64_t>());
-        const auto &rows=output.at("rows");
-        for(const auto &row:rows) {
-            if(op=="retry_batch" && row.at("id")!=request.at("member_id"))continue;
-            Member m;m.model=document;
-            for(const auto &parameter:BatchParameters(m.model)) if(row.at("parameters").contains(parameter.at("path").get<std::string>()) && row.at("parameters").at(parameter.at("path").get<std::string>())!=parameter.at("value")) m.model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=row.at("parameters").at(parameter.at("path").get<std::string>());
-            m.result=Json::object();for(const auto &[key,value]:output.items()) if(key!="rows") m.result[key]=value; /* do not copy every row per row */ m.result["rows"]=Json::array({row});m.result["project_snapshot"]=m.model;m.hash=DocumentHash(m.model);m.parameters=BatchParameters(m.model);m.result["provenance"]["device_hash"]=m.hash;
-            m.result["elapsed_s"]=row.at("elapsed_s");
-            m.t=rows.size()<2?0.:double(&row-&rows[0])/double(rows.size()-1);
-            m.typed=CreateRef<const BatchResult>(BatchFromJson(m.result));
-            if(prewarm) m.typed->View();
-            members.push_back(std::move(m));
-        }
+        output["mesh_node_count"]=std::dynamic_pointer_cast<const IvResult>(typedOut)?std::static_pointer_cast<const IvResult>(typedOut)->mesh_x_m.size():std::static_pointer_cast<const AcResult>(typedOut)->mesh_x_m.size();phase.lap("validate_snapshot");if(phase.on)output["perf_phase_ms"]=phase.log;
     }
     if(op!="save" && op!="project_save" && !op.starts_with("export_")) ctx.ThrowIfCancellationRequested();
     // typed result (S4): built here, on the job thread, so the UI thread only swaps pointers
     const bool runOp=op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe";
-    if(runOp) {
-        outputValid=output.is_object() && output.value("valid",false);
-        Json small=Json::object();for(const auto *key:{"provenance","compute_time_ms","elapsed_s","valid"}) if(output.contains(key)) small[key]=output.at(key); // what the history row needs
-        const bool iv=op=="run" || op=="band";
-        if(slim) { // UI app: the typed copy is the result and the Json is consumed
-            if(iv) typedOut=CreateRef<const IvResult>(IvFromJson(std::move(output)));else typedOut=CreateRef<const AcResult>(AcFromJson(std::move(output)));
-            output=std::move(small);
-            if(typedOut && prewarm) typedOut->View(); // pre-warm the Json view for the panels on this worker thread (freed again by Workflow::TrimViews when idle)
-        } else if(iv) typedOut=CreateRef<const IvResult>(IvFromJson(output));else typedOut=CreateRef<const AcResult>(AcFromJson(output));
-    } else if((op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") && output.is_object() && !output.empty()) {
-        outputValid=output.value("valid",false);typedOut=CreateRef<const BatchResult>(BatchFromJson(output));
-        if(prewarm) typedOut->View(); // panels read the table through its Json view: build it here, not on the UI thread
+    if(runOp && typedOut) {
+        outputValid=output.value("valid",false);output.erase("points");
+        if(const auto iv=std::dynamic_pointer_cast<const IvResult>(typedOut))std::const_pointer_cast<IvResult>(iv)->meta.prim=output;else std::const_pointer_cast<AcResult>(std::static_pointer_cast<const AcResult>(typedOut))->meta.prim=output;
     }
 }
 void Workflow::HistoryOp(const Json &request) {
@@ -1099,7 +1062,7 @@ bool Workflow::ReplacingProject() const {
     const std::string op=it->second.Op();return op=="project_load" || op=="load" || op=="layer";
 }
 void Workflow::StartOperation(const Json &r,const std::string &id) {
-    auto &d=Device(id);auto &L=LaneOf(id);if(L.active) throw std::invalid_argument("A job is still active on this device");L.pending=CreateRef<Operation>(d.document,r);auto &pending=L.pending;pending->slim=lightResponse;pending->prewarm=viewIdleSeconds>0;const std::string op0=r.at("operation");if(op0.starts_with("export_"))pending->acResults=d.acResults.json();if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchResult=*d.batchResult;pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
+    auto &d=Device(id);auto &L=LaneOf(id);if(L.active) throw std::invalid_argument("A job is still active on this device");L.pending=CreateRef<Operation>(d.document,r);auto &pending=L.pending;pending->jsonResponse=!lightResponse;const std::string op0=r.at("operation");if(op0.starts_with("export_"))pending->acResults=d.acResults.json();if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchInput=d.batchResult.typed();pending->batchSpec=d.batchSpec;pending->recorderColumns=d.recorderColumns;
     const std::string op=r.at("operation");
     if(op=="load_profile")pending->request["project_path"]=path;
     if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?*d.bandResult:*d.result;}
@@ -1287,14 +1250,7 @@ public:
     std::string GetType() const override {return "scapslab.free";}
     void Execute(JobContext &) override {results.clear();views.clear();finished.reset();}
 };
-class WarmViews final : public IJob { // builds Json views off the UI thread (ResultBase::View is thread-safe)
-    std::vector<Ref<const ResultBase>> results;
-public:
-    explicit WarmViews(std::vector<Ref<const ResultBase>> r):results(std::move(r)) {}
-    std::string GetName() const override {return "ScapsLab prepare views";}
-    std::string GetType() const override {return "scapslab.views";}
-    void Execute(JobContext &) override {for(const auto &r:results) r->View();}
-};
+
 }
 // UI app only (viewIdleSeconds>0): Json views of results that no panel has read for a while are freed; the typed result stays. Plot caches are keyed by view
 // addresses, so a drop bumps plotGen (they rebuild at the next frame boundary).
@@ -1314,27 +1270,8 @@ void Workflow::TrimViews() {
     }
     if(dropped) {++plotGen;(void)jobs->Submit(CreateRef<FreeJob>(std::vector<Ref<const ResultBase>>{},std::move(dead)));}
 }
-// Panels read results through Json views. When a view a panel needs is missing (trimmed while idle, history run first shown, project just loaded),
-// it is built on a worker and the panels draw a note meanwhile, so the UI thread never stalls on a Dump of a big result.
-bool Workflow::ViewsReady() {
-    if(viewIdleSeconds<=0) return true;
-    if(warmJob) {
-        const auto snap=jobs->GetJob(warmJob);
-        if(snap && (snap->status==JobStatus::Queued || snap->status==JobStatus::Running)) return false;
-        warmJob=0;++plotGen; // views exist at new addresses: plot caches rebuild
-    }
-    std::vector<Ref<const ResultBase>> missing;
-    const auto need=[&](const Ref<const ResultBase> &r) {if(r && !r->HasView()) missing.push_back(r);};
-    for(const auto &d:project.devices) {
-        if(d->id!=project.active_device && !project.compare_set.contains(d->id)) continue;
-        need(d->result.typed());need(d->bandResult.typed());need(d->batchResult.typed());
-        for(const auto &[k,r]:d->acResults.all()) need(r);
-        if(d->id==project.active_device) need(d->RunResult(d->selectedRun)); // profiles of a selected run are read as Json
-    }
-    if(missing.empty()) return true;
-    warmJob=jobs->Submit(CreateRef<WarmViews>(std::move(missing)));
-    return false;
-}
+bool Workflow::ViewsReady() {return true;}
+
 void Workflow::OnUpdate(float) {
     static const bool perf=std::getenv("SCAPSLAB_PERF")!=nullptr; // SCAPSLAB_PERF=1: log UI-thread hitches (>2 ms) to stderr
     const auto t0=std::chrono::steady_clock::now();
@@ -1385,7 +1322,7 @@ void Workflow::UpdateOperation() {
             d.needsBand=false;lastBandLive=now;++liveBandsStarted;
             Submit(d.id,{{"operation","band"},{"voltage_V",d.biasVoltage_V},{"live",true},{"rev",d.revision}},"auto-band");
         } else if(previewDue) { // live preview: previous run finished (never queued), <=10/s
-            const double estimate=lastFullMs>0?lastFullMs:d.result.value("compute_time_ms",0.);
+            const double estimate=lastFullMs>0?lastFullMs:d.Iv()->meta.prim.value("compute_time_ms",0.);
             lastLive=now;d.previewRev=d.revision;liveSeen=true;++previewsStarted;
             Submit(d.id,{{"operation","run"},{"preview",true},{"stride",estimate>150?4:1}},"auto");
         } else if(autoRecalculate && d.needsRecalculate && !interacting && !dragging && now-d.changedAt>=std::chrono::milliseconds(liveSeen?100:250)) {
@@ -1426,7 +1363,7 @@ void Workflow::FinishOperation(Lane &L) {
         else { // preview: curve only, no result/history/save/events
             if(snapshot->status==JobStatus::Completed && outValid && !dropped) {
                 d.previewV.clear();d.previewJ.clear();d.previewCoarse=stride>1;
-                for(const auto &pt:pending->output.at("points")) {d.previewV.push_back(pt.at("voltage_V"));d.previewJ.push_back(pt.at("J_A_m2").is_number()?pt.at("J_A_m2").get<double>():NAN);}
+                for(const auto &pt:std::static_pointer_cast<const IvResult>(pending->typedOut)->points) {d.previewV.push_back(pt.voltage_V);d.previewJ.push_back(pt.J_A_m2);}
                 d.status="preview";status=stride>1?"Preview (coarse, every "+std::to_string(stride)+". point); exact run on release":"Preview; exact run on release";
             } else {d.status=d.result.empty()?"no results":"previous";status="Preview dropped";}
             response=Json();L.active=0;pending.reset();return;
@@ -1482,11 +1419,11 @@ void Workflow::FinishOperation(Lane &L) {
         if(pending->output.contains("size_bytes")) status="Saved "+pending->output.at("path").get<std::string>()+" ("+std::to_string(pending->output.at("size_bytes").get<std::size_t>())+" bytes)";
         if(op=="project_load" && !recoveryPath.empty() && pending->request.at("path")==recoveryPath) {path.clear();projectDirty=true;RefreshDirty();response=Snapshot();status="Recovered unsaved project; use Save As";}
         if(op=="project_save" && !pending->request.value("autosave",false)) DropRecovery(path);
-        if(!lightResponse && !pending->output.empty()) response["operation_result"]=pending->output;
+        if(!lightResponse && !pending->output.empty()) response["operation_result"]=pending->typedOut?pending->typedOut->Dump():pending->output;
         if(quiet) {status=keepStatus;response=keepResponse;}
     } else {
         const bool wasCancelled=dropped || snapshot->status==JobStatus::Cancelled;
-        if(!dropped && (op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->output.contains("rows")) {d.batchResult.adopt(CreateRef<const BatchResult>(BatchFromJson(pending->output)));projectDirty=true;}
+        if(!dropped && (op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->typedOut) {d.batchResult.adopt(std::static_pointer_cast<const BatchResult>(pending->typedOut));projectDirty=true;}
         if(liveBand) d.status=d.result.empty()?"no results":"previous";
         else if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") d.status=wasCancelled?(d.result.empty()?"no results":"solved"):"failed";
         if(!dropped && !liveBand) {status=snapshot->errorMessage;response=Failure(wasCancelled?"cancelled":"operation_failed",status);} // a dropped job leaves the undo's own status and snapshot

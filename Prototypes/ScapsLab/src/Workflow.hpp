@@ -34,6 +34,9 @@ Json ProfileSamples(const Json &spec, double thickness_m, const Json &compositio
 Json ResolveSharedProfile(Json spec,const Json &document,const std::string &layerId,const std::string &parameter);
 void ExportProfile(const Json &samples, const std::string &path);
 scaps_core::DeviceProject Model(const Json &document);
+scaps_core::DeviceProject BatchModel(const Json &document); // Core validates each independent member, including failed axis points
+scaps_core::BatchConditioning BatchConditioningModel(const scaps_core::DeviceProject&,const Json&);
+Ref<const scaps_core::BatchInitialState> BatchInitialStateModel(const scaps_core::DeviceProject&,const Json&);
 void WriteProject(const Json &document, const std::string &path);
 Json AM15Spectrum();
 Json SelfContained(Json document);
@@ -71,7 +74,7 @@ struct SaveRefs {Ref<const Json> history; DeviceResults results;}; // one device
 // copies a snapshot at most every ~100 ms. Nothing here is a result: it is never stored in history, saved, exported or read by an exactness-claiming readout.
 struct PvEstimate {bool valid=false;double Voc_V=NAN,Jsc_A_m2=NAN,FF=NAN,eta=NAN,Pmax_Wm2=NAN,Vmpp_V=NAN,Jmpp_A_m2=NAN;};
 PvEstimate EstimatePv(const std::vector<double> &V,const std::vector<double> &J,double incidentPower_W_m2); // from the solved sweep (plotted voltage, native terminal J), no extra solves
-struct LiveMember {int index=0;std::vector<double> v,j;};
+struct LiveMember {int index=0;Column v,j;};
 struct LiveFeed {
     std::mutex lock;
     std::uint64_t seq=0;
@@ -87,6 +90,7 @@ class Operation final : public IJob {
 public:
     Json document, request, output, acResults, workspace, batchResult;
     Ref<const ResultBase> typedOut;       // typed form of `output` (run/band/cv/cf/qe/batch ops), built on the job thread
+    Ref<const BatchResult> batchInput;
     std::vector<DeviceResults> loaded;    // project_load/new: typed results taken out of `workspace`
     std::vector<SaveRefs> shared;         // save jobs
     struct Member {Json result,model,parameters;std::string hash;Ref<const BatchResult> typed;double t=0;}; // one batch member as a history run, prepared on the worker (apply only stores it)
@@ -95,8 +99,8 @@ public:
     std::string batchGroup;
     Json batchSpec=BatchDefaults(), recorderColumns=RecorderDefaults();
     bool superseded=false;                // set on the UI thread when undo/redo changed the document (or removed the device) under this job: its result is dropped on arrival
-    bool slim=false, prewarm=false, outputValid=false; // prewarm: build panel Json views on the worker (UI app only)
-      // slim: drop run output Json once typed (UI app); outputValid: output["valid"] read before that
+    bool outputValid=false;
+    bool jsonResponse=false; // JSON adapter preserves full-curve profile output; GUI requests lightweight typed samples
     Operation(Json d, Json r) : document(std::move(d)), request(std::move(r)) {}
     std::string GetName() const override { return "ScapsLab " + request.at("operation").get<std::string>(); }
     std::string GetType() const override { return "scapslab.operation"; }
@@ -364,8 +368,8 @@ public:
     void PullLive(Lane &lane);
     void FinishOperation(Lane &lane);
     double viewIdleSeconds=0;                             // >0 (UI app): free Json views of results idle that long
-    JobId warmJob=0;                                      // worker building Json views the panels need (see ViewsReady)
-    bool ViewsReady();                                    // UI app: false while a needed Json view is being built on a worker; panels draw a note instead of stalling the UI thread
+    JobId warmJob=0;                                      // compatibility: typed panels need no warm-up job
+    bool ViewsReady();                                    // typed results are ready to render immediately
     std::chrono::steady_clock::time_point viewTrimAt{};
     void TrimViews();
     bool Pending() const { return Busy() || Saving(); } // calculations or saves

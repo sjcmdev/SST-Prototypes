@@ -28,7 +28,7 @@ Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.
     acRequest={{"operation",v<8?"cv":"cf"},{"start_V",-0.5},{"stop_V",0.5},{"step_V",0.05},{"frequency_Hz",1e4},
         {"voltage_V",0.0},{"start_Hz",10.0},{"stop_Hz",1e7},{"points",61},{"temperature_K",w->Current().document.value("temperature_K",300.0)}};
     absoluteLog=w->project.ui.value("iv_absolute_log",true);
-    if(w->Current().acResults.contains("qe") && w->Current().acResults["qe"].contains("request")) qeRequest.update(w->Current().acResults["qe"]["request"],true);
+    if(const auto q=w->Current().acResults.get("qe");q && q->meta.prim.contains("request"))qeRequest.update(q->meta.prim.at("request"),true);
     std::snprintf(file,sizeof(file),"%s",w->path.c_str());
 }
 void Panel::Report(const Json &response) { if(!response.at("ok").get<bool>()) {w->status=response.at("error").at("message");w->response=response;} }
@@ -98,12 +98,6 @@ Ref<const ResultBase> HistoryTyped(const DeviceState &device,const Json &run) {
     if(!run.value("profiles_stored",true) && live && live->Provenance()==run.at("provenance"))return live;
     return device.RunResult(run.at("run_id").get_ref<const std::string &>());
 }
-const Json &HistoryResult(const DeviceState &device,const Json &run) {
-    static const Json none=Json::object();
-    const auto typed=HistoryTyped(device,run);
-    return typed?typed->View():none; // the view is owned by the (shared) typed result, so the reference stays valid
-}
-bool Archived(const DeviceState &,const Json &,const std::string &) {return false;} // live curve is always drawn; history draws only pinned shots (and batch runs)
 // True when the selected run is an I-V/band run that is not the live result (so the live curve and other runs are drawn dimmed).
 bool SelectedOffLive(const DeviceState &device,const std::string &kind) {
     if(device.selectedRun.empty())return false;
@@ -226,7 +220,7 @@ struct HLine {std::string name,head,tail,modelHash,runId;bool previous=false;std
 struct HEntry {std::uint64_t docGen=0;const DeviceState *dev=nullptr;std::string kind,xkey,ykey,selected;bool absolute=false;double scale=1.;int bias=0;bool profiles=false,gr=false,dashed=false;std::vector<HLine> lines;};
 struct PlotCache {
     std::uint64_t gen=~0ull;int frame=-1;
-    std::map<std::tuple<const Json *,int,double>,Cols> cols;
+    std::map<std::tuple<const void *,int,double>,Cols> cols;
     std::vector<HEntry> entries;
 };
 inline int &PlotCacheBuilds() {static int n=0;return n;} // test hook: number of cache (re)builds
@@ -238,8 +232,8 @@ PlotCache &Cache() {
     c.frame=ImGui::GetFrameCount();
     return c;
 }
-template<class F> Cols &Derived(const Json &node,int tag,F &&build,double param=0.) {
-    auto &cols=Cache().cols;const auto key=std::make_tuple(&node,tag,param);
+template<class Node,class F> Cols &Derived(const Node &node,int tag,F &&build,double param=0.) {
+    auto &cols=Cache().cols;const auto key=std::make_tuple(static_cast<const void*>(&node),tag,param);
     auto found=cols.find(key);
     if(found==cols.end() || found->second.size!=node.size()) {Cols c;build(c);c.size=node.size();++PlotCacheBuilds();found=cols.insert_or_assign(key,std::move(c)).first;}
     return found->second;
@@ -252,6 +246,19 @@ const std::vector<double> &Vec(const Json &node,double scale=1.,int mode=0) {
         for(auto &v:c.a) {v*=scale;if(mode==1?v<=0:mode==2?(!std::isfinite(v) || v<=0):mode==3)v=NAN;}
     },scale).a;
 }
+const std::vector<double>& Vec(const std::vector<double>& node,double scale=1.,int mode=0) {
+    PlotDataScope scope;
+    return Derived(node,mode,[&](Cols& c){c.a=node;for(auto& v:c.a){v*=scale;if(mode==1?v<=0:mode==2?(!std::isfinite(v) || v<=0):mode==3)v=NAN;}},scale).a;
+}
+const Cols& IvCols(const std::vector<IvPoint>& points,bool absolute,double scale=1.) {
+    PlotDataScope scope;
+    return Derived(points,100,[&](Cols& c){for(const auto& p:points){c.a.push_back(p.voltage_V);const bool valid=p.valid && std::isfinite(p.J_A_m2);if(!valid)++c.n;const double current=valid?p.J_A_m2*scale:NAN;c.b.push_back(absolute?(current==0?NAN:std::abs(current)):current);}},absolute?-scale:scale);
+}
+const Cols& AcCols(const std::vector<AcPoint>& points,int view) {
+    PlotDataScope scope;
+    return Derived(points,200+view,[&](Cols& c){for(const auto& p:points){if(!p.valid)++c.n;c.a.push_back(view<8?p.voltage_V:p.frequency_Hz);c.b.push_back(p.valid?(view==7?p.inverse_C2_F_minus2:view==9?p.G_over_omega_F:p.capacitance_F):NAN);c.c.push_back(p.valid?p.G_over_omega_F:NAN);}});
+}
+bool Archived(const DeviceState&,const ResultBase&,const std::string&){return false;}
 // Live I-V curve (a=V, b=J or |J|, n=invalid points) and AC curve (a=x, b=y of this view, c=G/omega, n=invalid points) of a result's points array.
 const Cols &IvCols(const Json &points,bool absolute) {
     PlotDataScope scope;
@@ -362,7 +369,7 @@ void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false
             const auto &point=iv->points[std::clamp(device.selectedBias,0,int(iv->points.size())-1)];
             if(point.verbatim || !point.valid)continue;
             HLine l;
-            if(gr) {const auto *g=ChildOf(point.rest,"generation_recombination");if(!g || !NumbersOf(*g,"x_m",l.x) || !NumbersOf(*g,field,l.y))continue;}
+            if(gr) {if(point.details){const auto& g=point.details->generation_recombination;l.x=g.x_m.get();if(field=="generation_m3_s")l.y=g.generation_m3_s.get();else continue;}else{const auto *g=ChildOf(point.rest,"generation_recombination");if(!g || !NumbersOf(*g,"x_m",l.x) || !NumbersOf(*g,field,l.y))continue;}}
             else if(!PointArray(point,"x_m",l.x) || !PointArray(point,field,l.y))continue;
             if(l.x.size()!=l.y.size())continue;
             for(auto &v:l.x)v*=1e6;for(auto &v:l.y){v*=scale;if(gr && v<=0)v=NAN;}
@@ -769,7 +776,7 @@ void Panel::RenderContent() {
                 }
                 ImGui::PopID();
             }
-            const auto &computed=w->Current().bandResult.empty()?w->Current().result:w->Current().bandResult;
+            const auto &computed=(w->Current().bandResult.empty()?w->Current().Iv():w->Current().Band())->meta.prim;
             if(computed.contains("contact_phi_eV") && ImGui::CollapsingHeader("Contact view",ImGuiTreeNodeFlags_DefaultOpen)) {
                 double total=0;for(const auto &layer:draft.at("layers")) total+=layer.at("thickness_m").get<double>()*1e6;
                 const double x[]={0,total},phi[]={computed.at("contact_phi_eV")[0],computed.at("contact_phi_eV")[1]};
@@ -820,9 +827,9 @@ bool FileField(const char *label,Json &j,const char *key) {
     BeginRow(label);const bool changed=ImGui::InputText("##path",text,sizeof(text),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll);EndRow();
     if(changed) {j[key]=text;++gesture;}return changed;
 }
-void PlotJson(const char *title,const char *xLabel,const char *yLabel,const Json &x,const Json &y,bool log=false,float height=190,bool persistent=false) {
+template<class X,class Y> void PlotJson(const char *title,const char *xLabel,const char *yLabel,const X &x,const Y &y,bool log=false,float height=190,bool persistent=false) {
     // persistent: x/y live inside a stored result, so their vectors come from the plot cache; otherwise (per-frame temporaries) convert here
-    std::vector<double> xl,yl;if(!persistent) {xl=x.get<std::vector<double>>();yl=y.get<std::vector<double>>();if(log) for(auto &v:yl) if(v<=0) v=NAN;}
+    std::vector<double> xl,yl;if(!persistent) {if constexpr(std::is_same_v<X,Json>)xl=x.template get<std::vector<double>>();else xl=x;if constexpr(std::is_same_v<Y,Json>)yl=y.template get<std::vector<double>>();else yl=y;if(log) for(auto &v:yl) if(v<=0) v=NAN;}
     const auto &xs=persistent?Vec(x):xl,&ys=persistent?Vec(y,1.,log?1:0):yl;
     if(ImPlot::BeginPlot(title,ImVec2(-1,height))) {ImPlot::SetupAxes(xLabel,yLabel,ImPlotAxisFlags_None,ImPlotAxisFlags_None);if(log) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);ImPlot::PlotLine(title,xs.data(),ys.data(),int(xs.size()));ImPlot::EndPlot();}
 }
@@ -890,15 +897,15 @@ bool Panel::Illumination(Json &draft) {
             changed|=Number("Front transmission",light,"front_transmission");changed|=Number("Back reflection",light,"back_reflection");changed|=Number("Internal reflection",light,"front_internal_reflection");
             changed|=OpticalFile(light,"front_filter_file","front_filter_nm_fraction","ftr","Front transmission [.ftr]");changed|=OpticalFile(light,"back_filter_file","back_filter_nm_fraction","ftr","Back reflection [.ftr]");
             if(wide) ImGui::TableNextColumn();
-            const auto &r=w->Current().bandResult.contains("optics")?w->Current().bandResult:w->Current().result;
-            if(r.contains("optics")) {const auto &o=r.at("optics");ImGui::Text("Incident power %.6g W/m^2",o.at("incident_power_W_m2").get<double>());PlotJson("G(x)","x [m]","G [m^-3 s^-1]",o.at("x_m"),o.at("generation_m3_s"),false,330,true);}
+            const auto &r=*(w->Current().Band()->optics?w->Current().Band():w->Current().Iv());
+            if(r.optics) {const auto &o=*r.optics;ImGui::Text("Incident power %.6g W/m^2",o.incident_power_W_m2);PlotJson("G(x)","x [m]","G [m^-3 s^-1]",o.x_m.get(),o.generation_m3_s.get(),false,330,true);}
             else ImGui::TextWrapped("Generation preview updates after automatic band calculation.");
             if(wide) ImGui::EndTable();
             ImGui::EndTabItem();
         }
         if(ImGui::BeginTabItem("Light I-V",nullptr,tabFlags(1))) {selectTab(1);
             ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Calculate light I-V")) Do(Cmd::Run::With());w->tutorialOverlay.Item("scapslab.Illumination","light-iv");ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"iv");ImGui::TextDisabled("Illuminated J-V curve with Voc, Jsc and MPP markers");
-            const auto &r=w->Current().result;
+            const auto &r=*w->Current().Iv();
             const auto &live=w->Current();const bool estimating=live.liveRunning && live.pvEstimate.valid;
             if(estimating) { // photovoltaic metrics read off the sweep so far: tagged, replaced by the exact refinement of the same job
                 ImGui::TextColored(ImVec4(1.f,.6f,.15f,1.f),"PV metrics: ESTIMATE from the solved sweep (exact refinement running)");
@@ -909,22 +916,21 @@ bool Panel::Illumination(Json &draft) {
                         if(std::isfinite(value))ImGui::TextDisabled(format,value);else ImGui::TextDisabled("unavailable");
                     }ImGui::EndTable();
                 }
-            } else if(live.Stale() && r.contains("photovoltaic")) ImGui::TextDisabled("PV metrics below are outdated (model edited); recalculating replaces them.");
-            if(!estimating && r.contains("photovoltaic")) {const auto &pv=r.at("photovoltaic");ImGui::TextWrapped("PV: %s",pv.at("status").get<std::string>().c_str());if(!pv.value("message",std::string{}).empty()) ImGui::TextWrapped("%s",pv.at("message").get<std::string>().c_str());
+            } else if(live.Stale() && bool(r.photovoltaic)) ImGui::TextDisabled("PV metrics below are outdated (model edited); recalculating replaces them.");
+            if(!estimating && bool(r.photovoltaic)) {const auto &pv=*r.photovoltaic;ImGui::TextWrapped("PV: %s",scaps_core::to_string(pv.status));if(!pv.message.empty()) ImGui::TextWrapped("%s",pv.message.c_str());
                 if(ImGui::BeginTable("PV metrics",2,ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit)) {
                     for(const auto &[key,label,scale]:{std::tuple{"Voc_V","Voc [V]",1.},std::tuple{"Jsc_A_m2","Jsc [mA/cm^2]",.1},std::tuple{"FF_fraction","FF [%]",100.},std::tuple{"efficiency_fraction","Efficiency [%]",100.}}) {
                         ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextUnformatted(label);ImGui::TableNextColumn();
-                        if(pv.at(key).is_number())ImGui::Text(std::string(key)=="Voc_V"?"%.4f":"%.4g",pv.at(key).get<double>()*scale);else ImGui::TextUnformatted("unavailable");
+                        const double value=std::string_view(key)=="Voc_V"?-pv.Voc_V:std::string_view(key)=="Jsc_A_m2"?-pv.Jsc_Am2:std::string_view(key)=="FF_fraction"?pv.FF:pv.eta;if(std::isfinite(value))ImGui::Text(std::string(key)=="Voc_V"?"%.4f":"%.4g",value*scale);else ImGui::TextUnformatted("unavailable");
                     }ImGui::EndTable();
                 }
             }
-            if(r.contains("points") || live.liveRunning) {
+            if(!r.points.empty() || live.liveRunning) {
                 const bool reset=ImGui::Button("Reset PV view");
                 if(ImGui::IsItemHovered())ImGui::SetTooltip("Default range: -1.2 Jsc to +Jsc. Scroll to zoom; drag to pan.");
-                std::vector<double>x,y;if(r.contains("points")) for(const auto &p:r.at("points")) {x.push_back(p.at("voltage_V"));y.push_back(p.value("valid",false) && p.at("J_A_m2").is_number()?p.at("J_A_m2").get<double>()*.1:NAN);}
-                const auto pv=r.value("photovoltaic",Json::object());
-                const bool valid=pv.value("status",std::string{})=="converged";
-                const double jsc=valid && pv.at("Jsc_A_m2").is_number()?std::abs(pv.at("Jsc_A_m2").get<double>())*.1:0.;
+                const auto& cols=IvCols(r.points,false,.1);const auto& x=cols.a;const auto& y=cols.b;
+                const bool valid=r.photovoltaic && r.photovoltaic->status==scaps_core::PhotovoltaicStatus::Converged;
+                const double jsc=valid && std::isfinite(r.photovoltaic->Jsc_Am2)?std::abs(r.photovoltaic->Jsc_Am2)*.1:0.;
                 if(BeginSavedPlot(*w,"Light I-V",ImVec2(-1,std::max(280.f,ImGui::GetContentRegionAvail().y-30)))) {
                     ImPlot::SetupAxes("Voltage [V]","J [mA/cm^2]");ImPlot::SetupLegend(ImPlotLocation_NorthWest,ImPlotLegendFlags_Horizontal);
                     if(x.size()>1 && x.front()!=x.back())ImPlot::SetupAxisLimits(ImAxis_X1,*std::min_element(x.begin(),x.end()),*std::max_element(x.begin(),x.end()),reset?ImGuiCond_Always:ImGuiCond_Once);
@@ -940,9 +946,9 @@ bool Panel::Illumination(Json &draft) {
                     }
                     if(valid && !estimating) {
                         const double zero=0.,shortCircuit=-jsc;
-                        if(pv.at("Voc_V").is_number()) {const double voc=pv.at("Voc_V");ImPlot::PlotScatter("Voc",&voc,&zero,1);}
+                        if(std::isfinite(r.photovoltaic->Voc_V)) {const double voc=-r.photovoltaic->Voc_V;ImPlot::PlotScatter("Voc",&voc,&zero,1);}
                         if(jsc>0)ImPlot::PlotScatter("Jsc",&zero,&shortCircuit,1);
-                        if(pv.contains("Vmpp_V") && pv.at("Vmpp_V").is_number() && pv.at("Jmpp_A_m2").is_number()) {const double v=pv.at("Vmpp_V"),j=pv.at("Jmpp_A_m2").get<double>()*.1;ImPlot::PlotScatter("MPP",&v,&j,1);}
+                        if(std::isfinite(r.photovoltaic->Vmpp_V) && std::isfinite(r.photovoltaic->Jmpp_Am2)) {const double v=-r.photovoltaic->Vmpp_V,j=r.photovoltaic->Jmpp_Am2*.1;ImPlot::PlotScatter("MPP",&v,&j,1);}
                     }EndSavedPlot(*w,"Light I-V");
                 }
             }
@@ -956,11 +962,13 @@ bool Panel::Illumination(Json &draft) {
             ImGui::TextWrapped("Dark differential EQE at 0 V; current device temperature. Full spectrum coverage is required for integrated Jsc.");
             ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Calculate QE")) Do(Cmd::RunQe::FromJson(qeRequest));w->tutorialOverlay.Item("scapslab.Illumination","qe");ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"qe");ImGui::TextDisabled("External quantum efficiency vs. wavelength");
             if(wide) ImGui::TableNextColumn();
-            if(w->Current().acResults.contains("qe")) {const auto &q=w->Current().acResults.at("qe");ImGui::TextWrapped("Effective: %s | T %.6g K | 0 V | %d samples",q.at("probe_mode").get<std::string>().c_str(),q.at("temperature_K").get<double>(),int(q.at("points").size()));Json x=Json::array(),y=Json::array();for(const auto &p:q.at("points")) {x.push_back(p.at("wavelength_nm"));y.push_back(p.at("EQE").is_number()?p.at("EQE"):Json(NAN));}
-                ImGui::TextWrapped("Integrated Jsc: %s A/m^2 | Light Jsc: %s A/m^2",q.at("integrated_Jsc_A_m2").dump().c_str(),q.at("light_Jsc_A_m2").dump().c_str());ImGui::TextWrapped("%s",q.at("integration_note").get<std::string>().c_str());if(BeginSavedPlot(*w,"QE history",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","EQE [fraction]");HistoryLines(*w,w->Current(),"qe","wavelength_nm","EQE");{std::vector<double> qx,qy;for(const auto &p:q.at("points")){qx.push_back(p.at("wavelength_nm"));qy.push_back(p.at("EQE").is_number()?p.at("EQE").get<double>():NAN);}ImPlot::PlotLine("EQE",qx.data(),qy.data(),int(qx.size()),{ImPlotProp_LineWeight,2.5f});}EndSavedPlot(*w,"QE history");}
+            if(const auto result=w->Current().acResults.get("qe")) {const auto& q=result->meta.prim;const auto& points=result->points;
+                ImGui::TextWrapped("Effective: %s | T %.6g K | 0 V | %d samples",q.at("probe_mode").get<std::string>().c_str(),q.at("temperature_K").get<double>(),int(points.size()));
+                ImGui::TextWrapped("Integrated Jsc: %s A/m^2 | Light Jsc: %s A/m^2",q.at("integrated_Jsc_A_m2").dump().c_str(),q.at("light_Jsc_A_m2").dump().c_str());ImGui::TextWrapped("%s",q.at("integration_note").get<std::string>().c_str());
+                if(BeginSavedPlot(*w,"QE history",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","EQE [fraction]");HistoryLines(*w,w->Current(),"qe","wavelength_nm","EQE");const auto& data=Derived(points,620,[&](Cols& c){for(const auto& p:points){c.a.push_back(p.wavelength_nm);c.b.push_back(p.EQE);}});ImPlot::PlotLine("EQE",data.a.data(),data.b.data(),int(data.a.size()),{ImPlotProp_LineWeight,2.5f});EndSavedPlot(*w,"QE history");}
                 if(ImGui::BeginTable("QE sample voltages",3,ImGuiTableFlags_Borders|ImGuiTableFlags_RowBg|ImGuiTableFlags_ScrollY,ImVec2(0,120))) {
                     for(const auto *label:{"Wavelength [nm]","Terminal [V]","Internal [V]"}) ImGui::TableSetupColumn(label);ImGui::TableHeadersRow();
-                    for(const auto &p:q.at("points")) {ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::Text("%.6g",p.at("wavelength_nm").get<double>());ImGui::TableNextColumn();ImGui::Text("%.6g",p.value("terminal_voltage_V",p.at("voltage_V")).get<double>());ImGui::TableNextColumn();const auto v=p.value("internal_voltage_V",Json(nullptr));if(v.is_number()) ImGui::Text("%.9g",v.get<double>());else ImGui::TextUnformatted("unavailable");}
+                    for(const auto &p:points) {ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::Text("%.6g",p.wavelength_nm);ImGui::TableNextColumn();ImGui::Text("%.6g",p.terminal_voltage_V);ImGui::TableNextColumn();if(std::isfinite(p.internal_voltage_V))ImGui::Text("%.9g",p.internal_voltage_V);else ImGui::TextUnformatted("unavailable");}
                     ImGui::EndTable();
                 }
             }if(wide) ImGui::EndTable();ImGui::EndTabItem();
@@ -1001,9 +1009,9 @@ bool Panel::Absorption(Json &draft) {
     bool tail=a.value("urbach_enabled",false);if(Toggle("Urbach tail",tail)) {a["urbach_enabled"]=tail;changed=true;}if(tail) changed|=Number("Urbach E_U [eV]",a,"urbach_energy_eV");
     ImGui::TextWrapped("Eg-joint Urbach extension. A pure square-root model has alpha(Eg)=0 and therefore no tail; use a nonzero step/background or a file.");
     if(wide) ImGui::TableNextColumn();
-    const auto &r=w->Current().bandResult.contains("optics")?w->Current().bandResult:w->Current().result;
-    if(r.contains("optics")) for(const auto &curve:r.at("optics").at("absorption")) if(curve.at("layer_id")==layers[selected].at("scapslab_id")) {
-        const auto &x=Vec(curve.at("wavelength_nm")),&y=Vec(curve.at("alpha_m1"),1.,1),&base=Vec(curve.at("without_tail_m1"),1.,1);
+    const auto &r=*(w->Current().Band()->optics?w->Current().Band():w->Current().Iv());
+    if(r.optics) for(const auto &curve:r.optics->absorption) if(curve.layer_id==layers[selected].at("scapslab_id").get<std::string>()) {
+        const auto &x=Vec(curve.wavelength_nm.get()),&y=Vec(curve.alpha_m1.get(),1.,1),&base=Vec(curve.without_tail_m1.get(),1.,1);
         if(BeginSavedPlot(*w,"Absorption preview",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","alpha [m^-1]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);ImPlot::PlotLine("With tail",x.data(),y.data(),int(x.size()));ImPlot::PlotLine("Without tail",x.data(),base.data(),int(x.size()));EndSavedPlot(*w,"Absorption preview");}
     }if(wide) ImGui::EndTable();return changed;
 }
@@ -1184,25 +1192,26 @@ bool Panel::Defects(Json &draft,bool sheet) {
 }
 void Panel::Preview(bool sheet) {
     if(w->Current().bandResult.empty() && w->Current().result.empty()) {ImGui::TextWrapped("Preview waiting for auto-recalculate band. The previous model's occupancy is cleared on every edit.");return;}
-    const auto &point=PointAtBias(w->Current().result,w->Current().bandResult,w->Current().selectedBias);
-    ImGui::TextWrapped("Occupancy at %.5g V, %.5g K | %s | %s",point.at("voltage_V").get<double>(),w->Current().document.at("temperature_K").get<double>(),sheet?"interface sheet":"layer midpoint",point.value("validity_status",std::string("unknown")).c_str());
+    const auto &point=PointAtBias(*w->Current().Iv(),*w->Current().Band(),w->Current().selectedBias);
+    ImGui::TextWrapped("Occupancy at %.5g V, %.5g K | %s | %s",point.voltage_V,w->Current().document.at("temperature_K").get<double>(),sheet?"interface sheet":"layer midpoint",point.validity_status.c_str());
     ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding,ImVec2(.03f,.08f));
     if(!BeginSavedPlot(*w,"Nt(E) and occupancy",ImVec2(-1,std::max(300.f,ImGui::GetContentRegionAvail().y-8)))) {ImPlot::PopStyleVar();return;}
     ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside);
     ImPlot::SetupAxes("E - Ev [eV]",sheet?"Dit [cm^-2/eV]":"Nt [cm^-3/eV]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
     ImPlot::SetupAxis(ImAxis_Y2,"Occupation fraction",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisLimits(ImAxis_Y2,-.05,1.05,ImGuiCond_Always);
+    if(!point.details){EndSavedPlot(*w,"Nt(E) and occupancy");ImPlot::PopStyleVar();return;}
     bool edgesDrawn=false;
-    for(const auto &c:point.at("defect_previews")) {
-        if(c.at("sheet").get<bool>()!=sheet) continue;
-        if(sheet?c.at("left_layer_index")!=w->Current().selectedInterface:c.at("layer_id")!=w->Current().document.at("layers")[w->Current().selectedLayer].at("scapslab_id")) continue;
-        const auto id=c.at("id").get<std::string>();const auto *xp=&Vec(c.at("energy_eV")),*yp=&Vec(c.at(sheet?"density_m2_eV":"density_m3_eV"),sheet?1e-4:1e-6);
+    for(const auto &c:point.details->defect_previews) {
+        if(c.sheet!=sheet) continue;
+        if(sheet?c.left_layer_index!=w->Current().selectedInterface:c.layer_id!=w->Current().document.at("layers")[w->Current().selectedLayer].at("scapslab_id").get<std::string>()) continue;
+        const auto id=c.id;const auto *xp=&Vec(c.energy_eV),*yp=&Vec(c.density,sheet?1e-4:1e-6);
         ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);
-        if(c.at("single").get<bool>()) {const double e=c.at("level_energy_eV");ImPlot::PlotInfLines((id+" (discrete Nt)").c_str(),&e,1);if(c.contains("second_level_energy_eV")) {const double e2=c.at("second_level_energy_eV");ImPlot::PlotInfLines((id+" second transition").c_str(),&e2,1);}}
+        if(c.single) {const double e=c.level_energy_eV;ImPlot::PlotInfLines((id+" (discrete Nt)").c_str(),&e,1);if(bool(c.second_level_energy_eV)) {const double e2=*c.second_level_energy_eV;ImPlot::PlotInfLines((id+" second transition").c_str(),&e2,1);}}
         else ImPlot::PlotLine(id.c_str(),xp->data(),yp->data(),int(xp->size()));
-        if(!edgesDrawn) {const auto &edges=Vec(c.at("band_edges_eV"));for(int e=0;e<int(edges.size());++e) {const char *labels[]={"EvL","EcL","EvR","EcR"};ImPlot::PlotInfLines(sheet?labels[e]:e==0?"Ev":"Ec",&edges[e],1,ImPlotSpec(ImPlotProp_LineColor,ImVec4(.9f,.85f,.4f,1),ImPlotProp_LineWeight,2));ImPlot::TagX(edges[e],ImVec4(.5f,.45f,.15f,1),"%s",sheet?labels[e]:e==0?"Ev":"Ec");}edgesDrawn=true;}
-        if(point.at("status")=="Converged") {
-            xp=&Vec(c.at("occupation_energy_eV"));yp=&Derived(c.at("occupation"),160,[&](Cols &o){for(const auto &v:c.at("occupation")) o.a.push_back(v.is_number()?v.get<double>():NAN);}).a;
-            ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlotSpec occupationStyle(ImPlotProp_LineWeight,2,ImPlotProp_Marker,ImPlotMarker_None);ImPlot::PlotLine((id+(c.at("amphoteric").get<bool>() && c.at("correlated").get<bool>()?" P-":" f")).c_str(),xp->data(),yp->data(),int(xp->size()),occupationStyle);
+        if(!edgesDrawn) {const auto &edges=Vec(c.band_edges_eV);for(int e=0;e<int(edges.size());++e) {const char *labels[]={"EvL","EcL","EvR","EcR"};ImPlot::PlotInfLines(sheet?labels[e]:e==0?"Ev":"Ec",&edges[e],1,ImPlotSpec(ImPlotProp_LineColor,ImVec4(.9f,.85f,.4f,1),ImPlotProp_LineWeight,2));ImPlot::TagX(edges[e],ImVec4(.5f,.45f,.15f,1),"%s",sheet?labels[e]:e==0?"Ev":"Ec");}edgesDrawn=true;}
+        if(point.status=="Converged") {
+            xp=&Vec(c.occupation_energy_eV);yp=&Vec(c.occupation);
+            ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlotSpec occupationStyle(ImPlotProp_LineWeight,2,ImPlotProp_Marker,ImPlotMarker_None);ImPlot::PlotLine((id+(c.amphoteric && c.correlated?" P-":" f")).c_str(),xp->data(),yp->data(),int(xp->size()),occupationStyle);
         }
     }EndSavedPlot(*w,"Nt(E) and occupancy");ImPlot::PopStyleVar();
 }
@@ -1281,39 +1290,39 @@ void Panel::Results() {
         else if(view==5 && !d.BandFresh() && (d.Stale() || d.needsBand)) PlotBadge("outdated: model edited",IM_COL32(95,95,105,210),IM_COL32(235,235,240,255),0);
     };
     if(!liveBand) for(const auto &run:w->Current().history) if(run.at("run_id")==w->Current().selectedRun && (run.at("kind")=="iv" || run.at("kind")=="band")) {
-        if(!run.value("profiles_stored",true) && !HistoryResult(w->Current(),run).at("points").front().contains("x_m")){ImGui::TextUnformatted("Profiles not stored. Recalculate this model to view spatial profiles.");return;}
+        if(!run.value("profiles_stored",true) && std::static_pointer_cast<const IvResult>(HistoryTyped(w->Current(),run))->points.front().x_m.empty()){ImGui::TextUnformatted("Profiles not stored. Recalculate this model to view spatial profiles.");return;}
         selected=&run;
     }
     const bool bandOnly=view==5 && w->Current().result.empty() && !w->Current().bandResult.empty();
-    const auto &result=selected?HistoryResult(w->Current(),*selected):bandOnly?*w->Current().bandResult:*w->Current().result;
+    const auto resultRef=selected?std::static_pointer_cast<const IvResult>(HistoryTyped(w->Current(),*selected)):bandOnly?w->Current().Band():w->Current().Iv();const auto& result=*resultRef;
     const auto profileKind=selected?selected->at("kind").get<std::string>():bandOnly?"band":"iv";
     const auto &layers=(selected?selected->at("document"):w->Current().document).at("layers");
     double total=0;for(const auto &l:layers) total+=l.at("thickness_m").get<double>();
     if(view==5) StructureEdit();
-    if(!result.contains("points") || result["points"].empty()) {ImGui::TextUnformatted("Calculate I-V to view results.");return;}
-    const auto &points=result.at("points");int bias=bandOnly?0:w->Current().selectedBias;bias=std::clamp(bias,0,int(points.size())-1);
+    if(result.points.empty()) {ImGui::TextUnformatted("Calculate I-V to view results.");return;}
+    const auto &points=result.points;int bias=bandOnly?0:w->Current().selectedBias;bias=std::clamp(bias,0,int(points.size())-1);
     { // one row: Bias point [slider showing V] | Single shot | Shots
-        char biasFormat[64];std::snprintf(biasFormat,sizeof(biasFormat),"%.4g V  (#%%d)",points[bias].at("voltage_V").get<double>());
+        char biasFormat[64];std::snprintf(biasFormat,sizeof(biasFormat),"%.4g V  (#%%d)",points[bias].voltage_V);
         ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Bias point");ImGui::SameLine();
         ImGui::SetNextItemWidth(std::max(120.f,ImGui::GetContentRegionAvail().x*.5f));ImGui::SliderInt("##bias",&bias,0,int(points.size())-1,biasFormat);if(!bandOnly)w->Current().selectedBias=bias;
         ImGui::SameLine();ShotBar(*w,"iv");
     }
-    const auto &band=w->Current().bandResult;
-    const auto &p=selected?points[bias]:view==5?PointAtBias(w->Current().result,band,bias):points[bias];
-    const bool preview=view==5 && !band.empty() && &p==&band.at("points")[0];
-    const auto &metrics=preview?(const Json &)band:result;
-    w->Current().biasVoltage_V=p.at("voltage_V");
+    const auto &band=*w->Current().Band();
+    const auto &p=selected?points[bias]:view==5?PointAtBias(*w->Current().Iv(),band,bias):points[bias];
+    const bool preview=view==5 && !band.empty() && &p==&band.points[0];
+    const auto &metrics=(preview?band:result).meta.prim;
+    w->Current().biasVoltage_V=p.voltage_V;
     {   // one small grey status line
-        const double jAbs=p.at("J_A_m2").is_number()?std::abs(p.at("J_A_m2").get<double>()):0;char residual[80]="";
-        if(jAbs>0 && p.contains("residual")) std::snprintf(residual,sizeof(residual)," | residual %.2e | dJ/J %.1e",p.at("residual").get<double>(),p.at("conservation_error_A_m2").get<double>()/jAbs);
-        ImGui::TextDisabled("%.0f ms | %d nodes | terminal %.5g V | internal %.5g V | %s | %d it%s",metrics.value("compute_time_ms",0.0),metrics.value("mesh_node_count",0),p.at("terminal_voltage_V").get<double>(),p.at("internal_voltage_V").get<double>(),p.at("status").get<std::string>().c_str(),p.at("iterations").get<int>(),residual);
+        const double jAbs=std::isfinite(p.J_A_m2)?std::abs(p.J_A_m2):0;char residual[80]="";
+        if(jAbs>0 && std::isfinite(p.residual)) std::snprintf(residual,sizeof(residual)," | residual %.2e | dJ/J %.1e",p.residual,p.conservation_error_A_m2/jAbs);
+        ImGui::TextDisabled("%.0f ms | %d nodes | terminal %.5g V | internal %.5g V | %s | %d it%s",metrics.value("compute_time_ms",0.0),metrics.value("mesh_node_count",0),p.terminal_voltage_V,p.internal_voltage_V,p.status.c_str(),int(p.iterations),residual);
     }
     if(view==10) {
         Toggle("Log |J|",absoluteLog);
         const auto &ivc=IvCols(points,absoluteLog);const auto &v=ivc.a,&j=ivc.b;const int failed=ivc.n;
-        ImGui::TextWrapped("Curve validity: %s | %d / %d valid points; invalid points masked",result.value("validity_status",std::string("unknown")).c_str(),int(points.size())-failed,int(points.size()));
+        ImGui::TextWrapped("Curve validity: %s | %d / %d valid points; invalid points masked",result.meta.prim.value("validity_status",std::string("unknown")).c_str(),int(points.size())-failed,int(points.size()));
         if(ImGui::CollapsingHeader("Per-point convergence")) {
-            for(const auto &pt:points) ImGui::TextWrapped("%s | %.5g V | %s | %s",pt.at("bias_id").get<std::string>().c_str(),pt.at("voltage_V").get<double>(),pt.at("status").get<std::string>().c_str(),pt.at("validity_status").get<std::string>().c_str());
+            for(const auto &pt:points) ImGui::TextWrapped("%s | %.5g V | %s | %s",pt.bias_id.c_str(),pt.voltage_V,pt.status.c_str(),pt.validity_status.c_str());
         }
         if(BeginSavedPlot(*w,"I-V",ImVec2(-1,-1))) {
             ImPlot::SetupAxes("Voltage [V]",absoluteLog?"|J| [A/m^2]":"Signed J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
@@ -1329,8 +1338,8 @@ void Panel::Results() {
         }
         return;
     }
-    if(p.at("status")!="Converged" || p.at("J_A_m2").is_null()) {ImGui::TextWrapped("This bias did not converge; profiles are masked. Select a converged bias.");return;}
-    const auto &x=Vec(p.at("x_m"),1e6);
+    if(p.status!="Converged" || !std::isfinite(p.J_A_m2)) {ImGui::TextWrapped("This bias did not converge; profiles are masked. Select a converged bias.");return;}
+    const auto &x=Vec(p.x_m.get(),1e6);
     if(x.empty()) return;
     // Bands and Carriers share the free height; the splitter fraction is kept in project.ui["band_split"].
     const float splitterH=8.f,availH=std::max(160.f,ImGui::GetContentRegionAvail().y-splitterH-2*ImGui::GetStyle().ItemSpacing.y);
@@ -1341,18 +1350,18 @@ void Panel::Results() {
         ImPlot::SetupAxes("Position [um]","Energy [eV]");ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
         const double end=total*1e6,metal=end*.04;
         FitWhenChanged("bands",ImAxis_X1,end,-metal,end+metal);
-        {double lo=1e300,hi=-1e300;for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) for(double v:Vec(p.at(key))) if(std::isfinite(v)){lo=std::min(lo,v);hi=std::max(hi,v);}
-        if(hi>lo){const double m=.05*(hi-lo);FitWhenChanged("bands",ImAxis_Y1,lo*7.31+hi+p.at("voltage_V").get<double>()*1e-3,lo-m,hi+m);}}
-        for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(p.at(key));if(y.size()==x.size()){const auto c=XColour(key);ImPlot::PlotLine(key,x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c.x,c.y,c.z,dashed?.6f:1.f),ImPlotProp_LineWeight,2.f});if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,c);ImPlot::PopPlotClipRect();}}}
+        {double lo=1e300,hi=-1e300;for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) for(double v:Vec(PointColumn(p,key).get())) if(std::isfinite(v)){lo=std::min(lo,v);hi=std::max(hi,v);}
+        if(hi>lo){const double m=.05*(hi-lo);FitWhenChanged("bands",ImAxis_Y1,lo*7.31+hi+p.voltage_V*1e-3,lo-m,hi+m);}}
+        for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(PointColumn(p,key).get());if(y.size()==x.size()){const auto c=XColour(key);ImPlot::PlotLine(key,x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c.x,c.y,c.z,dashed?.6f:1.f),ImPlotProp_LineWeight,2.f});if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,c);ImPlot::PopPlotClipRect();}}}
         const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();
         ImPlot::PushPlotClipRect();
         for(int side=0;side<2;++side) {
             const double lo=side?end:-metal,hi=side?end+metal:0;
             const auto a=ImPlot::PlotToPixels(lo,limits.Y.Max),b=ImPlot::PlotToPixels(hi,limits.Y.Min);
             draw->AddRectFilled(a,b,IM_COL32(255,176,66,38));
-            const double phi=result.at("contact_phi_eV")[side];
+            const double phi=result.meta.prim.at("contact_phi_eV")[side];
             const double chi=layers[side?layers.size()-1:0].at("material").at("chi_eV");
-            const auto &ec=Vec(p.at("Ec_eV"));
+            const auto &ec=Vec(p.Ec_eV.get());
             if(!ec.empty()) {
                 const double ef=(side?ec.back():ec.front())+chi-phi;const double xx[]={lo,hi},yy[]={ef,ef};
                 const bool flatContact=contactDoc.at(side?"right":"left").value("flat_band",false);
@@ -1371,9 +1380,9 @@ void Panel::Results() {
         ImPlot::SetupAxes("Position [um]","Density [cm^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupAxisFormat(ImAxis_Y1,[](double value,char *buffer,int size,void*) {return std::snprintf(buffer,size,"1e%.0f",std::log10(value));});
         ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);FitWhenChanged("carriers",ImAxis_X1,total*1e6,0,total*1e6);
-        {double lo=1e300,hi=0;for(const auto *key:{"n_m3","p_m3"}) for(double v:Vec(p.at(key))) if(std::isfinite(v) && v>0){lo=std::min(lo,v*1e-6);hi=std::max(hi,v*1e-6);}
-        if(hi>0)FitWhenChanged("carriers",ImAxis_Y1,std::log10(lo)*7.31+std::log10(hi)+p.at("voltage_V").get<double>()*1e-3,std::max(lo,hi*1e-16),hi*3);}
-        for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(p.at(key),1e-6);if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
+        {double lo=1e300,hi=0;for(const auto *key:{"n_m3","p_m3"}) for(double v:Vec(PointColumn(p,key).get())) if(std::isfinite(v) && v>0){lo=std::min(lo,v*1e-6);hi=std::max(hi,v*1e-6);}
+        if(hi>0)FitWhenChanged("carriers",ImAxis_Y1,std::log10(lo)*7.31+std::log10(hi)+p.voltage_V*1e-3,std::max(lo,hi*1e-16),hi*3);}
+        for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(PointColumn(p,key).get(),1e-6);if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
         DrawLayerRegions(layers);bandBadge();EndSavedPlot(*w,"Carriers");
     }
 }
@@ -1400,19 +1409,19 @@ void Panel::AC() {
         const auto job=w->jobs->GetJob(w->ActiveJob()); if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0); ImGui::TextWrapped("%s",job->currentStage.c_str());}
         if(ImGui::Button("Cancel")) Do(Cmd::Cancel::With());
     }
-    const Json *snapshot=nullptr;
-    if(w->Current().acResults.contains(kind)) snapshot=&w->Current().acResults.at(kind);
-    else for(const auto &d:w->project.devices) if(w->project.compare_set.contains(d->id) && d->acResults.contains(kind)) {snapshot=&d->acResults.at(kind);break;}
+    Ref<const AcResult> snapshot;
+    if(w->Current().acResults.contains(kind)) snapshot=w->Current().acResults.get(kind);
+    else for(const auto &d:w->project.devices) if(w->project.compare_set.contains(d->id) && d->acResults.contains(kind)) {snapshot=d->acResults.get(kind);break;}
     if(!snapshot) {ImGui::TextWrapped("Run the sweep to view AC results. Voltage: left minus right.");return;}
-    const auto &data=*snapshot;const auto &points=data.at("points");
-    ImGui::TextWrapped("Curve validity: %s (1%% conservation gate)",data.value("validity_status",std::string("unknown")).c_str());
+    const auto &data=*snapshot;const auto &points=data.points;
+    ImGui::TextWrapped("Curve validity: %s (1%% conservation gate)",data.meta.prim.value("validity_status",std::string("unknown")).c_str());
     const auto &first=points.front();
-    ImGui::Text("Result: %.6g K | %s = %.6g %s | %d points",first.at("temperature_K").get<double>(),cv?"f":"V",first.at(cv?"frequency_Hz":"voltage_V").get<double>(),cv?"Hz":"V",int(points.size()));
+    ImGui::Text("Result: %.6g K | %s = %.6g %s | %d points",first.temperature_K,cv?"f":"V",(cv?first.frequency_Hz:first.voltage_V),cv?"Hz":"V",int(points.size()));
     const int failed=AcCols(points,view).n;
     const char *key=view==7?"inverse_C2_F_minus2":view==9?"G_over_omega_F":"capacitance_F";
     if(failed) ImGui::TextWrapped("%d invalid points (convergence/current conservation); raw CSV rows retain validity flags.",failed);
     if(ImGui::CollapsingHeader("Per-point convergence"))
-        for(const auto &pt:points) ImGui::TextWrapped("%s | %.5g V | %.5g Hz | %s | %s",pt.at("point_id").get<std::string>().c_str(),pt.at("voltage_V").get<double>(),pt.at("frequency_Hz").get<double>(),pt.at("status").get<std::string>().c_str(),pt.at("validity_status").get<std::string>().c_str());
+        for(const auto &pt:points) ImGui::TextWrapped("%s | %.5g V | %.5g Hz | %s | %s",pt.point_id.c_str(),pt.voltage_V,pt.frequency_Hz,pt.status.c_str(),pt.validity_status.c_str());
     const char *ylabel=view==7?"1/C^2 [F^-2]":view==9?"G/omega [F]":"C [F]";
     if(BeginSavedPlot(*w,names[view],ImVec2(-1,-1))) {
         ImPlot::SetupAxes(cv?"Voltage [V]":"Frequency [Hz]",ylabel,ImPlotAxisFlags_None,ImPlotAxisFlags_None);
@@ -1422,9 +1431,9 @@ void Panel::AC() {
         for(const auto &d:w->project.devices) if(w->project.compare_set.contains(d->id) && d->acResults.contains(kind)) {
             if(!d->history.empty()) {
                 ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);HistoryLines(*w,*d,kind,cv?"voltage_V":"frequency_Hz",key);
-                if(view==6 || view==8){ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);HistoryLines(*w,*d,kind,cv?"voltage_V":"frequency_Hz","G_over_omega_F");}if(Archived(*d,d->acResults.at(kind),kind))continue;
+                if(view==6 || view==8){ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);HistoryLines(*w,*d,kind,cv?"voltage_V":"frequency_Hz","G_over_omega_F");}if(Archived(*d,*d->acResults.get(kind),kind))continue;
             }
-            const auto &ac=AcCols(d->acResults.at(kind).at("points"),view);const auto &xx=ac.a,&yy=ac.b,&gg=ac.c;
+            const auto &ac=AcCols(d->acResults.get(kind)->points,view);const auto &xx=ac.a,&yy=ac.b,&gg=ac.c;
             const auto c=d->colour.get<std::vector<float>>();const auto label=d->name+"##"+d->id;
             ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);ImPlot::PlotLine(label.c_str(),xx.data(),yy.data(),int(xx.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,2.5f});
             if(view==6 || view==8) {ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlot::PlotLine((d->name+" G/omega##"+d->id).c_str(),xx.data(),gg.data(),int(xx.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,2.5f});}
@@ -1702,12 +1711,12 @@ void Panel::Compare() {
     if(historyOpen) DrawHistory(*w);
     bool any=false;for(const auto &d:w->project.devices) any|=(w->project.compare_set.contains(d->id) || d->id==w->project.active_device) && (!d->result.empty() || !d->history.empty() || d->liveRunning);
     if(!any) {ImGui::TextWrapped("Tick 'Compare' on devices in the Project tree to overlay them.");return;}
-    bool light=false;for(const auto &d:w->project.devices) light|=w->project.compare_set.contains(d->id) && d->result.contains("photovoltaic");
+    bool light=false;for(const auto &d:w->project.devices) light|=w->project.compare_set.contains(d->id) && bool(d->Iv()->photovoltaic);
     if(light && ImGui::BeginTable("Solar metrics",5,ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerH)) {
         for(const auto *label:{"Device","Voc [V]","Jsc [mA/cm^2]","FF [%]","Efficiency [%]"}) ImGui::TableSetupColumn(label);ImGui::TableHeadersRow();
-        for(const auto &d:w->project.devices) if(w->project.compare_set.contains(d->id) && d->result.contains("photovoltaic")) {
+        for(const auto &d:w->project.devices) if(w->project.compare_set.contains(d->id) && bool(d->Iv()->photovoltaic)) {
             ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextUnformatted(d->name.c_str());
-            for(const auto *key:{"Voc_V","Jsc_A_m2","FF_fraction","efficiency_fraction"}) {ImGui::TableNextColumn();const auto &value=d->result.at("photovoltaic").at(key);if(value.is_number()) ImGui::Text(std::string(key)=="Voc_V"?"%.4f":"%.4g",value.get<double>()*(std::string(key)=="Jsc_A_m2"?.1:std::string(key)=="Voc_V"?1:100));else ImGui::TextUnformatted("--");}
+            for(const auto *key:{"Voc_V","Jsc_A_m2","FF_fraction","efficiency_fraction"}) {ImGui::TableNextColumn();const auto& pv=*d->Iv()->photovoltaic;const double value=std::string_view(key)=="Voc_V"?-pv.Voc_V:std::string_view(key)=="Jsc_A_m2"?-pv.Jsc_Am2:std::string_view(key)=="FF_fraction"?pv.FF:pv.eta;if(std::isfinite(value)) ImGui::Text(std::string(key)=="Voc_V"?"%.4f":"%.4g",value*(std::string(key)=="Jsc_A_m2"?.1:std::string(key)=="Voc_V"?1:100));else ImGui::TextUnformatted("--");}
         }ImGui::EndTable();
     }
     if(BeginSavedPlot(*w,"I-V compare",ImVec2(-1,-1))) {
@@ -1716,9 +1725,9 @@ void Panel::Compare() {
         if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         for(const auto &d:w->project.devices) if((w->project.compare_set.contains(d->id) || d->id==w->project.active_device) && (!d->result.empty() || !d->history.empty() || d->liveRunning)) {
             if(d->result.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);if(d->id==w->project.active_device)PreviewOverlay(*d,absoluteLog);continue;}
-            const auto &ivc=IvCols(d->result.at("points"),absoluteLog);const auto &x=ivc.a,&y=ivc.b;
+            const auto &ivc=IvCols(d->Iv()->points,absoluteLog);const auto &x=ivc.a,&y=ivc.b;
 
-            if(!d->history.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);if(Archived(*d,d->result,"iv"))continue;}
+            if(!d->history.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);if(Archived(*d,*d->Iv(),"iv"))continue;}
             const float c[4]={d->colour[0].get<float>(),d->colour[1].get<float>(),d->colour[2].get<float>(),d->colour[3].get<float>()};
             static std::string label;label=d->name;label+="##";label+=d->id; // reused buffer: no per-frame allocation
             {StaleDim dim(*d);ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],SelectedOffLive(*d,"iv")?.3f:c[3]),ImPlotProp_LineWeight,2.5f});}
@@ -1744,15 +1753,13 @@ void Panel::Compare() {
 
 namespace SST::ScapsLab {
 namespace {
-std::string MemberLabel(const Json &row,const Json &spec) {
-    std::string label=row.at("id").get<std::string>();
-    for(const auto &a:spec.at("axes")) {const auto path=a.at("path").get<std::string>();label+=" | "+ParameterLabel(path,a.value("unit",std::string("1")),row.at("parameters").at(path));}
-    return label;
+double ParameterNumber(const scaps_core::BatchRow& row,const std::string& path) {
+    return std::visit([](const auto& value)->double {if constexpr(std::is_arithmetic_v<std::decay_t<decltype(value)>>)return double(value);else return NAN;},row.parameters.at(path));
 }
-ImVec4 MemberColour(const Json &row,const Json &table) {
-    const auto path=table.at("spec").at("axes")[0].at("path").get<std::string>();double lo=INFINITY,hi=-INFINITY;
-    for(const auto &r:table.at("rows")) {const double v=r.at("parameters").at(path);lo=std::min(lo,v);hi=std::max(hi,v);}
-    const double v=row.at("parameters").at(path);return ImPlot::SampleColormap(float(hi>lo?(v-lo)/(hi-lo):.5),ImPlotColormap_Viridis);
+std::string MemberLabel(const scaps_core::BatchRow &row,const Json &spec) {
+    std::string label=row.id;
+    for(const auto &a:spec.at("axes")) {const auto path=a.at("path").get<std::string>();label+=" | "+ParameterLabel(path,a.value("unit",std::string("1")),ParameterNumber(row,path));}
+    return label;
 }
 bool AxisNumber(const char *label,Json &axis,const char *key,const Json &parameter) {
     const auto path=parameter.at("path").get<std::string>();const auto name=path.substr(path.find_last_of('.')==std::string::npos?0:path.find_last_of('.')+1);
@@ -1797,7 +1804,7 @@ void Panel::Batch() {
     ImGui::TextWrapped("%s",w->status.c_str());
     if(!preview.empty()) {
         ImGui::TextWrapped("Preview: %zu members x %zu biases x (DC + %zu AC frequencies) = %zu samples. Polarity: left minus right.",preview.at("member_count").get<std::size_t>(),preview.at("bias_count").get<std::size_t>(),preview.at("frequency_count").get<std::size_t>(),preview.at("sample_count").get<std::size_t>());
-        if(!d.batchResult.empty())ImGui::Text("Estimated time: %.3g s (previous mean/member)",d.batchResult.value("elapsed_s",0.)/std::max(std::size_t(1),d.batchResult.at("rows").size())*preview.at("member_count").get<double>());else ImGui::TextUnformatted("Estimated time: unavailable before first run");
+        if(!d.batchResult.empty())ImGui::Text("Estimated time: %.3g s (previous mean/member)",d.batchResult.typed()->Schema().value("elapsed_s",0.)/std::max(std::size_t(1),d.batchResult.typed()->rows.size())*preview.at("member_count").get<double>());else ImGui::TextUnformatted("Estimated time: unavailable before first run");
         const auto &biases=preview.at("voltages_V");
         ImGui::Text("Bias: %.5g ... %.5g V | DC + %zu AC frequencies",biases.front().get<double>(),biases.back().get<double>(),preview.at("frequency_count").get<std::size_t>());
         if(ImGui::TreeNode("Bias / frequency samples")) {ImGui::BeginChild("Samples",ImVec2(0,100),ImGuiChildFlags_Borders);for(const auto &v:biases) ImGui::Text("%.7g V",v.get<double>());ImGui::TextWrapped("AC frequencies [Hz]: %s",preview.at("frequencies_Hz").dump().c_str());ImGui::EndChild();ImGui::TreePop();}
@@ -1820,18 +1827,18 @@ void Panel::Recorder() {
     if(ImGui::Button("Send to PlotLab...")) {if(const auto target=SaveFileDialog({"PlotLab workbook","plotlab"},"scapslab-batch.plotlab"))Do(Cmd::SendToPlotLab::With({{"path",target->Utf8()}}));}ImGui::EndDisabled();ImGui::EndDisabled();
     ImGui::TextWrapped("%s",w->status.c_str());
     if(d.batchResult.empty()) {ImGui::TextUnformatted("Run a batch to populate the worksheet.");return;}
-    const auto &table=d.batchResult;const auto &rows=table.at("rows");
+    const auto &table=d.batchResult.typed()->Schema();const auto &rows=d.batchResult.typed()->rows;
     if(ImGui::BeginTable("Recorder worksheet",int(table.at("columns").size()+4+table.at("spec").at("axes").size()),ImGuiTableFlags_ScrollX|ImGuiTableFlags_ScrollY|ImGuiTableFlags_Borders|ImGuiTableFlags_RowBg,ImVec2(0,200))) {
         for(const char *h:{"Member","Status / error","Time [s]","Attempt"})ImGui::TableSetupColumn(h);
         for(const auto &a:table.at("spec").at("axes"))ImGui::TableSetupColumn((a.at("path").get<std::string>()+" ["+a.at("unit").get<std::string>()+"]").c_str());
         for(const auto &c:table.at("columns"))ImGui::TableSetupColumn((c.at("id").get<std::string>()+" ["+c.at("unit").get<std::string>()+"]").c_str());ImGui::TableSetupScrollFreeze(1,1);ImGui::TableHeadersRow();
-        for(std::size_t i=0;i<rows.size();++i) {const auto &r=rows[i];ImGui::PushID(int(i));ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Selectable(r.at("id").get<std::string>().c_str(),d.selectedMember==int(i)))Do(Cmd::SelectBatchMember::With({{"index",i}}));ImGui::TableNextColumn();ImGui::TextWrapped("%s %s %s",r.at("status").get<std::string>().c_str(),r.value("error_type",std::string{}).c_str(),r.value("message",std::string{}).c_str());ImGui::TableNextColumn();ImGui::Text("%.3g",r.at("elapsed_s").get<double>());ImGui::TableNextColumn();ImGui::Text("%d",r.value("attempt",1));for(const auto &a:table.at("spec").at("axes")) {ImGui::TableNextColumn();ImGui::Text("%.6g",r.at("parameters").at(a.at("path").get<std::string>()).get<double>());}for(const auto &c:table.at("columns")) {ImGui::TableNextColumn();const auto id=c.at("id").get<std::string>();const auto &v=r.at("values").at(id);if(v.is_number())ImGui::Text("%.6g",v.get<double>());else ImGui::TextUnformatted("--");ImGui::TextWrapped("%s",r.at("statuses").at(id).get<std::string>().c_str());}ImGui::PopID();}ImGui::EndTable();
+        for(std::size_t i=0;i<rows.size();++i) {const auto &r=*rows[i];ImGui::PushID(int(i));ImGui::TableNextRow();ImGui::TableNextColumn();if(ImGui::Selectable(r.id.c_str(),d.selectedMember==int(i)))Do(Cmd::SelectBatchMember::With({{"index",i}}));ImGui::TableNextColumn();ImGui::TextWrapped("%s %s %s",r.status.c_str(),r.error_type.c_str(),r.message.c_str());ImGui::TableNextColumn();ImGui::Text("%.3g",r.elapsed_s);ImGui::TableNextColumn();ImGui::Text("%d",r.attempt);for(const auto &a:table.at("spec").at("axes")) {ImGui::TableNextColumn();ImGui::Text("%.6g",ParameterNumber(r,a.at("path").get<std::string>()));}for(const auto &c:table.at("columns")) {ImGui::TableNextColumn();const auto id=c.at("id").get<std::string>();const auto &v=r.values.at(id);if(std::isfinite(v.value))ImGui::Text("%.6g",v.value);else ImGui::TextUnformatted("--");ImGui::TextWrapped("%s",v.status.c_str());}ImGui::PopID();}ImGui::EndTable();
     }
     if(table.at("columns").empty())return;recorderPlot=w->project.ui.value("recorder_plot",0);recorderPlot=std::clamp(recorderPlot,0,int(table.at("columns").size())-1);BeginRow("Plot scalar");if(ImGui::BeginCombo("##quantity",table.at("columns")[recorderPlot].at("id").get<std::string>().c_str())) {for(int i=0;i<int(table.at("columns").size());++i)if(ImGui::Selectable(table.at("columns")[i].at("id").get<std::string>().c_str(),i==recorderPlot))recorderPlot=i;ImGui::EndCombo();}EndRow();
     w->project.ui["recorder_plot"]=recorderPlot;
     const auto &c=table.at("columns")[recorderPlot];const auto &axes=table.at("spec").at("axes");const auto path=axes[0].at("path").get<std::string>();
     if(BeginSavedPlot(*w,"Recorder vs parameter",ImVec2(-1,std::max(220.f,ImGui::GetContentRegionAvail().y-5)))) {ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside);ImPlot::SetupAxes((path+" ["+axes[0].at("unit").get<std::string>()+"]").c_str(),(c.at("id").get<std::string>()+" ["+c.at("unit").get<std::string>()+"]").c_str(),ImPlotAxisFlags_None,ImPlotAxisFlags_None);if(axes[0].value("spacing",std::string{})=="log")ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);
-        std::map<std::string,std::vector<std::pair<double,double>>> groups;for(const auto &r:rows) {std::string label=c.at("id");if(axes.size()==2) {const auto p=axes[1].at("path").get<std::string>();label=ParameterLabel(p,axes[1].at("unit"),r.at("parameters").at(p));}const auto &v=r.at("values").at(c.at("id").get<std::string>());groups[label].push_back({r.at("parameters").at(path).get<double>(),v.is_number() && r.at("statuses").at(c.at("id").get<std::string>())=="ok"?v.get<double>():NAN});}
+        std::map<std::string,std::vector<std::pair<double,double>>> groups;for(const auto &row:rows) {const auto& r=*row;std::string label=c.at("id");if(axes.size()==2) {const auto p=axes[1].at("path").get<std::string>();label=ParameterLabel(p,axes[1].at("unit"),ParameterNumber(r,p));}const auto &v=r.values.at(c.at("id").get<std::string>());groups[label].push_back({ParameterNumber(r,path),v.status=="ok"?v.value:NAN});}
         for(auto &[label,points]:groups) {std::sort(points.begin(),points.end(),[](auto a,auto b){return a.first<b.first;});std::vector<double>x,y;for(auto [a,b]:points){x.push_back(a);y.push_back(b);}ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),ImPlotSpec(ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,3));}EndSavedPlot(*w,"Recorder vs parameter");}
 }
 void Panel::BatchPlots() {
@@ -1840,21 +1847,32 @@ void Panel::BatchPlots() {
         ImGui::TextColored(ImVec4(1.f,.6f,.15f,1.f),"RUNNING: %d of %d members finished (partial curves, not saved; the table follows)",int(d.liveMembers.size()),int(d.liveMemberTotal));
         if(BeginSavedPlot(*w,"Batch I-V running",ImVec2(-1,-1))) {
             ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside);ImPlot::SetupAxes("Voltage [V] (left minus right)","J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
-            for(const auto &m:d.liveMembers) {const auto name="member "+std::to_string(m.index+1)+" (running)##live"+std::to_string(m.index);ImPlot::PlotLine(name.c_str(),m.v.data(),m.j.data(),int(std::min(m.v.size(),m.j.size())),{ImPlotProp_LineWeight,1.5f});}
+            for(const auto &m:d.liveMembers) {const auto name="member "+std::to_string(m.index+1)+" (running)##live"+std::to_string(m.index);ImPlot::PlotLine(name.c_str(),m.v.get().data(),m.j.get().data(),int(std::min(m.v.size(),m.j.size())),{ImPlotProp_LineWeight,1.5f});}
             PlotBadge("RUNNING (partial)",IM_COL32(255,140,25,230),IM_COL32(0,0,0,255),0);
             EndSavedPlot(*w,"Batch I-V running");
         }
         return;
     }
     if(d.batchResult.empty()) {ImGui::TextUnformatted("Run a batch to overlay its curves.");return;}
-    const auto &table=d.batchResult;const auto &rows=table.at("rows");d.selectedMember=std::clamp(d.selectedMember,0,int(rows.size())-1);
-    BeginRow("Selected member");if(ImGui::BeginCombo("##member",MemberLabel(rows[d.selectedMember],table.at("spec")).c_str())) {for(int i=0;i<int(rows.size());++i)if(ImGui::Selectable((MemberLabel(rows[i],table.at("spec"))+" | "+rows[i].at("status").get<std::string>()).c_str(),i==d.selectedMember))Do(Cmd::SelectBatchMember::With({{"index",i}}));ImGui::EndCombo();}EndRow();
-    const auto &selected=rows[d.selectedMember];ImGui::TextWrapped("%s | %s",selected.at("status").get<std::string>().c_str(),selected.value("message",std::string{}).c_str());
-    ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Retry selected"))Do(Cmd::RetryBatchMember::With({{"member_id",selected.at("id")}}));ImGui::SameLine();if(ImGui::Button("Export selected CSV..."))if(const auto target=SaveFileDialog({"Recorder CSV","csv"},"scapslab-member.csv"))Do(Cmd::ExportBatch::With({{"member_id",selected.at("id")},{"path",target->Utf8()}}));ImGui::EndDisabled();
-    ImGui::TextWrapped("Colour: %s [%s]. Click near a curve sample to select. Failed members remain listed.",table.at("spec").at("axes")[0].at("path").get<std::string>().c_str(),table.at("spec").at("axes")[0].at("unit").get<std::string>().c_str());
+    const auto result=d.batchResult.typed();const auto& table=result->Schema();const auto& rows=result->rows;
+    if(rows.empty())return;
+    d.selectedMember=std::clamp(d.selectedMember,0,int(rows.size())-1);
+    BeginRow("Selected member");if(ImGui::BeginCombo("##member",MemberLabel(*rows[d.selectedMember],table.at("spec")).c_str())) {for(int i=0;i<int(rows.size());++i)if(ImGui::Selectable((MemberLabel(*rows[i],table.at("spec"))+" | "+rows[i]->status).c_str(),i==d.selectedMember))Do(Cmd::SelectBatchMember::With({{"index",i}}));ImGui::EndCombo();}EndRow();
+    const auto &selected=*rows[d.selectedMember];ImGui::TextWrapped("%s | %s",selected.status.c_str(),selected.message.c_str());
+    ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Retry selected"))Do(Cmd::RetryBatchMember::With({{"member_id",selected.id}}));ImGui::SameLine();if(ImGui::Button("Export selected CSV..."))if(const auto target=SaveFileDialog({"Recorder CSV","csv"},"scapslab-member.csv"))Do(Cmd::ExportBatch::With({{"member_id",selected.id},{"path",target->Utf8()}}));ImGui::EndDisabled();
+    const auto path=table.at("spec").at("axes")[0].at("path").get<std::string>();
+    ImGui::TextWrapped("Colour: %s [%s]. Click near a curve sample to select. Failed members remain listed.",path.c_str(),table.at("spec").at("axes")[0].at("unit").get<std::string>().c_str());
+    if(batchPlotSource.lock()!=result){batchPlotSource=result;batchPlotCurves=BatchIvCurves(*result);}
+    double lo=INFINITY,hi=-INFINITY;for(const auto& row:rows){const double v=ParameterNumber(*row,path);lo=std::min(lo,v);hi=std::max(hi,v);}
     if(BeginSavedPlot(*w,"Batch I-V overlay",ImVec2(-1,-1))) {ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside);ImPlot::SetupAxes("Voltage [V] (left minus right)","J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);double nearest=64;int hit=-1;
-        for(int i=0;i<int(rows.size());++i) {const auto &r=rows[i];if(!r.contains("curves"))continue;std::vector<double>x,y;for(const auto &p:r.at("curves").at("iv")) {const double v=p.at("voltage_V");const double j=p.at("J_Am2").is_number() && p.at("status")=="Converged"?p.at("J_Am2").get<double>():NAN;x.push_back(v);y.push_back(j);if(std::isfinite(j) && ImPlot::IsPlotHovered()) {const auto pixel=ImPlot::PlotToPixels(v,j);const auto mouse=ImGui::GetMousePos();const double dist=(pixel.x-mouse.x)*(pixel.x-mouse.x)+(pixel.y-mouse.y)*(pixel.y-mouse.y);if(dist<nearest){nearest=dist;hit=i;}}}ImPlot::PlotLine(MemberLabel(r,table.at("spec")).c_str(),x.data(),y.data(),int(x.size()),ImPlotSpec(ImPlotProp_LineColor,MemberColour(r,table),ImPlotProp_LineWeight,i==d.selectedMember?3.f:2.f));}
+        for(int i=0;i<int(rows.size());++i) {
+            const auto& r=*rows[i];const auto& curve=batchPlotCurves[i];
+            if(ImPlot::IsPlotHovered())for(std::size_t j=0;j<curve.v.size();++j)if(std::isfinite(curve.j[j])) {const auto pixel=ImPlot::PlotToPixels(curve.v[j],curve.j[j]);const auto mouse=ImGui::GetMousePos();const double dist=(pixel.x-mouse.x)*(pixel.x-mouse.x)+(pixel.y-mouse.y)*(pixel.y-mouse.y);if(dist<nearest){nearest=dist;hit=i;}}
+            const double v=ParameterNumber(r,path);const auto colour=ImPlot::SampleColormap(float(hi>lo?(v-lo)/(hi-lo):.5),ImPlotColormap_Viridis);
+            ImPlot::PlotLine(MemberLabel(r,table.at("spec")).c_str(),curve.v.data(),curve.j.data(),int(curve.v.size()),ImPlotSpec(ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,i==d.selectedMember?3.f:2.f));
+        }
         if(hit>=0 && ImGui::IsMouseClicked(0) && !w->Busy())Do(Cmd::SelectBatchMember::With({{"index",hit}}));EndSavedPlot(*w,"Batch I-V overlay");}
+
 }
 }
 
@@ -1862,17 +1880,17 @@ namespace SST::ScapsLab {
 void Panel::GenerationRecombination() {
     grFollow=w->project.ui.value("gr_follow",true);grHidden=w->project.ui.value("gr_hidden",std::set<std::string>{});grBias=w->project.ui.value("gr_bias",Json{{"voltage_V",0.}});
     const int savedTab=w->project.ui.value("gr_tab",0);const bool restoreTab=grTab!=savedTab;
-    auto &device=w->Current();
+    auto &device=w->Current();const auto& iv=*device.Iv();
     StructureEdit();
     ShotBar(*w,"iv");ImGui::SameLine();
     const bool followToggled=ImGui::Checkbox("Follow I-V working point",&grFollow);TrackGesture();
     if(followToggled && !grFollow) {
-        if(device.result.contains("points") && !device.result.at("points").empty()) device.biasVoltage_V=device.result.at("points")[std::clamp(device.selectedBias,0,int(device.result.at("points").size())-1)].at("voltage_V");
+        if(!iv.points.empty()) device.biasVoltage_V=iv.points[std::clamp(device.selectedBias,0,int(iv.points.size())-1)].voltage_V;
         grBias["voltage_V"]=device.biasVoltage_V;device.needsBand=true;device.changedAt=std::chrono::steady_clock::now();
     }
-    if(grFollow && device.result.contains("points") && !device.result.at("points").empty()) {
+    if(grFollow && !iv.points.empty()) {
         ImGui::SameLine();ImGui::SetNextItemWidth(std::max(100.f,ImGui::GetContentRegionAvail().x));
-        {const auto &pts=device.result.at("points");const int sel=std::clamp(device.selectedBias,0,int(pts.size())-1);char fmt[64];std::snprintf(fmt,sizeof(fmt),"%.4g V  (#%%d)",pts[sel].at("voltage_V").get<double>());
+        {const auto &pts=iv.points;const int sel=std::clamp(device.selectedBias,0,int(pts.size())-1);char fmt[64];std::snprintf(fmt,sizeof(fmt),"%.4g V  (#%%d)",pts[sel].voltage_V);
         ImGui::SliderInt("##point",&device.selectedBias,0,int(pts.size())-1,fmt);}
     }
     if(!grFollow) {
@@ -1881,34 +1899,34 @@ void Panel::GenerationRecombination() {
         if(changed) {device.biasVoltage_V=grBias.at("voltage_V");device.needsBand=true;device.changedAt=std::chrono::steady_clock::now();}
         if(!w->Busy() && device.needsBand && !ImGui::IsAnyItemActive() && std::chrono::steady_clock::now()-device.changedAt>=std::chrono::milliseconds(250))
             Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));
-        const bool hasVoc=device.result.contains("photovoltaic") && device.result["photovoltaic"].at("Voc_V").is_number();
+        const bool hasVoc=iv.photovoltaic && std::isfinite(iv.photovoltaic->Voc_V);
         ImGui::BeginDisabled(w->Busy() || !hasVoc);
-        if(ImGui::Button("Voc")) {grBias["voltage_V"]=device.result["photovoltaic"]["Voc_V"];device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));}
+        if(ImGui::Button("Voc")) {grBias["voltage_V"]=-iv.photovoltaic->Voc_V;device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));}
         ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Requires an idle job and a valid refined Voc from a light I-V sweep.");
         ImGui::SameLine();
-        const bool hasVmp=device.result.contains("points") && std::any_of(device.result.at("points").begin(),device.result.at("points").end(),[](const Json &p){return p.value("valid",false) && p.at("J_A_m2").is_number();});
+        const bool hasVmp=!iv.points.empty() && std::any_of(iv.points.begin(),iv.points.end(),[](const IvPoint &p){return p.valid && std::isfinite(p.J_A_m2);});
         ImGui::BeginDisabled(w->Busy() || !hasVmp);
         if(ImGui::Button("Vmp")) {
-            double best=-1;for(const auto &p:device.result.at("points")) if(p.value("valid",false) && p.at("J_A_m2").is_number()) {
-                const double power=-p.at("voltage_V").get<double>()*p.at("J_A_m2").get<double>();
-                if(power>best) {best=power;grBias["voltage_V"]=p.at("voltage_V");}
+            double best=-1;for(const auto &p:iv.points) if(p.valid && std::isfinite(p.J_A_m2)) {
+                const double power=-p.voltage_V*p.J_A_m2;
+                if(power>best) {best=power;grBias["voltage_V"]=p.voltage_V;}
             }
             device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));
         }
         ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Requires an idle job and valid I-V points. Selects the sampled point with maximum delivered power.");
     }
     w->project.ui["gr_follow"]=grFollow;w->project.ui["gr_bias"]=grBias;
-    const auto &snapshot=grFollow?device.result:device.bandResult;
-    if(!snapshot.contains("points") || snapshot.at("points").empty()) {ImGui::TextWrapped("Calculate I-V or select a working voltage. %s",w->status.c_str());return;}
-    const int index=grFollow?std::clamp(device.selectedBias,0,int(snapshot.at("points").size())-1):0;
-    const auto &point=snapshot.at("points")[index];
-    if(!point.contains("generation_recombination")) {ImGui::TextUnformatted("Recalculate this snapshot to obtain G/R.");return;}
-    const auto &gr=point.at("generation_recombination");
+    const auto &snapshot=*(grFollow?device.Iv():device.Band());
+    if(snapshot.points.empty()) {ImGui::TextWrapped("Calculate I-V or select a working voltage. %s",w->status.c_str());return;}
+    const int index=grFollow?std::clamp(device.selectedBias,0,int(snapshot.points.size())-1):0;
+    const auto &point=snapshot.points[index];
+    if(!bool(point.details)) {ImGui::TextUnformatted("Recalculate this snapshot to obtain G/R.");return;}
+    const auto &gr=point.details->generation_recombination;
     if(ImGui::CollapsingHeader("Details")) {
-    ImGui::TextWrapped("%s | terminal %.6g V | internal %.6g V | %.5g K | solver %s | profile validity %s",point.at("bias_id").get<std::string>().c_str(),point.at("terminal_voltage_V").get<double>(),point.at("internal_voltage_V").get<double>(),snapshot.at("project_snapshot").at("temperature_K").get<double>(),point.at("status").get<std::string>().c_str(),point.at("validity_status").get<std::string>().c_str());
-    ImGui::TextWrapped("%s | illumination %s | %s",device.id.c_str(),snapshot.at("project_snapshot").value("illumination",Json::object()).value("enabled",false)?"on":"off",w->status.c_str());
-    ImGui::TextWrapped("Terminal budget: %s | relative error %.5g",gr.value("terminal_budget_valid",false)?"valid <= 1e-6":"NOT VALID",gr.at("terminal_budget_relative_error").is_number()?gr.at("terminal_budget_relative_error").get<double>():NAN);
-    for(const auto &c:gr.at("channels")) ImGui::TextWrapped("%s / %s: %s",c.at("mechanism").get<std::string>().c_str(),c.at("id").get<std::string>().c_str(),c.at("validity_status").get<std::string>().c_str());
+    ImGui::TextWrapped("%s | terminal %.6g V | internal %.6g V | %.5g K | solver %s | profile validity %s",point.bias_id.c_str(),point.terminal_voltage_V,point.internal_voltage_V,snapshot.meta.prim.at("project_snapshot").at("temperature_K").get<double>(),point.status.c_str(),point.validity_status.c_str());
+    ImGui::TextWrapped("%s | illumination %s | %s",device.id.c_str(),snapshot.meta.prim.at("project_snapshot").value("illumination",Json::object()).value("enabled",false)?"on":"off",w->status.c_str());
+    ImGui::TextWrapped("Terminal budget: %s | relative error %.5g",gr.terminal_budget_valid?"valid <= 1e-6":"NOT VALID",gr.terminal_budget_relative_error);
+    for(const auto &c:gr.channels) ImGui::TextWrapped("%s / %s: %s",c.mechanism.c_str(),c.id.c_str(),c.validity_status.c_str());
     ImGui::TextWrapped("Log plot shows positive rates only; signed rates and integrals are retained in export. Sheets use the right axis [m^-2 s^-1].");
     }
     ImGui::BeginDisabled(w->Busy());
@@ -1918,7 +1936,7 @@ void Panel::GenerationRecombination() {
             catch(const std::exception &e){w->status=e.what();}
         }ImGui::SameLine();
     }ImGui::NewLine();ImGui::EndDisabled();
-    const bool valid=point.value("valid",false);
+    const bool valid=point.valid;
     if(!ImGui::BeginTabBar("G/R views"))return;
     const bool budgetShot=gallery && std::getenv("SCAPSLAB_GR_TAB") && std::string(std::getenv("SCAPSLAB_GR_TAB"))=="1";
     if(ImGui::BeginTabItem("Profiles",nullptr,(gallery && !budgetShot) || (restoreTab && savedTab==0)?ImGuiTabItemFlags_SetSelected:0)) {grTab=0;w->project.ui["gr_tab"]=0;
@@ -1930,12 +1948,12 @@ void Panel::GenerationRecombination() {
     // data windows: left axis 12 decades below the max visible bulk rate; right axis only when a sheet channel is visible
     double bulkMax=0,sheetMax=0;
     if(valid) {
-        if(showGeneration) for(double v:Vec(gr.at("generation_m3_s"))) if(std::isfinite(v))bulkMax=std::max(bulkMax,v);
-        for(const auto &c:gr.at("channels")) if(!grHidden.contains(c.at("mechanism").get<std::string>()) && c.value("valid",false)) {
-            const bool sh=!c.at("R_sheet_m2_s").empty();for(double v:Vec(c.at(sh?"R_sheet_m2_s":"R_m3_s"))) if(std::isfinite(v))(sh?sheetMax:bulkMax)=std::max(sh?sheetMax:bulkMax,v);
+        if(showGeneration) for(double v:Vec(gr.generation_m3_s.get())) if(std::isfinite(v))bulkMax=std::max(bulkMax,v);
+        for(const auto &c:gr.channels) if(!grHidden.contains(c.mechanism) && c.valid) {
+            const bool sh=!c.R_sheet_m2_s.empty();for(double v:Vec((sh?c.R_sheet_m2_s:c.R_m3_s).get())) if(std::isfinite(v))(sh?sheetMax:bulkMax)=std::max(sh?sheetMax:bulkMax,v);
         }
     }
-    const double totalUm=[&]{double t=0;for(const auto &l:snapshot.at("project_snapshot").at("layers"))t+=l.at("thickness_m").get<double>()*1e6;return t;}();
+    const double totalUm=[&]{double t=0;for(const auto &l:snapshot.meta.prim.at("project_snapshot").at("layers"))t+=l.at("thickness_m").get<double>()*1e6;return t;}();
     if(BeginSavedPlot(*w,"G(x), R(x)",ImVec2(-1,-1))) {
         ImPlot::SetupAxes("Position [um]","Bulk rate [m^-3 s^-1]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
         ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
@@ -1943,61 +1961,61 @@ void Panel::GenerationRecombination() {
         FitWhenChanged("gr",ImAxis_X1,totalUm,0,totalUm);
         if(bulkMax>0)FitWhenChanged("gr",ImAxis_Y1,bulkMax,bulkMax*1e-12,bulkMax*5);
         if(sheetMax>0){ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);FitWhenChanged("gr",ImAxis_Y2,sheetMax,sheetMax*1e-8,sheetMax*5);}
-        auto plot=[&](const std::string &name,const Json &xx,const Json &yy,bool sheet,bool curveValid,int shade=0) {
-            const auto &x=Vec(xx,1e6),&y=Vec(yy,1.,curveValid?2:3);if(x.size()!=y.size())return;
+        auto plot=[&](const std::string &name,const Column &xx,const Column &yy,bool sheet,bool curveValid,int shade=0) {
+            const auto &x=Vec(xx.get(),1e6),&y=Vec(yy.get(),1.,curveValid?2:3);if(x.size()!=y.size())return;
             if(sheet && sheetMax<=0)return;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
             const auto mech=name.substr(0,name.find(' '));const ImPlotSpec style(ImPlotProp_LineColor,XColour(mech,shade),ImPlotProp_LineWeight,2.f,ImPlotProp_MarkerFillColor,XColour(mech,shade),ImPlotProp_MarkerLineColor,XColour(mech,shade));
             if(sheet)ImPlot::PlotScatter(name.c_str(),x.data(),y.data(),int(x.size()),style);else ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),style);
         };
         if(showGeneration)HistoryProfiles(*w,"generation_m3_s",1.,true);
-        if(showGeneration && !Archived(device,snapshot,grFollow?"iv":"band"))plot("G",gr.at("x_m"),gr.at("generation_m3_s"),false,valid);
+        if(showGeneration && !Archived(device,snapshot,grFollow?"iv":"band"))plot("G",gr.x_m,gr.generation_m3_s,false,valid);
         for(const auto &run:device.history) {
-            if(!run.at("visible").get<bool>() || !ShowRun(run) || run.at("run_id")==device.selectedRun || (run.at("kind")!="iv" && run.at("kind")!="band") || !HistoryResult(device,run).contains("points"))continue;
-            const auto &points=HistoryResult(device,run).at("points");if(points.empty())continue;
+            if(!run.at("visible").get<bool>() || !ShowRun(run) || run.at("run_id")==device.selectedRun || (run.at("kind")!="iv" && run.at("kind")!="band"))continue;
+            const auto history=std::dynamic_pointer_cast<const IvResult>(HistoryTyped(device,run));if(!history || history->points.empty())continue;const auto &points=history->points;
             const auto &p=points[std::clamp(device.selectedBias,0,int(points.size())-1)];
-            if(!p.contains("generation_recombination"))continue;
+            if(!p.details)continue;
             const auto colour=run.at("colour").get<std::vector<float>>();const bool selectedRun=run.at("run_id")==device.selectedRun;std::map<std::string,int> shadeOf;
-            for(const auto &channel:p.at("generation_recombination").at("channels")) {
-                if(grHidden.contains(channel.at("mechanism").get<std::string>()))continue;
-                const bool sheet=!channel.at("R_sheet_m2_s").empty();
-                const auto &x=Vec(channel.at("x_m"),1e6),&y=Vec(channel.at(sheet?"R_sheet_m2_s":"R_m3_s"),1.,channel.value("valid",false)?1:3);if(x.size()!=y.size())continue;
-                const auto label=channel.at("mechanism").get<std::string>()+" / "+channel.at("id").get<std::string>()+" / "+RunLabel(run)+"##"+run.at("run_id").get<std::string>();
+            for(const auto &channel:p.details->generation_recombination.channels) {
+                if(grHidden.contains(channel.mechanism))continue;
+                const bool sheet=!channel.R_sheet_m2_s.empty();
+                const auto &x=Vec(channel.x_m.get(),1e6),&y=Vec((sheet?channel.R_sheet_m2_s:channel.R_m3_s).get(),1.,channel.valid?1:3);if(x.size()!=y.size())continue;
+                const auto label=channel.mechanism+" / "+channel.id+" / "+RunLabel(run)+"##"+run.at("run_id").get<std::string>();
                 if(sheet && sheetMax<=0)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
-                const auto mechName=channel.at("mechanism").get<std::string>();const ImVec4 lc=selectedRun?XColour(mechName,shadeOf[mechName]++):ImVec4(colour[0],colour[1],colour[2],colour[3]);ImPlotSpec style(ImPlotProp_LineColor,lc,ImPlotProp_LineWeight,selectedRun?2.5f:1.f,ImPlotProp_MarkerFillColor,lc,ImPlotProp_MarkerLineColor,lc);
+                const auto mechName=channel.mechanism;const ImVec4 lc=selectedRun?XColour(mechName,shadeOf[mechName]++):ImVec4(colour[0],colour[1],colour[2],colour[3]);ImPlotSpec style(ImPlotProp_LineColor,lc,ImPlotProp_LineWeight,selectedRun?2.5f:1.f,ImPlotProp_MarkerFillColor,lc,ImPlotProp_MarkerLineColor,lc);
                 if(sheet)ImPlot::PlotScatter(label.c_str(),x.data(),y.data(),int(x.size()),style);else ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),style);
             }
         }
         std::map<std::string,int> curShade;
-        for(const auto &c:gr.at("channels")) if(!Archived(device,snapshot,grFollow?"iv":"band") && !grHidden.contains(c.at("mechanism").get<std::string>())) {
-            const bool sheet=!c.at("R_sheet_m2_s").empty();plot(c.at("mechanism").get<std::string>()+" / "+c.at("id").get<std::string>(),c.at("x_m"),c.at(sheet?"R_sheet_m2_s":"R_m3_s"),sheet,c.value("valid",false),curShade[c.at("mechanism").get<std::string>()]++);
+        for(const auto &c:gr.channels) if(!Archived(device,snapshot,grFollow?"iv":"band") && !grHidden.contains(c.mechanism)) {
+            const bool sheet=!c.R_sheet_m2_s.empty();plot(c.mechanism+" / "+c.id,c.x_m,(sheet?c.R_sheet_m2_s:c.R_m3_s),sheet,c.valid,curShade[c.mechanism]++);
         }
-        ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);DrawLayerRegions(snapshot.at("project_snapshot").at("layers"));
+        ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);DrawLayerRegions(snapshot.meta.prim.at("project_snapshot").at("layers"));
         EndSavedPlot(*w,"G(x), R(x)");
     }
     ImGui::EndTabItem();
     }
     if(ImGui::BeginTabItem("Integrated currents",nullptr,budgetShot || (restoreTab && savedTab==1)?ImGuiTabItemFlags_SetSelected:0)) {grTab=1;w->project.ui["gr_tab"]=1;
-    ImGui::TextWrapped("q integral G = %.8g A/m^2 | q integral R = %.8g A/m^2 | net = %.8g A/m^2",gr.at("generation_current_A_m2").get<double>(),gr.at("recombination_current_A_m2").get<double>(),gr.at("net_generation_current_A_m2").get<double>());
-    ImGui::TextWrapped("Terminal budget: %s | relative error %.5g.",gr.value("terminal_budget_valid",false)?"valid <= 1e-6":"NOT VALID",gr.at("terminal_budget_relative_error").is_number()?gr.at("terminal_budget_relative_error").get<double>():NAN);
-    if(gr.contains("predicted_terminal_current_A_m2")) {
-        for(const auto &c:gr.at("contact_recombination")) ImGui::Text("Contact %s: electron %.8g | hole %.8g A/m^2 (signed removal)",c.at("id").get<std::string>().c_str(),c.at("electron_current_A_m2").get<double>(),c.at("hole_current_A_m2").get<double>());
-        ImGui::TextWrapped("Shunt %.8g | series %.8g | predicted terminal %.8g A/m^2",gr.at("shunt_current_A_m2").get<double>(),gr.at("series_current_A_m2").get<double>(),gr.at("predicted_terminal_current_A_m2").get<double>());
-        ImGui::TextWrapped("%s",gr.at("terminal_budget_identity").get<std::string>().c_str());
+    ImGui::TextWrapped("q integral G = %.8g A/m^2 | q integral R = %.8g A/m^2 | net = %.8g A/m^2",gr.generation_current_A_m2,gr.recombination_current_A_m2,gr.net_generation_current_A_m2);
+    ImGui::TextWrapped("Terminal budget: %s | relative error %.5g.",gr.terminal_budget_valid?"valid <= 1e-6":"NOT VALID",gr.terminal_budget_relative_error);
+    if(gr.has_terminal_budget) {
+        for(const auto &c:gr.contact_recombination) ImGui::Text("Contact %s: electron %.8g | hole %.8g A/m^2 (signed removal)",c.id.c_str(),c.electron_current_A_m2,c.hole_current_A_m2);
+        ImGui::TextWrapped("Shunt %.8g | series %.8g | predicted terminal %.8g A/m^2",gr.shunt_current_A_m2,gr.series_current_A_m2,gr.predicted_terminal_current_A_m2);
+        ImGui::TextWrapped("%s","J = G - R - right.electron - left.hole + J_shunt (native current sign)");
     } else ImGui::TextWrapped("Legacy bulk-only budget; recalculate to include contacts and external branches.");
     const float tableHeight=std::clamp(ImGui::GetContentRegionAvail().y-210.f,80.f,150.f);
     if(ImGui::BeginTable("Integrated losses",4,ImGuiTableFlags_Borders|ImGuiTableFlags_RowBg|ImGuiTableFlags_ScrollY,ImVec2(0,tableHeight))) {
         for(const auto *name:{"Layer / defect ID","Mechanism","J_R [A/m^2]","Profile validity"})ImGui::TableSetupColumn(name);ImGui::TableHeadersRow();
-        for(const auto &c:gr.at("channels")) for(const auto &l:c.at("by_layer")) {
-            ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::Text("%s / %s",l.at("layer_id").get<std::string>().c_str(),c.at("id").get<std::string>().c_str());ImGui::TableNextColumn();ImGui::TextUnformatted(c.at("mechanism").get<std::string>().c_str());ImGui::TableNextColumn();ImGui::Text("%.9g",l.at("current_A_m2").get<double>());ImGui::TableNextColumn();ImGui::TextUnformatted(c.at("validity_status").get<std::string>().c_str());
+        for(const auto &c:gr.channels) for(const auto &l:c.by_layer) {
+            ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::Text("%s / %s",l.layer_id.c_str(),c.id.c_str());ImGui::TableNextColumn();ImGui::TextUnformatted(c.mechanism.c_str());ImGui::TableNextColumn();ImGui::Text("%.9g",l.current_A_m2);ImGui::TableNextColumn();ImGui::TextUnformatted(c.validity_status.c_str());
         }
-        for(const auto &l:gr.at("layers")) {ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextUnformatted(l.at("layer_id").get<std::string>().c_str());ImGui::TableNextColumn();ImGui::TextUnformatted("TOTAL");ImGui::TableNextColumn();ImGui::Text("%.9g",l.at("recombination_current_A_m2").get<double>());}
+        for(const auto &l:gr.layers) {ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextUnformatted(l.layer_id.c_str());ImGui::TableNextColumn();ImGui::TextUnformatted("TOTAL");ImGui::TableNextColumn();ImGui::Text("%.9g",l.recombination_current_A_m2);}
         ImGui::EndTable();
     }
     ImGui::TextUnformatted("Loss breakdown | signed A/m^2 | sheets assigned to left layer");
     if(BeginSavedPlot(*w,"Integrated loss breakdown",ImVec2(-1,std::max(150.f,ImGui::GetContentRegionAvail().y-4)))) {
         ImPlot::SetupAxes("Mechanism index","J_R [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
         ImPlot::SetupLegend(ImPlotLocation_North,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
-        int i=0;for(const auto &c:gr.at("channels")) {const double x=i++,y=valid?c.at("integrated_current_A_m2").get<double>():NAN;ImPlot::PlotBars((c.at("mechanism").get<std::string>()+" / "+c.at("id").get<std::string>()).c_str(),&x,&y,1,.7);}
+        int i=0;for(const auto &c:gr.channels) {const double x=i++,y=valid?c.integrated_current_A_m2:NAN;ImPlot::PlotBars((c.mechanism+" / "+c.id).c_str(),&x,&y,1,.7);}
         EndSavedPlot(*w,"Integrated loss breakdown");
     }
     ImGui::EndTabItem();

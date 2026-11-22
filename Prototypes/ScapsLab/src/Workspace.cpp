@@ -28,14 +28,29 @@ std::size_t PBytes(const PJson &p,std::set<const void*> &seen) {
 }
 std::size_t VBytes(const Column &v,std::set<const void*> &seen) {return v.id() && seen.insert(v.id()).second?v.size()*8:0;}
 std::size_t TypedBytes(const ResultBase *r,std::set<const void*> &seen) {
-    if(!r) return 0;
+    if(!r || !seen.insert(r).second) return 0;
     std::size_t n=0;
     if(auto iv=dynamic_cast<const IvResult*>(r)) {
         n=PBytes(iv->meta,seen)+VBytes(iv->mesh_x_m,seen);
-        for(const auto &p:iv->points) {n+=sizeof(IvPoint)+PBytes(p.rest,seen);for(const auto *v:{&p.x_m,&p.Ec_eV,&p.Ev_eV,&p.EFn_eV,&p.EFp_eV,&p.n_m3,&p.p_m3})n+=VBytes(*v,seen);}
+        for(const auto &p:iv->points) {
+            n+=sizeof(IvPoint)+PBytes(p.rest,seen);for(const auto *v:{&p.x_m,&p.Ec_eV,&p.Ev_eV,&p.EFn_eV,&p.EFp_eV,&p.n_m3,&p.p_m3})n+=VBytes(*v,seen);
+            if(p.details && seen.insert(p.details.get()).second) {
+                const auto& g=p.details->generation_recombination;n+=sizeof(IvDetails)+VBytes(g.x_m,seen)+VBytes(g.generation_m3_s,seen);
+                for(const auto& c:g.channels)n+=sizeof(RecombinationChannel)+VBytes(c.x_m,seen)+VBytes(c.R_m3_s,seen)+VBytes(c.R_sheet_m2_s,seen)+c.by_layer.size()*sizeof(LayerCurrent);
+                for(const auto& d:p.details->defect_previews)n+=sizeof(DefectPreview)+8*(d.energy_eV.size()+d.density.size()+d.occupation_energy_eV.size()+d.occupation.size()+d.band_edges_eV.size());
+                for(const auto& v:p.details->trap_occupation)n+=v.size()*8;n+=p.details->interface_occupation.size()*8;
+            }
+        }
+        if(iv->optics) {n+=VBytes(iv->optics->x_m,seen)+VBytes(iv->optics->generation_m3_s,seen);for(const auto& c:iv->optics->absorption)n+=VBytes(c.wavelength_nm,seen)+VBytes(c.alpha_m1,seen)+VBytes(c.without_tail_m1,seen);}
     } else if(auto ac=dynamic_cast<const AcResult*>(r)) {
         n=PBytes(ac->meta,seen)+VBytes(ac->mesh_x_m,seen);for(const auto &p:ac->points)n+=sizeof(AcPoint)+PBytes(p.rest,seen);
-    } else if(auto b=dynamic_cast<const BatchResult*>(r)) n=PBytes(b->body,seen);
+    } else if(auto b=dynamic_cast<const BatchResult*>(r)) {
+        n=PBytes(b->body,seen);
+        for(const auto& row:b->rows)if(seen.insert(row.get()).second) {
+            n+=sizeof(scaps_core::BatchRow)+row->iv.size()*sizeof(scaps_core::IVSample)+row->ac.size()*sizeof(scaps_core::ACSample);
+            for(const auto& p:row->iv)if(p.profiles && seen.insert(p.profiles.get()).second){n+=p.profiles->x_m.size()*8;for(const auto& [field,v]:p.profiles->fields)n+=v.size()*8;}
+        }
+    }
     return n;
 }
 }

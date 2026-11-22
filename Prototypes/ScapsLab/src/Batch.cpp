@@ -3,6 +3,7 @@
 #include "Io.hpp"
 #include <scaps_core/batch.hpp>
 #include <scaps_core/api.hpp>
+#include <scaps_core/device_project_def.hpp>
 #include <sst/plotlab/Engine.hpp>
 #include <algorithm>
 #include <cmath>
@@ -24,25 +25,41 @@ std::string Unit(const std::string &key,std::string *name=nullptr) {
     for(const auto &[suffix,unit]:std::vector<std::pair<std::string,std::string>>{{"_m3_s","m^-3/s"},{"_cm6_s","cm^6/s"},{"_cm3_s","cm^3/s"},{"_W_m2","W/m^2"},{"_m1","m^-1"},{"_nm","nm"},{"_m2_V_s","m^2/V/s"},{"_ohm_m2","Ohm m^2"},{"_m2_eV","m^-2/eV"},{"_m_s","m/s"},{"_m3","m^-3"},{"_m2","m^2"},{"_eV","eV"},{"_Hz","Hz"},{"_K","K"},{"_V","V"},{"_m","m"}}) if(key.ends_with(suffix)) {if(name)name->erase(key.size()-suffix.size());return unit;}
     return "1";
 }
-Json SelectedTable(const Json &table,const Json &request) {
-    if(table.empty()) throw std::invalid_argument("No current batch results");
-    auto selected=table;
-    if(request.contains("member_id")) {selected["rows"]=Json::array();for(const auto &r:table.at("rows")) if(r.at("id")==request.at("member_id")) selected["rows"].push_back(r);if(selected["rows"].empty())throw std::invalid_argument("Unknown member_id");}
-    return selected;
+std::vector<scaps_core::RecorderColumn> RecorderColumns(const Json& input) {
+    if(!input.is_array())throw std::invalid_argument("columns must be a list");
+    std::vector<scaps_core::RecorderColumn> columns;
+    for(const auto& c:input) {
+        scaps_core::RecorderColumn column;column.id=c.at("id");column.quantity=c.at("quantity");column.field=c.value("field",std::string{});
+        column.voltage_V=c.value("voltage_V",double(NAN));column.frequency_Hz=c.value("frequency_Hz",double(NAN));column.x_m=c.value("x_m",double(NAN));
+        column.voltage_min_V=c.value("voltage_min_V",-INFINITY);column.voltage_max_V=c.value("voltage_max_V",INFINITY);
+        if((c.contains("voltage_min_V") && !std::isfinite(column.voltage_min_V)) || (c.contains("voltage_max_V") && !std::isfinite(column.voltage_max_V)))throw std::invalid_argument("Vbi window bounds must be finite");
+        columns.push_back(std::move(column));
+    }
+    scaps_core::validate_recorder_columns(columns);return columns;
+}
+Json NormalizedColumns(const Json& input) {
+    auto result=input;const auto columns=RecorderColumns(input);for(std::size_t i=0;i<columns.size();++i)result[i]["unit"]=columns[i].unit;return result;
 }
 void Save(const std::string &path,const std::string &text) {std::string error;if(!Io::Save(path,text,error)) throw std::runtime_error(error);}
-void Workbook(const Json &table,const std::string &path) {
-    namespace pl=sst::plotlab;
+double ParameterValue(const scaps_core::BatchRow& row,const std::string& key) {
+    return std::visit([](const auto& value)->double {using T=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<T,double> || std::is_same_v<T,std::int64_t>)return double(value);else throw std::invalid_argument("Workbook axes must be numeric");},row.parameters.at(key));
+}
+void Workbook(const BatchResult& result,const std::vector<Ref<const scaps_core::BatchRow>>& rows,const std::string& path) {
+    namespace pl=sst::plotlab;const auto& table=result.Schema();
     pl::Project project("ScapsLab batch");const auto book=project.reserveId(),sheet=project.reserveId();
     pl::Worksheet worksheet;worksheet.source["provenance"]=table.at("provenance").dump();worksheet.source["batch_spec"]=table.at("spec").dump();
-    for(const auto &r:table.at("rows")) worksheet.rows.push_back(project.reserveId());
-    std::vector<pl::Object> objects={{book,project.root(),"Batch workbook",0,pl::Workbook{}},{sheet,book,"Recorder",0,worksheet}};
-    auto column=[&](const std::string &name,const std::string &unit,pl::Values values,pl::Role role=pl::Role::None) {pl::Column c;c.units=unit;c.values=std::move(values);c.role=role;objects.push_back({project.reserveId(),sheet,name,0,std::move(c)});};
-    for(const auto *key:{"id","status","error_type","message"}) {std::vector<std::string> values;for(const auto &r:table.at("rows")) values.push_back(r.value(key,std::string{}));column(key,"",values);}
-    for(const auto &a:table.at("spec").at("axes")) {const std::string key=a.at("path");std::vector<double> values;for(const auto &r:table.at("rows")) values.push_back(r.at("parameters").at(key).get<double>());column(key,a.value("unit",Unit(key)),values,pl::Role::X);}
-    for(const auto &c:table.at("columns")) {const std::string id=c.at("id");std::vector<double> values;std::vector<std::string> statuses;for(const auto &r:table.at("rows")) {const auto &v=r.at("values").at(id);values.push_back(v.is_number()?v.get<double>():NAN);statuses.push_back(r.at("statuses").at(id));}column(id,c.at("unit"),values,pl::Role::Y);column(id+" status","",statuses);}
+    for(const auto& r:rows)worksheet.rows.push_back(project.reserveId());
+    std::vector<pl::Object> objects={{book,project.root(),"Batch workbook",0,pl::Workbook{}},{sheet,book,"Recorder",0,std::move(worksheet)}};
+    auto column=[&](const std::string& name,const std::string& unit,pl::Values values,pl::Role role=pl::Role::None){pl::Column c;c.units=unit;c.values=std::move(values);c.role=role;objects.push_back({project.reserveId(),sheet,name,0,std::move(c)});};
+    for(const auto member:{&scaps_core::BatchRow::id,&scaps_core::BatchRow::status,&scaps_core::BatchRow::error_type,&scaps_core::BatchRow::message}) {
+        std::vector<std::string> values;for(const auto& r:rows)values.push_back((*r).*member);
+        column(member==&scaps_core::BatchRow::id?"id":member==&scaps_core::BatchRow::status?"status":member==&scaps_core::BatchRow::error_type?"error_type":"message","",std::move(values));
+    }
+    for(const auto& a:table.at("spec").at("axes")){const std::string key=a.at("path");std::vector<double> values;for(const auto& r:rows)values.push_back(ParameterValue(*r,key));column(key,a.value("unit",Unit(key)),std::move(values),pl::Role::X);}
+    for(const auto& c:table.at("columns")){const std::string id=c.at("id");std::vector<double> values;std::vector<std::string> statuses;for(const auto& r:rows){values.push_back(r->values.at(id).value);statuses.push_back(r->values.at(id).status);}column(id,c.at("unit"),std::move(values),pl::Role::Y);column(id+" status","",std::move(statuses));}
     auto change=project.change("ScapsLab recorder workbook",std::move(objects));change.apply(project);Save(path,project.toJson());
 }
+
 }
 std::string ParameterLabel(const std::string &path,const std::string &unit,const Json &value,const Json &before) {
     auto name=path;
@@ -64,7 +81,7 @@ Json BatchParameters(const Json &document) {
     visit(document,"","","","");return result;
 }
 Json BatchPreview(const Json &document,const Json &input) {
-    auto spec=input;spec["include_curves"]=true;spec["threads"]=1;
+    auto spec=input;if(!spec.contains("include_curves"))spec["include_curves"]=true;spec["threads"]=1;
     const auto mode=spec.value("mode",std::string("nested"));if(mode!="nested" && mode!="together")throw std::invalid_argument("Mode must be nested or together");
     if(!spec.contains("axes") || !spec.at("axes").is_array() || spec.at("axes").empty() || spec.at("axes").size()>2) throw std::invalid_argument("Select one or two axes");
     const auto parameters=BatchParameters(document);Json combinations=Json::array({Json::object()});std::set<std::string> seen;
@@ -86,7 +103,7 @@ Json BatchPreview(const Json &document,const Json &input) {
     for(const auto &v:volts)if(!v.is_number() || !std::isfinite(v.get<double>()))throw std::invalid_argument("Invalid voltage sample");
     auto frequencies=spec.value("frequencies_Hz",Json::array());if(!frequencies.is_array() || frequencies.size()>1000)throw std::invalid_argument("Invalid frequency sampling");for(const auto &f:frequencies)if(!f.is_number() || !std::isfinite(f.get<double>()) || f.get<double>()<=0)throw std::invalid_argument("Frequency must be positive");
     spec["columns"]=spec.value("columns",RecorderDefaults());
-    (void)scaps_core::record_batch_json(Json{{"rows",Json::array()}}.dump(),spec["columns"].dump());
+    (void)RecorderColumns(spec["columns"]);
     // Acquire requested Recorder samples inside the declared range; never extrapolate.
     const auto [low,high]=std::minmax_element(volts.begin(),volts.end());const double first=low->get<double>(),last=high->get<double>();
     for(const auto &column:spec["columns"]) {
@@ -110,7 +127,7 @@ Json QuickSweep(const Json &document,const Json &request) {
 }
 bool BatchOperation(Operation &o,JobContext &ctx) {
     const auto op=o.request.at("operation").get<std::string>();
-    if(op=="batch_select") {const int i=o.request.at("index");if(i<0 || o.batchResult.empty() || i>=int(o.batchResult.at("rows").size()))throw std::invalid_argument("Unknown member index");}
+    if(op=="batch_select") {const int i=o.request.at("index");if(i<0 || !o.batchInput || i>=int(o.batchInput->rows.size()))throw std::invalid_argument("Unknown member index");}
     else if(op=="batch_parameters") o.output=BatchParameters(o.document);
     else if(op=="batch_settings") {
         o.batchSpec=o.request.value("spec",o.batchSpec);o.recorderColumns=o.request.value("columns",o.recorderColumns);
@@ -121,49 +138,131 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
             if(axis.contains("values")) {if(!axis.at("values").is_array())throw std::invalid_argument("Values must be a numeric list");for(const auto &v:axis.at("values"))if(!v.is_number() || !std::isfinite(v.get<double>()))throw std::invalid_argument("Values must be finite numbers");}
             else if(!axis.at("start").is_number() || !axis.at("stop").is_number() || !axis.at("count").is_number_integer())throw std::invalid_argument("Range requires numeric start/stop and integer count");
         }
-        (void)scaps_core::record_batch_json("{\"rows\":[]}",o.recorderColumns.dump());
+        (void)RecorderColumns(o.recorderColumns);
         auto spec=o.batchSpec;spec["columns"]=o.recorderColumns;
         try {o.output=BatchPreview(o.document,spec);}catch(const std::invalid_argument &e) {o.output={{"configuration_error",e.what()}};}
     }
     else if(op=="quick_sweep" || op=="preview_batch" || op=="run_batch" || op=="retry_batch") {
-        if(op=="retry_batch" && o.batchResult.empty())throw std::invalid_argument("No batch to retry");
-        auto spec=op=="quick_sweep"?QuickSweep(o.document,o.request):op=="retry_batch"?o.batchResult.at("spec"):o.request.value("spec",o.batchSpec);
-        spec["columns"]=op=="retry_batch"?o.batchResult.at("columns"):o.request.value("columns",o.recorderColumns);
+        if(op=="retry_batch" && !o.batchInput)throw std::invalid_argument("No batch to retry");
+        auto spec=op=="quick_sweep"?QuickSweep(o.document,o.request):op=="retry_batch"?o.batchInput->Schema().at("spec"):o.request.value("spec",o.batchSpec);
+        spec["columns"]=op=="retry_batch"?o.batchInput->Schema().at("columns"):o.request.value("columns",o.recorderColumns);
         const auto plan=BatchPreview(o.document,spec);spec=plan.at("spec");
         if(op=="preview_batch") {o.output=plan;return true;}
         const auto &points=plan.at("combinations");
-        o.output=op=="retry_batch"?o.batchResult:Json{{"schema_version",1},{"spec",spec},{"columns",Json::parse(scaps_core::record_batch_json("{\"rows\":[]}",spec.at("columns").dump())).at("columns")},{"rows",Json::array()},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"elapsed_s",0.},{"project_snapshot",o.document},{"provenance",{{"device_hash",DocumentHash(o.document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}}}};
-        // Members are independent: solve them on a small thread pool, then merge rows in order (progress/cancel via the main thread).
-        std::vector<Json> solved(points.size());std::vector<char> ready(points.size(),0);
-        auto wanted=[&](std::size_t i){return !(op=="retry_batch" && o.output["rows"][i].at("id")!=o.request.at("member_id"));};
+        auto table=CreateRef<BatchResult>();table->native=true;
+        auto metadata=op=="retry_batch" ? o.batchInput->Schema() : Json{{"schema_version",1},{"spec",spec},{"columns",NormalizedColumns(spec.at("columns"))},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"elapsed_s",0.},{"project_snapshot",o.document},{"provenance",{{"device_hash",DocumentHash(o.document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}}}};
+        if(op=="retry_batch")table->rows=o.batchInput->rows;else table->rows.resize(points.size());
+        if(op=="retry_batch" && (!o.batchInput->native || o.batchInput->legacyBase)) {
+            table->legacyBase=o.batchInput->legacyBase?o.batchInput->legacyBase:o.batchInput;table->replacedRows=o.batchInput->replacedRows;
+            table->replacedRows.push_back(o.request.at("member_id").get<std::string>());
+        }
+        if(op=="retry_batch" && std::none_of(table->rows.begin(),table->rows.end(),[&](const auto& r){return r->id==o.request.at("member_id").get<std::string>();}))throw std::invalid_argument("Unknown member_id");
+        const auto parameters=BatchParameters(o.document);
+        scaps_core::BatchSpec typedSpec;typedSpec.voltages_V=spec.at("voltages_V").get<std::vector<double>>();typedSpec.frequencies_Hz=spec.at("frequencies_Hz").get<std::vector<double>>();typedSpec.columns=RecorderColumns(spec.at("columns"));
+        typedSpec.photovoltaic=true;typedSpec.photovoltaic_voltage_limit_V=spec.value("photovoltaic_voltage_limit_V",2.);
+        if(spec.contains("incident_power_W_m2"))typedSpec.incident_power_W_m2=spec.at("incident_power_W_m2");
+        if(spec.contains("mesh_coordinates_m"))typedSpec.mesh_coordinates_m=spec.at("mesh_coordinates_m").get<std::vector<double>>();
+        scaps_core::BatchOptions options;options.include_curves=true;options.parallel_member=true;
+        options.include_conditioning_profiles=o.jsonResponse;
+        if(o.jsonResponse && spec.value("include_curves",true))options.profile_biases=typedSpec.voltages_V;
+        o.batchGroup="batch-"+std::to_string(metadata.at("provenance").at("time_unix_ms").get<std::int64_t>());
+        o.members.resize(points.size());
         std::atomic<std::size_t> finished{0};
         if(o.feed) {std::lock_guard g(o.feed->lock);o.feed->memberTotal=points.size();}
-        // Core ParallelFor: caller + child jobs on the JobSystem (no raw threads); cancel skips remaining members -> Cancelled rows.
+        const auto wanted=[&](std::size_t i){return op!="retry_batch" || table->rows[i]->id==o.request.at("member_id").get<std::string>();};
         ParallelFor(ctx,points.size(),[&](std::size_t i){
             if(wanted(i)) {
-                auto single=spec;for(auto &axis:single["axes"]) {axis["values"]=Json::array({points[i].at(axis.at("path").get<std::string>())});axis.erase("count");axis.erase("start");axis.erase("stop");}
-                solved[i]=Json::parse(scaps_core::run_batch_json(o.document.dump(),single.dump())).at("rows")[0];ready[i]=1;
-                if(o.feed) { // finished member goes to the UI at once (curve only; marked "running" there, never stored)
-                    LiveMember m;m.index=int(i);
-                    if(solved[i].contains("curves") && solved[i].at("curves").contains("iv")) for(const auto &pt:solved[i].at("curves").at("iv")) {m.v.push_back(pt.at("voltage_V").get<double>());m.j.push_back(pt.value("status",std::string{})=="Converged" && pt.at("J_Am2").is_number()?pt.at("J_Am2").get<double>():double(NAN));}
-                    o.feed->AddMember(std::move(m));
+                auto model=o.document;auto row=CreateRef<scaps_core::BatchRow>();
+                for(const auto& parameter:parameters) {
+                    const std::string path=parameter.at("path");
+                    if(points[i].contains(path) && points[i].at(path)!=parameter.at("value")) {
+                        model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=points[i].at(path);
+                    }
                 }
+                try {
+                    auto project=BatchModel(model);
+                    for(const auto& [path,value]:points[i].items())if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
+                    auto memberSpec=typedSpec;
+                    if(spec.contains("metastable"))memberSpec.conditioning=BatchConditioningModel(project,spec.at("metastable"));
+                    memberSpec.initial_state=BatchInitialStateModel(project,spec);
+                    *row=scaps_core::run_batch_member(project,memberSpec,options);
+                    row->project_hash=scaps_core::batch_project_hash(project);
+                }
+                catch(const std::exception& e) {row->status="Failed";const auto* typed=dynamic_cast<const scaps_core::DefError*>(&e);row->error_type=typed?typed->code:"invalid_parameter";row->message=e.what();scaps_core::record_batch(*row,typedSpec.columns);}
+                row->id="point_"+std::to_string(i);row->attempt=op=="retry_batch"?table->rows[i]->attempt+1:1;
+                for(const auto& [key,value]:points[i].items())row->parameters[key]=value.get<double>();
+                table->rows[i]=row;
+                auto& member=o.members[i];member.model=std::move(model);member.hash=DocumentHash(member.model);member.parameters=BatchParameters(member.model);member.t=points.size()<2?0.:double(i)/double(points.size()-1);
+                auto memberMeta=metadata;memberMeta["project_snapshot"]=member.model;memberMeta["provenance"]["device_hash"]=member.hash;memberMeta["elapsed_s"]=row->elapsed_s;
+                auto memberResult=CreateRef<BatchResult>();memberResult->native=true;memberResult->body.prim=std::move(memberMeta);memberResult->rows.push_back(row);member.typed=std::move(memberResult);
+                member.result={{"provenance",member.typed->Schema().at("provenance")},{"elapsed_s",row->elapsed_s}};
+                if(o.feed) {LiveMember m;m.index=int(i);std::vector<double> v,j;for(const auto& p:row->iv){v.push_back(p.voltage_V);j.push_back(p.status==scaps_core::SolverStatus::Converged?p.J_Am2:double(NAN));}m.v=Column::Intern(std::move(v));m.j=Column::Intern(std::move(j));o.feed->AddMember(std::move(m));}
             }
             ctx.SetStage("Members "+std::to_string(++finished)+" / "+std::to_string(points.size()));
         });
+        double elapsed=op=="retry_batch"?metadata.value("elapsed_s",0.):0;
         for(std::size_t i=0;i<points.size();++i) {
-            if(!wanted(i))continue;
-            Json row;
-            if(!ready[i]) {row={{"parameters",points[i]},{"status","Cancelled"},{"error_type","cancelled"},{"message","Stopped before this member"},{"elapsed_s",0.},{"values",Json::object()},{"statuses",Json::object()}};for(const auto &c:o.output.at("columns")) {row["values"][c.at("id").get<std::string>()]=nullptr;row["statuses"][c.at("id").get<std::string>()]="cancelled";}}
-            else {row=std::move(solved[i]);o.output["elapsed_s"]=o.output.at("elapsed_s").get<double>()+row.at("elapsed_s").get<double>();}
-            row["id"]="point_"+std::to_string(i);row["attempt"]=op=="retry_batch"?o.output["rows"][i].value("attempt",1)+1:1;
-            if(op=="retry_batch")o.output["rows"][i]=row;else o.output["rows"].push_back(row);
+            if(!table->rows[i]) {
+                auto row=CreateRef<scaps_core::BatchRow>();row->id="point_"+std::to_string(i);row->status="Cancelled";row->error_type="cancelled";row->message="Stopped before this member";
+                for(const auto& [key,value]:points[i].items())row->parameters[key]=value.get<double>();
+                for(const auto& c:typedSpec.columns)row->values[c.id]={NAN,"cancelled"};table->rows[i]=std::move(row);
+            }
+            if(wanted(i))elapsed+=table->rows[i]->elapsed_s;
         }
+        std::erase_if(o.members,[](const auto& member){return !member.typed;});
+        metadata["elapsed_s"]=elapsed;metadata["cancelled"]=ctx.IsCancellationRequested();table->body.prim=std::move(metadata);o.typedOut=table;
+        o.output={{"provenance",table->Schema().at("provenance")},{"elapsed_s",elapsed},{"cancelled",ctx.IsCancellationRequested()}};
         ctx.SetProgress(float(points.size()),float(points.size()));
-        if(op=="retry_batch" && std::none_of(o.output.at("rows").begin(),o.output.at("rows").end(),[&](const Json &r){return r.at("id")==o.request.at("member_id");}))throw std::invalid_argument("Unknown member_id");
-        o.output["cancelled"]=ctx.IsCancellationRequested();
-    } else if(op=="record_batch") {auto table=SelectedTable(o.batchResult,Json::object());o.output=Json::parse(scaps_core::record_batch_json(table.dump(),o.request.value("columns",o.recorderColumns).dump()));}
-    else if(op=="export_batch" || op=="send_to_plotlab") {const auto table=SelectedTable(o.batchResult,o.request);const auto path=o.request.at("path").get<std::string>();if(op=="send_to_plotlab")Workbook(table,path);else Save(path,scaps_core::batch_table_csv(table.dump()));o.output={{"path",path},{"rows",table.at("rows").size()},{"export_status","saved"}};}
+    } else if(op=="record_batch") {
+        if(!o.batchInput)throw std::invalid_argument("No current batch results");
+        auto table=CreateRef<BatchResult>();table->native=true;auto metadata=o.batchInput->Schema();
+        if(!o.batchInput->native || o.batchInput->legacyBase){table->legacyBase=o.batchInput->legacyBase?o.batchInput->legacyBase:o.batchInput;table->replacedRows=o.batchInput->replacedRows;}
+        const auto input=o.request.value("columns",o.recorderColumns);const auto columns=RecorderColumns(input);metadata["columns"]=NormalizedColumns(input);
+        for(const auto& source:o.batchInput->rows) {
+            ctx.ThrowIfCancellationRequested();
+            if(source->status=="Converged" && !source->curves_retained)throw std::invalid_argument("recording again requires include_curves=true");
+            auto row=CreateRef<scaps_core::BatchRow>(*source);
+            scaps_core::BatchOptions fetch;fetch.include_curves=true;fetch.parallel_member=true;
+            std::vector<scaps_core::RecorderColumn> missing;
+            for(const auto& column:columns)if(column.quantity=="profile" && source->status=="Converged")for(const auto& point:source->iv) {
+                if(std::abs(point.voltage_V-column.voltage_V)<=8*std::numeric_limits<double>::epsilon()*std::max({1.,std::abs(point.voltage_V),std::abs(column.voltage_V)}) && (!point.profiles || !point.profiles->fields.contains(column.field))) {
+                    missing.push_back(column);break;
+                }
+            }
+            if(!missing.empty()) {
+                auto model=metadata.at("project_snapshot");
+                for(const auto& parameter:BatchParameters(model)) {const std::string path=parameter.at("path");if(source->parameters.contains(path))std::visit([&](const auto& value){model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=value;},source->parameters.at(path));}
+                scaps_core::BatchSpec spec;spec.voltages_V=metadata.at("spec").at("voltages_V").get<std::vector<double>>();spec.columns=std::move(missing);
+                if(metadata.at("spec").contains("mesh_coordinates_m"))spec.mesh_coordinates_m=metadata.at("spec").at("mesh_coordinates_m").get<std::vector<double>>();
+                auto project=BatchModel(model);for(const auto& [path,value]:source->parameters)if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
+                if(metadata.at("spec").contains("metastable"))spec.conditioning=BatchConditioningModel(project,metadata.at("spec").at("metastable"));
+                spec.initial_state=BatchInitialStateModel(project,metadata.at("spec"));
+                const auto samples=scaps_core::run_batch_member(project,spec,fetch);
+                if(samples.status!="Converged")throw std::runtime_error("Profile acquisition failed: "+samples.status+" "+samples.message);
+                for(auto& point:row->iv)for(const auto& sample:samples.iv)if(sample.voltage_V==point.voltage_V && sample.profiles) {
+                    if(!point.profiles){point.profiles=sample.profiles;continue;}
+                    auto profiles=point.profiles?CreateRef<scaps_core::BatchProfile>(*point.profiles):CreateRef<scaps_core::BatchProfile>();profiles->x_m=sample.profiles->x_m;
+                    for(const auto& [field,values]:sample.profiles->fields)profiles->fields[field]=values;point.profiles=std::move(profiles);
+                }
+            }
+            scaps_core::record_batch(*row,columns);table->rows.push_back(std::move(row));
+        }
+        table->body.prim=std::move(metadata);o.typedOut=std::move(table);o.output={{"provenance",o.batchInput->Schema().at("provenance")}};
+    }
+    else if(op=="export_batch" || op=="send_to_plotlab") {
+        if(!o.batchInput)throw std::invalid_argument("No current batch results");
+        auto rows=o.batchInput->rows;
+        if(o.request.contains("member_id")){const auto id=o.request.at("member_id").get<std::string>();std::erase_if(rows,[&](const auto& row){return row->id!=id;});if(rows.empty())throw std::invalid_argument("Unknown member_id");}
+        const auto path=o.request.at("path").get<std::string>();
+        if(op=="send_to_plotlab")Workbook(*o.batchInput,rows,path);
+        else {
+            const auto& schema=o.batchInput->Schema();std::vector<std::string> paths;for(const auto& axis:schema.at("spec").at("axes"))paths.push_back(axis.at("path"));
+            std::vector<scaps_core::RecorderColumn> columns;for(const auto& c:schema.at("columns")){scaps_core::RecorderColumn column;column.id=c.at("id");column.unit=c.at("unit");columns.push_back(std::move(column));}
+            scaps_core::BatchTable table;table.rows=rows;Save(path,scaps_core::batch_table_csv(table,paths,columns,schema.at("solver_version")));
+        }
+        o.output={{"path",path},{"rows",rows.size()},{"export_status","saved"}};
+    }
+
     else return false;
     return true;
 }

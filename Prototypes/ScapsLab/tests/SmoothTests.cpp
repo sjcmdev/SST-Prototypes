@@ -59,6 +59,6 @@ TEST(Smooth,BatchMembersArePreparedOnTheWorkerAndStreamed) {
     const auto &d=w.Current();
     EXPECT_EQ(std::count_if(d.history.begin(),d.history.end(),[](const Json &r){return r.at("kind")=="batch";}),4);
     EXPECT_TRUE(d.liveMembers.empty());
-    for(const auto &run:d.history) if(run.at("kind")=="batch") {const auto typed=d.RunResult(run.at("run_id"));ASSERT_TRUE(typed);EXPECT_TRUE(typed->HasView()) << "view prepared by the worker";}
-    EXPECT_TRUE(d.batchResult.typed()->HasView());
+    for(const auto &run:d.history) if(run.at("kind")=="batch") {const auto typed=std::dynamic_pointer_cast<const BatchResult>(d.RunResult(run.at("run_id")));ASSERT_TRUE(typed);EXPECT_FALSE(typed->HasView());ASSERT_EQ(typed->rows.size(),1u);EXPECT_FALSE(typed->rows[0]->iv.empty());}
+    EXPECT_FALSE(d.batchResult.typed()->HasView());
 }
