@@ -5,9 +5,11 @@
 #include <GLFW/glfw3.h>
 #include "Core/Presentation/EditorLayer.hpp"
 #include "Panel.hpp"
+#include "PlotUi.hpp"
 #include "Io.hpp"
 #include "Core/IO/IOLayer.hpp"
 #include <imgui.h>
+#include <implot.h>
 #include <imgui_internal.h>
 #include <cstdlib>
 #include <cstdio>
@@ -32,17 +34,18 @@ public:
             if(w->focusLayers) {ImGui::SetWindowFocus(panels[w->Current().selectedInterface>=0?12:1]->ImGuiName().c_str());w->focusLayers=false;}
             if(w->focusView>=0 && w->focusView<int(panels.size()) && !ScapsLab::PanelShown(w->focusView)) w->focusView=-1;
             if(w->focusView>=0 && w->focusView<int(panels.size())) {auto &p=panels[w->focusView];p->SetVisible(true);ImGui::SetWindowFocus(p->ImGuiName().c_str());w->focusView=-1;}
-            if(w->resetLayout) {w->resetLayout=false;(void)w->commands->Execute(CommandID{"app.layout.reset"});force=true;done=false;}
+            if(w->resetLayout) {w->plotSession.ResetRanges();w->plotSession.settings.layout.clear();w->plotSession.settings.panels.clear();w->projectDirty=true;w->RefreshDirty();w->resetLayout=false;(void)w->commands->Execute(CommandID{"app.layout.reset"});force=true;done=false;}
             else if(focus) {ImGui::SetWindowFocus(panels[1]->ImGuiName().c_str());ImGui::SetWindowFocus(panels[5]->ImGuiName().c_str());focus=false;}return;} done=true;
         // SettingsIniData is only filled by a save, so it is empty right after the loaded layout; serialize the live settings instead.
         const std::string ini=ImGui::SaveIniSettingsToMemory();
         // Live windows always get a section, so require a saved dock assignment for a known panel.
         const auto section=ini.find("[Window][sst-window-"+std::to_string(panels[0]->GetId())+"]");
+        if(!force && !panels[0]->GetWorkflow()->plotSession.settings.layout.empty()) return;
         if(auto *w=panels[0]->GetWorkflow();!layoutKey.empty() && !w->settingsPath.empty()) {
             // Rebuild once when the panel set (or the default layout) changed since the saved layout was made.
             if(w->settings.value("layout_key",std::string{})!=layoutKey) {force=true;w->settings["layout_key"]=layoutKey;w->SaveSettings();}
         }
-        if(!force && section!=std::string::npos && ini.substr(section,ini.find("\n[",section+1)-section).find("DockId=")!=std::string::npos) return;
+        if(!force && ScapsLab::ValidDockLayout(ini) && section!=std::string::npos && ini.substr(section,ini.find("\n[",section+1)-section).find("DockId=")!=std::string::npos) return;
         const auto *vp=ImGui::GetMainViewport(); const auto root=vp->ID;
         ImGui::DockBuilderRemoveNode(root); ImGui::DockBuilderAddNode(root,ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodePos(root,vp->WorkPos); ImGui::DockBuilderSetNodeSize(root,vp->WorkSize);
@@ -80,9 +83,33 @@ class ScapsCloseGuard final : public Layer {
     Application &app;ScapsLab::Workflow &w;
     bool requested=false,saving=false,closing=false,creating=false;
     std::vector<Ref<ScapsLab::Panel>> panels;
-    ScapsLab::Json appliedPanels;
+    ScapsLab::PlotSettings loadedSettings,observedSettings,persistedSettings;
+    unsigned appliedEpoch=~0u;
+    std::chrono::steady_clock::time_point changedAt=std::chrono::steady_clock::now(),capturedAt{};
+    void CaptureSession() {
+        auto &s=w.plotSession.settings;
+        for(const auto &panel:panels)if(panel->GetId())s.panels[panel->GetTitle()]=panel->IsVisible();
+        ScapsLab::CaptureDockLayout(s,closing);
+        capturedAt=std::chrono::steady_clock::now();
+    }
+    void PersistSession(bool force=false) {
+        const auto now=std::chrono::steady_clock::now();
+        for(const auto &panel:panels)if(panel->GetId())w.plotSession.settings.panels[panel->GetTitle()]=panel->IsVisible();
+        // Exit flushes the last good frame; it must never sample a dismantled dock tree.
+        if(!force && now-capturedAt>std::chrono::seconds(1))CaptureSession();
+        const auto &s=w.plotSession.settings;
+        if(s!=observedSettings){observedSettings=s;changedAt=now;}
+        if(s!=persistedSettings && (force || now-changedAt>std::chrono::milliseconds(750))){w.settings["session"]=s.Write();w.SaveSettings();persistedSettings=s;}
+    }
+    void ApplySession() {
+        auto &s=w.plotSession.settings;
+        s.Read(w.project.ui);w.plotSession.runtime.clear();w.plotSession.epoch=w.epoch;appliedEpoch=w.epoch;loadedSettings=s;
+        ScapsLab::ApplyDockLayout(s);
+        for(auto &panel:panels)if(const auto it=s.panels.find(panel->GetTitle());it!=s.panels.end())panel->SetVisible(it->second);
+        observedSettings=s;changedAt=std::chrono::steady_clock::now();
+    }
     std::string opening;
-    std::string appliedLayout;
+    std::string settingsPlot;
     bool exporting=false, exportAll=false;
     int exportFormat=0, selectedRun=0;
     char exportPath[2048]="scapslab-results.csv";
@@ -91,13 +118,13 @@ class ScapsCloseGuard final : public Layer {
             auto target=w.path;
             if(saveAs || target.empty()) {const auto file=SaveFileDialog({"ScapsLab project","scapslab"},"Untitled.scapslab");if(!file)return false;target=file->Utf8();}
             if(std::filesystem::path(target).extension()!=".scapslab") target+=".scapslab";
-            std::size_t iniSize=0;const auto *ini=ImGui::SaveIniSettingsToMemory(&iniSize);w.project.ui["imgui_ini"]=std::string(ini,iniSize);appliedLayout=std::string(ini,iniSize); /* live layout: do not reload what we just captured (reset after Save) */
+            CaptureSession();w.plotSession.settings.WriteChanges(w.project.ui,loadedSettings);PersistSession(true);
             app.GetEventBusRef()->PublishNew<ScapsLab::ProjectSaveRequested>(target,w.includeResults);return w.ioResult.value("ok",false);
         } catch(const std::exception &e) {w.status=e.what();return false;}
     }
     void Proceed() {
         if(!w.recoveryPath.empty() && opening!=w.recoveryPath) w.DropRecovery(w.path);
-        if(closing) {w.dirty=false;app.Shutdown();}
+        if(closing) {PersistSession(true);w.dirty=false;app.Shutdown();}
         else if(creating) {(void)w.Dispatch({{"operation","project_new"}});creating=false;}
         else if(!opening.empty()) {app.GetEventBusRef()->PublishNew<ScapsLab::ProjectOpenRequested>(opening);opening.clear();}
     }
@@ -106,22 +133,44 @@ public:
         if(!std::getenv("SCAPSLAB_GALLERY_EXPORT") && !std::getenv("SCAPSLAB_NO_IDLE_THROTTLE")) app.SetIdleWaitProvider([this]()->double { // idle: sleep until input; job running: ~20 fps
             if(ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || this->w.tutorial.Active() || this->requested || this->exporting) return 0.;
             return this->w.Pending() || this->w.warmJob ? 0.05 : 0.5;});
-        app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Pending())return true;creating=false;closing=true;requested=true;return false;});
+        app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Pending()){PersistSession(true);return true;}creating=false;closing=true;requested=true;return false;});
+        persistedSettings=w.plotSession.settings;
         if(const auto config=app.GetConfigManager().lock()) w.SetRecentPath((config->GetConfigDirectory()/Path{"scapslab-recent.json"}).Utf8()); // async read/write; Workflow::OnUpdate persists changes
+    }
+    void OnUpdate(float) override {
+        if(ImGui::GetFrameCount()>=3 && appliedEpoch!=w.epoch)ApplySession();
     }
     void OnImGuiRender() override {
         w.interacting=ImGui::IsAnyItemActive();w.dragging=std::exchange(w.dragSeen,false); // dragSeen: a slider was held last frame
+        if(ImGui::GetFrameCount()<3)return; // apply after Core's deferred window settings
         if(std::getenv("SCAPSLAB_PERF")) { // frame-time log: avg/max over 2 s windows
             static double sum=0,mx=0;static int n=0;static auto last=std::chrono::steady_clock::now();
             const double ms=ImGui::GetIO().DeltaTime*1000.;sum+=ms;mx=std::max(mx,ms);++n;
             if(std::chrono::steady_clock::now()-last>std::chrono::seconds(2)) {std::fprintf(stderr,"[perf] frames %d avg %.2f ms max %.2f ms | %s\n",n,sum/n,mx,w.MemoryReport().c_str());sum=mx=0;n=0;last=std::chrono::steady_clock::now();}
         }
-        const auto savedPanels=w.project.ui.value("panels",ScapsLab::Json::object());
-        if(savedPanels!=appliedPanels) for(auto &panel:panels) if(savedPanels.contains(panel->GetTitle()))panel->SetVisible(savedPanels.at(panel->GetTitle()).get<bool>());
-        appliedPanels=ScapsLab::Json::object();for(const auto &panel:panels)appliedPanels[panel->GetTitle()]=panel->GetState().visible;
-        w.project.ui["panels"]=appliedPanels;
-        const auto layout=w.project.ui.value("imgui_ini",std::string{});
-        if(!layout.empty() && layout!=appliedLayout && !w.Busy()) {ImGui::LoadIniSettingsFromMemory(layout.c_str(),layout.size());appliedLayout=layout;}
+        if(appliedEpoch!=w.epoch)return;
+        PersistSession();
+        if(w.plotPreferences){
+            ImGui::SetNextWindowSize(ImVec2(470,360),ImGuiCond_FirstUseEver);
+            if(ImGui::Begin("Plot settings",&w.plotPreferences) && ImGui::BeginTable("plot_preferences",2)){
+                ImGui::TableNextRow();ImGui::TableSetColumnIndex(0);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Auto-fit margin [%]");ImGui::TableSetColumnIndex(1);ImGui::SetNextItemWidth(-1);
+                if(ImGui::SliderFloat("##auto_fit_margin",&w.plotSession.settings.margin,0,30,"%.0f %%")){++w.plotSession.revision;w.projectDirty=true;w.RefreshDirty();}
+                auto &session=w.plotSession;
+                const auto row=[](const char *label){ImGui::TableNextRow();ImGui::TableSetColumnIndex(0);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);ImGui::TableSetColumnIndex(1);ImGui::SetNextItemWidth(-1);};
+                row("Plot");if(ImGui::BeginCombo("##plot",settingsPlot.empty()?"Select a plot":settingsPlot.c_str())){for(const auto &[id,v]:session.settings.plots)if(ImGui::Selectable(id.c_str(),id==settingsPlot))settingsPlot=id;ImGui::EndCombo();}
+                if(!settingsPlot.empty()){
+                    auto &v=session.settings.plots[settingsPlot];const auto &r=session.runtime[settingsPlot];bool changed=false;
+                    const char *axes[]={"Log X1","Log X2","Log X3","Log Y1","Log Y2","Log Y3"};
+                    for(int i=0;i<6;++i)if(r.enabled[i]){row(axes[i]);ImGui::PushID(i);bool log=v.log[i].value_or(r.logBefore[i]);if(ImGui::Checkbox("##log",&log)){v.log[i]=log;changed=true;}ImGui::PopID();}
+                    row("Legend shown");bool shown=v.legend.value_or(r.legendShown);if(ImGui::Checkbox("##legend",&shown)){v.legend=shown;changed=true;}
+                    row("Legend position");const int locations[]={ImPlotLocation_NorthWest,ImPlotLocation_North,ImPlotLocation_NorthEast,ImPlotLocation_West,ImPlotLocation_Center,ImPlotLocation_East,ImPlotLocation_SouthWest,ImPlotLocation_South,ImPlotLocation_SouthEast};
+                    int location=0;for(int i=0;i<9;++i)if(locations[i]==v.legendLocation.value_or(r.legendLocation))location=i;
+                    if(ImGui::Combo("##legend_position",&location,"Top left\0Top\0Top right\0Left\0Center\0Right\0Bottom left\0Bottom\0Bottom right\0")){v.legendLocation=locations[location];changed=true;}
+                    if(changed){++session.revision;w.projectDirty=true;w.RefreshDirty();}
+                }
+                ImGui::EndTable();
+            }ImGui::End();
+        }
         if(auto *window=glfwGetCurrentContext()) glfwSetWindowTitle(window,(w.project.name+(w.dirty?" *":"")+" - ScapsLab").c_str());
         if(!ImGui::GetIO().WantTextInput) {
             if(ImGui::IsKeyPressed(ImGuiKey_F,false) && !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyAlt) w.fineLock=!w.fineLock; // F = fine slider mode (touchpads)
@@ -135,7 +184,7 @@ public:
         if(!w.fileAction.empty() && !w.Pending()) {
             const auto action=std::exchange(w.fileAction,std::string{});
             if(action=="new") {creating=true;closing=false;if(w.dirty)requested=true;else Proceed();}
-            else if(action=="exit") {if(!w.dirty)app.Shutdown();else {creating=false;closing=true;requested=true;}}
+            else if(action=="exit") {if(!w.dirty){PersistSession(true);app.Shutdown();}else {creating=false;closing=true;requested=true;}}
             else if(action=="export_results") exporting=true;
             else if(action=="recover") w.openRequest=w.recoveryPath;
             else if(action=="save" || action=="save_as") (void)Save(action=="save_as");
@@ -208,6 +257,7 @@ void SetupApplication(Application &app) {
         if(Io::Load(startupSettings,text,error)) {try {w->settings=Json::parse(text);}catch(...) {}}
         if(!w->settings.is_object()) w->settings=Json::object();
         ExperimentalPanels()=w->settings.value("experimental_panels",false);
+        if(w->settings.contains("session"))w->plotSession.settings.Read(w->settings["session"]);
     }
     w->Current().document=NewDeviceDocument(); w->Current().name=w->Current().document.at("case_id");w->path="";
     if(!startupFile.empty()) {(void)w->Dispatch({{"operation","project_load"},{"path",startupFile}});while(w->Pending()){w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}}

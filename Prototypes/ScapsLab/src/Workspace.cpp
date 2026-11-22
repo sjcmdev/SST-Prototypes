@@ -278,11 +278,11 @@ Json Workflow::Workspace(bool withResults) const {
     return {{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}};
 }
 // ui object checks shared by workspace validation and project_edit; returns history_retention
-int ValidateUi(const Json &ui) {
+int ValidateUi(const Json &ui,bool strictPlotRanges) {
     if(!ui.is_object()) throw std::invalid_argument("ui must be an object");
     if(ui.contains("history_retention") && !ui.at("history_retention").is_number_integer())throw std::invalid_argument("history_retention must be an integer");
     if(ui.contains("panels")) {if(!ui.at("panels").is_object())throw std::invalid_argument("panels must be an object");for(const auto &visible:ui.at("panels"))if(!visible.is_boolean())throw std::invalid_argument("panel visibility must be boolean");}
-    if(ui.contains("plots")) {
+    if(strictPlotRanges && ui.contains("plots")) {
         if(!ui.at("plots").is_object())throw std::invalid_argument("plots must be an object");
         for(const auto &limits:ui.at("plots")) {
             if(!limits.is_array() || (limits.size()!=4 && limits.size()!=6))throw std::invalid_argument("plot limits require xmin, xmax, ymin, ymax and optional y2min, y2max");
@@ -315,7 +315,7 @@ void ValidateWorkspace(const Json &value) {
     const auto &devices=value.at("devices");if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::invalid_argument("Expected 1..1000 devices");
     Project checked;checked.name=value.at("name").get<std::string>();if(checked.name.empty()) throw std::invalid_argument("Project name is empty");
     checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
-    const auto retention=ValidateUi(checked.ui);
+    const auto retention=ValidateUi(checked.ui,false); // optional legacy view ranges are validated/ignored by the plot reader
     std::set<std::string> ids;
     for(const auto &item:devices) {
         const auto id=item.at("id").get<std::string>();if(id.empty() || !ids.insert(id).second) throw std::invalid_argument("Invalid or duplicate device_id");
