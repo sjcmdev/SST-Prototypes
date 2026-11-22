@@ -101,7 +101,7 @@ namespace SST
 		if (!result)
 			return result;
 
-		auto entries = result.Value();
+		auto entries = std::move(result.Value());
 		entries.erase(std::remove_if(entries.begin(), entries.end(), [](const ProgressEntrySnapshot &entry) {
 			return entry.finished;
 		}), entries.end());
@@ -115,7 +115,7 @@ namespace SST
 		if (!result)
 			return result;
 
-		auto entries = result.Value();
+		auto entries = std::move(result.Value());
 		entries.erase(std::remove_if(entries.begin(), entries.end(), [](const ProgressEntrySnapshot &entry) {
 			return !entry.finished;
 		}), entries.end());
@@ -136,8 +136,8 @@ namespace SST
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
 		entry.parentId = event.parentId;
-		entry.source = event.type;
-		entry.label = event.name;
+		entry.source = JobHistoryText(event.type);
+		entry.label = JobHistoryText(event.name);
 		entry.status = JobStatus::Queued;
 		entry.priority = event.priority;
 		entry.createdAt = event.createdAt;
@@ -167,8 +167,8 @@ namespace SST
 
 		entry.completedWork = event.completedWork;
 		entry.totalWork = event.totalWork;
-		entry.currentStage = event.stage;
-		entry.currentMessage = event.message;
+		entry.currentStage = JobHistoryText(event.stage);
+		entry.currentMessage = JobHistoryText(event.message);
 	}
 
 	void ProgressTracker::onCompleted(const JobCompletedEvent &event)
@@ -182,6 +182,7 @@ namespace SST
 		entry.finished = true;
 		if (entry.totalWork > 0.0f && entry.completedWork < entry.totalWork)
 			entry.completedWork = entry.totalWork;
+		trimHistory();
 	}
 
 	void ProgressTracker::onCancelled(const JobCancelledEvent &event)
@@ -193,6 +194,7 @@ namespace SST
 		entry.status = JobStatus::Cancelled;
 		entry.finishedAt = event.finishedAt;
 		entry.finished = true;
+		trimHistory();
 	}
 
 	void ProgressTracker::onFailed(const JobFailedEvent &event)
@@ -202,8 +204,24 @@ namespace SST
 		auto &entry = m_Entries[event.id];
 		entry.id = event.id;
 		entry.status = JobStatus::Failed;
-		entry.errorSummary = event.errorMessage;
+		entry.errorSummary = JobHistoryText(event.errorMessage);
 		entry.finishedAt = event.finishedAt;
 		entry.finished = true;
+		trimHistory();
+	}
+	void ProgressTracker::trimHistory()
+	{
+		// At most 256 finished entries; unfinished parents/children are never removed.
+		std::vector<JobId> finished;
+		for (const auto &[id, entry] : m_Entries) {
+			if (!entry.finished) continue;
+			finished.push_back(id);
+		}
+		if (finished.size() <= JobHistoryLimit) return;
+		std::sort(finished.begin(), finished.end(), [this](JobId a, JobId b) {
+            const auto ta=m_Entries.at(a).finishedAt, tb=m_Entries.at(b).finishedAt;
+            return ta==tb ? a<b : ta<tb;
+        });
+		for (std::size_t i = 0; i < finished.size() - JobHistoryLimit; ++i) m_Entries.erase(finished[i]);
 	}
 } // namespace SST

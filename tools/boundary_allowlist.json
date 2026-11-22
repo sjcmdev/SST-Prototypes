@@ -1,0 +1,1603 @@
+{
+  "scan": [
+    "Core",
+    "Prototypes/ScapsLab/src"
+  ],
+  "edges": [
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 32,
+      "code": "YAML::Node MissingNode()",
+      "sha256": "842fa387dbff7473be48edaa6efda240797287e3be59738f8b70584da681933e",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 34,
+      "code": "return YAML::Node(YAML::NodeType::Undefined);",
+      "sha256": "7c564c1c065206310fabb71c70249e9c3205cf2e5e2447d1a850c28fc5f0ff48",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 37,
+      "code": "YAML::Node FindNodeRecursive(const YAML::Node &current, const std::string_view *path, std::size_t remaining)",
+      "sha256": "2ab63e00c0072534d7900721c4b9c0853525dae9cb747b71e3e28c0ea5adf618",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 45,
+      "code": "YAML::Node child = current[std::string(path[0])];",
+      "sha256": "c0fc5c81b2a6494434547bee8554f7a6fbd556f667cfe291d921e137452d2f53",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 52,
+      "code": "YAML::Node FindNode(const YAML::Node &root, std::span<const std::string_view> path)",
+      "sha256": "1e27c5a9068da291579fbac805bf713e32ba80d33280d0b6ecf18c0e0a3f4353",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 60,
+      "code": "YAML::Node FindNode(const YAML::Node &root,",
+      "sha256": "48894f8cadc888ccd263deb9af1a0ae62edbd92e7e7d73b5a751cfa1d5e94855",
+      "count": 4,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 64,
+      "code": "YAML::Node node = FindNode(root, path);",
+      "sha256": "2a6fccc0076232a7e476fc67f56ac2615f81987c743f0e9e2c8088d80678384f",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 70,
+      "code": "YAML::Node legacyNode = root[std::string(legacyFlatKey)];",
+      "sha256": "e9699c6518dc3eaa074a592928180975b080ffe1b1cce48a8789fd3e21e70633",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 81,
+      "code": "YAML::Node FindNode(const YAML::Node &root, std::initializer_list<std::string_view> path)",
+      "sha256": "46a9b85d1ce54145337f8f53105f9ce042bb51abd729d599fc0f549a36e315b5",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 94,
+      "code": "TValue ReadValue(const YAML::Node &root,",
+      "sha256": "7d1dc34b70fdfe83ea0adbcec31c80e64c3f8a45cae254368a99059f16a6c74f",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 99,
+      "code": "const YAML::Node node = FindNode(root, path, legacyFlatKey);",
+      "sha256": "027bf4b878edd9f0d5ce1ecb56ff7658f638547a5d265d642509fc4fbc8b848b",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 122,
+      "code": "std::string ReadString(const YAML::Node &root,",
+      "sha256": "d2b8feb1fe02f488f17095c2d67ee516a039a4e328ba78f51b6fee490ea322b1",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 188,
+      "code": "std::array<float, 4> ReadColorNode(const YAML::Node &node, std::array<float, 4> fallback)",
+      "sha256": "a5a405e0f3e37abfa5a38673a42b16f45b22589752732074e1918a7e738a26f6",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 214,
+      "code": "std::array<float, 3> ReadVec3Node(const YAML::Node &node, std::array<float, 3> fallback)",
+      "sha256": "4bc4d38fbfb0cc589e3da7cbe72458b6e29138e776e9959444d229b41b1b2aeb",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 233,
+      "code": "std::array<float, 4> ReadColor(const YAML::Node &root,",
+      "sha256": "b8830c6d55f0bc538cb0752a6ec9c502693e9d8ec76001081097ac195148ecee",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 249,
+      "code": "std::array<float, 3> ReadVec3(const YAML::Node &root,",
+      "sha256": "157c838b04c162bfe6354177ccac813102dca6b990c82c487e42118f9e83e613",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 266,
+      "code": "const YAML::Node &root,",
+      "sha256": "ed2ce4aaef3319db4046a24f4346891093f30c7b2ad65e49be700fa40c072f39",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 293,
+      "code": "std::array<float, 4> ReadClearColor(const YAML::Node &root, std::array<float, 4> fallback)",
+      "sha256": "dadd4d9520a55c82fa1de4c0662c8ada48484628145f6fa1dce5f41f170fd4dd",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 300,
+      "code": "YAML::Node node = FindNode(root, {appearanceSection, clearColorKey}, Name(LegacyKey::AppearanceClearColor));",
+      "sha256": "1953492bf37947e69659904a8d209587510618729996e8c791156f4a79ba5aeb",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 309,
+      "code": "void ApplyAppearanceYaml(const YAML::Node &root, AppearanceConfig &appearance)",
+      "sha256": "b80e904f595d5bec25e3d6e10057859d521dac64b764ff11c6f613547fb6feb2",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 429,
+      "code": "void ApplyDefaultYaml(const YAML::Node &root, ApplicationConfig &config)",
+      "sha256": "0e533857730844f9525f541178f06595ae3c88b7c0f7b9449200224d14aaee98",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 578,
+      "code": "void ApplyUserYaml(const YAML::Node &root, ApplicationConfig &config)",
+      "sha256": "933592e30dbd5b522b4fb3ffb2e68b59a44fb4e91c6140463bc364009d28cac4",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 639,
+      "code": "bool LoadYamlFile(const Path &path, YAML::Node &root, std::string &error)",
+      "sha256": "e68663cef29746d620bff69a63845d9f8284fb3397eac0531a0ce2f857ce3be7",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 646,
+      "code": "root = YAML::Load(text);",
+      "sha256": "67d121e9459eb43f2c320e3c847898bd19d678c7595afb1bbd8f6923fae6f26a",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 648,
+      "code": "root = YAML::Node(YAML::NodeType::Map);",
+      "sha256": "098704d66580451ccc784de6bc0f361343cf0b66aa4b50f81a39249fda908ae3",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 677,
+      "code": "bool WriteEmitterToFile(const Path &path, const YAML::Emitter &emitter, std::string &error)",
+      "sha256": "d5679283822dcbef34632afed4d48c76cd572978dc46f619db98ab6ced8f93e7",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 781,
+      "code": "void EmitColor(YAML::Emitter &emitter, const std::array<float, 4> &color)",
+      "sha256": "350cf12f22b200ed62304b3356fcf35284baf65a5b116294eb8b0c5f18078ebb",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 789,
+      "code": "void EmitVec3(YAML::Emitter &emitter, const std::array<float, 3> &vector)",
+      "sha256": "4ea2aa9e1c2e0343eb5ab371bdd7e3ac24cf9761348764490dcf12f76f50a24b",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 797,
+      "code": "void EmitFloatList(YAML::Emitter &emitter, const std::vector<float> &values)",
+      "sha256": "78bad191aaf25a18e9ac4f7ced12f70568fd00f0236e633d1c93759f895033a2",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 805,
+      "code": "void EmitVector2(YAML::Emitter &emitter, float x, float y)",
+      "sha256": "f9488d6cd04f6f66ae2a50cb633ee97b033031f2f0e973030f1885a32a4a5ef1",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 818,
+      "code": "void EmitAppearance(YAML::Emitter &out, const AppearanceConfig &appearance)",
+      "sha256": "08a4a0cb731f3507e0e829ce72a3c16efac0e6ce9488cfa16d441058888853f7",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 924,
+      "code": "YAML::Emitter out;",
+      "sha256": "edbed2fd87ee2cd0ed1af04d84a7727e2f83379b6be3103c30670f4ad593f085",
+      "count": 7,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1097,
+      "code": "void ApplyDefaultYaml(const YAML::Node &root, ApplicationConfig &config);",
+      "sha256": "665e17da9cc260ba3f02aee2a6d4c86dfc93d4113d9297396e1914be8595ac4a",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1098,
+      "code": "void ApplyUserYaml(const YAML::Node &root, ApplicationConfig &config);",
+      "sha256": "cae5a3b88ea223687c2d5cfa6a8a0d60d4e14ca08a27ecb46f998c94043ff954",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1099,
+      "code": "void ApplyAppearanceYaml(const YAML::Node &root, AppearanceConfig &appearance);",
+      "sha256": "c25a76adc548e0dc19fac03ce72d25b2f231dee409e28a58f88b7b03f2848070",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1168,
+      "code": "void emitColor(YAML::Emitter &emitter, const std::array<float, 4> &color)",
+      "sha256": "96f6541d15dfa6af75b94767379c63abaef2755b9ff943c6010061a5fbe07658",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1176,
+      "code": "void emitVector2(YAML::Emitter &emitter, float x, float y)",
+      "sha256": "9f4b88a1f70f505098819bd0c9690f4d5af3b4e8462334e42be58ead72fc04d3",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1184,
+      "code": "void emitAppearance(YAML::Emitter &out, const AppearanceConfig &appearance)",
+      "sha256": "a9843b70eedbd5f5a49bfcf5f10dcf123c0ad8fe44edf74f9bdbebefdcaf49d6",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1244,
+      "code": "bool emitterToString(const YAML::Emitter &emitter, std::string &text, std::string &error)",
+      "sha256": "4ab6c408242e43a18d023be83a49346c6b30d3c961f2cb49daefec2870b1edd4",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1257,
+      "code": "bool loadYamlText(std::string_view text, YAML::Node &root, std::string &error)",
+      "sha256": "7e8468b191619b262667666c97d45dd3ca0c06b81320fdc9134837c36711e332",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1261,
+      "code": "root = YAML::Load(std::string(text));",
+      "sha256": "5557a4a7611eace87bca5bbd6519f5b08cd6dbe568d5f6aab84e13f429731b66",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1278,
+      "code": "void emitDefaultConfig(YAML::Emitter &out, const ApplicationConfig &config)",
+      "sha256": "d32c9e187e81743af86ff6ee9906c2ffd4a9754a2ada24b98111cbcb7de5e172",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1328,
+      "code": "void emitUserSettings(YAML::Emitter &out, const ApplicationConfig &config)",
+      "sha256": "af85d2b79e31a1dee705465db1e20e5b6cc6171bf6ff4676177497382dbe1d82",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1353,
+      "code": "void emitProfile(YAML::Emitter &out, const ApplicationConfig &config)",
+      "sha256": "e008cbe2512988e1eb085c5635ced59b0b0c2b683be5f412694d966d603c4f4f",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/App/Serialization/YamlConfigSerializer.cpp",
+      "rule": "text-yaml",
+      "line": 1414,
+      "code": "YAML::Node root;",
+      "sha256": "973219ffdb0db6e8beeb6decfce1cef2c8fe3f2b39d82031dc6076e85d23d55a",
+      "count": 4,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/Input/KeyChord.cpp",
+      "rule": "text-stream",
+      "line": 59,
+      "code": "std::ostringstream out;",
+      "sha256": "9d653d72f3ae979fc56205ad7026ecd9e8dda56802db65080c137b53e79dc1fe",
+      "count": 1,
+      "reason": "Human-readable log, CLI command line or UI label; no data roundtrip."
+    },
+    {
+      "file": "Core/IO/IOLayer.cpp",
+      "rule": "text-yaml",
+      "line": 71,
+      "code": "YAML::Emitter out;",
+      "sha256": "edbed2fd87ee2cd0ed1af04d84a7727e2f83379b6be3103c30670f4ad593f085",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/IO/IOLayer.cpp",
+      "rule": "text-yaml",
+      "line": 101,
+      "code": "YAML::Node root = YAML::Load(std::string(text));",
+      "sha256": "8e27328954a5f5cbd9363f595283e2039a78b63e873b80a5a6a93a49ca32bcd2",
+      "count": 2,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/IO/IOLayer.cpp",
+      "rule": "text-yaml",
+      "line": 102,
+      "code": "YAML::Node list = root[\"bindings\"];",
+      "sha256": "d169c2fb967cbd0c3f3a73d543e0604e1ab53a6d879cfbd894c2a2dd00ad32bc",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/IO/IOLayer.cpp",
+      "rule": "text-yaml",
+      "line": 110,
+      "code": "for (const YAML::Node &node : list)",
+      "sha256": "81f17bb8dd01ef099169d6da89588dc35948d70d05a1379a193b039110d99b8f",
+      "count": 1,
+      "reason": "Persisted configuration/keymap file codec."
+    },
+    {
+      "file": "Core/Logging/Logger.cpp",
+      "rule": "text-stream",
+      "line": 138,
+      "code": "std::ostringstream stream;",
+      "sha256": "680244bb35fe8ceaf8bdefe6656ed5dd1fe90bbcc093f9155f9fb2dfd7868b76",
+      "count": 1,
+      "reason": "Human-readable log, CLI command line or UI label; no data roundtrip."
+    },
+    {
+      "file": "Core/Logging/LogRegistry.cpp",
+      "rule": "text-stream",
+      "line": 13,
+      "code": "std::ostringstream stream;",
+      "sha256": "680244bb35fe8ceaf8bdefe6656ed5dd1fe90bbcc093f9155f9fb2dfd7868b76",
+      "count": 1,
+      "reason": "Human-readable log, CLI command line or UI label; no data roundtrip."
+    },
+    {
+      "file": "Core/Platform/ProcessRunner.cpp",
+      "rule": "text-stream",
+      "line": 74,
+      "code": "std::ostringstream command;",
+      "sha256": "84a17e76493c28bbc0f640723e21510078e3fee79b3e150a19680f44a1d6ac70",
+      "count": 1,
+      "reason": "Human-readable log, CLI command line or UI label; no data roundtrip."
+    },
+    {
+      "file": "Core/Presentation/Panels/ProgressMonitorWindow.cpp",
+      "rule": "text-stream",
+      "line": 1113,
+      "code": "std::ostringstream stream;",
+      "sha256": "680244bb35fe8ceaf8bdefe6656ed5dd1fe90bbcc093f9155f9fb2dfd7868b76",
+      "count": 1,
+      "reason": "Human-readable log, CLI command line or UI label; no data roundtrip."
+    },
+    {
+      "file": "Core/Presentation/Panels/WindowChrome.cpp",
+      "rule": "text-json",
+      "line": 329,
+      "code": "return nlohmann::json{{\"state\", Save()}, {\"workspaces\", m_Workspaces}}.dump();",
+      "sha256": "7e64ad6a15f582166a44d0f239bc9dacf49f87690035b379f31b9bfd8ce96303",
+      "count": 1,
+      "reason": "Workspace/window persistence codec; runtime uses the typed layout state."
+    },
+    {
+      "file": "Core/Presentation/Panels/WindowChrome.cpp",
+      "rule": "text-json",
+      "line": 352,
+      "code": "const auto data = nlohmann::json::parse(std::exchange(workspace.m_PendingSettings, {}));",
+      "sha256": "68e8ec403f9bfbb9abb604cd4689cec0704bf11936177eb063df81b762a48492",
+      "count": 1,
+      "reason": "Workspace/window persistence codec; runtime uses the typed layout state."
+    },
+    {
+      "file": "Core/Presentation/Panels/WindowState.cpp",
+      "rule": "text-json",
+      "line": 342,
+      "code": "return result.dump();",
+      "sha256": "c5eab0dfde688f4d62f130b4d0c0edcd8a443a2f9cd23d7e57e239ef4c639c3c",
+      "count": 1,
+      "reason": "Workspace/window persistence codec; runtime uses the typed layout state."
+    },
+    {
+      "file": "Core/Presentation/Panels/WindowState.cpp",
+      "rule": "text-json",
+      "line": 348,
+      "code": "const auto document = nlohmann::json::parse(json);",
+      "sha256": "256c273dab9d01121d454de381733c784cda64b61e15a05cf46413551638ce55",
+      "count": 1,
+      "reason": "Workspace/window persistence codec; runtime uses the typed layout state."
+    },
+    {
+      "file": "Core/Presentation/Tutorial.cpp",
+      "rule": "text-json",
+      "line": 107,
+      "code": "FinishStep(false, \"tutorial.command_failed\", result.value(\"error\", Json::object()).dump()); return;",
+      "sha256": "e6090c9e0f96dc13e13eb5ddd42d9b235028d9a7921e4cc749c8a40f3c27ff63",
+      "count": 1,
+      "reason": "Failure diagnostic shown to the user; no result transport."
+    },
+    {
+      "file": "Core/Presentation/Tutorial.cpp",
+      "rule": "text-json",
+      "line": 111,
+      "code": "if (!response.value(\"ok\", false)) FinishStep(false, \"tutorial.command_failed\", response.dump());",
+      "sha256": "919e4cbfee634b010abd65b258280a61e2840430b0b26cfc848ad4ac676f16de",
+      "count": 1,
+      "reason": "Failure diagnostic shown to the user; no result transport."
+    },
+    {
+      "file": "Core/Presentation/Tutorial.cpp",
+      "rule": "text-json",
+      "line": 113,
+      "code": "else FinishStep(false, \"tutorial.condition_failed\", step.at(\"condition\").dump());",
+      "sha256": "3a586b3bb5a4e261400fc5690eb5116e14294c73ea1a88601c8030aa274d8137",
+      "count": 1,
+      "reason": "Failure diagnostic shown to the user; no result transport."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonGilScope.cpp",
+      "rule": "python",
+      "line": 14,
+      "code": "PythonGilAcquireScope::PythonGilAcquireScope()",
+      "sha256": "b6fcfaca5ad528963c03db91b9e6bf86203f52ffc61e2f5f9048e3cfe1c45fe8",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonGilScope.cpp",
+      "rule": "python",
+      "line": 18,
+      "code": "if (PythonInterpreter::IsRuntimeInitialized())",
+      "sha256": "1e19391e9fb2323357e177aaa48822edc46ec8214c33fcb2b54b331e9bddbe2e",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonGilScope.cpp",
+      "rule": "python",
+      "line": 20,
+      "code": "m_State = PythonInterpreter::AcquireRuntimeGil();",
+      "sha256": "a1f0476a0891c90919ffd9102260a233a6212358b674706ec045be08b9c29283",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonGilScope.cpp",
+      "rule": "python",
+      "line": 28,
+      "code": "PythonGilAcquireScope::~PythonGilAcquireScope()",
+      "sha256": "8dd9f059ca02cc05509a5f21b4f480ff2118e142c9bf2e15f03b94c5968837be",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonGilScope.cpp",
+      "rule": "python",
+      "line": 32,
+      "code": "PythonInterpreter::ReleaseRuntimeGil(m_State);",
+      "sha256": "4dadf5a2fd221cccdbfd2e9e2012fc10a9df81f288230e1e1d31664810cee8f2",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonGilScope.hpp",
+      "rule": "python",
+      "line": 14,
+      "code": "PythonGilAcquireScope();",
+      "sha256": "6a605125e5d6d2ef92c656ef195f752c6e70c351eeb41b013d2351233de3571b",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonGilScope.hpp",
+      "rule": "python",
+      "line": 15,
+      "code": "~PythonGilAcquireScope() override;",
+      "sha256": "09777d0cf00b50d108b48587589eeebbdfc863b90ab23383ecb1ce12a9fdafcf",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 31,
+      "code": "PythonInterpreter::~PythonInterpreter()",
+      "sha256": "fd0ab9927543880207022aca7b9c56cb2efa012cd0dea7fd55dae343e4a6539d",
+      "count": 2,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 36,
+      "code": "Result<void> PythonInterpreter::Start()",
+      "sha256": "bb9a49a05f7ad1dc5c062a9ffd72f6e6e07b43e691a139cd38467675a619b548",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 42,
+      "code": "if (!Py_IsInitialized())",
+      "sha256": "0296db562a3e9f49e90412f53652318e7b6a73eea1401903bccf2965696673f7",
+      "count": 3,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 49,
+      "code": "Py_InitializeEx(0);",
+      "sha256": "a0118eee1cee76c0b1b071131cb8001d9e7a465c4b0101dbeca641a780db9e01",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 51,
+      "code": "if (Py_IsInitialized() && !g_ReleasedMainThreadState)",
+      "sha256": "981109f47d9fa34e93bd7a57a27baf74af933595975df56506128e7282e4177a",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 58,
+      "code": "PyRun_SimpleString((\"import site; site.addsitedir(r'\" + dir + \"')\").c_str());",
+      "sha256": "c497c1ca649a91660bb453c2ef1c78bb2b9da2aec4918b8258c7e8dd29cbc271",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 72,
+      "code": "m_MainThreadState = g_ReleasedMainThreadState ? g_ReleasedMainThreadState : PyEval_SaveThread();",
+      "sha256": "2af9a42c811cbd805a8cd76b39ce4b8d5eef5d0e5eb04cc99648b51abdb27584",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 97,
+      "code": "void PythonInterpreter::Stop()",
+      "sha256": "838919ac3559bdf290bcdc357eecea34b0fdaabe5c49c4abc830a4778ca4b734",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 113,
+      "code": "bool PythonInterpreter::IsRunning() const",
+      "sha256": "308bb5fb617869e1585be6e22885371ecace0a106e792851efdfa720d7f36811",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 118,
+      "code": "bool PythonInterpreter::IsEmbeddingAvailable()",
+      "sha256": "b06d7061a4965b59d66a0ed83816ec5bcdb8f53ca9196521b2ecfd72c702527c",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 127,
+      "code": "bool PythonInterpreter::IsRuntimeInitialized()",
+      "sha256": "567470f0e311accd739a2439718ebcecec2614f616faa6a63c600d7ffd1561f3",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 133,
+      "code": "PyGILState_STATE PythonInterpreter::AcquireRuntimeGil()",
+      "sha256": "931a0270382c1e7b20cde58ad9872ed6db9bc96c5190d19cd496911359968792",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 135,
+      "code": "if (!IsRuntimeInitialized() || !Py_IsInitialized() || g_PythonRuntimeThreadState == nullptr)",
+      "sha256": "f77b254dd9e5d9293db457a680f6e1dd42a511d63c6f610a70cded579519a3e2",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 138,
+      "code": "return PyGILState_Ensure();",
+      "sha256": "33ad87eec282bcf5b9f6a097e3959cc0dc0f889698599946c4ba3268c7b2caf0",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 141,
+      "code": "void PythonInterpreter::ReleaseRuntimeGil(PyGILState_STATE state)",
+      "sha256": "940908f61c9166b6b7a8a11b5613e52240d253ea90b2e6a5a3c231f4b63d3bee",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 143,
+      "code": "PyGILState_Release(state);",
+      "sha256": "a996d2557619e3c0492cd11033de8d5cb6c3c2ca7ef7b4e574c54d8d46b28fc0",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.hpp",
+      "rule": "python",
+      "line": 9,
+      "code": "class PythonInterpreter final",
+      "sha256": "be8b9c0a20262ac05b4c1ee3aeb21fc847ba79b44b7a32eff817b78b9812d462",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.hpp",
+      "rule": "python",
+      "line": 12,
+      "code": "PythonInterpreter() = default;",
+      "sha256": "0b0a58784637a9dbc7fc8173ccc1e92d46f9751cbbf2dbabf2b43938444ebc02",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.hpp",
+      "rule": "python",
+      "line": 13,
+      "code": "~PythonInterpreter();",
+      "sha256": "e26935eefa1e0a582452a391db2ea9c9cca88017e0fe4a160962b982d4e5d853",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonScriptJob.cpp",
+      "rule": "python",
+      "line": 10,
+      "code": "PythonScriptJob::PythonScriptJob(",
+      "sha256": "55d00ed2ee81ec237dbdb0f8eddfdd7090049b037e9dbbda7704981267b19612",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonScriptJob.hpp",
+      "rule": "python",
+      "line": 15,
+      "code": "PythonScriptJob(",
+      "sha256": "631cca8991ad4d29b2b167dbfbc572c4e184ea0185298d332bfec8d45f66c9ed",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/ScientificPythonRuntime.hpp",
+      "rule": "python",
+      "line": 16,
+      "code": "PythonInterpreter m_Interpreter;",
+      "sha256": "5b8e593a0847bbfe9699281dbe1549c98e6d41c8cc3733a35f4675aba60c8ce5",
+      "count": 1,
+      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "text-json",
+      "line": 177,
+      "code": "const auto request = json::parse(requestJson);",
+      "sha256": "3cfaa16c66689a0f41294db06ee0711e90b2714e4f8b00f0a7937e4f21595756",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "text-json",
+      "line": 180,
+      "code": "return json{{\"ok\", false}, {\"error\", {{\"code\", \"app.command.unknown\"}}}}.dump();",
+      "sha256": "b9b8a29393ac65d70de717e05eedb06fb73ed14aad415939808ef92ef526ae32",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "text-json",
+      "line": 185,
+      "code": "{\"message\", \"A running application on its main thread is required.\"}}}}.dump();",
+      "sha256": "2dd5384935a9c3ce11823d54c1ba426a20b828031af1e5e638f49d70b47b2c1d",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "text-json",
+      "line": 190,
+      "code": "return json{{\"ok\", false}, {\"error\", {{\"code\", result.Error().code}, {\"message\", result.Error().technicalDetails}}}}.dump();",
+      "sha256": "5219c29b46843179514febc5309c41a51248ae7e9b125eaf7a41ca212b06dd83",
+      "count": 2,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "text-json",
+      "line": 191,
+      "code": "return json{{\"ok\", true}, {\"command_id\", result.Value().id.value}, {\"path\", path}}.dump();",
+      "sha256": "e1506dfa480309530fefd9fb0310ddf65d3e232aa782216e1ea274e9dc26737b",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "text-json",
+      "line": 201,
+      "code": "return response.dump();",
+      "sha256": "c4a8994cddcf43d2b60cf8de60222dbf8b8087919190e87ae8e5930e059bcc9d",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "text-json",
+      "line": 205,
+      "code": "return json{{\"ok\", false}, {\"error\", {{\"code\", \"app.request.invalid\"}, {\"message\", error.what()}}}}.dump();",
+      "sha256": "7b76418b34f42129778c9eddeff8261b6eee13cdb8dbb6f17d0d2d46c5284263",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 211,
+      "code": "return nanobind::str(ExecuteApplicationRequest(requestJson).c_str());",
+      "sha256": "6421f5009e54959cdb4fd6cc7b8e08df03e8b4cffd36031e1e137de1694670ff",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 212,
+      "code": "}, nanobind::arg(\"request_json\"));",
+      "sha256": "deb8f252066ce932f2509ded097d974cd12f354c7ef556e2458cfe78b868e2da",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 221,
+      "code": "static const bool registered = PyImport_AppendInittab(\"sst_application\", PyInit_sst_application) == 0;",
+      "sha256": "ce620741b7107eb98cf973ae9d602f9295ba551df6d5b0b962cbf0d04c652586",
+      "count": 1,
+      "reason": "Public Python/CLI screenshot request and response boundary."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/App.cpp",
+      "rule": "text-json",
+      "line": 257,
+      "code": "if(Io::Load(startupSettings,text,error)) {try {w->settings=Json::parse(text);}catch(...) {}}",
+      "sha256": "e4c95644bae54390fb104b32cad121bbc3fd1b3b9a889d15bdaf9b96f0af774d",
+      "count": 1,
+      "reason": "Application startup file settings or CLI report output."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/App.cpp",
+      "rule": "text-json",
+      "line": 354,
+      "code": "if(!SST::TextFileIO::Save(SST::Path{reportPath},report.dump(2),error)) throw std::runtime_error(error);",
+      "sha256": "a02cd8899b323657ec11c23b7f8be5903881b90976584434c7d38ad6491b649c",
+      "count": 1,
+      "reason": "Application startup file settings or CLI report output."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/App.cpp",
+      "rule": "text-json",
+      "line": 355,
+      "code": "std::cout<<report.dump(2)<<std::endl;return report.value(\"ok\",false)?0:1;",
+      "sha256": "0c31e0656c4c789a096850d5885703e9ee97fd52384784fc3b87dae880c345a9",
+      "count": 1,
+      "reason": "Application startup file settings or CLI report output."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Batch.cpp",
+      "rule": "text-stream",
+      "line": 68,
+      "code": "std::ostringstream text;text.imbue(std::locale::classic());text<<std::setprecision(6)<<name<<' ';",
+      "sha256": "6d5f5127b7fd850a967e306f5d203cd15eb78b465404533e5e7d1f5272d94070",
+      "count": 1,
+      "reason": "Recorder display label only."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "text-json",
+      "line": 12,
+      "code": "auto parsed=Json::parse(document);if(parsed.is_null()) parsed=ReadProject(SCAPSLAB_PROJECT);",
+      "sha256": "7f0f48dd4691f2ddb638df0e1f5fe3f66d41441227b61c356cdc72bd489f99aa",
+      "count": 1,
+      "reason": "Public embedded ScapsLab Python/headless operation adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "text-json",
+      "line": 17,
+      "code": "try {return s.Dispatch(Json::parse(request)).dump();}",
+      "sha256": "037e427b5896762aa2a62d529f2ab596e6f692d33f049304680aecee8a3a4449",
+      "count": 2,
+      "reason": "Public embedded ScapsLab Python/headless operation adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "text-json",
+      "line": 18,
+      "code": "catch(const std::exception &e) {return Json{{\"ok\",false},{\"error\",{{\"code\",\"invalid_request\"},{\"message\",e.what()}}}}.dump();}",
+      "sha256": "637bd34cb11d7ed5970634ff546a1c4fda5a786c0a9b277b27b01b8298a2f366",
+      "count": 1,
+      "reason": "Public embedded ScapsLab Python/headless operation adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "text-json",
+      "line": 25,
+      "code": "return j.dump();",
+      "sha256": "a9911dade2ad7a05ab36d0702c20af327e89f3713d13656abb07cf872f7ea368",
+      "count": 1,
+      "reason": "Public embedded ScapsLab Python/headless operation adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "python",
+      "line": 10,
+      "code": "nb::class_<Workflow>(m,\"Session\")",
+      "sha256": "0ad66fe81be6cf451c673643b03ff505a1a6a16db2b457868f769ef81fe25e05",
+      "count": 1,
+      "reason": "Public embedded ScapsLab Python/headless operation adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "python",
+      "line": 34,
+      "code": "if(Py_IsInitialized() || PyImport_AppendInittab(\"sst_scapslab\",PyInit_sst_scapslab)!=0) throw std::runtime_error(\"Register ScapsLab before Python startup\");",
+      "sha256": "2f6572daf73815be84c7b54688464d399350cee031c6304e620d07b49198bafc",
+      "count": 2,
+      "reason": "Public embedded ScapsLab Python/headless operation adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/ResultsIO.cpp",
+      "rule": "text-json",
+      "line": 46,
+      "code": "if(!value.is_string()) return value.is_primitive()?value.dump():Csv(Json(value.dump()));",
+      "sha256": "17d572e1dbed8a9faa51cefbb50816e4839c556015cb463c664b74e2befa50f7",
+      "count": 2,
+      "reason": "Result export/import file adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/ResultsIO.cpp",
+      "rule": "text-json",
+      "line": 103,
+      "code": "auto curve=run;curve[\"kind\"]=\"iv\";curve[\"run_id\"]=run.at(\"run_id\").get<std::string>()+\"/\"+member.at(\"id\").get<std::string>()+\" \"+member.at(\"parameters\").dump();curve[\"result\"][\"points\"]=Json::array();",
+      "sha256": "1807bf117970a388418853de092340a4dba1b14057bc19fb68c7b95cbef75873",
+      "count": 1,
+      "reason": "Result export/import file adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/ResultsIO.cpp",
+      "rule": "text-stream",
+      "line": 95,
+      "code": "std::ostringstream csv;bool first=true;for(const auto &key:columns) {if(!first)csv<<',';first=false;csv<<Csv(Json(key));}csv<<'\\n';",
+      "sha256": "f348626457ac0ae4d3c0f8a4e63507d86f13e33b750f46d57d2fa91b52058415",
+      "count": 1,
+      "reason": "Result export/import file adapter."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Tutorials.cpp",
+      "rule": "text-json",
+      "line": 44,
+      "code": "auto definition = Json::parse(stream);",
+      "sha256": "125923eed22f62ba975676168571a84150ae519ede77d7148860dea524df81b8",
+      "count": 1,
+      "reason": "Tutorial definition/progress file read/write."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Tutorials.cpp",
+      "rule": "text-json",
+      "line": 154,
+      "code": "AsyncIo(\"Tutorial progress\",[file=tutorialProgressPath,text=tutorialProgress.dump(2)]()->std::string {std::string error;return Io::Save(file,text,error)?std::string{}:error;});",
+      "sha256": "ae15904b74b1325a5c1a2035a35efd566f1a4067284191d3d2f478b518a7f784",
+      "count": 1,
+      "reason": "Tutorial definition/progress file read/write."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/TutorialUi.cpp",
+      "rule": "text-json",
+      "line": 57,
+      "code": "const auto value=Json::parse(source);",
+      "sha256": "ddc9476df7410e08a0d5260fa7931fe7c858f5059000f8be79fc37977b7eebda",
+      "count": 1,
+      "reason": "Human-readable tutorial diagnostic display."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/TutorialUi.cpp",
+      "rule": "text-json",
+      "line": 188,
+      "code": "tutorialWindows.Render(\"Tutorial report###sst-tutorial-report\",reportOpen,0,[&] {ImGui::TextUnformatted(report.at(\"status\")==\"passed\"?(report.at(\"mode\")==\"learn\"?\"Lesson complete.\":\"Tutorial PASS\"):\"Tutorial FAIL\");if(report.at(\"mode\")!=\"learn\")for(const auto &step:report.at(\"steps\")) {ImGui::Text(\"%s: %s\",step.at(\"step_id\").get<std::string>().c_str(),step.at(\"status\").get<std::string>().c_str());if(!step.at(\"error\").is_null())ImGui::TextWrapped(\"%s\",step.at(\"error\").dump().c_str());}},true);",
+      "sha256": "a341e2739891ec8fb62e85c75bbcdaa004eb410dcc195a5706e5272769455b3a",
+      "count": 1,
+      "reason": "Human-readable tutorial diagnostic display."
+    }
+  ],
+  "known-debt": [
+    {
+      "file": "Prototypes/ScapsLab/src/Batch.cpp",
+      "rule": "text-json",
+      "line": 50,
+      "code": "pl::Worksheet worksheet;worksheet.source[\"provenance\"]=table.at(\"provenance\").dump();worksheet.source[\"batch_spec\"]=table.at(\"spec\").dump();",
+      "sha256": "5ab3e6b05af8b674bcd477e672d1e28e17fd20252bd2290b27dd6592b5a19878",
+      "count": 2,
+      "reason": "F16: legacy batch metadata stored as formatted strings in PlotLab worksheet source."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Packed.cpp",
+      "rule": "packed-result",
+      "line": 48,
+      "code": "PJson Pack(const Json &j) {SCAPS_BOUNDARY_RESULT();",
+      "sha256": "b7fe7cb48f9087eabe78f97d0a8e0ff7728c7bcacca6610835a5569044dc6a94",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Packed.cpp",
+      "rule": "packed-result",
+      "line": 56,
+      "code": "for (const auto &e : j) {kids.emplace_back(std::string{}, Pack(e)); packed |= kids.back().second.kind != PJson::Kind::Plain;}",
+      "sha256": "c394e0b8ae905c674ba3f8214772bd987cb3d566e25c59d3f0eaf4d4cac7ea7a",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Packed.cpp",
+      "rule": "packed-result",
+      "line": 61,
+      "code": "if (Structured(it.value())) {auto k = Pack(it.value()); if (k.kind != PJson::Kind::Plain) {kids.emplace_back(it.key(), std::move(k)); continue;}}",
+      "sha256": "d126c21663c7e3c3692f1a68e5a90dc9e52d676cdc98c66b7c70e3c5c12df284",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Packed.hpp",
+      "rule": "packed-result",
+      "line": 31,
+      "code": "struct PJson {",
+      "sha256": "75b2610274a10aa794fb5f73dbd9d6cf8327790f734403b8933d2ef3c3bf8373",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Packed.hpp",
+      "rule": "packed-result",
+      "line": 38,
+      "code": "PJson Pack(const Json &j);",
+      "sha256": "738a885bf22987b57cc6d9428472ac596b82941a5af1dbde02224a56e800d807",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 57,
+      "code": "out->preserve_original=DetailsJson(*out).dump()!=original.dump();return out;",
+      "sha256": "40408265b346e79104decd296c599398b948490994aec9864a421390b964175a",
+      "count": 2,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 124,
+      "code": "if(meta.contains(\"optics\"))try {const auto& o=meta.at(\"optics\");OpticsResult optics;optics.x_m=Column::Intern(Numbers(o.at(\"x_m\")));optics.generation_m3_s=Column::Intern(Numbers(o.at(\"generation_m3_s\")));optics.incident_power_W_m2=Number(o,\"incident_power_W_m2\");for(const auto& c:o.at(\"absorption\"))optics.absorption.push_back({c.at(\"layer_id\"),Column::Intern(Numbers(c.at(\"wavelength_nm\"))),Column::Intern(Numbers(c.at(\"alpha_m1\"))),Column::Intern(Numbers(c.at(\"without_tail_m1\")))});IvResult check;check.optics=std::move(optics);r.preserve_optics=check.Dump().at(\"optics\").dump()!=o.dump();r.optics=std::move(check.optics);if(!r.preserve_optics)meta.erase(\"optics\");}catch(const Json::exception&){}",
+      "sha256": "aca4fb094f398433a02123275eb8939ca68fc0ae4c7cdd31d549ae18eb0528cc",
+      "count": 3,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 125,
+      "code": "if(meta.contains(\"photovoltaic\"))try {const auto& o=meta.at(\"photovoltaic\");scaps_core::PhotovoltaicResult pv;for(auto v:{scaps_core::PhotovoltaicStatus::Converged,scaps_core::PhotovoltaicStatus::SolveFailed,scaps_core::PhotovoltaicStatus::OpenCircuitNotBracketed,scaps_core::PhotovoltaicStatus::NoPhotovoltaicPower})if(o.at(\"status\")==scaps_core::to_string(v))pv.status=v;pv.message=o.value(\"message\",std::string{});pv.Voc_V=-Number(o,\"Voc_V\");pv.Jsc_Am2=-Number(o,\"Jsc_A_m2\");pv.FF=Number(o,\"FF_fraction\");pv.eta=Number(o,\"efficiency_fraction\");pv.Pmax_Wm2=Number(o,\"Pmax_W_m2\");pv.Vmpp_V=-Number(o,\"Vmpp_V\");pv.Jmpp_Am2=Number(o,\"Jmpp_A_m2\");IvResult check;check.photovoltaic=std::move(pv);r.preserve_photovoltaic=check.Dump().at(\"photovoltaic\").dump()!=o.dump();r.photovoltaic=std::move(check.photovoltaic);if(!r.preserve_photovoltaic)meta.erase(\"photovoltaic\");}catch(const Json::exception&){}",
+      "sha256": "413422d573f20ca5bdf9a47bd5cc91a8c1f6548423288d7d21429cbc84415caa",
+      "count": 3,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 234,
+      "code": "if(r.Dump().dump()!=j.dump()){r.legacySchema=std::move(r.body.prim);r.body=Pack(j);r.native=false;}",
+      "sha256": "fcbbd9ad03026efa74205fe36d2c08a07c8e9f33f2351eb2f24ffbdb455d684e",
+      "count": 3,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 289,
+      "code": "Json BatchResult::Dump() const {SCAPS_BOUNDARY_RESULT();",
+      "sha256": "bafe4bc00d670339d1e97f3941937e8e7cee54b2c42739a5380e8fce455ce8d5",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 290,
+      "code": "auto out=legacyBase?legacyBase->Dump():Unpack(body);",
+      "sha256": "a7ab05bb917490c024300a28b8df5c3a9ba6acff9370d2f069b24981885cbe6e",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 308,
+      "code": "Json IvResult::Dump() const {SCAPS_BOUNDARY_RESULT();",
+      "sha256": "19feb46d29fd35b43c1e392e88d40459116649c3b3bd677f4e893bb7f149fdb7",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 317,
+      "code": "Json AcResult::Dump() const {SCAPS_BOUNDARY_RESULT();return To(*this, acTop, acFields);}",
+      "sha256": "e232f0b97cc82543cf8623d7b01e48ad73086b728a8b547c8c1ac2471dd042cb",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "text-json",
+      "line": 367,
+      "code": "if (!view) view = CreateRef<const Json>(Dump());",
+      "sha256": "faae89a0d440004ded4412c9018946909952b9a9fb189192ecc893cbf9e74582",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "packed-result",
+      "line": 138,
+      "code": "p.rest = Pack(rest);",
+      "sha256": "1073db7f2b02c8d4e238b6c48e1263f9ab9ca9de60be8b2e19bc48f1c5191a6e",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
+      "rule": "packed-result",
+      "line": 234,
+      "code": "if(r.Dump().dump()!=j.dump()){r.legacySchema=std::move(r.body.prim);r.body=Pack(j);r.native=false;}",
+      "sha256": "fcbbd9ad03026efa74205fe36d2c08a07c8e9f33f2351eb2f24ffbdb455d684e",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.hpp",
+      "rule": "text-json",
+      "line": 20,
+      "code": "virtual Json Dump() const = 0;",
+      "sha256": "3342c523da3f0d2d0e00d34ccb3502c56dedb0dd12ab6aa23cc4b7a9ad931b7a",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.hpp",
+      "rule": "text-json",
+      "line": 100,
+      "code": "Json Dump() const override;",
+      "sha256": "dc093792fe3d4d4766cdd2fcc7530f38d3115154fdd804c577879bbe39a126cc",
+      "count": 3,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.hpp",
+      "rule": "text-json",
+      "line": 132,
+      "code": "inline Json ToJson(const IvResult &r) {return r.Dump();}",
+      "sha256": "7ab13372737052eb57dc5721074ed767948d8e34c2212ecf9d786df1ad3391ab",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.hpp",
+      "rule": "text-json",
+      "line": 133,
+      "code": "inline Json ToJson(const AcResult &r) {return r.Dump();}",
+      "sha256": "95c7ef87b61c733b36bdfa79f6fff8788740da21359c2f98fc6d9d31aca6133b",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/Results.hpp",
+      "rule": "text-json",
+      "line": 134,
+      "code": "inline Json ToJson(const BatchResult &r) {return r.Dump();}",
+      "sha256": "4f04f32e8b77fe3efb8914ace4fd0cbcc9f81d3de7e1d1f17f58b7c255ddc226",
+      "count": 1,
+      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Panel.cpp",
+      "rule": "text-json",
+      "line": 955,
+      "code": "ImGui::TextWrapped(\"Integrated Jsc: %s A/m^2 | Light Jsc: %s A/m^2\",q.at(\"integrated_Jsc_A_m2\").dump().c_str(),q.at(\"light_Jsc_A_m2\").dump().c_str());ImGui::TextWrapped(\"%s\",q.at(\"integration_note\").get<std::string>().c_str());",
+      "sha256": "075d4ea518b2a29d98c3b0875f001e92d42d7564b8ea42e8483f87b399e83892",
+      "count": 2,
+      "reason": "F04 F36: existing JSON display/preview in panel frame; expected to improve after typed3."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Panel.cpp",
+      "rule": "text-json",
+      "line": 1803,
+      "code": "if(ImGui::TreeNode(\"Bias / frequency samples\")) {ImGui::BeginChild(\"Samples\",ImVec2(0,100),ImGuiChildFlags_Borders);for(const auto &v:biases) ImGui::Text(\"%.7g V\",v.get<double>());ImGui::TextWrapped(\"AC frequencies [Hz]: %s\",preview.at(\"frequencies_Hz\").dump().c_str());ImGui::EndChild();ImGui::TreePop();}",
+      "sha256": "c535274399abfa7f21acdc380a6794a225c883a9528340cd4a91a008d4fc267b",
+      "count": 1,
+      "reason": "F04 F36: existing JSON display/preview in panel frame; expected to improve after typed3."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Panel.cpp",
+      "rule": "text-json",
+      "line": 1804,
+      "code": "if(ImGui::BeginChild(\"Combinations\",ImVec2(0,140),ImGuiChildFlags_Borders)) for(std::size_t i=0;i<preview.at(\"combinations\").size();++i)ImGui::TextWrapped(\"%zu: %s\",i+1,preview.at(\"combinations\")[i].dump().c_str());ImGui::EndChild();",
+      "sha256": "389eeed4f22053ebed25a226a4e3155ce2ccffc29147a671c4d6dd0c6e36e381",
+      "count": 1,
+      "reason": "F04 F36: existing JSON display/preview in panel frame; expected to improve after typed3."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 554,
+      "code": "if(format==\"json\") text=output.dump(2);",
+      "sha256": "19e4d01f891cba693d6078fb2bd936fe3536b16226ba277a48586c212815fe8c",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 561,
+      "code": "csv<<quoted(request.at(\"device_id\"))<<','<<quoted(point.at(\"bias_id\"))<<','<<point.at(\"voltage_V\")<<','<<point.at(\"internal_voltage_V\")<<','<<workspace.at(\"project_snapshot\").at(\"temperature_K\")<<','<<point.at(\"valid\")<<','<<quoted(point.at(\"validity_status\"))<<','<<quoted(workspace.at(\"project_snapshot\").value(\"illumination\",Json::object()).dump())<<','<<quoted(workspace.at(\"provenance\").dump())<<','<<quoted(id)<<','<<quoted(engine)<<','<<quoted(mechanism)<<','<<quoted(layer)<<',';",
+      "sha256": "e15309ad2ea71cc9d5101ee35332f5c65066c0d968fb851ecee6a9c96632bac0",
+      "count": 2,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 588,
+      "code": "auto raw=source.find_first_not_of(\" \\t\\r\\n\")!=std::string::npos && source[source.find_first_not_of(\" \\t\\r\\n\")]=='{'?Json::parse(source):FromYaml(YAML::Load(source));",
+      "sha256": "40510ec3b621dbc26025aff88df9ac2a9350b0ff44b2625e2849c7cab257377f",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 641,
+      "code": "const auto &v=pt.at(key); if(v.is_string()) csv << v.get<std::string>(); else if(!v.is_null()) csv << v.dump();",
+      "sha256": "63dab97e4ff030d5325c97b9fc4e301387e16a8bccda921ad2be5d9a169fcf04",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 1013,
+      "code": "try {auto items=Json::parse(text);if(items.is_array() && items.size()<=10 && std::all_of(items.begin(),items.end(),[](const auto &p){return p.is_string();})) *loaded=std::move(items);}catch(...) {}",
+      "sha256": "96da87c4db1d8b66a6cf06bb38c087725fdbcdd8292fa5461a0fb8815abf9bf5",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 1028,
+      "code": "AsyncIo(\"Write recent files\",[file=recentPath,text=recent.dump(2)]()->std::string {std::string error;return Io::Save(file,text,error)?std::string{}:error;},[this]{recentWriting=false;});",
+      "sha256": "66522da200be3a373c5aa7047ada5fee0c610fbee0bb52fce93d21d2f591201d",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 1034,
+      "code": "AsyncIo(\"Write settings\",[file=settingsPath,text=settings.dump(2)]()->std::string {std::string error;return Io::Save(file,text,error)?std::string{}:error;},[this]{settingsWriting=false;if(settingsDirty)SaveSettings();});",
+      "sha256": "52d994d1780865727394861b47ba1500128e9701dc8ea4f5896a8f3186cffc1f",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 1446,
+      "code": "if(!lightResponse && !pending->output.empty()) response[\"operation_result\"]=pending->typedOut?pending->typedOut->Dump():pending->output;",
+      "sha256": "85f158a58d9552a92afa3fcdf6319e331d95a470b857533c0ad5efa589e39663",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 33,
+      "code": "Json FromYaml(const YAML::Node &n) {",
+      "sha256": "665a9d2b3f5396d6195006a82e132ed5a0afa6b3504d11d802ece2bab4dcfbe8",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 45,
+      "code": "YAML::Node ToYaml(const Json &j) {",
+      "sha256": "d2983e716d410d111324dd6b0f24161b8821383019d801f0a64a1a1000fa9f2b",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 46,
+      "code": "if (j.is_object()) { YAML::Node n(YAML::NodeType::Map); for (auto it=j.begin();it!=j.end();++it) n[it.key()]=ToYaml(it.value()); return n; }",
+      "sha256": "2d9f4e69142f334331842548c4bec1039d62c02528d0414a8fc174ff17be9449",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 47,
+      "code": "if (j.is_array()) { YAML::Node n(YAML::NodeType::Sequence); for (const auto &v:j) n.push_back(ToYaml(v)); return n; }",
+      "sha256": "1653f7e0bdfed27ecc58f46d33f81dfa540937358e84aa1ddbd8950634b94ebc",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 48,
+      "code": "if (j.is_null()) return YAML::Node(YAML::NodeType::Null);",
+      "sha256": "3ca2f64a2b9f3a4ce7b9abd0b6286f82c28d310e55e889d2534e0809bb43b627",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 49,
+      "code": "if (j.is_string()) { const auto s=j.get<std::string>(); YAML::Node n(s);",
+      "sha256": "cb24e7ad77a6d1d42b07f93724d20209873a8d88ebb7fae64cd29b863681bb9b",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 51,
+      "code": "if(j.is_boolean())return YAML::Node(j.get<bool>());",
+      "sha256": "7ab3539ddf895e589b1112b63308399570b2e8c50492ce0d2ffbb469c6ef7ca7",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 52,
+      "code": "if(j.is_number_integer())return YAML::Node(j.get<std::int64_t>());",
+      "sha256": "12f089d454994376746b7221c5a74e56d4d4d0a63706d27c9ff35633eba5ed62",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 53,
+      "code": "if(j.is_number_unsigned())return YAML::Node(j.get<std::uint64_t>());",
+      "sha256": "806ce8ba7acecfe053415d2aab84e7fd968ee86799b4dcd82a4baa2939107d36",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 54,
+      "code": "YAML::Node n(j.get<double>());n.SetTag(\"tag:yaml.org,2002:float\");return n;",
+      "sha256": "685060eb67157460c8e189daa6227b80bf8a81e087efaa0b19359a68cf79e850",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 56,
+      "code": "std::string Text(const Json &j) { YAML::Emitter e; e.SetDoublePrecision(17); e << ToYaml(j); if (!e.good()) throw std::runtime_error(e.GetLastError()); return e.c_str(); }",
+      "sha256": "3efa36ccf08877818e82ed943c90f0f51c83610b25df72f652ebb58edb675c75",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 302,
+      "code": "Json ReadProject(const std::string &path) {return ImportProject(FromYaml(YAML::LoadFile(path)),std::filesystem::absolute(path).parent_path());}",
+      "sha256": "0f42dfa52a9ee80391e38b1f09f0fa3c18bca32835062ea6c67b55955f26e3fd",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 588,
+      "code": "auto raw=source.find_first_not_of(\" \\t\\r\\n\")!=std::string::npos && source[source.find_first_not_of(\" \\t\\r\\n\")]=='{'?Json::parse(source):FromYaml(YAML::Load(source));",
+      "sha256": "40510ec3b621dbc26025aff88df9ac2a9350b0ff44b2625e2849c7cab257377f",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-stream",
+      "line": 257,
+      "code": "std::ostringstream out;out<<std::setprecision(17);",
+      "sha256": "b0f85b76769a4a0758d6ece31224b8f352dfd3277226ba0fc0c144154c1e45b1",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-stream",
+      "line": 556,
+      "code": "std::ostringstream csv;csv<<std::setprecision(17);",
+      "sha256": "c16a524c9a3ed165c64451d653a8f1cdc070c0471f58f3fe293b8ef681612f48",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-stream",
+      "line": 634,
+      "code": "std::ostringstream csv; csv << std::setprecision(17);",
+      "sha256": "dfd9de95ff4aba05aee1f809c35ae4632520fb35bec291fafb1ffc44220de9d9",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-number",
+      "line": 41,
+      "code": "try { std::size_t used; const auto v=std::stoll(s,&used); if(used==s.size()) return v; } catch (...) {}",
+      "sha256": "87938bb60e43d4c635d718264171eedfa11f1791dde366b2ea66b80143df89e2",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-number",
+      "line": 42,
+      "code": "try { std::size_t used; const double v=std::stod(s,&used); if (used==s.size() && std::isfinite(v)) return v; } catch (...) {}",
+      "sha256": "5b837a5f781e2277e013edc84d5df19bca486f388b5488e0e17d3cfa284a4f2c",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.hpp",
+      "rule": "text-json",
+      "line": 134,
+      "code": "std::string dump(int i=-1) const {return p->dump(i);}",
+      "sha256": "6864c1ebf1176636ed126186cfc801d0fcbdcbb094423918fc5fb266f4ee9dfe",
+      "count": 2,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.hpp",
+      "rule": "text-json",
+      "line": 159,
+      "code": "std::string dump(int i=-1) const {return json().dump(i);}",
+      "sha256": "1e884190834ee86205a58e33678efb3992a934bebe7cb86fd42299f62a746141",
+      "count": 2,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.hpp",
+      "rule": "text-json",
+      "line": 177,
+      "code": "Json json(bool cached=false) const {Json o=Json::object();for(const auto &[k,r]:m)o[k]=cached?r->View():r->Dump();return o;}",
+      "sha256": "8227d94de7e7055e8f078a735a5d432a3e1586a8971274a2c4cd3a0824538b9a",
+      "count": 1,
+      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workspace.cpp",
+      "rule": "text-json",
+      "line": 76,
+      "code": "for(unsigned char c:document.dump()) {hash^=c;hash*=1099511628211ull;}",
+      "sha256": "c220aa1f3a27710a1ea09cab90598da6c9cae19ec7a755aabcaa9f1263da4848",
+      "count": 1,
+      "reason": "F16: workspace compatibility hash and saved-run adapter; avoid per-member use."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workspace.cpp",
+      "rule": "text-json",
+      "line": 121,
+      "code": "if(v.is_primitive() || v.empty() || Compact(v)) return v.dump();",
+      "sha256": "ebe46db5765e51498147e7e1a0d39e3c1bc76bce030b965eeacfc2ec5a7d8ef2",
+      "count": 1,
+      "reason": "F16: workspace compatibility hash and saved-run adapter; avoid per-member use."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workspace.cpp",
+      "rule": "text-json",
+      "line": 125,
+      "code": "if(object) out+=Json(it.key()).dump()+\": \";out+=Pretty(it.value(),indent+2);",
+      "sha256": "b5c63e09429d36771ebd41611d7becae14a52993174b9c872586d45b7213b1a6",
+      "count": 1,
+      "reason": "F16: workspace compatibility hash and saved-run adapter; avoid per-member use."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workspace.cpp",
+      "rule": "text-json",
+      "line": 190,
+      "code": "if(run[\"result\"].dump().size()<=65536) continue;",
+      "sha256": "4cdd922abcaf9c674d934c62dc0fa9910e1670b9f98b9bbf473c4daf75f3d2f0",
+      "count": 1,
+      "reason": "F16: workspace compatibility hash and saved-run adapter; avoid per-member use."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workspace.cpp",
+      "rule": "text-json",
+      "line": 226,
+      "code": "namespace {Json JsonOf(const ResultBase &r,bool cached) {return cached?r.View():r.Dump();}}",
+      "sha256": "d8676a20a6647d41e2bd444d0e664f6089e1db438300cb9f0cca75eef9fb5a37",
+      "count": 1,
+      "reason": "F16: workspace compatibility hash and saved-run adapter; avoid per-member use."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workspace.cpp",
+      "rule": "text-stream",
+      "line": 77,
+      "code": "std::ostringstream text;text<<std::hex<<std::setfill('0')<<std::setw(16)<<hash;return text.str();",
+      "sha256": "1421f31408172ac78e1fd7b3c41c426f7fd99fb4d1ee37a87892d8966f2991ca",
+      "count": 1,
+      "reason": "F16: workspace compatibility hash and saved-run adapter; avoid per-member use."
+    }
+  ]
+}

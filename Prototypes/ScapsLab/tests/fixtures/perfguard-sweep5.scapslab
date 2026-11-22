@@ -1,0 +1,672 @@
+{
+  "active_device": "device-17953470036167907-4",
+  "compare_set": ["device-1","device-17953470036167907-4"],
+  "devices": [
+    {
+      "ac_results": {},
+      "actions": {},
+      "band_result": {},
+      "batch_result": {},
+      "batch_spec": {
+        "axes": [
+          {
+            "count": 19,
+            "parameter_id": "interface_defects[interface/0/defect/0].energy_offset_eV",
+            "spacing": "linear",
+            "start": 0.1,
+            "stop": 1.0
+          },
+          {
+            "count": 18,
+            "parameter_id": "temperature_K",
+            "spacing": "linear",
+            "start": 50.0,
+            "stop": 390.0
+          }
+        ],
+        "include_curves": true,
+        "mode": "nested"
+      },
+      "colour": [0.25,0.65,0.95,1.0],
+      "description": "",
+      "document": {
+        "carrier_statistics": "boltzmann",
+        "case_id": "scaps_import",
+        "constants_mode": "scaps_compat",
+        "contacts": {
+          "left": {
+            "Sn_m_s": 100000,
+            "Sp_m_s": 100000,
+            "flat_band": true,
+            "label": "left contact",
+            "phi_m_eV": 4.5
+          },
+          "right": {
+            "Sn_m_s": 100000,
+            "Sp_m_s": 100000,
+            "flat_band": true,
+            "label": "right contact",
+            "phi_m_eV": 4.5
+          }
+        },
+        "external": {
+          "area_m2": 1,
+          "series_ohm_m2": 0,
+          "shunt_ohm_m2": ".inf"
+        },
+        "illumination": {
+          "back_filter_file": "",
+          "back_filter_nm_fraction": [],
+          "back_reflection": 0,
+          "enabled": false,
+          "from_right": false,
+          "front_filter_file": "",
+          "front_filter_nm_fraction": [],
+          "front_internal_reflection": 0,
+          "front_transmission": 1,
+          "generation_file": "",
+          "generation_m_m3s": [],
+          "generation_quadrature": "exact_box",
+          "intensity_multiplier": 1,
+          "mode": "uniform",
+          "monochromatic_power_W_m2": 1000,
+          "spectrum_file": "",
+          "spectrum_nm_W_m2": [],
+          "uniform_generation_m3_s": 0,
+          "wavelength_max_nm": ".inf",
+          "wavelength_min_nm": 0,
+          "wavelength_nm": 800
+        },
+        "interface_defects": [
+          {
+            "Nt_m2": 100000000000000,
+            "characteristic_energy_eV": 0.1,
+            "charge_type": "neutral",
+            "density_convention": "scaps_peak",
+            "energy_distribution": "single",
+            "energy_levels": 7,
+            "energy_offset_eV": 0.5,
+            "energy_quadrature": "scaps_trapezoid",
+            "energy_reference": 7,
+            "gaussian_width": 6,
+            "id": "interface/0/defect/0",
+            "left_layer_index": 0,
+            "peak_density_m2_eV": 0,
+            "sigma_n_left_m2": 1e-19,
+            "sigma_n_right_m2": 1e-19,
+            "sigma_p_left_m2": 1e-19,
+            "sigma_p_right_m2": 1e-19,
+            "tail_width": 7
+          }
+        ],
+        "layers": [
+          {
+            "absorption": {
+              "A_m1_eV_half": 0,
+              "B_m1_eV_minus_half": 0,
+              "background_m1": 0.0,
+              "file": "",
+              "model": "file",
+              "powers": [],
+              "sqrt_alpha_m1": 0,
+              "sqrt_beta_m1": 0,
+              "step_m1": 0,
+              "table_nm_m1": [[260.0,210000000.0],[270.0,221000000.0],[280.0,235000000.0],[290.0,213000000.0],[300.0,165000000.0],[310.0,144000000.0],[320.0,128000000.0],[330.0,119000000.0],[340.0,112000000.0],[350.0,108000000.0],[360.0,104000000.0],[370.0,73200000.0],[380.0,28200000.0],[390.0,17000000.0],[400.0,10700000.0],[410.0,7800000.0],[420.0,5730000.0],[430.0,4630000.0],[440.0,3700000.0],[450.0,3060000.0],[460.0,2540000.0],[470.0,2180000.0],[480.0,1820000.0],[490.0,1590000.0],[500.0,1380000.0],[510.0,1180000.0],[520.0,1020000.0],[530.0,927000.0],[540.0,810000.0],[550.0,715000.0],[560.0,645000.0],[570.0,594000.0],[580.0,543000.0],[590.0,477000.0],[600.0,440000.0],[610.0,409000.0],[620.0,382000.0],[630.0,355000.0],[640.0,328000.0],[650.0,302000.0],[660.0,277000.0],[670.0,253000.0],[680.0,234000.0],[690.0,217000.0],[700.0,200000.0],[710.0,186000.0],[720.0,171000.0],[730.0,158000.0],[740.0,146000.0],[750.0,134200.0],[760.0,123400.0],[770.0,113300.0],[780.0,103900.0],[790.0,95100.0],[800.0,86900.0],[810.0,79200.0],[820.0,72100.0],[830.0,65500.0],[840.0,59400.0],[850.0,53600.0],[860.0,48300.0],[870.0,43400.0],[880.0,38900.0],[890.0,34700.0],[900.0,30800.0],[910.0,27200.0],[920.0,23900.0],[930.0,20900.0],[940.0,18200.0],[950.0,15700.0],[960.0,13400.0],[970.0,11400.0],[980.0,9510.0],[990.0,7900.0],[1000.0,6400.0],[1010.0,5100.1],[1020.0,3900.9],[1030.0,3000.2],[1040.0,2200.6],[1050.0,1600.3],[1060.0,1100.1],[1070.0,800.0],[1080.0,600.2],[1090.0,400.7],[1100.0,300.5],[1110.0,200.7],[1120.0,200.0],[1130.0,100.5],[1140.0,100.01],[1150.0,68.0],[1160.0,42.0],[1170.0,22.0],[1180.0,6.5],[1190.0,3.6],[1200.0,2.3],[1210.0,1.3],[1220.0,0.77],[1230.0,0.38],[1240.0,0.15],[1250.0,0.0]],
+              "urbach_enabled": false,
+              "urbach_energy_eV": 0.025
+            },
+            "defects": [],
+            "doping": {
+              "Na_m3": 1e+21,
+              "Nd_m3": 1000000
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.9,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000,
+              "vth_p_ref_m_s": 100000
+            },
+            "name": "P layer",
+            "recombination": {
+              "auger_n_cm6_s": 0,
+              "auger_p_cm6_s": 0,
+              "radiative_cm3_s": 4.73e-15
+            },
+            "scapslab_id": "layer-1",
+            "thickness_m": 2e-06
+          },
+          {
+            "absorption": {
+              "A_m1_eV_half": 0,
+              "B_m1_eV_minus_half": 0,
+              "background_m1": 0.0,
+              "file": "",
+              "model": "file",
+              "powers": [],
+              "sqrt_alpha_m1": 0,
+              "sqrt_beta_m1": 0,
+              "step_m1": 0,
+              "table_nm_m1": [[260.0,210000000.0],[270.0,221000000.0],[280.0,235000000.0],[290.0,213000000.0],[300.0,165000000.0],[310.0,144000000.0],[320.0,128000000.0],[330.0,119000000.0],[340.0,112000000.0],[350.0,108000000.0],[360.0,104000000.0],[370.0,73200000.0],[380.0,28200000.0],[390.0,17000000.0],[400.0,10700000.0],[410.0,7800000.0],[420.0,5730000.0],[430.0,4630000.0],[440.0,3700000.0],[450.0,3060000.0],[460.0,2540000.0],[470.0,2180000.0],[480.0,1820000.0],[490.0,1590000.0],[500.0,1380000.0],[510.0,1180000.0],[520.0,1020000.0],[530.0,927000.0],[540.0,810000.0],[550.0,715000.0],[560.0,645000.0],[570.0,594000.0],[580.0,543000.0],[590.0,477000.0],[600.0,440000.0],[610.0,409000.0],[620.0,382000.0],[630.0,355000.0],[640.0,328000.0],[650.0,302000.0],[660.0,277000.0],[670.0,253000.0],[680.0,234000.0],[690.0,217000.0],[700.0,200000.0],[710.0,186000.0],[720.0,171000.0],[730.0,158000.0],[740.0,146000.0],[750.0,134200.0],[760.0,123400.0],[770.0,113300.0],[780.0,103900.0],[790.0,95100.0],[800.0,86900.0],[810.0,79200.0],[820.0,72100.0],[830.0,65500.0],[840.0,59400.0],[850.0,53600.0],[860.0,48300.0],[870.0,43400.0],[880.0,38900.0],[890.0,34700.0],[900.0,30800.0],[910.0,27200.0],[920.0,23900.0],[930.0,20900.0],[940.0,18200.0],[950.0,15700.0],[960.0,13400.0],[970.0,11400.0],[980.0,9510.0],[990.0,7900.0],[1000.0,6400.0],[1010.0,5100.1],[1020.0,3900.9],[1030.0,3000.2],[1040.0,2200.6],[1050.0,1600.3],[1060.0,1100.1],[1070.0,800.0],[1080.0,600.2],[1090.0,400.7],[1100.0,300.5],[1110.0,200.7],[1120.0,200.0],[1130.0,100.5],[1140.0,100.01],[1150.0,68.0],[1160.0,42.0],[1170.0,22.0],[1180.0,6.5],[1190.0,3.6],[1200.0,2.3],[1210.0,1.3],[1220.0,0.77],[1230.0,0.38],[1240.0,0.15],[1250.0,0.0]],
+              "urbach_enabled": false,
+              "urbach_energy_eV": 0.025
+            },
+            "defects": [],
+            "doping": {
+              "Na_m3": 1000000,
+              "Nd_m3": 1e+21
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.9,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000,
+              "vth_p_ref_m_s": 100000
+            },
+            "name": "N layer",
+            "recombination": {
+              "auger_n_cm6_s": 0,
+              "auger_p_cm6_s": 0,
+              "radiative_cm3_s": 4.73e-15
+            },
+            "scapslab_id": "layer-2",
+            "thickness_m": 5e-07
+          }
+        ],
+        "mesh": {
+          "adaptive_delta_log_carrier": 0.5,
+          "adaptive_delta_psi_Vt": 0.5,
+          "adaptive_max_bias": false,
+          "adaptive_max_layer_fraction": 0.25,
+          "adaptive_target_profile_error_eV": null,
+          "adaptive_target_relative_J_error": 0.001,
+          "adaptivity_level": "0",
+          "clustering_beta": 0,
+          "points_per_layer": 60,
+          "recalculate_generation_limit_uA_cm2": 1,
+          "recalculate_max_adaptions_per_voltage": 10,
+          "recalculate_max_ratio": 1.6,
+          "recalculate_mesh": false,
+          "recalculate_min_ratio": 1.05,
+          "recalculate_points": 10,
+          "recalculate_recombination_limit_uA_cm2": 0.001,
+          "solution_adaptive": false,
+          "thermionic_homojunctions": true
+        },
+        "mobility_temperature_model": "sqrt_T",
+        "radiative_limit_mode": "never",
+        "scaps_native": {
+          "action_lines": ["Temperature : 300 K","dark : 1","IV_startV : -0.3 V","IV_stopV : 0.6 V","IV_increment : 0.02 V"],
+          "optics": [
+            {
+              "id": "layer/0/absorptionfile pure A material (y=0)",
+              "kind": "absorption",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "D:\\Aplications\\SCAPS\\install\\absorption\\Si.abs",
+              "source_path": "Si.abs"
+            },
+            {
+              "id": "layer/0/absorption pure B material (y=1), file",
+              "kind": "absorption",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "D:\\Aplications\\SCAPS\\install\\absorption\\Si.abs",
+              "source_path": "Si.abs"
+            },
+            {
+              "id": "layer/0",
+              "kind": "absorption",
+              "model": "from file",
+              "parameters": ["absorption grading :\t 1107.12\t 1107.12\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 0\t 0\t[nm]","absorptionmodel pure A material (y=0) : from file","absorptionfile pure A material (y=0) : Si.abs","absorption pure B material (y=1), model : from file","absorption pure B material (y=1), file : Si.abs"],
+              "resolved_path": "",
+              "source_path": ""
+            },
+            {
+              "id": "layer/1/absorptionfile pure A material (y=0)",
+              "kind": "absorption",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "D:\\Aplications\\SCAPS\\install\\absorption\\Si.abs",
+              "source_path": "Si.abs"
+            },
+            {
+              "id": "layer/1/absorption pure B material (y=1), file",
+              "kind": "absorption",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "D:\\Aplications\\SCAPS\\install\\absorption\\Si.abs",
+              "source_path": "Si.abs"
+            },
+            {
+              "id": "layer/1",
+              "kind": "absorption",
+              "model": "from file",
+              "parameters": ["absorption grading :\t 1107.12\t 1107.12\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 0\t 0\t[nm]","absorptionmodel pure A material (y=0) : from file","absorptionfile pure A material (y=0) : Si.abs","absorption pure B material (y=1), model : from file","absorption pure B material (y=1), file : Si.abs"],
+              "resolved_path": "",
+              "source_path": ""
+            }
+          ],
+          "sections": [
+            {
+              "lines": ["clamp_psi :  5.00e+00 units kT","clamp_n :  5.00e+00 units kT","clamp_p :  5.00e+00 units kT"],
+              "name": "convergence"
+            },
+            {
+              "lines": ["flatband : 1 (1: flatband contact imposed; 0: fixed Phi_m value)","recalculate : 1 (1 = do or 0 = do not recalculate phi_m to set flatband in each batch step)","Sn :  1.000e+05 [m/s]","Sp :  1.000e+05 [m/s]","Tunneling to contact: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00"],
+              "name": "back contact"
+            },
+            {
+              "lines": ["name : P layer","d : 2.000e-06 [m]","composition grading :\t  0.00000\t  1.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t 0\t 1\t[-]","v_th_n :\t 1.000000e+05\t 1.000000e+05\t 1.000000e+05\t 1.000000e+00\t 1.000000e+00\t 1.000000e+05\t 1.000000e+05\t 0\t 2\t[m/s]","v_th_p :\t 1.000000e+05\t 1.000000e+05\t 1.000000e+05\t 1.000000e+00\t 1.000000e+00\t 1.000000e+05\t 1.000000e+05\t 0\t 2\t[m/s]","eps :\t 1.190000e+01\t 1.190000e+01\t 1.190000e+01\t 1.000000e+00\t 1.000000e+00\t 1.190000e+01\t 1.190000e+01\t 0\t 2\t[-]","chi :\t 4.050000e+00\t 4.050000e+00\t 4.050000e+00\t 1.000000e+00\t 1.000000e+00\t 4.050000e+00\t 4.050000e+00\t 0\t 2\t[eV]","Eg :\t 1.120000e+00\t 1.120000e+00\t 1.120000e+00\t 1.000000e+00\t 1.000000e+00\t 1.120000e+00\t 1.120000e+00\t 0\t 2\t[eV]","Nc :\t 2.800000e+25\t 2.800000e+25\t 2.800000e+25\t 1.000000e+00\t 1.000000e+00\t 2.800000e+25\t 2.800000e+25\t 0\t 2\t[/m^3]","Nv :\t 1.040000e+25\t 1.040000e+25\t 1.040000e+25\t 1.000000e+00\t 1.000000e+00\t 1.040000e+25\t 1.040000e+25\t 0\t 2\t[/m^3]","mu_n :\t 1.350000e-01\t 1.350000e-01\t 1.350000e-01\t 1.000000e+00\t 1.000000e+00\t 1.350000e-01\t 1.350000e-01\t 0\t 2\t[m^2/Vs]","mu_p :\t 4.800000e-02\t 4.800000e-02\t 4.800000e-02\t 1.000000e+00\t 1.000000e+00\t 4.800000e-02\t 4.800000e-02\t 0\t 2\t[m^2/Vs]","Tunneling in layer: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 0\t 0\t[-]","Relative hole mass :\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 0\t 0\t[-]","K_rad :\t 4.730000e-21\t 4.730000e-21\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 4.730000e-21\t 4.730000e-21\t 0\t 0\t[m^3/s]","c_n_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","c_p_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","Na(uniform) :\t 1.000000e+21\t 1.000000e+21\t 1.000000e+21\t 1.000000e+00\t 1.000000e+00\t 1.000000e+21\t 1.000000e+21\t 0\t 2\t[/m^3]","Nd(uniform) :\t 1.000000e+06\t 1.000000e+06\t 1.000000e+06\t 1.000000e+00\t 1.000000e+00\t 1.000000e+06\t 1.000000e+06\t 0\t 2\t[/m^3]","absorption grading :\t 1107.12\t 1107.12\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 0\t 0\t[nm]","absorptionmodel pure A material (y=0) : from file","absorptionfile pure A material (y=0) : Si.abs","absorption pure B material (y=1), model : from file","absorption pure B material (y=1), file : Si.abs"],
+              "name": "layer"
+            },
+            {
+              "lines": ["interfacename : N/P","Intraband tunneling : 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00"],
+              "name": "interface properties"
+            },
+            {
+              "lines": ["type : neutral","sigma_nleft : 1.000e-19 [m^2]","sigma_nright : 1.000e-19 [m^2]","sigma_pleft : 1.000e-19 [m^2]","sigma_pright : 1.000e-19 [m^2]","Tunneling to trap: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00","energy distribution : single","Reference for defect energy :  7 ; 3 = above highest EV; 4 = below lowest EC; 5 = above Ei left; 6 = above Ei right; 7 = above EV left (= SCAPS%<2.7 reference); 8 = above EV right; 9 = above middle of interface gap","Et :  0.50 [eV]","Ekar :  0.10 [eV]","N : 1.000e+14 [/m^2]"],
+              "name": "interface recombination"
+            },
+            {
+              "lines": ["name : N layer","d : 5.000e-07 [m]","composition grading :\t  0.00000\t  1.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t 0\t 1\t[-]","v_th_n :\t 1.000000e+05\t 1.000000e+05\t 1.000000e+05\t 1.000000e+00\t 1.000000e+00\t 1.000000e+05\t 1.000000e+05\t 0\t 2\t[m/s]","v_th_p :\t 1.000000e+05\t 1.000000e+05\t 1.000000e+05\t 1.000000e+00\t 1.000000e+00\t 1.000000e+05\t 1.000000e+05\t 0\t 2\t[m/s]","eps :\t 1.190000e+01\t 1.190000e+01\t 1.190000e+01\t 1.000000e+00\t 1.000000e+00\t 1.190000e+01\t 1.190000e+01\t 0\t 2\t[-]","chi :\t 4.050000e+00\t 4.050000e+00\t 4.050000e+00\t 1.000000e+00\t 1.000000e+00\t 4.050000e+00\t 4.050000e+00\t 0\t 2\t[eV]","Eg :\t 1.120000e+00\t 1.120000e+00\t 1.120000e+00\t 1.000000e+00\t 1.000000e+00\t 1.120000e+00\t 1.120000e+00\t 0\t 2\t[eV]","Nc :\t 2.800000e+25\t 2.800000e+25\t 2.800000e+25\t 1.000000e+00\t 1.000000e+00\t 2.800000e+25\t 2.800000e+25\t 0\t 2\t[/m^3]","Nv :\t 1.040000e+25\t 1.040000e+25\t 1.040000e+25\t 1.000000e+00\t 1.000000e+00\t 1.040000e+25\t 1.040000e+25\t 0\t 2\t[/m^3]","mu_n :\t 1.350000e-01\t 1.350000e-01\t 1.350000e-01\t 1.000000e+00\t 1.000000e+00\t 1.350000e-01\t 1.350000e-01\t 0\t 2\t[m^2/Vs]","mu_p :\t 4.800000e-02\t 4.800000e-02\t 4.800000e-02\t 1.000000e+00\t 1.000000e+00\t 4.800000e-02\t 4.800000e-02\t 0\t 2\t[m^2/Vs]","Tunneling in layer: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 0\t 0\t[-]","Relative hole mass :\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 0\t 0\t[-]","K_rad :\t 4.730000e-21\t 4.730000e-21\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 4.730000e-21\t 4.730000e-21\t 0\t 0\t[m^3/s]","c_n_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","c_p_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","Na(uniform) :\t 1.000000e+06\t 1.000000e+06\t 1.000000e+06\t 1.000000e+00\t 1.000000e+00\t 1.000000e+06\t 1.000000e+06\t 0\t 2\t[/m^3]","Nd(uniform) :\t 1.000000e+21\t 1.000000e+21\t 1.000000e+21\t 1.000000e+00\t 1.000000e+00\t 1.000000e+21\t 1.000000e+21\t 0\t 2\t[/m^3]","absorption grading :\t 1107.12\t 1107.12\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 0\t 0\t[nm]","absorptionmodel pure A material (y=0) : from file","absorptionfile pure A material (y=0) : Si.abs","absorption pure B material (y=1), model : from file","absorption pure B material (y=1), file : Si.abs"],
+              "name": "layer"
+            },
+            {
+              "lines": ["flatband : 1 (1: flatband contact imposed; 0: fixed Phi_m value)","recalculate : 1 (1 = do or 0 = do not recalculate phi_m to set flatband in each batch step)","Sn :  1.000e+05 [m/s]","Sp :  1.000e+05 [m/s]","Tunneling to contact: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00"],
+              "name": "front contact"
+            },
+            {
+              "lines": ["illuminated from : right","internal Rfront :   0.00000000","internal Tfront :  1.0000e+00","voltage V applied to : -1 (+1: right contact; -1: left contact)","cell reference system :  1 (1: as a consumer (consumed power = +VJ; 0: as a generator (generated power = +VJ) )"],
+              "name": "working point"
+            }
+          ],
+          "warnings": ["unsupported, ignored in solve: layer/0 optical data (TODO st6 integration)","unsupported, ignored in solve: layer/-1/K_rad","unsupported, ignored in solve: layer/1 optical data (TODO st6 integration)","unsupported, ignored in solve: layer/0/K_rad"]
+        },
+        "schema_version": 1,
+        "solver": {
+          "max_line_search_backtracks": 12,
+          "max_newton_iterations": 100,
+          "max_step_multiple_of_Vt": 4,
+          "residual_tolerance": 1e-10
+        },
+        "temperature_K": 300,
+        "voltage": {
+          "start_V": -0.5,
+          "step_V": 0.02,
+          "stop_V": 0.8
+        }
+      },
+      "history": [],
+      "id": "device-1",
+      "name": "dark",
+      "recorder_columns": [
+        {
+          "id": "J_0p5V",
+          "quantity": "J",
+          "voltage_V": 0.5
+        }
+      ],
+      "result": {},
+      "selected_run": "",
+      "selection": {
+        "bias": 0,
+        "interface": -1,
+        "layer": 0,
+        "member": 0,
+        "voltage_V": 0.0
+      },
+      "status": "no results"
+    },
+    {
+      "ac_results": {},
+      "actions": {},
+      "band_result": {},
+      "batch_result": {},
+      "batch_spec": {
+        "axes": [
+          {
+            "count": 19,
+            "parameter_id": "interface_defects[interface/0/defect/0].energy_offset_eV",
+            "spacing": "linear",
+            "start": 0.1,
+            "stop": 1.0
+          },
+          {
+            "count": 18,
+            "parameter_id": "temperature_K",
+            "spacing": "linear",
+            "start": 50.0,
+            "stop": 390.0
+          }
+        ],
+        "include_curves": true,
+        "mode": "nested"
+      },
+      "colour": [0.95,0.55,0.25,1.0],
+      "description": "",
+      "document": {
+        "carrier_statistics": "boltzmann",
+        "case_id": "scaps_import",
+        "constants_mode": "scaps_compat",
+        "contacts": {
+          "left": {
+            "Sn_m_s": 100000,
+            "Sp_m_s": 100000,
+            "flat_band": true,
+            "label": "left contact",
+            "phi_m_eV": 4.5
+          },
+          "right": {
+            "Sn_m_s": 100000,
+            "Sp_m_s": 100000,
+            "flat_band": true,
+            "label": "right contact",
+            "phi_m_eV": 4.5
+          }
+        },
+        "external": {
+          "area_m2": 1,
+          "series_ohm_m2": 0,
+          "shunt_ohm_m2": ".inf"
+        },
+        "illumination": {
+          "back_filter_file": "",
+          "back_filter_nm_fraction": [],
+          "back_reflection": 0.0,
+          "enabled": true,
+          "from_right": true,
+          "front_filter_file": "",
+          "front_filter_nm_fraction": [],
+          "front_internal_reflection": 0.0,
+          "front_transmission": 1.0,
+          "generation_file": "",
+          "generation_m_m3s": [],
+          "generation_quadrature": "exact_box",
+          "intensity_multiplier": 1.0,
+          "mode": "spectrum",
+          "monochromatic_power_W_m2": 1000,
+          "spectrum_file": "",
+          "spectrum_nm_W_m2": [[305.0,0.048],[310.0,0.23238],[315.0,0.5445],[320.0,0.90135],[325.0,1.28742],[330.0,1.88289],[335.0,1.98457],[340.0,2.15306],[345.0,2.22299],[350.0,3.65008],[360.0,5.34591],[370.0,6.54581],[380.0,7.08628],[390.0,7.5717],[400.0,9.95916],[410.0,11.4467],[420.0,11.68187],[430.0,11.15997],[440.0,13.02812],[450.0,15.09041],[460.0,15.89996],[470.0,15.91177],[480.0,16.13227],[490.0,15.53414],[500.0,15.54154],[510.0,15.70997],[520.0,15.10392],[530.0,15.60647],[540.0,15.56661],[550.0,23.28738],[570.0,29.95176],[590.0,28.43396],[610.0,29.38973],[630.0,28.80925],[650.0,28.39838],[670.0,27.29172],[690.0,23.75072],[710.0,17.68235],[718.0,7.41233],[724.0,11.801],[740.0,17.21923],[753.0,10.77465],[758.0,5.56304],[763.0,3.79513],[768.0,8.67959],[780.0,17.84488],[800.0,19.15106],[816.0,10.61303],[824.0,6.53929],[832.0,7.26152],[840.0,13.45886],[860.0,19.43966],[880.0,20.55956],[905.0,13.59171],[915.0,6.81306],[925.0,4.97575],[930.0,2.47678],[937.0,2.53067],[948.0,4.77279],[965.0,8.2099],[980.0,9.33587],[994.0,21.93074],[1040.0,26.39676],[1070.0,18.50298],[1100.0,10.41107],[1120.0,2.49641],[1130.0,1.45884],[1137.0,2.72242],[1161.0,6.96365],[1180.0,8.60153],[1200.0,12.00256],[1235.0,20.93583],[1290.0,17.42957],[1320.0,7.30847],[1350.0,1.86257],[1395.0,0.57198],[1443.0,1.69503],[1463.0,1.66614],[1477.0,1.98705],[1497.0,3.96003],[1520.0,5.31758],[1539.0,5.191],[1558.0,5.29055],[1578.0,4.24367],[1592.0,3.9157],[1610.0,4.43194],[1630.0,4.34685],[1646.0,5.60431],[1678.0,10.05307],[1740.0,9.79486],[1800.0,2.66783],[1860.0,0.32569],[1920.0,0.16752],[1960.0,0.80785],[1985.0,1.67246],[2005.0,1.10419],[2035.0,2.56887],[2065.0,2.2378],[2100.0,3.53577],[2148.0,4.00654],[2198.0,4.42194],[2270.0,5.61576],[2360.0,5.22307],[2450.0,1.86556],[2494.0,0.73717],[2537.0,0.85958],[2941.0,0.90637],[2973.0,0.22564],[3005.0,0.25458],[3056.0,0.24642],[3132.0,0.29146],[3156.0,0.54884],[3204.0,0.17814],[3245.0,0.2612],[3317.0,0.52581],[3344.0,0.38099],[3450.0,1.36829],[3573.0,1.85006],[3765.0,2.277],[4045.0,1.12998]],
+          "uniform_generation_m3_s": 0,
+          "wavelength_max_nm": ".inf",
+          "wavelength_min_nm": 0,
+          "wavelength_nm": 800
+        },
+        "interface_defects": [
+          {
+            "Nt_m2": 100000000000000,
+            "characteristic_energy_eV": 0.1,
+            "charge_type": "neutral",
+            "density_convention": "scaps_peak",
+            "energy_distribution": "single",
+            "energy_levels": 7,
+            "energy_offset_eV": 0.5,
+            "energy_quadrature": "scaps_trapezoid",
+            "energy_reference": 7,
+            "gaussian_width": 6,
+            "id": "interface/0/defect/0",
+            "left_layer_index": 0,
+            "peak_density_m2_eV": 0,
+            "sigma_n_left_m2": 1e-19,
+            "sigma_n_right_m2": 1e-19,
+            "sigma_p_left_m2": 1e-19,
+            "sigma_p_right_m2": 1e-19,
+            "tail_width": 7
+          }
+        ],
+        "layers": [
+          {
+            "absorption": {
+              "A_m1_eV_half": 0,
+              "B_m1_eV_minus_half": 0,
+              "background_m1": 0.0,
+              "file": "",
+              "model": "file",
+              "powers": [],
+              "sqrt_alpha_m1": 0,
+              "sqrt_beta_m1": 0,
+              "step_m1": 0,
+              "table_nm_m1": [[260.0,210000000.0],[270.0,221000000.0],[280.0,235000000.0],[290.0,213000000.0],[300.0,165000000.0],[310.0,144000000.0],[320.0,128000000.0],[330.0,119000000.0],[340.0,112000000.0],[350.0,108000000.0],[360.0,104000000.0],[370.0,73200000.0],[380.0,28200000.0],[390.0,17000000.0],[400.0,10700000.0],[410.0,7800000.0],[420.0,5730000.0],[430.0,4630000.0],[440.0,3700000.0],[450.0,3060000.0],[460.0,2540000.0],[470.0,2180000.0],[480.0,1820000.0],[490.0,1590000.0],[500.0,1380000.0],[510.0,1180000.0],[520.0,1020000.0],[530.0,927000.0],[540.0,810000.0],[550.0,715000.0],[560.0,645000.0],[570.0,594000.0],[580.0,543000.0],[590.0,477000.0],[600.0,440000.0],[610.0,409000.0],[620.0,382000.0],[630.0,355000.0],[640.0,328000.0],[650.0,302000.0],[660.0,277000.0],[670.0,253000.0],[680.0,234000.0],[690.0,217000.0],[700.0,200000.0],[710.0,186000.0],[720.0,171000.0],[730.0,158000.0],[740.0,146000.0],[750.0,134200.0],[760.0,123400.0],[770.0,113300.0],[780.0,103900.0],[790.0,95100.0],[800.0,86900.0],[810.0,79200.0],[820.0,72100.0],[830.0,65500.0],[840.0,59400.0],[850.0,53600.0],[860.0,48300.0],[870.0,43400.0],[880.0,38900.0],[890.0,34700.0],[900.0,30800.0],[910.0,27200.0],[920.0,23900.0],[930.0,20900.0],[940.0,18200.0],[950.0,15700.0],[960.0,13400.0],[970.0,11400.0],[980.0,9510.0],[990.0,7900.0],[1000.0,6400.0],[1010.0,5100.1],[1020.0,3900.9],[1030.0,3000.2],[1040.0,2200.6],[1050.0,1600.3],[1060.0,1100.1],[1070.0,800.0],[1080.0,600.2],[1090.0,400.7],[1100.0,300.5],[1110.0,200.7],[1120.0,200.0],[1130.0,100.5],[1140.0,100.01],[1150.0,68.0],[1160.0,42.0],[1170.0,22.0],[1180.0,6.5],[1190.0,3.6],[1200.0,2.3],[1210.0,1.3],[1220.0,0.77],[1230.0,0.38],[1240.0,0.15],[1250.0,0.0]],
+              "urbach_enabled": false,
+              "urbach_energy_eV": 0.025
+            },
+            "defects": [],
+            "doping": {
+              "Na_m3": 1e+21,
+              "Nd_m3": 1000000
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.9,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000,
+              "vth_p_ref_m_s": 100000
+            },
+            "name": "P layer",
+            "recombination": {
+              "auger_n_cm6_s": 0,
+              "auger_p_cm6_s": 0,
+              "radiative_cm3_s": 4.73e-15
+            },
+            "scapslab_id": "layer-1",
+            "thickness_m": 2e-06
+          },
+          {
+            "absorption": {
+              "A_m1_eV_half": 0,
+              "B_m1_eV_minus_half": 0,
+              "background_m1": 0.0,
+              "file": "",
+              "model": "file",
+              "powers": [],
+              "sqrt_alpha_m1": 0,
+              "sqrt_beta_m1": 0,
+              "step_m1": 0,
+              "table_nm_m1": [[260.0,210000000.0],[270.0,221000000.0],[280.0,235000000.0],[290.0,213000000.0],[300.0,165000000.0],[310.0,144000000.0],[320.0,128000000.0],[330.0,119000000.0],[340.0,112000000.0],[350.0,108000000.0],[360.0,104000000.0],[370.0,73200000.0],[380.0,28200000.0],[390.0,17000000.0],[400.0,10700000.0],[410.0,7800000.0],[420.0,5730000.0],[430.0,4630000.0],[440.0,3700000.0],[450.0,3060000.0],[460.0,2540000.0],[470.0,2180000.0],[480.0,1820000.0],[490.0,1590000.0],[500.0,1380000.0],[510.0,1180000.0],[520.0,1020000.0],[530.0,927000.0],[540.0,810000.0],[550.0,715000.0],[560.0,645000.0],[570.0,594000.0],[580.0,543000.0],[590.0,477000.0],[600.0,440000.0],[610.0,409000.0],[620.0,382000.0],[630.0,355000.0],[640.0,328000.0],[650.0,302000.0],[660.0,277000.0],[670.0,253000.0],[680.0,234000.0],[690.0,217000.0],[700.0,200000.0],[710.0,186000.0],[720.0,171000.0],[730.0,158000.0],[740.0,146000.0],[750.0,134200.0],[760.0,123400.0],[770.0,113300.0],[780.0,103900.0],[790.0,95100.0],[800.0,86900.0],[810.0,79200.0],[820.0,72100.0],[830.0,65500.0],[840.0,59400.0],[850.0,53600.0],[860.0,48300.0],[870.0,43400.0],[880.0,38900.0],[890.0,34700.0],[900.0,30800.0],[910.0,27200.0],[920.0,23900.0],[930.0,20900.0],[940.0,18200.0],[950.0,15700.0],[960.0,13400.0],[970.0,11400.0],[980.0,9510.0],[990.0,7900.0],[1000.0,6400.0],[1010.0,5100.1],[1020.0,3900.9],[1030.0,3000.2],[1040.0,2200.6],[1050.0,1600.3],[1060.0,1100.1],[1070.0,800.0],[1080.0,600.2],[1090.0,400.7],[1100.0,300.5],[1110.0,200.7],[1120.0,200.0],[1130.0,100.5],[1140.0,100.01],[1150.0,68.0],[1160.0,42.0],[1170.0,22.0],[1180.0,6.5],[1190.0,3.6],[1200.0,2.3],[1210.0,1.3],[1220.0,0.77],[1230.0,0.38],[1240.0,0.15],[1250.0,0.0]],
+              "urbach_enabled": false,
+              "urbach_energy_eV": 0.025
+            },
+            "defects": [],
+            "doping": {
+              "Na_m3": 1000000,
+              "Nd_m3": 1e+21
+            },
+            "material": {
+              "Eg_eV": 1.12,
+              "Nc_ref_m3": 2.8e+25,
+              "Nv_ref_m3": 1.04e+25,
+              "T_ref_K": 300,
+              "chi_eV": 4.05,
+              "eps_r": 11.9,
+              "mu_n_m2_V_s": 0.135,
+              "mu_p_m2_V_s": 0.048,
+              "vth_n_ref_m_s": 100000,
+              "vth_p_ref_m_s": 100000
+            },
+            "name": "N layer",
+            "recombination": {
+              "auger_n_cm6_s": 0,
+              "auger_p_cm6_s": 0,
+              "radiative_cm3_s": 4.73e-15
+            },
+            "scapslab_id": "layer-2",
+            "thickness_m": 5e-07
+          }
+        ],
+        "mesh": {
+          "adaptive_delta_log_carrier": 0.5,
+          "adaptive_delta_psi_Vt": 0.5,
+          "adaptive_max_bias": false,
+          "adaptive_max_layer_fraction": 0.25,
+          "adaptive_target_profile_error_eV": null,
+          "adaptive_target_relative_J_error": 0.001,
+          "adaptivity_level": "0",
+          "clustering_beta": 0,
+          "points_per_layer": 60,
+          "recalculate_generation_limit_uA_cm2": 1,
+          "recalculate_max_adaptions_per_voltage": 10,
+          "recalculate_max_ratio": 1.6,
+          "recalculate_mesh": false,
+          "recalculate_min_ratio": 1.05,
+          "recalculate_points": 10,
+          "recalculate_recombination_limit_uA_cm2": 0.001,
+          "solution_adaptive": false,
+          "thermionic_homojunctions": true
+        },
+        "mobility_temperature_model": "sqrt_T",
+        "radiative_limit_mode": "never",
+        "scaps_native": {
+          "action_lines": ["Temperature : 300 K","dark : 1","IV_startV : -0.3 V","IV_stopV : 0.6 V","IV_increment : 0.02 V"],
+          "optics": [
+            {
+              "id": "layer/0/absorptionfile pure A material (y=0)",
+              "kind": "absorption",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "D:\\Aplications\\SCAPS\\install\\absorption\\Si.abs",
+              "source_path": "Si.abs"
+            },
+            {
+              "id": "layer/0/absorption pure B material (y=1), file",
+              "kind": "absorption",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "D:\\Aplications\\SCAPS\\install\\absorption\\Si.abs",
+              "source_path": "Si.abs"
+            },
+            {
+              "id": "layer/0",
+              "kind": "absorption",
+              "model": "from file",
+              "parameters": ["absorption grading :\t 1107.12\t 1107.12\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 0\t 0\t[nm]","absorptionmodel pure A material (y=0) : from file","absorptionfile pure A material (y=0) : Si.abs","absorption pure B material (y=1), model : from file","absorption pure B material (y=1), file : Si.abs"],
+              "resolved_path": "",
+              "source_path": ""
+            },
+            {
+              "id": "layer/1/absorptionfile pure A material (y=0)",
+              "kind": "absorption",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "D:\\Aplications\\SCAPS\\install\\absorption\\Si.abs",
+              "source_path": "Si.abs"
+            },
+            {
+              "id": "layer/1/absorption pure B material (y=1), file",
+              "kind": "absorption",
+              "model": "",
+              "parameters": [],
+              "resolved_path": "D:\\Aplications\\SCAPS\\install\\absorption\\Si.abs",
+              "source_path": "Si.abs"
+            },
+            {
+              "id": "layer/1",
+              "kind": "absorption",
+              "model": "from file",
+              "parameters": ["absorption grading :\t 1107.12\t 1107.12\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 0\t 0\t[nm]","absorptionmodel pure A material (y=0) : from file","absorptionfile pure A material (y=0) : Si.abs","absorption pure B material (y=1), model : from file","absorption pure B material (y=1), file : Si.abs"],
+              "resolved_path": "",
+              "source_path": ""
+            }
+          ],
+          "sections": [
+            {
+              "lines": ["clamp_psi :  5.00e+00 units kT","clamp_n :  5.00e+00 units kT","clamp_p :  5.00e+00 units kT"],
+              "name": "convergence"
+            },
+            {
+              "lines": ["flatband : 1 (1: flatband contact imposed; 0: fixed Phi_m value)","recalculate : 1 (1 = do or 0 = do not recalculate phi_m to set flatband in each batch step)","Sn :  1.000e+05 [m/s]","Sp :  1.000e+05 [m/s]","Tunneling to contact: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00"],
+              "name": "back contact"
+            },
+            {
+              "lines": ["name : P layer","d : 2.000e-06 [m]","composition grading :\t  0.00000\t  1.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t 0\t 1\t[-]","v_th_n :\t 1.000000e+05\t 1.000000e+05\t 1.000000e+05\t 1.000000e+00\t 1.000000e+00\t 1.000000e+05\t 1.000000e+05\t 0\t 2\t[m/s]","v_th_p :\t 1.000000e+05\t 1.000000e+05\t 1.000000e+05\t 1.000000e+00\t 1.000000e+00\t 1.000000e+05\t 1.000000e+05\t 0\t 2\t[m/s]","eps :\t 1.190000e+01\t 1.190000e+01\t 1.190000e+01\t 1.000000e+00\t 1.000000e+00\t 1.190000e+01\t 1.190000e+01\t 0\t 2\t[-]","chi :\t 4.050000e+00\t 4.050000e+00\t 4.050000e+00\t 1.000000e+00\t 1.000000e+00\t 4.050000e+00\t 4.050000e+00\t 0\t 2\t[eV]","Eg :\t 1.120000e+00\t 1.120000e+00\t 1.120000e+00\t 1.000000e+00\t 1.000000e+00\t 1.120000e+00\t 1.120000e+00\t 0\t 2\t[eV]","Nc :\t 2.800000e+25\t 2.800000e+25\t 2.800000e+25\t 1.000000e+00\t 1.000000e+00\t 2.800000e+25\t 2.800000e+25\t 0\t 2\t[/m^3]","Nv :\t 1.040000e+25\t 1.040000e+25\t 1.040000e+25\t 1.000000e+00\t 1.000000e+00\t 1.040000e+25\t 1.040000e+25\t 0\t 2\t[/m^3]","mu_n :\t 1.350000e-01\t 1.350000e-01\t 1.350000e-01\t 1.000000e+00\t 1.000000e+00\t 1.350000e-01\t 1.350000e-01\t 0\t 2\t[m^2/Vs]","mu_p :\t 4.800000e-02\t 4.800000e-02\t 4.800000e-02\t 1.000000e+00\t 1.000000e+00\t 4.800000e-02\t 4.800000e-02\t 0\t 2\t[m^2/Vs]","Tunneling in layer: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 0\t 0\t[-]","Relative hole mass :\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 0\t 0\t[-]","K_rad :\t 4.730000e-21\t 4.730000e-21\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 4.730000e-21\t 4.730000e-21\t 0\t 0\t[m^3/s]","c_n_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","c_p_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","Na(uniform) :\t 1.000000e+21\t 1.000000e+21\t 1.000000e+21\t 1.000000e+00\t 1.000000e+00\t 1.000000e+21\t 1.000000e+21\t 0\t 2\t[/m^3]","Nd(uniform) :\t 1.000000e+06\t 1.000000e+06\t 1.000000e+06\t 1.000000e+00\t 1.000000e+00\t 1.000000e+06\t 1.000000e+06\t 0\t 2\t[/m^3]","absorption grading :\t 1107.12\t 1107.12\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 0\t 0\t[nm]","absorptionmodel pure A material (y=0) : from file","absorptionfile pure A material (y=0) : Si.abs","absorption pure B material (y=1), model : from file","absorption pure B material (y=1), file : Si.abs"],
+              "name": "layer"
+            },
+            {
+              "lines": ["interfacename : N/P","Intraband tunneling : 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00"],
+              "name": "interface properties"
+            },
+            {
+              "lines": ["type : neutral","sigma_nleft : 1.000e-19 [m^2]","sigma_nright : 1.000e-19 [m^2]","sigma_pleft : 1.000e-19 [m^2]","sigma_pright : 1.000e-19 [m^2]","Tunneling to trap: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00","energy distribution : single","Reference for defect energy :  7 ; 3 = above highest EV; 4 = below lowest EC; 5 = above Ei left; 6 = above Ei right; 7 = above EV left (= SCAPS%<2.7 reference); 8 = above EV right; 9 = above middle of interface gap","Et :  0.50 [eV]","Ekar :  0.10 [eV]","N : 1.000e+14 [/m^2]"],
+              "name": "interface recombination"
+            },
+            {
+              "lines": ["name : N layer","d : 5.000e-07 [m]","composition grading :\t  0.00000\t  1.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t  0.00000\t 0\t 1\t[-]","v_th_n :\t 1.000000e+05\t 1.000000e+05\t 1.000000e+05\t 1.000000e+00\t 1.000000e+00\t 1.000000e+05\t 1.000000e+05\t 0\t 2\t[m/s]","v_th_p :\t 1.000000e+05\t 1.000000e+05\t 1.000000e+05\t 1.000000e+00\t 1.000000e+00\t 1.000000e+05\t 1.000000e+05\t 0\t 2\t[m/s]","eps :\t 1.190000e+01\t 1.190000e+01\t 1.190000e+01\t 1.000000e+00\t 1.000000e+00\t 1.190000e+01\t 1.190000e+01\t 0\t 2\t[-]","chi :\t 4.050000e+00\t 4.050000e+00\t 4.050000e+00\t 1.000000e+00\t 1.000000e+00\t 4.050000e+00\t 4.050000e+00\t 0\t 2\t[eV]","Eg :\t 1.120000e+00\t 1.120000e+00\t 1.120000e+00\t 1.000000e+00\t 1.000000e+00\t 1.120000e+00\t 1.120000e+00\t 0\t 2\t[eV]","Nc :\t 2.800000e+25\t 2.800000e+25\t 2.800000e+25\t 1.000000e+00\t 1.000000e+00\t 2.800000e+25\t 2.800000e+25\t 0\t 2\t[/m^3]","Nv :\t 1.040000e+25\t 1.040000e+25\t 1.040000e+25\t 1.000000e+00\t 1.000000e+00\t 1.040000e+25\t 1.040000e+25\t 0\t 2\t[/m^3]","mu_n :\t 1.350000e-01\t 1.350000e-01\t 1.350000e-01\t 1.000000e+00\t 1.000000e+00\t 1.350000e-01\t 1.350000e-01\t 0\t 2\t[m^2/Vs]","mu_p :\t 4.800000e-02\t 4.800000e-02\t 4.800000e-02\t 1.000000e+00\t 1.000000e+00\t 4.800000e-02\t 4.800000e-02\t 0\t 2\t[m^2/Vs]","Tunneling in layer: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 0\t 0\t[-]","Relative hole mass :\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 1.000000e+00\t 0\t 0\t[-]","K_rad :\t 4.730000e-21\t 4.730000e-21\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 4.730000e-21\t 4.730000e-21\t 0\t 0\t[m^3/s]","c_n_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","c_p_auger :\t 0.000000e+00\t 0.000000e+00\t 1.000000e+01\t 1.000000e+01\t 1.000000e+01\t 0.000000e+00\t 0.000000e+00\t 0\t 0\t[m^6/s]","Na(uniform) :\t 1.000000e+06\t 1.000000e+06\t 1.000000e+06\t 1.000000e+00\t 1.000000e+00\t 1.000000e+06\t 1.000000e+06\t 0\t 2\t[/m^3]","Nd(uniform) :\t 1.000000e+21\t 1.000000e+21\t 1.000000e+21\t 1.000000e+00\t 1.000000e+00\t 1.000000e+21\t 1.000000e+21\t 0\t 2\t[/m^3]","absorption grading :\t 1107.12\t 1107.12\t  250.00\t  250.00\t    0.00\t    1.20\t    1.20\t 0\t 0\t[nm]","absorptionmodel pure A material (y=0) : from file","absorptionfile pure A material (y=0) : Si.abs","absorption pure B material (y=1), model : from file","absorption pure B material (y=1), file : Si.abs"],
+              "name": "layer"
+            },
+            {
+              "lines": ["flatband : 1 (1: flatband contact imposed; 0: fixed Phi_m value)","recalculate : 1 (1 = do or 0 = do not recalculate phi_m to set flatband in each batch step)","Sn :  1.000e+05 [m/s]","Sp :  1.000e+05 [m/s]","Tunneling to contact: 0 (0: no tunneling, 1: with tunneling)","Relative electron mass :  1.00e+00","Relative hole mass :  1.00e+00"],
+              "name": "front contact"
+            },
+            {
+              "lines": ["illuminated from : right","internal Rfront :   0.00000000","internal Tfront :  1.0000e+00","voltage V applied to : -1 (+1: right contact; -1: left contact)","cell reference system :  1 (1: as a consumer (consumed power = +VJ; 0: as a generator (generated power = +VJ) )"],
+              "name": "working point"
+            }
+          ],
+          "warnings": ["unsupported, ignored in solve: layer/0 optical data (TODO st6 integration)","unsupported, ignored in solve: layer/-1/K_rad","unsupported, ignored in solve: layer/1 optical data (TODO st6 integration)","unsupported, ignored in solve: layer/0/K_rad"]
+        },
+        "schema_version": 1,
+        "solver": {
+          "max_line_search_backtracks": 12,
+          "max_newton_iterations": 100,
+          "max_step_multiple_of_Vt": 4,
+          "residual_tolerance": 1e-10
+        },
+        "temperature_K": 300,
+        "voltage": {
+          "start_V": -0.5,
+          "step_V": 0.02,
+          "stop_V": 0.8
+        }
+      },
+      "history": [],
+      "id": "device-17953470036167907-4",
+      "name": "light",
+      "recorder_columns": [
+        {
+          "id": "Voc",
+          "quantity": "Voc"
+        },
+        {
+          "id": "Jsc",
+          "quantity": "Jsc"
+        },
+        {
+          "id": "FF",
+          "quantity": "FF"
+        },
+        {
+          "id": "eta",
+          "quantity": "eta"
+        }
+      ],
+      "result": {},
+      "selected_run": "",
+      "selection": {
+        "bias": 0,
+        "interface": -1,
+        "layer": 0,
+        "member": 0,
+        "voltage_V": 0.0
+      },
+      "status": "no results"
+    }
+  ],
+  "name": "Untitled project",
+  "schema_version": 3,
+  "ui": {}
+}

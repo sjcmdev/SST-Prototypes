@@ -1,3 +1,4 @@
+#include <scaps_core/boundary_probe.hpp>
 #include "Domain/Packed.hpp"
 #include <cstring>
 #include <mutex>
@@ -44,7 +45,7 @@ Column Column::Intern(std::vector<double> v) {
     }
     return out;
 }
-PJson Pack(const Json &j) {
+PJson Pack(const Json &j) {SCAPS_BOUNDARY_RESULT();
     PJson out;
     if (IsFloats(j)) {
         std::vector<double> v; v.reserve(j.size());
@@ -65,7 +66,7 @@ PJson Pack(const Json &j) {
     }
     out.prim = j; return out;
 }
-Json Unpack(const PJson &p) {
+Json Unpack(const PJson &p) {SCAPS_BOUNDARY_RESULT();
     switch (p.kind) {
     case PJson::Kind::Plain: return p.prim;
     case PJson::Kind::Floats: {auto a = Json::array(); for (double v : p.f) a.push_back(FiniteOrNull(v)); return a;}

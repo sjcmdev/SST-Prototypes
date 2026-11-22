@@ -11,6 +11,19 @@
 
 namespace SST
 {
+	namespace {
+		void trimLogs(JobRecord &record)
+		{
+			// A job retains at most 64 KiB / 256 log messages, including lifecycle entries.
+			std::size_t bytes = 0;
+			for (const auto &entry : record.logs) bytes += entry.message.size();
+			while (!record.logs.empty() && (bytes > 64 * 1024 || record.logs.size() > 256)) {
+				bytes -= record.logs.front().message.size();
+				record.logs.erase(record.logs.begin());
+			}
+		}
+	}
+
 	namespace
 	{
 		thread_local const JobSystem *g_CurrentJobSystem = nullptr;
@@ -168,7 +181,7 @@ namespace SST
 
 			if (it->second.snapshot.status == JobStatus::Cancelled)
 			{
-				jobToResume = it->second.job;
+				jobToResume = it->second.job.lock();
 				if (!jobToResume)
 					return false;
 
@@ -181,11 +194,13 @@ namespace SST
 				it->second.snapshot.currentStage.clear();
 				it->second.snapshot.currentMessage.clear();
 				it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Resume", Time::Now()});
+			trimLogs(it->second);
 				shouldEnqueue = true;
 			}
 			else
 			{
 				it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Resume request cleared cancellation", Time::Now()});
+			trimLogs(it->second);
 			}
 		}
 
@@ -207,6 +222,10 @@ namespace SST
 		if (!isFinishedStatus(it->second.snapshot.status))
 			return false;
 
+		// A reset must not leave an expired request permanently queued.
+		if (it->second.job.expired())
+			return false;
+
 		// Reset to Queued state
 		it->second.snapshot.status = JobStatus::Queued;
 		it->second.snapshot.startedAt = Time::TimePoint{};
@@ -218,6 +237,7 @@ namespace SST
 		it->second.snapshot.currentMessage.clear();
 		it->second.cancellationRequested->store(false, std::memory_order_relaxed);
 		it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Reset", Time::Now()});
+			trimLogs(it->second);
 		return true;
 	}
 
@@ -235,7 +255,7 @@ namespace SST
 			if (!isFinishedStatus(it->second.snapshot.status))
 				return false;
 
-			jobToRetry = it->second.job;
+			jobToRetry = it->second.job.lock();
 			if (!jobToRetry)
 				return false;
 
@@ -250,6 +270,7 @@ namespace SST
 			it->second.snapshot.currentMessage.clear();
 			it->second.cancellationRequested->store(false, std::memory_order_relaxed);
 			it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Retry", Time::Now()});
+			trimLogs(it->second);
 		}
 
 		// Re-enqueue without holding mutex
@@ -318,6 +339,8 @@ namespace SST
 	{
 		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
+		// Adoption can release the last owner after the last worker finished.
+		trimHistory();
 		std::vector<JobSnapshot> jobs;
 		jobs.reserve(m_Records.size());
 		for (const auto &entry : m_Records)
@@ -397,6 +420,8 @@ namespace SST
 			if (cancelJobs)
 				m_Pool.unpause();
 			m_Pool.wait();
+			std::lock_guard lock(m_RecordsMutex);
+			trimHistory();
 		});
 	}
 
@@ -435,8 +460,8 @@ namespace SST
 		JobRecord record;
 		record.snapshot.id = id;
 		record.snapshot.parentId = parentId;
-		record.snapshot.name = job->GetName();
-		record.snapshot.type = job->GetType();
+		record.snapshot.name = JobHistoryText(job->GetName());
+		record.snapshot.type = JobHistoryText(job->GetType());
 		record.snapshot.status = JobStatus::Queued;
 		record.snapshot.priority = priority;
 		record.snapshot.createdAt = now;
@@ -544,6 +569,9 @@ namespace SST
 			auto child = GetJob(id);
 			if (child.has_value() && isFinishedStatus(child->status))
 				return true;
+            // Only finished IDs can retire: waiting on one does not require keeping every child record.
+            if (!child && id > 0 && id < m_NextId.load(std::memory_order_relaxed))
+                return true;
 
 			// Avoid deadlock only in true single-worker mode. With 2+ workers,
 			// a parent job can safely wait while another worker executes the child.
@@ -564,6 +592,7 @@ namespace SST
 		it->second.snapshot.status = JobStatus::Running;
 		it->second.snapshot.startedAt = startedAt;
 		it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Running", startedAt});
+			trimLogs(it->second);
 	}
 
 	void JobSystem::updateProgress(JobId id, float completedWork, float totalWork)
@@ -598,7 +627,7 @@ namespace SST
 			if (it == m_Records.end())
 				return;
 
-			it->second.snapshot.currentStage = stage;
+			it->second.snapshot.currentStage = JobHistoryText(stage);
 			completedWork = it->second.snapshot.completedWork;
 			totalWork = it->second.snapshot.totalWork;
 			message = it->second.snapshot.currentMessage;
@@ -619,7 +648,7 @@ namespace SST
 			if (it == m_Records.end())
 				return;
 
-			it->second.snapshot.currentMessage = message;
+			it->second.snapshot.currentMessage = JobHistoryText(message);
 			completedWork = it->second.snapshot.completedWork;
 			totalWork = it->second.snapshot.totalWork;
 			stage = it->second.snapshot.currentStage;
@@ -632,10 +661,9 @@ namespace SST
 	{
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
-		if (it == m_Records.end())
-			return;
-
-		it->second.logs.push_back(JobLogEntry{level, message, Time::Now()});
+		if (it == m_Records.end()) return;
+		it->second.logs.push_back(JobLogEntry{level, JobHistoryText(message), Time::Now()});
+		trimLogs(it->second);
 	}
 
 	bool JobSystem::isCancellationRequested(JobId id) const
@@ -670,15 +698,34 @@ namespace SST
 		else if (finalStatus == JobStatus::Cancelled)
 		{
 			if (!errorMessage.empty())
-				it->second.snapshot.errorMessage = errorMessage;
+				it->second.snapshot.errorMessage = JobHistoryText(errorMessage);
 
 			it->second.logs.push_back(JobLogEntry{JobLogLevel::Warning, "Cancelled", finishedAt});
 		}
 		else
 		{
-			it->second.snapshot.errorMessage = errorMessage;
-			it->second.logs.push_back(JobLogEntry{JobLogLevel::Error, errorMessage, finishedAt});
+			it->second.snapshot.errorMessage = JobHistoryText(errorMessage);
+			it->second.logs.push_back(JobLogEntry{JobLogLevel::Error, JobHistoryText(errorMessage), finishedAt});
 		}
+		trimLogs(it->second);
+		trimHistory();
+	}
+
+	void JobSystem::trimHistory() const
+	{
+		std::vector<JobId> finished;
+		for (const auto &[id, record] : m_Records) {
+			if (!isFinishedStatus(record.snapshot.status)) continue;
+            // A consumer still awaiting adoption owns its job; keep its status readable without owning the payload.
+            if (!record.job.expired()) continue;
+			finished.push_back(id);
+		}
+		if (finished.size() <= JobHistoryLimit) return;
+		std::sort(finished.begin(), finished.end(), [this](JobId a, JobId b) {
+            const auto ta=m_Records.at(a).snapshot.finishedAt, tb=m_Records.at(b).snapshot.finishedAt;
+            return ta==tb ? a<b : ta<tb;
+        });
+		for (std::size_t i = 0; i < finished.size() - JobHistoryLimit; ++i) m_Records.erase(finished[i]);
 	}
 
 	std::optional<Ref<EventBus>> JobSystem::lockEventBus() const
@@ -695,7 +742,7 @@ namespace SST
 		if (!eventBus)
 			return;
 
-		(*eventBus)->Queue(JobQueuedEvent{id, job.GetName(), job.GetType(), createdAt, parentId, priority});
+		(*eventBus)->Queue(JobQueuedEvent{id, JobHistoryText(job.GetName()), JobHistoryText(job.GetType()), createdAt, parentId, priority});
 	}
 
 	void JobSystem::publishStartedEvent(JobId id, const IJob &job, const Time::TimePoint &startedAt) const
@@ -704,7 +751,7 @@ namespace SST
 		if (!eventBus)
 			return;
 
-		(*eventBus)->Queue(JobStartedEvent{id, job.GetName(), job.GetType(), startedAt});
+		(*eventBus)->Queue(JobStartedEvent{id, JobHistoryText(job.GetName()), JobHistoryText(job.GetType()), startedAt});
 	}
 
 	void JobSystem::publishProgressEvent(JobId id, float completedWork, float totalWork, const std::string &stage, const std::string &message) const
@@ -714,7 +761,7 @@ namespace SST
 		if (!eventBus)
 			return;
 
-		(*eventBus)->Queue(JobProgressEvent{id, completedWork, totalWork, stage, message, Time::Now()});
+		(*eventBus)->Queue(JobProgressEvent{id, completedWork, totalWork, JobHistoryText(stage), JobHistoryText(message), Time::Now()});
 	}
 
 	void JobSystem::publishFinishedEvent(
@@ -729,11 +776,11 @@ namespace SST
 			return;
 
 		if (status == JobStatus::Completed)
-			(*eventBus)->Queue(JobCompletedEvent{id, job.GetName(), job.GetType(), finishedAt});
+			(*eventBus)->Queue(JobCompletedEvent{id, JobHistoryText(job.GetName()), JobHistoryText(job.GetType()), finishedAt});
 		else if (status == JobStatus::Cancelled)
-			(*eventBus)->Queue(JobCancelledEvent{id, job.GetName(), job.GetType(), finishedAt});
+			(*eventBus)->Queue(JobCancelledEvent{id, JobHistoryText(job.GetName()), JobHistoryText(job.GetType()), finishedAt});
 		else
-			(*eventBus)->Queue(JobFailedEvent{id, job.GetName(), job.GetType(), errorMessage, finishedAt});
+			(*eventBus)->Queue(JobFailedEvent{id, JobHistoryText(job.GetName()), JobHistoryText(job.GetType()), JobHistoryText(errorMessage), finishedAt});
 	}
 
 	void JobSystem::delayedWorkerLoop(std::stop_token stopToken)
