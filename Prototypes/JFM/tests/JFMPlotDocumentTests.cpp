@@ -71,20 +71,21 @@ namespace SST::Prototypes::JFM
         EXPECT_EQ(doc.project.series(id).data.count, 1);
         EXPECT_EQ(doc.project.series(id).data.yError, nullptr);
     }
-    TEST(JFMPlotDocumentTests, JsonSnapshotRoundTripsStableIdsAndRejectsInvalidRequests)
+    TEST(JFMPlotDocumentTests, TypedSnapshotRetainsStableIdsAndRejectsInvalidRanges)
     {
         JFMPlotDocument doc;
         const double x[] = {0,1}, y[] = {2,3};
         doc.BeginFrame(); auto id = doc.SetSeries({"Data###data", {x,y,2}}); doc.EndFrame({});
-        nlohmann::json request = {{"operation","snapshot"},{"project",nlohmann::json::parse(doc.project.toJson())},
-            {"graph_id",doc.graph},{"ranges",{-1,2,1,4}}};
-        auto result = RunJFMPlotRequest(request);
-        ASSERT_EQ(result.at("ok"), true) << result.dump();
-        EXPECT_EQ(result.at("snapshot").at("series").at(0).at("plot_id"), id);
-        EXPECT_EQ(result.at("snapshot").at("font_family"), "DejaVu Sans");
-        request["ranges"] = {0,0,1,4};
-        result = RunJFMPlotRequest(request);
-        EXPECT_EQ(result.at("ok"), false); EXPECT_EQ(result.at("error").at("code"), "jfm.plot.validation");
+        doc.view.viewport = plot::Bounds{-1,2,1,4};
+        const auto snapshot = doc.Snapshot();
+        ASSERT_EQ(snapshot->series.size(), 1);
+        EXPECT_EQ(snapshot->series[0].plot, id);
+        EXPECT_EQ(snapshot->fontFamily, "DejaVu Sans");
+        const auto invalidSize = ExportJFMPlot(snapshot, "figure.png", "png", 300, JFMPlotSize{0, 60});
+        ASSERT_FALSE(invalidSize);
+        EXPECT_EQ(invalidSize.Error().code, "jfm.plot.validation");
+        doc.view.viewport = plot::Bounds{0,0,1,4};
+        EXPECT_THROW(doc.Snapshot(), std::exception);
     }
     TEST(JFMPlotDocumentTests, MonteCarloHeadlessFigureRetainsSigmaClassesAndVisibility)
     {

@@ -406,16 +406,35 @@ namespace SST
           m_Host(std::move(host)), m_TemplateId(std::move(templateId)) {}
     WindowDuplicate ViewInstance::Duplicate() const { return {CreateRef<ViewInstance>(*this), {}}; }
     void ViewInstance::RenderContent() { if (auto host = m_Host.lock()) host->Render(*this); }
-    std::string ViewInstance::SaveViewState() const { return Json{{"version", 1}, {"binding", m_Binding}, {"table", m_Table}}.dump(); }
-    bool ViewInstance::LoadViewState(const std::string &text)
+    ViewInstance::State ViewInstance::ReadState(const Json &b, const Json &t)
     {
-        try
-        {
-            const auto state = Json::parse(text); require(state.at("version") == 1, "Unsupported view state");
-            auto b = binding(state.at("binding")), t = table(state.at("table"));
-            require(m_TemplateId != "core.comparison" || b.at("selection_source") == 0, "Comparison table cannot consume selection");
-            m_Binding = std::move(b); m_Table = std::move(t); return true;
-        }
-        catch (const std::exception &) { return false; }
+        State state{b.at("mode"), b.at("item_ids").get<std::vector<std::string>>(), b.at("selection_source"),
+            t.at("filter_text"), t.at("sort_metric_id"), t.at("descending")};
+        if (!t.at("selected_item_ids").is_null()) state.selected = t.at("selected_item_ids").get<std::vector<std::string>>();
+        return state;
+    }
+    std::any ViewInstance::CaptureViewState() const { return ReadState(m_Binding, m_Table); }
+    bool ViewInstance::RestoreViewState(const std::any &value)
+    {
+        const auto *s = std::any_cast<State>(&value);
+        if (!s || (m_TemplateId == "core.comparison" && s->selectionSource)) return false;
+        m_Binding = {{"mode", s->mode}, {"item_ids", s->items}, {"selection_source", s->selectionSource}};
+        m_Table = {{"filter_text", s->filter}, {"sort_metric_id", s->sortMetric}, {"descending", s->descending},
+            {"selected_item_ids", s->selected ? Json(*s->selected) : Json()}};
+        return true;
+    }
+    std::string ViewInstance::EncodeViewState(const std::any &value) const
+    {
+        const auto &s = std::any_cast<const State &>(value);
+        return Json{{"version", 1}, {"binding", {{"mode", s.mode}, {"item_ids", s.items}, {"selection_source", s.selectionSource}}},
+            {"table", {{"filter_text", s.filter}, {"sort_metric_id", s.sortMetric}, {"descending", s.descending},
+                {"selected_item_ids", s.selected ? Json(*s.selected) : Json()}}}}.dump();
+    }
+    std::any ViewInstance::DecodeViewState(const std::string &text) const
+    {
+        const auto state = Json::parse(text); require(state.at("version") == 1, "Unsupported view state");
+        auto b = binding(state.at("binding")), t = table(state.at("table"));
+        require(m_TemplateId != "core.comparison" || b.at("selection_source") == 0, "Comparison table cannot consume selection");
+        return ReadState(b, t);
     }
 }

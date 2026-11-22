@@ -95,16 +95,18 @@ namespace SST::Prototypes::JFM
                     const char *formats[] = {"svg", "pdf", "png"};
                     auto destination = SaveFileDialog({"Publication figure", formats[format]}, (std::string("figure.")+formats[format]).c_str(), JFMPlotExportDirectory());
                     if (destination) {
-                        auto result = ExportJFMPlot(*doc.Snapshot(), destination->Utf8(), formats[format], dpi);
-                        if (result.at("ok").get<bool>()) { doc.exportJob = result.at("job_id"); status = "Export queued"; }
-                        else status = result.at("error").at("message").get<std::string>();
+                        auto result = ExportJFMPlot(doc.Snapshot(), destination->Utf8(), formats[format], dpi);
+                        if (result) { doc.exportJob = *result; status = "Export queued"; }
+                        else status = result.Error().userMessage;
                     }
                 }
             } catch (const std::exception &e) { status = e.what(); }
             if (doc.exportJob) {
-                const auto result = RunJFMPlotRequest({{"operation", "status"}, {"job_id", doc.exportJob}});
-                status = result.at("ok").get<bool>() ? "Export " + result.at("status").get<std::string>()
-                    : result.at("error").at("message").get<std::string>();
+                const auto result = JFMPlotExportStatus(doc.exportJob);
+                static constexpr const char *names[] = {"queued", "running", "completed", "failed", "cancelled"};
+                status = !result ? result.Error().userMessage :
+                    (result->status == JobStatus::Failed || result->status == JobStatus::Cancelled) ? result->errorMessage :
+                    std::string("Export ") + names[static_cast<int>(result->status)];
             }
             ImGui::TextWrapped("%s", status.c_str());
             ImGui::EndPopup();

@@ -9,6 +9,7 @@
 #include "solver/objective.hpp"
 #include "solver/fit_solver.hpp"
 #include "IO/JFMFitJobs.hpp"
+#include "IO/JFMPythonBindings.hpp"
 
 #include <array>
 #include <algorithm>

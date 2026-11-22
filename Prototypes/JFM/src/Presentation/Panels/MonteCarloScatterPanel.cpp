@@ -383,8 +383,8 @@ namespace SST::Prototypes::JFM
                     bounds = {plot.options.xMinimum,plot.options.xMaximum,plot.options.yMinimum,plot.options.yMaximum};
                 plot.document->view.viewport = bounds;
             }
-            auto exported = ExportJFMPlot(*plot.document->Snapshot(), outputPath->Utf8(), "png", 300);
-            if (!exported.at("ok").get<bool>()) { m_LastSavePlotError = exported.at("error").at("message"); return false; }
+            auto exported = ExportJFMPlot(plot.document->Snapshot(), outputPath->Utf8(), "png", 300);
+            if (!exported) { m_LastSavePlotError = exported.Error().userMessage; return false; }
         } catch (const std::exception &e) { m_LastSavePlotError = e.what(); return false; }
 		return true;
 	}

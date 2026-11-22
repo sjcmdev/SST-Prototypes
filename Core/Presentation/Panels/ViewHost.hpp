@@ -55,9 +55,20 @@ namespace SST
         [[nodiscard]] const nlohmann::json &Table() const { return m_Table; }
     protected:
         void RenderContent() override;
-        std::string SaveViewState() const override;
-        bool LoadViewState(const std::string &text) override;
+        std::any CaptureViewState() const override;
+        bool RestoreViewState(const std::any &state) override;
+        std::string EncodeViewState(const std::any &state) const override;
+        std::any DecodeViewState(const std::string &text) const override;
     private:
+        struct State {
+            std::string mode;
+            std::vector<std::string> items;
+            WindowId selectionSource = 0;
+            std::string filter, sortMetric;
+            bool descending = false;
+            std::optional<std::vector<std::string>> selected;
+        };
+        static State ReadState(const nlohmann::json &binding, const nlohmann::json &table);
         friend class ViewHost;
         WeakRef<ViewHost> m_Host;
         std::string m_TemplateId;

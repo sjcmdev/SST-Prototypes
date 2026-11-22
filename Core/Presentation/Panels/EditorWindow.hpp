@@ -1,6 +1,8 @@
 #pragma once
 
 #include <cstdint>
+#include <any>
+#include <stdexcept>
 #include <string>
 #include "Presentation/Panels/IPanel.hpp"
 #include "Core/Commands/Command.hpp"
@@ -76,9 +78,14 @@ namespace SST
         virtual void OnContentSkipped() {}
         virtual void RenderContextMenu() {}
         virtual void RevealInProject() {}
-        // Project serializers own content. This hook is for window-specific view state.
-        [[nodiscard]] virtual std::string SaveViewState() const { return {}; }
-        virtual bool LoadViewState(const std::string &state) { return state.empty(); }
+        // Captured values are owned C++ view objects; text conversion belongs to layout IO.
+        [[nodiscard]] virtual std::any CaptureViewState() const { return {}; }
+        virtual bool RestoreViewState(const std::any &state) { return !state.has_value(); }
+        [[nodiscard]] virtual std::string EncodeViewState(const std::any &) const { return {}; }
+        [[nodiscard]] virtual std::any DecodeViewState(const std::string &state) const {
+            if (!state.empty()) throw std::invalid_argument("Unexpected window view state");
+            return {};
+        }
         void Request(WindowRequest request);
 
     private:

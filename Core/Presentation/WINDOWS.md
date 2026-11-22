@@ -31,7 +31,7 @@ Use `editor.GetWindows()->Execute(WindowRequest{WindowAction::Minimize, id})`. C
 
 ## Persistence
 
-`Save()` / `Load(json)` work without ImGui and belong in project IO; PrototypeTemplate demonstrates UI-thread capture before a background save and restoration after successful open. Applications own document content. `SaveViewState()` / `LoadViewState()` store view options only; validate before mutation, return false on invalid input, and accept your own saved state for rollback.
+`Save()` / `Load(json)` work without ImGui and belong in project IO; PrototypeTemplate demonstrates UI-thread capture before a background save and restoration after successful open. Applications own document content. `CaptureLayout()` / `LoadLayout()` retain typed window and view snapshots for workspace switching. `CaptureViewState()` / `RestoreViewState()` exchange owned C++ view objects (`std::any` supports heterogeneous window types); validate before mutation and accept your own captured state for rollback. `EncodeViewState()` / `DecodeViewState()` are used only by layout file IO. Named workspaces retain native ImGui window, table and docking settings; INI conversion occurs at the settings handler.
 
 On Windows, each executable keeps its layout at `%LOCALAPPDATA%/Semiconductor Studio/<executable-stem>/imgui.ini`; an existing portable layout is copied on first use. Screenshot runs retain their portable layout path, so existing sandboxed captures do not modify the user profile. Core saves changed settings periodically and on shutdown. `app.layout.reset` is shared by Window > Reset layout and `sst_application.execute` (JSON); it also works on a headless workspace. It clears docking and restores the registered window defaults, including visibility and pin/maximize state.
 

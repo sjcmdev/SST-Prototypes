@@ -1,9 +1,13 @@
 # Shared plot export
 
-`sst::plotlab::SnapshotJson` in PlotLab-Engine serializes an owned `GraphSnapshot`
-without a Core dependency. Core's `ExportPlotsJson` consumes those JSON snapshots
-inside the application's existing command/job path. It acquires the GIL without
-Core's outer Python scope mutex, so a Python caller can release the GIL and wait.
+Core's `ExportPlotsJson` runs inside the application's existing command/job path.
+A request can retain a typed immutable snapshot through `pythonSnapshot`, a binding
+callback invoked with the GIL held. JFM uses this path; `SnapshotJson` and Python
+conversion run in `JFMPythonBindings.cpp` at that boundary. The existing text field
+remains a compatibility adapter for file/Python callers.
+
+The exporter acquires the GIL without Core's outer Python scope mutex, so a Python
+caller can release the GIL and wait.
 
 The `sst_plot_export` Python package renders PNG/SVG/PDF with Matplotlib's Agg
 canvas. It preserves resolved ranges, ticks, visible series, styles, physical

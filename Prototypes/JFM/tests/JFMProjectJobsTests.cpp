@@ -704,12 +704,15 @@ namespace SST::Prototypes::JFM
             const auto id = result.at("job_id");
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
             do {
-                result = RunJFMPlotRequest({{"operation","status"},{"job_id",id}});
-                if (result.at("status") != "queued" && result.at("status") != "running") break;
+                const auto job = JFMPlotExportStatus(id.get<JobId>());
+                ASSERT_TRUE(job);
+                if (job->status != JobStatus::Queued && job->status != JobStatus::Running) {
+                    ASSERT_EQ(job->status, JobStatus::Completed) << job->errorMessage;
+                    break;
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
             } while (std::chrono::steady_clock::now() < deadline);
-            ASSERT_EQ(result.at("ok"), true) << result.dump();
-            ASSERT_EQ(result.at("status"), "completed") << result.dump();
+            ASSERT_EQ(JFMPlotExportStatus(id.get<JobId>())->status, JobStatus::Completed);
             EXPECT_GT(std::filesystem::file_size(destination), 500);
             std::filesystem::remove(destination);
         }

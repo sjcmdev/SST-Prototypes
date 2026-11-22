@@ -334,78 +334,109 @@ namespace SST
         window->ApplyState(s); return {};
     }
 
-    std::string WindowWorkspace::Save() const
+    WindowLayout WindowWorkspace::CaptureLayout() const
     {
-        nlohmann::json result = {{"version", 1}, {"locked", m_Locked}, {"windows", nlohmann::json::array()}};
-        for (const auto &w : Windows()) if (!w->Capabilities().auxiliary) result["windows"].push_back({{"id", w->GetId()}, {"type", w->GetType()},
-            {"state", encode(w->GetState())}, {"view", w->SaveViewState()}});
+        WindowLayout layout; layout.locked = m_Locked;
+        for (const auto &w : Windows()) if (!w->Capabilities().auxiliary)
+            layout.items.push_back({{w->GetId(), w}, w->GetState(), w->CaptureViewState()});
+        return layout;
+    }
+    std::string WindowWorkspace::SaveLayout(const WindowLayout &layout) const
+    {
+        nlohmann::json result = {{"version", 1}, {"locked", layout.locked}, {"windows", nlohmann::json::array()}};
+        for (const auto &item : layout.items) {
+            const auto w = std::static_pointer_cast<EditorWindow>(item.entry.panel);
+            result["windows"].push_back({{"id", item.entry.id}, {"type", w->GetType()},
+                {"state", encode(item.state)}, {"view", w->EncodeViewState(item.view)}});
+        }
         return result.dump();
     }
-    Result<void> WindowWorkspace::Load(const std::string &json)
+    std::string WindowWorkspace::Save() const { return SaveLayout(CaptureLayout()); }
+    Result<WindowLayout> WindowWorkspace::ParseLayout(const std::string &json) const
     {
-        try
-        {
+        try {
             const auto document = nlohmann::json::parse(json);
-            if (document.at("version") != 1 || !document.at("windows").is_array()) return invalid("Unsupported window layout.");
-            const bool locked = document.at("locked").get<bool>();
-            WindowSnapshot staged; staged.locked = locked;
+            if (document.at("version") != 1 || !document.at("windows").is_array()) return invalid("Unsupported window layout.").Error();
+            WindowLayout layout; layout.locked = document.at("locked").get<bool>();
             std::set<WindowId> ids;
-            struct View { Ref<EditorWindow> window; std::string previous, next; };
-            std::vector<View> views;
-            for (const auto &item : document.at("windows"))
-            {
-                if (!item.at("id").is_number_integer()) return invalid("Window IDs must be integers.");
+            for (const auto &item : document.at("windows")) {
+                if (!item.at("id").is_number_integer()) return invalid("Window IDs must be integers.").Error();
                 const auto signedId = item.at("id").get<std::int64_t>();
                 if (signedId <= 0 || signedId >= std::numeric_limits<std::int64_t>::max() || !ids.insert(WindowId(signedId)).second)
-                    return invalid("Duplicate or invalid window ID in layout.");
+                    return invalid("Duplicate or invalid window ID in layout.").Error();
                 const auto id = WindowId(signedId);
                 const auto type = item.at("type").get<std::string>();
                 auto window = Find(id);
-                if (window && window->GetType() != type) return invalid("EditorWindow type does not match layout.");
+                if (window && window->GetType() != type) return invalid("EditorWindow type does not match layout.").Error();
                 if (!window)
                 {
-                    if (m_Panels.Contains(id)) return invalid("Layout ID conflicts with a legacy panel.");
+                    if (m_Panels.Contains(id)) return invalid("Layout ID conflicts with a legacy panel.").Error();
                     if (type.starts_with("hosted.")) window = CreateRef<HostedEditorWindow>(type.substr(7));
                     if (auto factory = m_Factories.find(type); !window && factory != m_Factories.end()) window = factory->second();
                     for (auto &candidate : Windows()) if (!window && candidate->GetType() == type && candidate->Capabilities().duplicable)
                     {
                         auto factory = candidate->Duplicate();
-                        if (factory.contentCommand) return invalid("Restore engine-backed windows from the project before loading its layout.");
+                        if (factory.contentCommand) return invalid("Restore engine-backed windows from the project before loading its layout.").Error();
                         window = factory.window; break;
                     }
-                    if (!window || window->GetId() != 0 || window->GetType() != type) return invalid("No factory for saved window type: " + type);
+                    if (!window || window->GetId() != 0 || window->GetType() != type) return invalid("No factory for saved window type: " + type).Error();
                 }
-                auto state = decode(item.at("state"));
+                layout.items.push_back({{id, window}, decode(item.at("state")), window->DecodeViewState(item.at("view").get<std::string>())});
+            }
+            return layout;
+        } catch (const std::exception &error) { return invalid(std::string("Invalid window layout: ") + error.what()).Error(); }
+    }
+    Result<void> WindowWorkspace::Load(const std::string &json)
+    {
+        auto layout = ParseLayout(json);
+        if (!layout) return layout.Error();
+        return LoadLayout(*layout);
+    }
+    Result<void> WindowWorkspace::LoadLayout(const WindowLayout &layout)
+    {
+        try {
+            WindowSnapshot staged; staged.locked = layout.locked;
+            std::set<WindowId> ids;
+            struct View { Ref<EditorWindow> window; std::any previous, next; };
+            std::vector<View> views;
+            for (const auto &item : layout.items) {
+                const auto id = item.entry.id;
+                auto window = std::dynamic_pointer_cast<EditorWindow>(item.entry.panel);
+                if (!window || !id || id >= std::numeric_limits<std::int64_t>::max() || !ids.insert(id).second)
+                    return invalid("Duplicate or invalid window ID in layout.");
+                if (auto current = Find(id); current && current != window) return invalid("Layout ID conflicts with another window.");
+                if (!Find(id) && m_Panels.Contains(id)) return invalid("Layout ID conflicts with a legacy panel.");
+                auto state = item.state;
+                if (!validName(state.shortName) || !validName(state.longName) ||
+                    int(state.mode) < 0 || int(state.mode) > 2 || int(state.restoreMode) < 0 || int(state.restoreMode) > 2 || state.restoreMode == WindowMode::Minimized ||
+                    !std::isfinite(state.x) || !std::isfinite(state.y) || !std::isfinite(state.width) || !std::isfinite(state.height) ||
+                    std::abs(state.x) > 100000 || std::abs(state.y) > 100000 || state.width < 1 || state.height < 1 || state.width > 100000 || state.height > 100000)
+                    return invalid("Invalid window state");
                 const auto &cap = window->Capabilities();
                 if (cap.auxiliary) state = window->m_DefaultState;
                 if ((!cap.pinnable && state.pinned) || (!cap.minimizable && state.mode == WindowMode::Minimized) ||
                     (!cap.maximizable && state.mode == WindowMode::Maximized) || (!cap.closable && !state.visible) ||
                     (!cap.dockable && state.dockId)) return invalid("Saved state exceeds window capabilities.");
                 staged.items.push_back({{id, window}, state});
-                views.push_back({window, window->SaveViewState(), item.at("view").get<std::string>()});
+                views.push_back({window, window->CaptureViewState(), item.view});
             }
-            // Retained windows must still be able to import legacy INI geometry on their first render.
             std::vector<std::pair<Ref<EditorWindow>, bool>> retainedGeometry;
-            for (auto &w : Windows()) if (!ids.contains(w->GetId()))
-            {
+            for (auto &w : Windows()) if (!ids.contains(w->GetId())) {
                 staged.items.push_back({{w->GetId(), w}, w->GetState()});
                 retainedGeometry.emplace_back(w, w->m_ApplyGeometry);
             }
-            for (std::size_t i = 0; i < views.size(); ++i)
-            {
+            for (std::size_t i = 0; i < views.size(); ++i) {
                 bool accepted = false;
-                try { accepted = views[i].window->LoadViewState(views[i].next); }
+                try { accepted = views[i].window->RestoreViewState(views[i].next); }
                 catch (const std::exception &) { /* Roll back earlier views below as well. */ }
-                if (!accepted)
-                {
-                    for (std::size_t j = 0; j <= i; ++j) (void)views[j].window->LoadViewState(views[j].previous);
+                if (!accepted) {
+                    for (std::size_t j = 0; j <= i; ++j) (void)views[j].window->RestoreViewState(views[j].previous);
                     return invalid("Window rejected saved view state.");
                 }
             }
             Restore(staged);
             for (auto &[window, applyGeometry] : retainedGeometry) window->m_ApplyGeometry = applyGeometry;
             return {};
-        }
-        catch (const std::exception &error) { return invalid(std::string("Invalid window layout: ") + error.what()); }
+        } catch (const std::exception &error) { return invalid(std::string("Invalid window layout: ") + error.what()); }
     }
 }

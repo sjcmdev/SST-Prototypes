@@ -1,6 +1,6 @@
 #include "IO/JFMPlotExport.hpp"
 #include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
-#include <sst/plotlab/SnapshotJson.hpp>
+#include "IO/JFMPythonBindings.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -28,15 +28,16 @@ namespace SST::Prototypes::JFM
         }
         class ExportJob final : public IJob {
         public:
-            pl::GraphSnapshot snapshot;
+            std::shared_ptr<const pl::GraphSnapshot> snapshot;
             std::string path, format;
             double dpi;
+            JFMPlotSize size;
             std::string GetName() const override { return "Export JFM figure"; }
             std::string GetType() const override { return "jfm.plot.export"; }
             void Execute(JobContext &context) override {
                 context.ThrowIfCancellationRequested();
                 // The shared adapter acquires the GIL inside this job.
-                const PlotExportRequest request{pl::SnapshotJson(snapshot), std::filesystem::u8path(path), format, dpi};
+                const auto request = MakeJFMPlotExportRequest(snapshot, std::filesystem::u8path(path), format, dpi, size);
                 ExportPlotsJson(context, {&request, 1});
                 context.SetProgress(1, 1);
             }
@@ -65,16 +66,18 @@ namespace SST::Prototypes::JFM
     }
     void ConfigureJFMPlotServices(WeakRef<CommandRegistry> commands, WeakRef<JobSystem> jobs)
     { appCommands = std::move(commands); appJobs = std::move(jobs); }
-    nlohmann::json ExportJFMPlot(const pl::GraphSnapshot &snapshot, const std::string &path, const std::string &format, double dpi)
+    Result<JobId> ExportJFMPlot(std::shared_ptr<const pl::GraphSnapshot> snapshot, const std::string &path, const std::string &format, double dpi, std::optional<JFMPlotSize> size)
     {
         try {
+            if (!snapshot) throw std::invalid_argument("Missing graph snapshot");
+            const auto publication = size.value_or(JFMPlotSize{snapshot->widthMm, snapshot->heightMm});
             if ((format != "svg" && format != "pdf" && format != "png") || path.empty()
-                || !std::isfinite(dpi) || dpi <= 0 || !std::isfinite(snapshot.widthMm) || snapshot.widthMm <= 0
-                || !std::isfinite(snapshot.heightMm) || snapshot.heightMm <= 0)
+                || !std::isfinite(dpi) || dpi <= 0 || !std::isfinite(publication.widthMm) || publication.widthMm <= 0
+                || !std::isfinite(publication.heightMm) || publication.heightMm <= 0)
                 throw std::invalid_argument("Expected SVG/PDF/PNG, a destination, positive width_mm, height_mm and dpi");
             auto jobs = Jobs(); auto commands = Commands();
             auto id = CreateRef<JobId>(0);
-            auto job = CreateRef<ExportJob>(); job->snapshot = snapshot; job->path = path; job->format = format; job->dpi = dpi;
+            auto job = CreateRef<ExportJob>(); job->snapshot = std::move(snapshot); job->path = path; job->format = format; job->dpi = dpi; job->size = publication;
             const CommandID commandId{"jfm.plot.export"};
             if (!commands->HasCommand(commandId)) {
                 auto registered = commands->Register({commandId, "Export JFM figure", "JFM"},
@@ -92,51 +95,17 @@ namespace SST::Prototypes::JFM
             if (!executed) throw std::runtime_error(executed.Error().technicalDetails);
             if (!*id) throw std::runtime_error("Export job submission failed");
 
-            return {{"ok", true}, {"job_id", *id}, {"status", "queued"}, {"project_id", snapshot.project}, {"graph_id", snapshot.graph}, {"path", path}};
+            return *id;
         } catch (const std::invalid_argument &e) {
-            return {{"ok", false}, {"error", {{"code", "jfm.plot.validation"}, {"message", e.what()}}}};
+            return StructuredError{ErrorCategory::Validation, Severity::Error, e.what(), e.what(), {}, "JFMPlotExport", "jfm.plot.validation"};
         } catch (const std::exception &e) {
-            return {{"ok", false}, {"error", {{"code", "jfm.plot.export_failed"}, {"message", e.what()}}}};
+            return StructuredError{ErrorCategory::Internal, Severity::Error, e.what(), e.what(), {}, "JFMPlotExport", "jfm.plot.export_failed"};
         }
     }
-    nlohmann::json RunJFMPlotRequest(const nlohmann::json &request)
+    Result<JobSnapshot> JFMPlotExportStatus(JobId id)
     {
-        try {
-            if (request.at("operation") == "status") {
-                const auto id = request.at("job_id").get<JobId>();
-                const auto job = Jobs()->GetJob(id);
-                if (!job) throw std::invalid_argument("Unknown job_id");
-                static constexpr const char *names[] = {"queued", "running", "completed", "failed", "cancelled"};
-                nlohmann::json result = {{"ok", true}, {"job_id", id}, {"status", names[static_cast<int>(job->status)]}};
-                if (job->status == JobStatus::Failed || job->status == JobStatus::Cancelled) {
-                    result["ok"] = false;
-                    result["error"] = {{"code", job->status == JobStatus::Cancelled ? "jfm.plot.cancelled" : "jfm.plot.export_failed"},
-                        {"message", job->errorMessage}};
-                }
-                return result;
-            }
-            auto project = pl::Project::fromJson(request.at("project").dump());
-            sst::ui::plot::PlotViewState view = request.contains("view") ? pl::viewStateFromJson(request.at("view").dump()) : sst::ui::plot::PlotViewState{};
-            const auto &r = request.at("ranges");
-            if (r.size() != 4) throw std::invalid_argument("ranges requires four values");
-            view.viewport = sst::ui::plot::Bounds{r.at(0), r.at(1), r.at(2), r.at(3)};
-            for (const auto &[key, value] : request.value("visibility", nlohmann::json::object()).items()) view.visibility[key] = value.get<bool>();
-            auto ticks = [&](const char *key, auto &out) {
-                for (const auto &tick : request.value(key, nlohmann::json::array()))
-                    out.push_back({tick.at("value"), tick.value("label", ""), tick.value("major", true)});
-            };
-            ticks("x_ticks", view.xTicks); ticks("y_ticks", view.yTicks);
-            auto snapshot = *pl::snapshotGraph(project, request.at("graph_id"), view);
-            snapshot.widthMm = request.value("width_mm", snapshot.widthMm);
-            snapshot.heightMm = request.value("height_mm", snapshot.heightMm);
-            if (!std::isfinite(snapshot.widthMm) || snapshot.widthMm <= 0 || !std::isfinite(snapshot.heightMm) || snapshot.heightMm <= 0)
-                throw std::invalid_argument("width_mm and height_mm must be positive");
-            const auto operation = request.at("operation").get<std::string>();
-            if (operation == "snapshot") return {{"ok", true}, {"snapshot", nlohmann::json::parse(pl::SnapshotJson(snapshot))}};
-            if (operation != "export") throw std::invalid_argument("Unknown plot operation");
-            return ExportJFMPlot(snapshot, request.at("path"), request.at("format"), request.value("dpi", 300.0));
-        } catch (const std::exception &e) {
-            return {{"ok", false}, {"error", {{"code", "jfm.plot.validation"}, {"message", e.what()}}}};
-        }
+        auto job = Jobs()->GetJob(id);
+        if (!job) return StructuredError{ErrorCategory::Validation, Severity::Error, "Unknown job_id", "Unknown job_id", {}, "JFMPlotExport", "jfm.plot.validation"};
+        return std::move(*job);
     }
 }
