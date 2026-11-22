@@ -24,7 +24,7 @@ TEST(PerformanceGuard, MonteCarlo512FrameBudget_F32) {
         result.idealCurrent.resize(1000,.001);result.noisyCurrent.resize(512*1000,.001);
         for(int i=0;i<512;++i){JFMMonteCarloSample sample;sample.parameters={1e-10,1.5,2.,1e6};sample.converged=true;sample.solverConverged=true;result.samples.push_back(sample);}
         JFMMonteCarloState state;state.modelId="SD-RsRsh";state.status="completed";state.sampleCount=512;state.acceptedCount=512;
-        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,generation,state,std::move(result)));
+        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,generation,state,CreateRef<const JFMMonteCarloResult>(std::move(result))));
         MonteCarloCurvesPanel panel(store,bus);bus->PublishNew<MonteCarloCompleted>(ref,generation,state,JFMMonteCarloResult{});
         ASSERT_EQ(store->GetMonteCarloResult(ref)->samples.size(),512u);
         perfguard::Frames("JFM.MC512.F32",[&]{

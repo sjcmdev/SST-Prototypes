@@ -4514,6 +4514,312 @@
       "sha256": "dd7fe5abd9c244afea302f640f34c1fa7bc2706d3b9eb250c29efc8805fe3a2c",
       "count": 1,
       "reason": "PlotLab workspace persistence/public Python binding."
+    },
+    {
+      "file": "Prototypes/CapLab/src/Domain/CapLabIS.cpp",
+      "rule": "text-json",
+      "line": 345,
+      "code": "throw std::runtime_error(\"Invalid initial simulation/measurement: \"+initial.at(\"diagnostics\").dump());",
+      "sha256": "31d1bca30578e3b9e79d6e9dd222fc69c054a5b3d8fc85e77a355cb19c2139ce",
+      "count": 1,
+      "reason": "User-facing diagnostic error text for invalid initial IS simulation; no parse and outside objective/covariance data transport (perfis1)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 30,
+      "code": "nanobind::dict WalterSpectrumPython(sst::physics::WalterSpectrum result) {",
+      "sha256": "618eec8b4c82f9d9a464ad8cb7deda5f1d35ca5fabf01c4c97334b392c8ba199",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 34,
+      "code": "nb::capsule owner(owned,[](void *p) noexcept {delete static_cast<std::vector<double> *>(p);});",
+      "sha256": "db72ed701fd6a824ca0c79e5ac8dc0d74ee9dc80322ff27ad69673c97293c509",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 35,
+      "code": "return nb::ndarray<nb::numpy,double>(owned->data(),{owned->size()},owner);",
+      "sha256": "84f9fc6acfa26d886449d2716931ee37136c04a845df52790795b47923b25c4f",
+      "count": 2,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 37,
+      "code": "nb::dict out;",
+      "sha256": "15b638bf264a64cc8a9c30c9bea8f89903e6d2fc3c626e4987c85d6b08e92f91",
+      "count": 2,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 41,
+      "code": "out[\"quality\"]=nb::cast(std::move(result.quality));",
+      "sha256": "8c3b79bd30aa27ac50ba6c8823f66d7b1764d380c327c751867a627bae8c8e17",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 44,
+      "code": "nanobind::dict WalterIntegralPython(const sst::physics::WalterIntegral &r, double lo, double hi, bool compat) {",
+      "sha256": "5e41610da5f9442f9876ae231f9e874130a5fb885023420501d81b37e8fa439b",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 47,
+      "code": "out[\"density_cm3\"]=nb::cast(r.density_cm3); out[\"segments\"]=nb::cast(r.segments); out[\"gaps\"]=nb::cast(r.gaps);",
+      "sha256": "8a3662cf4734415edc0ad78c4652519e7ad94a7820c9d0f05d7ccaad4040e4b6",
+      "count": 3,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 48,
+      "code": "out[\"range_eV\"]=nb::cast(std::vector<double>{lo,hi}); out[\"semantics\"]=compat ? \"ProPho-minus-trapz\" : \"ascending-clipped-trapezoids\";",
+      "sha256": "7db01057eb584feef0a8fab18941c30fd2dbdfc0a8a3594f137cdbabf26f7191",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 51,
+      "code": "nanobind::object PythonValue(const SST::Prototypes::CapLab::Json &value) {",
+      "sha256": "2df0e93565d1bfb22e30021b5e5f8e35970925f89d217d716184c63be52f955d",
+      "count": 2,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 53,
+      "code": "if (value.is_null()) return nb::none();",
+      "sha256": "4d1a4cd4452b56f1483449a2970cd0372ee49f9a651bf49cc257736b663b9e58",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 54,
+      "code": "if (value.is_boolean()) return nb::bool_(value.get<bool>());",
+      "sha256": "b6808a3b584a491ebc870fd2b0461f84c3483d0bbe7941407408c172e0cb562d",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 55,
+      "code": "if (value.is_number_unsigned()) return nb::int_(value.get<std::uint64_t>());",
+      "sha256": "95cc7487997feeb2174f3d48c285da30642d008fad4f9460e3be1bb0806b2374",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 56,
+      "code": "if (value.is_number_integer()) return nb::int_(value.get<std::int64_t>());",
+      "sha256": "a60f38e9e93a81cb48b89a54bad50ac7484ce7f0110eeb97f9c699fdfd7fdf66",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 57,
+      "code": "if (value.is_number_float()) return nb::float_(value.get<double>());",
+      "sha256": "bb2ccaf2adfa69972c0cbb627acc710a070ad79bfa255395cc12e9a3f9af67e9",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 58,
+      "code": "if (value.is_string()) return nb::cast(value.get_ref<const std::string &>());",
+      "sha256": "786a178454ae178cb251e803010333668e0de92cacb0640db5833748c3303d95",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 60,
+      "code": "nb::list result;",
+      "sha256": "19d7e3202eefff6da68be6ae0dafd33327532de998a6f5416503c4e9b302fe17",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 61,
+      "code": "for (const auto &v : value) result.append(PythonValue(v));",
+      "sha256": "514687ef49c8b28565e4e26de695c5d9961340bec3a3779ee847e915b863867d",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 64,
+      "code": "nb::dict result;",
+      "sha256": "1945f4a79768a9f81aac6a5978b6875fc27d305d0a692f016d8756a47d626186",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 65,
+      "code": "for (const auto &[key,v] : value.items()) result[nb::str(key.c_str())]=PythonValue(v);",
+      "sha256": "83680debe0d0fce96da29f01403cbaf5c2f2af5538162889f140e41f29550420",
+      "count": 2,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 68,
+      "code": "SST::Prototypes::CapLab::Json AnalysisValue(nanobind::handle value) {",
+      "sha256": "d1f6da33e76a975271cad9bf3b0d08c8b5337f9e5b51f905734687fa83277d37",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 72,
+      "code": "if (nb::isinstance<nb::bool_>(value)) return nb::cast<bool>(value);",
+      "sha256": "ec72198927c39438b8bbfe31f3c87e901c221fef664f85c0bbf84ec2cae866c2",
+      "count": 3,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 73,
+      "code": "if (nb::isinstance<nb::int_>(value)) return nb::cast<bool>(value.attr(\"__lt__\")(0)) ? Json(nb::cast<std::int64_t>(value)) : Json(nb::cast<std::uint64_t>(value));",
+      "sha256": "680cc180392d15d371034150105ced76152a40959175d8ac3f7437652d766bec",
+      "count": 5,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 74,
+      "code": "if (nb::isinstance<nb::float_>(value)) {",
+      "sha256": "dc8fedf6724f78bdc8d16b8bf17495846e6f3e567823bdc5680f595fe18e44a4",
+      "count": 2,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 75,
+      "code": "const auto v=nb::cast<double>(value);",
+      "sha256": "68a1a6e0ef49bb3c47db07baff9e11a756a7c41721622cf4ab81f234e3842fad",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 79,
+      "code": "if (nb::isinstance<nb::str>(value)) return nb::cast<std::string>(value);",
+      "sha256": "f4cf9d674a203009a0e4b6fcdb227402c5b825d4581b14d1e8105578145b46ed",
+      "count": 3,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 80,
+      "code": "if (nb::isinstance<nb::dict>(value)) {",
+      "sha256": "054cc49f6118b6becf3e4eb5996c79803ebc4045dbd2e842f65ef19ff6dede8c",
+      "count": 2,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 82,
+      "code": "for (const auto &[key,v] : nb::borrow<nb::dict>(value)) result[nb::cast<std::string>(key)]=AnalysisValue(v);",
+      "sha256": "8a1e24c58ee621ff33d65694dcb013b520bf9820ea979a2937d18953fa407a08",
+      "count": 3,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 85,
+      "code": "if (!nb::isinstance<nb::list>(value) && !nb::isinstance<nb::tuple>(value)) throw std::runtime_error(\"Unsupported analysis output type\");",
+      "sha256": "3a869b4800b0de8434dca044a40b00575889148d82458d83dfae86d15e61853e",
+      "count": 4,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 87,
+      "code": "for (auto v : nb::borrow<nb::iterable>(value)) result.push_back(AnalysisValue(v));",
+      "sha256": "7f202506a26a5690cd0732b2d50f6b8430d5682c16a712f16381e5fe70f6fab3",
+      "count": 2,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 165,
+      "code": "using Array=nanobind::ndarray<nanobind::numpy,const double,nanobind::ndim<1>,nanobind::c_contig,nanobind::device::cpu>;",
+      "sha256": "72df34987e1d6658d10f3a9f8db64d3e9365cdc7a5a95dbebc3d7dae9dc3ca85",
+      "count": 5,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 176,
+      "code": "out[\"selected_indices\"]=nanobind::cast(std::move(result.selectedIndices));",
+      "sha256": "f8c39f244e9953e64d1b4726c83f43fb88fcd362fd79dc31672c59621698654b",
+      "count": 1,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 580,
+      "code": "auto value = nb::module_::import_(\"caplab.analysis\").attr(\"analyze\")(PythonValue(measurement),PythonValue(options),PythonValue(xd),cancel,progress);",
+      "sha256": "ec5d58ea7b1d9a2f62ff8303e2ab9924ecb0a268da4d17dc0185105a89c8009a",
+      "count": 4,
+      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
+    },
+    {
+      "file": "Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
+      "rule": "text-stream",
+      "line": 449,
+      "code": "auto flush=[](FILE *stream,std::ostringstream &buffer) {",
+      "sha256": "909553f7a1fd3c41daedbe61671bc6f261042769e7255f29ec9b1ff7f4dfdbc8",
+      "count": 1,
+      "reason": "Disk export edge: bounded 64 KiB TSV buffer flushed to FILE by atomic TextFileIO::Save (perfret1)."
     }
   ],
   "known-debt": [
@@ -4527,15 +4833,6 @@
       "reason": "F06: existing JSON circuit objective/data setup; prepared typed evaluator is a separate task."
     },
     {
-      "file": "Prototypes/CapLab/src/Domain/CapLabIS.cpp",
-      "rule": "text-json",
-      "line": 316,
-      "code": "if (initial.at(\"status\")!=\"valid\") throw std::runtime_error(\"Invalid initial simulation/measurement: \"+initial.at(\"diagnostics\").dump());",
-      "sha256": "64ce25c89bbdb37dd717772b581eb629c5e5f72f5d67815bdcc1d2907fff11f8",
-      "count": 1,
-      "reason": "F06: existing JSON circuit objective/data setup; prepared typed evaluator is a separate task."
-    },
-    {
       "file": "Prototypes/CapLab/src/Domain/CapLabPlotStyle.hpp",
       "rule": "text-json",
       "line": 21,
@@ -4543,24 +4840,6 @@
       "sha256": "86e8bd103a5fbb5fb6c927e2529e7abf9e57dfd34ca349f13ca8b87a53388d16",
       "count": 2,
       "reason": "F26: legacy saved-view text bridge used by analysis plot setup."
-    },
-    {
-      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
-      "rule": "text-json",
-      "line": 499,
-      "code": "auto value = nb::module_::import_(\"caplab.analysis\").attr(\"analyze_json\")(measurement.dump(),options.dump(),xd.is_null() ? \"\" : xd.dump(),cancel,progress);",
-      "sha256": "f552d639e1421b9ff4cdd0d4ee7ce35602893ae077fd06d335b63183bf613602",
-      "count": 3,
-      "reason": "F12: GUI analysis still transports measurement/options/results as JSON through Python."
-    },
-    {
-      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
-      "rule": "text-json",
-      "line": 500,
-      "code": "return Json::parse(nb::cast<std::string>(value));",
-      "sha256": "1e3935f62c190610ee9b41660651bd015979973b2b1a38369373a6ecc6256f58",
-      "count": 1,
-      "reason": "F12: GUI analysis still transports measurement/options/results as JSON through Python."
     },
     {
       "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
@@ -4613,24 +4892,6 @@
       "line": 496,
       "code": "if (!nb::cast<bool>(paths.attr(\"__contains__\")(root))) paths.attr(\"insert\")(0,root);",
       "sha256": "990d0fbe9810b7ea8c2a4b2de56c6a6749f4fb9e0734f964f6688f8289c83ff6",
-      "count": 1,
-      "reason": "F12: GUI analysis still transports measurement/options/results as JSON through Python."
-    },
-    {
-      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
-      "rule": "python",
-      "line": 499,
-      "code": "auto value = nb::module_::import_(\"caplab.analysis\").attr(\"analyze_json\")(measurement.dump(),options.dump(),xd.is_null() ? \"\" : xd.dump(),cancel,progress);",
-      "sha256": "f552d639e1421b9ff4cdd0d4ee7ce35602893ae077fd06d335b63183bf613602",
-      "count": 1,
-      "reason": "F12: GUI analysis still transports measurement/options/results as JSON through Python."
-    },
-    {
-      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
-      "rule": "python",
-      "line": 500,
-      "code": "return Json::parse(nb::cast<std::string>(value));",
-      "sha256": "1e3935f62c190610ee9b41660651bd015979973b2b1a38369373a6ecc6256f58",
       "count": 1,
       "reason": "F12: GUI analysis still transports measurement/options/results as JSON through Python."
     },
