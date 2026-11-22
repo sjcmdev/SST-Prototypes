@@ -48,7 +48,7 @@ TEST(CapLabTypedBoundary, ViewComparisonUsesStoredFields) {
     sst::ui::plot::PlotViewState a,b;
     a.viewport=b.viewport=sst::ui::plot::Bounds{1,2,3,4};
     EXPECT_TRUE(SameStoredView(a,b));
-    a.fitted=true; a.axisConfigSignature="transient";
+    a.fitted=true; a.axisState.emplace();
     EXPECT_TRUE(SameStoredView(a,b));
     a.zTicks.push_back({1,"one",false}); EXPECT_FALSE(SameStoredView(a,b));
     b.zTicks=a.zTicks; EXPECT_TRUE(SameStoredView(a,b));
