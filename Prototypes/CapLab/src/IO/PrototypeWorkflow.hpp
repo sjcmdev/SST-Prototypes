@@ -49,7 +49,7 @@ namespace SST::Prototypes::CapLab
         Json pendingCandidate;
         explicit CapLabWorkflow(Ref<JobSystem> jobs, Ref<EventBus> bus = {}, Ref<UndoStack> undo = {})
             : Layer("CapLabWorkflow"), jobs(std::move(jobs)), bus(std::move(bus)), undo(std::move(undo))
-        { (void)workspace.Open(CapLabDocument{}); }
+        { (void)workspace.Open(CapLabDocument{}); if(this->undo)this->undo->SetLimits(CapLabDocument::UndoSteps,CapLabDocument::UndoBytes); }
         void Start(Operation operation, Path target = {}, std::vector<Path> sources = {}, bool recursive = false);
         void SelectPreview(int index);
         void ClearPreview();

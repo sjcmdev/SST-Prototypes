@@ -3,6 +3,7 @@
 #include "gpu_types.hpp"
 
 #include <string>
+#include <cstdint>
 #include <vector>
 
 struct GpuDeviceStatus
@@ -46,7 +47,7 @@ struct GpuMonteCarloRequest
     std::vector<double> sigma;
     int n_samples = 0;
     double noise_pct = 0.0;
-    unsigned int noise_seed = 42;
+    std::uint64_t noise_seed = 42;
     double start_perturbation_pct = 0.0;
 };
 

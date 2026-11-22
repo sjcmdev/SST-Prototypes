@@ -140,7 +140,7 @@ namespace SST::Prototypes::JFM
                 ImGui::Text("Method: %s | Stop: %s", s.fitMethod.c_str(), s.stopReason.c_str());
             }
             const std::size_t pointCount = result->voltage.size();
-			const std::size_t sampleCount = std::min(result->samples.size(), result->noisyCurrent.size() / pointCount);
+			const std::size_t sampleCount = result->noiseSeed ? result->samples.size() : std::min(result->samples.size(), result->noisyCurrent.size() / pointCount);
 			if (sampleCount == 0)
 				continue;
 			m_Iteration = std::clamp(m_Iteration, 0, static_cast<int>(sampleCount - 1));
@@ -181,7 +181,12 @@ namespace SST::Prototypes::JFM
 						spec.LineWeight = 2.0f;
 						spec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##mc_noisy_" + std::to_string(sampleIndex);
-						PlotCurrent(label.c_str(), result->voltage, result->noisyCurrent.data() + sampleIndex * pointCount, pointCount, spec, m_SemiLog);
+                        if(sampleIndex<result->noisyCurrent.size()/pointCount)
+                            PlotCurrent(label.c_str(),result->voltage,result->noisyCurrent.data()+sampleIndex*pointCount,pointCount,spec,m_SemiLog);
+                        else {
+                            const auto curve=JFMMonteCarloNoisyCurve(*result,sampleIndex);
+                            PlotCurrent(label.c_str(),result->voltage,curve.data(),curve.size(),spec,m_SemiLog);
+                        }
 					}
 					if (m_ShowFitted)
 					{

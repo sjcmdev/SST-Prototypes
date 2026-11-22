@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -69,6 +70,8 @@ namespace SST
 		[[nodiscard]] virtual Result<void> Redo(CommandContext &context);
 		[[nodiscard]] virtual std::string Description() const = 0;
 		[[nodiscard]] virtual bool IsUndoable() const noexcept;
+		// Conservative retained bytes, used by opt-in UndoStack limits.
+		[[nodiscard]] virtual std::size_t ByteSize() const noexcept { return 0; }
 		[[nodiscard]] virtual bool CanMerge(const ICommand &next) const noexcept;
 		[[nodiscard]] virtual Result<void> Merge(std::unique_ptr<ICommand> next);
 	};

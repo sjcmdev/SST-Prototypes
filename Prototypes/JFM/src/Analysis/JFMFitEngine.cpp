@@ -464,6 +464,19 @@ namespace SST::Prototypes::JFM
 		return status.available;
 	}
 
+	std::vector<double> JFMMonteCarloNoisyCurve(const JFMMonteCarloResult &result, std::size_t sample)
+	{
+		const auto points=result.voltage.size();
+		if (sample >= result.samples.size() || points == 0) return {};
+		if (sample < result.noisyCurrent.size()/points)
+			return {result.noisyCurrent.begin()+sample*points,result.noisyCurrent.begin()+(sample+1)*points};
+		if (!result.noiseSeed || result.noiseAmplitude.size()!=points || result.idealCurrent.size()!=points) return {};
+		std::vector<double> curve(points);
+		for (std::size_t point=0;point<points;++point)
+			curve[point]=result.idealCurrent[point]+lm::normal(*result.noiseSeed+static_cast<std::uint64_t>(sample)*0xD1B54A32D192ED03ULL,static_cast<int>(point))*result.noiseAmplitude[point];
+		return curve;
+	}
+
 	Result<JFMMonteCarloComputation> RunJFMMonteCarlo(
 		const JFMCharacteristicRecord &characteristic,
 		const JFMPrefitState &prefit,
@@ -498,10 +511,6 @@ namespace SST::Prototypes::JFM
             }
             if (!output.result.confidenceAvailable)
                 output.state.warnings.push_back("Zero noise variance: chi_squared=0 is a sentinel; confidence classes are unavailable.");
-            output.result.voltage = output.voltage;
-			output.result.idealCurrent = output.idealCurrent;
-            output.result.currentSigma = output.sigma;
-			output.result.noisyCurrent = output.noisyCurrent;
 		};
 
 		const FitData source = BuildFitData(characteristic, prefit, settings);
@@ -509,60 +518,86 @@ namespace SST::Prototypes::JFM
             return MakeError(error);
         if (settings.monteCarloSamples <= 0 || !std::isfinite(settings.monteCarloNoisePercent) || settings.monteCarloNoisePercent < 0.0)
             return MakeError("Invalid Monte Carlo sample count or noise percent.");
+        // Full parameter samples are consumed by scatter plots and the Python API.
+        // Bound them at 64 MiB; counters aggregate during fitting, with no S x N scratch.
+        constexpr std::size_t sampleBudget=64*1024*1024;
+        const auto sampleBytes=sizeof(JFMMonteCarloSample)+model->parameters.size()*sizeof(double)+128;
+        if (static_cast<std::size_t>(settings.monteCarloSamples)>sampleBudget/sampleBytes)
+            return MakeError("Monte Carlo parameter results exceed the 64 MiB memory budget; reduce the sample count.");
         output.state.objective = ObjectiveSummary(source, characteristic);
         output.result.confidenceAvailable = settings.monteCarloNoisePercent > 0.0 || source.objective.sigma_abs > 0;
-        output.voltage = source.voltage;
-		output.idealCurrent = EvaluateCurve(*model, output.voltage, *characteristic.info.temperatureK, fitValues);
-        for (double current : output.idealCurrent)
+        output.result.voltage = source.voltage;
+		output.result.idealCurrent = EvaluateCurve(*model, output.result.voltage, *characteristic.info.temperatureK, fitValues);
+        for (double current : output.result.idealCurrent)
             if (!std::isfinite(current) || (source.objective.objective == JfmObjective::LogLegacy && (!(current > 0.0) || current == 1.0)))
                 return MakeError("Model domain: non-finite or non-positive current (possibly negative junction voltage with fractional alpha). Choose a positive fit range and valid parameters.");
         const double factor = std::clamp(settings.monteCarloNoisePercent, 0.0, 100.0) / 100.0;
-		output.sigma.resize(output.idealCurrent.size());
-		for (std::size_t index = 0; index < output.idealCurrent.size(); ++index)
-			output.sigma[index] = std::abs(output.idealCurrent[index] * factor) + source.objective.sigma_abs;
+		output.result.currentSigma.resize(output.result.idealCurrent.size());
+		for (std::size_t index = 0; index < output.result.idealCurrent.size(); ++index)
+			output.result.currentSigma[index] = std::abs(output.result.idealCurrent[index] * factor) + source.objective.sigma_abs;
+
+        output.result.noiseSeed=settings.monteCarloSeed;
+        output.result.noiseAmplitude.resize(output.result.voltage.size());
+        for (std::size_t point=0;point<output.result.voltage.size();++point)
+            output.result.noiseAmplitude[point]=source.objective.objective==JfmObjective::LogLegacy ? output.result.idealCurrent[point]*factor : output.result.currentSigma[point];
+        const auto savedLimit=settings.savedSampleLimit>0 ? std::min(settings.monteCarloSamples,settings.savedSampleLimit) : settings.monteCarloSamples;
+        constexpr std::size_t noisyBudget=16*1024*1024;
+        const auto retainedCurves=settings.saveSamples ? std::min(static_cast<std::size_t>(savedLimit),noisyBudget/sizeof(double)/output.result.voltage.size()) : 0;
+        output.result.noisyCurrent.reserve(retainedCurves*output.result.voltage.size());
 
 		std::string gpuMessage;
 		if (settings.preferGpu && JFMGpuAvailable(&gpuMessage))
 		{
 			GpuMonteCarloRequest request;
 			request.model_type = model->gpuType;
-			request.voltages = output.voltage;
-			request.true_current = output.idealCurrent;
+			request.voltages = output.result.voltage;
+			request.true_current = output.result.idealCurrent;
 			request.n_samples = settings.monteCarloSamples;
 			request.noise_pct = settings.monteCarloNoisePercent;
 			request.noise_seed = settings.monteCarloSeed;
 			request.start_perturbation_pct = settings.monteCarloStartPerturbationPercent;
 			request.use_lm = settings.fitMethod == "lm";
-            request.layout = Layout(*model, *characteristic.info.temperatureK, prefitValues, fitValues, freeMask, settings, static_cast<int>(output.voltage.size()));
+            request.layout = Layout(*model, *characteristic.info.temperatureK, prefitValues, fitValues, freeMask, settings, static_cast<int>(output.result.voltage.size()));
             request.layout.objective = source.objective.objective; request.layout.shift = source.objective.shift;
             request.layout.sigma_rel = source.objective.sigma_rel; request.layout.sigma_abs = source.objective.sigma_abs;
-            request.layout.switch_k = source.objective.switch_k; request.sigma = output.sigma;
+            request.layout.switch_k = source.objective.switch_k; request.sigma = output.result.currentSigma;
 			request.nm_config.max_iter = settings.monteCarloMaxIterations;
 			request.nm_config.reduced_chi2_tol = monteCarloSolverSettings.fitReducedChiSquaredTolerance;
+            // Each GPU call holds at most 64 curves / 16 MiB (or one input-sized curve).
+            const int chunkSize=static_cast<int>(std::max(std::size_t{1},std::min(std::size_t{64},noisyBudget/sizeof(double)/output.result.voltage.size())));
 			if (!request.use_lm && settings.autoCalibrateGpuSimplexIterations && settings.simplexCalibrationRuns > 0)
 			{
-				GpuMonteCarloRequest calibration = request;
-				calibration.n_samples = settings.simplexCalibrationRuns;
-				GpuMonteCarloOutput calibrationOutput = gpuRunMonteCarlo(calibration);
-				if (calibrationOutput.success && !calibrationOutput.results.empty())
-				{
-					int maxIterations = 0;
-					for (const GpuMcResult &sample : calibrationOutput.results)
-						maxIterations = std::max(maxIterations, sample.iterations);
-					request.nm_config.max_iter = std::max(1, maxIterations + settings.simplexCalibrationExtraIterations);
-				}
-				else if (!calibrationOutput.message.empty())
-					output.state.warnings.push_back("GPU simplex calibration failed: " + calibrationOutput.message);
-			}
-			GpuMonteCarloOutput gpu = gpuRunMonteCarlo(request);
+                GpuMonteCarloRequest calibration=request;
+                int maxIterations=0; bool calibrated=true;
+                for(int offset=0;offset<settings.simplexCalibrationRuns;offset+=calibration.n_samples) {
+                    calibration.n_samples=std::min(chunkSize,settings.simplexCalibrationRuns-offset);
+                    calibration.noise_seed=static_cast<std::uint64_t>(settings.monteCarloSeed)+static_cast<std::uint64_t>(offset)*0xD1B54A32D192ED03ULL;
+                    const auto calibrationOutput=gpuRunMonteCarlo(calibration);
+                    if(!calibrationOutput.success || calibrationOutput.results.empty()) {
+                        calibrated=false;
+                        if(!calibrationOutput.message.empty())output.state.warnings.push_back("GPU simplex calibration failed: "+calibrationOutput.message);
+                        break;
+                    }
+                    for(const auto &sample:calibrationOutput.results)maxIterations=std::max(maxIterations,sample.iterations);
+                }
+                if(calibrated)request.nm_config.max_iter=std::max(1,maxIterations+settings.simplexCalibrationExtraIterations);
+            }
+
+			// GPU scratch is bounded by 16 MiB / 64 samples; seed offsets preserve global indices.
+            bool gpuFailed=false;
+            for (int offset=0;offset<settings.monteCarloSamples;offset+=chunkSize) {
+            request.n_samples=std::min(chunkSize,settings.monteCarloSamples-offset);
+            request.noise_seed=static_cast<std::uint64_t>(settings.monteCarloSeed)+static_cast<std::uint64_t>(offset)*0xD1B54A32D192ED03ULL;
+            GpuMonteCarloOutput gpu = gpuRunMonteCarlo(request);
 			if (!gpu.success)
-				output.state.warnings.push_back(gpu.message + "; CPU fallback used.");
+				{ output.state.warnings.push_back(gpu.message + "; CPU fallback used."); gpuFailed=true; break; }
 			else
 			{
 				output.state.backend = "cuda";
-				output.state.totalMilliseconds = gpu.total_ms;
-				output.noisyCurrent = std::move(gpu.noisy_current);
-				output.result.samples.reserve(gpu.results.size());
+				output.state.totalMilliseconds += gpu.total_ms;
+				const auto keep=std::min(gpu.noisy_current.size(),retainedCurves*output.result.voltage.size()-output.result.noisyCurrent.size());
+                output.result.noisyCurrent.insert(output.result.noisyCurrent.end(),gpu.noisy_current.begin(),gpu.noisy_current.begin()+keep);
+				output.result.samples.reserve(settings.monteCarloSamples);
 				for (const GpuMcResult &gpuSample : gpu.results)
 				{
 					JFMMonteCarloSample sample;
@@ -587,10 +622,13 @@ namespace SST::Prototypes::JFM
 					output.state.acceptedCount += sample.converged ? 1 : 0;
 					output.result.samples.push_back(std::move(sample));
 				}
-				output.state.status = "completed";
-				attachCurvesToResult();
-				return output;
-			}
+            }
+            }
+            if (!gpuFailed) {
+                output.state.status="completed"; attachCurvesToResult(); return output;
+            }
+            output.result.samples.clear(); output.result.noisyCurrent.clear();
+            output.state.acceptedCount=0; output.state.convergedCount=0;
 		}
 		else if (settings.preferGpu && !gpuMessage.empty())
 		{
@@ -600,24 +638,24 @@ namespace SST::Prototypes::JFM
 		output.state.backend = "cpu";
 		const auto started = std::chrono::steady_clock::now();
 		
-		output.noisyCurrent.reserve(static_cast<std::size_t>(settings.monteCarloSamples) * output.idealCurrent.size());
+
 		output.result.samples.reserve(settings.monteCarloSamples);
+		FitData noisyData;
+		noisyData.voltage = output.result.voltage;
+		noisyData.sigma = output.result.currentSigma;
+        noisyData.objective = source.objective;
+		noisyData.current.resize(output.result.idealCurrent.size());
 		for (int run = 0; run < settings.monteCarloSamples; ++run)
 		{
-			FitData noisyData;
-			noisyData.voltage = output.voltage;
-			noisyData.sigma = output.sigma;
-            noisyData.objective = source.objective;
-			noisyData.current.resize(output.idealCurrent.size());
-			for (std::size_t point = 0; point < output.idealCurrent.size(); ++point)
+			for (std::size_t point = 0; point < output.result.idealCurrent.size(); ++point)
 			{
-				const double noiseAmplitude = source.objective.objective == JfmObjective::LogLegacy ? output.idealCurrent[point]*factor : output.sigma[point];
-				noisyData.current[point] = output.idealCurrent[point] + lm::normal(settings.monteCarloSeed + static_cast<uint64_t>(run)*0xD1B54A32D192ED03ULL, static_cast<int>(point)) * noiseAmplitude;
-				output.noisyCurrent.push_back(noisyData.current[point]);
+				const double noiseAmplitude = source.objective.objective == JfmObjective::LogLegacy ? output.result.idealCurrent[point]*factor : output.result.currentSigma[point];
+				noisyData.current[point] = output.result.idealCurrent[point] + lm::normal(settings.monteCarloSeed + static_cast<uint64_t>(run)*0xD1B54A32D192ED03ULL, static_cast<int>(point)) * noiseAmplitude;
+				if (static_cast<std::size_t>(run)<retainedCurves) output.result.noisyCurrent.push_back(noisyData.current[point]);
 			}
 			ParameterArray start = prefitValues;
             const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations, settings.monteCarloSeed, run, settings.monteCarloStartPerturbationPercent);
-			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.voltage, output.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent, noisyData);
+			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.result.voltage, output.result.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent, noisyData);
 			JFMMonteCarloSample sample;
 			for (std::string_view name : model->parameters)
 				sample.parameters.push_back(solved.parameters[IndexOf(name)]);

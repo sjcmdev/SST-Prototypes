@@ -134,21 +134,26 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
         });
         auto fitFailed = bus->Subscribe<FitFailed>(failed);
         auto mcDone = bus->Subscribe<MonteCarloCompleted>([&](const MonteCarloCompleted &event) {
+            const auto &mc=*event.result;
             Json samples = Json::array();
-            for (std::size_t i = 0; i < event.result.samples.size(); ++i) {
-                const auto &s = event.result.samples[i];
+            for (std::size_t i = 0; i < mc.samples.size(); ++i) {
+                const auto &s = mc.samples[i];
                 samples.push_back({{"sample_id", i}, {"parameters", s.parameters}, {"chi_squared", s.chiSquared},
                     {"objective_chi_squared", s.objectiveChiSquared}, {"linear_points",s.linearPoints}, {"log_points",s.logPoints}, {"reduced_chi_squared", s.reducedChiSquared}, {"accepted", s.accepted}, {"converged", s.solverConverged},
                     {"solver_converged", s.solverConverged}, {"stop_reason", s.stopReason}, {"fit_method", s.fitMethod},
                     {"lm_status", s.lmStatus}, {"flat_directions", s.flatDirections}, {"iterations", s.iterations}});
             }
-            result = {{"ok", true}, {"samples", samples}, {"parameter_names", event.result.parameterNames},
-                {"voltage_V", event.result.voltage}, {"ideal_current_A", event.result.idealCurrent},
-                {"noisy_current_A", event.result.noisyCurrent}, {"total_ms", event.state.totalMilliseconds},
+            // Explicit Python output materializes curves only at the binding edge.
+            Json noisy=Json::array();
+            for(std::size_t sample=0;sample<mc.samples.size();++sample)
+                for(double value:JFMMonteCarloNoisyCurve(mc,sample))noisy.push_back(value);
+            result = {{"ok", true}, {"samples", samples}, {"parameter_names", mc.parameterNames},
+                {"voltage_V", mc.voltage}, {"ideal_current_A", mc.idealCurrent},
+                {"noisy_current_A", std::move(noisy)}, {"total_ms", event.state.totalMilliseconds},
                 {"accepted_count", event.state.acceptedCount}, {"converged_count", event.state.convergedCount},
                 {"backend", event.state.backend}, {"warnings", event.state.warnings}, {"objective", objectiveJson(event.state.objective)},
-                {"sigma_current_A", event.result.currentSigma}, {"free_parameter_count", event.result.freeParameterCount},
-                {"fit_dof", static_cast<int>(event.result.voltage.size())-event.result.freeParameterCount}};
+                {"sigma_current_A", mc.currentSigma}, {"free_parameter_count", mc.freeParameterCount},
+                {"fit_dof", static_cast<int>(mc.voltage.size())-mc.freeParameterCount}};
         });
         auto mcFailed = bus->Subscribe<MonteCarloFailed>(failed);
         Ref<IJob> job;

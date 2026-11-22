@@ -15,6 +15,11 @@ namespace SST
 {
 	bool TextFileIO::Save(const Path &path, std::string_view text, std::string &error)
 	{
+		return Save(path, [text](FILE *stream) { return std::fwrite(text.data(), 1, text.size(), stream) == text.size(); }, error);
+	}
+
+	bool TextFileIO::Save(const Path &path, const std::function<bool(FILE *)> &write, std::string &error)
+	{
 		if (path.Empty())
 		{
 			error = "Target path is empty";
@@ -53,7 +58,9 @@ namespace SST
 			const std::filesystem::path &path;
 			~Cleanup() { std::error_code ignored; std::filesystem::remove(path, ignored); }
 		} cleanup{temporary};
-		const bool written = std::fwrite(text.data(), 1, text.size(), stream) == text.size();
+		bool written = false;
+		try { written = write(stream); }
+		catch (...) { std::fclose(stream); throw; }
 		const bool flushed = std::fflush(stream) == 0;
 		const bool closed = std::fclose(stream) == 0;
 		if (!written || !flushed || !closed)

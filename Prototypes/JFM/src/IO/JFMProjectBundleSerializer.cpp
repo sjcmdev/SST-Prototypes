@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "IO/JFMProjectBundleSerializer.hpp"
+#include "Analysis/JFMFitEngine.hpp"
 
 #include "Core/IO/TextFileIO.hpp"
 #include "IO/JFMProjectYamlSerializer.hpp"
@@ -444,6 +445,12 @@ namespace SST::Prototypes::JFM
 
 		Result<void> SaveMonteCarloTsv(const Path &parameterPath, const Path &noisePath, const JFMMonteCarloResult &result, double noisePercent)
 		{
+            std::string error;
+            auto flush=[](FILE *stream,std::ostringstream &buffer) {
+                const auto text=buffer.str(); buffer.str({});
+                return std::fwrite(text.data(),1,text.size(),stream)==text.size();
+            };
+            if (!TextFileIO::Save(parameterPath,[&](FILE *stream) {
 			std::ostringstream parameters;
 			parameters << std::setprecision(17) << "sample";
 			for (const std::string &name : result.parameterNames)
@@ -456,29 +463,33 @@ namespace SST::Prototypes::JFM
 				for (double value : sample.parameters)
 					parameters << '\t' << value;
 				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\t' << sample.linearPoints << '\t' << sample.logPoints << '\n';
+                if(parameters.tellp()>=64*1024 && !flush(stream,parameters))return false;
 			}
-			std::string error;
-			if (!SaveText(parameterPath, parameters.str(), error))
+            return flush(stream,parameters);
+            },error))
 				return BundleError("Monte Carlo parameters TSV could not be saved.", error);
 
+            if (!TextFileIO::Save(noisePath,[&](FILE *stream) {
 			std::ostringstream noise;
 			noise << std::setprecision(17) << "sample\tvoltage\tideal_current\tnoisy_current\tnoise\tsigma\n";
 			const std::size_t points = result.voltage.size();
 			const double factor = std::max(0.0, noisePercent) / 100.0;
 			for (std::size_t sample = 0; sample < result.samples.size(); ++sample)
 			{
+                const auto curve=JFMMonteCarloNoisyCurve(result,sample);
 				for (std::size_t point = 0; point < points; ++point)
 				{
-					const std::size_t offset = sample * points + point;
-					if (offset >= result.noisyCurrent.size())
+					if (point >= curve.size())
 						break;
 					const double ideal = point < result.idealCurrent.size() ? result.idealCurrent[point] : 0.0;
 					const double sigma = point < result.currentSigma.size() ? result.currentSigma[point] : std::abs(ideal * factor);
-					const double noisy = result.noisyCurrent[offset];
+					const double noisy = curve[point];
 					noise << sample << '\t' << result.voltage[point] << '\t' << ideal << '\t' << noisy << '\t' << noisy - ideal << '\t' << sigma << '\n';
+                    if(noise.tellp()>=64*1024 && !flush(stream,noise))return false;
 				}
 			}
-			if (!SaveText(noisePath, noise.str(), error))
+            return flush(stream,noise);
+            },error))
 				return BundleError("Monte Carlo noise TSV could not be saved.", error);
 			return {};
 		}

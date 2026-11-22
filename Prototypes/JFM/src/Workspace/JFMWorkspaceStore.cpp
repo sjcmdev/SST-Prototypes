@@ -1469,8 +1469,9 @@ namespace SST::Prototypes::JFM
 		return current != document->get().monteCarloGenerations.end() && current->second == generation;
 	}
 
-	bool JFMWorkspaceStore::ApplyMonteCarloResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMMonteCarloState state, JFMMonteCarloResult result)
+	bool JFMWorkspaceStore::ApplyMonteCarloResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMMonteCarloState state, Ref<const JFMMonteCarloResult> result)
 	{
+		if (!result) return false;
 		std::scoped_lock lock(m_Mutex);
 		auto document = findDocumentLocked(ref.project);
 		if (!document)
@@ -1485,8 +1486,11 @@ namespace SST::Prototypes::JFM
 		if (!info->get().monteCarlo || info->get().monteCarlo->status != "running")
 			return false;
 		document->get().project.monteCarloRuns.push_back({nextId(document->get(), "mc"), info->get().name, state.status});
+		// Only the latest 256 lightweight run labels; numeric results replace the entry per characteristic.
+		auto &runs=document->get().project.monteCarloRuns;
+		if(runs.size()>256)runs.erase(runs.begin(),runs.end()-256);
 		info->get().monteCarlo = std::move(state);
-		document->get().monteCarloResults[ref.characteristic] = CreateRef<const JFMMonteCarloResult>(std::move(result));
+		document->get().monteCarloResults[ref.characteristic] = std::move(result);
 		bumpRevisionLocked(document->get());
 		return true;
 	}

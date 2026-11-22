@@ -18,10 +18,6 @@ namespace SST::Prototypes::JFM
 	{
 		JFMMonteCarloState state;
 		JFMMonteCarloResult result;
-		std::vector<double> voltage;
-		std::vector<double> idealCurrent;
-		std::vector<double> sigma;
-		std::vector<double> noisyCurrent;
 	};
 
 	[[nodiscard]] const std::vector<std::string_view> &JFMModelParameterNames(std::string_view modelId);
@@ -39,5 +35,7 @@ namespace SST::Prototypes::JFM
 		const JFMPrefitState &prefit,
 		const JFMFitState &fit,
 		const JFMFitMonteCarloSettings &settings);
+	// One curve of scratch space; live results regenerate noise with the original sample index.
+	[[nodiscard]] std::vector<double> JFMMonteCarloNoisyCurve(const JFMMonteCarloResult &result, std::size_t sample);
 	[[nodiscard]] bool JFMGpuAvailable(std::string *message = nullptr);
 } // namespace SST::Prototypes::JFM

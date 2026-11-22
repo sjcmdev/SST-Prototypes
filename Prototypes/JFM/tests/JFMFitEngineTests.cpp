@@ -263,8 +263,8 @@ namespace SST::Prototypes::JFM
 		auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
 		ASSERT_EQ(result->result.samples.size(), 4);
-		EXPECT_EQ(result->idealCurrent.size(), record.data->current.size());
-		EXPECT_EQ(result->noisyCurrent.size(), 4 * record.data->current.size());
+		EXPECT_EQ(result->result.idealCurrent.size(), record.data->current.size());
+		EXPECT_EQ(result->result.noisyCurrent.size(), 4 * record.data->current.size());
 		bool sawNonZeroDeltaChiSquared = false;
 		for (const JFMMonteCarloSample &sample : result->result.samples)
 		{
@@ -292,10 +292,10 @@ namespace SST::Prototypes::JFM
 
 		auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
-		ASSERT_EQ(result->noisyCurrent.size(), result->idealCurrent.size() * 2);
+		ASSERT_EQ(result->result.noisyCurrent.size(), result->result.idealCurrent.size() * 2);
 		for (std::size_t sample = 0; sample < 2; ++sample)
-			for (std::size_t point = 0; point < result->idealCurrent.size(); ++point)
-				EXPECT_DOUBLE_EQ(result->noisyCurrent[sample * result->idealCurrent.size() + point], result->idealCurrent[point]);
+			for (std::size_t point = 0; point < result->result.idealCurrent.size(); ++point)
+				EXPECT_DOUBLE_EQ(result->result.noisyCurrent[sample * result->result.idealCurrent.size() + point], result->result.idealCurrent[point]);
 	}
 
 	TEST(JFMFitEngineTests, CpuMonteCarloReportsFinalErrorAgainstCleanCurve)
@@ -341,7 +341,7 @@ namespace SST::Prototypes::JFM
         settings.parameters = {{"I0", {1e-15, 1e-5, false}}, {"A", {0.5, 3., false}}};
         auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
         ASSERT_TRUE(result) << result.Error().technicalDetails;
-        const auto [lo, hi] = std::minmax_element(result->voltage.begin(), result->voltage.end());
+        const auto [lo, hi] = std::minmax_element(result->result.voltage.begin(), result->result.voltage.end());
         EXPECT_NEAR(*lo, 0.0958904, 1e-8); EXPECT_NEAR(*hi, 0.643379, 1e-8);
         EXPECT_EQ(data->voltage, rawVoltage);
         data->current = rawCurrent;
@@ -402,7 +402,7 @@ namespace SST::Prototypes::JFM
         auto result = RunJFMMonteCarlo(record, *record.info.prefit, fit, settings);
         ASSERT_TRUE(result); EXPECT_FALSE(result->result.confidenceAvailable);
         EXPECT_FALSE(result->state.warnings.empty());
-        for (double sigma : result->sigma) EXPECT_DOUBLE_EQ(sigma, 0.);
+        for (double sigma : result->result.currentSigma) EXPECT_DOUBLE_EQ(sigma, 0.);
         for (const auto &sample : result->result.samples) EXPECT_DOUBLE_EQ(sample.chiSquared, 0.);
     }
 
@@ -573,13 +573,13 @@ TEST(JFMObjectiveTests, StatisticalMonteCarloHandlesZeroCrossingAndAbsoluteNoise
     auto result=RunJFMMonteCarlo(record,*record.info.prefit,fit,options);
     ASSERT_TRUE(result) << result.Error().technicalDetails;
     EXPECT_EQ(result->state.acceptedCount,8); EXPECT_TRUE(result->result.confidenceAvailable);
-    for(double sigma:result->sigma) EXPECT_DOUBLE_EQ(sigma,1e-5);
-    EXPECT_NE(result->noisyCurrent[0],result->idealCurrent[0]);
+    for(double sigma:result->result.currentSigma) EXPECT_DOUBLE_EQ(sigma,1e-5);
+    EXPECT_NE(result->result.noisyCurrent[0],result->result.idealCurrent[0]);
     auto automatic=options;automatic.sigmaAbsolute=0;
     auto withFloor=RunJFMMonteCarlo(record,*record.info.prefit,fit,automatic);
     ASSERT_TRUE(withFloor);EXPECT_GT(withFloor->state.objective.sigmaAbsolute,0);
     EXPECT_TRUE(withFloor->result.confidenceAvailable);
-    EXPECT_NE(withFloor->noisyCurrent[0],withFloor->idealCurrent[0]);
+    EXPECT_NE(withFloor->result.noisyCurrent[0],withFloor->result.idealCurrent[0]);
     for(auto &s:result->result.samples) {
         EXPECT_TRUE(std::isfinite(s.objectiveChiSquared));
         EXPECT_DOUBLE_EQ(s.reducedChiSquared,s.chiSquared/5);
@@ -643,4 +643,73 @@ TEST(JFMParameterLabels, SiDefaultsAndDensityResistanceUsePhysicalUnits)
     EXPECT_EQ(JFMParameterLabel("Rsh", &info), "Rsh [Ω·cm²]");
     info.columns[1].unit = "A/m2";
     EXPECT_EQ(JFMParameterLabel("Rsh", &info), "Rsh [Ω·m²]");
+}
+
+#define NOMINMAX
+#include <windows.h>
+#include <psapi.h>
+#include <cstdio>
+#include <cstdlib>
+#include <bit>
+#include "Analysis/JFMMonteCarloStatistics.hpp"
+namespace SST::Prototypes::JFM {
+TEST(JFMRetention, SavedPrefixAndRegeneratedNoiseAreBitIdentical) {
+    auto record=MakeRecord("SD-0");JFMFitState fit;fit.modelId="SD-0";fit.parameters=record.info.prefit->parameters;
+    JFMFitMonteCarloSettings options;options.preferGpu=false;options.monteCarloSamples=7;options.monteCarloMaxIterations=2;
+    for(const auto *mode:{"log_legacy","signed_sigma","isc_shift"}) {
+        if(std::string_view(mode)=="isc_shift") {
+            auto data=CreateRef<JFMCharacteristicData>(*record.data);
+            data->voltage.insert(data->voltage.begin(),0.);data->current.insert(data->current.begin(),0.);record.data=data;
+        }
+        options.objectiveMode=mode;options.sigmaAbsolute=1e-12;options.saveSamples=true;options.savedSampleLimit=0;
+        auto full=RunJFMMonteCarlo(record,*record.info.prefit,fit,options);ASSERT_TRUE(full)<<full.Error().technicalDetails;
+        for(bool save:{false,true}) {
+            options.saveSamples=save;options.savedSampleLimit=2;
+            auto bounded=RunJFMMonteCarlo(record,*record.info.prefit,fit,options);ASSERT_TRUE(bounded);
+            EXPECT_EQ(bounded->result.noisyCurrent.size(),save?2*bounded->result.voltage.size():0);
+            EXPECT_EQ(bounded->state.acceptedCount,full->state.acceptedCount);
+            EXPECT_EQ(bounded->state.convergedCount,full->state.convergedCount);
+            ASSERT_EQ(bounded->result.samples.size(),full->result.samples.size());
+            for(std::size_t i=0;i<full->result.samples.size();++i) {
+                EXPECT_EQ(JFMMonteCarloNoisyCurve(bounded->result,i),JFMMonteCarloNoisyCurve(full->result,i));
+                EXPECT_EQ(bounded->result.samples[i].parameters,full->result.samples[i].parameters);
+                EXPECT_EQ(bounded->result.samples[i].chiSquared,full->result.samples[i].chiSquared);
+            }
+            const auto a=CalculateJFMMonteCarloScatterStatistics(full->result,0,1),b=CalculateJFMMonteCarloScatterStatistics(bounded->result,0,1);
+            ASSERT_EQ(bool(a),bool(b));if(a){EXPECT_EQ(a->meanX,b->meanX);EXPECT_EQ(a->meanY,b->meanY);EXPECT_EQ(a->covarianceXX,b->covarianceXX);EXPECT_EQ(a->covarianceXY,b->covarianceXY);EXPECT_EQ(a->covarianceYY,b->covarianceYY);}
+        }
+    }
+    options.monteCarloSamples=std::numeric_limits<int>::max();
+    EXPECT_FALSE(RunJFMMonteCarlo(record,*record.info.prefit,fit,options));
+}
+TEST(PerfRetain, MonteCarlo4096) {
+    if (!std::getenv("SST_MEMORY_PROBE")) GTEST_SKIP();
+    auto record=MakeRecord("SD-0");
+    auto data=CreateRef<JFMCharacteristicData>();
+    for(int i=0;i<4096;++i) {
+        const double v=.02+.70*i/4095.; data->voltage.push_back(v);
+        data->current.push_back(EvaluateJFMCurrent("SD-0",v,300.,Parameters));
+    }
+    record.data=data; record.info.prefit->fitRange={0,4096,.02,.72,"memory"};
+    JFMFitState fit; fit.modelId="SD-0"; fit.parameters=record.info.prefit->parameters;
+    JFMFitMonteCarloSettings settings; settings.preferGpu=false; settings.saveSamples=false;
+    settings.monteCarloSamples=4096; settings.monteCarloMaxIterations=1;
+    auto result=RunJFMMonteCarlo(record,*record.info.prefit,fit,settings); ASSERT_TRUE(result);
+    std::uint64_t hash=14695981039346656037ULL;
+    auto add=[&](double value){hash^=std::bit_cast<std::uint64_t>(value);hash*=1099511628211ULL;};
+    for(const auto &sample:result->result.samples) {
+        for(double value:sample.parameters)add(value);
+        add(sample.chiSquared); add(sample.reducedChiSquared); add(sample.objectiveChiSquared);
+        add(sample.iterations); add(sample.accepted); add(sample.solverConverged); add(sample.lmStatus);
+    }
+    for(std::size_t sample=0;sample<result->result.samples.size();++sample)for(double value:JFMMonteCarloNoisyCurve(result->result,sample))add(value);
+    const auto stats=CalculateJFMMonteCarloScatterStatistics(result->result,0,1);
+    ASSERT_TRUE(stats); add(stats->meanX); add(stats->meanY); add(stats->covarianceXX); add(stats->covarianceXY); add(stats->covarianceYY);
+    std::printf("RETAIN jfm numeric_hash=%llu\n",static_cast<unsigned long long>(hash));
+    EXPECT_EQ(hash,324877544310535566ULL); // Frozen MSVC baseline: all sample values, noise and scatter statistics.
+    EXPECT_TRUE(result->result.noisyCurrent.empty());
+    PROCESS_MEMORY_COUNTERS_EX m{}; m.cb=sizeof(m);
+    ASSERT_TRUE(K32GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&m),sizeof(m)));
+    std::printf("RETAIN jfm samples=%zu private_bytes=%zu peak_commit_bytes=%zu\n",result->result.samples.size(),m.PrivateUsage,m.PeakPagefileUsage);
+}
 }

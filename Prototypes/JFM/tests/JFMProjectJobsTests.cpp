@@ -196,7 +196,7 @@ namespace SST::Prototypes::JFM
         EXPECT_EQ(restored.monteCarloRuns.front().status, "completed");
         const JFMCharacteristicRef next{reopened->GetActiveProjectHandle(), id};
         ASSERT_TRUE(reopened->ApplyFitResult(next, reopened->BeginFit(next), *restored.characteristics.front().fit, {}));
-        ASSERT_TRUE(reopened->ApplyMonteCarloResult(next, reopened->BeginMonteCarlo(next), *restored.characteristics.front().monteCarlo, {}));
+        ASSERT_TRUE(reopened->ApplyMonteCarloResult(next, reopened->BeginMonteCarlo(next), *restored.characteristics.front().monteCarlo, CreateRef<const JFMMonteCarloResult>()));
         const auto rerun = reopened->GetProjectSnapshot();
         ASSERT_EQ(rerun.fitRuns.size(), 2); ASSERT_EQ(rerun.monteCarloRuns.size(), 2);
         EXPECT_NE(rerun.fitRuns.front().id, rerun.fitRuns.back().id);

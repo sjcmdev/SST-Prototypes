@@ -219,7 +219,11 @@ namespace SST::Prototypes::JFM
 		std::vector<double> voltage;
 		std::vector<double> idealCurrent;
         std::vector<double> currentSigma;
+		// Live noisy data: at most 16 MiB, and no more than the requested saved-sample prefix.
 		std::vector<double> noisyCurrent;
+		// Transient recipe; file adapters still store the original TSV rows.
+		std::optional<std::uint64_t> noiseSeed;
+		std::vector<double> noiseAmplitude;
 	};
 
 	struct JFMMonteCarloBundleRecord

@@ -529,7 +529,10 @@ namespace SST::Prototypes::CapLab
         std::uint64_t inputRevision=0;
         std::string selectionKind;
         pl::Id identityHighWater=0;
+        // Each document retains at most 50 steps / 128 MiB (Core keeps one oversized newest step).
+        static constexpr std::size_t UndoSteps=50, UndoBytes=128*1024*1024;
         UndoStack history;
+        CapLabDocument() {history.SetLimits(UndoSteps,UndoBytes);}
         void Changed() { ++revision; }
         void Saved(const Path &target, std::uint64_t expected) { MarkSaved(target, expected); }
         bool Opened(Project next, const Path &source, std::uint64_t expected)

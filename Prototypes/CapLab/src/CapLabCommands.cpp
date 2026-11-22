@@ -44,7 +44,66 @@ public:
 private:
     CapLabWorkflow &state;
 };
-class TreeCommand final : public ICommand {
+// Match ScapsLab's JSON patch Undo pattern: keep only changed domain leaves.
+// PlotLab operation snapshots already share immutable engine Objects/column arrays.
+std::size_t JsonBytes(const Json &j) {
+    std::size_t n=sizeof(Json);
+    if (j.is_string()) n+=j.get_ref<const std::string&>().capacity();
+    else if (j.is_array()) {n+=j.get_ref<const Json::array_t&>().capacity()*sizeof(Json); for(const auto &v:j)n+=JsonBytes(v);}
+    else if (j.is_object()) for(auto it=j.begin();it!=j.end();++it)n+=64+it.key().capacity()+JsonBytes(it.value());
+    return n;
+}
+class ProjectCommand : public ICommand {
+protected:
+    Project before,after;
+    static constexpr std::array<Json Project::*,7> fields={&Project::measurements,&Project::historical,&Project::imports,&Project::analyses,&Project::defects,&Project::circuits,&Project::comparisons};
+    std::array<Json,7> forward,backward;
+    std::size_t bytes=sizeof(ProjectCommand);
+    void Compact() {
+        for(std::size_t i=0;i<fields.size();++i) {
+            const auto field=fields[i];
+            forward[i]=Json::diff(before.*field,after.*field);
+            backward[i]=Json::diff(after.*field,before.*field);
+            before.*field=nullptr; after.*field=nullptr;
+            bytes+=JsonBytes(forward[i])+JsonBytes(backward[i]);
+        }
+        for(const auto *p:{&before,&after}) {
+            const auto &other=p==&before?after:before;
+            bytes+=p->samples.capacity()*sizeof(Sample)+p->sweeps.capacity()*sizeof(FrequencySweep);
+            for(const auto &sample:p->samples)bytes+=sample.name.capacity()+JsonBytes(sample.metadata);
+            for(const auto &[id,source]:p->sources) {
+                bytes+=sizeof(source)+64+source.rows.capacity()*sizeof(std::size_t);
+                const auto peer=other.sources.find(id);
+                if(source.provenance && (peer==other.sources.end() || source.provenance!=peer->second.provenance))bytes+=JsonBytes(*source.provenance);
+                if(source.encoded && (peer==other.sources.end() || source.encoded!=peer->second.encoded))for(const auto &[key,value]:*source.encoded)bytes+=64+key.capacity()+value.capacity();
+            }
+            for(const auto &[name,profile]:p->importProfiles)bytes+=128+name.capacity()+JsonBytes(profile.options)+(profile.encodedOptions?profile.encodedOptions->capacity():0);
+            // Charge changed Objects/arrays; unchanged immutable Objects stay shared with the document.
+            for(const auto &[id,object]:p->engine->objects()) {
+                bytes+=64; // Snapshot map entry.
+                const auto peer=other.engine->objects().find(id);
+                if(peer!=other.engine->objects().end() && peer->second==object)continue;
+                bytes+=sizeof(pl::Object)+object->name.capacity();
+                if(const auto *column=std::get_if<pl::Column>(&object->data))
+                    std::visit([&](const auto &values){bytes+=values.capacity()*sizeof(typename std::decay_t<decltype(values)>::value_type);},column->values);
+                if(const auto *sheet=std::get_if<pl::Worksheet>(&object->data))bytes+=sheet->rows.capacity()*sizeof(pl::Id);
+            }
+        }
+    }
+    void Restore(Project &current,bool redo) const {
+        Project next=redo?after:before;
+        const auto &patches=redo?forward:backward;
+        // Finish allocations before moving unchanged DOMs, so failed patching is atomic.
+        for(std::size_t i=0;i<fields.size();++i)
+            if(!patches[i].empty())next.*fields[i]=(current.*fields[i]).patch(patches[i]);
+        for(std::size_t i=0;i<fields.size();++i)
+            if(patches[i].empty())std::swap(next.*fields[i],current.*fields[i]);
+        current=std::move(next);
+    }
+public:
+    std::size_t ByteSize() const noexcept override {return bytes;}
+};
+class TreeCommand final : public ProjectCommand {
 public:
     TreeCommand(CapLabWorkflow &state, bool selection) : state(state), selection(selection) {}
     Result<void> Execute(CommandContext &context) override {
@@ -55,19 +114,19 @@ public:
             if (state.closeRequested) throw std::runtime_error("Resolve pending close first.");
             before=state.Document().project;
             auto draft=state.EditSnapshot(); EditProjectTree(draft,*edit); after=std::move(draft);
-            state.Document().project=after; state.Changed(); return {};
+            state.Document().project=after; state.Changed(); Compact(); return {};
         } catch (const std::exception &e) {
             state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,"Project tree operation failed",e.what(),"Check stable IDs and metadata.","CapLab",selection ? "caplab.selection" : "caplab.tree"};
         }
     }
-    Result<void> Undo(CommandContext &) override {state.Document().project=before; state.Changed(); return {};}
-    Result<void> Redo(CommandContext &) override {state.Document().project=after; state.Changed(); return {};}
+    Result<void> Undo(CommandContext &) override {Restore(state.Document().project,false); state.Changed(); return {};}
+    Result<void> Redo(CommandContext &) override {Restore(state.Document().project,true); state.Changed(); return {};}
     bool IsUndoable() const noexcept override {return !selection;}
     std::string Description() const override {return selection ? "Select CapLab object" : "Edit CapLab project tree";}
 private:
-    CapLabWorkflow &state; bool selection; Project before,after;
+    CapLabWorkflow &state; bool selection; 
 };
-class AnalysisChange final : public ICommand {
+class AnalysisChange final : public ProjectCommand {
 public:
     AnalysisChange(CapLabWorkflow &state, bool area) : state(state), area(area) {}
     Result<void> Execute(CommandContext &context) override {
@@ -90,19 +149,19 @@ public:
                 if (!state.analysisDraft || state.analysisRevision != state.Document().revision) throw std::runtime_error("Stale analysis discarded.");
                 after = *state.analysisDraft; Validate(after);
             }
-            state.Document().project = after; state.Changed(area); state.analysisDraft.reset(); return {};
+            state.Document().project = after; state.Changed(area); state.analysisDraft.reset(); Compact(); return {};
         } catch (const std::exception &e) {
             state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,"Analysis failed",e.what(),"Check analysis settings.","CapLab","caplab.analysis"};
         }
     }
-    Result<void> Undo(CommandContext &) override { state.Document().project=before; state.Changed(area); return {}; }
-    Result<void> Redo(CommandContext &) override { state.Document().project=after; state.Changed(area); return {}; }
+    Result<void> Undo(CommandContext &) override { Restore(state.Document().project,false); state.Changed(area); return {}; }
+    Result<void> Redo(CommandContext &) override { Restore(state.Document().project,true); state.Changed(area); return {}; }
     bool IsUndoable() const noexcept override { return true; }
     std::string Description() const override { return area ? "Change sample area" : "Accept analysis"; }
 private:
-    CapLabWorkflow &state; bool area; Project before, after;
+    CapLabWorkflow &state; bool area; 
 };
-class DefectChange final : public ICommand {
+class DefectChange final : public ProjectCommand {
 public:
     DefectChange(CapLabWorkflow &state, bool circuit=false, bool measurement=false) : state(state), circuit(circuit), measurement(measurement) {}
     Result<void> Execute(CommandContext &context) override {
@@ -112,19 +171,19 @@ public:
             before=state.Document().project;
             auto draft=state.EditSnapshot();
             if (measurement) DeleteMeasurement(draft,edit->at("measurement_id").get<pl::Id>()); else if (circuit) EditCircuit(draft,*edit); else EditDefect(draft,*edit); RefreshAnalyses(draft); after=std::move(draft);
-            state.Document().project=after; state.Changed(); return {};
+            state.Document().project=after; state.Changed(); Compact(); return {};
         } catch (const std::exception &e) {
             state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,measurement ? "Measurement removal failed" : circuit ? "Circuit edit failed" : "Defect edit failed",e.what(),"Check input and sample.","CapLab",measurement ? "caplab.measurement" : circuit ? "caplab.circuit" : "caplab.defect"};
         }
     }
-    Result<void> Undo(CommandContext &) override {state.Document().project=before; state.Changed(); return {};}
-    Result<void> Redo(CommandContext &) override {state.Document().project=after; state.Changed(); return {};}
+    Result<void> Undo(CommandContext &) override {Restore(state.Document().project,false); state.Changed(); return {};}
+    Result<void> Redo(CommandContext &) override {Restore(state.Document().project,true); state.Changed(); return {};}
     bool IsUndoable() const noexcept override {return true;}
     std::string Description() const override {return measurement ? "Delete measurement" : circuit ? "Edit circuit" : "Edit defect";}
 private:
-    CapLabWorkflow &state; bool circuit,measurement; Project before,after;
+    CapLabWorkflow &state; bool circuit,measurement; 
 };
-class ImportCommand final : public ICommand {
+class ImportCommand final : public ProjectCommand {
 public:
     explicit ImportCommand(CapLabWorkflow &state) : state(state) {}
     Result<void> Execute(CommandContext &context) override {
@@ -172,7 +231,7 @@ public:
                 }
             }
             Validate(draft); after=std::move(draft);
-            state.Document().project=after; state.Changed(); state.ClearPreview(); state.status="Imported."; state.failure.reset();
+            state.Document().project=after; state.Changed(); state.ClearPreview(); state.status="Imported."; state.failure.reset(); Compact();
             return {};
         } catch (const std::exception &e) {
             state.status = e.what();
@@ -181,15 +240,15 @@ public:
             return *state.failure;
         }
     }
-    Result<void> Undo(CommandContext &) override { state.Document().project=before; state.Changed(); return {}; }
-    Result<void> Redo(CommandContext &) override { state.Document().project=after; state.Changed(); return {}; }
+    Result<void> Undo(CommandContext &) override { Restore(state.Document().project,false); state.Changed(); return {}; }
+    Result<void> Redo(CommandContext &) override { Restore(state.Document().project,true); state.Changed(); return {}; }
     std::string Description() const override { return "Import measurements"; }
     bool IsUndoable() const noexcept override { return true; }
 private:
     CapLabWorkflow &state;
-    Project before, after;
+    
 };
-class SourceCommand final : public ICommand {
+class SourceCommand final : public ProjectCommand {
 public:
     SourceCommand(CapLabWorkflow &state, bool profile) : state(state), profile(profile) {}
     Result<void> Execute(CommandContext &context) override {
@@ -222,17 +281,18 @@ public:
             changed=true; state.Document().project=after; state.Changed(inputChange);
             if (profile) ++state.profileRevision;
             if (!profile) {state.sourceDraft.reset(); state.sourceDiff=nullptr;}
+            Compact();
             return {};
         } catch (const std::exception &e) {
             state.status=e.what(); return StructuredError{ErrorCategory::Validation,Severity::Error,"Source operation failed",e.what(),"Review source settings and diff.","CapLab",profile ? "caplab.profile" : "caplab.source"};
         }
     }
-    Result<void> Undo(CommandContext &) override {state.Document().project=before; state.Changed(inputChange); if (profile) ++state.profileRevision; return {};}
-    Result<void> Redo(CommandContext &) override {state.Document().project=after; state.Changed(inputChange); if (profile) ++state.profileRevision; return {};}
+    Result<void> Undo(CommandContext &) override {Restore(state.Document().project,false); state.Changed(inputChange); if (profile) ++state.profileRevision; return {};}
+    Result<void> Redo(CommandContext &) override {Restore(state.Document().project,true); state.Changed(inputChange); if (profile) ++state.profileRevision; return {};}
     bool IsUndoable() const noexcept override {return changed;}
     std::string Description() const override {return profile ? "Save import profile" : "Accept source change";}
 private:
-    CapLabWorkflow &state; bool profile,changed=false,inputChange=false; Project before,after;
+    CapLabWorkflow &state; bool profile,changed=false,inputChange=false; 
 };
 }
 void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWorkflow &state) {

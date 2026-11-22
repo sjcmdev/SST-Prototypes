@@ -499,16 +499,20 @@ namespace SST::Prototypes::JFM
 		monteCarlo.modelId = "SD-0";
         monteCarlo.acceptedCount = 2;
         monteCarlo.convergedCount = 1;
-		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, mcGeneration, monteCarlo, {{"I0", "A"}, {}}));
+		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, mcGeneration, monteCarlo, CreateRef<const JFMMonteCarloResult>(JFMMonteCarloResult{{"I0", "A"}, {}})));
 		EXPECT_NE(store.GetFitCurve(ref), nullptr);
 		EXPECT_NE(store.GetMonteCarloResult(ref), nullptr);
+		const auto shared=store.GetMonteCarloResult(ref);
+		for(int run=0;run<300;++run)ASSERT_TRUE(store.ApplyMonteCarloResult(ref,store.BeginMonteCarlo(ref),monteCarlo,shared));
+		EXPECT_EQ(store.GetMonteCarloResult(ref),shared);
+		EXPECT_EQ(store.GetProjectSnapshot().monteCarloRuns.size(),256);
 		ASSERT_TRUE(store.ClearMonteCarloResults(project, {id}));
 		EXPECT_FALSE(store.GetMonteCarloState(ref).has_value());
 		EXPECT_EQ(store.GetMonteCarloResult(ref), nullptr);
 		const std::uint64_t rerunGeneration = store.BeginMonteCarlo(ref);
         EXPECT_EQ(store.GetMonteCarloState(ref)->acceptedCount,0);
         EXPECT_EQ(store.GetMonteCarloState(ref)->convergedCount,0);
-		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, rerunGeneration, monteCarlo, {{"I0", "A"}, {}}));
+		ASSERT_TRUE(store.ApplyMonteCarloResult(ref, rerunGeneration, monteCarlo, CreateRef<const JFMMonteCarloResult>(JFMMonteCarloResult{{"I0", "A"}, {}})));
 
         fit.accepted = fit.converged = true; fit.fitMethod = "LM"; fit.stopReason = "converged";
         ASSERT_TRUE(store.ApplyFitResult(ref,store.BeginFit(ref),fit,{}));

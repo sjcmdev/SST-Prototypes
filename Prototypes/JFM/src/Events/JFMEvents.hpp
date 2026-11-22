@@ -503,14 +503,14 @@ namespace SST::Prototypes::JFM
 	{
 		MonteCarloCompleted() = default;
 		MonteCarloCompleted(JFMCharacteristicRef completedRef, std::uint64_t completedGeneration, JFMMonteCarloState completedState, JFMMonteCarloResult completedResult)
-			: ref(completedRef), generation(completedGeneration), state(std::move(completedState)), result(std::move(completedResult))
+			: ref(completedRef), generation(completedGeneration), state(std::move(completedState)), result(CreateRef<const JFMMonteCarloResult>(std::move(completedResult)))
 		{
 		}
 
 		JFMCharacteristicRef ref;
 		std::uint64_t generation = 0;
 		JFMMonteCarloState state;
-		JFMMonteCarloResult result;
+		Ref<const JFMMonteCarloResult> result;
 	};
 
 	struct MonteCarloFailed final : public BusEvent

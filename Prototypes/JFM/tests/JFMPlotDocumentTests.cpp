@@ -137,7 +137,9 @@ namespace SST::Prototypes::JFM
         result.voltage = {.2,.3}; result.idealCurrent = {1e-5,2e-5};
         result.noisyCurrent = {1e-5,2e-5,1e-5,2e-5};
         result.samples = {{{1e-10,1.5},0,0,1,true},{{1e-9,1.5},0,0,1,false}};
-        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,result));
+        const auto shared=CreateRef<const JFMMonteCarloResult>(std::move(result));
+        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,shared));
+        EXPECT_EQ(store->GetMonteCarloResult(ref),shared);
         auto *gui = ImGui::CreateContext(); auto *plot = ImPlot::CreateContext();
         auto &io = ImGui::GetIO(); io.DisplaySize = {1200,800}; io.DeltaTime = 1.f/60;
         io.IniFilename = nullptr;

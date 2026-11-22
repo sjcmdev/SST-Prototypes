@@ -85,17 +85,17 @@ namespace SST::Prototypes::JFM
 			if (!noise)
 				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo noise could not be saved.", "Cannot open noise.tsv.", "Check the projects directory permissions.", "JFMMonteCarloJob", "jfm.mc.noise"};
 			noise << std::setprecision(17) << "sample\tvoltage\tideal_current\tnoisy_current\tnoise\tsigma\n";
-			const std::size_t points = computation.voltage.size();
+			const std::size_t points = computation.result.voltage.size();
 			for (std::size_t sample = 0; sample < savedSamples; ++sample)
 			{
+                const auto curve=JFMMonteCarloNoisyCurve(computation.result,sample);
 				for (std::size_t point = 0; point < points; ++point)
 				{
-					const std::size_t offset = sample * points + point;
-					if (offset >= computation.noisyCurrent.size())
+					if (point >= curve.size())
 						break;
-					const double ideal = computation.idealCurrent[point];
-					const double noisy = computation.noisyCurrent[offset];
-					noise << sample << '\t' << computation.voltage[point] << '\t' << ideal << '\t' << noisy << '\t' << noisy - ideal << '\t' << computation.sigma[point] << '\n';
+					const double ideal = computation.result.idealCurrent[point];
+					const double noisy = curve[point];
+					noise << sample << '\t' << computation.result.voltage[point] << '\t' << ideal << '\t' << noisy << '\t' << noisy - ideal << '\t' << computation.result.currentSigma[point] << '\n';
 				}
 			}
 
