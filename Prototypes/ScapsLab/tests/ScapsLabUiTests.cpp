@@ -407,3 +407,78 @@ TEST(ScapsLab,CoarsePreviewIsNeverSavedStoredOrUsedForReadouts) {
     const auto saved=w.Workspace(true).dump();EXPECT_EQ(saved.find("previewV"),std::string::npos);EXPECT_EQ(saved.find("\"preview\":true"),std::string::npos);
     w.dragging=false;Settle(w);EXPECT_TRUE(d.previewV.empty());EXPECT_EQ(d.status,"solved");
 }
+
+// ---- sllive1: mantissa x 10^exponent log widget, live band/profile refresh ----
+TEST(ScapsLab,MantissaExponentWidgetMathRoundTripsAndClamps) {
+    const SliderMap r{1,1e24,true};
+    for(const double v:{1.,2.5,9.99,1e14,3.2e15,9.5e23,1e24}) {
+        double m;int e;SplitMantissaExponent(v,m,e);
+        EXPECT_GE(m,1.);EXPECT_LT(m,10.);EXPECT_NEAR(m*std::pow(10.,e)/v,1.,1e-12)<<v;
+        EXPECT_NEAR(MantissaExponentValue(m,e,r)/v,1.,1e-12)<<v;
+    }
+    double m;int e;SplitMantissaExponent(1e-30,m,e);EXPECT_EQ(e,-30);EXPECT_NEAR(m,1.,1e-12);
+    EXPECT_EQ(MantissaExponentValue(5,30,r),1e24)<<"clamped to hi";EXPECT_EQ(MantissaExponentValue(5,-3,r),1.)<<"clamped to lo";
+    EXPECT_NEAR(MantissaExponentValue(3.2,15,r),3.2e15,1.);
+}
+TEST(ScapsLab,LayerLogParameterIsTwoSlidersAndCtrlClickTypesValueOrMantissa) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1400,2400);io.Fonts->AddFontDefault();io.Fonts->Build();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    w.Current().document["layers"][0]["doping"]["Nd_m3"]=1e22;w.Current().document["layers"][0]["doping"]["Na_m3"]=0.;Panel panel(&w,1);
+    auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1300,2300));ImGui::Begin("Log widget");panel.RenderContent();ImGui::End();ImGui::Render();};
+    frame();frame();
+    const auto row=ImGui::FindWindowByName("Log widget")->GetID("Donors [cm^-3]");
+    const auto mantissaId=ImHashStr("##mantissa",0,ImHashStr("Donors [cm^-3]",0,row)),exponentId=ImHashStr("##exponent",0,ImHashStr("Donors [cm^-3]",0,row));
+    auto hover=[&](ImGuiID id)->ImVec2 {for(float y=30;y<2300;y+=2) for(float x:{300.f,600.f,900.f,1200.f}) {io.AddMousePosEvent(x,y);frame();frame();if(GImGui->HoveredId==id) return ImVec2(x,y);}return ImVec2(-1,-1);};
+    auto settle=[&]{while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}};
+    auto type=[&](ImVec2 at,const char *text) {
+        io.AddMousePosEvent(at.x,at.y);frame();io.AddKeyEvent(ImGuiMod_Ctrl,true);frame();io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();io.AddKeyEvent(ImGuiMod_Ctrl,false);frame();
+        EXPECT_TRUE(ImGui::TempInputIsActive(GImGui->ActiveId)||GImGui->ActiveId!=0)<<"Ctrl+click opens exact text entry";
+        io.AddInputCharactersUTF8(text);frame();io.AddKeyEvent(ImGuiKey_Enter,true);frame();io.AddKeyEvent(ImGuiKey_Enter,false);frame();frame();settle();frame();
+    };
+    const auto nd=[&]{return w.Current().document["layers"][0]["doping"]["Nd_m3"].get<double>();};
+    const auto m=hover(mantissaId);ASSERT_GE(m.x,0)<<"mantissa slider exists with its own ID";
+    const auto e=hover(exponentId);ASSERT_GE(e.x,0)<<"exponent slider exists with its own ID";
+    EXPECT_EQ(m.y,e.y)<<"both sliders on one row";EXPECT_LT(m.x,e.x);
+    type(m,"3.2e15");EXPECT_NEAR(nd()/3.2e21,1.,1e-9)<<"a full value typed into the mantissa is taken as the value";
+    const auto m2=hover(mantissaId);ASSERT_GE(m2.x,0);type(m2,"5");EXPECT_NEAR(nd()/5e21,1.,1e-9)<<"a plain mantissa keeps the exponent";
+    const auto e2=hover(exponentId);ASSERT_GE(e2.x,0);type(e2,"16");EXPECT_NEAR(nd()/5e22,1.,1e-9)<<"typed exponent keeps the mantissa";
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}
+TEST(ScapsLab,LiveBandRefreshesOnDraftChangeIsCoalescedAndKeepsHistoryClean) {
+    auto doc=TinyDevice();
+        {   // I-V auto off, band auto on: a discrete edit refreshes the band at the working bias, no history entry, no "running" noise
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=doc;w.autoRecalculate=false;w.autoRecalculateBand=true;
+        ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
+        const auto history=w.Current().history.size();
+        auto d=w.Current().document;d["layers"][0]["doping"]["Nd_m3"]=d["layers"][0]["doping"]["Nd_m3"].get<double>()*10+1e21;
+        ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d}}).at("ok").get<bool>());
+        for(int i=0;i<60000 && !w.Current().BandFresh();++i) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        EXPECT_TRUE(w.Current().BandFresh());EXPECT_EQ(w.Current().history.size(),history);EXPECT_GE(w.liveBandsStarted,1u);
+        EXPECT_TRUE(w.Current().Stale())<<"I-V is outdated, the stale marker stays";
+        EXPECT_NEAR(w.Current().bandResult.at("points").at(0).at("voltage_V").get<double>(),w.Current().biasVoltage_V,1e-12);
+        const auto before=w.liveBandsStarted;for(int i=0;i<200;++i){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_EQ(w.liveBandsStarted,before)<<"no recompute while nothing changed";
+    }
+    {   // toggle off: no band jobs at all
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=doc;w.autoRecalculate=false;w.autoRecalculateBand=false;
+        ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
+        auto d=w.Current().document;d["layers"][0]["doping"]["Nd_m3"]=3e21;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d}}).at("ok").get<bool>());
+        for(int i=0;i<400;++i) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        EXPECT_EQ(w.liveBandsStarted,0u);EXPECT_FALSE(w.Current().BandFresh());
+    }
+    {   // drag: <=10 band jobs/s, latest wins, alternates with the I-V preview, final band is for the final draft
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=doc;w.autoRecalculate=true;w.autoRecalculateBand=true;
+        ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);const auto history=w.Current().history.size();
+        w.dragging=true;const auto t0=std::chrono::steady_clock::now();const double nd0=doc["layers"][0]["doping"]["Nd_m3"].get<double>();
+        for(int i=0;i<40;++i) {
+            auto d=w.Current().document;d["layers"][0]["doping"]["Nd_m3"]=nd0*(1+.05*i);
+            ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d},{"gesture_id","drag"}}).at("ok").get<bool>());
+            for(int k=0;k<5;++k) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        }
+        const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
+        EXPECT_GE(w.liveBandsStarted,1u);EXPECT_LE(w.liveBandsStarted,unsigned(ms/100)+2)<<"coalesced: <=10 per second; ms="<<ms;
+        EXPECT_GE(w.previewsStarted,1u)<<"the I-V preview is not starved";EXPECT_EQ(w.Current().history.size(),history);
+        auto last=w.EditDraft()?*w.EditDraft():w.Current().document;last["layers"][0]["doping"]["Nd_m3"]=nd0*7;
+        w.dragging=false;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",last},{"gesture_id","drag"}}).at("ok").get<bool>());
+        Settle(w);EXPECT_EQ(w.Current().result.at("project_snapshot").at("layers")[0]["doping"]["Nd_m3"].get<double>(),nd0*7);
+    }
+}

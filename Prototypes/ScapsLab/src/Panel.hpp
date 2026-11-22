@@ -23,6 +23,8 @@ struct SliderMap {
     double FromT(double t) const {t=std::clamp(t,0.,1.);return log?lo*std::exp(t*(std::log(hi)-std::log(lo))):lo+t*(hi-lo);}
     double Step(double v,double steps) const {return log?std::clamp(v*std::pow(10.,.01*steps),lo,hi):std::clamp(v+.01*steps*(hi-lo),lo,hi);} // arrow/wheel: 1% of range, log: 0.01 decade
 };
+inline double MantissaExponentValue(double m,double e,const SliderMap &r) {return std::clamp(m*std::pow(10.,e),r.lo,r.hi);}
+inline void SplitMantissaExponent(double v,double &m,int &e) {e=int(std::floor(std::log10(v)));m=v/std::pow(10.,e);if(m>=10){m/=10;++e;}else if(m<1){m*=10;--e;}}
 // One slider drag. Native (ImGui) value until a fine modifier is used; then relative to the cursor and the value at the moment the speed changed (no jump).
 struct SliderDrag {
     double start=0,anchorT=0,scale=1;float anchorX=0;bool relative=false;

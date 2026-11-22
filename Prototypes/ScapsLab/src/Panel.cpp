@@ -556,6 +556,23 @@ static SliderMap LogMap(const std::string &k) {
     if(k=="uniform_generation_m3_s") return {1e-30,1e36,true};
     return {1e-30,1e21,true};
 }
+// Log parameter = mantissa slider (1.00..9.99) x integer exponent slider; value = m*10^e clamped to [lo,hi].
+// Ctrl+click on either slider types an exact value: a mantissa >=10 or an exponent beyond +-100 is read as the full value (e.g. 3.2e15).
+// Mantissa goes through Slide() so live drag, fine mode, Esc revert and arrows keep working.
+static bool SlideMantissaExponent(double &value,const SliderMap &r,bool zero) {
+    double m;int e;SplitMantissaExponent(std::clamp(value,r.lo,r.hi),m,e);
+    const double emin=std::floor(std::log10(r.lo)),emax=std::floor(std::log10(r.hi));
+    const float gap=ImGui::GetStyle().ItemSpacing.x;
+    bool changed=false;double v=value;
+    ImGui::SetNextItemWidth(std::max(40.f,(ImGui::GetContentRegionAvail().x-gap)*.58f));
+    if(Slide("##mantissa",m,SliderMap{1,9.99,false},zero?"0":"%.2f")) {changed=true;v=m>=10?std::clamp(m,r.lo,r.hi):m>0?MantissaExponentValue(m,e,r):r.lo;}
+    TrackGesture();ImGui::SameLine();
+    double x=e;ImGui::SetNextItemWidth(-1);
+    if(ImGui::SliderScalar("##exponent",ImGuiDataType_Double,&x,&emin,&emax,zero?"0":"10^%.0f")) {changed=true;v=std::fabs(x)>100?std::clamp(x,r.lo,r.hi):MantissaExponentValue(m,std::round(x),r);}
+    TrackGesture();
+    if(changed) value=v;
+    return changed;
+}
 static bool Number(const char *label,Json &j,const char *key,double scale=1) {
     const auto &n=j.at(key); if(!n.is_number()) return false;
     const std::string k=key; double value=n.get<double>()*scale;
@@ -569,8 +586,7 @@ static bool Number(const char *label,Json &j,const char *key,double scale=1) {
         if(zeroAllowed) {ImGui::TextUnformatted("Zero");ImGui::SameLine();changed=ImGui::Checkbox("##zero",&zero);TrackGesture();ImGui::SameLine();}
         double v=value>0?value:(density?1e14:1.);
         ImGui::BeginDisabled(zero);
-        ImGui::SetNextItemWidth(-1);
-        changed|=Slide("##value",v,LogMap(k),zero?"0":"%.3g");TrackGesture();
+        changed|=SlideMantissaExponent(v,LogMap(k),zero);
         ImGui::EndDisabled();
         if(zero) ImGui::TextWrapped("Clear Zero to edit.");
         if(changed) value=zero?0:v;
@@ -1257,7 +1273,14 @@ void Panel::StructureEdit() {
 }
 void Panel::Results() {
     const Json *selected=nullptr;
-    for(const auto &run:w->Current().history) if(run.at("run_id")==w->Current().selectedRun && (run.at("kind")=="iv" || run.at("kind")=="band")) {
+    // A live band/profile job of the current model (changed Eg, Nd, ...) replaces the outdated run's profiles until the exact I-V run lands.
+    const bool liveBand=view==5 && w->Current().BandFresh() && (w->Current().result.empty() || !SelectedOffLive(w->Current(),"iv"));
+    const auto bandBadge=[&]{
+        const auto &d=w->Current();
+        if(liveBand && d.result.empty()==false && d.Stale()) PlotBadge("LIVE band (exact I-V follows)",IM_COL32(255,140,25,230),IM_COL32(0,0,0,255),0);
+        else if(view==5 && !d.BandFresh() && (d.Stale() || d.needsBand)) PlotBadge("outdated: model edited",IM_COL32(95,95,105,210),IM_COL32(235,235,240,255),0);
+    };
+    if(!liveBand) for(const auto &run:w->Current().history) if(run.at("run_id")==w->Current().selectedRun && (run.at("kind")=="iv" || run.at("kind")=="band")) {
         if(!run.value("profiles_stored",true) && !HistoryResult(w->Current(),run).at("points").front().contains("x_m")){ImGui::TextUnformatted("Profiles not stored. Recalculate this model to view spatial profiles.");return;}
         selected=&run;
     }
@@ -1337,7 +1360,7 @@ void Panel::Results() {
                 ImPlot::Annotation((lo+hi)/2,ef,ImVec4(1,.8f,.4f,1),ImVec2(side?-90.f:5.f,-28.f),true,"%s contact phi_m = %.3f eV%s",side?"Right":"Left",phi,flatContact?" (flat band)":"");
             }
         }
-        ImPlot::PopPlotClipRect();DrawLayerRegions(layers);EndSavedPlot(*w,"Bands / contacts");
+        ImPlot::PopPlotClipRect();DrawLayerRegions(layers);bandBadge();EndSavedPlot(*w,"Bands / contacts");
     }
     ImGui::InvisibleButton("##band-split",ImVec2(-1,splitterH));
     if(ImGui::IsItemHovered() || ImGui::IsItemActive()) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
@@ -1351,7 +1374,7 @@ void Panel::Results() {
         {double lo=1e300,hi=0;for(const auto *key:{"n_m3","p_m3"}) for(double v:Vec(p.at(key))) if(std::isfinite(v) && v>0){lo=std::min(lo,v*1e-6);hi=std::max(hi,v*1e-6);}
         if(hi>0)FitWhenChanged("carriers",ImAxis_Y1,std::log10(lo)*7.31+std::log10(hi)+p.at("voltage_V").get<double>()*1e-3,std::max(lo,hi*1e-16),hi*3);}
         for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(p.at(key),1e-6);if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
-        DrawLayerRegions(layers);EndSavedPlot(*w,"Carriers");
+        DrawLayerRegions(layers);bandBadge();EndSavedPlot(*w,"Carriers");
     }
 }
 void Panel::AC() {

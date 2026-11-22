@@ -208,6 +208,8 @@ struct DeviceState {
     bool liveRunning = false;
     std::uint64_t resultRevision = 0; // d.revision the live I-V result was computed for (stale = it differs, or a recalculation is pending)
     bool Stale() const {return !result.empty() && (needsRecalculate || resultRevision!=revision);}
+    std::uint64_t bandRevision = 0; // d.revision the live band (request "live") was computed for
+    bool BandFresh() const {return !bandResult.empty() && bandRevision==revision;} // live band/profile job of the current model: panels show it instead of the outdated run
     bool previewCoarse = false;
     std::uint64_t previewRev = 0; // d.revision the last preview was started for
 };
@@ -286,7 +288,7 @@ public:
     std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}
     // Live recalculation while a slider is held (latest wins, <=10/s, coarse every 4th point when the last full run took >150 ms)
     bool dragging = false, dragSeen = false, fineLock = false, liveSeen = false; // dragSeen: set by the slider helper each frame, App copies it to dragging
-    double lastFullMs = 0; unsigned previewsStarted = 0; std::chrono::steady_clock::time_point lastLive;
+    double lastFullMs = 0; unsigned previewsStarted = 0, liveBandsStarted = 0; std::chrono::steady_clock::time_point lastLive, lastBandLive;
     bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false, resetLayout = false, pendingSheet = false;
     int focusView = -1, focusPanel = -1, pendingDefect = -1;
     bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true, lightResponse = false;

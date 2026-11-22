@@ -366,3 +366,36 @@ TEST_P(ScapsLabTutorialUi,EveryStepTargetIsVisibleAndArrowTipClearsIt) {
     } glfwDestroyWindow(window);glfwTerminate();
 }
 INSTANTIATE_TEST_SUITE_P(AllLessons,ScapsLabTutorialUi,testing::ValuesIn(kLessons));
+
+// sllive1 evidence: SCAPSLAB_SHOT_DIR=<dir> writes sllive1-layer-sliders.png and sllive1-band-before.png / sllive1-band-after.png (Nd changed, live band job, no I-V run).
+TEST(ScapsLabLive,OffscreenLayerSlidersAndLiveBandScreenshots) {
+    const char *dir=std::getenv("SCAPSLAB_SHOT_DIR");if(!dir)GTEST_SKIP()<<"set SCAPSLAB_SHOT_DIR";
+    Threading::SetMainThread();ASSERT_TRUE(glfwInit());
+    glfwWindowHint(GLFW_VISIBLE,GLFW_FALSE);glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR,3);glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR,3);
+    auto *window=glfwCreateWindow(1100,820,"live offscreen",nullptr,nullptr);ASSERT_NE(window,nullptr);glfwMakeContextCurrent(window);ASSERT_NE(gladLoadGL(glfwGetProcAddress),0);
+    { Testing::UiScreenshotContext ui({.nativeWindow=window});auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1100,820);io.ConfigDebugHighlightIdConflicts=true;
+    Workflow w(CreateRef<JobSystem>(nullptr,2));auto doc=ReadProject(SCAPSLAB_PROJECT);doc["voltage"]={{"start_V",0.0},{"stop_V",0.6},{"step_V",0.1}};
+    w.Current().document=doc;w.WatchPlots();w.autoRecalculate=false;w.autoRecalculateBand=true;
+    auto registry=CreateRef<CommandRegistry>();ApplicationDetail::RegisterScreenshotCommand(registry,w.jobs);
+    auto shot=[&](Panel &panel,const char *title,const char *file,int frames) {
+        for(int f=0;f<frames;++f) {
+            w.OnUpdate(0);ImGui_ImplOpenGL3_NewFrame();io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1100,820));
+            ImGui::Begin(title);panel.RenderContent();ImGui::End();glViewport(0,0,1100,820);ui.Render();glFinish();std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+        if(!file)return;
+        const auto path=std::filesystem::path(dir)/file;std::filesystem::create_directories(path.parent_path());CommandContext context;context.Set("path",Path{path});
+        EXPECT_TRUE(registry->Execute(CommandID{"app.screenshot"},context));
+    };
+    Panel layers(&w,1),band(&w,5);
+    shot(layers,"Layers","sllive1-layer-sliders.png",6);
+    ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());
+    for(int i=0;i<60000 && (w.Pending() || !w.ViewsReady());++i){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    shot(band,"Band diagram & profiles","sllive1-band-before.png",8);
+    auto d=w.Current().document;const double nd=d["layers"][0]["doping"]["Nd_m3"].get<double>();d["layers"][0]["doping"]["Nd_m3"]=std::max(nd,1e21)*1000.;
+    ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d}}).at("ok").get<bool>());
+    for(int i=0;i<60000 && !w.Current().BandFresh();++i){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_TRUE(w.Current().BandFresh());
+    for(int i=0;i<60000 && !w.ViewsReady();++i){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    shot(band,"Band diagram & profiles","sllive1-band-after.png",8);
+    } glfwDestroyWindow(window);glfwTerminate();
+}

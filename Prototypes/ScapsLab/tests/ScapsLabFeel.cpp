@@ -165,6 +165,23 @@ TEST(Feel,Actions) {
             }
             (void)r.Send({{"operation","auto_recalculate"},{"enabled",false}});
         }
+        // 9. sllive1: slider change (doping of layer 0, held) -> updated band diagram + carrier profiles (live band job on the device lane)
+        if(Wanted("band_live")) {
+            (void)r.Send({{"operation","auto_recalculate"},{"enabled",true},{"band_enabled",true}});r.w.autoRecalculateBand=true;Settle(r,600);
+            const Json base=r.w.Current().document;const double nd0=base["layers"][0]["doping"].value("Nd_m3",0.)>0?base["layers"][0]["doping"]["Nd_m3"].get<double>():1e22;
+            std::vector<double> fr,lat;r.sink=&fr;r.w.dragging=true;r.held=true;int timeouts=0;
+            for(int i=0;i<25;++i) {
+                const auto rev0=r.w.Current().revision;auto d=r.w.Current().document;d["layers"][0]["doping"]["Nd_m3"]=nd0*(1+.03*(i+1));
+                const auto t=Clock::now();(void)r.Send({{"operation","edit"},{"document",d},{"gesture_id","feel-band"}});
+                while(!(r.w.Current().revision!=rev0 && r.w.Current().BandFresh())) {r.Frame();if(Since(t)>20000){++timeouts;break;}}
+                lat.push_back(Since(t,r.frameEnd));
+            }
+            r.w.dragging=false;r.held=false;r.sink=nullptr;Settle(r,700);
+            const auto l=Summ(lat),f=Summ(fr);
+            std::printf("FEEL|%s|band_live_latency_ms|n=%d|p50=%.1f|p95=%.1f|max=%.1f|timeouts=%d|bands_started=%u|previews=%u\n",name.c_str(),l.n,l.p50,l.p95,l.mx,timeouts,r.w.liveBandsStarted,r.w.previewsStarted);
+            std::printf("FEEL|%s|band_live_ui_frames_ms|frames=%d|p50=%.2f|p95=%.2f|max=%.2f|over16=%d\n",name.c_str(),f.n,f.p50,f.p95,f.mx,f.over16);
+            (void)r.Send({{"operation","auto_recalculate"},{"enabled",false},{"band_enabled",false}});
+        }
     }
 }
 
