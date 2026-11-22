@@ -148,6 +148,7 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
         spec["columns"]=op=="retry_batch"?o.batchInput->Schema().at("columns"):o.request.value("columns",o.recorderColumns);
         const auto plan=BatchPreview(o.document,spec);spec=plan.at("spec");
         if(op=="preview_batch") {o.output=plan;return true;}
+        if(!o.draft)o.draft=DraftFromDocument(o.document);
         const auto &points=plan.at("combinations");
         auto table=CreateRef<BatchResult>();table->native=true;
         auto metadata=op=="retry_batch" ? o.batchInput->Schema() : Json{{"schema_version",1},{"spec",spec},{"columns",NormalizedColumns(spec.at("columns"))},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"elapsed_s",0.},{"project_snapshot",o.document},{"provenance",{{"device_hash",DocumentHash(o.document)},{"solver_version",SCAPSLAB_SOLVER_VERSION},{"time_unix_ms",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count()}}}};
@@ -180,7 +181,13 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
                     }
                 }
                 try {
-                    auto project=BatchModel(model);
+                    auto project=o.draft->project;
+                    for(const auto& parameter:parameters) {
+                        const std::string path=parameter.at("path"),pointer=parameter.at("pointer");
+                        if(!points[i].contains(path) || points[i].at(path)==parameter.at("value"))continue;
+                        const bool extension=std::any_of(o.draft->extensions.begin(),o.draft->extensions.end(),[&](const auto& field){return pointer==field.first || pointer.starts_with(field.first+"/");});
+                        if(!extension)SetProjectParameter(project,path,points[i].at(path).get<double>());
+                    }
                     for(const auto& [path,value]:points[i].items())if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
                     auto memberSpec=typedSpec;
                     if(spec.contains("metastable"))memberSpec.conditioning=BatchConditioningModel(project,spec.at("metastable"));
@@ -218,6 +225,7 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
         auto table=CreateRef<BatchResult>();table->native=true;auto metadata=o.batchInput->Schema();
         if(!o.batchInput->native || o.batchInput->legacyBase){table->legacyBase=o.batchInput->legacyBase?o.batchInput->legacyBase:o.batchInput;table->replacedRows=o.batchInput->replacedRows;}
         const auto input=o.request.value("columns",o.recorderColumns);const auto columns=RecorderColumns(input);metadata["columns"]=NormalizedColumns(input);
+        Ref<const ProjectDraft> replayDraft;
         for(const auto& source:o.batchInput->rows) {
             ctx.ThrowIfCancellationRequested();
             if(source->status=="Converged" && !source->curves_retained)throw std::invalid_argument("recording again requires include_curves=true");
@@ -230,11 +238,17 @@ bool BatchOperation(Operation &o,JobContext &ctx) {
                 }
             }
             if(!missing.empty()) {
-                auto model=metadata.at("project_snapshot");
-                for(const auto& parameter:BatchParameters(model)) {const std::string path=parameter.at("path");if(source->parameters.contains(path))std::visit([&](const auto& value){model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=value;},source->parameters.at(path));}
+                if(!replayDraft)replayDraft=DraftFromDocument(metadata.at("project_snapshot"));
+                auto project=replayDraft->project;
+                for(const auto& parameter:BatchParameters(metadata.at("project_snapshot"))) {
+                    const std::string path=parameter.at("path"),pointer=parameter.at("pointer");
+                    if(!source->parameters.contains(path))continue;
+                    const bool extension=std::any_of(replayDraft->extensions.begin(),replayDraft->extensions.end(),[&](const auto& field){return pointer==field.first || pointer.starts_with(field.first+"/");});
+                    if(!extension)std::visit([&](const auto& value){if constexpr(std::is_arithmetic_v<std::decay_t<decltype(value)>>)SetProjectParameter(project,path,static_cast<double>(value));else throw std::invalid_argument("Expected numeric batch parameter: "+path);},source->parameters.at(path));
+                }
                 scaps_core::BatchSpec spec;spec.voltages_V=metadata.at("spec").at("voltages_V").get<std::vector<double>>();spec.columns=std::move(missing);
                 if(metadata.at("spec").contains("mesh_coordinates_m"))spec.mesh_coordinates_m=metadata.at("spec").at("mesh_coordinates_m").get<std::vector<double>>();
-                auto project=BatchModel(model);for(const auto& [path,value]:source->parameters)if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
+                for(const auto& [path,value]:source->parameters)if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
                 if(metadata.at("spec").contains("metastable"))spec.conditioning=BatchConditioningModel(project,metadata.at("spec").at("metastable"));
                 spec.initial_state=BatchInitialStateModel(project,metadata.at("spec"));
                 const auto samples=scaps_core::run_batch_member(project,spec,fetch);

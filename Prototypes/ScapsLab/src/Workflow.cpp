@@ -74,10 +74,12 @@ Json SolverDocument(Json document) {
 scaps_core::DeviceProject BatchModel(const Json& document) {return scaps_core::device_project_from_node(ToYaml(SolverDocument(document)));}
 scaps_core::BatchConditioning BatchConditioningModel(const scaps_core::DeviceProject& project,const Json& spec) {
     auto node=ToYaml(spec);
-    if(!node["transitions"] && !project.metastable_transitions.empty())node["transitions"]=scaps_core::device_project_to_node(project)["metastable_transitions"];
     return scaps_core::batch_conditioning_from_node(project,node);
 }
-Ref<const scaps_core::BatchInitialState> BatchInitialStateModel(const scaps_core::DeviceProject& project,const Json& spec) {return scaps_core::batch_initial_state_from_node(project,ToYaml(spec));}
+Ref<const scaps_core::BatchInitialState> BatchInitialStateModel(const scaps_core::DeviceProject& project,const Json& spec) {
+    if(!spec.contains("initial_state") && !spec.contains("initial_state_file") && !spec.value("export_initial_state_wp2",false))return {};
+    return scaps_core::batch_initial_state_from_node(project,ToYaml(spec));
+}
 scaps_core::DeviceProject Model(const Json &j) {
     if(j.contains("constants_mode") && j.at("constants_mode")!="codata" && j.at("constants_mode")!="scaps_compat") throw std::invalid_argument("Unknown constants_mode");
     if(j.contains("mobility_temperature_model") && j.at("mobility_temperature_model")!="constant" && j.at("mobility_temperature_model")!="sqrt_T" && j.at("mobility_temperature_model")!="caughey_thomas_T") throw std::invalid_argument("Unknown mobility_temperature_model");
@@ -113,6 +115,28 @@ scaps_core::DeviceProject Model(const Json &j) {
     if (!std::isfinite(p.voltage.start_V) || !std::isfinite(p.voltage.stop_V) || !std::isfinite(p.voltage.step_V) || p.voltage.step_V==0 ||
         (p.voltage.stop_V-p.voltage.start_V)*p.voltage.step_V<0 || std::abs((p.voltage.stop_V-p.voltage.start_V)/p.voltage.step_V)>10000) throw std::invalid_argument("Invalid voltage sweep (maximum 10001 points)");
     (void)scaps_core::make_device_from_project(p); return p;
+}
+std::shared_ptr<const ProjectDraft> DraftFromDocument(const Json& document) {
+    auto draft=std::make_shared<ProjectDraft>();draft->project=Model(document);
+    for(const auto& layer:document.at("layers")) {
+        DraftIdentity identity{layer.value("scapslab_id",std::string{}),layer.value("name",std::string{})};
+        for(const auto& defect:layer.value("defects",Json::array()))identity.defects.push_back({defect.value("scapslab_id",std::string{}),defect.value("label",std::string{})});
+        draft->layers.push_back(std::move(identity));
+    }
+    const auto fields=ProjectFieldPaths(draft->project);
+    const auto collect=[&](auto&& self,const Json& source,const std::string& path,const std::string& pointer)->void {
+        if(source.is_object())for(const auto& [key,value]:source.items()) {
+            if(key=="scapslab_id" || (path.empty() && key=="scaps_native"))continue;
+            std::string escaped;for(char c:key)escaped+=c=='~'?"~0":c=='/'?"~1":std::string(1,c);
+            const auto child=pointer+"/"+escaped;
+            const auto field=path.empty()?key:path+"."+key;
+            const auto next=fields.lower_bound(field+".");
+            if(key.find_first_of(".[]")!=std::string::npos || (!fields.contains(field) && (next==fields.end() || !next->starts_with(field+"."))))draft->extensions[child]=value;
+            else self(self,value,field,child);
+        }
+        else if(source.is_array())for(std::size_t i=0;i<source.size();++i)self(self,source[i],path+"["+std::to_string(i)+"]",pointer+"/"+std::to_string(i));
+    };
+    collect(collect,document,"","");return draft;
 }
 const Json &PointAtBias(const Json &sweep,const Json &band,int selected) {
     if(sweep.empty()) return band.at("points").at(0);
@@ -620,7 +644,7 @@ void Operation::Execute(JobContext &ctx) {
         }
         ctx.ThrowIfCancellationRequested(); SaveText(Path{request.at("path").get<std::string>()}.Native(),csv.str());
     } else if (op=="cv" || op=="cf") {
-        const auto p=Model(document);const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        if(!draft)draft=DraftFromDocument(document);const auto& p=draft->project;const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         const double T=request.at("temperature_K"); Positive(T,"temperature_K");
         std::vector<double> volts, frequencies;
         if(op=="cv") {
@@ -669,7 +693,7 @@ void Operation::Execute(JobContext &ctx) {
             ctx.SetProgress(float(i+1),float(total));
         }
     } else if(op=="qe") {
-        const auto p=Model(document);auto device=make_device_from_project(p);const auto pc=physical_constants(p.constants_mode);
+        if(!draft)draft=DraftFromDocument(document);const auto& p=draft->project;auto device=make_device_from_project(p);const auto pc=physical_constants(p.constants_mode);
         const double first=request.value("start_nm",350.),last=request.value("stop_nm",1100.);
         const auto countValue=request.value("points",Json(31));if(!countValue.is_number_integer() || countValue.get<double>()<2 || countValue.get<double>()>1001) throw std::invalid_argument("QE points must be an integer in 2..1001");
         const int count=countValue.get<int>();const double probe=request.value(request.value("probe_mode",std::string("constant_flux"))=="constant_flux"?"probe_photon_flux_m2_s":"probe_power_W_m2",request.value("probe_mode",std::string("constant_flux"))=="constant_flux"?1e16:1e-3);
@@ -705,7 +729,7 @@ void Operation::Execute(JobContext &ctx) {
         output["light_Jsc_A_m2"]=sc.status==SolverStatus::Converged?Json(-sc.J_total_Am2):Json(nullptr);
         output["integration_note"]="Dark differential EQE weighted by incident spectrum bins; full spectral coverage required. Finite-light nonlinear response can differ.";
     } else if (op=="run" || op=="band") {
-        const auto p=Model(document);const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
+        if(!draft)draft=DraftFromDocument(document);const auto& p=draft->project;const auto device=make_device_from_project(p); const auto pc=physical_constants(p.constants_mode);
         auto volts=op=="band"?std::vector<double>{request.at("voltage_V").get<double>()}:make_voltage_list(p.voltage);
         for(auto &v:volts) {if(!std::isfinite(v)) throw std::invalid_argument("Invalid voltage_V");v=-v;}
         phase.lap("model_device");ctx.SetStage("Preparing mesh (cancel checked after preparation)");

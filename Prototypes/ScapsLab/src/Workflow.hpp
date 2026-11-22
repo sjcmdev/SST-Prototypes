@@ -11,6 +11,7 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Core/Presentation/Tutorial.hpp"
 #include "Domain/Results.hpp"
+#include "Domain/ProjectDraft.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
 #include <algorithm>
 #include <chrono>
@@ -91,6 +92,7 @@ public:
     Json document, request, output, acResults, workspace, batchResult;
     Ref<const ResultBase> typedOut;       // typed form of `output` (run/band/cv/cf/qe/batch ops), built on the job thread
     Ref<const BatchResult> batchInput;
+    Ref<const ProjectDraft> draft;
     std::vector<DeviceResults> loaded;    // project_load/new: typed results taken out of `workspace`
     std::vector<SaveRefs> shared;         // save jobs
     struct Member {Json result,model,parameters;std::string hash;Ref<const BatchResult> typed;double t=0;}; // one batch member as a history run, prepared on the worker (apply only stores it)

@@ -18,6 +18,39 @@ double Seconds(Clock::time_point start) {return std::chrono::duration<double>(Cl
 double Cpu() {FILETIME c,e,k,u;GetProcessTimes(GetCurrentProcess(),&c,&e,&k,&u);return ((double(k.dwHighDateTime)+u.dwHighDateTime)*4294967296.+k.dwLowDateTime+u.dwLowDateTime)*1e-7;}
 double PeakMB() {PROCESS_MEMORY_COUNTERS p{};GetProcessMemoryInfo(GetCurrentProcess(),&p,sizeof(p));return p.PeakWorkingSetSize/1048576.;}
 }
+TEST(Typed2Probe, SetupAndWorkflow) {
+    const char* folder=std::getenv("TYPED2_PROBE_OUT");if(!folder)GTEST_SKIP();
+    const char* sweep=std::getenv("TYPED2_SWEEP5");if(!sweep)GTEST_SKIP();
+    std::filesystem::create_directories(folder);
+    Json measurements=Json::array();
+    for(int rep=0;rep<3;++rep) {
+        Workflow w(CreateRef<JobSystem>(nullptr,23));w.lightResponse=true;w.autoRecalculate=false;w.autoRecalculateBand=false;
+        const auto execute=[&](Json request) {EXPECT_TRUE(w.Dispatch(request).value("ok",false));while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response;};
+        execute({{"operation","project_load"},{"path",sweep}});
+        for(const auto& d:w.project.devices)if(d->name=="light")w.project.active_device=d->id;
+        const auto document=w.Current().document;const auto plan=BatchPreview(document,w.Current().batchSpec);
+        ASSERT_EQ(plan.at("combinations").size(),342u);
+        const auto parameters=BatchParameters(document);
+        const auto draft=DraftFromDocument(document);
+        auto start=Clock::now();
+        double checksum=0;
+        for(const auto& point:plan.at("combinations")) {
+            auto model=document;
+            for(const auto& parameter:parameters) {const std::string path=parameter.at("path");if(point.contains(path))model[Json::json_pointer(parameter.at("pointer").get<std::string>())]=point.at(path);}
+            auto project=draft->project;
+            for(const auto& [path,value]:point.items())SetProjectParameter(project,path,value.get<double>());
+            checksum+=project.temperature_K;
+            EXPECT_FALSE(scaps_core::batch_project_hash(project).empty());
+        }
+        const double setup=Seconds(start);EXPECT_GT(checksum,0);
+        start=Clock::now();execute({{"operation","run"}});const double single=Seconds(start);
+        start=Clock::now();execute({{"operation","run_batch"}});const double batch=Seconds(start);
+        Json result={{"rep",rep},{"members",342},{"setup_s",setup},{"setup_per_member_ms",setup*1000/342},{"single_s",single},{"batch_s",batch}};
+        measurements.push_back(result);std::printf("TYPED2 %s\n",result.dump().c_str());
+        if(rep==0) {auto rows=Json::array();for(const auto& row:w.Current().batchResult.typed()->rows){auto value=BatchRowJson(*row);value.erase("elapsed_s");rows.push_back(std::move(value));}std::ofstream(std::filesystem::path(folder)/"rows.json")<<rows.dump();}
+    }
+    std::ofstream(std::filesystem::path(folder)/"measurements.json")<<measurements.dump(2);
+}
 TEST(PerfProbe, BatchBoundaryDirect) {
     if(!std::getenv("TYPED1_PERF")) GTEST_SKIP();
     const auto doc=ReadProject(SCAPSLAB_PROJECT);
