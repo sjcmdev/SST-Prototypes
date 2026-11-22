@@ -38,7 +38,7 @@ def analyze_walter(m, options, xd_measurement, cancelled, progress):
         result.update(sample_id=h['sample_id'], historical=h, compatibility='saved-spectrum-integral-only')
         energy, density = spectrum['E_w'], spectrum['N_T']
         lo, hi = _range(options, 'integration_range_eV', w['saved_integration_range'])
-        integral = json.loads(kernel.walter_integral(energy, density, lo, hi, True))
+        integral = kernel.walter_integral_values(np.asarray(energy, dtype=float), np.asarray(density, dtype=float), lo, hi, True)
         result['spectra'] = [dict(energy_eV=energy, density_cm3_eV=density,
             quality=['valid' if v is not None else 'historical_nonfinite' for v in density],
             integral=integral, saved_selection=w.get('selections', w.get('saved_idx')),
@@ -128,19 +128,17 @@ def analyze_walter(m, options, xd_measurement, cancelled, progress):
             xd['fit_id'] = options.get('cv_fit_id') if xd['source'] == 'CV' else options.get('dlcp_fit_id') if xd['source'] == 'DLCP' else None
             if measurement not in result['inputs']:
                 result['inputs'].append(measurement)
-            points = [json.loads(kernel.walter_point(float(w), t, prefactor, vb, ef, xd['value_m'], float(d), compat))
-                      for w, d in zip(omega, derivative)]
-            keep = [i for i, p in enumerate(points) if elo <= p['energy_eV'] <= ehi]
-            if len(keep) < 2:
-                raise ValueError('Energy range contains fewer than two spectrum samples')
-            energy = [points[i]['energy_eV'] for i in keep]
-            density = [points[i]['density_cm3_eV'] for i in keep]
-            lo, hi = _range(options, 'integration_range_eV', [min(energy), max(energy)])
-            integral = json.loads(kernel.walter_integral(energy, density, lo, hi, compat))
+            integration_range = _range(options, 'integration_range_eV', []) if 'integration_range_eV' in options else None
+            points = kernel.walter_measurement(omega, derivative, t, prefactor, vb, ef, xd['value_m'], compat,
+                                               [elo, ehi], integration_range)
+            keep = points['selected_indices']
+            energy = points['energy_eV'].tolist()
+            density = [float(v) if q == 'valid' else None for v, q in zip(points['density_cm3_eV'], points['quality'])]
             result['spectra'].append(dict(measurement_id=measurement['id'], temperature_K=t,
                 row_ids=[rows[indices[i]] for i in keep], frequency_Hz=f[keep].tolist(), x_d=xd,
                 energy_eV=energy, density_cm3_eV=density, D_c_F_m2=derivative[keep].tolist(),
-                field_factor_V_m_C=[points[i]['field_factor_V_m_C'] for i in keep], quality=[points[i]['quality'] for i in keep], integral=integral))
+                field_factor_V_m_C=[float(v) if q == 'valid' else None for v, q in zip(points['field_factor_V_m_C'], points['quality'])],
+                quality=points['quality'], integral=points['integral']))
             progress((mi+1)/len(measurements))
         if not result['spectra']:
             raise ValueError('No spectra in selected temperature range')

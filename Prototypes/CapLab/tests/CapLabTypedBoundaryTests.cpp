@@ -3,6 +3,25 @@
 #include "IO/PrototypeWorkflow.hpp"
 
 namespace SST::Prototypes::CapLab {
+TEST(CapLabTypedBoundary, FreshnessMatchesPackedSnapshotWithoutPackingCurrentColumns) {
+    auto p=FixtureProject();
+    const auto id=p.sweeps[0].id;
+    const auto input=AnalysisMeasurement(p,id);
+    auto check=[&] {
+        bool sameSample=false;
+        EXPECT_EQ(SameAnalysisMeasurement(p,input,sameSample),AnalysisMeasurement(p,id)==input);
+        EXPECT_TRUE(sameSample);
+    };
+    check();
+    p.samples[0].area_m2=2e-6; check(); p.samples[0].area_m2.reset();
+    auto object=p.engine->object(p.sweeps[0].capacitance);
+    std::get<std::vector<double>>(std::get<pl::Column>(object.data).values)[0]*=2;
+    p.engine->change("Edit analysis input",{std::move(object)}).apply(*p.engine);
+    check();
+    auto missingRow=input; missingRow["row_ids"].erase(missingRow["row_ids"].begin());
+    bool sameSample=false;
+    EXPECT_FALSE(SameAnalysisMeasurement(p,missingRow,sameSample));
+}
 TEST(CapLabTypedBoundary, SnapshotMatchesFileRoundtripAndSharesImmutableColumns) {
     auto p=FixtureProject();
     p.engine->reserveId(); // Unused reservations must survive a snapshot.

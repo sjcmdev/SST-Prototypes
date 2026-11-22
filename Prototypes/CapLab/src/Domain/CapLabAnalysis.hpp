@@ -7,12 +7,12 @@ inline pl::Id AnalysisSample(const Json &a) {
     if (a.contains("defect")) return a.at("defect").at("sample_id");
     return a.at("inputs").at(0).at("sample_id");
 }
-inline Json AnalysisMeasurement(const Project &p, pl::Id id) {
+inline Json AnalysisMeasurement(const Project &p, pl::Id id, bool includeData = true) {
     for (const auto &m : p.measurements) if (m.at("id") == id) {
         auto data = m.at("metadata"); data["id"] = id; data["columns"] = Json::array();
-        for (const auto &column : m.at("columns"))
+        if (includeData) for (const auto &column : m.at("columns"))
             data["columns"].push_back(std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(column.get<pl::Id>()).data).values));
-        data["row_ids"] = std::get<pl::Worksheet>(p.engine->object(id).data).rows;
+        if (includeData) data["row_ids"] = std::get<pl::Worksheet>(p.engine->object(id).data).rows;
         for (const auto &s : p.samples) if (m.at("sample_id") == s.id) {
             data["sample_id"] = s.id; data["area_m2"] = Nullable(s.area_m2); data["sample_metadata"] = s.metadata;
         }
@@ -26,10 +26,31 @@ inline Json AnalysisMeasurement(const Project &p, pl::Id id) {
             data["area_m2"]=Nullable(sample.area_m2); data["sample_metadata"]=sample.metadata;
         }
         data["source_rows"]=p.sources.at(id).rows;
-        for (auto cid : {m.frequency,m.capacitance,m.resistance}) data["columns"].push_back(std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(cid).data).values));
+        if (includeData) for (auto cid : {m.frequency,m.capacitance,m.resistance}) data["columns"].push_back(std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(cid).data).values));
+        else data.erase("row_ids");
         return data;
     }
     throw std::runtime_error("Missing analysis measurement.");
+}
+inline bool SameAnalysisMeasurement(const Project &p, const Json &input, bool &sameSample) {
+    const auto id=input.at("id").get<pl::Id>();
+    const auto header=AnalysisMeasurement(p,id,false);
+    sameSample=header.at("sample_id")==input.at("sample_id");
+    if (input.size()!=header.size()+1) return false; // row_ids is omitted; columns is an empty placeholder.
+    for (const auto &[key,value] : header.items()) if (key!="columns" && (!input.contains(key) || input.at(key)!=value)) return false;
+    const auto &rows=std::get<pl::Worksheet>(p.engine->object(id).data).rows;
+    const auto &oldRows=input.at("row_ids");
+    if (rows.size()!=oldRows.size() || !std::equal(rows.begin(),rows.end(),oldRows.begin(),[](auto a,const auto &b) {return b==a;})) return false;
+    std::vector<pl::Id> columns;
+    for (const auto &m : p.measurements) if (m.at("id")==id) columns=m.at("columns").get<std::vector<pl::Id>>();
+    for (const auto &m : p.sweeps) if (m.id==id) columns={m.frequency,m.capacitance,m.resistance};
+    const auto &old=input.at("columns");
+    if (columns.size()!=old.size()) return false;
+    for (std::size_t i=0;i<columns.size();++i) {
+        const auto &values=std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(columns[i]).data).values);
+        if (values.size()!=old[i].size() || !std::equal(values.begin(),values.end(),old[i].begin(),[](double a,const auto &b) {return b==a;})) return false;
+    }
+    return true;
 }
 inline void EditDefect(Project &p, const Json &edit) {
     const std::string action=edit.at("action");
@@ -87,9 +108,9 @@ inline void RefreshAnalyses(Project &p) {
         bool missing = false, stale = false;
         for (const auto &input : a.at("inputs")) {
             try {
-                const auto current=AnalysisMeasurement(p,input.at("id").get<pl::Id>());
-                missing |= current.at("sample_id")!=input.at("sample_id");
-                stale |= current!=input;
+                bool sameSample=false;
+                stale |= !SameAnalysisMeasurement(p,input,sameSample);
+                missing |= !sameSample;
             }
             catch (const std::exception &) { missing = true; }
         }
@@ -144,8 +165,8 @@ inline pl::Id AnalysisPlot(Project &p, pl::Id workbook, const Json &spec) {
         plot.style.marker=sst::ui::plot::Marker::Circle;
         plot.style.color = curve.value("fit",false) ? sst::ui::plot::Color{.85f,.25f,.12f,1} : sst::ui::plot::Color{.12f,.45f,.78f,1};
         if (curve.contains("color")) plot.style.color=curve.at("color").get<sst::ui::plot::Color>();
-        objects.push_back({sheet,workbook,name,0,w});
-        objects.push_back({x,sheet,"x",0,cx}); objects.push_back({y,sheet,"y",0,cy});
+        objects.push_back({sheet,workbook,name,0,std::move(w)});
+        objects.push_back({x,sheet,"x",0,std::move(cx)}); objects.push_back({y,sheet,"y",0,std::move(cy)});
         objects.push_back({p.engine->reserveId(),layer,curve.at("name").get<std::string>(),0,plot});
     }
     auto op = p.engine->change(name,std::move(objects)); op.apply(*p.engine); return graph;
@@ -155,7 +176,7 @@ inline void AppendAnalysis(Project &p, Json result) {
     if (result.contains("x_d") && result.at("type")!="Walter") result["x_d"]["fit_id"] = result.at("type")=="DLCPPolynomial" && result.at("x_d").at("measurement_id")==result.at("inputs").at(0).at("id") ? result.at("id") : Json(nullptr);
     result["graphs"] = Json::array();
     const auto sample=result.contains("sample_id") ? result.at("sample_id").get<pl::Id>() : result.at("inputs").at(0).at("sample_id").get<pl::Id>();
-    for (auto plot : result.at("plots")) {
+    for (auto &plot : result.at("plots")) {
         std::size_t i=0;
         for (auto &curve:plot.at("curves")) {
             Json temperature=curve.value("temperature_K",result.value("temperature_K",Json(nullptr)));

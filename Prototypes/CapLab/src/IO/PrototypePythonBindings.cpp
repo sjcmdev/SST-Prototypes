@@ -24,7 +24,69 @@
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/function.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/array.h>
 namespace {
+nanobind::dict WalterSpectrumPython(sst::physics::WalterSpectrum result) {
+    namespace nb=nanobind;
+    auto array=[](std::vector<double> values) {
+        auto *owned=new std::vector<double>(std::move(values));
+        nb::capsule owner(owned,[](void *p) noexcept {delete static_cast<std::vector<double> *>(p);});
+        return nb::ndarray<nb::numpy,double>(owned->data(),{owned->size()},owner);
+    };
+    nb::dict out;
+    out["energy_eV"]=array(std::move(result.energy_eV));
+    out["field_factor_V_m_C"]=array(std::move(result.factor));
+    out["density_cm3_eV"]=array(std::move(result.density_cm3_eV));
+    out["quality"]=nb::cast(std::move(result.quality));
+    return out;
+}
+nanobind::dict WalterIntegralPython(const sst::physics::WalterIntegral &r, double lo, double hi, bool compat) {
+    namespace nb=nanobind;
+    nb::dict out;
+    out["density_cm3"]=nb::cast(r.density_cm3); out["segments"]=nb::cast(r.segments); out["gaps"]=nb::cast(r.gaps);
+    out["range_eV"]=nb::cast(std::vector<double>{lo,hi}); out["semantics"]=compat ? "ProPho-minus-trapz" : "ascending-clipped-trapezoids";
+    return out;
+}
+nanobind::object PythonValue(const SST::Prototypes::CapLab::Json &value) {
+    namespace nb=nanobind;
+    if (value.is_null()) return nb::none();
+    if (value.is_boolean()) return nb::bool_(value.get<bool>());
+    if (value.is_number_unsigned()) return nb::int_(value.get<std::uint64_t>());
+    if (value.is_number_integer()) return nb::int_(value.get<std::int64_t>());
+    if (value.is_number_float()) return nb::float_(value.get<double>());
+    if (value.is_string()) return nb::cast(value.get_ref<const std::string &>());
+    if (value.is_array()) {
+        nb::list result;
+        for (const auto &v : value) result.append(PythonValue(v));
+        return result;
+    }
+    nb::dict result;
+    for (const auto &[key,v] : value.items()) result[nb::str(key.c_str())]=PythonValue(v);
+    return result;
+}
+SST::Prototypes::CapLab::Json AnalysisValue(nanobind::handle value) {
+    namespace nb=nanobind;
+    using SST::Prototypes::CapLab::Json;
+    if (value.is_none()) return nullptr;
+    if (nb::isinstance<nb::bool_>(value)) return nb::cast<bool>(value);
+    if (nb::isinstance<nb::int_>(value)) return nb::cast<bool>(value.attr("__lt__")(0)) ? Json(nb::cast<std::int64_t>(value)) : Json(nb::cast<std::uint64_t>(value));
+    if (nb::isinstance<nb::float_>(value)) {
+        const auto v=nb::cast<double>(value);
+        if (!std::isfinite(v)) throw std::runtime_error("Nonfinite analysis output");
+        return v;
+    }
+    if (nb::isinstance<nb::str>(value)) return nb::cast<std::string>(value);
+    if (nb::isinstance<nb::dict>(value)) {
+        Json result=Json::object();
+        for (const auto &[key,v] : nb::borrow<nb::dict>(value)) result[nb::cast<std::string>(key)]=AnalysisValue(v);
+        return result;
+    }
+    if (!nb::isinstance<nb::list>(value) && !nb::isinstance<nb::tuple>(value)) throw std::runtime_error("Unsupported analysis output type");
+    Json result=Json::array();
+    for (auto v : nb::borrow<nb::iterable>(value)) result.push_back(AnalysisValue(v));
+    return result;
+}
 // A caller-supplied operation ID lets another Python thread send the Core cancel command.
 std::mutex runningMutex;
 std::unordered_map<std::string,std::function<bool()>> runningOperations;
@@ -99,6 +161,25 @@ NB_MODULE(sst_caplab, module)
         const auto r=sst::physics::integrateWalter(e,values,lo,hi,compat);
         return Json{{"density_cm3",Nullable(r.density_cm3)},{"segments",r.segments},{"gaps",r.gaps},
             {"range_eV",{lo,hi}},{"semantics",compat ? "ProPho-minus-trapz" : "ascending-clipped-trapezoids"}}.dump();
+    });
+    using Array=nanobind::ndarray<nanobind::numpy,const double,nanobind::ndim<1>,nanobind::c_contig,nanobind::device::cpu>;
+    module.def("walter_spectrum", [](Array omega, Array derivative, double t, double prefactor, double vb, double ef, double xd, bool compat) {
+        auto result=sst::physics::walterSpectrum({omega.data(),omega.size()},{derivative.data(),derivative.size()},
+            t,prefactor,vb,ef,xd,compat ? sst::physics::WalterModel::ProPhoCompat : sst::physics::WalterModel::LinearField1996);
+        return WalterSpectrumPython(std::move(result));
+    });
+    module.def("walter_measurement", [](Array omega, Array derivative, double t, double prefactor, double vb, double ef, double xd, bool compat,
+        std::array<double,2> energyRange, std::optional<std::array<double,2>> integrationRange) {
+        auto result=sst::physics::walterMeasurement({omega.data(),omega.size()},{derivative.data(),derivative.size()},
+            t,prefactor,vb,ef,xd,compat ? sst::physics::WalterModel::ProPhoCompat : sst::physics::WalterModel::LinearField1996,energyRange,integrationRange);
+        auto out=WalterSpectrumPython(std::move(result.spectrum));
+        out["selected_indices"]=nanobind::cast(std::move(result.selectedIndices));
+        out["integral"]=WalterIntegralPython(result.integral,result.integrationRange_eV[0],result.integrationRange_eV[1],compat);
+        return out;
+    });
+    module.def("walter_integral_values", [](Array energy, Array density, double lo, double hi, bool compat) {
+        const auto r=sst::physics::integrateWalter({energy.data(),energy.size()},{density.data(),density.size()},lo,hi,compat);
+        return WalterIntegralPython(r,lo,hi,compat);
     });
     module.def("compat_sigma", &sst::physics::proPhoCaptureCrossSection);
     module.def("area_inverse_square", &sst::physics::areaInverseCapacitanceSquared);
@@ -496,8 +577,8 @@ namespace SST::Prototypes::CapLab
             if (!nb::cast<bool>(paths.attr("__contains__")(root))) paths.attr("insert")(0,root);
             const std::function<bool()> cancel = [&] { return context.IsCancellationRequested(); };
             const std::function<void(double)> progress = [&](double v) { context.SetProgress(float(v),1); };
-            auto value = nb::module_::import_("caplab.analysis").attr("analyze_json")(measurement.dump(),options.dump(),xd.is_null() ? "" : xd.dump(),cancel,progress);
-            return Json::parse(nb::cast<std::string>(value));
+            auto value = nb::module_::import_("caplab.analysis").attr("analyze")(PythonValue(measurement),PythonValue(options),PythonValue(xd),cancel,progress);
+            return AnalysisValue(value);
         } catch (const nb::python_error &e) { context.ThrowIfCancellationRequested(); throw std::runtime_error(e.what()); }
 #else
         (void)measurement; (void)options; (void)xd; (void)context;
