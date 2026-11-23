@@ -1,5 +1,7 @@
-﻿#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "PlotLabDocument.hpp"
+#include "WorksheetPython.hpp"
+#include <sst/plotlab/edges/CommandJson.hpp>
 #include "Core/JobSystem/JobContext.hpp"
 #include "PlotLabExport.hpp"
 #include "Core/Platform/PlatformFontDiscovery.hpp"
@@ -357,7 +359,7 @@ TEST_F(PlotLabApp, WorksheetDesignationsAndNearestXFollowColumnOrder)
     EXPECT_EQ(doc.project->pairedX(y),x);
     auto x2=doc.AddColumn(sheet), y2=doc.AddColumn(sheet), y3=doc.AddColumn(sheet);
     for(auto [id,role]:{std::pair{x2,"X"},std::pair{y2,"Y"},std::pair{y3,"Y"}})
-        doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","column_settings"},{"column_id",id},{"role",role}}.dump()));
+        doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","column_settings"},{"column_id",id},{"role",role}})));
     EXPECT_EQ(doc.project->pairedX(y2),x2); EXPECT_EQ(doc.project->pairedX(y3),x2);
     auto reordered=doc.project->object(x2); reordered.order=0;
     doc.Execute(doc.project->change("Reorder",{reordered}));
@@ -400,7 +402,7 @@ TEST(PlotLabWorksheet, DisplayFormattingNeverChangesStorage)
 }
 TEST_F(PlotLabApp, WorksheetParametersFormatsRoundtripUndoAndMigration)
 {
-    auto edit=[&](nlohmann::json request){doc.Execute(doc.project->worksheetEdit(request.dump()));};
+    auto edit=[&](nlohmann::json request){doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(request)));};
     edit({{"action","parameter_add"},{"worksheet_id",sheet},{"name","T"}});
     const auto parameter=std::get<pl::Worksheet>(doc.project->object(sheet).data).parameters.front().id;
     edit({{"action","parameter_value"},{"column_id",y},{"parameter_id",parameter},{"value","300 K"}});
@@ -408,9 +410,9 @@ TEST_F(PlotLabApp, WorksheetParametersFormatsRoundtripUndoAndMigration)
     edit({{"action","header_visibility"},{"worksheet_id",sheet},{"header","Comments"},{"visible",false}});
     edit({{"action","column_settings"},{"column_id",y},{"role","Y"},{"long_name","Signal"},{"comments","Measured"},{"display",{{"mode","engineering"},{"digits",3}}}});
     doc.Execute(doc.project->setCells(y,0,std::vector<double>{1.2345678901234567}));
-    auto copy=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{"action","copy_cell"},{"column_id",y},{"row_index",0}}.dump()));
+    auto copy=nlohmann::json::parse(PythonBinding::WorksheetCommandJson(doc,nlohmann::json{{"action","copy_cell"},{"column_id",y},{"row_index",0}}.dump()));
     EXPECT_EQ(copy["result"]["text"],"1.2345678901234567");
-    auto render=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{"action","render_cell"},{"column_id",y},{"row_index",0}}.dump()));
+    auto render=nlohmann::json::parse(PythonBinding::WorksheetCommandJson(doc,nlohmann::json{{"action","render_cell"},{"column_id",y},{"row_index",0}}.dump()));
     EXPECT_EQ(render["result"]["text"],"1.235");
     auto file=Temp("-worksheet.plotlab"); doc.Save(file);
     auto loaded=pl::Project::load(file); std::filesystem::remove(file);
@@ -471,11 +473,11 @@ TEST_F(PlotLabApp, ColumnValuesFunctionLibraryAndRanges)
     };
     for(const auto& [expression,expected]:cases) {
         SCOPED_TRACE(expression);
-        doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression",expression}}.dump()));
+        doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression",expression}})));
         ASSERT_NO_THROW(doc.project->recompute().wait());
         for(std::size_t row=0;row<expected.size();++row) EXPECT_NEAR(Values(y)[row],expected[row],1e-12);
     }
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","10*i"},{"row_from",2},{"row_to",2}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","10*i"},{"row_from",2},{"row_to",2}})));
     doc.project->recompute().wait();
     EXPECT_EQ(Values(y),(std::vector<double>{0,20,1}));
 }
@@ -484,12 +486,12 @@ TEST_F(PlotLabApp, ColumnValuesStableReferencesParametersAndPersistence)
 {
     auto object=doc.project->object(x); std::get<pl::Column>(object.data).longName="Long Time";
     doc.Execute(doc.project->change("Long name",{object}));
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","parameter_add"},{"worksheet_id",sheet},{"name","T"}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","parameter_add"},{"worksheet_id",sheet},{"name","T"}})));
     auto parameter=std::get<pl::Worksheet>(doc.project->object(sheet).data).parameters.front().id;
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","parameter_value"},{"column_id",x},{"parameter_id",parameter},{"value","10"}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","parameter_value"},{"column_id",x},{"parameter_id",parameter},{"value","10"}})));
     auto expression="col(\"Long Time\") + [Book]"+doc.project->object(sheet).name+"!col(A) + col(A)[T]";
     auto request=nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression",expression}};
-    doc.Execute(doc.project->worksheetEdit(request.dump())); doc.project->recompute().wait();
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(request))); doc.project->recompute().wait();
     EXPECT_EQ(Values(y),(std::vector<double>{12,14,16}));
     doc.Rename(x,"Renamed"); doc.project->recompute().wait();
     EXPECT_EQ(Values(y)[2],16);
@@ -497,7 +499,7 @@ TEST_F(PlotLabApp, ColumnValuesStableReferencesParametersAndPersistence)
     EXPECT_EQ(formula.evaluatorVersion,2u); EXPECT_EQ(formula.parameterBindings.at("col(A)[T]"),parameter);
     auto roundtrip=pl::Project::fromJson(doc.project->toJson());
     EXPECT_EQ(*std::get<pl::Column>(roundtrip.object(y).data).formula,formula);
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","parameter_value"},{"column_id",x},{"parameter_id",parameter},{"value","20"}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","parameter_value"},{"column_id",x},{"parameter_id",parameter},{"value","20"}})));
     doc.project->recompute().wait(); EXPECT_EQ(Values(y)[2],26);
     ASSERT_TRUE(undo->Undo()); doc.project->recompute().wait(); EXPECT_EQ(Values(y)[2],16);
     ASSERT_TRUE(undo->Redo()); doc.project->recompute().wait(); EXPECT_EQ(Values(y)[2],26);
@@ -506,7 +508,7 @@ TEST_F(PlotLabApp, ColumnValuesStableReferencesParametersAndPersistence)
 TEST_F(PlotLabApp, ColumnValuesDomainFailureBlocksDependentsAndPreservesCache)
 {
     auto z=doc.AddColumn(sheet);
-    auto set=[&](pl::Id id,std::string expression) {doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",id},{"expression",expression}}.dump()));};
+    auto set=[&](pl::Id id,std::string expression) {doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",id},{"expression",expression}})));};
     set(y,"col(A)*2"); set(z,"col(B)*2"); doc.project->recompute().wait();
     auto previous=Values(y), dependent=Values(z);
     set(y,"sqrt(col(A)-2)");
@@ -533,7 +535,7 @@ TEST_F(PlotLabApp, ColumnValuesDomainFailureBlocksDependentsAndPreservesCache)
 TEST_F(PlotLabApp, ColumnValuesNanAwareAndLegacyMigration)
 {
     doc.Execute(doc.project->setCells(x,1,std::vector<double>{std::nan("")}));
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","mean(col(A))+sum(col(A))+std(col(A))"}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","mean(col(A))+sum(col(A))+std(col(A))"}})));
     doc.project->recompute().wait(); EXPECT_NEAR(Values(y)[0],6+std::sqrt(2.),1e-12);
     doc.Execute(doc.project->setFormula(y,"sqrt(X-2)")); doc.project->recompute().wait();
     auto old=pl::Project::fromJson(doc.project->toJson());
@@ -556,7 +558,7 @@ TEST(PlotLabColumnValues, MillionRowsWorkerBenchmark)
 {
     pl::Project p; p.setAutoRecompute(false);
     const auto owner=std::this_thread::get_id(); bool offThread=false;
-    p.setBeforeFormulaRunner([&](const std::string&,const std::string&) {
+    p.setBeforeFormulaRunner([&](const std::string&,const pl::Project::FormulaInputs&) {
         offThread=std::this_thread::get_id()!=owner; return std::map<std::string,double>{};
     });
     auto book=p.reserveId(), sheet=p.reserveId(), x=p.reserveId(), y=p.reserveId();
@@ -564,7 +566,7 @@ TEST(PlotLabColumnValues, MillionRowsWorkerBenchmark)
     for(int row=0;row<1000000;++row) worksheet.rows.push_back(p.reserveId());
     pl::Column input, output; input.values=std::vector<double>(1000000,2); output.values=std::vector<double>(1000000,0);
     p.change("Million rows",{{book,p.root(),"Book",0,pl::Workbook{}},{sheet,book,"Sheet",0,std::move(worksheet)},{x,sheet,"A",0,std::move(input)},{y,sheet,"B",0,std::move(output)}}).apply(p);
-    p.worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","sqrt(col(A))*2+i"},{"before_script","# worker-thread probe"}}.dump()).apply(p);
+    p.worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","sqrt(col(A))*2+i"},{"before_script","# worker-thread probe"}})).apply(p);
     auto begin=std::chrono::steady_clock::now(); p.recompute().wait();
     double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-begin).count();
     std::cout<<"P6b 1e6 rows worker recompute (including publication): "<<ms<<" ms\n";
@@ -577,7 +579,7 @@ TEST_F(PlotLabApp, ColumnValuesVectorAlgorithms)
     doc.Execute(doc.project->setCells(x,0,std::vector<double>{1,4,9,16,25}));
     auto check=[&](std::string expression,std::vector<double> expected) {
         SCOPED_TRACE(expression);
-        doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression",expression}}.dump()));
+        doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression",expression}})));
         doc.project->recompute().wait();
         for(std::size_t row=0;row<expected.size();++row) EXPECT_NEAR(Values(y)[row],expected[row],1e-12);
     };
@@ -587,9 +589,9 @@ TEST_F(PlotLabApp, ColumnValuesVectorAlgorithms)
     check("smooth(col(A),1)",{1,4,9,16,25});
     check("smooth(col(A),0)",{2.5,14./3,29./3,50./3,20.5});
     check("interp(i/2+1,col(A),2*col(A))",{3,4,5,6,7});
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","100+i"},{"row_from",2},{"row_to",3}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","100+i"},{"row_from",2},{"row_to",3}})));
     doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{3,102,103,6,7}));
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","200+i"},{"row_from",4},{"row_to",5}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","200+i"},{"row_from",4},{"row_to",5}})));
     doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{3,102,103,204,205}));
     ASSERT_TRUE(undo->Undo()); doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{3,102,103,6,7}));
     ASSERT_TRUE(undo->Redo()); doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{3,102,103,204,205}));
@@ -598,7 +600,7 @@ TEST_F(PlotLabApp, ColumnValuesVectorAlgorithms)
 TEST_F(PlotLabApp, ColumnValuesModesAndScriptDependencyDeletion)
 {
     ASSERT_TRUE(TestPython().Start()); InstallWorksheetPython();
-    auto command=[&](nlohmann::json j) {return nlohmann::json::parse(doc.WorksheetCommand(j.dump()));};
+    auto command=[&](nlohmann::json j) {return nlohmann::json::parse(PythonBinding::WorksheetCommandJson(doc,j.dump()));};
     ASSERT_TRUE(command({{"action","set_column_values"},{"column_id",y},{"expression","scale+i"},{"before_script","scale = mean(col("+std::to_string(x)+"))"},{"recalculate","Manual"}}).at("ok"));
     ASSERT_TRUE(command({{"action","recompute"}}).at("ok"));
     EXPECT_EQ(Values(y),(std::vector<double>{3,4,5}));
@@ -636,7 +638,7 @@ TEST_F(PlotLabApp, ColumnValuesCrossBookReferencesSurviveRenames)
     for(int row=0;row<3;++row) doc.ResizeRows(otherSheet);
     auto source=doc.AddColumn(otherSheet);
     doc.Execute(doc.project->setCells(source,0,std::vector<double>{10,20,30}));
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","[Other Book]Other Sheet!col(A)+wcol(1)"}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","[Other Book]Other Sheet!col(A)+wcol(1)"}})));
     doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{11,22,33}));
     doc.Rename(otherBook,"Book renamed"); doc.Rename(otherSheet,"Sheet renamed"); doc.Rename(source,"Column renamed");
     doc.Execute(doc.project->setCells(source,0,std::vector<double>{100}));
@@ -661,25 +663,25 @@ TEST_F(PlotLabApp, ColumnValuesMigrationKeepsLegacyBuiltinNamedColumns)
 
 TEST_F(PlotLabApp, ColumnValuesDomainOutsideRangeDoesNotOverwriteOtherRows)
 {
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","sqrt(col(A)-2)"},{"row_from",2},{"row_to",3}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","sqrt(col(A)-2)"},{"row_from",2},{"row_to",3}})));
     doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{2,0,1}));
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","diff(sqrt(col(A)-2),0)"},{"row_from",2},{"row_to",2}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","diff(sqrt(col(A)-2),0)"},{"row_from",2},{"row_to",2}})));
     doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{2,1,1}));
 }
 
 TEST_F(PlotLabApp, ColumnValuesNumericParameterOnTextColumn)
 {
     auto label=doc.AddColumn(sheet,true);
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","parameter_add"},{"worksheet_id",sheet},{"name","T"}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","parameter_add"},{"worksheet_id",sheet},{"name","T"}})));
     auto parameter=std::get<pl::Worksheet>(doc.project->object(sheet).data).parameters.front().id;
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","parameter_value"},{"column_id",label},{"parameter_id",parameter},{"value","300"}}.dump()));
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","col(C)[T]+i"}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","parameter_value"},{"column_id",label},{"parameter_id",parameter},{"value","300"}})));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","col(C)[T]+i"}})));
     doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{301,302,303}));
 }
 
 TEST_F(PlotLabApp, ColumnValuesPersistenceRejectsTruncatedIndicesAndIds)
 {
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","col(A)"}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","col(A)"}})));
     doc.project->recompute().wait();
     const auto saved=nlohmann::json::parse(doc.project->toJson());
     for(const auto& [key,value]:std::vector<std::pair<std::string,nlohmann::json>>{
@@ -699,14 +701,14 @@ TEST_F(PlotLabApp, ColumnValuesInterpolationAcrossDifferentSheetLengths)
     doc.Execute(doc.project->setCells(sourceX,0,std::vector<double>{1,2,3,4,5}));
     doc.Execute(doc.project->setCells(sourceY,0,std::vector<double>{2,4,6,8,10}));
     auto set=[&](std::string expression) {
-        doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression",expression},
-            {"bindings",{{"sourceX",sourceX},{"sourceY",sourceY}}}}.dump()));
+        doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression",expression},
+            {"bindings",{{"sourceX",sourceX},{"sourceY",sourceY}}}})));
         doc.project->recompute().wait();
     };
     set("interp(i+1.5,sourceX,2*sourceY)"); EXPECT_EQ(Values(y),(std::vector<double>{10,14,18}));
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","mean(source)"},{"bindings",{{"source",sourceY}}}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",y},{"expression","mean(source)"},{"bindings",{{"source",sourceY}}}})));
     doc.project->recompute().wait(); EXPECT_EQ(Values(y),(std::vector<double>{6,6,6}));
-    doc.Execute(doc.project->worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",sourceY},{"expression","source"},{"bindings",{{"source",x}}}}.dump()));
+    doc.Execute(doc.project->worksheetEdit(pl::edges::worksheetEdit(nlohmann::json{{"action","set_column_values"},{"column_id",sourceY},{"expression","source"},{"bindings",{{"source",x}}}})));
     doc.project->recompute().wait();
     const auto& values=Values(sourceY); ASSERT_EQ(values.size(),5u); EXPECT_EQ(values[2],3); EXPECT_TRUE(std::isnan(values[3]));
 }
@@ -848,7 +850,7 @@ TEST(WindowMigration, OlderWorkspaceDoesNotOverrideMigratedPanelIni)
 
 TEST_F(PlotLabApp, DataCommandsUseCoreHistoryAndPublishCreatedSheetIds) {
     using J=nlohmann::json;
-    auto command=[&](J request) {auto response=J::parse(doc.WorksheetCommand(request.dump()));EXPECT_TRUE(response.at("ok").get<bool>())<<response;return response;};
+    auto command=[&](J request) {auto response=J::parse(PythonBinding::WorksheetCommandJson(doc,request.dump()));EXPECT_TRUE(response.at("ok").get<bool>())<<response;return response;};
     command({{"action","sort"},{"worksheet_id",sheet},{"keys",J::array({{{"column_id",x},{"descending",true}}})}});
     EXPECT_EQ(Values(y),(std::vector<double>{6,4,2}));EXPECT_EQ(undo->GetUndoDepth(),1u);ASSERT_TRUE(undo->Undo());EXPECT_EQ(Values(y),(std::vector<double>{2,4,6}));ASSERT_TRUE(undo->Redo());
     auto result=command({{"action","reduce"},{"worksheet_id",sheet},{"every_n",2}});
@@ -857,9 +859,9 @@ TEST_F(PlotLabApp, DataCommandsUseCoreHistoryAndPublishCreatedSheetIds) {
 }
 TEST_F(PlotLabApp, DataJobRejectsStaleProjectWithoutPublishing) {
     using J=nlohmann::json;
-    auto result=J::parse(doc.WorksheetCommand(J{{"action","sort"},{"worksheet_id",sheet},{"wait",false},{"keys",J::array({{{"column_id",x},{"descending",true}}})}}.dump()));ASSERT_TRUE(result.at("ok").get<bool>())<<result;
+    auto result=J::parse(PythonBinding::WorksheetCommandJson(doc,J{{"action","sort"},{"worksheet_id",sheet},{"wait",false},{"keys",J::array({{{"column_id",x},{"descending",true}}})}}.dump()));ASSERT_TRUE(result.at("ok").get<bool>())<<result;
     doc.Rename(sheet,"New name");
-    do {std::this_thread::sleep_for(std::chrono::milliseconds(1));result=J::parse(doc.WorksheetCommand("{\"action\":\"data_status\"}"));} while(result.at("ok").get<bool>() && result.at("result").at("state")=="running");
+    do {std::this_thread::sleep_for(std::chrono::milliseconds(1));result=J::parse(PythonBinding::WorksheetCommandJson(doc,"{\"action\":\"data_status\"}"));} while(result.at("ok").get<bool>() && result.at("result").at("state")=="running");
     EXPECT_FALSE(result.at("ok").get<bool>());EXPECT_EQ(Values(x),(std::vector<double>{1,2,3}));EXPECT_EQ(doc.project->object(sheet).name,"New name");
 }
 TEST(PlotLabDataJobs, MillionRowsSortFilterWorkerBenchmark) {
@@ -874,10 +876,10 @@ TEST(PlotLabDataJobs, MillionRowsSortFilterWorkerBenchmark) {
         {{"action","filter"},{"filters",J::array({{{"column_id",column},{"kind","range"},{"minimum_column_units",250000},{"maximum_column_units",750000}}})}}
     }) {
         request["worksheet_id"]=sheet;request["wait"]=false;
-        auto start=std::chrono::steady_clock::now();auto response=J::parse(doc.WorksheetCommand(request.dump()));ASSERT_TRUE(response.at("ok").get<bool>())<<response;
+        auto start=std::chrono::steady_clock::now();auto response=J::parse(PythonBinding::WorksheetCommandJson(doc,request.dump()));ASSERT_TRUE(response.at("ok").get<bool>())<<response;
         double submit=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
         ASSERT_EQ(response.at("result").at("state"),"running");
-        do {std::this_thread::sleep_for(std::chrono::milliseconds(1));response=J::parse(doc.WorksheetCommand("{\"action\":\"data_status\"}"));} while(response.at("ok").get<bool>() && response.at("result").at("state")=="running");
+        do {std::this_thread::sleep_for(std::chrono::milliseconds(1));response=J::parse(PythonBinding::WorksheetCommandJson(doc,"{\"action\":\"data_status\"}"));} while(response.at("ok").get<bool>() && response.at("result").at("state")=="running");
         ASSERT_TRUE(response.at("ok").get<bool>())<<response;
         std::cout<<"P6c 1e6 "<<request.at("action")<<": submit="<<submit<<" ms worker="<<response.at("result").at("elapsed_ms")<<" ms total="<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<" ms\n";
     }
@@ -895,7 +897,7 @@ TEST_F(PlotLabApp, EmbeddedPythonDataOperations) {
 
 TEST_F(PlotLabApp, LinkedRowStatisticsFollowInsertedRowsAndUndo) {
     using J=nlohmann::json;
-    const auto response=J::parse(doc.WorksheetCommand(J{{"action","statistics"},{"worksheet_id",sheet},{"axis","row"}}.dump()));ASSERT_TRUE(response.at("ok").get<bool>())<<response;
+    const auto response=J::parse(PythonBinding::WorksheetCommandJson(doc,J{{"action","statistics"},{"worksheet_id",sheet},{"axis","row"}}.dump()));ASSERT_TRUE(response.at("ok").get<bool>())<<response;
     const auto output=response.at("result").at("worksheet_ids").at(0).get<pl::Id>();
     const auto before=std::get<pl::Worksheet>(doc.project->object(output).data).rows;
     doc.ResizeRows(sheet);doc.project->recompute().wait();EXPECT_EQ(std::get<pl::Worksheet>(doc.project->object(output).data).rows.size(),4u);
@@ -910,7 +912,7 @@ TEST(PlotLabDataJobs, SharedCorePoolSurvivesDocumentAndPublishedJobPayloadIsRele
         Document doc{CreateRef<CommandRegistry>(),CreateRef<UndoStack>(),bus,jobs};project=doc.project;
         doc.Execute(pl::importTable(*doc.project,doc.project->root(),"Shared",pl::CsvImporter{}.read("X,Y\n1,2\n2,4\n")));
         auto book=doc.project->children(doc.project->root()).front(),sheet=doc.project->children(book).front(),column=doc.project->children(sheet).front();
-        auto result=J::parse(doc.WorksheetCommand(J{{"action","sort"},{"worksheet_id",sheet},{"keys",J::array({{{"column_id",column}}})}}.dump()));ASSERT_TRUE(result.at("ok").get<bool>())<<result;
+        auto result=J::parse(PythonBinding::WorksheetCommandJson(doc,J{{"action","sort"},{"worksheet_id",sheet},{"keys",J::array({{{"column_id",column}}})}}.dump()));ASSERT_TRUE(result.at("ok").get<bool>())<<result;
         id=result.at("result").at("job_id").get<SST::JobId>();ASSERT_TRUE(jobs->GetJob(id));
     }
     EXPECT_TRUE(project.expired());
@@ -921,4 +923,32 @@ TEST(PlotLabDataJobs, SharedCorePoolSurvivesDocumentAndPublishedJobPayloadIsRele
     auto open=CreateRef<OpenJob>(Path::FromResolved("Prototypes/PlotLab/examples/demo.csv"));auto next=jobs->Submit(open);ASSERT_NE(next,0u);
     do {std::this_thread::sleep_for(std::chrono::milliseconds(1));status=jobs->GetJob(next);} while(status && (status->status==JobStatus::Queued || status->status==JobStatus::Running));
     ASSERT_TRUE(status);EXPECT_EQ(status->status,JobStatus::Completed);
+}
+
+TEST(PlotLabTypedCommands, NumericListIsParsedAtInputEdge) {
+    EXPECT_EQ(ParseNumericList("1, 1.5, -2e-3"),(std::vector<double>{1,1.5,-2e-3}));
+    EXPECT_TRUE(ParseNumericList("").empty());
+    EXPECT_THROW(ParseNumericList("1,,2"),std::invalid_argument);
+    EXPECT_THROW(ParseNumericList("1,"),std::invalid_argument);
+    EXPECT_THROW(ParseNumericList("1,broken"),std::invalid_argument);
+}
+TEST(PlotLabTypedCommands, JsonAdapterRequiresIntegralDisplayDigits) {
+    auto request=nlohmann::json{{"action","column_settings"},{"column_id",1},{"display",{{"mode","general"}}}};
+    EXPECT_THROW(pl::edges::worksheetEdit(request),nlohmann::json::out_of_range);
+    for(auto digits:{nlohmann::json(-1),nlohmann::json(1.5),nlohmann::json(18),nlohmann::json(true)}) {
+        request["display"]["digits"]=digits;EXPECT_THROW(pl::edges::worksheetEdit(request),std::invalid_argument);
+    }
+    request["display"]["digits"]=17;EXPECT_NO_THROW(pl::edges::worksheetEdit(request));
+}
+TEST_F(PlotLabApp, TypedCommandsKeepStableDependenciesThroughCoreHistorySaveLoadAndApply) {
+    pl::SetColumnValues formula;formula.column=y;formula.formula.expression="abs(col(A))";
+    doc.WorksheetCommand(formula);doc.project->recompute().wait();
+    auto inserted=doc.AddColumn(sheet);auto added=doc.project->object(inserted),source=doc.project->object(x);added.order=1;source.order=10;
+    doc.Execute(doc.project->change("Insert before source",{added,source}));
+    auto verify=[&](double value){doc.project->recompute().wait();EXPECT_EQ(std::get<pl::Column>(doc.project->object(y).data).formula->bindings.at("col(A)"),x);EXPECT_DOUBLE_EQ(Values(y)[0],value);auto curve=doc.project->children(doc.project->children(graph).front()).front();EXPECT_DOUBLE_EQ(doc.project->series(curve).data.y[0],value);};
+    doc.WorksheetCommand(formula);verify(1);
+    doc.Execute(doc.project->setCells(x,0,std::vector<double>{-7}));verify(7);ASSERT_TRUE(undo->Undo());verify(1);ASSERT_TRUE(undo->Redo());verify(7);
+    doc.Rename(x,"Input renamed");doc.Rename(sheet,"Sheet renamed");verify(7);
+    doc.Delete(x);EXPECT_FALSE(doc.project->objects().contains(y));ASSERT_TRUE(undo->Undo());verify(7);ASSERT_TRUE(undo->Redo());EXPECT_FALSE(doc.project->objects().contains(x));ASSERT_TRUE(undo->Undo());verify(7);
+    auto file=Temp("-typed-dependencies.plotlab");doc.Save(file);doc.Open(file);doc.WorksheetCommand(formula);verify(7);ASSERT_TRUE(undo->Undo());verify(7);ASSERT_TRUE(undo->Redo());verify(7);std::filesystem::remove(file);
 }

@@ -1,7 +1,10 @@
-﻿#include "PlotLabDocument.hpp"
+#include "PlotLabDocument.hpp"
+#include "WorksheetPython.hpp"
+#include <sst/plotlab/edges/CommandJson.hpp>
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include <cctype>
+#include <cmath>
 #include <algorithm>
 #include <charconv>
 #include <limits>
@@ -14,6 +17,8 @@
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/map.h>
+#include <nanobind/stl/vector.h>
 #endif
 namespace SST::Prototypes::PlotLab
 {
@@ -22,7 +27,7 @@ namespace SST::Prototypes::PlotLab
         class DataJob final : public IJob {
         public:
             std::unique_ptr<pl::Project> snapshot;
-            std::string request;
+            pl::DataRequest request;
             std::optional<pl::Operation> operation;
             Ref<pl::Project> base;
             std::uint64_t revision = 0;
@@ -81,6 +86,16 @@ namespace SST::Prototypes::PlotLab
         if (error != std::errc{} || end != text.data() + text.size())
             throw std::invalid_argument("Use a number with decimal point, or leave the cell blank");
         return value;
+    }
+    std::vector<double> ParseNumericList(const std::string& text) {
+        std::vector<double> values;if(text.empty())return values;
+        for(std::size_t first=0;;) {
+            auto end=text.find(',',first);auto token=text.substr(first,end==std::string::npos?end:end-first);
+            const auto begin=token.find_first_not_of(" \t\r\n"),last=token.find_last_not_of(" \t\r\n");
+            if(begin==std::string::npos)throw std::invalid_argument("Expected comma-separated numbers");
+            values.push_back(ParseNumericCell(token.substr(begin,last-begin+1)));
+            if(end==std::string::npos)return values;first=end+1;
+        }
     }
     Result<void> EngineCommand::Execute(CommandContext &)
     {
@@ -156,12 +171,17 @@ namespace SST::Prototypes::PlotLab
         }
         undo->Clear();
         project = std::move(next);
-        project->setBeforeFormulaRunner([](const std::string& script,const std::string& data) {
+        project->setBeforeFormulaRunner([](const std::string& script,const pl::Project::FormulaInputs& data) {
 #if DS_PYTHON_CAPI_AVAILABLE
             if(!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python is unavailable");
             nanobind::gil_scoped_acquire gil;
-            auto result=nanobind::module_::import_("sst_plotlab.formula_script").attr("run")(script,data);
-            return nlohmann::json::parse(nanobind::cast<std::string>(result)).get<std::map<std::string,double>>();
+            nanobind::dict inputs;
+            for(const auto& [id,values]:data) {
+                nanobind::list column;
+                for(double value:values) {if(std::isfinite(value))column.append(value);else column.append(nanobind::none());}
+                inputs[nanobind::str(std::to_string(id).c_str())]=std::move(column);
+            }
+            return nanobind::cast<std::map<std::string,double>>(nanobind::module_::import_("sst_plotlab.formula_script").attr("run_typed")(script,inputs));
 #else
             (void)script; (void)data;
             throw std::runtime_error("Embedded Python is unavailable");
@@ -364,20 +384,59 @@ namespace SST::Prototypes::PlotLab
             if(status->status!=JobStatus::Completed) throw std::runtime_error(status->errorMessage);
             if(project!=work->base || project->revision()!=work->revision) throw std::runtime_error("Project changed while data job was running; retry operation");
             std::vector<pl::Id> created;
-            const auto request=nlohmann::json::parse(work->request);
-            const auto parent=project->object(request.at("worksheet_id").get<pl::Id>()).parent;
+            const auto parent=project->object(work->request.worksheet).parent;
             const auto before=project->children(parent);
             project->acceptOperationSnapshot(*work->snapshot);
             Execute(std::move(*work->operation));
             for(auto id:project->children(parent)) if(std::find(before.begin(),before.end(),id)==before.end()) created.push_back(id);
-            dataResult=nlohmann::json{{"ok",true},{"result",{{"job_id",dataJob},{"elapsed_ms",work->elapsedMs},{"state","completed"},{"worksheet_ids",created}}}}.dump();
-        } catch(const std::exception& e) {dataResult=nlohmann::json{{"ok",false},{"error",{{"type",status->status==JobStatus::Completed?"conflict":"validation"},{"message",e.what()}}}}.dump();}
-        work->operation.reset();work->snapshot.reset();work->base.reset();std::string{}.swap(work->request);
+            dataResult={DataState::Completed,dataJob,work->elapsedMs,std::move(created)};
+        } catch(const std::exception& e) {dataResult={};dataResult.error=status->status==JobStatus::Completed?WorksheetError::Conflict:WorksheetError::Validation;dataResult.message=e.what();}
+        work->operation.reset();work->snapshot.reset();work->base.reset();work->request={};
         dataJob=0;dataWork.reset();
     }
-    std::string Document::WorksheetCommand(const std::string& requestJson)
+    DataResult Document::DataStatus() {
+        PollDataOperation();return dataJob?DataResult{DataState::Running,dataJob}:dataResult;
+    }
+    DataResult Document::WorksheetCommand(pl::DataRequest request,bool wait) {
+        PollDataOperation();if(dataJob)throw std::invalid_argument("A data operation is running");
+        if(!dataJobs){dataJobs=CreateRef<JobSystem>(bus,1);ownsDataJobs=true;}
+        auto work=CreateRef<DataJob>();work->snapshot=project->operationSnapshot();work->base=project;work->revision=project->revision();work->request=std::move(request);
+        dataWork=work;dataResult={};dataJob=dataJobs->Submit(work);
+        if(!dataJob){dataWork.reset();throw std::runtime_error("Could not submit data job");}
+        if(!wait)return {DataState::Running,dataJob};
+        while(dataJob){PollDataOperation();if(dataJob)std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        return dataResult;
+    }
+    void Document::WorksheetCommand(pl::WorksheetEdit request) {
+        if(auto* values=std::get_if<pl::SetColumnValues>(&request)) {
+            auto& f=values->formula;f.variables.clear();f.scriptInputs.clear();
+            if(!f.beforeScript.empty()) {
+#if DS_PYTHON_CAPI_AVAILABLE
+                if(!PythonInterpreter::IsRuntimeInitialized())throw std::invalid_argument("Embedded Python is unavailable");
+                nanobind::gil_scoped_acquire gil;
+                auto validator=nanobind::module_::import_("sst_plotlab.formula_script");
+                f.variables=nanobind::cast<std::vector<std::string>>(validator.attr("declared")(f.beforeScript));
+                f.scriptInputs=nanobind::cast<std::vector<pl::Id>>(validator.attr("inputs")(f.beforeScript));
+#else
+                throw std::invalid_argument("Embedded Python is unavailable");
+#endif
+            }
+        }
+        Execute(project->worksheetEdit(request));
+    }
+    namespace PythonBinding {
+    nlohmann::json DataResponse(const DataResult& r) {
+        using Json=nlohmann::json;
+        if(r.error)return Json{{"ok",false},{"error",{{"type",*r.error==WorksheetError::Conflict?"conflict":"validation"},{"message",r.message}}}};
+        const char* states[]={"idle","running","completed"};Json result={{"state",states[static_cast<unsigned>(r.state)]}};
+        if(r.state!=DataState::Idle)result["job_id"]=r.job;
+        if(r.state==DataState::Completed){result["elapsed_ms"]=r.elapsedMs;result["worksheet_ids"]=r.worksheets;}
+        return Json{{"ok",true},{"result",std::move(result)}};
+    }
+    std::string WorksheetCommandJson(Document& doc,const std::string& requestJson)
     {
         using Json = nlohmann::json;
+        auto& project=doc.project;auto& undo=doc.undo;
         try {
             auto request = Json::parse(requestJson);
             const auto action = request.at("action").get<std::string>();
@@ -387,25 +446,16 @@ namespace SST::Prototypes::PlotLab
                     throw std::invalid_argument("Expected positive integer ID");
             }
             Json result = Json::object();
-            if(action=="data_status") { PollDataOperation(); return dataJob?Json{{"ok",true},{"result",{{"state","running"},{"job_id",dataJob}}}}.dump():dataResult.empty()?Json{{"ok",true},{"result",{{"state","idle"}}}}.dump():dataResult; }
-            static const std::set<std::string> dataActions={"sort","filter","mask","find_replace","transpose","stack","unstack","split","join","extract","reduce","normalize","interpolate","statistics"};
-            if(dataActions.contains(action)) {
-                PollDataOperation(); if(dataJob) throw std::invalid_argument("A data operation is running");
-                if(!dataJobs) {dataJobs=CreateRef<JobSystem>(bus,1);ownsDataJobs=true;}
-                auto work=CreateRef<DataJob>(); work->snapshot=project->operationSnapshot(); work->base=project; work->revision=project->revision(); work->request=request.dump();
-                dataWork=work;dataResult.clear();dataJob=dataJobs->Submit(work);
-                if(!dataJob) throw std::runtime_error("Could not submit data job");
-                if(!request.value("wait",true)) return Json{{"ok",true},{"result",{{"job_id",dataJob},{"state","running"}}}}.dump();
-                while(dataJob) {PollDataOperation();if(dataJob) std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-                return dataResult;
-            }
+            if(action=="data_status")return DataResponse(doc.DataStatus()).dump();
+            if(std::find(std::begin(pl::dataActionNames),std::end(pl::dataActionNames),action)!=std::end(pl::dataActionNames))
+                return DataResponse(doc.WorksheetCommand(pl::edges::dataRequest(request),request.value("wait",true))).dump();
             if(action=="analysis_column") {
                 const auto id=request.at("column_id").get<pl::Id>();
                 result["values_column_units"]=project->analysisValues(id,request.value("exclude_filtered",false));
                 const auto& o=project->object(id);result["units"]=std::get<pl::Column>(o.data).units;
                 result["row_ids"]=std::get<pl::Worksheet>(project->object(o.parent).data).rows;
             } else if (action == "snapshot") result = Json::parse(project->toJson());
-            else if (action == "load_project") Open(CreateRef<pl::Project>(pl::Project::fromJson(request.at("project").dump())), {});
+            else if (action == "load_project") doc.Open(CreateRef<pl::Project>(pl::Project::fromJson(request.at("project").dump())), {});
             else if (action == "undo" || action == "redo") {
                 auto changed = action == "undo" ? undo->Undo() : undo->Redo();
                 if (!changed) throw std::runtime_error(changed.Error().technicalDetails);
@@ -419,20 +469,7 @@ namespace SST::Prototypes::PlotLab
                     result["text"] = action == "copy_cell" ? pl::fullPrecision(values->at(row)) : pl::formatValue(values->at(row), c.display);
                 else result["text"] = std::get<std::vector<std::string>>(c.values).at(row);
             } else if(action=="set_column_values") {
-#if DS_PYTHON_CAPI_AVAILABLE
-                auto script=request.value("before_script",std::string{});
-                request["variables"]=Json::array(); request["script_input_ids"]=Json::array();
-                if(!script.empty()) {
-                    if(!PythonInterpreter::IsRuntimeInitialized()) throw std::invalid_argument("Embedded Python is unavailable");
-                    nanobind::gil_scoped_acquire gil;
-                    auto validator=nanobind::module_::import_("sst_plotlab.formula_script");
-                    request["variables"]=Json::parse(nanobind::cast<std::string>(validator.attr("declared_json")(script)));
-                    request["script_input_ids"]=Json::parse(nanobind::cast<std::string>(validator.attr("inputs_json")(script)));
-                }
-#else
-                if(!request.value("before_script",std::string{}).empty()) throw std::invalid_argument("Embedded Python is unavailable");
-#endif
-                Execute(project->worksheetEdit(request.dump()));
+                doc.WorksheetCommand(pl::edges::worksheetEdit(request));
             } else if(action=="recompute") {
 #if DS_PYTHON_CAPI_AVAILABLE
                 std::optional<nanobind::gil_scoped_release> release;
@@ -444,7 +481,7 @@ namespace SST::Prototypes::PlotLab
                 const auto& info=project->recomputeInfo(request.at("column_id").get<pl::Id>());
                 const char* states[]={"Clean","Dirty","Running","Failed","Blocked"};
                 result={{"state",states[static_cast<int>(info.state)]},{"stale",info.stale},{"diagnostic",info.diagnostic},{"runs",info.runs}};
-            } else Execute(project->worksheetEdit(request.dump()));
+            } else doc.WorksheetCommand(pl::edges::worksheetEdit(request));
             return Json{{"ok",true},{"result",result}}.dump();
         } catch (const std::out_of_range& e) {
             return Json{{"ok",false},{"error",{{"type","not_found"},{"message",e.what()}}}}.dump();
@@ -457,6 +494,7 @@ namespace SST::Prototypes::PlotLab
             return Json{{"ok",false},{"error",{{"type",type},{"message",message}}}}.dump();
         }
     }
+    } // namespace PythonBinding
     void InstallWorksheetPython(Document* active, const std::filesystem::path& pythonRoot)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -486,7 +524,7 @@ NB_MODULE(_sst_plotlab, module)
         .def("__init__", [](Document* self) {
             new (self) Document(CreateRef<CommandRegistry>(), CreateRef<UndoStack>(), CreateRef<EventBus>());
         })
-        .def("command_json", &Document::WorksheetCommand);
+        .def("command_json", [](Document& doc,const std::string& request){return PythonBinding::WorksheetCommandJson(doc,request);});
 }
 namespace {
     const bool worksheetModuleRegistered = [] {

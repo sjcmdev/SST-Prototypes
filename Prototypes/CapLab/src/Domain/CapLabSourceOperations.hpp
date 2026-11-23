@@ -50,7 +50,7 @@ inline Json ReplaceMeasurement(Project &p, pl::Id id, const Json &preview) {
     if (gridChanged) {
         sheet.rows.clear();
         for (std::size_t i=0;i<m.at("source_rows").size();++i) sheet.rows.push_back(p.engine->reserveId());
-        sheet.masks.clear(); sheet.filters="[]"; sheet.visibleRows.clear();
+        sheet.masks.clear(); sheet.filters.clear(); sheet.filterFileText.clear(); sheet.fileFilters.clear(); sheet.visibleRows.clear();
     }
     auto meta=m; meta.erase("columns");
     meta["normalization_area_m2"]=origin.value("normalization_area_m2",old.at("area_m2"));

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Undo/UndoStack.hpp"
@@ -23,6 +23,7 @@ namespace SST::Prototypes::PlotLab
         std::optional<pl::Table> table;
     };
     double ParseNumericCell(const std::string &);
+    std::vector<double> ParseNumericList(const std::string&);
     struct ModelChanged : BusEvent
     {
         pl::Event change;
@@ -49,6 +50,16 @@ namespace SST::Prototypes::PlotLab
         Ref<pl::Project> project;
         pl::Operation operation;
     };
+    enum class DataState { Idle, Running, Completed };
+    enum class WorksheetError { Validation, Conflict };
+    struct DataResult {
+        DataState state = DataState::Idle;
+        JobId job = 0;
+        double elapsedMs = 0;
+        std::vector<pl::Id> worksheets;
+        std::optional<WorksheetError> error;
+        std::string message;
+    };
     class Document final : public pl::Observer
     {
       public:
@@ -56,7 +67,9 @@ namespace SST::Prototypes::PlotLab
         ~Document() override;
         void changed(const pl::Event &) noexcept override;
         void Execute(pl::Operation);
-        std::string WorksheetCommand(const std::string& requestJson);
+        void WorksheetCommand(pl::WorksheetEdit);
+        DataResult WorksheetCommand(pl::DataRequest, bool wait = true);
+        DataResult DataStatus();
         void PollDataOperation();
         void New();
         void Open(const std::filesystem::path &);
@@ -88,7 +101,7 @@ namespace SST::Prototypes::PlotLab
         bool ownsDataJobs = false;
         Ref<IJob> dataWork;
         JobId dataJob = 0;
-        std::string dataResult;
+        DataResult dataResult;
     };
     void InstallWorksheetPython(Document* active = nullptr, const std::filesystem::path& pythonRoot = {});
 } // namespace SST::Prototypes::PlotLab

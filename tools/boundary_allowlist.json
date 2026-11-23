@@ -4408,114 +4408,6 @@
       "reason": "Export-to-disk/Python plotting adapter."
     },
     {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 163,
-      "code": "const auto dataStatus=nlohmann::json::parse(state->document->WorksheetCommand(\"{\\\"action\\\":\\\"data_status\\\"}\"));",
-      "sha256": "15fdd5ea069a9387e30446f90617fb853cc46bf4f7cd89b97a3d091fead967b3",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 449,
-      "code": "auto filters=clear?Json::array():Json::parse(std::get<pl::Worksheet>(p.object(sheet).data).filters);",
-      "sha256": "14db4321bd7e186955309b25b2dd7ccbe81afcaa5bd69c0222bd75776798bd82",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 459,
-      "code": "if(dataAction==12) request[\"new_x_column_units\"]=Json::parse(\"[\"+filterText+\"]\");",
-      "sha256": "a22877abf122ef8b69e27cea7a2d6211feafd115a23ae6cb18829694f7bb97c6",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 463,
-      "code": "auto response=Json::parse(doc.WorksheetCommand(request.dump()));if(!response.at(\"ok\").get<bool>()) throw std::runtime_error(response.at(\"error\").at(\"message\").get<std::string>());",
-      "sha256": "91f7cac96d2569de8a320213cafcae98054023f9d0fe5e4f85102474ac993cef",
-      "count": 2,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 542,
-      "code": "if (sst::ui::widgets::Checkbox(header, &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{\"action\",\"header_visibility\"},{\"worksheet_id\",id},{\"header\",header},{\"visible\",visible}}.dump())); });",
-      "sha256": "50d8da4f110d71eb94a92d068ee6c8fa4d6f8e870d13871011b69400ad63b384",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 547,
-      "code": "if (sst::ui::widgets::Checkbox(row.name.c_str(), &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{\"action\",\"parameter_visibility\"},{\"worksheet_id\",id},{\"parameter_id\",row.id},{\"visible\",visible}}.dump())); });",
-      "sha256": "69546234484f09064429b99fa999254ec0a8651162bbbf39f90a511f469f21fe",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 549,
-      "code": "if (ImGui::SmallButton(\"Remove\")) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{\"action\",\"parameter_remove\"},{\"worksheet_id\",id},{\"parameter_id\",row.id}}.dump())); });",
-      "sha256": "997e9459912ba457b0320af97a8462a3c4c93d562618873605b424a6a89dcabf",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 553,
-      "code": "if (ImGui::Button(\"Add parameter\")) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{\"action\",\"parameter_add\"},{\"worksheet_id\",id},{\"name\",parameterName}}.dump())); parameterName.clear(); });",
-      "sha256": "010f7024585af8c588501f72e8282d3e722afb6d97dedbeeed6356e1e6242399",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 630,
-      "code": "doc.Execute(p.worksheetEdit(request.dump()));",
-      "sha256": "0651bc0ab4e023cf02b684eca232e0fa1a440e5bedaace9da25839c4f88b0aa4",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 1008,
-      "code": "doc.Execute(p.worksheetEdit(nlohmann::json{{\"action\",\"column_settings\"},{\"column_id\",metadata},{\"long_name\",longName},{\"units\",units},{\"comments\",comments},{\"role\",pl::roleTag(static_cast<pl::Role>(role))},{\"display\",{{\"mode\",modes[displayMode]},{\"digits\",displayDigits}}}}.dump()));",
-      "sha256": "ca51a8b4e6800aab1fcfea2b1234abe58dae4e482019f76afd2181cea83a6316",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 1035,
-      "code": "auto response=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{\"action\",\"set_column_values\"},{\"column_id\",metadata},{\"expression\",formula},{\"row_from\",rowFrom},{\"row_to\",rowTo},{\"before_script\",beforeScript},{\"exclude_filtered\",excludeFiltered},{\"recalculate\",pl::recalculateModes[recalculate]}}.dump()));",
-      "sha256": "0f9db832442af893ed8f4906fa2efda7aba89b32ff4341e606decf96f3353a1c",
-      "count": 2,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabWorkspace.cpp",
-      "rule": "text-json",
-      "line": 1040,
-      "code": "auto result=nlohmann::json::parse(doc.WorksheetCommand(\"{\\\"action\\\":\\\"recompute\\\",\\\"wait\\\":false}\"));",
-      "sha256": "dd7fe5abd9c244afea302f640f34c1fa7bc2706d3b9eb250c29efc8805fe3a2c",
-      "count": 1,
-      "reason": "PlotLab workspace persistence/public Python binding."
-    },
-    {
       "file": "Prototypes/CapLab/src/Domain/CapLabIS.cpp",
       "rule": "text-json",
       "line": 345,
@@ -4820,6 +4712,276 @@
       "sha256": "909553f7a1fd3c41daedbe61671bc6f261042769e7255f29ec9b1ff7f4dfdbc8",
       "count": 1,
       "reason": "Disk export edge: bounded 64 KiB TSV buffer flushed to FILE by atomic TextFileIO::Save (perfret1)."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "text-json",
+      "line": 441,
+      "code": "auto request = Json::parse(requestJson);",
+      "sha256": "6d346fc9c7633a423bed9dfb1d7c4da731cb75cd684a0b6c5a0940e45d654d80",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "text-json",
+      "line": 449,
+      "code": "if(action==\"data_status\")return DataResponse(doc.DataStatus()).dump();",
+      "sha256": "d43a19baba3dd08258251e301c791cea2f909a9fc8cced0d086cc8b80968d7b1",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "text-json",
+      "line": 451,
+      "code": "return DataResponse(doc.WorksheetCommand(pl::edges::dataRequest(request),request.value(\"wait\",true))).dump();",
+      "sha256": "f8ade67564521aac9627b97a6e2eec2615f81b6b2bcaf70aedeb6d547d9abdba",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "text-json",
+      "line": 457,
+      "code": "} else if (action == \"snapshot\") result = Json::parse(project->toJson());",
+      "sha256": "97930245603d7b5a5023e01b9893d5ab2d48b209520c403844bcd0d97c0dcfc9",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "text-json",
+      "line": 458,
+      "code": "else if (action == \"load_project\") doc.Open(CreateRef<pl::Project>(pl::Project::fromJson(request.at(\"project\").dump())), {});",
+      "sha256": "1365ea3ac7bf38a35f731fc1f9c22556193fa3cd0022e50927ed9847f7bffabb",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "text-json",
+      "line": 485,
+      "code": "return Json{{\"ok\",true},{\"result\",result}}.dump();",
+      "sha256": "ec9c9bc67913a8376e023bd3acaddb9fc175af1cd06e10a4a1474804123a8cf4",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "text-json",
+      "line": 487,
+      "code": "return Json{{\"ok\",false},{\"error\",{{\"type\",\"not_found\"},{\"message\",e.what()}}}}.dump();",
+      "sha256": "e8ff7ea9ebf3bb54019271412a23ffbf77b7054daf3492f32d841f25909fa765",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "text-json",
+      "line": 494,
+      "code": "return Json{{\"ok\",false},{\"error\",{{\"type\",type},{\"message\",message}}}}.dump();",
+      "sha256": "700263e845e30d799faf09cb6eeafa1a2e9af81b4ec3c021a21af1e401211ec7",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 50,
+      "code": "std::optional<nanobind::gil_scoped_release> release;",
+      "sha256": "8fd9a2458d6e60583e89bb3a9161874cab530b07b7ffbc5461931728b625f1db",
+      "count": 2,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 51,
+      "code": "if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check()) release.emplace();",
+      "sha256": "bd7d9d67b70737c8f7e71f51755b6579085d7147a1db10e825a9b8096c986cd7",
+      "count": 4,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 176,
+      "code": "if(!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error(\"Embedded Python is unavailable\");",
+      "sha256": "52505f46c0c0888984ec7c06548cafe91a30711d301f676f2a98a468a0ac95f5",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 177,
+      "code": "nanobind::gil_scoped_acquire gil;",
+      "sha256": "c938f47556d4a7aca68169fea8ab4e1db396ffc59dbe78d5bed30140a514a098",
+      "count": 2,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 178,
+      "code": "nanobind::dict inputs;",
+      "sha256": "26679c41d7950701854b95ce9eb2dec66a15500ea561394657168fac4a6f42ba",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 180,
+      "code": "nanobind::list column;",
+      "sha256": "4e7a2284b44e5926a1d69e2a51488d88aa0a414c3a2b6ed0b9b6e0ce21009d48",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 181,
+      "code": "for(double value:values) {if(std::isfinite(value))column.append(value);else column.append(nanobind::none());}",
+      "sha256": "443389ced3dc9899c6e0b8c1c6297cf4978328ba9be43a84ef5b9e84e910a95d",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 182,
+      "code": "inputs[nanobind::str(std::to_string(id).c_str())]=std::move(column);",
+      "sha256": "4757491121acbf7c8fa15b2438ce7e30588dbce277cfeb3e67c90c7252323113",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 184,
+      "code": "return nanobind::cast<std::map<std::string,double>>(nanobind::module_::import_(\"sst_plotlab.formula_script\").attr(\"run_typed\")(script,inputs));",
+      "sha256": "76194c896bfa325b2f79e282b1b37f8705ce2ae889eb668f6e45fdf39f1b5d19",
+      "count": 2,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 415,
+      "code": "if(!PythonInterpreter::IsRuntimeInitialized())throw std::invalid_argument(\"Embedded Python is unavailable\");",
+      "sha256": "9ce65c3fc01b0acfbacfa6f68a950110f69c1f325c88dfd77bc026431dff152c",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 417,
+      "code": "auto validator=nanobind::module_::import_(\"sst_plotlab.formula_script\");",
+      "sha256": "7a65e30e608e2e978ca9b41eb131d7d9f319a6cc5be2515527159f84534fa482",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 418,
+      "code": "f.variables=nanobind::cast<std::vector<std::string>>(validator.attr(\"declared\")(f.beforeScript));",
+      "sha256": "58f670fcb921bb77d2c1fe5eabf8d9b0e68af6c64ae7e52d6992a5a4768c51a6",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 419,
+      "code": "f.scriptInputs=nanobind::cast<std::vector<pl::Id>>(validator.attr(\"inputs\")(f.beforeScript));",
+      "sha256": "6681af274632804f94cf59a5566d9e52d13e828eb01002d67ab8017eefe39648",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 502,
+      "code": "if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error(\"Embedded Python is unavailable\");",
+      "sha256": "aa501894f227b9acc3e04ac65ee0c0599b03dd8b3c1836dc6210f08bdbab8c0a",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 503,
+      "code": "nb::gil_scoped_acquire gil;",
+      "sha256": "feedf923911cc3f7a3cf74760880942d7a14e0a0c9c8fb05dd36a0ca03ea90c5",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 504,
+      "code": "auto sys=nb::module_::import_(\"sys\");",
+      "sha256": "41e43da8901a9387844029aae726fa54c3a740465aac2cd7a0043758d490a0ba",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 507,
+      "code": "const auto path=nb::str(reinterpret_cast<const char*>(raw.c_str()));",
+      "sha256": "c94aeec312421d6ad6225d9449bcbc3382262bf615ade854d9ea7f2fe9e11367",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 508,
+      "code": "if(!nb::cast<bool>(paths.attr(\"__contains__\")(path))) paths.attr(\"append\")(path);",
+      "sha256": "35e7c072361579175a826d923da6bdff322a4cfcffd9c3666099f47aa81b4911",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 509,
+      "code": "auto module = nb::module_::import_(\"_sst_plotlab\");",
+      "sha256": "22b284c8fe8a91d09655592bbddc4732bada9e6f5999f0971ed22a7514c36d1c",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 510,
+      "code": "if (active) module.attr(\"active_document\") = nb::cast(active, nb::rv_policy::reference);",
+      "sha256": "f55af45418e126066cb7177be00a9bb0fb71a0d7c23fd939fe64dc893c7d90f9",
+      "count": 2,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 523,
+      "code": "nanobind::class_<Document>(module, \"WorksheetSession\")",
+      "sha256": "8385f05714b8e6bd96cb5605aa5b6f5f659ca1cb39119427755669356f1cd1ff",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 531,
+      "code": "if(PyImport_AppendInittab(\"_sst_plotlab\", PyInit__sst_plotlab)!=0) std::terminate();",
+      "sha256": "e8b4207850b45111ac34ede8010c1e6aa1c699a70431b39dedb0b0b8a07ffaa6",
+      "count": 1,
+      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
     }
   ],
   "known-debt": [
@@ -5767,330 +5929,6 @@
       "sha256": "f5fcac1f5f4b6fea4d4bfb361705df7230446260fa4ef9dcddb13674ba60b1c8",
       "count": 2,
       "reason": "F33: embedded Python prefit bridge converts typed curves; retained until prefit migration."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 164,
-      "code": "return nlohmann::json::parse(nanobind::cast<std::string>(result)).get<std::map<std::string,double>>();",
-      "sha256": "edd923abd21e63d535b3f38cb4f25a05a1976a8be65d64b07c565e6fa87ac908",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 367,
-      "code": "const auto request=nlohmann::json::parse(work->request);",
-      "sha256": "c3393eec94ee8e636a0c87849c45847a29a39ce3a694546f779ca8f8fba8eee0",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 373,
-      "code": "dataResult=nlohmann::json{{\"ok\",true},{\"result\",{{\"job_id\",dataJob},{\"elapsed_ms\",work->elapsedMs},{\"state\",\"completed\"},{\"worksheet_ids\",created}}}}.dump();",
-      "sha256": "b876e113ea0503fcb1625e143034e710cf599cc33a95d96944b751a02fb8a085",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 374,
-      "code": "} catch(const std::exception& e) {dataResult=nlohmann::json{{\"ok\",false},{\"error\",{{\"type\",status->status==JobStatus::Completed?\"conflict\":\"validation\"},{\"message\",e.what()}}}}.dump();}",
-      "sha256": "43aa82b74f2fd22cda55e32f346109377ab7bc06b9c1dc198c86ea20acca017e",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 382,
-      "code": "auto request = Json::parse(requestJson);",
-      "sha256": "6d346fc9c7633a423bed9dfb1d7c4da731cb75cd684a0b6c5a0940e45d654d80",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 390,
-      "code": "if(action==\"data_status\") { PollDataOperation(); return dataJob?Json{{\"ok\",true},{\"result\",{{\"state\",\"running\"},{\"job_id\",dataJob}}}}.dump():dataResult.empty()?Json{{\"ok\",true},{\"result\",{{\"state\",\"idle\"}}}}.dump():dataResult; }",
-      "sha256": "baa804cc285dbe7f066d7f1be50330f7be25cb829b2fc2b2999b1d0225ee692e",
-      "count": 2,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 395,
-      "code": "auto work=CreateRef<DataJob>(); work->snapshot=project->operationSnapshot(); work->base=project; work->revision=project->revision(); work->request=request.dump();",
-      "sha256": "cee7b856a88d08f4139577f4623d73cf6eba7bdf001a48d8877c5b373e48a198",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 398,
-      "code": "if(!request.value(\"wait\",true)) return Json{{\"ok\",true},{\"result\",{{\"job_id\",dataJob},{\"state\",\"running\"}}}}.dump();",
-      "sha256": "2099a4f5ef0034aab378a56cc189900513888492bd037cadb215a63dba66f55e",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 407,
-      "code": "} else if (action == \"snapshot\") result = Json::parse(project->toJson());",
-      "sha256": "97930245603d7b5a5023e01b9893d5ab2d48b209520c403844bcd0d97c0dcfc9",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 408,
-      "code": "else if (action == \"load_project\") Open(CreateRef<pl::Project>(pl::Project::fromJson(request.at(\"project\").dump())), {});",
-      "sha256": "027861d1e89e75999a9c5128954af7fc7fc8ed51f7ef29ff185c2ff8210e08c5",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 429,
-      "code": "request[\"variables\"]=Json::parse(nanobind::cast<std::string>(validator.attr(\"declared_json\")(script)));",
-      "sha256": "1c6e857946dea5d0ad90a2496500f40a6fd56eb76669e46f3143e111ce22a867",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 430,
-      "code": "request[\"script_input_ids\"]=Json::parse(nanobind::cast<std::string>(validator.attr(\"inputs_json\")(script)));",
-      "sha256": "3aef3e3451dc72c3e765966c8ee2d571b7d8d011c4a1a2743e8626c00d06d415",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 435,
-      "code": "Execute(project->worksheetEdit(request.dump()));",
-      "sha256": "3bfead0106983351ea165b1137761fbca27942bb13feeae5bbd2be8e145a6e57",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 447,
-      "code": "} else Execute(project->worksheetEdit(request.dump()));",
-      "sha256": "a8a0114714cbfa4bde172edf76ce81d3d245b6cdd8309d1c40dcef54ff654dce",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 448,
-      "code": "return Json{{\"ok\",true},{\"result\",result}}.dump();",
-      "sha256": "ec9c9bc67913a8376e023bd3acaddb9fc175af1cd06e10a4a1474804123a8cf4",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 450,
-      "code": "return Json{{\"ok\",false},{\"error\",{{\"type\",\"not_found\"},{\"message\",e.what()}}}}.dump();",
-      "sha256": "e8ff7ea9ebf3bb54019271412a23ffbf77b7054daf3492f32d841f25909fa765",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "text-json",
-      "line": 457,
-      "code": "return Json{{\"ok\",false},{\"error\",{{\"type\",type},{\"message\",message}}}}.dump();",
-      "sha256": "700263e845e30d799faf09cb6eeafa1a2e9af81b4ec3c021a21af1e401211ec7",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 45,
-      "code": "std::optional<nanobind::gil_scoped_release> release;",
-      "sha256": "8fd9a2458d6e60583e89bb3a9161874cab530b07b7ffbc5461931728b625f1db",
-      "count": 2,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 46,
-      "code": "if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check()) release.emplace();",
-      "sha256": "bd7d9d67b70737c8f7e71f51755b6579085d7147a1db10e825a9b8096c986cd7",
-      "count": 4,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 161,
-      "code": "if(!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error(\"Embedded Python is unavailable\");",
-      "sha256": "52505f46c0c0888984ec7c06548cafe91a30711d301f676f2a98a468a0ac95f5",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 162,
-      "code": "nanobind::gil_scoped_acquire gil;",
-      "sha256": "c938f47556d4a7aca68169fea8ab4e1db396ffc59dbe78d5bed30140a514a098",
-      "count": 2,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 163,
-      "code": "auto result=nanobind::module_::import_(\"sst_plotlab.formula_script\").attr(\"run\")(script,data);",
-      "sha256": "438217e9615fd0b12555b6ec7ef10b8d4cb5daa810e919ff6690447018fa2f25",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 164,
-      "code": "return nlohmann::json::parse(nanobind::cast<std::string>(result)).get<std::map<std::string,double>>();",
-      "sha256": "edd923abd21e63d535b3f38cb4f25a05a1976a8be65d64b07c565e6fa87ac908",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 426,
-      "code": "if(!PythonInterpreter::IsRuntimeInitialized()) throw std::invalid_argument(\"Embedded Python is unavailable\");",
-      "sha256": "45560596c6411f4dcc9f12738fa704a6997a6384c47c3b0c0ae89544d9d0c67d",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 428,
-      "code": "auto validator=nanobind::module_::import_(\"sst_plotlab.formula_script\");",
-      "sha256": "7a65e30e608e2e978ca9b41eb131d7d9f319a6cc5be2515527159f84534fa482",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 429,
-      "code": "request[\"variables\"]=Json::parse(nanobind::cast<std::string>(validator.attr(\"declared_json\")(script)));",
-      "sha256": "1c6e857946dea5d0ad90a2496500f40a6fd56eb76669e46f3143e111ce22a867",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 430,
-      "code": "request[\"script_input_ids\"]=Json::parse(nanobind::cast<std::string>(validator.attr(\"inputs_json\")(script)));",
-      "sha256": "3aef3e3451dc72c3e765966c8ee2d571b7d8d011c4a1a2743e8626c00d06d415",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 464,
-      "code": "if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error(\"Embedded Python is unavailable\");",
-      "sha256": "aa501894f227b9acc3e04ac65ee0c0599b03dd8b3c1836dc6210f08bdbab8c0a",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 465,
-      "code": "nb::gil_scoped_acquire gil;",
-      "sha256": "feedf923911cc3f7a3cf74760880942d7a14e0a0c9c8fb05dd36a0ca03ea90c5",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 466,
-      "code": "auto sys=nb::module_::import_(\"sys\");",
-      "sha256": "41e43da8901a9387844029aae726fa54c3a740465aac2cd7a0043758d490a0ba",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 469,
-      "code": "const auto path=nb::str(reinterpret_cast<const char*>(raw.c_str()));",
-      "sha256": "c94aeec312421d6ad6225d9449bcbc3382262bf615ade854d9ea7f2fe9e11367",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 470,
-      "code": "if(!nb::cast<bool>(paths.attr(\"__contains__\")(path))) paths.attr(\"append\")(path);",
-      "sha256": "35e7c072361579175a826d923da6bdff322a4cfcffd9c3666099f47aa81b4911",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 471,
-      "code": "auto module = nb::module_::import_(\"_sst_plotlab\");",
-      "sha256": "22b284c8fe8a91d09655592bbddc4732bada9e6f5999f0971ed22a7514c36d1c",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 472,
-      "code": "if (active) module.attr(\"active_document\") = nb::cast(active, nb::rv_policy::reference);",
-      "sha256": "f55af45418e126066cb7177be00a9bb0fb71a0d7c23fd939fe64dc893c7d90f9",
-      "count": 2,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 485,
-      "code": "nanobind::class_<Document>(module, \"WorksheetSession\")",
-      "sha256": "8385f05714b8e6bd96cb5605aa5b6f5f659ca1cb39119427755669356f1cd1ff",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 493,
-      "code": "if(PyImport_AppendInittab(\"_sst_plotlab\", PyInit__sst_plotlab)!=0) std::terminate();",
-      "sha256": "e8b4207850b45111ac34ede8010c1e6aa1c699a70431b39dedb0b0b8a07ffaa6",
-      "count": 1,
-      "reason": "F27 F28: legacy PlotLab JSON command/formula Python bridge remains in the data path."
     }
   ]
 }

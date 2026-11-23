@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
-#include <nlohmann/json.hpp>
 #include <imgui.h>
 #include <sst/ui/Widgets/LabelledControls.hpp>
 #include <limits>
@@ -160,8 +159,8 @@ namespace SST::Prototypes::PlotLab
     {
         state->document->project->pollRecompute();
         state->document->PollDataOperation();
-        const auto dataStatus=nlohmann::json::parse(state->document->WorksheetCommand("{\"action\":\"data_status\"}"));
-        if(!dataStatus.at("ok").get<bool>()) state->status=dataStatus.at("error").at("message").get<std::string>();
+        const auto dataStatus=state->document->DataStatus();
+        if(dataStatus.error)state->status=dataStatus.message;
         if (state->openJob) {
             const auto job = state->jobs->GetJob(state->openJob);
             if (job && job->status != JobStatus::Queued && job->status != JobStatus::Running) {
@@ -437,31 +436,27 @@ namespace SST::Prototypes::PlotLab
         if(dataAction==11) {operationMode=std::clamp(operationMode,0,3);widgets::Combo("Normalization",&operationMode,"Max\0Range\0Area\0Value at X\0");if(operationMode==3) widgets::Double("Normalize at X (X units)",&normalizationX);}
         if(dataAction==13) {operationMode=std::clamp(operationMode,0,1);widgets::Combo("Statistics axis",&operationMode,"Column\0Row\0");widgets::Checkbox("Exclude filtered rows",&excludeFiltered);}
         auto submit=[&](bool clear) {
-            using Json=nlohmann::json; static const char* ids[]={"sort","filter","mask","find_replace","transpose","stack","unstack","split","join","extract","reduce","normalize","interpolate","statistics"};
-            Json request={{"action",ids[dataAction]},{"worksheet_id",sheet},{"column_id",columns[dataColumn]},{"name",operationName}};
-            if(!operationColumns.empty()) request["column_ids"]=operationColumns;
-            if(dataAction==0) {Json keys=Json::array({{{"column_id",columns[dataColumn]},{"descending",descending}}});for(const auto& [key,desc]:nestedKeys) keys.push_back({{"column_id",key},{"descending",desc}});request["keys"]=keys;request["column_only"]=columnOnly;request["confirm_break_rows"]=confirmBreak;request["wait"]=false;}
-            if(dataAction==1 || dataAction==9) {
-                static const char* kinds[]={"range","equality","contains","top_n"};Json filter={{"column_id",columns[dataColumn]},{"kind",kinds[filterKind]}};
-                if(filterKind==0) {filter["minimum_column_units"]=filterMinimum;filter["maximum_column_units"]=filterMaximum;}
-                else if(filterKind==3) filter["count"]=topN;
-                else filter["value"]=std::get<pl::Column>(p.object(columns[dataColumn]).data).values.index()==0?Json(filterMinimum):Json(filterText);
-                auto filters=clear?Json::array():Json::parse(std::get<pl::Worksheet>(p.object(sheet).data).filters);
-                std::erase_if(filters.get_ref<Json::array_t&>(),[&](const auto& f){return f.at("column_id")==columns[dataColumn];});if(!clear) filters.push_back(filter);request["filters"]=filters;request["wait"]=false;
+            pl::DataRequest request;request.action=static_cast<pl::DataAction>(dataAction);request.worksheet=sheet;request.column=columns[dataColumn];request.name=operationName;
+            if(!operationColumns.empty())request.columns=std::vector<pl::Id>(operationColumns.begin(),operationColumns.end());
+            if(dataAction==0){request.keys={{columns[dataColumn],descending}};request.keys.insert(request.keys.end(),nestedKeys.begin(),nestedKeys.end());request.columnOnly=columnOnly;request.confirmBreakRows=confirmBreak;}
+            if(dataAction==1 || dataAction==9){
+                pl::Filter filter;filter.column=columns[dataColumn];filter.kind=static_cast<pl::FilterKind>(filterKind);filter.minimum=filterMinimum;filter.maximum=filterMaximum;if(topN<0)throw std::invalid_argument("Expected nonnegative count");filter.count=topN;
+                filter.value=std::get<pl::Column>(p.object(filter.column).data).values.index()==0?pl::CellValue{filterMinimum}:pl::CellValue{filterText};
+                if(!clear){request.filters=std::get<pl::Worksheet>(p.object(sheet).data).filters;std::erase_if(request.filters,[&](const auto& f){return f.column==filter.column;});request.filters.push_back(std::move(filter));}
             }
-            if(dataAction==2) {request["row_from"]=maskFirst;request["row_to"]=maskEnd;request["masked"]=!clear;request["color_rgba"]=ImGui::ColorConvertFloat4ToU32(maskTint);if(maskRows) request.erase("column_id");}
-            if(dataAction==3) {const bool numeric=std::get<pl::Column>(p.object(columns[dataColumn]).data).values.index()==0;request["find"]=numeric?Json(filterMinimum):Json(filterText);request["replace"]=numeric?Json(replaceNumber):Json(replacement);request["column_ids"]={columns[dataColumn]};}
-            if(dataAction==6) {request["key_column_id"]=columns[dataSecondColumn];request["value_column_id"]=columns[dataColumn];}
-            if(dataAction==7) request["at_row"]=maskEnd;
-            if(dataAction==8) request["other_worksheet_id"]=joinSheet;
-            if(dataAction==11 || dataAction==12) request["x_column_id"]=columns[dataSecondColumn];
-            if(dataAction==11) request["x_value_column_units"]=normalizationX;
-            if(dataAction==12) request["new_x_column_units"]=Json::parse("["+filterText+"]");
-            if(dataAction==10) {request["every_n"]=everyN;request["mode"]=operationMode==1?"group_average":"every_nth";}
-            if(dataAction==11) {static const char* modes[]={"max","range","area","value_at_x"};request["mode"]=modes[std::clamp(operationMode,0,3)];}
-            if(dataAction==13) {request["axis"]=operationMode==1?"row":"column";request["exclude_filtered"]=excludeFiltered;}
-            auto response=Json::parse(doc.WorksheetCommand(request.dump()));if(!response.at("ok").get<bool>()) throw std::runtime_error(response.at("error").at("message").get<std::string>());
-            if(response.at("result").contains("worksheet_ids")) for(const auto& id:response.at("result").at("worksheet_ids")) state->Show(id.get<pl::Id>());
+            if(dataAction==2){if(maskFirst<0 || maskEnd<0)throw std::invalid_argument("Expected nonnegative row index");request.rowFrom=maskFirst;request.rowTo=maskEnd;request.masked=!clear;request.color=ImGui::ColorConvertFloat4ToU32(maskTint);if(maskRows)request.column=0;}
+            if(dataAction==3){const bool numeric=std::get<pl::Column>(p.object(columns[dataColumn]).data).values.index()==0;request.find=numeric?pl::CellValue{filterMinimum}:pl::CellValue{filterText};request.replacement=numeric?pl::CellValue{replaceNumber}:pl::CellValue{replacement};request.columns=std::vector<pl::Id>{columns[dataColumn]};}
+            if(dataAction==6){request.keyColumn=columns[dataSecondColumn];request.valueColumn=columns[dataColumn];}
+            if(dataAction==7){if(maskEnd<0)throw std::invalid_argument("Expected nonnegative row index");request.atRow=maskEnd;}
+            if(dataAction==8)request.otherWorksheet=joinSheet;
+            if(dataAction==11 || dataAction==12)request.xColumn=columns[dataSecondColumn];
+            if(dataAction==11){request.xValue=normalizationX;request.normalization=static_cast<pl::Normalization>(std::clamp(operationMode,0,3));}
+            if(dataAction==12)request.newX=ParseNumericList(filterText);
+            if(dataAction==10){if(everyN<0)throw std::invalid_argument("Expected nonnegative stride");request.everyN=everyN;request.reduction=operationMode==1?pl::Reduction::GroupAverage:pl::Reduction::EveryNth;}
+            if(dataAction==13){request.axis=operationMode==1?pl::StatisticsAxis::Row:pl::StatisticsAxis::Column;request.excludeFiltered=excludeFiltered;}
+            auto response=doc.WorksheetCommand(std::move(request),dataAction!=0 && dataAction!=1 && dataAction!=9);
+            if(response.error)throw std::runtime_error(response.message);
+            for(auto id:response.worksheets)state->Show(id);
         };
         if(ImGui::Button("Apply operation")) Attempt([&]{submit(false);});
         if(dataAction==1 || dataAction==2) {ImGui::SameLine();if(ImGui::Button(dataAction==1?"Clear all filters":"Unmask range")) Attempt([&]{submit(true);});}
@@ -539,18 +534,18 @@ namespace SST::Prototypes::PlotLab
             if (ImGui::BeginPopup("Header rows")) {
                 for (const auto* header : pl::headerNames) {
                     bool visible = std::find(sheet.hiddenHeaders.begin(), sheet.hiddenHeaders.end(), header) == sheet.hiddenHeaders.end();
-                    if (sst::ui::widgets::Checkbox(header, &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","header_visibility"},{"worksheet_id",id},{"header",header},{"visible",visible}}.dump())); });
+                    if (sst::ui::widgets::Checkbox(header, &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(pl::HeaderVisibility{id,header,visible})); });
                 }
                 for (const auto& row : sheet.parameters) {
                     ImGui::PushID(static_cast<int>(row.id));
                     bool visible = row.visible;
-                    if (sst::ui::widgets::Checkbox(row.name.c_str(), &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_visibility"},{"worksheet_id",id},{"parameter_id",row.id},{"visible",visible}}.dump())); });
+                    if (sst::ui::widgets::Checkbox(row.name.c_str(), &visible)) Attempt([&] { doc.Execute(p.worksheetEdit(pl::ParameterVisibility{id,row.id,visible})); });
                     ImGui::SameLine();
-                    if (ImGui::SmallButton("Remove")) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_remove"},{"worksheet_id",id},{"parameter_id",row.id}}.dump())); });
+                    if (ImGui::SmallButton("Remove")) Attempt([&] { doc.Execute(p.worksheetEdit(pl::RemoveParameter{id,row.id})); });
                     ImGui::PopID();
                 }
                 sst::ui::widgets::Text("Parameter name", &parameterName);
-                if (ImGui::Button("Add parameter")) Attempt([&] { doc.Execute(p.worksheetEdit(nlohmann::json{{"action","parameter_add"},{"worksheet_id",id},{"name",parameterName}}.dump())); parameterName.clear(); });
+                if (ImGui::Button("Add parameter")) Attempt([&] { doc.Execute(p.worksheetEdit(pl::AddParameter{id,parameterName})); parameterName.clear(); });
                 ImGui::EndPopup();
             }
             if (columns.size() > 0 && ImGui::BeginTable("data", static_cast<int>(columns.size() + 1),
@@ -624,10 +619,8 @@ namespace SST::Prototypes::PlotLab
                             std::string text = parameter ? (col.parameters.contains(parameter)?col.parameters.at(parameter):"") : label=="Long Name"?col.longName:label=="Units"?col.units:col.comments;
                             ImGui::SetNextItemWidth(-1);
                             if(ImGui::InputText("##header",&text,ImGuiInputTextFlags_EnterReturnsTrue)) Attempt([&] {
-                                nlohmann::json request={{"column_id",columns[index]}};
-                                if(parameter) { request["action"]="parameter_value"; request["parameter_id"]=parameter; request["value"]=text; }
-                                else { request["action"]="column_settings"; request[label=="Long Name"?"long_name":label=="Units"?"units":"comments"]=text; }
-                                doc.Execute(p.worksheetEdit(request.dump()));
+                                if(parameter)doc.Execute(p.worksheetEdit(pl::ParameterValue{columns[index],parameter,text}));
+                                else {pl::ColumnSettings request;request.column=columns[index];if(label=="Long Name")request.longName=text;else if(label=="Units")request.units=text;else request.comments=text;doc.Execute(p.worksheetEdit(request));}
                             });
                         }
                         ImGui::PopID(); ImGui::PopID(); ImGui::PopID();
@@ -636,7 +629,7 @@ namespace SST::Prototypes::PlotLab
                 for(const auto* h:pl::headerNames) if(std::find(sheet.hiddenHeaders.begin(),sheet.hiddenHeaders.end(),h)==sheet.hiddenHeaders.end()) headerRow(h,0);
                 for(const auto& row:sheet.parameters) if(row.visible) headerRow(row.name,row.id);
                 ImGuiListClipper clipper;
-                const bool filtering=sheet.filters!="[]";
+                const bool filtering=!sheet.filters.empty();
                 clipper.Begin(static_cast<int>(filtering?sheet.visibleRows.size():rows.size()));
                 while (clipper.Step())
                     for (int visibleRow = clipper.DisplayStart; visibleRow < clipper.DisplayEnd; ++visibleRow)
@@ -1002,10 +995,9 @@ namespace SST::Prototypes::PlotLab
                 Attempt(
                     [&]
                     {
-                        static const char* modes[]={"general","decimal","significant","scientific","engineering","text","date_time","categorical"};
                         auto group=doc.undo->ScopedGroup("Column metadata");
                         try {
-                            doc.Execute(p.worksheetEdit(nlohmann::json{{"action","column_settings"},{"column_id",metadata},{"long_name",longName},{"units",units},{"comments",comments},{"role",pl::roleTag(static_cast<pl::Role>(role))},{"display",{{"mode",modes[displayMode]},{"digits",displayDigits}}}}.dump()));
+                            doc.Execute(p.worksheetEdit(pl::ColumnSettings{metadata,static_cast<pl::Role>(role),longName,units,comments,pl::DisplayFormat{static_cast<pl::DisplayMode>(displayMode),static_cast<unsigned>(displayDigits)}}));
                             if(p.object(metadata).name!=name) doc.Rename(metadata,name);
                             auto result=group.Commit(); if(!result) throw std::runtime_error(result.Error().technicalDetails);
                         } catch(...) { (void)group.Cancel(); throw; }
@@ -1032,13 +1024,13 @@ namespace SST::Prototypes::PlotLab
                 ImGui::TreePop();
             }
             if (ImGui::Button("Set Column Values")) Attempt([&] {
-                auto response=nlohmann::json::parse(doc.WorksheetCommand(nlohmann::json{{"action","set_column_values"},{"column_id",metadata},{"expression",formula},{"row_from",rowFrom},{"row_to",rowTo},{"before_script",beforeScript},{"exclude_filtered",excludeFiltered},{"recalculate",pl::recalculateModes[recalculate]}}.dump()));
-                if(!response.at("ok").get<bool>()) throw std::runtime_error(response.at("error").at("message").get<std::string>());
+                if(rowFrom<0 || rowTo<0)throw std::invalid_argument("Expected nonnegative row index");
+                pl::SetColumnValues request;request.column=metadata;request.formula.expression=formula;request.formula.rowFrom=rowFrom;request.formula.rowTo=rowTo;request.formula.beforeScript=beforeScript;request.formula.excludeFiltered=excludeFiltered;request.formula.recalculate=static_cast<pl::RecalculateMode>(recalculate);
+                doc.WorksheetCommand(std::move(request));
             });
             ImGui::SameLine();
             if(ImGui::Button("Recalculate now")) Attempt([&] {
-                auto result=nlohmann::json::parse(doc.WorksheetCommand("{\"action\":\"recompute\",\"wait\":false}"));
-                if(!result.at("ok").get<bool>()) throw std::runtime_error(result.at("error").at("message").get<std::string>());
+                (void)p.recompute();
             });
             ImGui::SameLine();
             if (ImGui::Button("Detach formula"))

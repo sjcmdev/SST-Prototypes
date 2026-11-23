@@ -43,15 +43,20 @@ def _tree(script):
             raise ValueError("Only finite numeric constants are allowed")
     return tree
 
+def declared(script):
+    return [node.targets[0].id for node in _tree(script).body]
+
 def declared_json(script):
-    return json.dumps([node.targets[0].id for node in _tree(script).body])
+    return json.dumps(declared(script))
+
+def inputs(script):
+    return sorted({node.args[0].value for node in ast.walk(_tree(script))
+                              if isinstance(node, ast.Call) and node.func.id == "col"})
 
 def inputs_json(script):
-    return json.dumps(sorted({node.args[0].value for node in ast.walk(_tree(script))
-                              if isinstance(node, ast.Call) and node.func.id == "col"}))
+    return json.dumps(inputs(script))
 
-def run(script, data_json):
-    data = json.loads(data_json)
+def run_typed(script, data):
     variables = dict(pi=math.pi, e=math.e)
     def column(id):
         if type(id) not in (int, float) or int(id) != id or str(int(id)) not in data:
@@ -85,4 +90,7 @@ def run(script, data_json):
         if type(value) not in (int, float) or not math.isfinite(value):
             raise ValueError("Before formula assignments must be finite numeric scalars")
         variables[statement.targets[0].id] = value
-    return json.dumps({name: variables[name] for name in json.loads(declared_json(script))}, allow_nan=False)
+    return {name: variables[name] for name in declared(script)}
+
+def run(script, data_json):
+    return json.dumps(run_typed(script, json.loads(data_json)), allow_nan=False)
