@@ -1,11 +1,15 @@
-﻿#pragma once
+#pragma once
 #include "Workflow.hpp"
+#include "Domain/ParameterBounds.hpp"
 #include "Commands/Commands.hpp"
 #include <cmath>
 #include <algorithm>
 #include "Core/Presentation/Panels/EditorWindow.hpp"
 namespace SST {class Application;}
 namespace SST::ScapsLab {
+Bounds DisplayBounds(std::string_view key,double nativeScale=1);
+bool DrawBoundValue(const char* id,double& value,std::string_view key,double nativeScale=1,const void* address=nullptr,const char* label="");
+void DrawParameterBoundsPreferences(Workflow&);
 void DrawHistory(Workflow &workflow,bool global=false);
 int PlotCacheBuildCount();   // test hooks (S3): number of plot-cache (re)builds so far, and the sum of all finite cached values
 double PlotCacheSum();
@@ -18,10 +22,10 @@ inline std::string &UiSettingsPath() {static std::string path;return path;}
 inline bool PanelShown(int view) {if(ExperimentalPanels())return true;for(const int p:kBasicPanels)if(p==view)return true;return false;}
 // Slider maths (UI-free, unit-tested). Position t in [0,1]: linear, or logarithmic (decades) for log sliders.
 struct SliderMap {
-    double lo=0,hi=1;bool log=false;
+    double lo=0,hi=1;bool log=false;double step=0;
     double ToT(double v) const {const double t=log?(std::log(std::max(v,lo))-std::log(lo))/(std::log(hi)-std::log(lo)):(v-lo)/(hi-lo);return std::clamp(t,0.,1.);}
     double FromT(double t) const {t=std::clamp(t,0.,1.);return log?lo*std::exp(t*(std::log(hi)-std::log(lo))):lo+t*(hi-lo);}
-    double Step(double v,double steps) const {return log?std::clamp(v*std::pow(10.,.01*steps),lo,hi):std::clamp(v+.01*steps*(hi-lo),lo,hi);} // arrow/wheel: 1% of range, log: 0.01 decade
+    double Step(double v,double steps) const {return log?std::clamp(v*std::pow(10.,.01*steps),lo,hi):std::clamp(v+steps*(step>0?step:.01*(hi-lo)),lo,hi);} // arrow/wheel: 1% of range, log: 0.01 decade
 };
 inline double MantissaExponentValue(double m,double e,const SliderMap &r) {return std::clamp(m*std::pow(10.,e),r.lo,r.hi);}
 inline void SplitMantissaExponent(double v,double &m,int &e) {e=int(std::floor(std::log10(v)));m=v/std::pow(10.,e);if(m>=10){m/=10;++e;}else if(m<1){m*=10;--e;}}
@@ -38,8 +42,7 @@ struct SliderDrag {
 inline double SliderScale(bool shift,bool ctrl,bool lock) {return shift&&ctrl?.01:(shift||lock)?.1:1.;} // Shift = 10x slower, Ctrl+Shift = 100x, F toggle = Shift
 struct SweepControlState {
     SweepEditor editor;
-    std::string customText,error;
-    double sliderLo=0,sliderHi=1,stepHi=1;
+    std::string customText,error,parameterKey;
 };
 class Panel final : public EditorWindow {
 public:

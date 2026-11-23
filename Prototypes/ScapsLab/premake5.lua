@@ -1,6 +1,14 @@
 ﻿newoption { trigger = "scaps-core", value = "PATH", description = "Read-only scaps_core checkout (default ../scaps_core)" }
 local scaps = path.getabsolute(_OPTIONS["scaps-core"] or "../scaps_core", _SST_ROOT)
 local root = _SST_ROOT .. "/Prototypes/ScapsLab"
+-- One versioned source for shipped config and the emergency compiled fallback.
+local boundsFile = assert(io.open(root .. "/config/parameter_bounds.yaml", "rb"))
+local boundsText = boundsFile:read("*a"); boundsFile:close()
+os.mkdir(_SST_ROOT .. "/build/generated/config")
+local boundsHeader = assert(io.open(_SST_ROOT .. "/build/generated/config/ScapsLabBounds.inc", "wb"))
+boundsHeader:write('(std::string{}')
+for i=1,#boundsText,8000 do boundsHeader:write(' + R"bounds(' .. boundsText:sub(i,i+7999) .. ')bounds"') end
+boundsHeader:write(')'); boundsHeader:close()
 local solverStamp = os.outputof('powershell -NoProfile -Command "$files=Get-ChildItem -Path \'' .. scaps .. '/src\',\'' .. scaps .. '/include\' -Recurse -File | Sort-Object FullName; $joined=($files | Get-FileHash -Algorithm SHA256 | ForEach-Object Hash) -join \'\'; [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($joined))).Replace(\'-\',\'\')"')
 if not solverStamp or not solverStamp:match("^%x+") then error("Cannot identify scaps_core source version") end
 solverStamp = solverStamp:sub(1,16)
@@ -39,11 +47,16 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
     targetdir (_SST_ROOT .. "/build/bin/" .. outputdir .. "/%{prj.name}")
     objdir (_SST_ROOT .. "/build/bin-int/" .. outputdir .. "/%{prj.name}")
     includedirs { _SST_ROOT, _SST_ROOT .. "/Core", root .. "/src", scaps .. "/include",
+        _SST_ROOT .. "/build/generated/config",
         _SST_ROOT .. "/Vendor/ImGui", _SST_ROOT .. "/Vendor/implot", _SST_ROOT .. "/Vendor/GLFW/include",
         _SST_ROOT .. "/Vendor/GLAD/generated/include", _SST_ROOT .. "/Vendor/spdlog/include",
         _SST_ROOT .. "/Vendor/thread-pool/include", _SST_ROOT .. "/Vendor/json/include",
         _SST_ROOT .. "/Vendor/yaml-cpp/include", _SST_ROOT .. "/Vendor/GoogleTest/googletest/include" }
     links { "Core", "ScapsCore" }
+    if name ~= "ScapsLabHeadless" then
+        files { root .. "/src/Domain/ParameterBounds.cpp" }
+        postbuildcommands { '{COPYFILE} "' .. root .. '/config/parameter_bounds.yaml" "%{cfg.targetdir}/parameter_bounds.yaml"' }
+    end
     if name ~= "ScapsLabHeadless" then
         sst_link_ui(); sst_link_plotlab()
         files { _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabExport.cpp" }

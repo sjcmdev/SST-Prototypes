@@ -28,7 +28,7 @@
 namespace SST {class IOLayer;}
 namespace SST::ScapsLab {
 using Json = nlohmann::json;
-Json ReadProject(const std::string &path);
+Json ReadProject(const std::string &path,std::vector<std::string>* importWarnings=nullptr);
 Json NewDeviceDocument(); // template device with SCAPS-like flat-band contacts (engine default and example decks untouched)
 Json NormalizeDocument(Json document);
 scaps_core::Profile ProfileFromJson(const Json &spec, bool logarithmic=false);
@@ -322,6 +322,10 @@ public:
     Ref<CommandRegistry> commands;
     Ref<EventBus> bus;
     Ref<Notifier> notifier;
+    bool boundsFileBusy=false;
+    bool bindingBoundsReply=false; // the binding keeps file diagnostics scoped to its current request
+    std::string boundsFileDiagnostic;
+    void BoundsFileTyped(BoundsFileAction action) override;
     template<class E> void Emit(E e) {bus->Publish(e);}
     void WatchPlots(); // UI thread: start bumping plotGen on plot-affecting events
     std::uint64_t docGen=0;  // bumped by DocumentEdited only: result plots are keyed by plotGen (result data), so a drag does not rebuild them

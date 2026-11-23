@@ -1,4 +1,4 @@
-﻿"""ScapsLab embedded API. All operations use Core commands and jobs."""
+"""ScapsLab embedded API. All operations use Core commands and jobs."""
 import json
 import time
 from sst_scapslab import Session as _Session
@@ -24,6 +24,16 @@ class Session:
             if not response['running']:
                 return response['response']
             time.sleep(0.005)
+
+    def parameter_bounds(self):
+        """Effective bounds; numeric limits use the explicit SI unit field."""
+        return self.start(dict(operation='parameter_bounds', action='inspect'))
+
+    def reload_parameter_bounds(self):
+        return self.execute(dict(operation='parameter_bounds', action='reload'))
+
+    def reset_parameter_bounds(self):
+        return self.execute(dict(operation='parameter_bounds', action='reset'))
 
     def project_load(self, path):
         return self.execute(dict(operation='project_load', path=str(path)))

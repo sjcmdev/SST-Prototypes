@@ -26,6 +26,20 @@ template<class D> struct Req {           // JSON-backed request: exact round tri
 };
 #define SL_JOB(T, ...) struct T : Req<T> {static constexpr Info info{__VA_ARGS__};}
 // Calculations (Run.cpp)
+struct BoundsFile : Req<BoundsFile> {
+    static constexpr Info info{"parameter_bounds","Parameter bounds","Inspect or reload parameter bounds","","",true};
+    BoundsFileAction action=BoundsFileAction::Inspect;
+    static BoundsFile Make(BoundsFileAction action){BoundsFile c;c.action=action;return c;}
+    Out Execute(ILabStore& s) const {
+        auto selected=action;
+        if(args.contains("action")) {
+            const auto value=args.at("action").get<std::string>();
+            if(value!="inspect" && value!="reload" && value!="reset")return Reject("invalid_action","Invalid bounds action","Use inspect, reload or reset");
+            selected=value=="reload"?BoundsFileAction::Reload:value=="reset"?BoundsFileAction::Reset:BoundsFileAction::Inspect;
+        }
+        s.BoundsFileTyped(selected);return {};
+    }
+};
 struct Run : Req<Run> {
     static constexpr Info info{"run", "Calculate I-V", "Calculate the J-V curve of the active device", "Simulate/Calculate I-V", "", false, true};
     static Run Make() {return {};}

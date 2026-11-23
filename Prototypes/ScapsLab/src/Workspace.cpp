@@ -30,6 +30,10 @@ RunAction ReadRunAction(ActionKind kind,const Json& value) {
         }
     } else if(kind==ActionKind::Cf) {a.range->minimum=value.value("start_Hz",a.range->minimum);a.range->maximum=value.value("stop_Hz",a.range->maximum);a.range->points=value.value("points",a.range->points);}
     else if(kind==ActionKind::Qe) {a.range->minimum=value.value("start_nm",a.range->minimum);a.range->maximum=value.value("stop_nm",a.range->maximum);a.range->points=value.value("points",a.range->points);}
+    if(a.temperature_K!=0)RequireParameter("temperature_K",a.temperature_K);
+    RequireParameter("voltage_V",a.voltage_V);RequireParameter("frequency_Hz",a.frequency_Hz);
+    RequireParameter("probe_photon_flux_m2_s",a.photon_flux_m2_s);RequireParameter("probe_power_W_m2",a.probe_power_W_m2);
+    if(a.range)for(double x:SweepValues(*a.range))RequireParameter(kind==ActionKind::Cf?"frequency_Hz":kind==ActionKind::Qe?"wavelength_nm":"voltage_V",x);
     return a;
 }
 RunPlan ReadRunPlan(const Json& value) {

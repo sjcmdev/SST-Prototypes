@@ -1,4 +1,5 @@
 #include "Domain/BatchDraft.hpp"
+#include "Domain/ParameterBounds.hpp"
 #include <scaps_core/device_project_def.hpp>
 #include <algorithm>
 #include <cmath>
@@ -214,6 +215,7 @@ BatchPlan PrepareBatch(const ProjectDraft& project,const BatchDraft& input,const
     }
     auto& core=out.engine;core.voltages_V=spec.voltages_V.value_or(scaps_core::make_voltage_list(project.project.voltage));core.frequencies_Hz=spec.frequencies_Hz.value_or(std::vector<double>{});core.columns=recorder.columns;scaps_core::validate_recorder_columns(core.columns);
     if(core.voltages_V.empty() || core.voltages_V.size()>10001)throw std::invalid_argument("Voltage sampling requires 1..10001 points");for(double v:core.voltages_V)if(!std::isfinite(v))throw std::invalid_argument("Invalid voltage sample");if(core.frequencies_Hz.size()>1000)throw std::invalid_argument("Invalid frequency sampling");for(double f:core.frequencies_Hz)if(!std::isfinite(f) || f<=0)throw std::invalid_argument("Frequency must be positive");
+    for(double v:core.voltages_V)RequireParameter("voltage_V",v);for(double f:core.frequencies_Hz)RequireParameter("frequency_Hz",f);
     const auto [low,high]=std::minmax_element(core.voltages_V.begin(),core.voltages_V.end());const double first=*low,last=*high;
     for(const auto& c:core.columns){const double v=c.voltage_V;if(std::isfinite(v) && v>=first && v<=last && std::find(core.voltages_V.begin(),core.voltages_V.end(),v)==core.voltages_V.end())for(std::size_t i=1;i<core.voltages_V.size();++i){const double a=core.voltages_V[i-1],b=core.voltages_V[i];if(v>=std::min(a,b) && v<=std::max(a,b)){core.voltages_V.insert(core.voltages_V.begin()+i,v);break;}}if(std::isfinite(c.frequency_Hz) && std::find(core.frequencies_Hz.begin(),core.frequencies_Hz.end(),c.frequency_Hz)==core.frequencies_Hz.end())core.frequencies_Hz.push_back(c.frequency_Hz);}
     if(core.voltages_V.size()>10001 || core.frequencies_Hz.size()>1000)throw std::invalid_argument("Recorder samples exceed batch sampling limits");spec.voltages_V=core.voltages_V;spec.frequencies_Hz=core.frequencies_Hz;spec.threads=1;out.recorder=recorder;out.recorder.columns=core.columns;core.photovoltaic=true;core.photovoltaic_voltage_limit_V=spec.photovoltaic_voltage_limit_V;core.incident_power_W_m2=spec.incident_power_W_m2;core.mesh_coordinates_m=spec.mesh_coordinates_m;return out;

@@ -17,7 +17,11 @@ void CheckParameters(const Json& document) {
         if(std::any_of(draft->extensions.begin(),draft->extensions.end(),[&](const auto& field){return pointer==field.first || pointer.starts_with(field.first+"/");}))continue;
         const double before=parameter.at("value");
         ASSERT_EQ(std::bit_cast<std::uint64_t>(ProjectParameter(project,path)),std::bit_cast<std::uint64_t>(before))<<path;
-        const double after=parameter.at("value").is_number_integer()?before+1:std::nextafter(before,INFINITY);
+        const auto key=ParameterBoundsKey(path);const auto bounds=BoundsTable()->find(key);const double factor=ParameterToSI(key);
+        if(bounds!=BoundsTable()->end() && !bounds->second.Contains(before*factor))continue; // inactive engine coefficients retain zero; they are not editable physical values
+        const bool integer=bounds!=BoundsTable()->end() && bounds->second.integer;
+        double after=integer?before+1:std::nextafter(before,INFINITY);
+        if(bounds!=BoundsTable()->end() && !bounds->second.Contains(after*factor))after=integer?before-1:std::nextafter(before,-INFINITY);
         SetProjectParameter(project,path,after);EXPECT_EQ(ProjectParameter(project,path),after)<<path;
         SetProjectParameter(project,path,before);
         EXPECT_EQ(std::bit_cast<std::uint64_t>(ProjectParameter(project,path)),std::bit_cast<std::uint64_t>(before))<<path;

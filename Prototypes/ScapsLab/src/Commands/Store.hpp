@@ -14,6 +14,7 @@ using Json = nlohmann::json;
 class ILabStore {
 public:
     virtual ~ILabStore() = default;
+    virtual void BoundsFileTyped(BoundsFileAction) {throw std::logic_error("Parameter bounds unavailable");}
     // queries
     virtual bool Busy() const = 0;                                   // any device lane or the project lane has work
     virtual bool AnyActive() const = 0;                              // a job runs on some device
