@@ -14,12 +14,35 @@ struct InitialStateDraft {
     IlluminationPatch illumination;
     std::map<std::string,std::string> provenance_spellings;
 };
+enum class SweepSampling { Points, Step, List };
+enum class SweepComponent { FullValue, Mantissa, Exponent };
+struct SweepRange {
+    SweepSampling sampling=SweepSampling::Points;
+    bool logarithmic=false;
+    double minimum=270,maximum=330,step=15;
+    int points=5;
+    std::vector<double> custom;
+};
+struct SweepEditor {
+    SweepRange range;
+    SweepComponent component=SweepComponent::FullValue;
+    double fixed=1,displayScale=1;
+    std::string displayUnit;
+};
 struct BatchAxis {
     std::string parameter_id="temperature_K",path,unit,spacing="linear";
     double start=270,stop=330;
     int count=3;
     std::optional<std::vector<double>> values;
+    std::optional<SweepEditor> sweep_ui; // Native values remain authoritative, including after file load.
 };
+std::vector<double> SweepValues(const SweepRange&);
+std::vector<double> ParseSweepList(std::string_view);
+std::vector<double> SweepNativeValues(const SweepEditor&);
+std::vector<double> BatchAxisValues(const BatchAxis&);
+SweepEditor EditSweep(const BatchAxis&,const NumericParameter&);
+SweepEditor NewSweep(const NumericParameter&,SweepComponent,double displayScale=1,std::string displayUnit={});
+BatchAxis PrepareSweepAxis(const ProjectDraft&,const std::string& parameter_id,const SweepEditor&);
 struct RecorderDraft {
     std::vector<scaps_core::RecorderColumn> columns;
     std::shared_ptr<const nlohmann::json> source,canonical;
@@ -29,6 +52,7 @@ struct BatchDraft {
     std::string mode="nested";
     std::vector<BatchAxis> axes{BatchAxis{}};
     bool include_curves=true;
+    bool include_profiles=false;
     int threads=1;
     std::optional<std::vector<double>> voltages_V,frequencies_Hz,mesh_coordinates_m;
     double photovoltaic_voltage_limit_V=2;

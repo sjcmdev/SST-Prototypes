@@ -77,7 +77,7 @@ struct DeviceResults {
     Ref<const RunMap> runs=CreateRef<const RunMap>();
 };
 std::vector<DeviceResults> ExtractResults(Json &workspace);              // moves every result out of a workspace Json into typed form (leaves `{}`; run entries lose "result")
-void AttachResults(Json &device,const Json &history,const DeviceResults &r,bool cached=false); // inverse, for save/export: typed -> Json into one device object (cached: via the results' Json views, for headless/Python where Json is the API)
+void AttachResults(Json &device,const Json &history,const DeviceResults &r,bool cached=false,bool compact=false); // file v4 pools aliases; Python retains the expanded response
 Json HistoryJson(const Json &history,const RunMap &runs,bool cached=false);                 // history with each run's "result" restored
 struct SaveRefs {Ref<const Json> history; DeviceResults results;}; // one device of a save job (immutable, shared with the UI)
 // Live hand-off from a running job to the UI (progressive I-V, photovoltaic estimate, finished batch members). The worker appends under the lock, the UI thread
@@ -92,12 +92,27 @@ struct LiveFeed {
     PvEstimate pv;
     std::vector<LiveMember> members;   // batch members finished so far
     std::size_t memberTotal=0;
+    Ref<const BatchDraft> batch;
     void Point(double V,double J) {std::lock_guard g(lock);v.push_back(V);j.push_back(J);++seq;}
     void Estimate(const PvEstimate &e) {std::lock_guard g(lock);pv=e;++seq;}
     void AddMember(LiveMember m) {std::lock_guard g(lock);members.push_back(std::move(m));++seq;}
 };
 class Operation final : public IJob {
 public:
+    Ref<const RunPlan> runPlan;
+    std::optional<RunAction> action;
+    std::vector<std::pair<ActionKind,Ref<const ResultBase>>> completedActions;
+    std::stop_source cancellation;
+    std::atomic_bool paused=false;
+    std::size_t nextAction=0;
+    std::size_t nextMember=0;
+    Ref<BatchResult> actionBatch;
+    Ref<const BatchPlan> preparedBatch;
+    bool deferMetadata=false,retainProfiles=true,refinePv=true,parallelMember=false;
+    std::optional<scaps_core::BatchSpec> measurement;
+    bool automatic=false;
+    std::uint64_t revision=0;
+    int detailBias=0;
     Json document, request, output, acResults, workspace, batchResult;
     Ref<const ResultBase> typedOut;       // typed form of `output` (run/band/cv/cf/qe/batch ops), built on the job thread
     Ref<const BatchResult> batchInput;
@@ -192,6 +207,7 @@ struct DeviceState {
     DeviceState() {undo.SetLimits(kUndoMaxDepth,kUndoMaxBytes);}
     std::string id, name, description, status = "no results";
     Json colour = Json::array({0.25, 0.65, 0.95, 1.0});
+    Json fileExtensions=Json::object();
     Ref<const ProjectDraft> draft;
     mutable Ref<const Json> fileView;
     const Json& Document() const {if(!fileView)fileView=CreateRef<const Json>(draft?DraftDocument(*draft):Json{});return *fileView;}
@@ -199,6 +215,7 @@ struct DeviceState {
     void SetDocument(const Json& value) {SetDraft(value.empty()?Ref<const ProjectDraft>{}:DraftFromDocument(value));}
     Held<IvResult> bandResult, result;
     AcSet acResults;
+    std::map<std::string,std::uint64_t> acRevisions;
     Held<BatchResult> batchResult;
     Ref<const RunMap> runs=CreateRef<const RunMap>(); // typed result per history run_id
     Ref<const IvResult> Iv() const {static const auto none=CreateRef<const IvResult>();return result.typed()?result.typed():none;}
@@ -210,6 +227,8 @@ struct DeviceState {
     void SetResults(const DeviceResults &r);
     void SyncRuns();                                  // drop typed results of runs that left the history
     Json actions=Json::object();
+    Ref<const RunPlan> runPlan=CreateRef<const RunPlan>();
+    bool runPlanEdited=false;
     Ref<const BatchDraft> batch=CreateRef<const BatchDraft>();
     Ref<const RecorderDraft> recorder=CreateRef<const RecorderDraft>();
     mutable Ref<const Json> batchView,recorderView;
@@ -220,6 +239,7 @@ struct DeviceState {
     void SetBatchSpec(const Json& value){SetBatch(ReadBatchDraft(value));}
     void SetRecorderSpec(const Json& value){SetRecorder(ReadRecorderDraft(value));}
     int selectedMember=0;
+    int selectedAttempt=0; // zero selects the latest attempt
     std::uint64_t revision=0; // bumped with every DocumentEdited event
     Cow history{Json::array()};
     std::string selectedRun;
@@ -228,12 +248,17 @@ struct DeviceState {
     double biasVoltage_V = 0;
     int selectedLayer = 0, selectedInterface = -1, selectedBias = 0;
     std::chrono::steady_clock::time_point changedAt;
+    Ref<const IvResult> changeIv,changeBand; // previous exact results, shared until the next exact solve; never saved
+    std::map<std::string,Ref<const AcResult>> changeAc;
+    void RememberChange() {if(!changeIv)changeIv=result.typed();if(!changeBand)changeBand=bandResult.empty()?result.typed():bandResult.typed();for(const auto& [kind,r]:acResults.all())changeAc.try_emplace(kind,r);}
+    void ClearChange() {changeIv.reset();changeBand.reset();changeAc.clear();}
     std::vector<double> previewV, previewJ; // live slider-drag preview curve (J-V only): never saved, never in history/readouts/exports; cleared by the next exact run
     // Progressive exact run (never saved/stored/exported): partial I-V, photovoltaic estimate, finished batch members. Copied from the job's LiveFeed; cleared when the job ends.
     std::vector<double> liveV, liveJ;
     PvEstimate pvEstimate;
     std::vector<LiveMember> liveMembers;
     std::size_t liveMemberTotal = 0;
+    Ref<const BatchDraft> liveBatch;
     bool liveRunning = false;
     std::uint64_t resultRevision = 0; // d.revision the live I-V result was computed for (stale = it differs, or a recalculation is pending)
     bool Stale() const {return !result.empty() && (needsRecalculate || resultRevision!=revision);}
@@ -244,11 +269,12 @@ struct DeviceState {
 };
 void LimitProfiles(DeviceState &d,int keep=3);
 struct Project {
-    int schema_version = 3;
+    int schema_version = 4;
     std::string name = "Untitled project", active_device;
     std::vector<Ref<DeviceState>> devices;
     std::set<std::string> compare_set;
     Json ui = Json::object();
+    Json fileExtensions=Json::object();
 };
 std::filesystem::path ExamplesDirectory();
 std::string DocumentHash(const Json &document);
@@ -262,6 +288,7 @@ Json SingleDeviceWorkspace(Json document,std::string projectName);
 std::string WorkspaceText(const Json &workspace);
 class Workflow final : public Layer, public ILabStore {
 public:
+    std::set<std::tuple<std::string,std::string,int,int,int>> resultCompare; // device, run, member, Action, attempt
     explicit Workflow(Ref<JobSystem> jobs, Ref<CommandRegistry> registry = {}, Ref<EventBus> bus = {}, Ref<Notifier> notifier = {}); // no bus/notifier (headless, tests): own ones; events are published synchronously on the calling thread, no ProcessQueue needed
     ~Workflow() override;
     Workflow(const Workflow &) = delete;
@@ -278,7 +305,7 @@ public:
     std::string MemoryReport() const; // SCAPSLAB_PERF: private bytes + history/result sizes
     Json Runs() const;
     void RefreshDirty();
-    void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={});
+    void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={});
     void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy; undoable as a run delta, see Commands/UndoOps.cpp)
     Json response;
     std::string status = "Ready", path;
@@ -292,6 +319,7 @@ public:
     std::uint64_t plotGen=0; // S3: bumped by RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/DeviceListChanged/ProjectLoaded; panel plot caches compare it (no per-frame hashing/conversion)
     PlotSession plotSession;
     bool plotPreferences=false;
+    int liveChangeReference=0; // per-user: Dimmed, Dashed, Dimmed + dashed, Off
     // S6: one lane per device (serial inside, parallel across devices). `lanes[""]`-style project lane is `projectLane`: project-level
     // requests (load while calculating) wait there until every device lane is idle; the save job has its own lane `saveLane`.
     struct Queued {Json request; std::string key;Ref<const ProjectDraft> draft;}; // key: a newer queued request with the same non-empty key replaces this one (latest wins)
@@ -389,6 +417,14 @@ public:
     void ApplyDraft(DeviceState &d,Ref<const ProjectDraft> draft);
     void EditTyped(Ref<const ProjectDraft> draft,const std::string& gesture) override;
     void BatchTyped(Ref<const BatchDraft>,Ref<const RecorderDraft>) override; // undo/redo of an edit: new document, revision++, DocumentEdited, auto-recalculate arms
+    void QuickSweepTyped(Ref<const BatchDraft>,Ref<const RecorderDraft>,Ref<const ProjectDraft>,Ref<const RunPlan> = {}) override;
+    void RunBatchTyped(Ref<const BatchDraft>,Ref<const RecorderDraft>,Ref<const RunPlan>) override;
+    void SetRunPlanTyped(Ref<const RunPlan>) override;
+    void SingleShotTyped(Ref<const RunPlan>) override;
+    void CaptureLiveTyped(ActionKind) override;
+    void ResumeActions() override;
+    void StartActions(const std::string& device,Ref<const RunPlan>,bool automatic=false);
+    bool CancelLane(Lane& lane);
     bool DiscardPendingEdits(const std::string &device); // running/queued document-changing jobs of the device are dropped; true when there were any
     void SupersedeJobs(const std::string &device);       // running calculation of the device is cancelled and its result dropped on arrival
     void DropDeviceLane(const std::string &device);      // device leaves the project: its job is cancelled/dropped, its queue cleared

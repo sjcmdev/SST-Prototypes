@@ -1,6 +1,7 @@
 #include "DocumentFixture.hpp"
 #include <gtest/gtest.h>
 #include "Workflow.hpp"
+#include "Commands/Commands.hpp"
 #include <scaps_core/batch.hpp>
 #include <scaps_core/device_project_yaml.hpp>
 #include <fstream>
@@ -18,6 +19,42 @@ using Clock = std::chrono::steady_clock;
 double Seconds(Clock::time_point start) {return std::chrono::duration<double>(Clock::now()-start).count();}
 double Cpu() {FILETIME c,e,k,u;GetProcessTimes(GetCurrentProcess(),&c,&e,&k,&u);return ((double(k.dwHighDateTime)+u.dwHighDateTime)*4294967296.+k.dwLowDateTime+u.dwLowDateTime)*1e-7;}
 double PeakMB() {PROCESS_MEMORY_COUNTERS p{};GetProcessMemoryInfo(GetCurrentProcess(),&p,sizeof(p));return p.PeakWorkingSetSize/1048576.;}
+}
+TEST(ActionBatch, Sweep5ParallelBitwiseParityAndThroughput) {
+    std::printf("SLUX3D point_bytes profiles=%zu curve=%zu\n",sizeof(IvPoint),sizeof(scaps_core::IVSample));
+    std::vector<double> oldTimes,newTimes;
+    const auto path=std::filesystem::path(__FILE__).parent_path()/"fixtures/perfguard-sweep5.scapslab";
+    for(int rep=0;rep<3;++rep) {
+        Ref<const BatchResult> old;
+        Workflow w(CreateRef<JobSystem>(nullptr,23));w.lightResponse=true;w.autoRecalculate=w.autoRecalculateBand=false;
+        const auto wait=[&]{const auto deadline=Clock::now()+std::chrono::minutes(3);while(w.Pending() && Clock::now()<deadline){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_FALSE(w.Pending());EXPECT_TRUE(w.response.value("ok",false))<<w.response;};
+        ASSERT_TRUE(w.Dispatch({{"operation","project_load"},{"path",path.string()}}).value("ok",false));wait();
+        for(const auto& d:w.project.devices)if(d->name=="light")w.project.active_device=d->id;
+        for(bool actions:{false,true}) {
+            if(actions)ASSERT_TRUE(w.Exec(Cmd::SetRunPlan::Make(CreateRef<RunPlan>())).value("ok",false));
+            const auto idleDeadline=Clock::now()+std::chrono::seconds(30);while(!w.jobs->GetActiveJobs().empty() && Clock::now()<idleDeadline)std::this_thread::sleep_for(std::chrono::milliseconds(1));ASSERT_TRUE(w.jobs->GetActiveJobs().empty());
+            const auto start=Clock::now();const auto cpu=Cpu();
+            ASSERT_TRUE(w.Exec(Cmd::RunBatch::With()).value("ok",false));wait();
+            const auto wall=Seconds(start);(actions?newTimes:oldTimes).push_back(wall);
+            std::printf("SLUX3D sweep5 rep=%d path=%s workers=23 hardware_threads=%u wall_s=%.9f cores=%.3f peak_mb=%.3f\n",rep,actions?"actions":"legacy",std::thread::hardware_concurrency(),wall,(Cpu()-cpu)/wall,PeakMB());
+            const auto result=w.Current().batchResult.typed();ASSERT_TRUE(result);ASSERT_EQ(result->rows.size(),342u);
+            double memberSeconds=0;for(const auto& row:result->rows)memberSeconds+=row->elapsed_s;std::printf("SLUX3D member_elapsed_sum path=%s seconds=%.6f\n",actions?"actions":"legacy",memberSeconds);
+            if(actions){double engine=0;for(const auto& m:result->actionMembers)for(const auto& [kind,r]:m->results)engine+=r->MetaOf().prim.value("elapsed_s",0.);std::printf("SLUX3D engine_elapsed_sum seconds=%.6f\n",engine);}
+            if(!actions){old=result;continue;}
+            ASSERT_TRUE(result->runPlan);ASSERT_EQ(result->actionMembers.size(),342u);
+            for(std::size_t i=0;i<342;++i) {
+                SCOPED_TRACE(i);const auto& a=*old->rows[i];const auto& b=*result->rows[i];
+                EXPECT_EQ(a.id,b.id);EXPECT_EQ(a.parameters,b.parameters);EXPECT_EQ(a.attempt,b.attempt);EXPECT_EQ(a.status,b.status);
+                ASSERT_EQ(a.values.size(),b.values.size());
+                for(const auto& [id,value]:a.values){const auto& actual=b.values.at(id);EXPECT_EQ(value.status,actual.status)<<id;if(std::isfinite(value.value))EXPECT_EQ(std::bit_cast<std::uint64_t>(value.value),std::bit_cast<std::uint64_t>(actual.value))<<id;else EXPECT_TRUE(std::isnan(actual.value))<<id;}
+                const auto iv=std::dynamic_pointer_cast<const IvResult>(result->actionMembers[i]->results.at(0).second);ASSERT_TRUE(iv);ASSERT_EQ(a.iv.size(),iv->curve.size());
+                for(std::size_t j=0;j<a.iv.size();++j){EXPECT_EQ(a.iv[j].status,iv->curve[j].status);EXPECT_EQ(std::bit_cast<std::uint64_t>(a.iv[j].voltage_V),std::bit_cast<std::uint64_t>(iv->curve[j].voltage_V));if(std::isfinite(a.iv[j].J_Am2))EXPECT_EQ(std::bit_cast<std::uint64_t>(a.iv[j].J_Am2),std::bit_cast<std::uint64_t>(iv->curve[j].J_Am2));else EXPECT_TRUE(std::isnan(iv->curve[j].J_Am2));}
+            }
+        }
+    }
+    std::sort(oldTimes.begin(),oldTimes.end());std::sort(newTimes.begin(),newTimes.end());
+    std::printf("SLUX3D sweep5 median legacy_s=%.9f actions_s=%.9f ratio=%.6f\n",oldTimes[1],newTimes[1],newTimes[1]/oldTimes[1]);
+    EXPECT_LE(newTimes[1],oldTimes[1]);
 }
 TEST(Typed2Probe, SetupAndWorkflow) {
     const char* folder=std::getenv("TYPED2_PROBE_OUT");if(!folder)GTEST_SKIP();
@@ -110,13 +147,15 @@ TEST(TypedBatch, GoldenJsonAdapter) {
     if(std::getenv("TYPED1_CAPTURE")){std::filesystem::create_directories(path.parent_path());std::ofstream(path)<<actual.dump();return;}
     std::ifstream input(path);ASSERT_TRUE(input.good());Json expected;input>>expected;EXPECT_EQ(actual,expected);
 }
-TEST(TypedBatch, RecorderAcquiresOnlyRequestedProfile) {
+TEST(TypedBatch, RecorderRequiresExplicitProfileAcquisition) {
     Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));EditFixture(w.Current(),[&](Json& document){document["mesh"]["points_per_layer"]=21;});EditFixture(w.Current(),[&](Json& document){document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};});
     const auto execute=[&](Json request){EXPECT_TRUE(w.Dispatch(request).value("ok",false));while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response;};
     auto spec=BatchDefaults();spec["axes"][0]={{"parameter_id","temperature_K"},{"values",{300.}}};execute({{"operation","run_batch"},{"spec",spec}});
     for(const auto& p:w.Current().batchResult.typed()->rows[0]->iv)EXPECT_FALSE(p.profiles);
     execute({{"operation","record_batch"},{"columns",Json::array({{{"id","n"},{"quantity","profile"},{"field","n_m3"},{"voltage_V",0.},{"x_m",0.}}})}});
-    const auto row=w.Current().batchResult.typed()->rows[0];ASSERT_TRUE(row->iv[0].profiles);EXPECT_EQ(row->iv[0].profiles->fields.size(),1u);EXPECT_FALSE(row->iv[1].profiles);
+    const auto retained=w.Current().batchResult.typed();const auto old=retained->rows[0];ASSERT_FALSE(old->iv[0].profiles);EXPECT_FALSE(std::isfinite(old->values.at("n").value));
+    execute({{"operation","record_batch"},{"calculate_missing",true},{"columns",Json::array({{{"id","n"},{"quantity","profile"},{"field","n_m3"},{"voltage_V",0.},{"x_m",0.}}})}});
+    const auto acquired=w.Current().batchResult.typed();const auto row=acquired->rows[0];EXPECT_TRUE(acquired->actionMembers[0]->recorderSamples.empty());EXPECT_FALSE(old->iv[0].profiles);
     scaps_core::BatchSpec expected;expected.voltages_V={0.,.01};scaps_core::BatchOptions options;options.include_curves=true;options.profile_biases={0.};options.profile_fields={"n_m3"};
     const auto direct=scaps_core::run_batch(Model(w.Current().Document()),expected,options);
     EXPECT_EQ(std::bit_cast<std::uint64_t>(row->values.at("n").value),std::bit_cast<std::uint64_t>(direct.rows[0]->iv[0].profiles->fields.at("n_m3")[0]));

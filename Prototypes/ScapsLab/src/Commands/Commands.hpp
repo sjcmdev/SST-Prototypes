@@ -38,11 +38,46 @@ struct RunBand : Req<RunBand> {
 SL_JOB(RunCv, "cv", "Calculate C-V", "Capacitance-voltage sweep", "", "", true);
 SL_JOB(RunCf, "cf", "Calculate C-f", "Capacitance-frequency sweep", "", "", true);
 SL_JOB(RunQe, "qe", "Calculate QE", "External quantum efficiency", "", "", true);
-SL_JOB(RunBatch, "run_batch", "Run batch", "Run the batch of the active device", "", "", false, true);
+struct SingleShot : Req<SingleShot> {
+    static constexpr Info info{"single_shot","Single shot","Execute and store included Run Actions","Simulate/Single shot","",false,true};
+    std::shared_ptr<const RunPlan> plan;
+    static SingleShot Make(std::shared_ptr<const RunPlan> p={}) {SingleShot c;c.plan=std::move(p);return c;}
+    Out Execute(ILabStore& s) const {if(s.Busy())return Reject("busy","Busy","A job is still active");s.SingleShotTyped(plan?plan:args.contains("actions")?std::make_shared<const RunPlan>(ReadRunPlan(args.at("actions"))):nullptr);return {};}
+};
+struct SetRunPlan : Req<SetRunPlan> {
+    static constexpr Info info{"run_settings","Run settings","Edit Run Actions","","",true};
+    std::shared_ptr<const RunPlan> plan;
+    static SetRunPlan Make(std::shared_ptr<const RunPlan> p) {SetRunPlan c;c.plan=std::move(p);return c;}
+    Out Execute(ILabStore& s) const {s.SetRunPlanTyped(plan?plan:std::make_shared<const RunPlan>(ReadRunPlan(args.at("actions"))));return {};}
+};
+struct CaptureLive : Req<CaptureLive> {
+    static constexpr Info info{"capture_live","Capture live","Store the current exact live result","","",true};
+    ActionKind kind=ActionKind::Iv;
+    static CaptureLive Make(ActionKind k) {CaptureLive c;c.kind=k;return c;}
+    Out Execute(ILabStore& s) const {auto k=kind;if(args.contains("kind")){bool found=false;for(int i=0;i<5;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Capture requires band, iv, cv, cf or qe");}s.CaptureLiveTyped(k);return {};}
+};
+struct ResumeRun : Req<ResumeRun> {
+    static constexpr Info info{"resume_actions","Resume Actions","Continue after the completed Action","","",true};
+    Out Execute(ILabStore& s) const {s.ResumeActions();return {};}
+};
+struct RunBatch : Req<RunBatch> {
+    static constexpr Info info{"run_batch","Run batch","Run the batch of the active device","","",false,true};
+    std::shared_ptr<const BatchDraft> batch;std::shared_ptr<const RecorderDraft> recorder;std::shared_ptr<const RunPlan> plan;
+    static RunBatch Make(std::shared_ptr<const BatchDraft> b,std::shared_ptr<const RecorderDraft> r,std::shared_ptr<const RunPlan> p){RunBatch c;c.batch=std::move(b);c.recorder=std::move(r);c.plan=std::move(p);return c;}
+    Out Execute(ILabStore& s) const {if(!batch && !recorder && !plan)return Job(s,ToJson());if(s.Busy())return Reject("busy","Busy","A job is still active");s.RunBatchTyped(batch,recorder,plan);return {};}
+};
 SL_JOB(RetryBatchMember, "retry_batch", "Retry batch member", "Recalculate one batch member", "", "", true);
 SL_JOB(RecordBatch, "record_batch", "Re-extract recorder columns", "Rebuild the recorder table of the finished batch");
 SL_JOB(PreviewBatch, "preview_batch", "Preview batch", "Member list of a batch spec", "", "", true);
-SL_JOB(QuickSweep, "quick_sweep", "Quick parameter sweep", "Sweep one parameter around its value", "", "", true);
+struct QuickSweep : Req<QuickSweep> {
+    static constexpr Info info{"quick_sweep","Quick batch","Run one parameter sweep","","",true};
+    std::shared_ptr<const BatchDraft> batch;
+    std::shared_ptr<const RecorderDraft> recorder;
+    std::shared_ptr<const ProjectDraft> snapshot;
+    std::shared_ptr<const RunPlan> plan;
+    static QuickSweep Make(std::shared_ptr<const BatchDraft> batch,std::shared_ptr<const RecorderDraft> recorder,std::shared_ptr<const ProjectDraft> snapshot,std::shared_ptr<const RunPlan> plan={}){QuickSweep c;c.plan=std::move(plan);c.batch=std::move(batch);c.recorder=std::move(recorder);c.snapshot=std::move(snapshot);return c;}
+    Out Execute(ILabStore& s) const {if(!batch)return Job(s,ToJson());if(s.Busy())return Reject("busy","Busy","A job is still active");s.QuickSweepTyped(batch,recorder,snapshot,plan);return {};}
+};
 SL_JOB(BatchParameters, "batch_parameters", "List batch parameters", "Sweepable parameters of the active device");
 SL_JOB(SelectBatchMember, "batch_select", "Select batch member", "Show one batch member", "", "", true);
 struct SetBatchSettings : Req<SetBatchSettings> {

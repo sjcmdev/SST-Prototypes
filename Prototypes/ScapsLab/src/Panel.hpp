@@ -36,6 +36,11 @@ struct SliderDrag {
     }
 };
 inline double SliderScale(bool shift,bool ctrl,bool lock) {return shift&&ctrl?.01:(shift||lock)?.1:1.;} // Shift = 10x slower, Ctrl+Shift = 100x, F toggle = Shift
+struct SweepControlState {
+    SweepEditor editor;
+    std::string customText,error;
+    double sliderLo=0,sliderHi=1,stepHi=1;
+};
 class Panel final : public EditorWindow {
 public:
     Panel(Workflow *workflow, int view, bool gallery=false);
@@ -50,21 +55,27 @@ private:
     std::string pinDevice,pinLayer;
     bool absoluteLog=false, placed=false, gallery=false;
     char file[1024]{}, csvFile[1024]="scapslab-ac.csv";
-    Json acRequest;
+    bool RunActions(ProjectDraft&);
+    int selectedAction=1;
+    WeakRef<const RunPlan> actionSource;
+    std::array<SweepControlState,5> actionEditors;
     void AC();
     bool Illumination(ProjectDraft &draft);
     bool Absorption(ProjectDraft &draft);
     bool OpticalFile(ProjectDraft&,std::string& file,scaps_core::OpticalTable& table,const char* extension,const char* label);
     bool Grading(ProjectDraft &draft);
     bool ProfileEditor(scaps_core::Profile&,double thickness_m,const std::string& parameter,const scaps_core::Profile* composition=nullptr,bool diffusion=false);
-    Json qeRequest={{"operation","qe"},{"start_nm",300.},{"stop_nm",4100.},{"points",61},{"probe_mode","constant_flux"},{"probe_photon_flux_m2_s",1e16},{"probe_power_W_m2",1e-3}};
     std::string gradingParameter="Eg_eV";
     void Batch();
     void Recorder();
     void BatchPlots();
+    void ResultsBrowser();
+    int resultAction=1,resultTab=0;
     WeakRef<const BatchResult> batchPlotSource;
     std::vector<BatchCurve> batchPlotCurves;
     char parameterSearch[128]{};
+    WeakRef<const BatchDraft> sweepSource;
+    std::vector<SweepControlState> sweepEditors;
     int recorderPlot=0, opticalTab=-1, grTab=-1;
     bool Defects(ProjectDraft &draft,bool interface);
     bool Structure(ProjectDraft &draft);

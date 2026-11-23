@@ -1,5 +1,6 @@
 ﻿#include "Workflow.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
+#include "Commands/Commands.hpp"
 #include <thread>
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
@@ -14,12 +15,22 @@ NB_MODULE(sst_scapslab, m) {
             new(self) Workflow(CreateRef<JobSystem>(nullptr,hardware>1?hardware-1:1)); if(parsed.is_object() && parsed.contains("devices")) self->SetWorkspace(UnpackResults(parsed));else self->Current().SetDocument(NormalizeDocument(SelfContained(std::move(parsed))));
         })
         .def("start",[](Workflow &s,const std::string &request) {
-            try {return s.Dispatch(Json::parse(request)).dump();}
+            try {
+                auto value=Json::parse(request);const auto op=value.at("operation").get<std::string>();
+                Json response;
+                if(op=="run_settings")response=s.Exec(Cmd::SetRunPlan::Make(CreateRef<const RunPlan>(ReadRunPlan(value.at("actions")))));
+                else if(op=="single_shot")response=s.Exec(Cmd::SingleShot::Make(value.contains("actions")?CreateRef<const RunPlan>(ReadRunPlan(value.at("actions"))):nullptr));
+                else if(op=="run_batch" && (value.contains("actions") || value.contains("spec") || value.contains("columns")))response=s.Exec(Cmd::RunBatch::Make(value.contains("spec")?ReadBatchDraft(value.at("spec")):s.Current().batch,value.contains("columns")?ReadRecorderDraft(value.at("columns")):s.Current().recorder,value.contains("actions")?CreateRef<const RunPlan>(ReadRunPlan(value.at("actions"))):s.Current().runPlanEdited?s.Current().runPlan:nullptr));
+                else response=s.Dispatch(value);
+                if(op=="run_settings" && response.value("ok",false))s.response=s.Snapshot();
+                return response.dump();
+            }
             catch(const std::exception &e) {return Json{{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}}.dump();}
         })
         .def("poll",[](Workflow &s) {
             s.OnUpdate(0); Json j={{"running",s.Pending() || s.tutorial.Automatic()},{"auto_recalculate_pending",(s.autoRecalculate && s.Current().needsRecalculate) || (s.autoRecalculateBand && s.Current().needsBand)},{"status",s.status},{"response",s.response}};
             j["tutorial"]=s.tutorial.Report();
+            j["paused"]=s.ActiveOp() && s.ActiveOp()->paused.load();
             j["batch_progress"]={{"completed",s.batchCompleted},{"total",s.batchTotal}};
             if(const auto aj=s.ActiveJob()) { const auto p=s.jobs->GetJob(aj); if(p) j["progress"]={{"completed",p->completedWork},{"total",p->totalWork},{"stage",p->currentStage}}; }
             return j.dump();

@@ -952,15 +952,6 @@
     {
       "file": "Prototypes/ScapsLab/src/Python.cpp",
       "rule": "text-json",
-      "line": 17,
-      "code": "try {return s.Dispatch(Json::parse(request)).dump();}",
-      "sha256": "037e427b5896762aa2a62d529f2ab596e6f692d33f049304680aecee8a3a4449",
-      "count": 2,
-      "reason": "Public embedded ScapsLab Python/headless operation adapter."
-    },
-    {
-      "file": "Prototypes/ScapsLab/src/Python.cpp",
-      "rule": "text-json",
       "line": 18,
       "code": "catch(const std::exception &e) {return Json{{\"ok\",false},{\"error\",{{\"code\",\"invalid_request\"},{\"message\",e.what()}}}}.dump();}",
       "sha256": "637bd34cb11d7ed5970634ff546a1c4fda5a786c0a9b277b27b01b8298a2f366",
@@ -1083,6 +1074,51 @@
       "sha256": "3403aa78e001566f180cc6660b75c085b07adaca43e868756990601e164cf502",
       "count": 1,
       "reason": "ExportProfile writes the requested CSV or SCAPS .grd file on disk."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "text-json",
+      "line": 19,
+      "code": "auto value=Json::parse(request);const auto op=value.at(\"operation\").get<std::string>();",
+      "sha256": "98ebf74befae4a1a880c39e1f31909d47b4b5c6641a6d8a47e9a72b347dcc0ea",
+      "count": 1,
+      "reason": "Nanobind input/output edge: Python request JSON becomes typed commands; typed command replies become JSON only on return to Python."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "text-json",
+      "line": 26,
+      "code": "return response.dump();",
+      "sha256": "c4a8994cddcf43d2b60cf8de60222dbf8b8087919190e87ae8e5930e059bcc9d",
+      "count": 1,
+      "reason": "Nanobind input/output edge: Python request JSON becomes typed commands; typed command replies become JSON only on return to Python."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workspace.cpp",
+      "rule": "text-json",
+      "line": 234,
+      "code": "if(run.value(\"explicit\",false) || run.value(\"legacy\",false) || run[\"result\"].dump().size()<=65536) continue;",
+      "sha256": "2b86144adc54072b971286ecb9a271f5864ce3d61c0c39de0d739f4cbc6932f9",
+      "count": 1,
+      "reason": "Workspace file edge: legacy profile compaction excludes explicit and migrated runs to preserve stored arrays."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 651,
+      "code": "const auto first=original.find_first_not_of(\" \\t\\r\\n\");const auto old=first!=std::string::npos && original[first]=='{'?Json::parse(original):FromYaml(YAML::Load(original));const int version=old.value(\"schema_version\",0);",
+      "sha256": "82d602c186c4243fdb7629e937a02c74a1e1edb317c0640ebee616403e4a626c",
+      "count": 1,
+      "reason": "Project-save disk edge: inspect the existing workspace schema before preserving the original file and replacing it atomically."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-yaml",
+      "line": 651,
+      "code": "const auto first=original.find_first_not_of(\" \\t\\r\\n\");const auto old=first!=std::string::npos && original[first]=='{'?Json::parse(original):FromYaml(YAML::Load(original));const int version=old.value(\"schema_version\",0);",
+      "sha256": "82d602c186c4243fdb7629e937a02c74a1e1edb317c0640ebee616403e4a626c",
+      "count": 1,
+      "reason": "Project-save disk edge: inspect the existing workspace schema before preserving the original file and replacing it atomically."
     }
   ],
   "known-debt": [

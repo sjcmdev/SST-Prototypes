@@ -5,18 +5,24 @@
 // `rest`/`meta`, non-finite doubles are written as null (what Json::dump does anyway), integers are never turned into doubles.
 #include "Domain/Packed.hpp"
 #include "Domain/BatchDraft.hpp"
+#include "Domain/RunPlan.hpp"
 #include <chrono>
+#include <algorithm>
 #include <cstdint>
 #include <mutex>
 #include <string>
 #include <vector>
 #include <scaps_core/batch.hpp>
 namespace SST::ScapsLab {
+std::string DocumentHash(const Json& document); // canonical file provenance, used only by adapters
 class ResultBase {
 public:
     ResultBase() = default;
-    ResultBase(const ResultBase &) {}                            // the cached view is never copied
-    ResultBase &operator=(const ResultBase &) {return *this;}
+    ResultBase(const ResultBase &other):runPlan(other.runPlan),snapshot(other.snapshot),liveOnly(other.liveOnly) {} // the cached view is never copied
+    ResultBase &operator=(const ResultBase &other) {runPlan=other.runPlan;snapshot=other.snapshot;liveOnly=other.liveOnly;return *this;}
+    Ref<const RunPlan> runPlan; // immutable execution settings, serialized only by result file/Python adapters
+    Ref<const ProjectDraft> snapshot;
+    bool liveOnly=false; // new auto exact results are omitted from saved standalone results; history captures remain explicit
     virtual ~ResultBase() = default;
     virtual Json Dump() const = 0;                               // typed -> fresh Json (save, Snapshot, Python)
     virtual const PJson &MetaOf() const = 0;
@@ -92,15 +98,18 @@ struct AcPoint {
 struct IvResult final : ResultBase { // run and band (band = a single-bias run)
     Column mesh_x_m;
     std::vector<IvPoint> points;
+    std::vector<scaps_core::IVSample> curve; // curves-only Actions move the engine samples without per-point profile/metadata objects
+    double curve_series_ohm_m2=0;
     PJson meta;                 // optics, photovoltaic, provenance, project_snapshot, ...
     std::optional<OpticsResult> optics;
     std::optional<scaps_core::PhotovoltaicResult> photovoltaic;
     bool preserve_optics=false, preserve_photovoltaic=false;
     std::uint32_t has = 0;
-    bool empty() const {return points.empty();}
+    bool empty() const {return points.empty() && curve.empty();}
     Json Dump() const override;
     const PJson &MetaOf() const override {return meta;}
 };
+inline bool ValidIvSample(const scaps_core::IVSample& p) {return p.status==scaps_core::SolverStatus::Converged && std::isfinite(p.J_Am2) && std::isfinite(p.current_conservation_error_Am2) && p.current_conservation_error_Am2<=std::max(1e-10,std::abs(p.J_Am2)*.01);}
 struct AcResult final : ResultBase { // cv, cf, qe
     Column mesh_x_m;
     std::vector<AcPoint> points;
@@ -112,20 +121,41 @@ struct AcResult final : ResultBase { // cv, cf, qe
     Json Dump() const override;
     const PJson &MetaOf() const override {return meta;}
 };
+struct MemberActions {
+    bool illuminated=false;
+    std::vector<std::pair<ActionKind,Ref<const ResultBase>>> results;
+    std::map<ActionKind,std::string> errors;
+    std::vector<scaps_core::IVSample> recorderSamples; // requested profile fields only; shared immutable profiles
+    Ref<const MemberActions> previous;
+    Ref<const scaps_core::BatchRow> summary;
+};
 struct BatchResult final : ResultBase {
     std::shared_ptr<const ProjectDraft> projectSnapshot;
     std::shared_ptr<const BatchDraft> batchDraft;
     std::shared_ptr<const RecorderDraft> recorderDraft; // sweep/batch table (rows, curves, spec, columns) and single-row batch runs of the history
     PJson body; // metadata; legacy files retain their lossless packed representation
     std::vector<Ref<const scaps_core::BatchRow>> rows;
+    std::vector<Ref<const MemberActions>> actionMembers; // one immutable attempt per member; previous attempts share their arrays
+    std::string parentRun;
+    std::int64_t time_unix_ms=0;
+    double elapsed_s=0;
+    bool cancelled=false;
+    std::string solverVersion;
+    Ref<const MemberActions> Member(std::size_t index,int attempt=0) const {
+        auto member=actionMembers.at(index);
+        while(member && attempt>0 && member->summary && member->summary->attempt>attempt)member=member->previous;
+        return attempt>0 && (!member || !member->summary || member->summary->attempt!=attempt)?Ref<const MemberActions>{}:member;
+    }
     Json legacySchema;
     Ref<const BatchResult> legacyBase;
     std::vector<std::string> replacedRows;
     bool native = false;
     const Json& Schema() const {return native?body.prim:legacySchema;}
+    Json FileMetadata() const;
     Json Dump() const override;
     const PJson &MetaOf() const override {return body;}
 };
+scaps_core::BatchRow ExtractActions(const MemberActions&,const RecorderDraft&);
 Json BatchRowJson(const scaps_core::BatchRow& row);
 using BandResult = IvResult;
 IvResult IvFromJson(const Json &j);

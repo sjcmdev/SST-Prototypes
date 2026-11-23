@@ -38,6 +38,8 @@ struct PlotView {
 struct PlotSettings {
     float margin=5,bandSplit=.5f;
     bool ivAbsoluteLog=true,grFollow=true;
+    std::optional<bool> batchAbsolute;
+    std::optional<bool> contactAnnotations; // absent stays absent on an untouched project; the visible default is off
     double grVoltage=0;
     int opticalTab=0,grTab=0,recorderPlot=0;
     std::set<std::string> grHidden;
@@ -53,6 +55,8 @@ struct PlotSettings {
         const auto number=[&](const char *key,auto &v,double lo,double hi){auto it=ui.find(key);if(it!=ui.end() && it->is_number()){const double x=it->get<double>();if(std::isfinite(x) && x>=lo && x<=hi)v=static_cast<std::remove_reference_t<decltype(v)>>(x);}};
         number("auto_fit_margin_percent",margin,0,30);number("band_split",bandSplit,.15,.85);number("optical_tab",opticalTab,0,10000);number("gr_tab",grTab,0,10000);number("recorder_plot",recorderPlot,0,10000);
         for(auto [key,v]:{std::pair{"iv_absolute_log",&ivAbsoluteLog},{"gr_follow",&grFollow}})if(ui.contains(key) && ui[key].is_boolean())*v=ui[key].get<bool>();
+        if(ui.contains("batch_absolute") && ui["batch_absolute"].is_boolean())batchAbsolute=ui["batch_absolute"].get<bool>();
+        if(ui.contains("contact_annotations") && ui["contact_annotations"].is_boolean())contactAnnotations=ui["contact_annotations"].get<bool>();
         if(ui.contains("gr_bias") && ui["gr_bias"].is_object() && ui["gr_bias"].contains("voltage_V") && ui["gr_bias"]["voltage_V"].is_number()){const double v=ui["gr_bias"]["voltage_V"];if(std::isfinite(v))grVoltage=v;}
         if(ui.contains("gr_hidden") && ui["gr_hidden"].is_array()){grHidden.clear();for(const auto &v:ui["gr_hidden"])if(v.is_string())grHidden.insert(v.get<std::string>());}
         if(ui.contains("imgui_ini") && ui["imgui_ini"].is_string()){const auto &ini=ui["imgui_ini"].get_ref<const std::string &>();if(ValidDockLayout(ini))layout=ini;}
@@ -76,10 +80,14 @@ struct PlotSettings {
     nlohmann::json Write() const {
         using J=nlohmann::json;
         J ui={{"auto_fit_margin_percent",margin},{"band_split",bandSplit},{"iv_absolute_log",ivAbsoluteLog},{"gr_follow",grFollow},{"gr_bias",{{"voltage_V",grVoltage}}},{"optical_tab",opticalTab},{"gr_tab",grTab},{"recorder_plot",recorderPlot},{"gr_hidden",grHidden},{"panels",panels},{"imgui_ini",ValidDockLayout(layout)?layout:std::string{}}};
+        if(batchAbsolute)ui["batch_absolute"]=*batchAbsolute;
+        if(contactAnnotations)ui["contact_annotations"]=*contactAnnotations;
         ui["plot_settings"]=J::object();for(const auto &[id,p]:plots){if(p==PlotView{})continue;auto &v=ui["plot_settings"][id];v={{"manual",p.manual},{"hidden",p.hidden},{"axes",J::array()}};if(p.legend)v["legend"]=*p.legend;if(p.legendLocation)v["legend_location"]=*p.legendLocation;if(p.legendFlags)v["legend_flags"]=*p.legendFlags;for(int i=0;i<6;++i){J a=J::object();if(p.log[i])a["log"]=*p.log[i];if(p.manual && p.ranges[i])a["range"]={p.ranges[i]->min,p.ranges[i]->max};v["axes"].push_back(std::move(a));}}
         return ui;
     }
     void WriteChanges(nlohmann::json &ui,const PlotSettings &loaded) const {
+        if(batchAbsolute)ui["batch_absolute"]=*batchAbsolute;
+        if(contactAnnotations)ui["contact_annotations"]=*contactAnnotations;
         const auto now=Write();if(now==loaded.Write())return;
         for(auto it=now.begin();it!=now.end();++it)ui[it.key()]=*it;
         ui.erase("plots"); // one saved session snapshot supersedes legacy per-frame limits

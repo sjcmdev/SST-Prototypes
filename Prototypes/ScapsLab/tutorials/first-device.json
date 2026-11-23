@@ -47,7 +47,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "In Run click Calculate I-V and wait for the I-V curve.",
+      "instruction": "In Run include I-V, click Single shot and wait for the I-V curve.",
       "command": {
         "operation": "run"
       },

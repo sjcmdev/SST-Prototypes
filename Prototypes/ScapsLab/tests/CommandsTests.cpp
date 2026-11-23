@@ -184,21 +184,21 @@ TEST(Commands, JsonRoundTripKeepsTheRequestExactly) { // the request is what lan
     EXPECT_EQ(Cmd::Run::FromJson(preview).ToJson().dump(), preview.dump());
 }
 
-// The legacy op names (Workflow registration list before S8; the Dispatch contract of tests/test_headless.py).
-static const char *const kLegacyOps[] = {"load_material","save_material","set_profile","load_profile","preview_profile","export_profile","tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
-    "history_list","history_update","history_select","history_clear","quick_sweep","project_new","project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def"};
+// Public Dispatch contract: legacy operations plus the S2 typed Actions adapters.
+static const char *const kPublicOps[] = {"load_material","save_material","set_profile","load_profile","preview_profile","export_profile","tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
+    "history_list","history_update","history_select","history_clear","quick_sweep","project_new","project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def","single_shot","run_settings","capture_live","resume_actions"};
 
-TEST(CommandAdapter, EveryLegacyOperationMapsToATypedCommandOrAnExplicitLegacyHandler) {
+TEST(CommandAdapter, EveryPublicOperationMapsToATypedCommandOrAnExplicitLegacyHandler) {
     std::map<std::string, const Cmd::Info *> byOp;
     for(const auto &e : Cmd::Table()) EXPECT_TRUE(byOp.emplace(e.info->op, e.info).second) << "duplicate op " << e.info->op;
-    for(const auto *op : kLegacyOps) {
+    for(const auto *op : kPublicOps) {
         const auto it = byOp.find(op);
         ASSERT_NE(it, byOp.end()) << "legacy op without a command: " << op;
         EXPECT_EQ(it->second->legacy, std::string(op).starts_with("tutorial_")) << op; // only the tutorial player stays a JSON handler
     }
-    EXPECT_EQ(byOp.size(), std::size(kLegacyOps)) << "a typed command without a legacy op name (the Dispatch contract grew)";
+    EXPECT_EQ(byOp.size(), std::size(kPublicOps)) << "a typed command without a declared public op name";
     Workflow w(CreateRef<JobSystem>(nullptr, 1));
-    for(const auto *op : kLegacyOps) EXPECT_TRUE(w.commands->HasCommand(CommandID{std::string("scapslab.") + op})) << op;
+    for(const auto *op : kPublicOps) EXPECT_TRUE(w.commands->HasCommand(CommandID{std::string("scapslab.") + op})) << op;
 }
 TEST(CommandAdapter, DispatchReachesTheTypedCommandsAndKeepsTheReplyShape) {
     Workflow w(CreateRef<JobSystem>(nullptr, 1));

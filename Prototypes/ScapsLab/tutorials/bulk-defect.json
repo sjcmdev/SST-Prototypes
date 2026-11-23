@@ -29,7 +29,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "Calculate I-V in Run. This is the reference curve without defects.",
+      "instruction": "In Run include I-V and click Single shot. This is the reference curve without defects.",
       "command": {
         "operation": "run"
       },
@@ -115,7 +115,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "Calculate I-V again. Run history now holds both curves.",
+      "instruction": "Click Single shot again with I-V included. Run history now holds both curves.",
       "command": {
         "operation": "run"
       },

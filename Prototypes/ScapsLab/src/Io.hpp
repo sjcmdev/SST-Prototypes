@@ -20,5 +20,10 @@ inline void Note(const char *what,const std::string &path) {
 inline bool Load(const std::filesystem::path &p,std::string &text,std::string &error) {Note("load",p.string());return TextFileIO::Load(Path{p},text,error);}
 inline bool Save(const std::filesystem::path &p,const std::string &text,std::string &error) {Note("save",p.string());return TextFileIO::Save(Path{p},text,error);}
 inline bool Exists(const std::filesystem::path &p) {Note("exists",p.string());std::error_code ec;return std::filesystem::exists(p,ec);}
+inline std::filesystem::path BackupOriginal(const std::filesystem::path& p,int version) {
+    Note("backup",p.string());auto target=p;target+=".v"+std::to_string(version)+"-original";
+    for(unsigned i=1;std::filesystem::exists(target);++i){target=p;target+=".v"+std::to_string(version)+"-original-"+std::to_string(i);}
+    std::filesystem::copy_file(p,target);return target;
+}
 inline void Remove(const std::filesystem::path &p) {Note("remove",p.string());std::error_code ec;std::filesystem::remove(p,ec);}
 }

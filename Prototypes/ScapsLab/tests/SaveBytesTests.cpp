@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <sstream>
 #include <thread>
+#include <fstream>
 using namespace SST;
 using namespace SST::ScapsLab;
 namespace {
@@ -33,5 +34,16 @@ TEST(SaveBytes,LoadSaveIsByteStable) {
         const auto target=std::filesystem::path(out)/(file.stem().string()+"."+scenario+".scapslab");
         ASSERT_TRUE(Exec(w,{{"operation","project_save"},{"path",target.string()}}).value("ok",false))<<file;
         std::printf("SAVEBYTES %s %s %zu\n",file.filename().string().c_str(),scenario,std::size_t(std::filesystem::file_size(target)));
+    }
+}
+TEST(SaveBytes, MigratedV4ExamplesAreByteStable) {
+    const auto folder=std::filesystem::temp_directory_path()/("slux3d-v4-bytes-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));std::filesystem::create_directories(folder);
+    const auto read=[](const auto& path){std::ifstream input(path,std::ios::binary);return std::string(std::istreambuf_iterator<char>(input),{});};
+    for(const auto& file:std::filesystem::directory_iterator(ExamplesDirectory()))if(file.path().extension()==".scapslab" || file.path().extension()==".yaml") {
+        SCOPED_TRACE(file.path());Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;
+        ASSERT_TRUE(Exec(w,{{"operation","project_load"},{"path",file.path().string()}}).value("ok",false));
+        const auto target=folder/(file.path().stem().string()+".scapslab");ASSERT_TRUE(Exec(w,{{"operation","project_save"},{"path",target.string()}}).value("ok",false));const auto before=read(target);
+        ASSERT_TRUE(Exec(w,{{"operation","project_load"},{"path",target.string()}}).value("ok",false));ASSERT_TRUE(Exec(w,{{"operation","project_save"},{"path",target.string()}}).value("ok",false));
+        EXPECT_TRUE(before==read(target))<<"v4 load/save changed bytes";
     }
 }
