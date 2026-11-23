@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 #include "Domain/ProjectDraft.hpp"
 #include "Domain/BatchDraft.hpp"
+#include "Domain/RunPlan.hpp"
 #include <optional>
 #include <string>
 #include <vector>
@@ -28,7 +29,13 @@ public:
     virtual void CancelDevice(const std::string &device) = 0;
     virtual void DeferProjectLoad(const Json &request) = 0;          // cancel calculations, open the project when the lanes are idle
     virtual void BatchTyped(std::shared_ptr<const BatchDraft>,std::shared_ptr<const RecorderDraft>){throw std::logic_error("Typed batch settings unavailable");}
+    virtual void QuickSweepTyped(std::shared_ptr<const BatchDraft>,std::shared_ptr<const RecorderDraft>,std::shared_ptr<const ProjectDraft>,std::shared_ptr<const RunPlan> = {}){throw std::logic_error("Typed quick batch unavailable");}
+    virtual void RunBatchTyped(std::shared_ptr<const BatchDraft>,std::shared_ptr<const RecorderDraft>,std::shared_ptr<const RunPlan>){throw std::logic_error("Typed batch unavailable");}
     virtual void EditTyped(std::shared_ptr<const ProjectDraft>,const std::string&) {throw std::logic_error("Typed editing unavailable");}
+    virtual void SetRunPlanTyped(std::shared_ptr<const RunPlan>) {throw std::logic_error("Run Actions unavailable");}
+    virtual void SingleShotTyped(std::shared_ptr<const RunPlan>) {throw std::logic_error("Single shot unavailable");}
+    virtual void CaptureLiveTyped(ActionKind) {throw std::logic_error("Capture live unavailable");}
+    virtual void ResumeActions() {throw std::logic_error("No paused Actions");}
     virtual void QueueEdit(const Json &request) = 0;                 // merge into the active device's edit queue (latest wins per gesture)
     virtual void PublishSnapshot() = 0;                              // response = workspace snapshot (read-only commands)
     virtual void HistoryOp(const Json &request) = 0;                 // in place on the UI thread

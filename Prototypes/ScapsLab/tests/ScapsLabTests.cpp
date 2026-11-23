@@ -115,8 +115,12 @@ TEST(ScapsLab,EmbeddedPythonRunAndHeadlessCsv) {
     RegisterPython(); PythonInterpreter python; ASSERT_TRUE(python.Start());
     const auto gil=PythonInterpreter::AcquireRuntimeGil();
     const auto code=std::string("import json\nui_light=json.loads(")+Json(uiLight.dump()).dump()+")\nui_batch=json.loads("+Json(uiBatch.dump()).dump()+")\nui_document=json.loads("+Json(uiDocument.dump()).dump()+")\nui_spec=json.loads("+Json(uiSpec.dump()).dump()+")\nimport sys\nsys.path.insert(0, "+Json(SCAPSLAB_PYTHON).dump()+")\nproject_path="+Json(SCAPSLAB_PROJECT).dump()+"\nexamples_path="+Json(ExamplesDirectory().string()).dump()+"\nheadless_path="+Json(SCAPSLAB_HEADLESS).dump()+"\nexec(compile(open("+Json(SCAPSLAB_PYTHON_TEST).dump()+", encoding='utf-8-sig').read(), 'test_headless.py', 'exec'))\n";
-    const int result=PyRun_SimpleString(code.c_str());
-    PythonInterpreter::ReleaseRuntimeGil(gil); EXPECT_EQ(result,0);
+    // Per-test Sessions and large response dictionaries must not outlive this test in the shared interpreter.
+    PyObject* testModule=PyModule_New("scapslab_test");PyObject* testGlobals=PyModule_GetDict(testModule);
+    PyDict_SetItemString(testGlobals,"__builtins__",PyEval_GetBuiltins());
+    PyObject* scriptResult=PyRun_String(code.c_str(),Py_file_input,testGlobals,testGlobals);const bool succeeded=scriptResult!=nullptr;
+    if(!succeeded)PyErr_Print();Py_XDECREF(scriptResult);Py_DECREF(testModule);PyGC_Collect();
+    PythonInterpreter::ReleaseRuntimeGil(gil);EXPECT_TRUE(succeeded);
 #else
     FAIL()<<"Embedded Python is required";
 #endif
@@ -472,7 +476,10 @@ TEST(ScapsLab,Stage05DefImportSolvesLikeIndependentYaml) {
     auto result=Execute(imported,{{"operation","import_def"},{"path",(fixtures/"stage05-gaussian.def").string()}});
     ASSERT_TRUE(result.value("ok",false))<<result.dump();
     EXPECT_TRUE(result.at("operation_result").contains("warnings"));
-    reference.Current().SetDocument(ReadProject((fixtures/"stage05-gaussian.yaml").string()));
+    auto referenceDocument=ReadProject((fixtures/"stage05-gaussian.yaml").string());
+    // Pin the historical audit on both sides, independently of the engine's default distribution levels.
+    for(auto &layer:referenceDocument["layers"]) for(auto &defect:layer["defects"]) {defect["energy_levels"]=63;defect["energy_quadrature"]="gauss_legendre";}
+    reference.Current().SetDocument(referenceDocument);
     // Match numerical settings, including the def1 audit's 63-level Gauss quadrature.
     auto doc=imported.Current().Document();
     for(const char *key:{"mesh","solver","voltage","temperature_K","illumination"}) doc[key]=reference.Current().Document().at(key);
@@ -638,7 +645,7 @@ TEST(ScapsLab,SlioProjectRoundtripMigrationRecoveryAndOptionalResults) {
     ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",file.string()},{"include_results",false}}).value("ok",false));
     EXPECT_FALSE(w.Current().result.empty());EXPECT_FALSE(std::filesystem::exists(recovery));
     ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_TRUE(w.Current().result.empty());EXPECT_EQ(w.Current().Document(),document);EXPECT_EQ(w.Current().actions,actions);
-    for(int version:{0,1}) {auto old=w.Workspace();old["schema_version"]=version;old.erase("ui");for(auto &d:old["devices"])d.erase("actions");std::string error;ASSERT_TRUE(TextFileIO::Save(Path{file},old.dump(),error));ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_EQ(w.project.schema_version,3);EXPECT_EQ(w.Current().Document(),document);}
+    for(int version:{0,1}) {auto old=w.Workspace();old["schema_version"]=version;old.erase("ui");for(auto &d:old["devices"])d.erase("actions");std::string error;ASSERT_TRUE(TextFileIO::Save(Path{file},old.dump(),error));ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_EQ(w.project.schema_version,4);EXPECT_EQ(w.Current().Document(),document);}
     ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",recovery.string()}}).value("ok",false));EXPECT_TRUE(std::filesystem::exists(recovery));
     ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",recovery.string()}}).value("ok",false));EXPECT_EQ(w.Current().Document(),document);std::filesystem::remove(recovery);
     auto old=document;old["schema_version"]=0;std::string error;ASSERT_TRUE(TextFileIO::Save(Path{file},old.dump(),error));ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",file.string()}}).value("ok",false));EXPECT_EQ(w.Current().Document(),document);
@@ -745,7 +752,7 @@ TEST(ScapsLab,ImmutableHistoryRetentionClearUndoAndPersistence) {
     const auto allBefore=w.Workspace();
     ASSERT_TRUE(Execute(w,{{"operation","history_clear"},{"scope","all"},{"include_pinned",true}}).value("ok",false));for(const auto &device:w.project.devices)EXPECT_TRUE(device->history.empty());
     ASSERT_TRUE(Execute(w,{{"operation","undo"}}).value("ok",false));EXPECT_EQ(w.Workspace(),allBefore);EXPECT_EQ(w.Current().history.size(),20);
-    auto old=w.Workspace();old["schema_version"]=2;for(auto &d:old["devices"]){d.erase("history");d.erase("selected_run");}w.SetWorkspace(old);EXPECT_TRUE(w.Current().history.empty());
+    auto old=w.Workspace();old["schema_version"]=2;for(auto &d:old["devices"]){d.erase("history");d.erase("selected_run");}w.SetWorkspace(old);ASSERT_FALSE(w.Current().history.empty());for(const auto& run:w.Current().history)EXPECT_TRUE(run.value("legacy",false));EXPECT_TRUE(w.Current().selectedRun.empty());
     std::filesystem::remove(file);
 }
 TEST(ScapsLab,QuickSweepUsesBatchAndHistoryValidation) {
@@ -937,7 +944,7 @@ TEST(ScapsLab,TypedResultsRoundtripJson) {
     std::size_t checked=0;
     for(const auto &entry:std::filesystem::directory_iterator(SCAPSLAB_EXAMPLES)) if(entry.path().extension()==".scapslab") {
         std::string text,error;ASSERT_TRUE(TextFileIO::Load(Path{entry.path().string()},text,error));
-        const auto raw=UnpackResults(Json::parse(text));
+        const auto raw=NormalizeWorkspace(UnpackResults(Json::parse(text)));
         Workflow w(CreateRef<JobSystem>(nullptr,1));
         ASSERT_TRUE(Execute(w,{{"operation","project_load"},{"path",entry.path().string()}}).at("ok").get<bool>());
         for(std::size_t i=0;i<w.project.devices.size();++i) {

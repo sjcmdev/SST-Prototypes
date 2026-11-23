@@ -169,3 +169,16 @@ TEST_F(SavedPlots,Recorder18SeriesDoesNotOverlapWorksheet) {
     }
     EXPECT_FALSE(result->HasView());EXPECT_FALSE(w.dirty);
 }
+
+TEST(PlotSettingsOwner, ContactAnnotationsDefaultOffAndKeepExplicitPresence) {
+    PlotSettings settings;EXPECT_FALSE(settings.contactAnnotations.value_or(false));EXPECT_FALSE(settings.Write().contains("contact_annotations"));
+    PlotSettings loaded;settings.contactAnnotations=true;Json ui=Json::object();settings.WriteChanges(ui,loaded);EXPECT_TRUE(ui.at("contact_annotations"));
+    settings.contactAnnotations=false;settings.WriteChanges(ui,loaded);EXPECT_FALSE(ui.at("contact_annotations"));PlotSettings restored;restored.Read(ui);EXPECT_TRUE(restored.contactAnnotations.has_value());EXPECT_FALSE(*restored.contactAnnotations);EXPECT_FALSE(restored.Write().at("contact_annotations"));
+    const auto explicitFalse=restored;restored.contactAnnotations=true;restored.WriteChanges(ui,explicitFalse);EXPECT_TRUE(ui.at("contact_annotations"));restored.contactAnnotations=false;restored.WriteChanges(ui,explicitFalse);EXPECT_FALSE(ui.at("contact_annotations"));
+}
+
+TEST(PlotSettingsOwner, BatchLogAxesAndAbsoluteCurrentAreOptionalAndPersistent) {
+    PlotSettings initial,s;EXPECT_FALSE(s.Write().contains("batch_absolute"));s.batchAbsolute=true;s.plots["Batch I-V overlay"].log[ImAxis_X1]=true;s.plots["Batch I-V overlay"].log[ImAxis_Y1]=true;s.plots["Stored Actions"].log[ImAxis_Y1]=true;
+    Json ui=Json::object();s.WriteChanges(ui,initial);PlotSettings loaded;loaded.Read(ui);EXPECT_EQ(loaded,s);
+    s.batchAbsolute=false;s.WriteChanges(ui,loaded);loaded.Read(ui);EXPECT_FALSE(*loaded.batchAbsolute);EXPECT_TRUE(*loaded.plots["Batch I-V overlay"].log[ImAxis_X1]);
+}

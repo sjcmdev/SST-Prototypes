@@ -96,7 +96,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "Calculate I-V in Run. The dark I-V of the heterojunction appears in I-V.",
+      "instruction": "In Run include I-V and click Single shot. The dark I-V of the heterojunction appears in I-V.",
       "command": {
         "operation": "run"
       },

@@ -43,10 +43,10 @@
     {
       "id": "light-iv",
       "target": {
-        "window": "scapslab.Illumination",
-        "item": "light-iv"
+        "window": "scapslab.Run",
+        "item": "run"
       },
-      "instruction": "On Light I-V click Calculate light I-V. A working solar cell has positive Voc, Jsc and FF.",
+      "instruction": "In Run include I-V and click Single shot. Inspect Light I-V for positive Voc, Jsc and FF.",
       "command": {
         "operation": "run"
       },
@@ -92,10 +92,10 @@
     {
       "id": "qe",
       "target": {
-        "window": "scapslab.Illumination",
-        "item": "qe"
+        "window": "scapslab.Run",
+        "item": "run"
       },
-      "instruction": "On QE(lambda) set 590 to 610 nm with 3 points and click Calculate QE. Check EQE and the integrated Jsc.",
+      "instruction": "In Run include QE, disable other Includes, open its Settings and set 590 to 610 nm with 3 Points. Click Single shot, then inspect EQE and integrated Jsc in Illumination > QE(lambda).",
       "command": {
         "operation": "qe",
         "start_nm": 590.0,

@@ -5,6 +5,56 @@ import subprocess
 import tempfile
 import scapslab
 
+# S4: public wrappers use the same typed command/job path as GUI Actions.
+def check_run_actions(document):
+    import copy
+    draft = copy.deepcopy(document)
+    draft['temperature_K'] = 300
+    draft['mesh']['points_per_layer'] = 11
+    for layer in draft['layers']:
+        layer['defects'] = []
+    draft['interface_defects'] = []
+    run = scapslab.Session(draft)
+    def samples(values):
+        return dict(sampling='list', values=values)
+    actions = dict(band=dict(include=True, voltage_V=0.012),
+                   iv=dict(include=True, range=samples([0, 0.012, 0.024])),
+                   cv=dict(include=True, range=samples([0, 0.021]), frequency_Hz=1234, temperature_K=315),
+                   cf=dict(include=True, range=samples([100, 2000, 30000]), voltage_V=0.017),
+                   qe=dict(include=True, range=samples([400, 550, 700])))
+    assert run.run_settings(actions)['ok']
+    single = run.single_shot()
+    assert single['ok'], single
+    assert len(single['project']['devices'][0]['history']) == 5
+    columns = [dict(id='J0', quantity='J', voltage_V=0)]
+    spec = dict(mode='linked', axes=[dict(parameter_id='temperature_K', values=[300])], include_curves=True)
+    batch = run.run_batch(spec=spec, columns=columns, actions=actions)
+    assert batch['ok'], batch
+    table = batch['batch_result']
+    member = table['action_members'][0]
+    assert len(member['actions']) == 5
+    for actual in member['actions']:
+        kind = actual['kind']
+        expected = single['band_result'] if kind == 'band' else single['result'] if kind == 'iv' else single['ac_results'][kind]
+        fields = ('voltage_V', 'J_A_m2', 'frequency_Hz', 'capacitance_F', 'conductance_S', 'wavelength_nm', 'EQE', 'status')
+        assert [{k: p[k] for k in fields if k in p} for p in actual['result']['points']] == [{k: p[k] for k in fields if k in p} for p in expected['points']], kind
+    root = batch['selected_run']
+    assert run.results_select(root, action='cv')['ok']
+    assert not run.results_select(root, member_index=99)['ok']
+    extracted = run.record_batch(columns + [dict(id='C0', quantity='C', voltage_V=0, frequency_Hz=777)])
+    assert extracted['ok'] and extracted['batch_result']['rows'][0]['statuses'].get('C0') == 'not sampled', (extracted.get('status'), extracted['batch_result']['columns'], extracted['batch_result']['rows'][0]['statuses'])
+    calculated = run.calculate_missing(columns + [dict(id='C0', quantity='C', voltage_V=0, frequency_Hz=777)])
+    assert calculated['ok'] and calculated['batch_result']['rows'][0]['statuses']['C0'] == 'ok', calculated
+    actions['iv']['pause_after_action'] = True
+    paused = run.single_shot(actions)
+    assert paused['ok'] and paused['paused'], paused
+    while run.poll().get('paused'):
+        resumed = run.resume_actions()
+        assert resumed['ok'], resumed
+    assert not run.poll()['running']
+    assert not run.run_settings(dict(iv=dict(range=dict(sampling='step', minimum=0, maximum=1, step=0))))['ok']
+    print('slux3d Python Actions: Single/Batch exact parity, selection, Extract/Calculate missing and Pause/Resume PASS', flush=True)
+
 session = scapslab.Session()
 loaded = session.execute({'operation': 'load', 'path': project_path})
 assert loaded['ok'], loaded
@@ -38,6 +88,7 @@ with tempfile.TemporaryDirectory(prefix='scapslab-headless-') as output:
     print(f'Python command run + scaps_headless CSV: {len(points)} points, max relative J error {maximum_relative_error:g}, mesh identical', flush=True)
 assert not session.execute({'operation':'edit','patch':{'temperature_K':-1}})['ok']
 assert not session.execute({'operation':'unknown'})['ok']
+check_run_actions(loaded['document'])
 
 
 for kind in ('cv', 'cf'):
@@ -126,16 +177,22 @@ assert len(fresh.device_list()['devices']) == 2
 
 # The same request was submitted by clicking Run batch in the real ImGui panel.
 batch_session = scapslab.Session(ui_document)
-python_batch = batch_session.run_batch(spec=ui_spec)
+python_batch = batch_session.run_batch(spec=ui_spec, actions=ui_batch['run_plan'])
 assert python_batch['ok'], python_batch
 for actual, expected in zip(python_batch['batch_result']['rows'], ui_batch['rows'], strict=True):
     for key in ('id', 'parameters', 'status', 'error_type', 'project_hash', 'curves', 'values', 'statuses'):
         assert actual.get(key) == expected.get(key), key
 assert len(python_batch['batch_result']['rows']) == 3
+assert len(python_batch['history']) == 1
+for actual, expected in zip(python_batch['batch_result']['action_members'], ui_batch['action_members'], strict=True):
+    for action, reference_action in zip(actual['actions'], expected['actions'], strict=True):
+        assert action['kind'] == reference_action['kind']
+        assert action['result']['points'] == reference_action['result']['points']
 assert batch_session.record_batch([dict(id='Voc', quantity='Voc')])['batch_result']['rows'][0]['statuses']['Voc'] == 'not_illuminated'
 with tempfile.TemporaryDirectory(prefix='scapslab-batch-') as folder:
     path = Path(folder) / 'recorder.csv'
-    assert batch_session.export_batch(path)['ok']
+    exported = batch_session.export_batch(path)
+    assert exported['ok'], exported.get('error')
     rows = list(csv.DictReader(path.open()))
     assert len(rows) == 3 and 'Voc status' in rows[0]
     assert batch_session.export_batch(path, 'point_1')['ok']

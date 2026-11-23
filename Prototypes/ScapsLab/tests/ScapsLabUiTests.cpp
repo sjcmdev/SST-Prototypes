@@ -26,7 +26,7 @@ TEST(TypedBoundary, PanelsReadTypedResultsWithoutJsonViews) {
         execute({{"operation","cf"},{"temperature_K",300.},{"voltage_V",0.},{"start_Hz",100.},{"stop_Hz",1000.},{"points",3}});
         execute({{"operation","qe"},{"start_nm",500.},{"stop_nm",700.},{"points",3}});
         auto spec=BatchDefaults();spec["axes"][0]["count"]=2;execute({{"operation","run_batch"},{"spec",spec}});
-        for(int view:{2,5,6,7,8,9,10,11,12,17,18,19,20,22}) {
+        for(int view:{2,4,5,6,7,8,9,10,11,12,17,18,19,20,22}) {
             Panel panel(&w,view);for(int frame=0;frame<2;++frame){io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowSize(ImVec2(1100,900));ImGui::Begin("Typed boundary panels");panel.RenderContent();ImGui::End();ImGui::Render();}
         }
         EXPECT_TRUE(w.ViewsReady());EXPECT_EQ(w.warmJob,0u);
@@ -170,20 +170,19 @@ Json RunBatchViaUi(const Json &document,const Json &spec) {
 
 Json RunLightViaUi() {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,1100);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string()));Panel panel(&w,19);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string()));Panel panel(&w,19),run(&w,4);
+    auto runFrame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1100,1050));ImGui::Begin("Run parity");run.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);};
+    runFrame();runFrame();const auto shotId=ImGui::FindWindowByName("Run parity")->GetID("Single shot");bool clicked=false;
+    for(float y=30;y<1000 && !clicked;y+=2) {io.AddMousePosEvent(75,y);runFrame();runFrame();if(GImGui->HoveredId==shotId){clicked=true;io.AddMouseButtonEvent(0,true);runFrame();io.AddMouseButtonEvent(0,false);runFrame();}}
+    EXPECT_TRUE(clicked)<<"Single shot in Run must execute the included I-V Action";
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response;
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1100,1050));ImGui::Begin("Light parity");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);};
     frame();frame();
-    // Select the actual I-V tab, then its Calculate button.
-    auto click=[&](const char *label,float x,float first,float last) {
-        const auto id=ImHashStr(label,0,ImHashStr("Light I-V",0,ImGui::FindWindowByName("Light parity")->GetID("Optical views")));bool found=false;
-        for(float y=first;y<last && !found;y+=2) {io.AddMousePosEvent(x,y);frame();frame();if(GImGui->HoveredId==id) {found=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
-        return found;
-    };
     // Tab IDs are scoped by the tab bar; position is obtained from the rendered item.
     const auto tabId=ImHashStr("Light I-V",0,ImGui::FindWindowByName("Light parity")->GetID("Optical views"));
     bool tab=false;
     for(float y=45;y<150 && !tab;y+=2) for(float x=100;x<250 && !tab;x+=3) {io.AddMousePosEvent(x,y);frame();frame();if(GImGui->HoveredId==tabId) {tab=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
-    EXPECT_TRUE(tab);EXPECT_TRUE(click("Calculate light I-V",75,60,220));
+    EXPECT_TRUE(tab);
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();
     frame();frame();
     bool pvPlot=false;
@@ -380,7 +379,7 @@ TEST(ScapsLab,EscapeDuringSliderDragRestoresTheStartValue) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,900);io.Fonts->AddFontDefault();io.Fonts->Build();
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));const auto original=w.Current().Document();Panel panel(&w,4);
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(900,800));ImGui::Begin("Esc drag");panel.RenderContent();ImGui::End();ImGui::Render();};
-    frame();frame();const auto id=ImHashStr("##value",0,ImHashStr("T [K]",0,ImGui::FindWindowByName("Esc drag")->GetID("T [K]")));
+    frame();frame();const auto id=ImHashStr("##value",0,ImHashStr("Temperature [K]",0,ImGui::FindWindowByName("Esc drag")->GetID("Temperature [K]")));
     ImVec2 at;bool found=false;for(float y=30;y<500 && !found;y+=2) {io.AddMousePosEvent(450,y);frame();frame();if(GImGui->HoveredId==id) {found=true;at=ImVec2(450,y);}}
     ASSERT_TRUE(found);
     io.AddMouseButtonEvent(0,true);frame();io.AddMousePosEvent(at.x-150,at.y);frame();frame();io.AddMousePosEvent(at.x-250,at.y);frame();
@@ -412,7 +411,7 @@ TEST(ScapsLab,LiveDragLatestWinsStartsFewJobsAndEndsWithTheExactFinalRun) {
     w.dragging=false;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",last},{"gesture_id","drag"}}).at("ok").get<bool>());
     Settle(w);
     EXPECT_EQ(w.Current().result.at("project_snapshot").at("temperature_K").get<double>(),329.)<<"exact run of the final value";
-    EXPECT_TRUE(w.Current().previewV.empty());EXPECT_EQ(w.Current().history.size(),baseline+1);
+    EXPECT_TRUE(w.Current().previewV.empty());EXPECT_EQ(w.Current().history.size(),baseline)<<"auto exact only updates Live";
     Workflow ref(CreateRef<JobSystem>(nullptr,1));ref.Current().SetDocument(w.Current().Document());ASSERT_TRUE(ref.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(ref);
     ASSERT_EQ(w.Current().result.at("points").size(),ref.Current().result.at("points").size());
     for(std::size_t i=0;i<ref.Current().result.at("points").size();++i) EXPECT_EQ(w.Current().result.at("points")[i].at("J_A_m2"),ref.Current().result.at("points")[i].at("J_A_m2"));

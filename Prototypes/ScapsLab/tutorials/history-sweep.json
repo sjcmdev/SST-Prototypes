@@ -29,7 +29,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "In Run click Calculate I-V. The result is stored in Run history.",
+      "instruction": "In Run include I-V and click Single shot. The result is stored in Run history.",
       "command": {
         "operation": "run"
       },
@@ -65,7 +65,7 @@
       "target": {
         "window": "scapslab.Run"
       },
-      "instruction": "Right-click Temperature [K], choose Sweep..., set delta 10 K, 3 points, and run. The converged rows appear in Batch.",
+      "instruction": "Right-click Temperature [K], set Minimum to 290 K, Maximum to 310 K, Sampling to Points (3), then Run quick batch. The converged rows appear in Batch.",
       "command": {
         "operation": "quick_sweep",
         "parameter_id": "temperature_K",

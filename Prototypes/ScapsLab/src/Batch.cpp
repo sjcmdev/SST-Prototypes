@@ -45,7 +45,7 @@ double ParameterValue(const scaps_core::BatchRow& row,const std::string& key) {
     return std::visit([](const auto& value)->double {using T=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<T,double> || std::is_same_v<T,std::int64_t>)return double(value);else throw std::invalid_argument("Workbook axes must be numeric");},row.parameters.at(key));
 }
 void Workbook(const BatchResult& result,const std::vector<Ref<const scaps_core::BatchRow>>& rows,const std::string& path) {
-    namespace pl=sst::plotlab;const auto& table=result.Schema();
+    namespace pl=sst::plotlab;const auto table=result.runPlan?result.FileMetadata():result.Schema();
     pl::Project project("ScapsLab batch");const auto book=project.reserveId(),sheet=project.reserveId();
     pl::Worksheet worksheet;worksheet.source["provenance"]=table.at("provenance").dump();worksheet.source["batch_spec"]=table.at("spec").dump();
     for(const auto& r:rows)worksheet.rows.push_back(project.reserveId());
@@ -109,6 +109,142 @@ Json QuickSweep(const ProjectDraft& document,const Json& request) {
 }
 bool BatchOperation(Operation& o,JobContext& ctx) {
     const auto op=o.request.at("operation").get<std::string>();
+    if(o.runPlan && (op=="run_batch" || op=="quick_sweep" || op=="retry_batch")) {
+        const bool retry=op=="retry_batch";
+        if(!o.actionBatch) {
+            if(retry && (!o.batchInput || !o.batchInput->projectSnapshot))throw std::invalid_argument("No original batch snapshot");
+            if(retry){o.draft=o.batchInput->projectSnapshot;o.recorder=o.batchInput->recorderDraft;}
+            auto config=retry?o.batchInput->batchDraft:o.batch;
+            if(!config)throw std::invalid_argument("Batch settings are missing");
+            if(op=="quick_sweep" && o.request.contains("parameter_id"))config=CreateRef<const BatchDraft>(PrepareQuickSweep(*o.draft,o.request.at("parameter_id"),o.request.at("delta_native_units"),o.request.value("points",5),o.request.value("spacing",std::string("linear"))));
+            o.preparedBatch=CreateRef<const BatchPlan>(PrepareBatch(*o.draft,*config,*o.recorder));
+            auto table=CreateRef<BatchResult>();table->native=true;table->runPlan=o.runPlan;table->projectSnapshot=o.draft;table->batchDraft=CreateRef<const BatchDraft>(o.preparedBatch->spec);table->recorderDraft=CreateRef<const RecorderDraft>(o.preparedBatch->recorder);
+            table->parentRun=o.request.value("source_run",std::string{});
+            const auto time=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            table->time_unix_ms=time;table->solverVersion=SCAPSLAB_SOLVER_VERSION;
+            o.batchGroup="batch-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+            const auto& points=o.preparedBatch->combinations;
+            if(retry){table->rows=o.batchInput->rows;table->actionMembers=o.batchInput->actionMembers;}
+            else for(std::size_t i=0;i<points.size();++i) {
+                auto row=CreateRef<scaps_core::BatchRow>();row->id="point_"+std::to_string(i);row->status="Not started";
+                for(const auto& [path,value]:points[i])row->parameters[path]=value;
+                for(const auto& c:table->recorderDraft->columns)row->values[c.id]={NAN,"not sampled"};
+                table->rows.push_back(std::move(row));table->actionMembers.push_back(CreateRef<const MemberActions>());
+            }
+            if(retry && std::none_of(table->rows.begin(),table->rows.end(),[&](const auto& row){return row->id==o.request.at("member_id").get<std::string>();}))throw std::invalid_argument("Unknown member_id");
+            o.actionBatch=std::move(table);o.typedOut=o.actionBatch;
+            if(o.feed){std::lock_guard guard(o.feed->lock);o.feed->memberTotal=points.size();o.feed->batch=o.actionBatch->batchDraft;}
+        }
+        auto& table=*o.actionBatch;
+        const bool parallel=!o.runPlan->pauseAfterAction && !o.runPlan->pauseAfterMember;
+        const auto executeMember=[&](std::size_t i,std::size_t& nextAction) {
+            if(retry && table.rows[i]->id!=o.request.at("member_id").get<std::string>())return;
+            ctx.ThrowIfCancellationRequested();if(o.cancellation.stop_requested())throw JobCancelledException();
+            auto member=CreateRef<MemberActions>(*table.actionMembers[i]);
+            auto row=CreateRef<scaps_core::BatchRow>(*table.rows[i]);
+            if(retry && nextAction==0){member->previous=table.actionMembers[i];member->results.clear();member->errors.clear();member->recorderSamples.clear();row->attempt++;}
+            row->status="Running";table.rows[i]=row;table.actionMembers[i]=member;
+            auto snapshot=CreateRef<ProjectDraft>(*table.projectSnapshot);
+            for(const auto& [path,value]:o.preparedBatch->combinations[i])SetProjectParameter(snapshot->project,path,value);
+            for(const auto& [path,value]:o.preparedBatch->combinations[i])if(path.starts_with("illumination.") && path!="illumination.enabled")snapshot->project.illumination.enabled=true;
+            member->illuminated=snapshot->project.illumination.enabled;
+            const auto recorderSnapshot=[&](ActionKind kind)->Ref<const ProjectDraft> {const auto& a=o.runPlan->actions[int(kind)];if(a.temperature_K<=0)return snapshot;auto overridden=CreateRef<ProjectDraft>(*snapshot);overridden->project.temperature_K=a.temperature_K;return overridden;};
+            for(;nextAction<o.runPlan->actions.size();++nextAction) {
+                const auto& a=o.runPlan->actions[nextAction];if(!a.include)continue;
+                const auto started=std::chrono::steady_clock::now();
+                try {
+                    Ref<const ProjectDraft> actionDraft=snapshot;if(a.temperature_K>0){auto overrideDraft=CreateRef<ProjectDraft>(*snapshot);overrideDraft->project.temperature_K=a.temperature_K;actionDraft=std::move(overrideDraft);}
+                    ValidateDraft(*actionDraft);
+                    Operation child(actionDraft,{{"operation",ActionOperation(a.kind)}});child.action=a;child.deferMetadata=true;child.jsonResponse=false;child.retainProfiles=table.batchDraft->include_profiles;child.cancellation=o.cancellation;child.parallelMember=parallel;
+                    child.refinePv=std::any_of(table.recorderDraft->columns.begin(),table.recorderDraft->columns.end(),[](const auto& c){return c.quantity=="Voc" || c.quantity=="Jsc" || c.quantity=="FF" || c.quantity=="eta" || c.quantity=="Vmp" || c.quantity=="Pmax";});
+                    child.measurement=PrepareBatchMember(actionDraft->project,*table.batchDraft,o.preparedBatch->engine);
+                    child.Execute(ctx);member->results.emplace_back(a.kind,std::move(child.typedOut));
+                } catch(const JobCancelledException&) {table.actionMembers[i]=member;throw;}
+                catch(const scaps_core::ExecutionCancelled&) {table.actionMembers[i]=member;throw JobCancelledException();}
+                catch(const std::exception& e) {member->errors[a.kind]=e.what();}
+                row->elapsed_s+=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
+                auto recorded=ExtractActions(*member,*table.recorderDraft);row->values=std::move(recorded.values);
+                row->photovoltaic=std::move(recorded.photovoltaic);row->photovoltaic_requested=recorded.photovoltaic_requested;
+                row->status=!member->errors.empty()?"Failed":recorded.status;
+                row->message=member->errors.empty()?"":member->errors.begin()->second;
+                row->error_type=member->errors.empty()?"":"action_failed";
+                member->summary=row;table.rows[i]=row;table.actionMembers[i]=member;
+                if(o.runPlan->pauseAfterAction && std::any_of(o.runPlan->actions.begin()+nextAction+1,o.runPlan->actions.end(),[](const auto& next){return next.include;})) {
+                    ++nextAction;o.paused=true;ctx.SetStage(std::string("Paused after ")+ActionId(a.kind)+" / "+row->id);return;
+                }
+            }
+            try { // Recorder settings are explicit sampling requests, including when curves are discarded.
+                auto recorded=ExtractActions(*member,*table.recorderDraft);
+                for(const auto& column:table.recorderDraft->columns) {
+                    const auto& existing=recorded.values.at(column.id);
+                    if(existing.status=="ok")continue;
+                    RunAction extra;extra.include=true;
+                    if(column.quantity=="profile") {
+                        if(std::any_of(member->recorderSamples.begin(),member->recorderSamples.end(),[&](const auto& sample){return sample.voltage_V==column.voltage_V;}))continue;
+                        const auto source=recorderSnapshot(o.runPlan->actions[0].include?ActionKind::Band:ActionKind::Iv);auto spec=PrepareBatchMember(source->project,*table.batchDraft,scaps_core::BatchSpec{});spec.voltages_V={column.voltage_V};
+                        for(const auto& c:table.recorderDraft->columns)if(c.quantity=="profile" && c.voltage_V==column.voltage_V)spec.columns.push_back(c);
+                        scaps_core::BatchOptions options;options.include_curves=true;options.execution.stop=o.cancellation.get_token();options.execution.budget=parallel?1:0;
+                        auto acquired=scaps_core::run_batch_member(source->project,spec,options);
+                        if(acquired.status=="Cancelled" || ctx.IsCancellationRequested())throw JobCancelledException();
+                        if(acquired.status!="Converged")member->errors[ActionKind::Band]=acquired.message;
+                        member->recorderSamples.insert(member->recorderSamples.end(),std::make_move_iterator(acquired.iv.begin()),std::make_move_iterator(acquired.iv.end()));recorded=ExtractActions(*member,*table.recorderDraft);continue;
+                    }
+                    if(column.quantity=="Voc" || column.quantity=="Jsc" || column.quantity=="FF" || column.quantity=="eta" || column.quantity=="Pmax" || column.quantity=="Vmp") {
+                        if(!member->illuminated || row->photovoltaic_requested)continue;
+                        const auto source=recorderSnapshot(ActionKind::Iv);auto spec=PrepareBatchMember(source->project,*table.batchDraft,scaps_core::BatchSpec{});spec.voltages_V={0.};spec.columns={column};spec.photovoltaic=true;spec.photovoltaic_voltage_limit_V=table.batchDraft->photovoltaic_voltage_limit_V;spec.incident_power_W_m2=table.batchDraft->incident_power_W_m2;
+                        scaps_core::BatchOptions options;options.execution.stop=o.cancellation.get_token();options.execution.budget=parallel?1:0;auto acquired=scaps_core::run_batch_member(source->project,spec,options);if(acquired.status=="Cancelled" || ctx.IsCancellationRequested())throw JobCancelledException();row->photovoltaic=std::move(acquired.photovoltaic);row->photovoltaic_requested=acquired.photovoltaic_requested;row->incident_power_W_m2=acquired.incident_power_W_m2;recorded=ExtractActions(*member,*table.recorderDraft);continue;
+                    }
+                    if(column.quantity=="J"){extra.kind=ActionKind::Band;extra.voltage_V=column.voltage_V;}
+                    else if(column.quantity=="C" || column.quantity=="G" || column.quantity=="Vbi") {
+                        extra.kind=ActionKind::Cv;extra.frequency_Hz=column.frequency_Hz;
+                        if(column.quantity=="Vbi")extra.range=o.runPlan->actions[2].range;
+                        else extra.range=SweepRange{SweepSampling::List,false,0,0,1,1,{column.voltage_V}};
+                    } else continue;
+                    const auto source=recorderSnapshot(extra.kind==ActionKind::Band?ActionKind::Iv:ActionKind::Cv);Operation sample(source,{{"operation",ActionOperation(extra.kind)}});sample.action=extra;sample.deferMetadata=true;sample.jsonResponse=false;sample.retainProfiles=false;sample.cancellation=o.cancellation;sample.parallelMember=parallel;
+                    sample.measurement=PrepareBatchMember(source->project,*table.batchDraft,o.preparedBatch->engine);sample.Execute(ctx);
+                    member->results.emplace_back(extra.kind,std::move(sample.typedOut));
+                    recorded=ExtractActions(*member,*table.recorderDraft);
+                }
+                row->values=std::move(recorded.values);row->status=member->errors.empty()?recorded.status:"Failed";
+            } catch(const JobCancelledException&) {throw;}
+            catch(const scaps_core::ExecutionCancelled&) {throw JobCancelledException();}
+            catch(const std::exception& e) {member->errors[ActionKind::Band]=e.what();row->status="Failed";row->error_type="recorder_failed";row->message=e.what();}
+            if(o.feed) {
+                LiveMember live;live.index=int(i);
+                for(const auto& [kind,result]:member->results)if(kind==ActionKind::Iv){const auto& iv=static_cast<const IvResult&>(*result);std::vector<double> v,j;for(const auto& p:iv.curve){v.push_back(p.voltage_V);j.push_back(ValidIvSample(p)?p.J_Am2:NAN);}for(const auto& p:iv.points){v.push_back(p.voltage_V);j.push_back(p.valid?p.J_A_m2:NAN);}live.v=Column::Intern(std::move(v));live.j=Column::Intern(std::move(j));}
+                o.feed->AddMember(std::move(live));
+            }
+            // Recorder has consumed the transient samples; only explicitly requested arrays survive.
+            if(!table.batchDraft->include_profiles)member->recorderSamples.clear();
+            if(!table.batchDraft->include_curves && !table.batchDraft->include_profiles)member->results.clear();
+            else if(!table.batchDraft->include_curves) {
+                for(auto& [kind,result]:member->results)if(auto iv=std::dynamic_pointer_cast<const IvResult>(result)){auto kept=std::const_pointer_cast<IvResult>(iv);std::erase_if(kept->points,[](const auto& p){return p.x_m.empty();});}
+                std::erase_if(member->results,[](const auto& r){return !std::dynamic_pointer_cast<const IvResult>(r.second);});
+            }
+            nextAction=0;
+            ctx.SetStage("Members "+std::to_string(i+1)+" / "+std::to_string(table.rows.size()));
+            if(o.runPlan->pauseAfterMember && i+1<table.rows.size()){o.paused=true;ctx.SetStage("Paused after Member "+row->id);return;}
+        };
+        const auto runMember=[&](std::size_t i,std::size_t& nextAction) {
+            try {executeMember(i,nextAction);}
+            catch(const JobCancelledException&) {
+                if(table.rows[i]->status!="Not started") {
+                    auto row=CreateRef<scaps_core::BatchRow>(*table.rows[i]);row->status="Cancelled";row->error_type="cancelled";row->message="Stopped after completed Actions";
+                    auto member=CreateRef<MemberActions>(*table.actionMembers[i]);member->summary=row;table.rows[i]=std::move(row);table.actionMembers[i]=std::move(member);
+                }
+                throw;
+            }
+        };
+        if(parallel) {
+            ParallelFor(ctx,table.rows.size(),[&](std::size_t i){std::size_t cursor=0;runMember(i,cursor);});
+            o.nextMember=table.rows.size();
+        } else for(;o.nextMember<table.rows.size();++o.nextMember) {
+            runMember(o.nextMember,o.nextAction);
+            if(o.paused){if(o.nextAction==0)++o.nextMember;return true;}
+        }
+        double elapsed=0;for(const auto& row:table.rows)elapsed+=row->elapsed_s;
+        table.elapsed_s=elapsed;o.outputValid=true;return true;
+    }
     if(op=="batch_select"){const int i=o.request.at("index");if(i<0 || !o.batchInput || i>=int(o.batchInput->rows.size()))throw std::invalid_argument("Unknown member index");}
     else if(op=="batch_parameters")o.output=BatchParameters(*o.draft);
     else if(op=="batch_settings") {
@@ -118,7 +254,7 @@ bool BatchOperation(Operation& o,JobContext& ctx) {
         if(op=="retry_batch" && !o.batchInput)throw std::invalid_argument("No batch to retry");
         auto config=op=="retry_batch"?o.batchInput->batchDraft:o.batch;auto recorder=op=="retry_batch"?o.batchInput->recorderDraft:o.recorder;
         if(!config || !recorder || !o.draft)throw std::invalid_argument("Batch has no typed project/settings snapshot");
-        if(op=="quick_sweep") {
+        if(op=="quick_sweep" && o.request.contains("parameter_id")) {
             auto quick=PrepareQuickSweep(*o.draft,o.request.at("parameter_id"),o.request.at("delta_native_units"),o.request.value("points",5),o.request.value("spacing",std::string("linear")));
             if(o.request.contains("voltages_V"))quick.voltages_V=o.request.at("voltages_V").get<std::vector<double>>();if(o.request.contains("frequencies_Hz"))quick.frequencies_Hz=o.request.at("frequencies_Hz").get<std::vector<double>>();config=CreateRef<const BatchDraft>(std::move(quick));
         }
@@ -142,7 +278,7 @@ bool BatchOperation(Operation& o,JobContext& ctx) {
         o.batchGroup="batch-"+std::to_string(metadata.at("provenance").at("time_unix_ms").get<std::int64_t>());
         o.members.resize(points.size());
         std::atomic<std::size_t> finished{0};
-        if(o.feed) {std::lock_guard g(o.feed->lock);o.feed->memberTotal=points.size();}
+        if(o.feed) {std::lock_guard g(o.feed->lock);o.feed->memberTotal=points.size();o.feed->batch=table->batchDraft;}
         const auto wanted=[&](std::size_t i){return op!="retry_batch" || table->rows[i]->id==o.request.at("member_id").get<std::string>();};
         ParallelFor(ctx,points.size(),[&](std::size_t i){
             if(wanted(i)) {
@@ -188,37 +324,33 @@ bool BatchOperation(Operation& o,JobContext& ctx) {
         ctx.SetProgress(float(points.size()),float(points.size()));
     } else if(op=="record_batch") {
         if(!o.batchInput)throw std::invalid_argument("No current batch results");
+        if(o.request.value("calculate_missing",false)) {
+            if(!o.batchInput->projectSnapshot || !o.batchInput->batchDraft)throw std::invalid_argument("No original snapshot for Calculate missing");
+            Operation child(o.batchInput->projectSnapshot,{{"operation","run_batch"},{"calculate_missing",true},{"source_run",o.request.value("source_run",std::string{})}});
+            auto plan=o.batchInput->runPlan?CreateRef<RunPlan>(*o.batchInput->runPlan):CreateRef<RunPlan>();plan->pauseAfterAction=false;plan->pauseAfterMember=false;
+            if(!o.batchInput->runPlan && o.batchInput->batchDraft->voltages_V)plan->actions[1].range=SweepRange{SweepSampling::List,false,0,0,1,1,*o.batchInput->batchDraft->voltages_V};
+            child.runPlan=std::move(plan);child.batch=o.batchInput->batchDraft;child.recorder=o.recorder;child.cancellation=o.cancellation;
+            child.Execute(ctx);o.actionBatch=std::move(child.actionBatch);o.typedOut=o.actionBatch;o.batchGroup=child.batchGroup;o.output=std::move(child.output);return true;
+        }
+        if(o.batchInput->runPlan) {
+            auto table=CreateRef<BatchResult>(*o.batchInput);table->recorderDraft=o.recorder;
+            for(std::size_t i=0;i<table->rows.size();++i) {
+                ctx.ThrowIfCancellationRequested();auto row=CreateRef<scaps_core::BatchRow>(*table->rows[i]);
+                row->values=ExtractActions(*table->actionMembers[i],*o.recorder).values;
+                // Curves off retains the original requested metrics even though samples were discarded.
+                for(auto& [id,value]:row->values)if(value.status=="not stored")for(const auto& old:o.batchInput->recorderDraft->columns)for(const auto& current:o.recorder->columns)
+                    if(id==old.id && id==current.id && old.quantity==current.quantity && old.field==current.field && old.voltage_min_V==current.voltage_min_V && old.voltage_max_V==current.voltage_max_V && (old.voltage_V==current.voltage_V || (!std::isfinite(old.voltage_V)&&!std::isfinite(current.voltage_V))) && (old.frequency_Hz==current.frequency_Hz || (!std::isfinite(old.frequency_Hz)&&!std::isfinite(current.frequency_Hz))) && (old.x_m==current.x_m || (!std::isfinite(old.x_m)&&!std::isfinite(current.x_m))))if(auto found=table->rows[i]->values.find(id);found!=table->rows[i]->values.end())value=found->second;
+                auto member=CreateRef<MemberActions>(*table->actionMembers[i]);member->summary=row;table->actionMembers[i]=std::move(member);table->rows[i]=std::move(row);
+            }
+            o.actionBatch=std::move(table);o.typedOut=o.actionBatch;return true;
+        }
         auto table=CreateRef<BatchResult>();table->native=true;auto metadata=o.batchInput->Schema();
         if(!o.batchInput->native || o.batchInput->legacyBase){table->legacyBase=o.batchInput->legacyBase?o.batchInput->legacyBase:o.batchInput;table->replacedRows=o.batchInput->replacedRows;}
         const auto& columns=o.recorder->columns;metadata["columns"]=NormalizedColumns(RecorderDraftJson(*o.recorder));table->projectSnapshot=o.batchInput->projectSnapshot;table->batchDraft=o.batchInput->batchDraft;table->recorderDraft=o.recorder;
         const auto replayDraft=o.batchInput->projectSnapshot;
         for(const auto& source:o.batchInput->rows) {
             ctx.ThrowIfCancellationRequested();
-            if(source->status=="Converged" && !source->curves_retained)throw std::invalid_argument("recording again requires include_curves=true");
             auto row=CreateRef<scaps_core::BatchRow>(*source);
-            scaps_core::BatchOptions fetch;fetch.include_curves=true;fetch.parallel_member=true;
-            std::vector<scaps_core::RecorderColumn> missing;
-            for(const auto& column:columns)if(column.quantity=="profile" && source->status=="Converged")for(const auto& point:source->iv) {
-                if(std::abs(point.voltage_V-column.voltage_V)<=8*std::numeric_limits<double>::epsilon()*std::max({1.,std::abs(point.voltage_V),std::abs(column.voltage_V)}) && (!point.profiles || !point.profiles->fields.contains(column.field))) {
-                    missing.push_back(column);break;
-                }
-            }
-            if(!missing.empty()) {
-                if(!replayDraft || !o.batchInput->batchDraft)throw std::invalid_argument("Batch has no typed replay snapshot");
-                auto project=replayDraft->project;
-                const auto parameters=ProjectNumbers(project);
-                for(const auto& [path,value]:source->parameters)if(parameters.contains(path))std::visit([&](const auto& number){if constexpr(std::is_arithmetic_v<std::decay_t<decltype(number)>>)SetProjectParameter(project,path,double(number));else throw std::invalid_argument("Expected numeric batch parameter: "+path);},value);
-                const auto& config=*o.batchInput->batchDraft;scaps_core::BatchSpec spec;spec.voltages_V=config.voltages_V.value_or(scaps_core::make_voltage_list(project.voltage));spec.columns=std::move(missing);spec.mesh_coordinates_m=config.mesh_coordinates_m;
-                for(const auto& [path,value]:source->parameters)if(path.starts_with("illumination.") && path!="illumination.enabled")project.illumination.enabled=true;
-                spec=PrepareBatchMember(project,config,std::move(spec));
-                const auto samples=scaps_core::run_batch_member(project,spec,fetch);
-                if(samples.status!="Converged")throw std::runtime_error("Profile acquisition failed: "+samples.status+" "+samples.message);
-                for(auto& point:row->iv)for(const auto& sample:samples.iv)if(sample.voltage_V==point.voltage_V && sample.profiles) {
-                    if(!point.profiles){point.profiles=sample.profiles;continue;}
-                    auto profiles=point.profiles?CreateRef<scaps_core::BatchProfile>(*point.profiles):CreateRef<scaps_core::BatchProfile>();profiles->x_m=sample.profiles->x_m;
-                    for(const auto& [field,values]:sample.profiles->fields)profiles->fields[field]=values;point.profiles=std::move(profiles);
-                }
-            }
             scaps_core::record_batch(*row,columns);table->rows.push_back(std::move(row));
         }
         table->body.prim=std::move(metadata);o.typedOut=std::move(table);o.output={{"provenance",o.batchInput->Schema().at("provenance")}};
@@ -230,7 +362,7 @@ bool BatchOperation(Operation& o,JobContext& ctx) {
         const auto path=o.request.at("path").get<std::string>();
         if(op=="send_to_plotlab")Workbook(*o.batchInput,rows,path);
         else {
-            const auto& schema=o.batchInput->Schema();std::vector<std::string> paths;for(const auto& axis:schema.at("spec").at("axes"))paths.push_back(axis.at("path"));
+            const auto schema=o.batchInput->runPlan?o.batchInput->FileMetadata():o.batchInput->Schema();std::vector<std::string> paths;for(const auto& axis:schema.at("spec").at("axes"))paths.push_back(axis.at("path"));
             std::vector<scaps_core::RecorderColumn> columns;for(const auto& c:schema.at("columns")){scaps_core::RecorderColumn column;column.id=c.at("id");column.unit=c.at("unit");columns.push_back(std::move(column));}
             scaps_core::BatchTable table;table.rows=rows;Save(path,scaps_core::batch_table_csv(table,paths,columns,schema.at("solver_version")));
         }

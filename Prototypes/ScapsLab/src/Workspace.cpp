@@ -11,6 +11,46 @@
 #pragma comment(lib,"psapi.lib")
 #endif
 namespace SST::ScapsLab {
+RunAction ReadRunAction(ActionKind kind,const Json& value) {
+    auto a=RunPlan{}.actions[std::size_t(kind)];
+    a.include=value.value("include",a.include);a.onEdit=value.value("on_edit",false);
+    a.voltage_V=value.value("voltage_V",a.voltage_V);a.frequency_Hz=value.value("frequency_Hz",a.frequency_Hz);a.temperature_K=value.value("temperature_K",0.);
+    a.constantFlux=value.value("probe_mode",std::string("constant_flux"))=="constant_flux";
+    a.photon_flux_m2_s=value.value("probe_photon_flux_m2_s",a.photon_flux_m2_s);a.probe_power_W_m2=value.value("probe_power_W_m2",a.probe_power_W_m2);
+    if(value.contains("range")) {
+        const auto& r=value.at("range");SweepRange range;
+        if(r.contains("points") && (!r.at("points").is_number_integer()))throw std::invalid_argument("Action points must be an integer");
+        const auto sampling=r.at("sampling").get<std::string>();
+        if(sampling!="points" && sampling!="step" && sampling!="list")throw std::invalid_argument("Unknown Action sampling");
+        range.sampling=sampling=="points"?SweepSampling::Points:sampling=="step"?SweepSampling::Step:SweepSampling::List;
+        range.logarithmic=r.value("logarithmic",false);range.minimum=r.value("minimum",0.);range.maximum=r.value("maximum",0.);range.step=r.value("step",1.);range.points=r.value("points",2);range.custom=r.value("values",std::vector<double>{});a.range=std::move(range);
+    } else if(kind==ActionKind::Cv) {
+        if(value.contains("start_V") || value.contains("stop_V") || value.contains("step_V")) {
+            auto r=*a.range;r.sampling=SweepSampling::Step;r.minimum=value.value("start_V",r.minimum);r.maximum=value.value("stop_V",r.maximum);r.step=value.value("step_V",r.step);a.range=std::move(r);
+        }
+    } else if(kind==ActionKind::Cf) {a.range->minimum=value.value("start_Hz",a.range->minimum);a.range->maximum=value.value("stop_Hz",a.range->maximum);a.range->points=value.value("points",a.range->points);}
+    else if(kind==ActionKind::Qe) {a.range->minimum=value.value("start_nm",a.range->minimum);a.range->maximum=value.value("stop_nm",a.range->maximum);a.range->points=value.value("points",a.range->points);}
+    return a;
+}
+RunPlan ReadRunPlan(const Json& value) {
+    ValidateActions(value);
+    RunPlan plan;
+    for(auto& a:plan.actions)if(value.contains(ActionId(a.kind)))a=ReadRunAction(a.kind,value.at(ActionId(a.kind)));
+    // The execution field is kept inside a technique object for compatibility with legacy actions objects.
+    if(value.contains("iv")){plan.pauseAfterAction=value.at("iv").value("pause_after_action",false);plan.pauseAfterMember=value.at("iv").value("pause_after_member",false);}
+    return plan;
+}
+Json RunPlanJson(const RunPlan& plan,const Json& original) {
+    Json out=original;
+    for(const auto& a:plan.actions) {
+        auto& v=out[ActionId(a.kind)];if(!v.is_object())v=Json::object();
+        v["operation"]=ActionOperation(a.kind);v["include"]=a.include;v["on_edit"]=a.onEdit;v["voltage_V"]=a.voltage_V;v["frequency_Hz"]=a.frequency_Hz;v["temperature_K"]=a.temperature_K;
+        v["probe_mode"]=a.constantFlux?"constant_flux":"constant_power";v["probe_photon_flux_m2_s"]=a.photon_flux_m2_s;v["probe_power_W_m2"]=a.probe_power_W_m2;
+        if(a.range) {const auto& r=*a.range;auto& fields=v["range"];if(!fields.is_object())fields=Json::object();fields.update({{"sampling",r.sampling==SweepSampling::Points?"points":r.sampling==SweepSampling::Step?"step":"list"},{"logarithmic",r.logarithmic},{"minimum",r.minimum},{"maximum",r.maximum},{"step",r.step},{"points",r.points},{"values",r.custom}});}
+        else v.erase("range");
+    }
+    out["iv"]["pause_after_action"]=plan.pauseAfterAction;if(plan.pauseAfterMember || out["iv"].contains("pause_after_member"))out["iv"]["pause_after_member"]=plan.pauseAfterMember;return out;
+}
 std::size_t PrivateBytes() {
 #ifdef _WIN32
     PROCESS_MEMORY_COUNTERS_EX m{};if(GetProcessMemoryInfo(GetCurrentProcess(),reinterpret_cast<PROCESS_MEMORY_COUNTERS *>(&m),sizeof(m)))return m.PrivateUsage;
@@ -31,7 +71,7 @@ std::size_t TypedBytes(const ResultBase *r,std::set<const void*> &seen) {
     if(!r || !seen.insert(r).second) return 0;
     std::size_t n=0;
     if(auto iv=dynamic_cast<const IvResult*>(r)) {
-        n=PBytes(iv->meta,seen)+VBytes(iv->mesh_x_m,seen);
+        n=PBytes(iv->meta,seen)+VBytes(iv->mesh_x_m,seen)+iv->curve.size()*sizeof(scaps_core::IVSample);
         for(const auto &p:iv->points) {
             n+=sizeof(IvPoint)+PBytes(p.rest,seen);for(const auto *v:{&p.x_m,&p.Ec_eV,&p.Ev_eV,&p.EFn_eV,&p.EFp_eV,&p.n_m3,&p.p_m3})n+=VBytes(*v,seen);
             if(p.details && seen.insert(p.details.get()).second) {
@@ -130,9 +170,9 @@ std::string Pretty(const Json &v,int indent) {
 std::string WorkspaceText(const Json &workspace) {return Pretty(workspace,0)+"\n";}
 void TrimHistory(Json &history,int retention) {
     int automatic=0;
-    for(const auto &run:history) if(!run.at("pinned").get<bool>()) ++automatic;
+    for(const auto &run:history) if(!run.at("pinned").get<bool>() && !run.value("explicit",false) && !run.value("legacy",false)) ++automatic;
     for(auto it=history.begin();it!=history.end() && automatic>retention;) {
-        if(!it->at("pinned").get<bool>()) {it=history.erase(it);--automatic;} else ++it;
+        if(!it->at("pinned").get<bool>() && !it->value("explicit",false) && !it->value("legacy",false)) {it=history.erase(it);--automatic;} else ++it;
     }
 }
 std::string RunLabel(const Json &run) {
@@ -169,9 +209,13 @@ std::string StoreRun(Json &history,const std::string &kind,const Json &result,co
     }
     const auto modelDiff=Json::diff(previous,document);
     if(label.empty()) label=history.empty()?"Initial run":previous==document?"Same parameters":"Model changed: "+modelDiff.front().at("path").get<std::string>();
+    if(request.value("operation",std::string{})=="single_shot") {
+        const std::time_t seconds=result.at("provenance").at("time_unix_ms").get<std::int64_t>()/1000;std::tm local{};localtime_s(&local,&seconds);char time[32];std::strftime(time,sizeof(time),"%H:%M:%S",&local);label=std::string("Single shot ")+time;
+    }
     const double t=double(sequence%12)/12.;
     Json colour=Json::array({.5+.45*std::cos(6.283*t),.5+.45*std::cos(6.283*(t-.333)),.5+.45*std::cos(6.283*(t+.333)),1.});
     history.push_back({{"run_id",id},{"kind",kind},{"model_hash",modelHash?*modelHash:DocumentHash(document)},{"document",document},{"diff",changes},{"model_diff",modelDiff},{"label",label},{"request",request},{"time_unix_ms",result.at("provenance").at("time_unix_ms")},{"elapsed_s",result.value("elapsed_s",result.value("compute_time_ms",0.)/1000.)},{"provenance",result.at("provenance")},{"pinned",false},{"name",""},{"visible",true},{"colour",colour},{"group_id",group}});
+    if(request.value("operation",std::string{})=="single_shot" || request.value("operation",std::string{})=="capture_live")history.back()["explicit"]=true;
     TrimHistory(history,retention);
     return id;
 }
@@ -187,7 +231,7 @@ void DropProfiles(Json &run) {
 void CompactHistory(Json &workspace) {
     // shortcut: profiles over 64 KiB stay in memory only; move them to the HDF5 sidecar in slview1.
     for(auto &device:workspace["devices"]) for(auto &run:device["history"]) {
-        if(run["result"].dump().size()<=65536) continue;
+        if(run.value("explicit",false) || run.value("legacy",false) || run["result"].dump().size()<=65536) continue;
         DropProfiles(run);
     }
 }
@@ -196,7 +240,7 @@ void LimitProfiles(DeviceState &d,int keep) {
     const auto &h=*d.history;std::vector<std::string> drop;int kept=0;
     for(std::size_t i=h.size();i-->0;) {
         const auto &run=h[i];
-        if(!run.value("profiles_stored",true)) continue;
+        if(run.value("explicit",false) || run.value("legacy",false) || !run.value("profiles_stored",true)) continue;
         const auto id=run.at("run_id").get<std::string>();const auto typed=d.RunResult(id);
         const auto iv=dynamic_cast<const IvResult*>(typed.get());const auto ac=dynamic_cast<const AcResult*>(typed.get());
         const bool has=iv?HasProfiles(*iv):ac&&(ac->has>>31&1u)&&((ac->has&1u)||(ac->meta.prim.is_object()&&ac->meta.prim.contains("mesh_x_m")));
@@ -228,35 +272,72 @@ Json HistoryJson(const Json &history,const RunMap &runs,bool cached) {
     Json out=Json::array();
     for(const auto &run:history) {
         Json copy=run;auto it=runs.find(run.at("run_id").get<std::string>());
-        copy["result"]=it==runs.end()?Json::object():JsonOf(*it->second,cached);out.push_back(std::move(copy));
+        copy["result"]=it==runs.end()?Json::object():JsonOf(*it->second,cached);
+        if(it!=runs.end())if(auto batch=std::dynamic_pointer_cast<const BatchResult>(it->second);batch && batch->runPlan) {
+            copy["document"]=copy.at("result").at("project_snapshot");copy["provenance"]=copy.at("result").at("provenance");copy["model_hash"]=copy.at("provenance").at("device_hash");
+        }
+        out.push_back(std::move(copy));
     }
     return out;
 }
-void AttachResults(Json &device,const Json &history,const DeviceResults &r,bool cached) {
+void AttachResults(Json &device,const Json &history,const DeviceResults &r,bool cached,bool compact) {
+    if(compact) {
+        Json pool=Json::object();std::map<const ResultBase*,std::string> ids;
+        const auto store=[&](const Ref<const ResultBase>& result)->Json {
+            if(!result || result->liveOnly)return Json::object();
+            if(auto found=ids.find(result.get());found!=ids.end())return {{"$result_ref",found->second}};
+            auto value=JsonOf(*result,cached);std::string id;
+            for(const auto& entry:pool.items())if(entry.value()==value){id=entry.key();break;}
+            if(id.empty()){id="result-"+std::to_string(pool.size());pool[id]=std::move(value);}
+            ids[result.get()]=id;return {{"$result_ref",id}};
+        };
+        device["history"]=Json::array();
+        for(const auto& run:history) {
+            auto copy=run;const auto found=r.runs->find(run.at("run_id").get<std::string>());
+            copy["result"]=found==r.runs->end()?Json::object():store(found->second);
+            if(found!=r.runs->end())if(auto batch=std::dynamic_pointer_cast<const BatchResult>(found->second);batch && batch->runPlan) {
+                const auto& saved=pool.at(copy.at("result").at("$result_ref").get<std::string>());
+                copy["document"]=saved.at("project_snapshot");copy["provenance"]=saved.at("provenance");copy["model_hash"]=copy.at("provenance").at("device_hash");
+            }
+            device["history"].push_back(std::move(copy));
+        }
+        device["result"]=store(r.result);device["band_result"]=store(r.band);device["batch_result"]=store(r.batch);
+        device["ac_results"]=Json::object();for(const auto& [kind,result]:r.ac)if(!result->liveOnly)device["ac_results"][kind]=store(result);
+        if(!pool.empty())device["stored_results"]=std::move(pool);return;
+    }
     device["history"]=HistoryJson(history,*r.runs,cached);
-    device["result"]=r.result?JsonOf(*r.result,cached):Json::object();device["band_result"]=r.band?JsonOf(*r.band,cached):Json::object();
-    Json ac=Json::object();for(const auto &[k,v]:r.ac)ac[k]=JsonOf(*v,cached);device["ac_results"]=std::move(ac);
+    device["result"]=r.result && !r.result->liveOnly?JsonOf(*r.result,cached):Json::object();device["band_result"]=r.band && !r.band->liveOnly?JsonOf(*r.band,cached):Json::object();
+    Json ac=Json::object();for(const auto &[k,v]:r.ac)if(!v->liveOnly)ac[k]=JsonOf(*v,cached);device["ac_results"]=std::move(ac);
     device["batch_result"]=r.batch?JsonOf(*r.batch,cached):Json::object();
 }
 std::vector<DeviceResults> ExtractResults(Json &workspace) {
     std::vector<DeviceResults> out;
     if(!workspace.is_object() || !workspace.contains("devices")) return out;
     for(auto &item:workspace["devices"]) {
-        DeviceResults r;auto runs=CreateRef<RunMap>();
+        DeviceResults r;auto runs=CreateRef<RunMap>();std::map<std::string,Ref<const ResultBase>> decoded;
+        const auto read=[&](Json value,const std::string& kind)->Ref<const ResultBase> {
+            std::string id;
+            if(value.size()==1 && value.contains("$result_ref") && item.contains("stored_results")){id=value.at("$result_ref").get<std::string>();if(auto found=decoded.find(id);found!=decoded.end())return found->second;value=item.at("stored_results").at(id);}
+            Ref<const ResultBase> result;
+            if(kind=="iv" || kind=="band")result=CreateRef<const IvResult>(IvFromJson(std::move(value)));
+            else if(kind=="batch")result=CreateRef<const BatchResult>(BatchFromJson(value));
+            else result=CreateRef<const AcResult>(AcFromJson(std::move(value)));
+            if(!id.empty())decoded[id]=result;return result;
+        };
         const auto take=[&](const char *key) {Json v=Json::object();if(item.contains(key)) {v=std::move(item[key]);item[key]=Json::object();}return v;};
-        if(auto j=take("result");!j.empty()) r.result=CreateRef<const IvResult>(IvFromJson(std::move(j)));
-        if(auto j=take("band_result");!j.empty()) r.band=CreateRef<const IvResult>(IvFromJson(std::move(j)));
-        if(auto j=take("ac_results");j.is_object()) for(auto it=j.begin();it!=j.end();++it) if(!it.value().empty()) r.ac[it.key()]=CreateRef<const AcResult>(AcFromJson(it.value()));
-        if(auto j=take("batch_result");!j.empty()) r.batch=CreateRef<const BatchResult>(BatchFromJson(j));
+        if(auto j=take("result");!j.empty()) r.result=std::dynamic_pointer_cast<const IvResult>(read(std::move(j),"iv"));
+        if(auto j=take("band_result");!j.empty()) r.band=std::dynamic_pointer_cast<const IvResult>(read(std::move(j),"band"));
+        if(auto j=take("ac_results");j.is_object()) for(auto it=j.begin();it!=j.end();++it) if(!it.value().empty()) r.ac[it.key()]=std::dynamic_pointer_cast<const AcResult>(read(it.value(),it.key()));
+        if(auto j=take("batch_result");!j.empty()) r.batch=std::dynamic_pointer_cast<const BatchResult>(read(std::move(j),"batch"));
         if(item.contains("history") && item["history"].is_array()) for(auto &run:item["history"]) {
             if(!run.contains("result")) continue;
             Json result=std::move(run["result"]);run.erase("result");
             const auto id=run.at("run_id").get<std::string>(),kind=run.at("kind").get<std::string>();
-            if(kind=="iv" || kind=="band") (*runs)[id]=CreateRef<const IvResult>(IvFromJson(std::move(result)));
-            else if(kind=="batch") (*runs)[id]=CreateRef<const BatchResult>(BatchFromJson(result));
-            else (*runs)[id]=CreateRef<const AcResult>(AcFromJson(std::move(result)));
+            if(kind=="iv" || kind=="band") (*runs)[id]=read(std::move(result),kind);
+            else if(kind=="batch") {auto batch=std::dynamic_pointer_cast<const BatchResult>(read(std::move(result),kind));if(batch->runPlan){run["document"]=Json::object();run["model_hash"]="";run["provenance"]["device_hash"]="";}(*runs)[id]=std::move(batch);}
+            else (*runs)[id]=read(std::move(result),kind);
         }
-        r.runs=std::move(runs);out.push_back(std::move(r));
+        item.erase("stored_results");r.runs=std::move(runs);out.push_back(std::move(r));
     }
     return out;
 }
@@ -271,11 +352,14 @@ Json Workflow::Workspace(bool withResults) const {
     Json devices=Json::array();
     for(const auto &d:project.devices) {
         Json device={{"id",d->id},{"name",d->name},{"colour",d->colour},{"description",d->description},
-            {"history",noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->Document()},{"result",none},{"band_result",none},{"ac_results",none},{"batch_result",none},{"batch_spec",d->BatchSpec()},{"recorder_columns",d->RecorderSpec()},{"status",withResults?d->status:std::string("no results")}};
+            {"history",noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->runPlanEdited?RunPlanJson(*d->runPlan,d->actions):d->actions},{"document",d->Document()},{"result",none},{"band_result",none},{"ac_results",none},{"batch_result",none},{"batch_spec",d->BatchSpec()},{"recorder_columns",d->RecorderSpec()},{"status",withResults?d->status:std::string("no results")}};
+        auto selection=d->fileExtensions.value("selection",Json::object());selection.update(device.at("selection"));if(d->selectedAttempt || selection.contains("attempt"))selection["attempt"]=d->selectedAttempt;device["selection"]=std::move(selection);
+        auto extensions=d->fileExtensions;extensions.update(device);device=std::move(extensions);
+        if(d->runPlanEdited || device.contains("use_run_actions"))device["use_run_actions"]=d->runPlanEdited;
         if(withResults) AttachResults(device,*d->history,d->Results(),!lightResponse);
         devices.push_back(std::move(device));
     }
-    return {{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}};
+    auto out=project.fileExtensions;out.update(Json{{"schema_version",project.schema_version},{"name",project.name},{"devices",devices},{"active_device",project.active_device},{"compare_set",project.compare_set},{"ui",project.ui}});return out;
 }
 // ui object checks shared by workspace validation and project_edit; returns history_retention
 int ValidateUi(const Json &ui,bool strictPlotRanges) {
@@ -291,7 +375,8 @@ int ValidateUi(const Json &ui,bool strictPlotRanges) {
         }
     }
     for(const auto *key:{"optical_tab","gr_tab","recorder_plot"})if(ui.contains(key) && (!ui.at(key).is_number_integer() || ui.at(key).get<int>()<0 || ui.at(key).get<int>()>10000))throw std::invalid_argument("Invalid selected tab/plot");
-    for(const auto *key:{"gr_follow","iv_absolute_log"})if(ui.contains(key) && !ui.at(key).is_boolean())throw std::invalid_argument("Invalid plot toggle");
+    for(const auto *key:{"gr_follow","iv_absolute_log","contact_annotations","batch_absolute"})if(ui.contains(key) && !ui.at(key).is_boolean())throw std::invalid_argument("Invalid plot toggle");
+    if(ui.contains("results_action")){bool valid=false;for(int i=0;i<5;++i)valid|=ui.at("results_action")==ActionId(ActionKind(i));if(!valid)throw std::invalid_argument("Unknown Results Action");}
     if(ui.contains("gr_hidden")){if(!ui.at("gr_hidden").is_array())throw std::invalid_argument("gr_hidden must be an array");for(const auto &id:ui.at("gr_hidden"))if(!id.is_string())throw std::invalid_argument("Invalid mechanism ID");}
     if(ui.contains("gr_bias") && (!ui.at("gr_bias").is_object() || !ui.at("gr_bias").at("voltage_V").is_number() || !std::isfinite(ui.at("gr_bias").at("voltage_V").get<double>())))throw std::invalid_argument("Invalid G/R voltage_V");
     const auto retention=ui.value("history_retention",5);
@@ -307,11 +392,25 @@ void ValidateActions(const Json &actions) {
         for(const auto *key:{"temperature_K","voltage_V","start_V","stop_V","step_V","frequency_Hz","start_Hz","stop_Hz","points","start_nm","stop_nm","probe_photon_flux_m2_s","probe_power_W_m2"})
             if(a->contains(key) && (!a->at(key).is_number() || !std::isfinite(a->at(key).get<double>())))throw std::invalid_argument("Invalid numeric action setting");
         if(a->contains("probe_mode") && a->at("probe_mode")!="constant_flux" && a->at("probe_mode")!="constant_power")throw std::invalid_argument("Invalid QE probe mode");
+        if(a->contains("range"))for(int i=0;i<5;++i)if(a.key()==ActionId(ActionKind(i))) {
+            const auto typed=ReadRunAction(ActionKind(i),*a);(void)SweepValues(*typed.range);
+        }
     }
 }
 // Pure check of a whole workspace document (no live state touched, no JobSystem).
 void ValidateWorkspace(const Json &value) {
-    if(value.value("schema_version",0)<0 || value.value("schema_version",0)>3) throw std::invalid_argument("Unsupported ScapsLab schema_version");
+    if(value.contains("devices") && value.at("devices").is_array() && std::any_of(value.at("devices").begin(),value.at("devices").end(),[](const auto& d){return d.contains("stored_results");})) {
+        if(value.value("schema_version",0)!=4)throw std::invalid_argument("Result references require ScapsLab v4");
+        auto expanded=value;
+        for(auto& d:expanded["devices"])if(d.contains("stored_results")) {
+            const auto pool=std::move(d["stored_results"]);d.erase("stored_results");if(!pool.is_object())throw std::invalid_argument("Invalid stored_results");
+            const auto expand=[&](Json& result){if(result.contains("$result_ref")){if(result.size()!=1)throw std::invalid_argument("Invalid result reference");const auto id=result.at("$result_ref").template get<std::string>();if(!pool.contains(id) || pool.at(id).contains("$result_ref"))throw std::invalid_argument("Unknown result reference");result=pool.at(id);}};
+            for(const auto* key:{"result","band_result","batch_result"})if(d.contains(key))expand(d[key]);
+            for(auto& result:d["ac_results"])expand(result);for(auto& run:d["history"])expand(run["result"]);
+        }
+        ValidateWorkspace(expanded);return;
+    }
+    if(value.value("schema_version",0)<0 || value.value("schema_version",0)>4) throw std::invalid_argument("Unsupported ScapsLab schema_version");
     const auto &devices=value.at("devices");
 if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::invalid_argument("Expected 1..1000 devices");
     Project checked;checked.name=value.at("name").get<std::string>();if(checked.name.empty()) throw std::invalid_argument("Project name is empty");
@@ -323,7 +422,7 @@ if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::inv
         (void)Model(item.at("document"));
         if(item.contains("selection")) {
             const auto &selection=item.at("selection");if(!selection.is_object())throw std::invalid_argument("selection must be an object");
-            for(const auto *key:{"layer","interface","bias","member"})if(selection.contains(key) && (!selection.at(key).is_number_integer() || selection.at(key).get<int>()<(std::string(key)=="interface"?-1:0)))throw std::invalid_argument("Invalid selection index");
+            for(const auto *key:{"layer","interface","bias","member","attempt"})if(selection.contains(key) && (!selection.at(key).is_number_integer() || selection.at(key).get<int>()<(std::string(key)=="interface"?-1:0)))throw std::invalid_argument("Invalid selection index");
             if(selection.contains("voltage_V") && (!selection.at("voltage_V").is_number() || !std::isfinite(selection.at("voltage_V").get<double>())))throw std::invalid_argument("Invalid selected voltage_V");
         }
         const auto history=item.value("history",Json::array());
@@ -344,7 +443,8 @@ if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::inv
         }
         const auto selected=item.value("selected_run",std::string{});
         if(!selected.empty() && !runs.contains(selected)) throw std::invalid_argument("Unknown selected_run");
-        if(item.contains("actions")) ValidateActions(item.at("actions"));
+        if(item.contains("use_run_actions") && !item.at("use_run_actions").is_boolean())throw std::invalid_argument("use_run_actions must be boolean");
+        if(item.contains("actions")) (void)ReadRunPlan(item.at("actions"));
         if(item.at("name").get<std::string>().empty()) throw std::invalid_argument("Device name is empty");
         const auto &colour=item.at("colour");if(!colour.is_array() || colour.size()!=4) throw std::invalid_argument("colour must contain four RGBA values");
         for(const auto &c:colour) if(!c.is_number() || !std::isfinite(c.get<double>()) || c.get<double>()<0 || c.get<double>()>1) throw std::invalid_argument("Invalid RGBA colour");
@@ -367,6 +467,13 @@ if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::inv
         for(const auto &run:history) {
             const auto &result=run.at("result");
             if(run.at("kind")!="batch") {validate(result,run.value("profiles_stored",true));continue;}
+            if(result.contains("run_plan") && result.contains("action_members")) {
+                const auto typed=BatchFromJson(result);ValidateRunPlan(*typed.runPlan,*typed.projectSnapshot);
+                const auto plan=PrepareBatch(*typed.projectSnapshot,*typed.batchDraft,*typed.recorderDraft);
+                if(typed.rows.size()!=plan.combinations.size())throw std::invalid_argument("Stored Action batch has an invalid member count");
+                for(const auto& row:typed.rows)for(const auto& column:typed.recorderDraft->columns)if(!row->values.contains(column.id))throw std::invalid_argument("Missing stored Recorder cell");
+                continue;
+            }
             if(!result.at("provenance").at("solver_version").is_string() || !result.at("provenance").at("time_unix_ms").is_number_integer() || !result.at("rows").is_array() || result.at("rows").size()!=1 || !result.at("columns").is_array() || !result.at("spec").is_object())throw std::invalid_argument("Invalid batch history result");
             const auto &row=result.at("rows").front();
             if(!row.at("id").is_string() || !row.at("status").is_string() || !row.at("elapsed_s").is_number() || !row.at("parameters").is_object() || !row.at("values").is_object() || !row.at("statuses").is_object())throw std::invalid_argument("Invalid batch history member");
@@ -404,15 +511,29 @@ if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::inv
 }
 Json NormalizeWorkspace(Json workspace) {
     ValidateWorkspace(workspace);
-    for(auto &device:workspace["devices"]) device["document"]=NormalizeDocument(std::move(device["document"]));
+    for(auto &device:workspace["devices"]) {
+        device["document"]=NormalizeDocument(std::move(device["document"]));
+        if(workspace.value("schema_version",0)>=4)continue;
+        if(!device.contains("history"))device["history"]=Json::array();auto& history=device["history"];
+        for(auto& run:history)if(!run.value("explicit",false))run["legacy"]=true;
+        const auto retain=[&](const Json& result,const std::string& kind) {
+            if(result.empty() || std::any_of(history.begin(),history.end(),[&](const auto& run){return run.at("result")==result;}))return;
+            auto id="legacy-current-"+kind;while(std::any_of(history.begin(),history.end(),[&](const auto& run){return run.at("run_id")==id;}))id+="-copy";
+            const auto document=result.value("project_snapshot",device.at("document"));
+            history.push_back({{"run_id",id},{"kind",kind},{"document",document},{"model_hash",DocumentHash(document)},{"diff",Json::array()},{"model_diff",Json::array()},{"label","Legacy current result / "+kind},{"request",Json::object()},{"provenance",result.at("provenance")},{"time_unix_ms",result.at("provenance").at("time_unix_ms")},{"elapsed_s",result.value("elapsed_s",0.)},{"pinned",false},{"name",""},{"visible",true},{"colour",device.at("colour")},{"group_id",""},{"legacy",true},{"result",result}});
+        };
+        retain(device.value("result",Json::object()),"iv");retain(device.value("band_result",Json::object()),"band");retain(device.value("batch_result",Json::object()),"batch");
+        const auto ac=device.value("ac_results",Json::object());for(const auto& [kind,result]:ac.items())retain(result,kind);
+    }
     return workspace;
 }
 Json SingleDeviceWorkspace(Json document,std::string projectName) { // what Workspace() yields for one default device; replaces the throwaway Workflow
     const auto name=document.value("case_id",std::string("Device"));
     Json device={{"id","device-1"},{"name",name},{"colour",Json::array({0.25,0.65,0.95,1.0})},{"description",""},{"history",Json::array()},{"selected_run",""},{"selection",{{"layer",0},{"interface",-1},{"bias",0},{"member",0},{"voltage_V",0.}}},{"actions",Json::object()},{"document",std::move(document)},{"result",Json::object()},{"band_result",Json::object()},{"ac_results",Json::object()},{"batch_result",Json::object()},{"batch_spec",BatchDefaults()},{"recorder_columns",RecorderDefaults()},{"status","no results"}};
-    return NormalizeWorkspace({{"schema_version",3},{"name",std::move(projectName)},{"devices",Json::array({std::move(device)})},{"active_device","device-1"},{"compare_set",Json::array({"device-1"})},{"ui",Json::object()}});
+    return NormalizeWorkspace({{"schema_version",4},{"name",std::move(projectName)},{"devices",Json::array({std::move(device)})},{"active_device","device-1"},{"compare_set",Json::array({"device-1"})},{"ui",Json::object()}});
 }
 void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<DeviceResults> *typed,const std::vector<Ref<const ProjectDraft>>* drafts) { // validated: value came from NormalizeWorkspace (already checked and normalized)
+    if(!validated){auto normalized=NormalizeWorkspace(value);SetWorkspace(normalized,true);return;}
     ++plotGen;
     if(!validated) ValidateWorkspace(value);
     std::vector<DeviceResults> own;
@@ -420,7 +541,7 @@ void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<D
     const auto &devices=value.at("devices");
     std::vector<Ref<const ProjectDraft>> imported;
     if(!drafts){for(const auto& device:devices)imported.push_back(DraftFromDocument(NormalizeDocument(device.at("document"))));drafts=&imported;}
-    Project checked;checked.schema_version=3;checked.name=value.at("name").get<std::string>();checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
+    Project checked;checked.schema_version=4;checked.fileExtensions=value;for(const auto* key:{"schema_version","name","devices","active_device","compare_set","ui"})checked.fileExtensions.erase(key);checked.name=value.at("name").get<std::string>();checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
     const auto retention=checked.ui.value("history_retention",5);
     std::size_t index=0;
     for(const auto &item:devices) {
@@ -428,12 +549,13 @@ void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<D
         for(const auto &existing:project.devices) if(existing->id==id) state=existing;
         if(!state) state=CreateRef<DeviceState>();
         {Json h=Json::array();for(const auto &run:item.value("history",Json::array())) {Json copy=run;copy.erase("result");h.push_back(std::move(copy));}state->history=std::move(h);}
-        TrimHistory(state->history.mut(),retention);
-        state->selectedRun=item.value("selected_run",std::string{});
+
+        state->selectedRun=item.value("selected_run",std::string{});state->selectedAttempt=item.value("selection",Json::object()).value("attempt",0);
         if(std::none_of(state->history.begin(),state->history.end(),[&](const Json &r){return r.at("run_id")==state->selectedRun;}))state->selectedRun.clear();
         const auto selection=item.value("selection",Json::object());
         state->selectedLayer=selection.value("layer",0);state->selectedInterface=selection.value("interface",-1);state->selectedBias=selection.value("bias",0);state->selectedMember=selection.value("member",0);state->biasVoltage_V=selection.value("voltage_V",0.);
-        state->actions=item.value("actions",Json::object());
+        state->fileExtensions=item;for(const auto* key:{"id","name","colour","description","history","selected_run","actions","document","result","band_result","ac_results","batch_result","stored_results","batch_spec","recorder_columns","status"})state->fileExtensions.erase(key);
+        state->actions=item.value("actions",Json::object());state->runPlan=CreateRef<const RunPlan>(ReadRunPlan(state->actions));state->runPlanEdited=item.value("use_run_actions",false);
         state->id=id;state->name=item.at("name");state->colour=item.at("colour");state->description=item.value("description",std::string{});
         state->SetBatchSpec(item.value("batch_spec",BatchDefaults()));state->SetRecorderSpec(item.value("recorder_columns",RecorderDefaults()));
         state->SetDraft(drafts->at(index));state->SetResults(index<typed->size()?(*typed)[index]:DeviceResults{});state->SyncRuns();state->status=item.value("status",std::string("no results"));
@@ -445,7 +567,7 @@ void Workflow::RefreshDirty() {const bool was=dirty;for(auto &d:project.devices)
 Json Workflow::Snapshot() const {
     const auto &d=*std::find_if(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==project.active_device;});
     Json list=Json::array();for(const auto &item:project.devices) list.push_back({{"device_id",item->id},{"name",item->name},{"description",item->description},{"colour",item->colour},{"status",item->status},{"dirty",item->dirty},{"compare",project.compare_set.contains(item->id)}});
-    return {{"ok",true},{"history",HistoryJson(*d->history,*d->runs,true)},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->Document()},{"result",d->result.json()},{"band_result",d->bandResult.json()},{"ac_results",d->acResults.json(true)},{"batch_result",d->batchResult.json()},{"batch_spec",d->BatchSpec()},{"recorder_columns",d->RecorderSpec()},
+    return {{"ok",true},{"history",HistoryJson(*d->history,*d->runs,true)},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"attempt",d->selectedAttempt},{"voltage_V",d->biasVoltage_V}}},{"actions",d->runPlanEdited?RunPlanJson(*d->runPlan,d->actions):d->actions},{"document",d->Document()},{"result",d->result.json()},{"band_result",d->bandResult.json()},{"ac_results",d->acResults.json(true)},{"batch_result",d->batchResult.json()},{"batch_spec",d->BatchSpec()},{"recorder_columns",d->RecorderSpec()},
         {"devices",list},{"active_device",project.active_device},{"project",Workspace()},{"runs",Runs()},{"dirty",dirty},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"error",nullptr}};
 }
 }

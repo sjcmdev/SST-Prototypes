@@ -79,7 +79,7 @@
         "window": "scapslab.Run",
         "item": "run"
       },
-      "instruction": "Calculate I-V in Run and read the curve in I-V.",
+      "instruction": "In Run include I-V and click Single shot and read the curve in I-V.",
       "command": {
         "operation": "run"
       },

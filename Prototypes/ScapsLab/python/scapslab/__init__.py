@@ -19,6 +19,8 @@ class Session:
             return response
         while True:
             response = self.poll()
+            if response.get('paused'):
+                return dict(ok=True, paused=True, status=response['status'], progress=response.get('progress', {}), error=None)
             if not response['running']:
                 return response['response']
             time.sleep(0.005)
@@ -59,6 +61,29 @@ class Session:
 
     def run_batch(self, **request):
         return self.execute(dict(operation='run_batch', **request))
+
+    def run_settings(self, actions):
+        return self.execute(dict(operation='run_settings', actions=actions))
+
+    def single_shot(self, actions=None):
+        return self.execute(dict(operation='single_shot', **({'actions': actions} if actions is not None else {})))
+
+    def capture_live(self, kind='iv'):
+        return self.execute(dict(operation='capture_live', kind=kind))
+
+    def resume_actions(self):
+        return self.execute(dict(operation='resume_actions'))
+
+    def stop(self):
+        return self.execute(dict(operation='cancel'))
+
+    def calculate_missing(self, columns=None):
+        return self.execute(dict(operation='record_batch', calculate_missing=True,
+                                 **({'columns': columns} if columns is not None else {})))
+
+    def results_select(self, run_id, member_index=0, attempt=0, action='iv', device_id=None):
+        return self.execute(dict(operation='history_select', run_id=run_id, member_index=member_index,
+                                 attempt=attempt, action=action, **({'device_id': device_id} if device_id else {})))
 
     def record_batch(self, columns=None):
         return self.execute(dict(operation='record_batch',

@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cmath>
 #include <variant>
+#include <bit>
 namespace SST::ScapsLab {
+namespace {Ref<const MemberActions> ReadMemberActions(const Json&);}
 namespace {
 Json DetailsJson(const IvDetails& details) {
     const auto& g=details.generation_recombination;
@@ -120,6 +122,8 @@ template<class J, class R, class P, size_t N, size_t M> R FromJson(J &j, const F
     if (!j.is_object()) return r;
     Json meta;
     Read(j, r, r.has, meta, top, "points");
+    if(meta.contains("run_plan") && meta.contains("project_snapshot"))r.snapshot=DraftFromDocument(meta.at("project_snapshot"));
+    if(meta.contains("run_plan")) {r.runPlan=CreateRef<const RunPlan>(ReadRunPlan(meta.at("run_plan")));meta.erase("run_plan");}
     if constexpr(std::is_same_v<R,IvResult>) {
         if(meta.contains("optics"))try {const auto& o=meta.at("optics");OpticsResult optics;optics.x_m=Column::Intern(Numbers(o.at("x_m")));optics.generation_m3_s=Column::Intern(Numbers(o.at("generation_m3_s")));optics.incident_power_W_m2=Number(o,"incident_power_W_m2");for(const auto& c:o.at("absorption"))optics.absorption.push_back({c.at("layer_id"),Column::Intern(Numbers(c.at("wavelength_nm"))),Column::Intern(Numbers(c.at("alpha_m1"))),Column::Intern(Numbers(c.at("without_tail_m1")))});IvResult check;check.optics=std::move(optics);r.preserve_optics=check.Dump().at("optics").dump()!=o.dump();r.optics=std::move(check.optics);if(!r.preserve_optics)meta.erase("optics");}catch(const Json::exception&){}
         if(meta.contains("photovoltaic"))try {const auto& o=meta.at("photovoltaic");scaps_core::PhotovoltaicResult pv;for(auto v:{scaps_core::PhotovoltaicStatus::Converged,scaps_core::PhotovoltaicStatus::SolveFailed,scaps_core::PhotovoltaicStatus::OpenCircuitNotBracketed,scaps_core::PhotovoltaicStatus::NoPhotovoltaicPower})if(o.at("status")==scaps_core::to_string(v))pv.status=v;pv.message=o.value("message",std::string{});pv.Voc_V=-Number(o,"Voc_V");pv.Jsc_Am2=-Number(o,"Jsc_A_m2");pv.FF=Number(o,"FF_fraction");pv.eta=Number(o,"efficiency_fraction");pv.Pmax_Wm2=Number(o,"Pmax_W_m2");pv.Vmpp_V=-Number(o,"Vmpp_V");pv.Jmpp_Am2=Number(o,"Jmpp_A_m2");IvResult check;check.photovoltaic=std::move(pv);r.preserve_photovoltaic=check.Dump().at("photovoltaic").dump()!=o.dump();r.photovoltaic=std::move(check.photovoltaic);if(!r.preserve_photovoltaic)meta.erase("photovoltaic");}catch(const Json::exception&){}
@@ -152,6 +156,7 @@ template<class R, size_t N, class P, size_t M> Json To(const R &r, const Field<R
         Write(p, p.has, po, pf); pts.push_back(std::move(po));
     }
     if (r.has >> 31 & 1u) o["points"] = std::move(pts);
+    if(r.runPlan)o["run_plan"]=RunPlanJson(*r.runPlan);
     return o;
 }
 template<class T, size_t N> void ClearVecs(T &t, std::uint32_t &has, const Field<T> (&fields)[N]) {
@@ -192,7 +197,23 @@ bool NumbersOf(const PJson &obj, const std::string &key, std::vector<double> &ou
     out.clear(); for (const auto &e : obj.prim.at(key)) {if (!e.is_number()) return false; out.push_back(e.get<double>());}
     return true;
 }
-IvResult IvFromJson(const Json &j) {return FromJson(j, ivTop, ivFields);}
+IvResult IvFromJson(const Json &j) {
+    auto r=FromJson(j,ivTop,ivFields);
+    if(j.contains("curve_series_ohm_m2") && j.at("curve_series_ohm_m2").is_number_float() && std::all_of(r.points.begin(),r.points.end(),[](const auto& p){return p.has==((1u<<11)-1) && p.rest.kids.empty() && p.rest.prim.empty() && !p.details;})) {
+        const double series=j.at("curve_series_ohm_m2");std::vector<scaps_core::IVSample> curve;
+        if(!std::isfinite(series) || series<0)return r;
+        const auto exact=[](double a,double b){return std::bit_cast<std::uint64_t>(a)==std::bit_cast<std::uint64_t>(b) || (std::isnan(a) && std::isnan(b));};
+        for(const auto& p:r.points) {
+            scaps_core::IVSample sample;bool known=false;for(auto status:{scaps_core::SolverStatus::NotAttempted,scaps_core::SolverStatus::Converged,scaps_core::SolverStatus::MaxIterationsReached,scaps_core::SolverStatus::DivergedNaN,scaps_core::SolverStatus::LinearSolveFailed})if(p.status==scaps_core::to_string(status)){sample.status=status;known=true;}
+            if(!known || p.valid!=ValidIvSample(scaps_core::IVSample{p.voltage_V,p.J_A_m2,NAN,sample.status,int(p.iterations),p.residual,p.conservation_error_A_m2}))return r;
+            const auto validity=sample.status!=scaps_core::SolverStatus::Converged?"solver_failed":p.valid?"valid":"current_unresolved";
+            if(p.bias_id!="bias-"+std::to_string(curve.size()) || p.validity_status!=validity || p.iterations!=std::int64_t(int(p.iterations)) || !exact(p.terminal_voltage_V,p.voltage_V) || !exact(p.internal_voltage_V,p.voltage_V+series*p.J_A_m2))return r;
+            sample.voltage_V=p.voltage_V;sample.J_Am2=p.J_A_m2;sample.iterations=int(p.iterations);sample.residual=p.residual;sample.current_conservation_error_Am2=p.conservation_error_A_m2;curve.push_back(std::move(sample));
+        }
+        r.curve_series_ohm_m2=series;r.curve=std::move(curve);r.points.clear();r.points.shrink_to_fit();
+    }
+    return r;
+}
 IvResult IvFromJson(Json &&j) {return FromJson(j, ivTop, ivFields);}
 AcResult AcFromJson(const Json &j) {return FromJson(j, acTop, acFields);}
 AcResult AcFromJson(Json &&j) {return FromJson(j, acTop, acFields);}
@@ -230,6 +251,14 @@ BatchResult BatchFromJson(const Json &j) {
         }
         r.rows.push_back(std::move(row));
     }} catch(const Json::exception&) {r.rows.clear();}
+    if(j.contains("run_plan") && j.contains("action_members")) {
+        r.runPlan=CreateRef<const RunPlan>(ReadRunPlan(j.at("run_plan")));r.projectSnapshot=DraftFromDocument(j.at("project_snapshot"));r.batchDraft=ReadBatchDraft(j.at("spec"));r.recorderDraft=ReadRecorderDraft(j.at("columns"));r.parentRun=j.value("parent_run",std::string{});
+        r.time_unix_ms=j.at("provenance").at("time_unix_ms");r.solverVersion=j.at("provenance").at("solver_version");r.elapsed_s=j.value("elapsed_s",0.);r.cancelled=j.value("cancelled",false);
+        for(const auto& member:j.at("action_members"))r.actionMembers.push_back(ReadMemberActions(member));
+        if(r.rows.size()!=r.actionMembers.size())throw std::invalid_argument("Action member count does not match rows");
+        for(const auto* key:{"project_snapshot","spec","columns","run_plan","action_members","parent_run"})r.body.prim.erase(key);
+        return r;
+    }
     // Preserve unknown historical fields and numeric representations at the file import edge.
     if(r.Dump().dump()!=j.dump()){r.legacySchema=std::move(r.body.prim);r.body=Pack(j);r.native=false;}
     if(j.contains("project_snapshot") && j.contains("spec")) {
@@ -292,7 +321,82 @@ Json BatchRowJson(const scaps_core::BatchRow& row) {SCAPS_BOUNDARY_RESULT();
     }
     return out;
 }
+scaps_core::BatchRow ExtractActions(const MemberActions& member,const RecorderDraft& recorder) {
+    scaps_core::BatchRow row;row.status="Converged";row.iv=member.recorderSamples;bool invalid=false;
+    if(member.summary){row.photovoltaic=member.summary->photovoltaic;row.photovoltaic_requested=member.summary->photovoltaic_requested;row.incident_power_W_m2=member.summary->incident_power_W_m2;}
+    for(const auto& [kind,result]:member.results) {
+        if(const auto iv=std::dynamic_pointer_cast<const IvResult>(result)) {
+            for(auto sample:iv->curve){if(!ValidIvSample(sample)){invalid=true;sample.status=scaps_core::SolverStatus::DivergedNaN;}row.iv.push_back(std::move(sample));}
+            for(const auto& point:iv->points) {
+                if(kind==ActionKind::Band && std::any_of(row.iv.begin(),row.iv.end(),[&](const auto& p){return p.voltage_V==point.voltage_V;}))continue;
+                scaps_core::IVSample sample;sample.voltage_V=point.voltage_V;sample.J_Am2=point.J_A_m2;sample.status=point.valid?scaps_core::SolverStatus::Converged:scaps_core::SolverStatus::DivergedNaN;
+                if(!point.valid)invalid=true;
+                for(const auto& c:recorder.columns)if(c.quantity=="profile" && !PointColumn(point,c.field).empty()) {
+                    auto profiles=sample.profiles?CreateRef<scaps_core::BatchProfile>(*sample.profiles):CreateRef<scaps_core::BatchProfile>();profiles->x_m=point.x_m.get();profiles->fields[c.field]=PointColumn(point,c.field).get();sample.profiles=std::move(profiles);
+                }
+                row.iv.push_back(std::move(sample));
+            }
+            if(iv->photovoltaic){row.photovoltaic=iv->photovoltaic;row.photovoltaic_requested=true;}
+        } else if(const auto ac=std::dynamic_pointer_cast<const AcResult>(result)) {
+            if(kind==ActionKind::Qe)continue;
+            for(const auto& point:ac->points) {
+                scaps_core::ACSample sample;sample.voltage_V=point.voltage_V;sample.frequency_Hz=point.frequency_Hz;sample.C_F=point.capacitance_F;sample.G_S=point.conductance_S;sample.status=point.valid?scaps_core::SolverStatus::Converged:scaps_core::SolverStatus::DivergedNaN;
+                if(!point.valid)invalid=true;row.thermal_voltage_V=8.617333262145e-5*point.temperature_K;row.ac.push_back(std::move(sample));
+            }
+        }
+    }
+    // Extract consumes retained samples only. No interpolation, new sampling or solver call.
+    scaps_core::record_batch(row,recorder.columns);
+    row.status=!member.errors.empty()?"Failed":invalid?"Invalid":"Converged";
+    for(auto& [id,value]:row.values)if(value.status=="missing_sample")value.status=member.results.empty()?"not stored":"not sampled";
+    if(member.illuminated)for(auto& [id,value]:row.values)if(value.status=="not_illuminated")value.status="not sampled";
+    row.iv.clear();row.ac.clear();return row;
+}
+namespace {
+Json MemberActionsJson(const MemberActions& member) {
+    Json out={{"actions",Json::array()},{"errors",Json::object()},{"illuminated",member.illuminated}};
+    for(const auto& [kind,result]:member.results) {
+        Json saved;
+        if(const auto iv=std::dynamic_pointer_cast<const IvResult>(result))saved=ToJson(*iv);
+        else saved=ToJson(*std::static_pointer_cast<const AcResult>(result));
+        out["actions"].push_back({{"kind",ActionId(kind)},{"result",std::move(saved)}});
+    }
+    for(const auto& [kind,message]:member.errors)out["errors"][ActionId(kind)]=message;
+    if(member.summary)out["summary"]=BatchRowJson(*member.summary);
+    if(!member.recorderSamples.empty()){scaps_core::BatchRow samples;samples.iv=member.recorderSamples;samples.curves_retained=true;out["recorder_samples"]=BatchRowJson(samples);}
+    if(member.previous)out["previous"]=MemberActionsJson(*member.previous);
+    return out;
+}
+Ref<const MemberActions> ReadMemberActions(const Json& source) {
+    auto out=CreateRef<MemberActions>();
+    out->illuminated=source.value("illuminated",false);
+    for(const auto& a:source.at("actions")) {
+        bool found=false;for(int k=0;k<5;++k)if(a.at("kind")==ActionId(ActionKind(k))) {
+            const auto kind=ActionKind(k);if(kind==ActionKind::Iv || kind==ActionKind::Band)out->results.emplace_back(kind,CreateRef<const IvResult>(IvFromJson(a.at("result"))));else out->results.emplace_back(kind,CreateRef<const AcResult>(AcFromJson(a.at("result"))));found=true;
+        }
+        if(!found)throw std::invalid_argument("Unknown stored Action");
+    }
+    if(source.contains("errors"))for(int k=0;k<5;++k)if(source.at("errors").contains(ActionId(ActionKind(k))))out->errors[ActionKind(k)]=source.at("errors").at(ActionId(ActionKind(k)));
+    if(source.contains("summary")){auto summary=BatchFromJson({{"rows",Json::array({source.at("summary")})}});out->summary=summary.rows.at(0);}
+    if(source.contains("recorder_samples")){auto samples=BatchFromJson({{"rows",Json::array({source.at("recorder_samples")})}});out->recorderSamples=samples.rows.at(0)->iv;}
+    if(source.contains("previous"))out->previous=ReadMemberActions(source.at("previous"));
+    return out;
+}
+}
+Json BatchResult::FileMetadata() const {
+        auto out=body.prim;out["run_plan"]=RunPlanJson(*runPlan);out["spec"]=BatchDraftJson(*batchDraft);out["columns"]=RecorderDraftJson(*recorderDraft);out["parent_run"]=parentRun;
+        for(std::size_t i=0;i<recorderDraft->columns.size();++i)out["columns"][i]["unit"]=recorderDraft->columns[i].unit;
+        out["project_snapshot"]=DraftDocument(*projectSnapshot);out["provenance"]["device_hash"]=DocumentHash(out.at("project_snapshot"));
+        out["schema_version"]=1;out["solver_version"]=solverVersion;out["provenance"]["solver_version"]=solverVersion;out["provenance"]["time_unix_ms"]=time_unix_ms;out["elapsed_s"]=elapsed_s;if(cancelled)out["cancelled"]=true;
+        return out;
+}
 Json BatchResult::Dump() const {SCAPS_BOUNDARY_RESULT();
+    if(runPlan) {
+        auto out=FileMetadata();
+        out["rows"]=Json::array();for(const auto& row:rows)out["rows"].push_back(BatchRowJson(*row));
+        out["action_members"]=Json::array();for(const auto& member:actionMembers)out["action_members"].push_back(MemberActionsJson(*member));
+        return out;
+    }
     auto out=legacyBase?legacyBase->Dump():Unpack(body);
     if(legacyBase) {
         // Preserve opaque file fields until the save/Python edge; internal Recorder/retry keeps shared typed rows.
@@ -313,6 +417,10 @@ Json BatchResult::Dump() const {SCAPS_BOUNDARY_RESULT();
 }
 Json IvResult::Dump() const {SCAPS_BOUNDARY_RESULT();
     auto out=To(*this,ivTop,ivFields);
+    if(!curve.empty()) {
+        out["curve_series_ohm_m2"]=curve_series_ohm_m2;out["points"]=Json::array();
+        for(const auto& p:curve){const bool valid=ValidIvSample(p);out["points"].push_back({{"bias_id","bias-"+std::to_string(out["points"].size())},{"status",scaps_core::to_string(p.status)},{"validity_status",p.status!=scaps_core::SolverStatus::Converged?"solver_failed":valid?"valid":"current_unresolved"},{"voltage_V",p.voltage_V},{"J_A_m2",FiniteOrNull(p.J_Am2)},{"conservation_error_A_m2",FiniteOrNull(p.current_conservation_error_Am2)},{"residual",FiniteOrNull(p.residual)},{"internal_voltage_V",FiniteOrNull(p.voltage_V+curve_series_ohm_m2*p.J_Am2)},{"terminal_voltage_V",p.voltage_V},{"iterations",p.iterations},{"valid",valid}});}
+    }
     if(optics && !preserve_optics) {
         Json curves=Json::array();for(const auto& c:optics->absorption)curves.push_back({{"layer_id",c.layer_id},{"wavelength_nm",c.wavelength_nm.get()},{"alpha_m1",c.alpha_m1.get()},{"without_tail_m1",c.without_tail_m1.get()}});
         out["optics"]={{"x_m",optics->x_m.get()},{"generation_m3_s",optics->generation_m3_s.get()},{"absorption",std::move(curves)},{"incident_power_W_m2",optics->incident_power_W_m2}};

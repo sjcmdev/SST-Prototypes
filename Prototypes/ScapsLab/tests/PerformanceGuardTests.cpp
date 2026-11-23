@@ -60,6 +60,17 @@ TEST(PerformanceGuard, Batch342PanelsFrameBudget_F04_F35) {
                 EXPECT_EQ(gui->DebugDrawIdConflictsCount,0);
             },view==16?20.:view==17?2.:5.);
         }
+        table->runPlan=CreateRef<const RunPlan>();table->projectSnapshot=w.Current().draft;table->recorderDraft=ReadRecorderDraft(RecorderDefaults());table->batchDraft=CreateRef<const BatchDraft>(PrepareBatch(*w.Current().draft,*ReadBatchDraft(configured),*table->recorderDraft).spec);
+        for(const auto& row:table->rows) {
+            auto iv=CreateRef<IvResult>();iv->has=1u<<31;
+            iv->curve=row->iv;for(auto& point:iv->curve)point.current_conservation_error_Am2=0;
+            auto member=CreateRef<MemberActions>();member->summary=row;member->results.emplace_back(ActionKind::Iv,std::move(iv));table->actionMembers.push_back(std::move(member));
+        }
+        w.Current().runs=CreateRef<const RunMap>(RunMap{{"guard-actions",table}});w.Current().selectedRun="guard-actions";
+        w.Current().history=Json::array({{{"run_id","guard-actions"},{"kind","batch"},{"label","Batch Actions"},{"pinned",false},{"name",""},{"visible",true},{"explicit",true},{"group_id",""}}});
+        Panel browser(&w,18);scaps_core::boundary_probe::result_adapters=0;
+        perfguard::Frames("ScapsLab.Actions342.Results",[&]{ImGui::NewFrame();ImGui::SetNextWindowSize({1450,950});ImGui::Begin("Action Results guard");browser.RenderContent();ImGui::End();ImGui::Render();EXPECT_EQ(gui->DebugDrawIdConflictsCount,0);},5.);
+        EXPECT_EQ(scaps_core::boundary_probe::result_adapters,0u);EXPECT_FALSE(table->HasView());
     }
     ImPlot::DestroyContext(plot);ImGui::DestroyContext(gui);
 }
@@ -68,5 +79,15 @@ TEST(PerformanceGuard, Sweep5BatchMemoryPlateau) {
     perfguard::Plateau("ScapsLab.sweep5",[&]{
         ASSERT_TRUE(Cmd::RunBatch::With().Execute(w));Wait(w);
         ASSERT_TRUE(w.Current().batchResult.typed());ASSERT_EQ(w.Current().batchResult.typed()->rows.size(),342u);
+    },32ull*1024*1024);
+}
+TEST(PerformanceGuard, ActionBatchMemoryPlateau) {
+    Workflow w(CreateRef<JobSystem>(nullptr,4));Sweep5(w);
+    ASSERT_TRUE(w.Exec(Cmd::SetRunPlan::Make(CreateRef<RunPlan>())).value("ok",false));
+    perfguard::Plateau("ScapsLab.actions.sweep5",[&]{
+        ASSERT_TRUE(w.Exec(Cmd::RunBatch::With()).value("ok",false));Wait(w);
+        ASSERT_EQ(w.Current().batchResult.typed()->actionMembers.size(),342u);
+        ASSERT_TRUE(w.Exec(Cmd::ClearHistory::With({{"include_pinned",true}})).value("ok",false));
+        w.Current().undo.Clear();w.projectUndo.Clear(); // release deliberate Undo retention before measuring discarded runs
     },32ull*1024*1024);
 }

@@ -70,10 +70,10 @@
     {
       "id": "light-iv",
       "target": {
-        "window": "scapslab.Illumination",
-        "item": "light-iv"
+        "window": "scapslab.Run",
+        "item": "run"
       },
-      "instruction": "Click Calculate light I-V.",
+      "instruction": "In Run include I-V and click Single shot.",
       "command": {
         "operation": "run"
       },
