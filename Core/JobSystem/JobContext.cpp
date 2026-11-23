@@ -11,8 +11,9 @@ namespace SST
 		LogCallback logCallback,
 		CancelQuery cancelQuery,
 		SubmitJobCallback submitJobCallback,
-		WaitJobCallback waitJobCallback)
-		: m_ProgressCallback(std::move(progressCallback)),
+		WaitJobCallback waitJobCallback, std::size_t workerCount, std::stop_token stop)
+		: m_WorkerCount(std::max(std::size_t{1}, workerCount)), m_Stop(stop),
+        m_ProgressCallback(std::move(progressCallback)),
 		m_StageCallback(std::move(stageCallback)),
 		m_MessageCallback(std::move(messageCallback)),
 		m_LogCallback(std::move(logCallback)),

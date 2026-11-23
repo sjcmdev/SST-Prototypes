@@ -31,7 +31,7 @@ namespace SST
 
 	bool PythonScriptJob::UsesPythonRuntime() const
 	{
-		return true;
+		return false; // subprocess; no embedded interpreter calls
 	}
 
 	void PythonScriptJob::Execute(JobContext &context)

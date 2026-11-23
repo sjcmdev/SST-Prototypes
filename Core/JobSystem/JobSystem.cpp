@@ -31,7 +31,9 @@ namespace SST
 
 		struct WorkerContextGuard
 		{
-			explicit WorkerContextGuard(const JobSystem *jobSystem, JobId jobId)
+			const JobSystem* previousSystem = g_CurrentJobSystem;
+            JobId previousId = g_CurrentJobId;
+            explicit WorkerContextGuard(const JobSystem *jobSystem, JobId jobId)
 			{
 				g_CurrentJobSystem = jobSystem;
 				g_CurrentJobId = jobId;
@@ -39,8 +41,8 @@ namespace SST
 
 			~WorkerContextGuard()
 			{
-				g_CurrentJobSystem = nullptr;
-				g_CurrentJobId = 0;
+				g_CurrentJobSystem = previousSystem;
+				g_CurrentJobId = previousId;
 			}
 		};
 	}
@@ -158,7 +160,7 @@ namespace SST
 		if (it == m_Records.end())
 			return false;
 
-		it->second.cancellationRequested->store(true, std::memory_order_relaxed);
+		it->second.cancellationRequested->request_stop();
 		it->second.snapshot.cancellationRequested = true;
 		return true;
 	}
@@ -176,7 +178,7 @@ namespace SST
 			if (it == m_Records.end())
 				return false;
 
-			it->second.cancellationRequested->store(false, std::memory_order_relaxed);
+			it->second.cancellationRequested = CreateRef<std::stop_source>();
 			it->second.snapshot.cancellationRequested = false;
 
 			if (it->second.snapshot.status == JobStatus::Cancelled)
@@ -235,7 +237,7 @@ namespace SST
 		it->second.snapshot.completedWork = 0.0f;
 		it->second.snapshot.currentStage.clear();
 		it->second.snapshot.currentMessage.clear();
-		it->second.cancellationRequested->store(false, std::memory_order_relaxed);
+		it->second.cancellationRequested = CreateRef<std::stop_source>();
 		it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Reset", Time::Now()});
 			trimLogs(it->second);
 		return true;
@@ -268,7 +270,7 @@ namespace SST
 			it->second.snapshot.completedWork = 0.0f;
 			it->second.snapshot.currentStage.clear();
 			it->second.snapshot.currentMessage.clear();
-			it->second.cancellationRequested->store(false, std::memory_order_relaxed);
+			it->second.cancellationRequested = CreateRef<std::stop_source>();
 			it->second.logs.push_back(JobLogEntry{JobLogLevel::Info, "Retry", Time::Now()});
 			trimLogs(it->second);
 		}
@@ -397,7 +399,7 @@ namespace SST
 				{
 					if (!isFinishedStatus(record.snapshot.status))
 					{
-						record.cancellationRequested->store(true, std::memory_order_relaxed);
+						record.cancellationRequested->request_stop();
 						record.snapshot.cancellationRequested = true;
 					}
 				}
@@ -489,9 +491,9 @@ namespace SST
 		auto onLog = [this, id](JobLogLevel level, const std::string &message) {
 			appendLog(id, level, message);
 		};
-		auto onCancelQuery = [this, id]() {
-			return isCancellationRequested(id);
-		};
+		std::stop_token cancellation;
+        { std::lock_guard lock(m_RecordsMutex); cancellation = m_Records.at(id).cancellationRequested->get_token(); }
+        auto onCancelQuery = [cancellation]() { return cancellation.stop_requested(); };
 		auto onSubmitChild = [this, id](const Ref<IJob> &childJob, JobPriority priority) {
 			return submitInternal(childJob, priority, id, std::nullopt);
 		};
@@ -506,7 +508,7 @@ namespace SST
 			onLog,
 			onCancelQuery,
 			onSubmitChild,
-			onWaitChild);
+			onWaitChild, m_Pool.get_thread_count(), cancellation);
 
 		WorkerContextGuard workerContext(this, id);
 
@@ -573,10 +575,19 @@ namespace SST
             if (!child && id > 0 && id < m_NextId.load(std::memory_order_relaxed))
                 return true;
 
-			// Avoid deadlock only in true single-worker mode. With 2+ workers,
-			// a parent job can safely wait while another worker executes the child.
-			if (g_CurrentJobSystem == this && g_CurrentJobId != 0 && m_Pool.get_thread_count() <= 1)
-				return false;
+            // Claim a queued child before the backend does; its scheduled closure then becomes a no-op.
+            if (g_CurrentJobSystem == this && g_CurrentJobId != 0) {
+                Ref<IJob> queued;
+                Ref<std::atomic_bool> claimed;
+                {
+                    std::lock_guard lock(m_RecordsMutex);
+                    const auto it = m_Records.find(id);
+                    if (it != m_Records.end() && it->second.snapshot.status == JobStatus::Queued) {
+                        queued = it->second.job.lock(); claimed = it->second.executionClaimed;
+                    }
+                }
+                if (queued && claimed && !claimed->exchange(true)) { runJob(id, std::move(queued)); continue; }
+            }
 
 			std::this_thread::sleep_for(Time::Milliseconds(1));
 		}
@@ -673,7 +684,7 @@ namespace SST
 		if (it == m_Records.end())
 			return true;
 
-		return it->second.cancellationRequested->load(std::memory_order_relaxed);
+		return it->second.cancellationRequested->stop_requested();
 	}
 
 	void JobSystem::markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt)
@@ -686,7 +697,7 @@ namespace SST
 
 		it->second.snapshot.status = finalStatus;
 		it->second.snapshot.finishedAt = finishedAt;
-		it->second.snapshot.cancellationRequested = it->second.cancellationRequested->load(std::memory_order_relaxed);
+		it->second.snapshot.cancellationRequested = it->second.cancellationRequested->stop_requested();
 
 		if (finalStatus == JobStatus::Completed)
 		{
@@ -862,8 +873,10 @@ namespace SST
 			expandJobQueue(m_MaxQueueCapacity + 256);
 		}
 
-		m_Pool.detach_task(
-			[this, id, job]() { runJob(id, job); },
+        const auto claimed = CreateRef<std::atomic_bool>(false);
+        { std::lock_guard lock(m_RecordsMutex); m_Records.at(id).executionClaimed = claimed; }
+        m_Pool.detach_task(
+            [this, id, job, claimed]() { if (!claimed->exchange(true)) runJob(id, job); },
 			toBackendPriority(priority));
 	}
 

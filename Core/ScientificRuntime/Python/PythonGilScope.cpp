@@ -6,13 +6,7 @@
 
 namespace SST
 {
-	namespace
-	{
-		std::mutex g_PythonGilScopeMutex;
-	}
-
 	PythonGilAcquireScope::PythonGilAcquireScope()
-		: m_Lock(g_PythonGilScopeMutex)
 	{
 #if DS_PYTHON_CAPI_AVAILABLE
 		if (PythonInterpreter::IsRuntimeInitialized())
@@ -21,8 +15,6 @@ namespace SST
 			m_IsActive = true;
 		}
 #endif
-		if (!m_IsActive && m_Lock.owns_lock())
-			m_Lock.unlock();
 	}
 
 	PythonGilAcquireScope::~PythonGilAcquireScope()
