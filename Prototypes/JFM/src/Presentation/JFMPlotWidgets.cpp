@@ -16,11 +16,10 @@ namespace SST::Prototypes::JFM
     namespace plot = sst::ui::plot;
     bool BeginJFMPlotFrame(JFMPlotDocument &doc, ImVec2 available)
     {
-        const auto &g = std::get<pl::Graph>(doc.project.object(doc.graph).data);
         try {
             if (available.x<=0 || available.y<=0) available=ImGui::GetContentRegionAvail();
-            doc.preview=plot::PublicationPreview(g.widthMm,g.heightMm,available);
-            ImGui::PushFont(ResolvePlotPreviewFont(g.fontFamily,g.fontFile),doc.preview.metrics.ToPixels(static_cast<float>(g.fontSizePt)));
+            doc.preview=plot::InteractivePreview(available);
+            ImGui::PushFont(nullptr, 0);
             doc.BeginFrame();return true;
         } catch (const std::exception &e) { ImGui::TextWrapped("Graph font unavailable: %s", e.what()); return false; }
     }

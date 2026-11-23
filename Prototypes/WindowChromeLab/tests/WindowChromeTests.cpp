@@ -39,6 +39,8 @@ namespace SST
         Ref<CommandRegistry> commands = CreateRef<CommandRegistry>();
         Ref<UndoStack> undo = CreateRef<UndoStack>();
         WindowId a = 0, b = 0;
+        bool restoreDefaultsEachFrame = false;
+        int defaultLayoutCalls = 0;
         void SetUp() override
         {
             ImGui::CreateContext();
@@ -56,6 +58,7 @@ namespace SST
             ImGui::GetIO().DeltaTime = 1.0f / 60;
             ImGui::NewFrame();
             ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
+            if (restoreDefaultsEachFrame) workspace->RestoreDefaultLayoutIfNeeded();
             const auto entries = panels.Entries();
             for (const auto &entry : entries) entry.panel->Render();
             workspace->RenderOverlays(); ImGui::Render();
@@ -69,6 +72,25 @@ namespace SST
             ImGui::GetIO().AddMouseButtonEvent(0, true); frame(); frame(); frame();
             ImGui::GetIO().AddMouseButtonEvent(0, false); frame(); frame();
         }
+        void defaultTabs()
+        {
+            workspace->SetDefaultLayout([this] {
+                ++defaultLayoutCalls;
+                const auto* viewport = ImGui::GetMainViewport();
+                const auto root = viewport->ID;
+                ImGui::DockBuilderRemoveNode(root);
+                ImGui::DockBuilderAddNode(root, ImGuiDockNodeFlags_DockSpace);
+                ImGui::DockBuilderSetNodePos(root, viewport->WorkPos);
+                ImGui::DockBuilderSetNodeSize(root, viewport->WorkSize);
+                for (const auto& window : workspace->Windows()) {
+                    auto state = window->GetState(); state.dockId = root;
+                    window->ApplyState(state);
+                    ImGui::DockBuilderDockWindow(window->ImGuiName().c_str(), root);
+                }
+                ImGui::DockBuilderFinish(root);
+            });
+            restoreDefaultsEachFrame = true;
+        }
         void dockBoth()
         {
             frame();
@@ -77,6 +99,31 @@ namespace SST
             frame(); frame();
         }
     };
+    TEST_F(WindowChromeTest, ClickingEveryDockTabSelectsAndRetainsItsContent)
+    {
+        const auto c = panels.Add<ChromeWindow>(), d = panels.Add<ChromeWindow>();
+        defaultTabs();
+        for (int i = 0; i < 5; ++i) frame();
+        ASSERT_EQ(defaultLayoutCalls, 1);
+        workspace->Find(a)->SetTitle("Raw Plot"); workspace->Find(b)->SetTitle("Raw Plot 1");
+        workspace->Find(c)->SetTitle("MC Scatter"); workspace->Find(d)->SetTitle("MC Curves");
+        for (float scale : {1.0f, 1.5f}) {
+            ImGui::GetStyle().FontScaleMain = scale; frame(); frame();
+            for (auto id : {a, b, c, d}) {
+                const auto pos = gui(id)->DC.DockTabItemRect.GetCenter();
+                ImGui::GetIO().AddMousePosEvent(pos.x, pos.y); frame();
+                ImGui::GetIO().AddMouseButtonEvent(0, true); frame();
+                ImGui::GetIO().AddMouseButtonEvent(0, false); frame();
+                for (int i = 0; i < 30; ++i) {
+                    frame();
+                    EXPECT_TRUE(gui(id)->DockTabIsVisible) << id << " scale=" << scale;
+                    EXPECT_EQ(gui(id)->DockNode->SelectedTabId, gui(id)->TabId);
+                }
+            }
+        }
+        EXPECT_EQ(defaultLayoutCalls, 1);
+    }
+
     TEST_F(WindowChromeTest, RestoreButtonAfterMaximize)
     {
         workspace->Find(b)->SetVisible(false); frame(); frame();
@@ -202,6 +249,90 @@ namespace SST
         EXPECT_EQ(workspace->Find(a)->GetState(), initial);
         EXPECT_FALSE(workspace->Find(b)->GetState().pinned);
         frame(); EXPECT_EQ(gui(a)->DockId, 0u);
+    }
+    TEST_F(WindowChromeTest, StartupDefaultsRunOnceAndExplicitResetDocksAllDefaults)
+    {
+        int rebuilt = 0;
+        workspace->SetDefaultLayout([&] {
+            ++rebuilt; const auto* viewport = ImGui::GetMainViewport(); ImGuiID center = viewport->ID;
+            ImGui::DockBuilderRemoveNode(center); ImGui::DockBuilderAddNode(center, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodePos(center, viewport->WorkPos); ImGui::DockBuilderSetNodeSize(center, viewport->WorkSize);
+            const auto left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, .25f, nullptr, &center);
+            for (auto id : {a,b}) {
+                auto window = workspace->Find(id); auto state = window->GetState();
+                state.mode = state.restoreMode = WindowMode::Normal; state.pinned = false; state.visible = true;
+                state.dockId = id == a ? left : center; window->ApplyState(state);
+                ImGui::DockBuilderDockWindow(window->ImGuiName().c_str(), state.dockId);
+            }
+            ImGui::DockBuilderFinish(viewport->ID);
+        });
+        frame();
+        ImGui::NewFrame(); workspace->RestoreDefaultLayoutIfNeeded(); ImGui::Render();
+        frame(); frame(); EXPECT_EQ(rebuilt,1);
+        for(auto id : {a,b}) {ASSERT_NE(gui(id)->DockNode,nullptr); EXPECT_EQ(ImGui::DockNodeGetRootNode(gui(id)->DockNode)->ID,ImGui::GetMainViewport()->ID);}
+        ImGui::NewFrame(); workspace->RestoreDefaultLayoutIfNeeded(); ImGui::Render(); EXPECT_EQ(rebuilt,1);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Maximize,a})); frame(); 
+        ImGui::NewFrame(); workspace->RestoreDefaultLayoutIfNeeded(); ImGui::Render(); frame(); frame(); EXPECT_EQ(rebuilt,1);
+        EXPECT_EQ(workspace->Find(a)->GetState().mode, WindowMode::Maximized);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Close,b})); 
+        ImGui::NewFrame(); ASSERT_TRUE(commands->Execute(CommandID{"app.layout.reset"})); ImGui::Render(); frame(); frame();
+        EXPECT_EQ(rebuilt,2);
+        for(auto id : {a,b}) {EXPECT_TRUE(workspace->Find(id)->IsVisible()); ASSERT_NE(gui(id)->DockNode,nullptr); EXPECT_EQ(workspace->Find(id)->GetState().mode,WindowMode::Normal);}
+    }
+    TEST_F(WindowChromeTest, DefaultChecksPreserveLoadedFloatingAndMaximizedWindows)
+    {
+        const auto name = workspace->Find(a)->ImGuiName();
+        const std::string ini = "[Window][" + name + "]\nPos=97,83\nSize=411,307\nCollapsed=0\n\n";
+        ImGui::LoadIniSettingsFromMemory(ini.c_str());
+        auto state = workspace->Find(b)->GetState(); state.mode = WindowMode::Maximized;
+        workspace->Find(b)->ApplyState(state);
+        defaultTabs();
+        for (int i = 0; i < 15; ++i) frame();
+        EXPECT_EQ(defaultLayoutCalls, 0);
+        EXPECT_EQ(gui(a)->DockId, 0u);
+        EXPECT_FLOAT_EQ(gui(a)->Pos.x, 97); EXPECT_FLOAT_EQ(gui(a)->SizeFull.x, 411);
+        EXPECT_EQ(workspace->Find(b)->GetState().mode, WindowMode::Maximized);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Restore, b}));
+        for (int i = 0; i < 10; ++i) frame();
+        EXPECT_EQ(defaultLayoutCalls, 0);
+        EXPECT_EQ(workspace->Find(b)->GetState().mode, WindowMode::Normal);
+    }
+    TEST_F(WindowChromeTest, DragOutAndBackAndResetSurviveRepeatedDefaultChecks)
+    {
+        defaultTabs(); for (int i = 0; i < 5; ++i) frame();
+        const auto root = gui(a)->DockId;
+        const auto start = gui(a)->DC.DockTabItemRect.GetCenter();
+        auto& io = ImGui::GetIO();
+        io.AddMousePosEvent(start.x, start.y); frame();
+        io.AddMouseButtonEvent(0, true); frame();
+        io.AddMousePosEvent(start.x + 80, start.y + 200); frame(); frame();
+        io.AddMousePosEvent(300, 300); frame(); frame();
+        io.AddMouseButtonEvent(0, false); frame();
+        for (int i = 0; i < 10; ++i) frame();
+        ASSERT_EQ(gui(a)->DockId, 0u);
+        EXPECT_EQ(defaultLayoutCalls, 1);
+        const auto title = gui(a)->TitleBarRect().GetCenter();
+        io.AddMousePosEvent(title.x, title.y); frame();
+        io.AddMouseButtonEvent(0, true); frame();
+        ASSERT_NE(gui(b)->DockNode, nullptr);
+        const auto target = gui(b)->DockNode->Rect().GetCenter();
+        io.AddMousePosEvent(target.x, target.y); frame(); frame(); frame();
+        io.AddMouseButtonEvent(0, false); frame();
+        for (int i = 0; i < 10; ++i) frame();
+        EXPECT_EQ(gui(a)->DockId, root);
+        EXPECT_EQ(defaultLayoutCalls, 1);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Maximize, a}));
+        for (int i = 0; i < 10; ++i) frame();
+        EXPECT_EQ(workspace->Find(a)->GetState().mode, WindowMode::Maximized);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Restore, a}));
+        for (int i = 0; i < 10; ++i) frame();
+        EXPECT_EQ(gui(a)->DockId, root);
+        ImGui::NewFrame();
+        ASSERT_TRUE(commands->Execute(CommandID{"app.layout.reset"}));
+        ImGui::Render();
+        for (int i = 0; i < 15; ++i) frame();
+        EXPECT_EQ(defaultLayoutCalls, 2);
+        EXPECT_EQ(gui(a)->DockId, root); EXPECT_EQ(gui(b)->DockId, root);
     }
     TEST_F(WindowChromeTest, ScientificControlUsesOneRowAndPreservesUntouchedValues)
     {

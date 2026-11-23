@@ -109,11 +109,33 @@ void SetupApplication(Application &application) {
     if (!bound) throw std::runtime_error("Cannot register CapLab shortcut.");
     auto &editor = application.GetEditorLayer();
     ImGui::GetIO().ConfigDebugHighlightIdConflicts=true;
-    auto resetDocking=CreateRef<bool>(false);
-    (void)registry->AddObserver([resetDocking](const CommandExecutionEvent &event) {
-        if (event.id.value=="app.layout.reset" && event.state==CommandExecutionState::Succeeded) *resetDocking=true;
+    editor.GetWindows()->SetDefaultLayout([owner=WeakRef<WindowWorkspace>(editor.GetWindows())] {
+                const auto windows=owner.lock(); if (!windows) return;
+                const auto *viewport=ImGui::GetMainViewport();
+                const auto dock=viewport->ID;
+                ImGui::DockBuilderRemoveNode(dock); ImGui::DockBuilderAddNode(dock,ImGuiDockNodeFlags_DockSpace);
+                ImGui::DockBuilderSetNodePos(dock,viewport->WorkPos);
+                ImGui::DockBuilderSetNodeSize(dock,viewport->WorkSize);
+                ImGuiID center=dock;
+                const auto bottom=ImGui::DockBuilderSplitNode(center,ImGuiDir_Down,.18f,nullptr,&center);
+                const auto left=ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,.25f,nullptr,&center);
+                ImGuiID right=ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,.43f,nullptr,&center);
+                ImGui::DockBuilderDockWindow("Logging Panel",bottom);
+                for (const auto &w:windows->Windows()) {
+                    const auto &type=w->GetType();
+                    if (type=="caplab.import") continue;
+                    auto layout=w->GetState();
+                    if (type=="caplab.analysis" && layout.shortName=="Analysis / results") layout.shortName=layout.longName="CV / DLCP";
+                    const auto target=type=="caplab.workspace" ? left : type=="caplab.plot" ? center : right;
+                    layout.dockId=target;
+                    layout.mode=layout.restoreMode=WindowMode::Normal; layout.pinned=false;
+                    layout.visible=type.starts_with("caplab.");
+                    w->ApplyState(layout);
+                    if (layout.visible) ImGui::DockBuilderDockWindow(w->ImGuiName().c_str(),target);
+                }
+                ImGui::DockBuilderFinish(dock);
     });
-    editor.RegisterMenuRenderer("caplab", [registry,state,&editor,resetDocking,windows=editor.GetWindows(),initialized=false](EditorServices &) mutable {
+    editor.RegisterMenuRenderer("caplab", [registry,state,&editor,windows=editor.GetWindows(),initialized=false](EditorServices &) mutable {
         if (!initialized) {
             initialized=true;
             // Keep existing app and Core window IDs when adding module windows.
@@ -124,7 +146,6 @@ void SetupApplication(Application &application) {
             const auto *viewport=ImGui::GetMainViewport();
             if (const auto *dock=ImGui::DockBuilderGetNode(viewport->ID); dock && dock->LastFrameAlive!=GImGui->FrameCount)
                 ImGui::DockSpaceOverViewport(viewport->ID,viewport,ImGuiDockNodeFlags_PassthruCentralNode);
-            DS_LOG_DEBUG("CapLab restored window layout: {}",windows->Save());
             for (const auto &window:windows->Windows()) {
                 const auto dockId=window->GetState().dockId;
                 if (dockId) ImGui::DockBuilderDockWindow(window->ImGuiName().c_str(),dockId);
@@ -132,36 +153,11 @@ void SetupApplication(Application &application) {
             if (const auto *logging=ImGui::FindWindowSettingsByID(ImHashStr("Logging Panel")); logging && logging->DockId)
                 ImGui::DockBuilderDockWindow("Logging Panel",logging->DockId);
             ImGui::DockBuilderFinish(ImGui::GetMainViewport()->ID);
+            windows->RestoreDefaultLayoutIfNeeded("caplab.");
             for (const auto &window:windows->Windows()) if (window->IsVisible() && window->GetState().mode==WindowMode::Normal) {
                 (void)windows->Execute({WindowAction::Activate,window->GetId()}); break;
             }
         }
-            const auto entries=windows->Windows();
-            const auto added=std::find_if(entries.begin(),entries.end(),[](const auto &w) {return w->GetType()=="caplab.as";});
-            if (*resetDocking || (added!=entries.end() && !ImGui::FindWindowSettingsByID(ImHashStr((*added)->ImGuiName().c_str())))) {
-                *resetDocking=false;
-                const auto *viewport=ImGui::GetMainViewport();
-                const auto dock=viewport->ID;
-                ImGui::DockBuilderRemoveNode(dock); ImGui::DockBuilderAddNode(dock,ImGuiDockNodeFlags_DockSpace);
-                ImGui::DockBuilderSetNodeSize(dock,viewport->WorkSize);
-                ImGuiID center=dock;
-                const auto bottom=ImGui::DockBuilderSplitNode(center,ImGuiDir_Down,.18f,nullptr,&center);
-                const auto left=ImGui::DockBuilderSplitNode(center,ImGuiDir_Left,.25f,nullptr,&center);
-                ImGuiID right=ImGui::DockBuilderSplitNode(center,ImGuiDir_Right,.43f,nullptr,&center);
-                ImGui::DockBuilderDockWindow("Logging Panel",bottom);
-                for (const auto &w:entries) {
-                    const auto &type=w->GetType();
-                    if (type=="caplab.import") continue;
-                    auto layout=w->GetState();
-                    if (type=="caplab.analysis" && layout.shortName=="Analysis / results") layout.shortName=layout.longName="CV / DLCP";
-                    const auto target=type=="caplab.workspace" ? left : type=="caplab.plot" ? center : right;
-                    layout.dockId=target;
-                    if (!type.starts_with("caplab.")) layout.visible=false;
-                    w->ApplyState(layout);
-                    if (layout.visible) ImGui::DockBuilderDockWindow(w->ImGuiName().c_str(),target);
-                }
-                ImGui::DockBuilderFinish(dock);
-            }
         static bool gallery = std::getenv("SST_PLOT_GALLERY") != nullptr;
         if (ImGui::BeginMenu("CapLab")) {
             ImGui::MenuItem("3D and heatmap gallery", nullptr, &gallery);

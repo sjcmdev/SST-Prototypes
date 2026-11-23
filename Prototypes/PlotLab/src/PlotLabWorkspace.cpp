@@ -367,7 +367,7 @@ namespace SST::Prototypes::PlotLab
         rename = remove = metadata = exportGraph = operationsSheet = contextColumn = 0;
         targetGraph = sheetChoice = xChoice = errorChoice = 0;
         graphDialog = importDialog = false;
-        sheetViews.clear(); activeSheets.clear(); renderedSheets.clear(); maskPreviews.clear(); graphSources.clear(); fontErrors.clear();
+        sheetViews.clear(); activeSheets.clear(); renderedSheets.clear(); maskPreviews.clear(); graphSources.clear();
         availableColumns.clear(); plottedSeries.clear();
         nestedKeys.clear(); operationColumns.clear(); joinSheet = 0; preview.reset(); importText.clear();
         if (replaced) {
@@ -452,6 +452,7 @@ namespace SST::Prototypes::PlotLab
             contentDock = ImGui::DockBuilderGetCentralNode(viewport->ID)->ID;
             return;
         }
+        SetVisible(true);
         ImGui::DockBuilderRemoveNode(viewport->ID);
         ImGui::DockBuilderAddNode(viewport->ID, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodePos(viewport->ID, viewport->WorkPos);
@@ -1299,38 +1300,10 @@ namespace SST::Prototypes::PlotLab
                     }
                 });
             fontChanged |= sst::ui::widgets::Double("Graph font (pt)", &fontSettings.fontSizePt, 1, "%.1f");
-            if (ImGui::Button("Retry")) fontFailures.erase(fontSettings.fontFamily + "\n" + fontSettings.fontFile);
-            if (fontErrors.contains(id)) ImGui::TextWrapped("%s", fontErrors.at(id).c_str());
             ImGui::EndPopup();
             }
             if (fontChanged)
                 Attempt([&] { doc.Execute(p.change("Graph font", {graphObject})); });
-            const auto &chosen = std::get<pl::Graph>(p.object(id).data);
-            ImFont *graphFont = nullptr;
-            const auto key = chosen.fontFamily + "\n" + chosen.fontFile;
-            try {
-                if (fontFailures.contains(key)) throw std::runtime_error(fontFailures.at(key));
-                auto &cached = graphFonts[key];
-                auto *atlas = ImGui::GetIO().Fonts;
-                const auto tag = "PlotLab:" + std::to_string(std::hash<std::string>{}(key));
-                if (!cached || !atlas->Fonts.contains(cached) || cached->GetDebugName() != tag) {
-                    auto resolved = ResolveFont(chosen.fontFamily, chosen.fontFile, state->pythonRoot);
-                    ImFontConfig config;
-                    config.Flags |= ImFontFlags_NoLoadError;
-                    std::snprintf(config.Name, sizeof(config.Name), "%s", tag.c_str());
-                    cached = atlas->AddFontFromFileTTF(resolved.first.c_str(), 0, &config);
-                    if (!cached) throw std::runtime_error("Cannot load graph font: " + resolved.first);
-                }
-                graphFont = cached;
-                fontErrors.erase(id);
-            } catch (const std::exception &e) {
-                if (!fontFailures.contains(key)) fontFailures[key] = FriendlyFontError(e.what());
-                fontErrors[id] = fontFailures.at(key);
-            }
-            if (!graphFont) {
-                ImGui::TextWrapped("%s", fontErrors[id].c_str());
-                graphFont = ImGui::GetFont();
-            }
             const auto layer = p.children(id).at(0);
             auto spec = std::get<pl::Layer>(p.object(layer).data).spec;
             auto plots = p.children(layer);
@@ -1436,17 +1409,10 @@ namespace SST::Prototypes::PlotLab
             }
             if (!view.fitted)
                 spec.autoFit = plot::AutoFit::Once;
-            // pt to logical pixels at 96 DPI; ImGui applies the display DPI scale.
-            const plot::PlotPreview publication{ImGui::GetContentRegionAvail(), {(96.f / 72) * ImGui::GetWindowDpiScale() * ImGui::GetStyle().FontScaleMain}};
-            const float font = ImGui::GetFontSize(), w = std::max(1.f, publication.size.x), h = std::max(1.f, publication.size.y);
-            const float left = std::min(w * .3f, font * 5), bottom = std::min(h * .3f, font * 3.5f);
-            float right = font * 2;
-            if (spec.legend.visible && spec.legend.outside) for (auto series : plots) right = std::max(right, ImGui::CalcTextSize(p.object(series).name.c_str()).x + font * 5);
-            right = std::min(w * .3f, right);
-            view.frame = std::array<float,4>{left / w, bottom / h, (w - left - right) / w, std::max(.2f, (h - bottom - font * 2) / h)};
+            const auto publication = plot::InteractivePreview(ImGui::GetContentRegionAvail());
             editor.uiFontSize = ImGui::GetStyle().FontSizeBase;
             editor.keyboardShortcuts = !keymapRegistered;
-            ImGui::PushFont(graphFont, editor.uiFontSize * static_cast<float>(chosen.fontSizePt / 10));
+            ImGui::PushFont(nullptr, editor.uiFontSize);
             spec.customAxes = true;
             plot::RenderPlot("##graph", spec, entries.data(), entries.size(), view, publication.metrics, publication.size, &editor);
             ImGui::PopFont();

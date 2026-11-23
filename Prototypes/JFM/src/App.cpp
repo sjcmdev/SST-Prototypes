@@ -28,6 +28,8 @@
 #include "Presentation/Panels/ProjectTreePanel.hpp"
 #include "Presentation/Panels/RawPlotPanel.hpp"
 #include "Workspace/JFMWorkspaceStore.hpp"
+#include "Presentation/Panels/WindowWorkspace.hpp"
+#include <imgui_internal.h>
 
 namespace SST
 {	
@@ -95,6 +97,38 @@ namespace SST
 			[jfmSettingsPanel]() {
 				jfmSettingsPanel->RenderContent();
 			}});
+        const auto windows = editorLayer.GetWindows();
+        windows->SetDefaultLayout([owner = WeakRef<WindowWorkspace>(windows), panelIds] {
+            const auto windows = owner.lock(); if (!windows) return;
+            const auto* viewport = ImGui::GetMainViewport();
+            ImGuiID center = viewport->ID;
+            ImGui::DockBuilderRemoveNode(center);
+            ImGui::DockBuilderAddNode(center, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodePos(center, viewport->WorkPos);
+            ImGui::DockBuilderSetNodeSize(center, viewport->WorkSize);
+            const auto left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, .22f, nullptr, &center);
+            const auto bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, .25f, nullptr, &center);
+            const auto right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, .28f, nullptr, &center);
+            for (const auto& window : windows->Windows()) {
+                const auto& type = window->GetType();
+                const bool rawPlot = type.starts_with("hosted.###jfm_raw_plot_");
+                if ((!type.starts_with("jfm.") && !rawPlot) || type == "jfm.settings") continue;
+                auto state = window->GetState();
+                state.mode = state.restoreMode = WindowMode::Normal; state.pinned = false; state.visible = true;
+                state.dockId = window->GetId() == panelIds.projectTree ? left :
+                    window->GetId() == panelIds.overview || window->GetId() == panelIds.importStatus ? bottom :
+                    window->GetId() == panelIds.details || window->GetId() == panelIds.control || window->GetId() == panelIds.monteCarloSettings ? right : center;
+                window->ApplyState(state);
+                ImGui::DockBuilderDockWindow(window->ImGuiName().c_str(), state.dockId);
+            }
+            ImGui::DockBuilderFinish(viewport->ID);
+        });
+        editorLayer.RegisterMenuRenderer("jfm.layout", [windows, initialized = false](EditorServices&) mutable {
+            if (!initialized) {
+                initialized = true; windows->RestoreDefaultLayoutIfNeeded("jfm.");
+                windows->RestoreDefaultLayoutIfNeeded("hosted.###jfm_raw_plot_");
+            }
+        });
 		editorLayer.RegisterMenuRenderer(
 			"jfm.menu",
 			std::bind(&RenderJFMMenu, std::ref(editorLayer), panelIds, workspace, settings, std::placeholders::_1));

@@ -276,9 +276,8 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
         auto &currentView=index==2 ? bodePhaseView : viewState;
         if (!currentView.viewport) currentView=std::get<pl::Layer>(project.engine->object(layer).data).view;
         auto& editor=plotEditors[graph];
-        const auto& dimensions=std::get<pl::Graph>(project.engine->object(graph).data);
-        const auto preview=sst::ui::plot::PublicationPreview(dimensions.widthMm,dimensions.heightMm,{ImGui::GetContentRegionAvail().x,height});
-        ImGui::PushFont(ResolvePlotPreviewFont(dimensions.fontFamily,dimensions.fontFile),preview.metrics.ToPixels(static_cast<float>(dimensions.fontSizePt)));
+        const auto preview=sst::ui::plot::InteractivePreview({ImGui::GetContentRegionAvail().x,height});
+        ImGui::PushFont(nullptr, 0);
         RenderISPlot("##IS",spec,series.data(),series.size(),currentView,preview.size,&editor,preview.metrics);
         ImGui::PopFont();
         if (&project==&state->Document().project) {
@@ -319,7 +318,7 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
                 } else ImGui::TextWrapped("%s — fit draft",title.c_str());
                 if (tab.index<3 && !modelOnly) refitPlot=sst::ui::widgets::Checkbox("Residual overlay (model - measured)",&residualOverlay);
                 if (ImGui::Button("Fit plot")) refitPlot=true;
-                const float available=std::max(220.f,ImGui::GetContentRegionAvail().y-65);
+                const float available=std::max(1.f,ImGui::GetContentRegionAvail().y-ImGui::GetStyle().FramePadding.y*2);
                 if (tab.index==1) {
                     ImGui::TextUnformatted("Magnitude |Z|"); render(1,available*.5f-16);
                     ImGui::TextUnformatted("Phase (deg)"); render(2,available*.5f-16);

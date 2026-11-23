@@ -227,8 +227,11 @@ namespace SST
         if (action == WindowAction::ResetLayout)
         {
             ResetWindowStates();
-            if (ImGui::GetCurrentContext()) { ImGui::ClearIniSettings(); ImGui::MarkIniSettingsDirty(); }
-            if (m_DefaultLayout) m_DefaultLayout();
+            if (ImGui::GetCurrentContext()) {
+                m_DefaultLayoutChecked = true;
+                ImGui::ClearIniSettings(); ImGui::MarkIniSettingsDirty();
+            }
+            if (m_DefaultLayout && ImGui::GetCurrentContext()) m_DefaultLayout();
             return {};
         }
         auto windows = Windows();

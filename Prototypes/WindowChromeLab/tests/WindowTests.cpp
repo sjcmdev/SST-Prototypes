@@ -52,6 +52,7 @@ namespace SST
     TEST_F(WindowStateTest, ResetLayoutCommandWorksWithoutImGui)
     {
         const auto initial = get(a)->GetState();
+        workspace->SetDefaultLayout([] { ADD_FAILURE() << "GUI docking must not run without ImGui"; });
         ASSERT_TRUE(act(WindowAction::Maximize, a)); ASSERT_TRUE(act(WindowAction::Pin, b));
         ASSERT_TRUE(act(WindowAction::Close, a)); ASSERT_TRUE(act(WindowAction::LockLayout));
         ASSERT_TRUE(commands->Execute(CommandID{"app.layout.reset"}));

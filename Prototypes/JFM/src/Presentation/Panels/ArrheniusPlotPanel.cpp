@@ -1045,7 +1045,8 @@ namespace SST::Prototypes::JFM
         figureSpec.x.label = JFMArrheniusUsesInvTemperature(quantity) ? "1000/T" : "T (K)";
         figureSpec.y.label = JFMArrheniusQuantityName(quantity);
         window.document->SetSpec(figureSpec);
-		const bool plotFont = BeginJFMPlotFrame(*window.document, {ImGui::GetContentRegionAvail().x,360});
+		const float tableHeight = fitColumns ? ImGui::GetFrameHeightWithSpacing() * (window.series.size() + 2) : 0;
+        const bool plotFont = BeginJFMPlotFrame(*window.document, {ImGui::GetContentRegionAvail().x, std::max(100.f, ImGui::GetContentRegionAvail().y - tableHeight)});
 		if (plotFont && ImPlot::BeginPlot(("##arrhenius_plot_" + std::to_string(window.id)).c_str(), window.document->preview.size))
 		{
 			ImPlot::SetupAxes(JFMArrheniusUsesInvTemperature(quantity) ? "1000/T" : "T (K)", JFMArrheniusQuantityName(quantity));

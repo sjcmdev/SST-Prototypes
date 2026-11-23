@@ -519,10 +519,9 @@ void CapLabPrototypePanel::RenderPlot() {
         ImGui::PushID(std::to_string(project.graph).c_str());
         auto spec = std::get<pl::Layer>(p.object(layer).data).spec; spec.customAxes = true;
         auto& editor = plotEditors[project.graph];
-        const auto& dimensions=std::get<pl::Graph>(p.object(project.graph).data);
-        const auto preview=sst::ui::plot::PublicationPreview(dimensions.widthMm,dimensions.heightMm,{ImGui::GetContentRegionAvail().x,std::max(200.f,ImGui::GetContentRegionAvail().y-40)});
+        const auto preview=sst::ui::plot::InteractivePreview({ImGui::GetContentRegionAvail().x,ImGui::GetContentRegionAvail().y});
         try {
-            ImGui::PushFont(ResolvePlotPreviewFont(dimensions.fontFamily,dimensions.fontFile),preview.metrics.ToPixels(static_cast<float>(dimensions.fontSizePt)));
+            ImGui::PushFont(nullptr, 0);
             try {sst::ui::plot::RenderPlot("##cf", spec,series.data(),series.size(),state->view,preview.metrics,preview.size,&editor);}
             catch (...) {ImGui::PopFont();throw;}
             ImGui::PopFont();

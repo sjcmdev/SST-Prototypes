@@ -493,6 +493,21 @@ namespace SST
         const std::string ini = GImGui->SettingsIniData.c_str();
         if (!ini.empty()) ImGui::LoadIniSettingsFromMemory(ini.c_str());
     }
+    void WindowWorkspace::RestoreDefaultLayoutIfNeeded(std::string_view typePrefix)
+    {
+        if (m_DefaultLayoutChecked || !m_DefaultLayout || !ImGui::GetCurrentContext()) return;
+        bool found = false, hasLayout = false;
+        for (const auto& window : Windows()) {
+            if (window->Capabilities().auxiliary || !window->GetType().starts_with(typePrefix)) continue;
+            found = true;
+            const auto* saved = ImGui::FindWindowSettingsByID(ImHashStr(window->ImGuiName().c_str()));
+            hasLayout |= saved && !saved->WantDelete;
+        }
+        if (!found) return; // Hosts may register their windows after the first frame.
+        m_DefaultLayoutChecked = true;
+        // Floating, hidden and maximized windows are valid saved user layouts.
+        if (!hasLayout) (void)Execute({WindowAction::ResetLayout});
+    }
     void WindowWorkspace::RemoveSettingsHandler()
     {
         if (ImGui::GetCurrentContext()) ImGui::RemoveSettingsHandler("SSTWindows");

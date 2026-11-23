@@ -24,6 +24,7 @@ struct WorkspaceTestAccess {
     static void NewSheet(WorkspacePanel& panel, pl::Id book) { panel.NewWorksheet(book); }
     static void NewBook(WorkspacePanel& panel, pl::Id folder) { panel.NewWorkbook(folder); }
     static auto Layout(WorkspacePanel& panel) { panel.PrepareLayout(); return std::pair{panel.explorerDock, panel.contentDock}; }
+    static bool LayoutRebuilt(const WorkspacePanel& panel) { return panel.layoutRebuilt; }
     static pl::Id XChoice(WorkspacePanel& panel) { return panel.xChoice; }
     static void Process(WorkspacePanel& panel) { panel.ProcessCommands(); }
     static void Action(WorkspacePanel& panel, const std::string& action) { panel.RunAction(action); }
@@ -385,6 +386,24 @@ TEST_F(WorksheetUi, DefaultAndResetLayoutSplitExplorerLeftAndContentInsideMainVi
     EXPECT_NE(reset.first, 0u); EXPECT_NE(reset.second, 0u);
     EXPECT_EQ(ImGui::GetPlatformIO().Viewports.Size, 1);
 }
+TEST_F(WorksheetUi, RestoredSplitLayoutDoesNotRedockDocumentsOrReopenExplorer) {
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    ImGui::NewFrame();
+    const auto root = ImGui::GetMainViewport()->ID;
+    ImGui::DockSpaceOverViewport(root);
+    ImGuiID left = 0, center = 0;
+    ImGui::DockBuilderSplitNode(root, ImGuiDir_Left, .3f, &left, &center);
+    ImGui::DockBuilderFinish(root);
+    panel.SetVisible(false);
+    const auto docks = WorkspaceTestAccess::Layout(panel);
+    EXPECT_EQ(docks.first, left); EXPECT_EQ(docks.second, center);
+    EXPECT_FALSE(WorkspaceTestAccess::LayoutRebuilt(panel));
+    EXPECT_FALSE(panel.IsVisible());
+    panel.ResetLayout(); WorkspaceTestAccess::Layout(panel);
+    EXPECT_TRUE(WorkspaceTestAccess::LayoutRebuilt(panel)); EXPECT_TRUE(panel.IsVisible());
+    WorkspaceTestAccess::Layout(panel); EXPECT_FALSE(WorkspaceTestAccess::LayoutRebuilt(panel));
+    ImGui::Render();
+}
 TEST_F(WorksheetUi, PlotDialogsUseOwnerUiFontAndStayInsideMainViewport) {
     const auto graph = doc->PlotColumns(sheet, {columns[1]}, plot::SeriesKind::LineScatter);
     auto& editor = session->plotEditors[graph];
@@ -426,4 +445,23 @@ TEST_F(WorksheetUi, SaveAndReopenRestoreTheTypedGraphViewport) {
     EXPECT_EQ(*session->views[graph].viewport, (plot::Bounds{1,4,1,6}));
     GraphFrame(graph); EXPECT_EQ(*session->views[graph].viewport, (plot::Bounds{1,4,1,6}));
     std::filesystem::remove(file);
+}
+
+TEST_F(WorksheetUi, PhysicalExportSizeAndFontsDoNotScaleTheInteractiveGraph) {
+    const auto graph = doc->PlotColumns(sheet,{columns[1]},plot::SeriesKind::LineScatter);
+    auto object=doc->project->object(graph); auto& settings=std::get<pl::Graph>(object.data);
+    settings.widthMm=300; settings.heightMm=20; settings.fontSizePt=72;
+    doc->project->change("Export settings",{object}).apply(*doc->project);
+    for (float scale : {1.f,1.5f}) {
+        ImGui::GetStyle().FontScaleMain=scale; GraphFrame(graph); GraphFrame(graph);
+        auto* owner=ImGui::FindWindowByName("Graph test");
+        const auto* plot=GImPlot->Plots.GetByKey(owner->GetID("##graph")); ASSERT_NE(plot,nullptr);
+        EXPECT_GE(plot->FrameRect.GetWidth(),owner->InnerRect.GetWidth()*.9f);
+        EXPECT_GE(plot->FrameRect.GetHeight(),(owner->WorkRect.Max.y-plot->FrameRect.Min.y)*.9f);
+        ASSERT_TRUE(session->views[graph].legendLayout);
+        const auto preview=plot::PreviewMetrics{(96.f/72)*scale,true};
+        EXPECT_NEAR(preview.ToPixels(session->views[graph].legendLayout->fontSizePt),owner->FontRefSize,owner->FontRefSize*.15f);
+    }
+    const auto& saved=std::get<pl::Graph>(doc->project->object(graph).data);
+    EXPECT_DOUBLE_EQ(saved.widthMm,300); EXPECT_DOUBLE_EQ(saved.heightMm,20); EXPECT_DOUBLE_EQ(saved.fontSizePt,72);
 }

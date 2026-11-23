@@ -103,3 +103,25 @@ TEST(CapLabISDisplay, RenderedNyquistEqualScaleOnResizeAndWheelZoom) {
     ImGui::SetCurrentContext(oldGui); ImPlot::SetCurrentContext(oldPlot);
 }
 }
+
+TEST(CapLabISDisplay, SharedInteractiveEditorKeepsNyquistScaleAndFillsContentAtUiScales) {
+    ImGui::CreateContext(); ImPlot::CreateContext(); auto& io=ImGui::GetIO();
+    io.IniFilename=nullptr; io.DisplaySize={1600,1100}; io.Fonts->AddFontDefault(); io.Fonts->Build();
+    const double x[]={0,100,200},y[]={0,80,0};
+    sst::ui::plot::SeriesEntryView series{"R-C",{x,y,3}};
+    sst::ui::plot::PlotSpec spec; spec.equalAspect=true; spec.autoFit=sst::ui::plot::AutoFit::Once;
+    sst::ui::plot::PlotViewState state; sst::ui::plot::PlotEditorState editor;
+    for(float scale : {1.f,1.5f}) {
+        ImGui::GetStyle().FontScaleMain=scale;
+        for(int frame=0;frame<2;++frame) {
+            ImGui::NewFrame(); ImGui::SetNextWindowSize({1400,950}); ImGui::Begin("IS interactive");
+            const auto available=ImGui::GetContentRegionAvail(); const auto preview=sst::ui::plot::InteractivePreview(available);
+            const auto actual=SST::Prototypes::CapLab::RenderISPlot("Nyquist shared",spec,&series,1,state,preview.size,&editor,preview.metrics);
+            EXPECT_NEAR(actual.xPixelsPerOhm,actual.yPixelsPerOhm,actual.xPixelsPerOhm*.01) << "scale " << scale << " frame " << frame;
+            const auto* plot=ImPlot::GetPlot("Nyquist shared"); ASSERT_NE(plot,nullptr);
+            EXPECT_GE(plot->FrameRect.GetWidth(),available.x*.9f); EXPECT_GE(plot->FrameRect.GetHeight(),available.y*.9f);
+            ImGui::End(); ImGui::Render();
+        }
+    }
+    ImPlot::DestroyContext(); ImGui::DestroyContext();
+}

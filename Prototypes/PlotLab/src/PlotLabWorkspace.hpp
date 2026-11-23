@@ -78,7 +78,7 @@ namespace SST::Prototypes::PlotLab
         void WorksheetContents(pl::Id);
         void GraphContents(pl::Id);
         void Dialogs();
-        void ResetLayout() { layoutReady = false; resetLayoutRequested = true; }
+        void ResetLayout() { SetVisible(true); layoutReady = false; resetLayoutRequested = true; }
         void RegisterCommands(Ref<KeymapResolver> keymap = {});
         void RenderMenus(bool helpOnly = false);
 
@@ -140,9 +140,6 @@ namespace SST::Prototypes::PlotLab
         void CopySelection(pl::Id);
         void PasteSelection(pl::Id, const char*);
         void PlotSelection(pl::Id, plot::SeriesKind);
-        std::map<std::string, ImFont *> graphFonts;
-        std::map<std::string, std::string> fontFailures;
-        std::map<pl::Id, std::string> fontErrors;
         double width = 80, height = 60;
         int dpi = 300;
         void Tree(pl::Id);

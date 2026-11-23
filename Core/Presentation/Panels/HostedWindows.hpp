@@ -77,7 +77,7 @@ namespace SST
                 editor.RegisterWindow(window, window->GetId()); // Undo may have removed a host's child entries.
             entry.used = true;
             if (defaultDock) window->m_DefaultState.dockId = defaultDock;
-            if (resetDock) { auto current = window->GetState(); current.dockId = defaultDock; window->ApplyState(current); }
+            if (resetDock) { auto current = window->GetState(); current.dockId = defaultDock; current.mode = current.restoreMode = WindowMode::Normal; current.pinned = false; current.visible = open; window->ApplyState(current); }
             window->SetLegacyName(name);
             const bool wasOpen = open;
             const bool rendered = window->Render(content, flags);

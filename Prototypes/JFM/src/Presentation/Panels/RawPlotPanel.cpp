@@ -1238,7 +1238,7 @@ namespace SST::Prototypes::JFM
 				ImGui::EndDragDropTarget();
 			}
 			ImGui::PopID();
-            });
+            }, false, GetState().dockId);
             if (!rendered) FinishRangeUndoGroup(area);
 
 			if (!plotVisible)
