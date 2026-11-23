@@ -293,14 +293,25 @@ void ShotBar(Workflow &w,const std::string &kind) {
     }
     ImGui::PopID();
 }
+void RecalculateThisBias(Workflow& w) {
+    if(w.Current().selectedRun.empty())(void)w.Exec(Cmd::RecalculateLive::Make(ActionKind::Band));
+    else (void)w.Exec(Cmd::RecalculateStoredBias::With());
+}
+// Owner 2026-11-23: a bias without stored profiles must not blank the plots - draw the nearest stored profile
+// under one fixed-height line that says so and offers the recalculation.
+const IvPoint* NearestStoredProfiles(Workflow& w,const std::vector<IvPoint>& points,int index) {
+    const IvPoint* best=nullptr;int distance=std::numeric_limits<int>::max();
+    for(int i=0;i<int(points.size());++i) if(points[i].details && std::abs(i-index)<distance) {distance=std::abs(i-index);best=&points[i];}
+    if(!best)return nullptr;
+    ImGui::AlignTextToFramePadding();ImGui::TextDisabled("Not stored at %.4g V - showing %.4g V",points[std::clamp(index,0,int(points.size())-1)].voltage_V,best->voltage_V);
+    ImGui::SameLine();ImGui::BeginDisabled(w.Busy());if(ImGui::SmallButton("Recalculate this bias"))RecalculateThisBias(w);ImGui::EndDisabled();
+    return best;
+}
 bool MissingProfiles(Workflow& w,const IvPoint& point) {
     if(point.details)return false;
     ImGui::TextUnformatted("Profiles not stored at this bias");
     ImGui::BeginDisabled(w.Busy());
-    if(ImGui::Button("Recalculate this bias")) {
-        if(w.Current().selectedRun.empty())(void)w.Exec(Cmd::RecalculateLive::Make(ActionKind::Band));
-        else (void)w.Exec(Cmd::RecalculateStoredBias::With());
-    }
+    if(ImGui::Button("Recalculate this bias"))RecalculateThisBias(w);
     ImGui::EndDisabled();return true;
 }
 // S3 plot caches: everything a plot draws per frame is read from here. Entries are keyed by Json node address / device and dropped when
@@ -1511,6 +1522,7 @@ void Panel::Results() {
     if(view==5) {
         if(drawn->details) ImGui::TextDisabled("Details at %.4g V",points[bias].voltage_V);
         else if(!band.empty() && band.points[0].details) {drawn=&band.points[0];ImGui::TextDisabled("Loading details at %.4g V ...",points[bias].voltage_V);}
+        else if(const auto* nearest=NearestStoredProfiles(*w,points,bias)) drawn=nearest;
         else if(MissingProfiles(*w,*drawn)) return;
     }
     const auto &p=*drawn;
@@ -2297,6 +2309,7 @@ void Panel::GenerationRecombination() {
     // Keep the last profiles on screen while the new bias loads (owner 2026-11-23: no blanking on bias change).
     if(drawnGr->details) ImGui::TextDisabled("Details at %.4g V",drawnGr->voltage_V);
     else if(!bandRef->points.empty() && bandRef->points.front().details) {drawnGr=&bandRef->points.front();ImGui::TextDisabled("Loading details at %.4g V ...",selectedVoltage);}
+    else if(const auto* nearest=NearestStoredProfiles(*w,snapshot.points,index)) drawnGr=nearest;
     else if(MissingProfiles(*w,*drawnGr))return;
     const auto &point=*drawnGr;
     const auto &gr=point.details->generation_recombination;
