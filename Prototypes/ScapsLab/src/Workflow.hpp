@@ -113,6 +113,7 @@ public:
     bool automatic=false;
     std::uint64_t revision=0;
     int detailBias=0;
+    std::string detailRun;
     Json document, request, output, acResults, workspace, batchResult;
     Ref<const ResultBase> typedOut;       // typed form of `output` (run/band/cv/cf/qe/batch ops), built on the job thread
     Ref<const BatchResult> batchInput;
@@ -220,6 +221,8 @@ struct DeviceState {
     Ref<const RunMap> runs=CreateRef<const RunMap>(); // typed result per history run_id
     Ref<const IvResult> Iv() const {static const auto none=CreateRef<const IvResult>();return result.typed()?result.typed():none;}
     Ref<const IvResult> Band() const {static const auto none=CreateRef<const IvResult>();return bandResult.typed()?bandResult.typed():none;}
+    Ref<const IvResult> ProfileSweep() const {auto stored=std::dynamic_pointer_cast<const IvResult>(RunResult(selectedRun));return stored?stored:Iv();}
+    Ref<const IvResult> ProfileBand() const {static const auto none=CreateRef<const IvResult>();return selectedRun.empty()?Band():detailRun==selectedRun && storedBand?storedBand:none;}
     Ref<const AcResult> Ac(const std::string &kind) const {static const auto none=CreateRef<const AcResult>();auto r=acResults.get(kind);return r?r:none;}
     Ref<const ResultBase> RunResult(const std::string &runId) const {auto it=runs->find(runId);return it==runs->end()?Ref<const ResultBase>{}:it->second;}
     const Json &RunJson(const std::string &runId) const {static const Json none=Json::object();auto r=RunResult(runId);return r?r->View():none;}
@@ -243,6 +246,9 @@ struct DeviceState {
     std::uint64_t revision=0; // bumped with every DocumentEdited event
     Cow history{Json::array()};
     std::string selectedRun;
+    bool pinStoredView=false,needsBiasDetails=false;
+    std::string detailRun;
+    Ref<const IvResult> storedBand;
     UndoStack undo;
     bool dirty = false, metadataDirty = false, needsBand = false, needsRecalculate = false;
     double biasVoltage_V = 0;
@@ -305,8 +311,11 @@ public:
     std::string MemoryReport() const; // SCAPSLAB_PERF: private bytes + history/result sizes
     Json Runs() const;
     void RefreshDirty();
-    void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={});
+    void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={},std::string detailRun={});
     void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy; undoable as a run delta, see Commands/UndoOps.cpp)
+    void RecalculateLive(ActionKind) override;
+    void SelectBias(int) override;
+    void RecalculateStoredBias() override;
     Json response;
     std::string status = "Ready", path;
     Ref<JobSystem> jobs;

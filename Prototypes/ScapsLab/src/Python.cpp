@@ -22,7 +22,7 @@ NB_MODULE(sst_scapslab, m) {
                 else if(op=="single_shot")response=s.Exec(Cmd::SingleShot::Make(value.contains("actions")?CreateRef<const RunPlan>(ReadRunPlan(value.at("actions"))):nullptr));
                 else if(op=="run_batch" && (value.contains("actions") || value.contains("spec") || value.contains("columns")))response=s.Exec(Cmd::RunBatch::Make(value.contains("spec")?ReadBatchDraft(value.at("spec")):s.Current().batch,value.contains("columns")?ReadRecorderDraft(value.at("columns")):s.Current().recorder,value.contains("actions")?CreateRef<const RunPlan>(ReadRunPlan(value.at("actions"))):s.Current().runPlanEdited?s.Current().runPlan:nullptr));
                 else response=s.Dispatch(value);
-                if(op=="run_settings" && response.value("ok",false))s.response=s.Snapshot();
+                if((op=="run_settings" || op=="select_bias") && response.value("ok",false))s.response=s.Snapshot();
                 return response.dump();
             }
             catch(const std::exception &e) {return Json{{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}}.dump();}

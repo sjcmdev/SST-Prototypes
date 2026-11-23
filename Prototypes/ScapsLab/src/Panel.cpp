@@ -255,9 +255,15 @@ void DrawLayerRegions(const Json &layers) {
 // Live and stored are selected independently of pinning overlays.
 void ShotBar(Workflow &w,const std::string &kind) {
     ImGui::PushID("shotbar");
-    const auto &device=w.Current();const std::string deviceId=device.id;const auto history=device.history;
+    auto &device=w.Current();const std::string deviceId=device.id;const auto history=device.history;
     const auto actionKind=kind=="band"?ActionKind::Band:kind=="cv"?ActionKind::Cv:kind=="cf"?ActionKind::Cf:kind=="qe"?ActionKind::Qe:ActionKind::Iv;
-    if(!device.selectedRun.empty()) {if(ImGui::SmallButton("Live"))(void)w.Exec(Cmd::SelectRun::With({{"device_id",deviceId},{"run_id",""}}));ImGui::SameLine();}
+    if(!device.selectedRun.empty()) {
+        ImGui::TextUnformatted("Viewing stored run");ImGui::SameLine();
+        if(ImGui::SmallButton("Back to Live"))(void)w.Exec(Cmd::SelectRun::Make(deviceId,""));ImGui::SameLine();
+        ImGui::TextUnformatted("Pin view");ImGui::SameLine();ImGui::Checkbox("##pin-view",&device.pinStoredView);
+    }
+    const char* recalc=actionKind==ActionKind::Band?"Recalculate band":actionKind==ActionKind::Cv?"Recalculate C-V":actionKind==ActionKind::Cf?"Recalculate C-f":actionKind==ActionKind::Qe?"Recalculate QE":"Recalculate I-V";
+    ImGui::BeginDisabled(w.Busy());if(ImGui::Button(recalc))(void)w.Exec(Cmd::RecalculateLive::Make(actionKind));ImGui::EndDisabled();ImGui::SameLine();
     ImGui::BeginDisabled(w.Busy());bool shot=ImGui::Button("Capture live");ImGui::EndDisabled();
     if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Store the current exact live result (Ctrl+P). Single shot executes included Actions in Run.");
     if(ImGui::Shortcut(ImGuiMod_Ctrl|ImGuiKey_P,ImGuiInputFlags_RouteFocused))shot=true;
@@ -286,6 +292,16 @@ void ShotBar(Workflow &w,const std::string &kind) {
         ImGui::EndPopup();
     }
     ImGui::PopID();
+}
+bool MissingProfiles(Workflow& w,const IvPoint& point) {
+    if(point.details)return false;
+    ImGui::TextUnformatted("Profiles not stored at this bias");
+    ImGui::BeginDisabled(w.Busy());
+    if(ImGui::Button("Recalculate this bias")) {
+        if(w.Current().selectedRun.empty())(void)w.Exec(Cmd::RecalculateLive::Make(ActionKind::Band));
+        else (void)w.Exec(Cmd::RecalculateStoredBias::With());
+    }
+    ImGui::EndDisabled();return true;
 }
 // S3 plot caches: everything a plot draws per frame is read from here. Entries are keyed by Json node address / device and dropped when
 // Workflow::plotGen changes (RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/... events), so draw paths do no JSON->vector
@@ -745,14 +761,58 @@ bool Panel::RunActions(ProjectDraft& draft) {
         }
         actionSource=source;
     }
-    for(int i=0;i<5;++i) {
-        auto& a=plan->actions[i];BeginRow(labels[i]);
-        ImGui::TextUnformatted("Include");ImGui::SameLine();changed|=ImGui::Checkbox("##include",&a.include);ImGui::SameLine();
-        ImGui::TextUnformatted("On edit");ImGui::SameLine();changed|=ImGui::Checkbox("##on-edit",&a.onEdit);ImGui::SameLine();
-        if(ImGui::SmallButton("..."))selectedAction=i;
-        if(ImGui::IsItemHovered())ImGui::SetTooltip("Settings: %s",labels[i]);
-        EndRow();
+    const auto& style=ImGui::GetStyle();
+    const float numeric=std::max(110.f,ImGui::CalcTextSize("-0.5000 V").x+style.FramePadding.x*2);
+    const float actionWidth=ImGui::CalcTextSize("Band / profiles").x;
+    const float checkWidth=ImGui::CalcTextSize("Include").x;
+    const float scaleWidth=ImGui::CalcTextSize("Log").x+ImGui::GetFrameHeight()+style.FramePadding.x*2;
+    const float moreWidth=ImGui::CalcTextSize("More").x+style.FramePadding.x*2;
+    const float minimum=actionWidth+2*checkWidth+4*numeric+scaleWidth+moreWidth+18*style.CellPadding.x;
+    const bool scroll=ImGui::GetContentRegionAvail().x<minimum;bool more=false;
+    if(ImGui::BeginTable("Run Actions",9,ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_RowBg|ImGuiTableFlags_SizingFixedFit|ImGuiTableFlags_NoKeepColumnsVisible|(scroll?ImGuiTableFlags_ScrollX:0),ImVec2(0,scroll?ImGui::GetFrameHeightWithSpacing()*6+style.ScrollbarSize+style.CellPadding.y*12:0),scroll?minimum:0)) {
+        ImGui::TableSetupColumn("Action",ImGuiTableColumnFlags_WidthStretch);
+        for(const auto* title:{"Include","On edit"})ImGui::TableSetupColumn(title,ImGuiTableColumnFlags_WidthFixed,checkWidth);
+        for(const auto* title:{"From","To","Step / Points"})ImGui::TableSetupColumn(title,ImGuiTableColumnFlags_WidthFixed,numeric);
+        ImGui::TableSetupColumn("Scale",ImGuiTableColumnFlags_WidthFixed,scaleWidth);
+        ImGui::TableSetupColumn("At",ImGuiTableColumnFlags_WidthFixed,numeric);
+        ImGui::TableSetupColumn("More",ImGuiTableColumnFlags_WidthFixed,moreWidth);
+        ImGui::TableHeadersRow();
+        for(int i:{1,2,3,4,0}) {
+            auto& a=plan->actions[i];auto& state=actionEditors[i];auto& range=state.editor.range;
+            ImGui::PushID(ActionId(a.kind));ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(labels[i]);
+            ImGui::TableNextColumn();changed|=ImGui::Checkbox("##include",&a.include);
+            ImGui::TableNextColumn();changed|=ImGui::Checkbox("##on-edit",&a.onEdit);
+            const auto cell=[&](const char* id,double& value,const char* unit,bool log=false) {
+                ImGui::SetNextItemWidth(-1);
+                if(log)return sst::ui::widgets::LogControl(id,&value);
+                const auto format=std::string("%.4g ")+unit;
+                return ImGui::DragScalar(id,ImGuiDataType_Double,&value,unit==std::string_view("V")?.001f:1.f,nullptr,nullptr,format.c_str(),ImGuiSliderFlags_NoRoundToFormat);
+            };
+            ImGui::TableNextColumn();bool rangeChanged=false;
+            if(i==0)changed|=cell("##bias",a.voltage_V,"V");
+            else {
+                ImGui::BeginDisabled(range.sampling==SweepSampling::List);
+                rangeChanged|=cell("##from",range.minimum,state.editor.displayUnit.c_str(),range.logarithmic);
+                ImGui::TableNextColumn();rangeChanged|=cell("##to",range.maximum,state.editor.displayUnit.c_str(),range.logarithmic);
+                ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);
+                if(range.sampling==SweepSampling::Step)rangeChanged|=cell("##step",range.step,range.logarithmic?"dec":state.editor.displayUnit.c_str());
+                else rangeChanged|=ImGui::DragInt("##points",&range.points,1,range.minimum==range.maximum?1:2,10000,"%d pts");
+                ImGui::EndDisabled();
+            }
+            ImGui::TableSetColumnIndex(6);
+            if(i!=0){int scale=range.logarithmic;ImGui::SetNextItemWidth(-1);if(ImGui::Combo("##scale",&scale,"Lin\0Log\0")){range.logarithmic=scale;rangeChanged=true;}}
+            ImGui::TableNextColumn();
+            if(i==2){ImGui::TextUnformatted("f");ImGui::SameLine();changed|=cell("##frequency",a.frequency_Hz,"Hz",true);}
+            if(i==3){ImGui::TextUnformatted("Bias");ImGui::SameLine();changed|=cell("##voltage",a.voltage_V,"V");}
+            if(rangeChanged){a.range=range;state.error.clear();changed=true;}
+            ImGui::TableNextColumn();if(ImGui::Button("...")){selectedAction=i;more=true;}
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
     }
+    if(more)ImGui::OpenPopup("Action settings");
+    ImGui::SetNextWindowSize(ImVec2(600,0),ImGuiCond_Appearing);
+    if(ImGui::BeginPopup("Action settings")) {
     ImGui::SeparatorText(labels[selectedAction]);auto& a=plan->actions[selectedAction];ImGui::PushID(ActionId(a.kind));
     bool ownTemperature=a.temperature_K>0;
     if(ImGui::BeginTable("Action temperature",2)) {
@@ -773,7 +833,8 @@ bool Panel::RunActions(ProjectDraft& draft) {
         if(a.constantFlux)changed|=Number("Photon flux [m^-2 s^-1]",a.photon_flux_m2_s,"probe_photon_flux_m2_s");
         else changed|=Number("Probe power [W/m^2]",a.probe_power_W_m2,"probe_power_W_m2");
     }
-    ImGui::PopID();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Pause after Action");ImGui::SameLine();changed|=ImGui::Checkbox("##pause-action",&plan->pauseAfterAction);ImGui::SameLine();ImGui::TextUnformatted("Pause after Member");ImGui::SameLine();changed|=ImGui::Checkbox("##pause-member",&plan->pauseAfterMember);
+    ImGui::PopID();ImGui::EndPopup();
+    }
     std::string error;try {ValidateRunPlan(*plan,draft);for(const auto& state:actionEditors)if(!state.error.empty())throw std::invalid_argument(state.error);}catch(const std::exception& e){error=e.what();}
     if(changed && error.empty()) {Do(Cmd::SetRunPlan::Make(plan));actionSource=plan;}
     else if(changed) { // Include may be empty while editing; invalid range text stays local until corrected.
@@ -784,6 +845,9 @@ bool Panel::RunActions(ProjectDraft& draft) {
     if(ImGui::Button("Single shot"))Do(Cmd::SingleShot::Make(plan));w->tutorialOverlay.Item("scapslab.Run","run");
     ImGui::EndDisabled();ImGui::SameLine();
     if(ImGui::Button("Results"))w->focusView=18;
+    ImGui::SameLine();ImGui::TextUnformatted("Pause after Action");ImGui::SameLine();changed|=ImGui::Checkbox("##pause-action",&plan->pauseAfterAction);
+    ImGui::SameLine();ImGui::TextUnformatted("Member");ImGui::SameLine();changed|=ImGui::Checkbox("##pause-member",&plan->pauseAfterMember);
+    if(changed && (plan->pauseAfterAction!=source->pauseAfterAction || plan->pauseAfterMember!=source->pauseAfterMember))Do(Cmd::SetRunPlan::Make(plan));
     if(const auto op=w->ActiveOp();op && op->paused) {if(ImGui::Button("Resume"))Do(Cmd::ResumeRun::With());}
     return conditions;
 }
@@ -819,6 +883,7 @@ void Panel::RenderContent() {
     if(view==5) {Results();return;}
     if(view==22) {GenerationRecombination();return;}
     if(view>=6 && view<10) {AC();return;}
+    if(view==19)ShotBar(*w,"qe");
     const bool replacing=w->ReplacingProject();
     ImGui::BeginDisabled(replacing);
     if(w->Current().draft) {
@@ -1101,7 +1166,7 @@ bool Panel::Illumination(ProjectDraft &draft) {
         if(ImGui::BeginTabItem("QE(lambda)",nullptr,tabFlags(2))) {selectTab(2);
             const bool wide=ImGui::GetContentRegionAvail().x>750;if(wide){ImGui::BeginTable("QE controls and plot",2,ImGuiTableFlags_SizingStretchSame);ImGui::TableNextColumn();}
             ImGui::TextWrapped("QE range and probe settings are in Run. Dark differential EQE uses the Action temperature at 0 V.");
-            if(ImGui::Button("Run settings"))w->focusView=4;ImGui::SameLine();ShotBar(*w,"qe");
+            if(ImGui::Button("Run settings"))w->focusView=4;
             if(wide) ImGui::TableNextColumn();
             if(const auto result=w->Current().acResults.get("qe")) {const auto& q=result->meta.prim;const auto& points=result->points;
                 ImGui::TextWrapped("Effective: %s | T %.6g K | 0 V | %d samples",q.at("probe_mode").get<std::string>().c_str(),q.at("temperature_K").get<double>(),int(points.size()));
@@ -1402,14 +1467,13 @@ void Panel::Results() {
     // Owner 2026-11-23 (no blinking): while dragging or while a newer band job is pending, keep showing the last live band
     // instead of falling back to the outdated exact run for a frame and back again.
     const bool bandPending=w->dragging || w->Current().needsBand || w->Busy();
-    const bool liveBand=view==5 && !w->Current().bandResult.empty() && (w->Current().BandFresh() || bandPending) && (w->Current().result.empty() || !SelectedOffLive(w->Current(),"iv"));
+    const bool liveBand=view==5 && w->Current().selectedRun.empty() && !w->Current().bandResult.empty() && (w->Current().BandFresh() || bandPending);
     const auto bandBadge=[&]{
         const auto &d=w->Current();
         if(liveBand && d.result.empty()==false && d.Stale()) PlotBadge("LIVE band (exact I-V follows)",IM_COL32(255,140,25,230),IM_COL32(0,0,0,255),0);
         else if(view==5 && !liveBand && !d.BandFresh() && (d.Stale() || d.needsBand)) PlotBadge("outdated: model edited",IM_COL32(95,95,105,210),IM_COL32(235,235,240,255),0);
     };
     if(!liveBand) for(const auto &run:w->Current().history) if(run.at("run_id")==w->Current().selectedRun && (run.at("kind")=="iv" || run.at("kind")=="band")) {
-        if(!run.value("profiles_stored",true) && std::static_pointer_cast<const IvResult>(HistoryTyped(w->Current(),run))->points.front().x_m.empty()){ImGui::TextUnformatted("Profiles not stored. Recalculate this model to view spatial profiles.");return;}
         selected=&run;
     }
     const bool bandOnly=view==5 && w->Current().result.empty() && !w->Current().bandResult.empty();
@@ -1418,6 +1482,7 @@ void Panel::Results() {
     const auto &layers=(selected?selected->at("document"):w->Current().Document()).at("layers");
     double total=0;for(const auto &l:layers) total+=l.at("thickness_m").get<double>();
     if(view==5) StructureEdit();
+    ShotBar(*w,view==5?"band":"iv");
     if(result.points.empty()) {
         // Owner 2026-11-23: the changing curve must be visible while dragging even before the first exact I-V exists.
         const auto& d=w->Current();
@@ -1436,23 +1501,17 @@ void Panel::Results() {
     { // one row: Bias point [slider showing V] | Single shot | Shots
         char biasFormat[64];std::snprintf(biasFormat,sizeof(biasFormat),"%.4g V  (#%%d)",points[bias].voltage_V);
         ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Bias point");ImGui::SameLine();
-        ImGui::SetNextItemWidth(std::max(120.f,ImGui::GetContentRegionAvail().x*.5f));ImGui::SliderInt("##bias",&bias,0,int(points.size())-1,biasFormat);if(!bandOnly)w->Current().selectedBias=bias;
-        ImGui::SameLine();ShotBar(*w,"iv");
+        ImGui::SetNextItemWidth(std::max(120.f,ImGui::GetContentRegionAvail().x*.5f));if(ImGui::SliderInt("##bias",&bias,0,int(points.size())-1,biasFormat) && !bandOnly)Do(Cmd::SelectBias::Make(bias));
     }
     ImGui::TextDisabled("%s",selected?"STORED result (frozen snapshot)":"LIVE result (store with Capture live)");
-    const auto &band=*w->Current().Band();
-    // Owner 2026-11-23: moving the bias point must not blank/re-layout the panel (flicker). While the details of the newly
-    // selected bias load, keep drawing the last point that has details, and keep a fixed one-line status row.
-    const IvPoint* drawn=&(selected?points[bias]:view==5?PointAtBias(*w->Current().Iv(),band,bias):points[bias]);
-    if(!selected && view==5 && !w->Current().Stale()) {
-        const bool need=!drawn->details;
-        static std::tuple<std::string,int,std::uint64_t> requested{};
-        const auto key=std::make_tuple(w->Current().id,bias,std::uint64_t(w->Current().revision));
-        const bool autoBand=w->autoRecalculateBand || w->Current().runPlan->actions[0].onEdit;
-        if(need && autoBand && !w->Busy() && requested!=key) {requested=key;Do(Cmd::RunBand::With({{"voltage_V",points[bias].voltage_V},{"live",true},{"rev",w->Current().revision}}));}
-        if(need && !band.empty() && band.points[0].details) drawn=&band.points[0]; // previous live band point stays visible until the new one arrives
-        if(autoBand) ImGui::TextDisabled(need?"Loading details at %.4g V ...":"Details at %.4g V",points[bias].voltage_V);
-        else {ImGui::BeginDisabled(!need || w->Busy());if(ImGui::Button("Load selected live details"))Do(Cmd::RunBand::With({{"voltage_V",points[bias].voltage_V},{"live",true},{"rev",w->Current().revision}}));ImGui::EndDisabled();}
+    const auto bandRef=w->Current().ProfileBand();const auto &band=*bandRef;
+    // Owner 2026-11-23: changing the bias must not blank/re-layout the panel. While the selected bias' details load
+    // (SelectBias requests them), keep drawing the last band point that has details under a fixed-height status line.
+    const IvPoint* drawn=&(view==5?PointAtBias(result,band,bias):points[bias]);
+    if(view==5) {
+        if(drawn->details) ImGui::TextDisabled("Details at %.4g V",points[bias].voltage_V);
+        else if(!band.empty() && band.points[0].details) {drawn=&band.points[0];ImGui::TextDisabled("Loading details at %.4g V ...",points[bias].voltage_V);}
+        else if(MissingProfiles(*w,*drawn)) return;
     }
     const auto &p=*drawn;
     const bool preview=view==5 && !band.empty() && &p==&band.points[0];
@@ -1482,7 +1541,7 @@ void Panel::Results() {
             if(ImPlot::DragLineX(1,&selectedVoltage,ImVec4(1,.7f,.3f,1))) {
                 bias=int(std::min_element(v.begin(),v.end(),[&](double a,double b){return std::abs(a-selectedVoltage)<std::abs(b-selectedVoltage);})-v.begin());
             }
-            w->Current().selectedBias=bias;w->Current().biasVoltage_V=v[bias];
+            if(bias!=w->Current().selectedBias)Do(Cmd::SelectBias::Make(bias));
             EndSavedPlot(*w,"I-V");
         }
         return;
@@ -1541,12 +1600,13 @@ void Panel::Results() {
 }
 void Panel::AC() {
     const bool cv=view<8; const char *kind=cv?"cv":"cf";
+    ShotBar(*w,kind);
     ImGui::TextUnformatted("Action ranges and working conditions: Run settings");
     if(ImGui::Button("Run settings"))w->focusView=4;
     ImGui::BeginDisabled(w->Busy());
     ImGui::SameLine(); ImGui::SetNextItemWidth(220); TextInput("CSV path",csvFile,sizeof(csvFile)); ImGui::SameLine();
     if(ImGui::Button("Export CSV")) Do(Cmd::ExportAc::With({{"kind",kind},{"path",csvFile}}));
-    ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,kind);
+    ImGui::EndDisabled();
     if(w->Busy()) {
         ImGui::TextDisabled("AC controls disabled while a job is active; wait or Cancel.");
         const auto job=w->jobs->GetJob(w->ActiveJob()); if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0); ImGui::TextWrapped("%s",job->currentStage.c_str());}
@@ -1847,7 +1907,7 @@ void Panel::Compare() {
     ImGui::SameLine();
     ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Log |J|");ImGui::SameLine();
     if(ImGui::Checkbox("##iv_absolute_log",&absoluteLog)){w->plotSession.settings.ivAbsoluteLog=absoluteLog;w->plotSession.settings.plots["I-V compare"].log[ImAxis_Y1]=absoluteLog;w->projectDirty=true;w->RefreshDirty();}
-    ImGui::SameLine();ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Run all checked")) Do(Cmd::RunAll::With());ImGui::EndDisabled();ImGui::SameLine();ShotBar(*w,"iv");
+    ImGui::SameLine();ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Run all checked")) Do(Cmd::RunAll::With());ImGui::EndDisabled();ShotBar(*w,"iv");
     if(historyOpen) DrawHistory(*w);
     bool any=false;for(const auto &d:w->project.devices) any|=(w->project.compare_set.contains(d->id) || d->id==w->project.active_device) && (!d->result.empty() || !d->history.empty() || d->liveRunning);
     if(!any) {ImGui::TextWrapped("Tick 'Compare' on devices in the Project tree to overlay them.");return;}
@@ -1866,13 +1926,14 @@ void Panel::Compare() {
         if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         SetupSavedPlot(w->plotSession,"I-V compare");
         for(const auto &d:w->project.devices) if((w->project.compare_set.contains(d->id) || d->id==w->project.active_device) && (!d->result.empty() || !d->history.empty() || d->liveRunning)) {
-            if(d->result.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);if(d->id==w->project.active_device)PreviewOverlay(*d,absoluteLog);continue;}
-            const auto &ivc=IvCols(d->Iv()->points,absoluteLog);const auto &x=ivc.a,&y=ivc.b;
+            const auto shown=d->id==w->project.active_device?d->ProfileSweep():d->Iv();
+            if(shown->points.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);if(d->id==w->project.active_device)PreviewOverlay(*d,absoluteLog);continue;}
+            const auto &ivc=IvCols(shown->points,absoluteLog);const auto &x=ivc.a,&y=ivc.b;
 
-            if(!d->history.empty()){HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);if(Archived(*d,*d->Iv(),"iv"))continue;}
+            if(!d->history.empty())HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);
             const float c[4]={d->colour[0].get<float>(),d->colour[1].get<float>(),d->colour[2].get<float>(),d->colour[3].get<float>()};
             static std::string label;label=d->name;label+="##";label+=d->id; // reused buffer: no per-frame allocation
-            if(!IvIsReference(*w,*d)){StaleDim dim(*d);ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],SelectedOffLive(*d,"iv")?.3f:c[3]),ImPlotProp_LineWeight,2.5f});}
+            if(!d->result.empty() && !Archived(*d,*d->Iv(),"iv") && !IvIsReference(*w,*d)){const auto& live=IvCols(d->Iv()->points,absoluteLog);StaleDim dim(*d);ImPlot::PlotLine(label.c_str(),live.a.data(),live.b.data(),int(live.a.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],SelectedOffLive(*d,"iv")?.3f:c[3]),ImPlotProp_LineWeight,2.5f});}
             IvReference(*w,*d,absoluteLog);if(d->id==w->project.active_device) PreviewOverlay(*d,absoluteLog);
             if(d->id==w->project.active_device && !x.empty()) {
                 int bias=std::clamp(d->selectedBias,0,int(x.size())-1);double voltage=x[bias];
@@ -1880,7 +1941,7 @@ void Panel::Compare() {
                 const auto nearest=[&](double at){return int(std::min_element(x.begin(),x.end(),[&](double a,double b){return std::abs(a-at)<std::abs(b-at);})-x.begin());};
                 if(ImPlot::DragLineX(1,&voltage,ImVec4(c[0],c[1],c[2],c[3]))) bias=nearest(voltage);
                 else if(ImPlot::IsPlotHovered() && ImGui::IsMouseReleased(0) && ImGui::GetIO().MouseDragMaxDistanceSqr[0]<16.f) bias=nearest(ImPlot::GetPlotMousePos().x); // click selects the nearest bias point
-                d->selectedBias=bias;d->biasVoltage_V=x[bias];
+                if(bias!=d->selectedBias)Do(Cmd::SelectBias::Make(bias));
             }
         }EndSavedPlot(*w,"I-V compare");
     }
@@ -2188,11 +2249,12 @@ namespace SST::ScapsLab {
 void Panel::GenerationRecombination() {
     grFollow=w->plotSession.settings.grFollow;grHidden=w->plotSession.settings.grHidden;grBias=Json{{"voltage_V",w->plotSession.settings.grVoltage}};
     const int savedTab=w->plotSession.settings.grTab;const bool restoreTab=grTab!=savedTab;
-    auto &device=w->Current();const auto& iv=*device.Iv();
+    auto &device=w->Current();const auto ivRef=device.ProfileSweep();const auto& iv=*ivRef;
     StructureEdit();
-    ShotBar(*w,"iv");ImGui::SameLine();
+    ShotBar(*w,"band");
     ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Follow I-V working point");ImGui::SameLine();
     const bool followToggled=ImGui::Checkbox("###Follow I-V working point",&grFollow);TrackGesture();
+    if(followToggled && grFollow && !iv.points.empty())Do(Cmd::SelectBias::Make(std::clamp(device.selectedBias,0,int(iv.points.size())-1)));
     if(followToggled && !grFollow) {
         if(!iv.points.empty()) device.biasVoltage_V=iv.points[std::clamp(device.selectedBias,0,int(iv.points.size())-1)].voltage_V;
         grBias["voltage_V"]=device.biasVoltage_V;device.needsBand=true;device.changedAt=std::chrono::steady_clock::now();
@@ -2200,17 +2262,17 @@ void Panel::GenerationRecombination() {
     if(grFollow && !iv.points.empty()) {
         ImGui::SameLine();ImGui::SetNextItemWidth(std::max(100.f,ImGui::GetContentRegionAvail().x));
         {const auto &pts=iv.points;const int sel=std::clamp(device.selectedBias,0,int(pts.size())-1);char fmt[64];std::snprintf(fmt,sizeof(fmt),"%.4g V  (#%%d)",pts[sel].voltage_V);
-        ImGui::SliderInt("##point",&device.selectedBias,0,int(pts.size())-1,fmt);}
+        int bias=sel;if(ImGui::SliderInt("##point",&bias,0,int(pts.size())-1,fmt))Do(Cmd::SelectBias::Make(bias));}
     }
     if(!grFollow) {
         grBias["voltage_V"]=device.biasVoltage_V;
         const bool changed=Number("Working voltage [V]",grBias,"voltage_V");
         if(changed) {device.biasVoltage_V=grBias.at("voltage_V");device.needsBand=true;device.changedAt=std::chrono::steady_clock::now();}
         if(!w->Busy() && device.needsBand && !ImGui::IsAnyItemActive() && std::chrono::steady_clock::now()-device.changedAt>=std::chrono::milliseconds(250))
-            Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));
+            Do(Cmd::RecalculateLive::Make(ActionKind::Band));
         const bool hasVoc=iv.photovoltaic && std::isfinite(iv.photovoltaic->Voc_V);
         ImGui::BeginDisabled(w->Busy() || !hasVoc);
-        if(ImGui::Button("Voc")) {grBias["voltage_V"]=-iv.photovoltaic->Voc_V;device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));}
+        if(ImGui::Button("Voc")) {grBias["voltage_V"]=-iv.photovoltaic->Voc_V;device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RecalculateLive::Make(ActionKind::Band));}
         ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Requires an idle job and a valid refined Voc from a light I-V sweep.");
         ImGui::SameLine();
         const bool hasVmp=!iv.points.empty() && std::any_of(iv.points.begin(),iv.points.end(),[](const IvPoint &p){return p.valid && std::isfinite(p.J_A_m2);});
@@ -2220,23 +2282,19 @@ void Panel::GenerationRecombination() {
                 const double power=-p.voltage_V*p.J_A_m2;
                 if(power>best) {best=power;grBias["voltage_V"]=p.voltage_V;}
             }
-            device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RunBand::With({{"voltage_V",device.biasVoltage_V}}));
+            device.biasVoltage_V=grBias.at("voltage_V");Do(Cmd::RecalculateLive::Make(ActionKind::Band));
         }
         ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Requires an idle job and valid I-V points. Selects the sampled point with maximum delivered power.");
     }
     w->plotSession.settings.grFollow=grFollow;w->plotSession.settings.grVoltage=grBias.at("voltage_V").get<double>();
     const double selectedVoltage=iv.points.empty()?NAN:iv.points[std::clamp(device.selectedBias,0,int(iv.points.size())-1)].voltage_V;
-    const bool selectedBand=grFollow && device.BandFresh() && !device.Band()->points.empty() && device.Band()->points.front().voltage_V==selectedVoltage;
-    const auto &snapshot=*(grFollow && !selectedBand?device.Iv():device.Band());
+    const auto bandRef=device.ProfileBand();
+    const bool selectedBand=grFollow && !bandRef->points.empty() && bandRef->points.front().voltage_V==selectedVoltage;
+    const auto &snapshot=*(grFollow && !selectedBand?ivRef:bandRef);
     if(snapshot.points.empty()) {ImGui::TextWrapped("Calculate I-V or select a working voltage. %s",w->status.c_str());return;}
     const int index=grFollow && !selectedBand?std::clamp(device.selectedBias,0,int(snapshot.points.size())-1):0;
     const auto &point=snapshot.points[index];
-    if(!bool(point.details)) {
-        ImGui::TextUnformatted("G/R details were not requested for this bias.");
-        ImGui::BeginDisabled(w->Busy() || device.Stale());
-        if(ImGui::Button("Load selected live details"))Do(Cmd::RunBand::With({{"voltage_V",point.voltage_V},{"live",true},{"rev",device.revision}}));
-        ImGui::EndDisabled();return;
-    }
+    if(MissingProfiles(*w,point))return;
     const auto &gr=point.details->generation_recombination;
     const auto before=device.changeBand?device.changeBand:device.changeIv;
     const bool grIsReference=w->liveChangeReference!=3 && before && std::any_of(before->points.begin(),before->points.end(),[&](const auto& p){return &p==&point;});

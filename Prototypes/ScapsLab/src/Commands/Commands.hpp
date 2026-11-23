@@ -60,6 +60,27 @@ struct ResumeRun : Req<ResumeRun> {
     static constexpr Info info{"resume_actions","Resume Actions","Continue after the completed Action","","",true};
     Out Execute(ILabStore& s) const {s.ResumeActions();return {};}
 };
+struct RecalculateLive : Req<RecalculateLive> {
+    static constexpr Info info{"recalculate_live","Recalculate Live","Update one Live technique without storing","","",true};
+    ActionKind kind=ActionKind::Iv;
+    static RecalculateLive Make(ActionKind k) {RecalculateLive c;c.kind=k;return c;}
+    Out Execute(ILabStore& s) const {
+        if(s.Busy())return Reject("busy","Busy","A job is still active");
+        auto k=kind;
+        if(args.contains("kind")){bool found=false;for(int i=0;i<5;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Expected band, iv, cv, cf or qe");}
+        s.RecalculateLive(k);return {};
+    }
+};
+struct SelectBias : Req<SelectBias> {
+    static constexpr Info info{"select_bias","Select bias","Update the working point of spatial plots","","",true};
+    int index=0;
+    static SelectBias Make(int i) {SelectBias c;c.index=i;return c;}
+    Out Execute(ILabStore& s) const {if(args.contains("index") && !args.at("index").is_number_integer())return Reject("invalid_index","Invalid bias","Bias index must be an integer");s.SelectBias(args.contains("index")?args.at("index").get<int>():index);return {};}
+};
+struct RecalculateStoredBias : Req<RecalculateStoredBias> {
+    static constexpr Info info{"recalculate_stored_bias","Recalculate this bias","Load missing stored profiles without storing","","",true};
+    Out Execute(ILabStore& s) const {if(s.Busy())return Reject("busy","Busy","A job is still active");s.RecalculateStoredBias();return {};}
+};
 struct RunBatch : Req<RunBatch> {
     static constexpr Info info{"run_batch","Run batch","Run the batch of the active device","","",false,true};
     std::shared_ptr<const BatchDraft> batch;std::shared_ptr<const RecorderDraft> recorder;std::shared_ptr<const RunPlan> plan;

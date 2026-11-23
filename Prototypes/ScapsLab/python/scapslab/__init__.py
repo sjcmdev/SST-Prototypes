@@ -71,6 +71,15 @@ class Session:
     def capture_live(self, kind='iv'):
         return self.execute(dict(operation='capture_live', kind=kind))
 
+    def recalculate_live(self, kind='iv'):
+        return self.execute(dict(operation='recalculate_live', kind=kind))
+
+    def select_bias(self, index):
+        return self.execute(dict(operation='select_bias', index=index))
+
+    def recalculate_stored_bias(self):
+        return self.execute(dict(operation='recalculate_stored_bias'))
+
     def resume_actions(self):
         return self.execute(dict(operation='resume_actions'))
 
