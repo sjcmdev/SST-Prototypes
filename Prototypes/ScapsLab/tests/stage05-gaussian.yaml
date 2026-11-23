@@ -92,7 +92,9 @@
           "energy_distribution": "gaussian",
           "characteristic_energy_eV": 0.1,
           "gaussian_width": 6.0,
-          "tail_width": 7.0
+          "tail_width": 7.0,
+          "energy_levels": 63,
+          "energy_quadrature": "gauss_legendre"
         },
         {
           "label": "gaussian-1",
