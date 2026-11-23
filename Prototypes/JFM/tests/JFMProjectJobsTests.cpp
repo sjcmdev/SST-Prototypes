@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <future>
+#include <optional>
 #include <thread>
 #include <chrono>
 #include "Core/IO/TextFileIO.hpp"
@@ -345,12 +346,12 @@ namespace SST::Prototypes::JFM
 #if DS_PYTHON_CAPI_AVAILABLE
 		auto runtime = EnsurePythonRuntimeForBridgeTests();
 		ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
-		const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+		std::optional<PythonGilAcquireScope> gil{std::in_place};
 		ASSERT_TRUE(PyGILState_Check());
 
 		JFMPythonImportBridge bridge(pythonRoot);
 		Result<JFMImportBatchResult> result = bridge.ImportFiles({dataPath}, {});
-		PythonInterpreter::ReleaseRuntimeGil(gil);
+		gil.reset();
 
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
 		ASSERT_FALSE(result->characteristics.empty());
@@ -378,17 +379,17 @@ namespace SST::Prototypes::JFM
 
 		JFMPythonImportBridge firstBridge(pythonRoot);
 		{
-			const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+			std::optional<PythonGilAcquireScope> gil{std::in_place};
 			ASSERT_TRUE(PyGILState_Check());
 			ASSERT_TRUE(firstBridge.ImportFiles({dataPath}, {}));
-			PythonInterpreter::ReleaseRuntimeGil(gil);
+			gil.reset();
 		}
 
 		auto workerResult = std::async(std::launch::async, [pythonRoot, dataPath] {
-			const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+			std::optional<PythonGilAcquireScope> gil{std::in_place};
 			JFMPythonImportBridge bridge(pythonRoot);
 			Result<JFMImportBatchResult> result = bridge.ImportFiles({dataPath}, {});
-			PythonInterpreter::ReleaseRuntimeGil(gil);
+			gil.reset();
 			return result;
 		});
 
@@ -426,10 +427,10 @@ namespace SST::Prototypes::JFM
 		characteristic.info.prefit->manualUpperVoltage = 0.65;
 		characteristic.data = data;
 
-		const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+		std::optional<PythonGilAcquireScope> gil{std::in_place};
 		JFMPythonPrefitBridge bridge(pythonRoot);
 		auto result = bridge.Run(characteristic);
-		PythonInterpreter::ReleaseRuntimeGil(gil);
+		gil.reset();
 
 		ASSERT_TRUE(result) << result.Error().technicalDetails;
 		EXPECT_EQ(result->state.fitRange.reason, "manual");
@@ -464,13 +465,13 @@ namespace SST::Prototypes::JFM
 		auto subscription = bus->Subscribe<ImportPreviewCompleted>([&](const ImportPreviewCompleted &event) {
 			preview = event.payload;
 		});
-		const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+		std::optional<PythonGilAcquireScope> gil{std::in_place};
 		JFMPythonImportBridge bridge(pythonRoot);
 		auto imported = bridge.ImportFiles({dataPath}, {});
 		JFMImportPreviewJob previewJob(bus, 3, {dataPath}, false, pythonRoot, {});
 		JobContext context = MakeTestJobContext();
 		previewJob.Execute(context);
-		PythonInterpreter::ReleaseRuntimeGil(gil);
+		gil.reset();
 		bus->ProcessQueue();
 
 		ASSERT_TRUE(imported) << imported.Error().technicalDetails;
@@ -505,9 +506,9 @@ namespace SST::Prototypes::JFM
         auto subscription = bus->Subscribe<PlotRequested>([&](const auto &event) { plotted = event; });
         MaterializeProjectDataJob job(bus, loaded.Value(), ResolveJFMPythonRoot(ApplicationConfig{}, root), handle);
         auto context = MakeTestJobContext();
-        const auto gil = PythonInterpreter::AcquireRuntimeGil();
+        std::optional<PythonGilAcquireScope> gil{std::in_place};
         job.Execute(context);
-        PythonInterpreter::ReleaseRuntimeGil(gil);
+        gil.reset();
         bus->ProcessQueue();
         bus->ProcessQueue();
         ASSERT_TRUE(plotted);
@@ -574,11 +575,11 @@ namespace SST::Prototypes::JFM
 			warnings = event.warnings;
 		});
 
-		const PyGILState_STATE gil = PythonInterpreter::AcquireRuntimeGil();
+		std::optional<PythonGilAcquireScope> gil{std::in_place};
 		MaterializeProjectDataJob job(bus, project, pythonRoot, 4, 5);
 		JobContext context = MakeTestJobContext();
 		job.Execute(context);
-		PythonInterpreter::ReleaseRuntimeGil(gil);
+		gil.reset();
 		bus->ProcessQueue();
 
 		ASSERT_EQ(materialized.size(), 1);
@@ -611,7 +612,7 @@ namespace SST::Prototypes::JFM
             {
             PythonGilAcquireScope scriptGuard; // Reproduce the PythonScriptJob guard around the binding.
             ASSERT_TRUE(scriptGuard.IsActive());
-            const auto gil = PythonInterpreter::AcquireRuntimeGil();
+            std::optional<PythonGilAcquireScope> gil{std::in_place};
             auto *json = PyImport_ImportModule("json");
             auto *module = PyImport_ImportModule("sst_jfm");
             ASSERT_NE(json, nullptr); ASSERT_NE(module, nullptr);
@@ -622,7 +623,7 @@ namespace SST::Prototypes::JFM
             auto *encoded = PyObject_CallMethod(json, "dumps", "O", output);
             result = nlohmann::json::parse(PyUnicode_AsUTF8(encoded));
             Py_DECREF(encoded); Py_DECREF(output); Py_DECREF(input); Py_DECREF(module); Py_DECREF(json);
-            PythonInterpreter::ReleaseRuntimeGil(gil);
+            gil.reset();
             }
             ASSERT_EQ(result.at("ok"), true) << result.dump();
             const auto id = result.at("job_id");
@@ -818,7 +819,7 @@ TEST_F(UnicodePaths, EmbeddedPythonPathAndImport) {
     {
 #if DS_PYTHON_CAPI_AVAILABLE
         auto runtime=EnsurePythonRuntimeForBridgeTests(); ASSERT_TRUE(runtime);
-        const auto gil=PythonInterpreter::AcquireRuntimeGil();
+        std::optional<PythonGilAcquireScope> gil{std::in_place};
         const int status=PyRun_SimpleString(R"PY(
 import json, math, sst_jfm
 q = dict(voltage_V=[.1+i*.02 for i in range(30)], temperature_K=300.,
@@ -864,7 +865,28 @@ bad=dict(q,parameters=dict(I0=1e-10,A=1.5))
 assert sst_jfm.fit(bad)["error"]["code"] == "jfm.fit.validation"
 
 )PY");
-        PythonInterpreter::ReleaseRuntimeGil(gil); EXPECT_EQ(status,0);
+        gil.reset(); EXPECT_EQ(status,0);
+#endif
+    }
+
+    TEST(JFMProjectJobsTests, ReleasedGilAllowsAnotherPythonSection)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        auto runtime = EnsurePythonRuntimeForBridgeTests();
+        ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
+        std::promise<void> released, acquired;
+        auto ready = released.get_future(), entered = acquired.get_future();
+        std::atomic<bool> overlapped = false;
+        std::thread first([&] {
+            PythonGilAcquireScope gil;
+            auto *state = PyEval_SaveThread();
+            released.set_value();
+            overlapped = entered.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+            PyEval_RestoreThread(state);
+        });
+        std::thread second([&] { ready.wait(); PythonGilAcquireScope gil; acquired.set_value(); });
+        first.join(); second.join();
+        EXPECT_TRUE(overlapped);
 #endif
     }
 

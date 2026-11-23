@@ -65,13 +65,36 @@ bool SweepRangeControl(SweepControlState& state,bool compact=false) {
     auto& editor=state.editor;auto& range=editor.range;bool changed=false,listChanged=false;
     if(compact) {
         int input=range.sampling==SweepSampling::List?1:0,sampling=range.sampling==SweepSampling::Step?1:0,scale=range.logarithmic?1:0;
-        if(ImGui::BeginTable("Action range",7,ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_SizingStretchProp)) {
-            for(const auto* title:{"Quantity","Min","Max",sampling?(range.logarithmic?"Step [decades]":"Step"):"Points","Scale","Sampling","Input"})ImGui::TableSetupColumn(title);
-            ImGui::TableHeadersRow();ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::Text("%s [%s]",editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage",editor.displayUnit.c_str());
+        const auto& style=ImGui::GetStyle();
+        const std::string quantityLabel=std::string(editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage")+" ["+editor.displayUnit+"]";
+        const float quantity=ImGui::CalcTextSize(quantityLabel.c_str()).x;
+        const float number=std::max(ImGui::CalcTextSize("-1.234e+100").x+style.FramePadding.x*2,ImGui::CalcTextSize("Step [decades]").x);
+        const float combo=ImGui::CalcTextSize("Custom list").x+ImGui::GetFrameHeight()+style.FramePadding.x*2;
+        const float available=ImGui::GetContentRegionAvail().x;
+        const bool split=available<quantity+number*3+combo*3+style.CellPadding.x*14;
+        const auto begin=[&](const char* id,bool modes) {
+            const int columns=modes?3:split?4:7;
+            const float minimum=modes?combo*3:quantity+number*3+(split?0:combo*3);
+            const float inner=minimum+style.CellPadding.x*2*columns;
+            const bool scroll=available<inner;
+            if(!ImGui::BeginTable(id,columns,ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_SizingFixedFit|ImGuiTableFlags_NoKeepColumnsVisible|(scroll?ImGuiTableFlags_ScrollX:0),ImVec2(0,scroll?ImGui::GetFrameHeight()*2+style.CellPadding.y*4+style.ScrollbarSize:0),scroll?inner:0))return false;
+            if(!modes) {
+                ImGui::TableSetupColumn("Quantity",ImGuiTableColumnFlags_WidthFixed,quantity);
+                for(const auto* title:{"Min","Max",sampling?(range.logarithmic?"Step [decades]":"Step"):"Points"})ImGui::TableSetupColumn(title,ImGuiTableColumnFlags_WidthFixed,std::max(number,ImGui::CalcTextSize(title).x));
+            }
+            if(modes || !split)for(const auto* title:{"Scale","Sampling","Input"})ImGui::TableSetupColumn(title,ImGuiTableColumnFlags_WidthFixed,combo);
+            ImGui::TableHeadersRow();ImGui::TableNextRow();return true;
+        };
+        const bool opened=begin("Action range",false);
+        if(opened) {
+            ImGui::TableNextColumn();ImGui::Text("%s [%s]",editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage",editor.displayUnit.c_str());
             const auto drag=[&](const char* id,double& value,double lo,double hi){ImGui::SetNextItemWidth(-1);return ImGui::SliderScalar(id,ImGuiDataType_Double,&value,&lo,&hi,"%.4g",ImGuiSliderFlags_NoRoundToFormat|(range.logarithmic && lo>0?ImGuiSliderFlags_Logarithmic:0));};
             ImGui::TableNextColumn();ImGui::BeginDisabled(input!=0);changed|=drag("##minimum",range.minimum,state.sliderLo,state.sliderHi);
             ImGui::TableNextColumn();changed|=drag("##maximum",range.maximum,state.sliderLo,state.sliderHi);
             ImGui::TableNextColumn();if(sampling)changed|=drag("##step",range.step,0,state.stepHi);else {ImGui::SetNextItemWidth(-1);changed|=ImGui::DragInt("##points",&range.points,1,range.minimum==range.maximum?1:2,10000);}ImGui::EndDisabled();
+            if(split)ImGui::EndTable();
+        }
+        if((!split && opened) || (split && begin("Action modes",true))) {
             ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);if(ImGui::Combo("##scale",&scale,"Linear\0Log\0")){range.logarithmic=scale==1;changed=true;}
             ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);if(ImGui::Combo("##sampling",&sampling,"Points\0Step\0")){range.sampling=sampling?SweepSampling::Step:SweepSampling::Points;input=0;changed=true;}
             ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);if(ImGui::Combo("##input",&input,"Range\0Custom list\0")){changed=true;if(input){try{range.custom=SweepValues(range);}catch(const std::exception&){range.custom={range.minimum};}range.sampling=SweepSampling::List;const auto saved=editor;InitSweepControl(state,saved);}else {range.sampling=sampling?SweepSampling::Step:SweepSampling::Points;if(!range.custom.empty()){range.minimum=range.custom.front();range.maximum=range.custom.back();range.points=int(range.custom.size());}}}
@@ -341,8 +364,8 @@ struct StaleDim {
     explicit StaleDim(const DeviceState &d):on(d.Stale()) {if(on)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,ImGui::GetStyle().Alpha*.4f);}
     ~StaleDim() {if(on)ImGui::PopStyleVar();}
 };
-// Live slider-drag preview (DeviceState::previewV/J, never stored) and the growing exact run (liveV/J): dashed / orange curve + badge over the I-V plot; call between BeginPlot/EndPlot.
-// Returns the next free badge slot. Neither curve is a result: they are never saved, put in history, exported or read by a readout.
+// Live slider-drag preview (DeviceState::previewV/J, never stored) and the growing exact run (liveV/J): dashed / orange curves; status stays above the plot; call between BeginPlot/EndPlot.
+// Neither curve is a result: they are never saved, put in history, exported or read by a readout.
 void ReferenceLine(Workflow& w,const std::string& name,const std::vector<double>& x,const std::vector<double>& y,ImVec4 colour) {
     if(w.liveChangeReference==3 || x.empty() || x.size()!=y.size())return;
     if(w.liveChangeReference==0 || w.liveChangeReference==2)colour.w*=.3f;
@@ -360,22 +383,22 @@ void ProfileReference(Workflow& w,const char* key,double scale=1.) {
     const auto& p=result->points[std::clamp(d.selectedBias,0,int(result->points.size())-1)];if(!p.valid)return;
     ReferenceLine(w,key,Vec(p.x_m.get(),1e6),Vec(PointColumn(p,key).get(),scale),XColour(key));
 }
-int PreviewOverlay(const DeviceState &d,bool absolute,double scale=1.) {
-    int slot=0;
+void IvStatus(const DeviceState& d) {
+    if(d.liveRunning && !d.liveV.empty())ImGui::TextColored(ImVec4(1.f,.55f,.1f,1.f),"RUNNING (%zu points so far, exact result follows)",d.liveV.size());
+    else if(!d.previewV.empty())ImGui::TextColored(ImVec4(1.f,.55f,.1f,1.f),"%s",d.previewCoarse?"PREVIEW (coarse, exact on release)":"PREVIEW (exact on release)");
+    if(d.Stale())ImGui::TextDisabled("outdated: model edited");
+}
+void PreviewOverlay(const DeviceState &d,bool absolute,double scale=1.) {
     auto J=[&](double j){return absolute?(j==0?double(NAN):std::abs(j)*scale):j*scale;};
     if(d.liveRunning && !d.liveV.empty()) {
         std::vector<double> y;y.reserve(d.liveJ.size());for(double j:d.liveJ) y.push_back(J(j));
         ImPlot::PlotLine("running##live",d.liveV.data(),y.data(),int(y.size()),{ImPlotProp_LineColor,ImVec4(1.f,.55f,.1f,1.f),ImPlotProp_LineWeight,2.f});
-        char text[64];std::snprintf(text,sizeof(text),"RUNNING (%d points so far, exact result follows)",int(y.size()));PlotBadge(text,IM_COL32(255,140,25,230),IM_COL32(0,0,0,255),slot++);
     } else if(!d.previewV.empty()) {
         std::vector<double> x,y;const std::size_t n=d.previewV.size();
         auto Ji=[&](std::size_t i){return J(d.previewJ[i]);};
         for(std::size_t i=0;i<n;++i){x.push_back(d.previewV[i]);y.push_back(Ji(i));}
         ImPlot::PlotLine("preview##live",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(1.f,.55f,.1f,1.f),ImPlotProp_LineWeight,2.f});
-        PlotBadge(d.previewCoarse?"PREVIEW (coarse, exact on release)":"PREVIEW (exact on release)",IM_COL32(255,140,25,230),IM_COL32(0,0,0,255),slot++);
     }
-    if(d.Stale()) PlotBadge("outdated: model edited",IM_COL32(95,95,105,210),IM_COL32(235,235,240,255),slot++);
-    return slot;
 }
 const Cols &AcCols(const Json &points,int view) {
     PlotDataScope scope;
@@ -1049,7 +1072,8 @@ bool Panel::Illumination(ProjectDraft &draft) {
                 const auto& cols=IvCols(r.points,false,.1);const auto& x=cols.a;const auto& y=cols.b;
                 const bool valid=r.photovoltaic && r.photovoltaic->status==scaps_core::PhotovoltaicStatus::Converged;
                 const double jsc=valid && std::isfinite(r.photovoltaic->Jsc_Am2)?std::abs(r.photovoltaic->Jsc_Am2)*.1:0.;
-                if(BeginSavedPlot(*w,"Light I-V",ImVec2(-1,std::max(280.f,ImGui::GetContentRegionAvail().y-30)))) {
+                IvStatus(w->Current());
+    if(BeginSavedPlot(*w,"Light I-V",ImVec2(-1,std::max(280.f,ImGui::GetContentRegionAvail().y-30)))) {
                     ImPlot::SetupAxes("Voltage [V]","J [mA/cm^2]");ImPlot::SetupLegend(ImPlotLocation_NorthWest,ImPlotLegendFlags_Horizontal);
                     if(reset){auto &v=w->plotSession.settings.plots["Light I-V"];v.manual=false;v.ranges={};}
                     if(x.size()>1 && x.front()!=x.back())FitSavedAxis(w->plotSession,"Light I-V",ImAxis_X1,*std::min_element(x.begin(),x.end()),*std::max_element(x.begin(),x.end()));
@@ -1401,6 +1425,12 @@ void Panel::Results() {
     }
     ImGui::TextDisabled("%s",selected?"STORED result (frozen snapshot)":"LIVE result (store with Capture live)");
     if(!selected && view==5 && !points[bias].details && !w->Current().Stale()) {
+        // Owner 2026-11-23: moving the bias point must update the profiles. With Band "On edit" the details of the newly selected
+        // bias load automatically (once per bias/revision); otherwise the explicit button stays.
+        static std::tuple<std::string,int,std::uint64_t> requested{};
+        const auto key=std::make_tuple(w->Current().id,bias,std::uint64_t(w->Current().revision));
+        const bool autoBand=w->autoRecalculateBand || w->Current().runPlan->actions[0].onEdit;
+        if(autoBand && !w->Busy() && requested!=key) {requested=key;Do(Cmd::RunBand::With({{"voltage_V",points[bias].voltage_V},{"live",true},{"rev",w->Current().revision}}));}
         ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Load selected live details"))Do(Cmd::RunBand::With({{"voltage_V",points[bias].voltage_V},{"live",true},{"rev",w->Current().revision}}));ImGui::EndDisabled();
     }
     const auto &band=*w->Current().Band();
@@ -1422,7 +1452,8 @@ void Panel::Results() {
         if(ImGui::CollapsingHeader("Per-point convergence")) {
             for(const auto &pt:points) ImGui::TextWrapped("%s | %.5g V | %s | %s",pt.bias_id.c_str(),pt.voltage_V,pt.status.c_str(),pt.validity_status.c_str());
         }
-        if(BeginSavedPlot(*w,"I-V",ImVec2(-1,-1))) {
+        IvStatus(w->Current());
+    if(BeginSavedPlot(*w,"I-V",ImVec2(-1,-1))) {
             ImPlot::SetupAxes("Voltage [V]",absoluteLog?"|J| [A/m^2]":"Signed J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
             if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
             SetupSavedPlot(w->plotSession,"I-V");HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",absoluteLog);if(!Archived(w->Current(),result,"iv") && !IvIsReference(*w,w->Current())){StaleDim dim(w->Current());ImPlot::PlotLine("I-V",v.data(),j.data(),int(v.size()),LiveStyle(w->Current(),2.f));}
@@ -1481,8 +1512,8 @@ void Panel::Results() {
         ImPlot::SetupAxes("Position [um]","Density [cm^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupAxisFormat(ImAxis_Y1,[](double value,char *buffer,int size,void*) {return std::snprintf(buffer,size,"1e%.0f",std::log10(value));});
         ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);FitSavedAxis(w->plotSession,"Carriers",ImAxis_X1,0,total*1e6);
-        {double lo=1e300,hi=0;for(const auto *key:{"n_m3","p_m3"}) for(double v:Vec(PointColumn(p,key).get())) if(std::isfinite(v) && v>0){lo=std::min(lo,v*1e-6);hi=std::max(hi,v*1e-6);}
-        if(hi>0)FitSavedAxis(w->plotSession,"Carriers",ImAxis_Y1,std::max(lo,hi*1e-16),hi*3);}
+
+
         SetupSavedPlot(w->plotSession,"Carriers");
         for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(!selected)ProfileReference(*w,key,1e-6);if(profileIsReference || Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(PointColumn(p,key).get(),1e-6);if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,XColour(key),ImPlotProp_LineWeight,2.f});}
         DrawLayerRegions(layers);bandBadge();EndSavedPlot(*w,"Carriers");
@@ -1808,6 +1839,7 @@ void Panel::Compare() {
             for(const auto *key:{"Voc_V","Jsc_A_m2","FF_fraction","efficiency_fraction"}) {ImGui::TableNextColumn();const auto& pv=*d->Iv()->photovoltaic;const double value=std::string_view(key)=="Voc_V"?-pv.Voc_V:std::string_view(key)=="Jsc_A_m2"?-pv.Jsc_Am2:std::string_view(key)=="FF_fraction"?pv.FF:pv.eta;if(std::isfinite(value)) ImGui::Text(std::string(key)=="Voc_V"?"%.4f":"%.4g",value*(std::string(key)=="Jsc_A_m2"?.1:std::string(key)=="Voc_V"?1:100));else ImGui::TextUnformatted("--");}
         }ImGui::EndTable();
     }
+    IvStatus(w->Current());
     if(BeginSavedPlot(*w,"I-V compare",ImVec2(-1,-1))) {
         ImPlot::SetupAxes("Voltage [V]",absoluteLog?"|J| [A/m^2]":"Signed J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
         ImPlot::SetupLegend(ImPlotLocation_NorthWest);
@@ -2222,12 +2254,11 @@ void Panel::GenerationRecombination() {
     const bool showGeneration=!grHidden.contains("generation");
     if(grTab==0) {
     if(!valid) ImGui::TextWrapped("Invalid working point: profiles are masked; raw values remain available in export.");
-    // data windows: left axis 12 decades below the max visible bulk rate; right axis only when a sheet channel is visible
-    double bulkMax=0,sheetMax=0;
+    // Log Y fitting uses visible series in EndSavedPlot; enable the right axis only for sheet channels.
+    double sheetMax=0;
     if(valid) {
-        if(showGeneration) for(double v:Vec(gr.generation_m3_s.get())) if(std::isfinite(v))bulkMax=std::max(bulkMax,v);
         for(const auto &c:gr.channels) if(!grHidden.contains(c.mechanism) && c.valid) {
-            const bool sh=!c.R_sheet_m2_s.empty();for(double v:Vec((sh?c.R_sheet_m2_s:c.R_m3_s).get())) if(std::isfinite(v))(sh?sheetMax:bulkMax)=std::max(sh?sheetMax:bulkMax,v);
+            for(double v:c.R_sheet_m2_s.get())if(std::isfinite(v))sheetMax=std::max(sheetMax,v);
         }
     }
     const double totalUm=[&]{double t=0;for(const auto &l:snapshot.meta.prim.at("project_snapshot").at("layers"))t+=l.at("thickness_m").get<double>()*1e6;return t;}();
@@ -2236,8 +2267,7 @@ void Panel::GenerationRecombination() {
         ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
         FitSavedAxis(w->plotSession,"G(x), R(x)",ImAxis_X1,0,totalUm);
-        if(bulkMax>0)FitSavedAxis(w->plotSession,"G(x), R(x)",ImAxis_Y1,bulkMax*1e-12,bulkMax*5);
-        if(sheetMax>0){ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);FitSavedAxis(w->plotSession,"G(x), R(x)",ImAxis_Y2,sheetMax*1e-8,sheetMax*5);}
+        if(sheetMax>0){ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);}
         SetupSavedPlot(w->plotSession,"G(x), R(x)");
         auto plot=[&](const std::string &name,const Column &xx,const Column &yy,bool sheet,bool curveValid,int shade=0) {
             const auto &x=Vec(xx.get(),1e6),&y=Vec(yy.get(),1.,curveValid?2:3);if(x.size()!=y.size())return;

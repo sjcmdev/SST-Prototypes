@@ -414,6 +414,7 @@ public:
     bool CanUndo() const; bool CanRedo() const; // a discardable pending edit counts
     // S9 undo support (Commands/UndoOps.cpp)
     bool HasDevice(const std::string &id) const {return std::any_of(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==id;});}
+    void ReturnToLive(DeviceState &d);
     void ApplyDraft(DeviceState &d,Ref<const ProjectDraft> draft);
     void EditTyped(Ref<const ProjectDraft> draft,const std::string& gesture) override;
     void BatchTyped(Ref<const BatchDraft>,Ref<const RecorderDraft>) override; // undo/redo of an edit: new document, revision++, DocumentEdited, auto-recalculate arms

@@ -26,6 +26,8 @@
 #include <numbers>
 #include <thread>
 #include "Core/JobSystem/ParallelFor.hpp"
+// shortcut: IVSession/prepare_mesh/PV have no public ExecutionContext; use the engine scope until their public APIs accept it.
+#include <scaps_core/../../src/parallel.hpp>
 #include <mutex>
 #include <exception>
 namespace SST::ScapsLab {
@@ -475,11 +477,15 @@ PvEstimate EstimatePv(const std::vector<double> &V,const std::vector<double> &J,
     if(pmax>0 && power>0) e.eta=pmax/power;
     e.valid=true;return e;
 }
-void Operation::Execute(JobContext &ctx) {
+void Operation::Execute(JobContext &ctx) try {
     using namespace scaps_core;
     const auto started=std::chrono::steady_clock::now();
     ctx.ThrowIfCancellationRequested();if(cancellation.stop_requested())throw JobCancelledException();
-    ExecutionContext execution;execution.stop=cancellation.get_token();execution.budget=parallelMember?1:0;
+    std::stop_callback cancel(ctx.GetStopToken(),[this]{cancellation.request_stop();});
+    JobExecutor executor{ctx};
+    // Engine calls are synchronous; nested execution scopes only need a cheap executor reference.
+    ExecutionContext execution{std::ref(executor),parallelMember?1:ctx.GetWorkerCount(),cancellation.get_token()};
+    scaps_core::detail::ExecutionScope engineScope(execution,false);
     if(runPlan && !action && (request.at("operation")=="run_batch" || request.at("operation")=="quick_sweep" || request.at("operation")=="retry_batch")) {BatchOperation(*this,ctx);return;}
     if(runPlan && !action) {
         const auto original=draft;bool valid=completedActions.empty()?true:outputValid;
@@ -507,7 +513,7 @@ void Operation::Execute(JobContext &ctx) {
     const std::string op=action?ActionOperation(action->kind):request.at("operation").get<std::string>();
     if(action && parallelMember && !retainProfiles && (op=="run" || op=="band")) {
         const auto& p=draft->project;auto spec=measurement.value_or(BatchSpec{});spec.voltages_V=ActionSamples(*action,p);spec.frequencies_Hz.clear();spec.columns.clear();spec.photovoltaic=op=="run" && refinePv;
-        BatchOptions options;options.include_curves=true;options.parallel_member=true; // one inner worker; cancellation remains at member boundaries
+        BatchOptions options;options.include_curves=true;options.parallel_member=true;options.execution=execution;options.execution.budget=1;
         auto acquired=run_batch_member(p,spec,options);if(acquired.status=="Cancelled")throw JobCancelledException();
         if(acquired.iv.empty())throw std::runtime_error(acquired.message.empty()?"No Action samples":acquired.message);
         auto result=CreateRef<IvResult>();result->has=1u<<31;result->photovoltaic=std::move(acquired.photovoltaic);result->curve_series_ohm_m2=p.external.series_ohm_m2;
@@ -763,7 +769,7 @@ void Operation::Execute(JobContext &ctx) {
         if(light.enabled && light.mode=="spectrum") for(const auto &[w,power]:light.spectrum_nm_W_m2) add(w,power*light.intensity_multiplier);
         else if(light.enabled && light.mode=="monochromatic") add(light.wavelength_nm,light.monochromatic_power_W_m2*light.intensity_multiplier);
         else covered=false;
-        const auto sc=solve_iv(device,mesh,{0.},p.temperature_K,p.solver,pc).front();
+        const auto sc=solve_iv(device,mesh,{0.},p.temperature_K,p.solver,pc,execution).front();
         output["integrated_Jsc_A_m2"]=covered && std::isfinite(integrated)?Json(integrated):Json(nullptr);
         output["light_Jsc_A_m2"]=sc.status==SolverStatus::Converged?Json(-sc.J_total_Am2):Json(nullptr);
         output["integration_note"]="Dark differential EQE weighted by incident spectrum bins; full spectral coverage required. Finite-light nonlinear response can differ.";
@@ -774,28 +780,27 @@ void Operation::Execute(JobContext &ctx) {
         const bool preview=op=="run" && request.value("preview",false);
         auto meshConfig=p.mesh;
         if(preview) {
-            const std::size_t stride=std::max(std::size_t(std::max(1,request.value("stride",1))),(volts.size()+23)/25);
+            // Owner 2026-11-23: same mesh as the exact run (no visible jump on release), every stride-th bias (4 when a full run is slow).
+            const std::size_t stride=std::size_t(std::max(1,request.value("stride",1)));
             std::vector<double> sub;for(std::size_t i=0;i<volts.size();++i)if(i%stride==0 || i+1==volts.size())sub.push_back(volts[i]);volts=std::move(sub);
-            meshConfig.points_per_layer=std::min(101,meshConfig.points_per_layer);meshConfig.solution_adaptive=false;meshConfig.adaptivity_level="0";meshConfig.recalculate_mesh=false;
         }
         phase.lap("model_device");ctx.SetStage("Preparing mesh");
         const auto mesh=prepareMeasurement(device,p,volts,std::vector<double>{p.temperature_K},meshConfig,pc);phase.lap("mesh");
         if(preview) {
             auto result=CreateRef<IvResult>();result->has=1u<<31;typedOut=result;
-            // shortcut: public IVSession has no ExecutionContext; short preview chunks expose progressive points and Newton cancellation until the engine offers a streaming context.
-            for(std::size_t begin=0;begin<volts.size();begin+=7) {
+            // One continuation sweep point by point (IVSession == solve_iv bit for bit): progressive feed and a cancellation
+            // check after every point. The former 7-point chunks restarted from equilibrium each time and made previews slow.
+            IVSession session(device,mesh,p.temperature_K,p.solver,pc);
+            const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
+            for(std::size_t i=0;i<volts.size();++i) {
                 ctx.ThrowIfCancellationRequested();
-                const auto end=std::min(volts.size(),begin+7);
-                std::vector<IVPoint> points;
-                try {points=solve_iv(device,mesh,{volts.begin()+begin,volts.begin()+end},p.temperature_K,p.solver,pc,execution);}
+                IVPoint pt;
+                try {pt=session.next(volts[i]);}
                 catch(const ExecutionCancelled&) {throw JobCancelledException();}
-                for(std::size_t i=0;i<points.size();++i) {
-                    const auto& pt=points[i];const auto& s=pt.state;
-                    const bool external=p.illumination.enabled || p.external.series_ohm_m2!=0 || !std::isinf(p.external.shunt_ohm_m2);
-                    IvPoint point;point.has=(1u<<3)|(1u<<4);point.voltage_V=-volts[begin+i];point.J_A_m2=pt.status!=SolverStatus::Converged?NAN:external?pt.J_total_Am2:s.Jn_Am2.front()+s.Jp_Am2.front();
-                    if(feed)feed->Point(point.voltage_V,point.J_A_m2);result->points.push_back(std::move(point));
-                }
-                ctx.SetProgress(float(end),float(volts.size()));
+                const auto& st=pt.state;
+                IvPoint point;point.has=(1u<<3)|(1u<<4);point.voltage_V=-volts[i];point.J_A_m2=pt.status!=SolverStatus::Converged?NAN:external?pt.J_total_Am2:st.Jn_Am2.front()+st.Jp_Am2.front();
+                if(feed)feed->Point(point.voltage_V,point.J_A_m2);result->points.push_back(std::move(point));
+                ctx.SetProgress(float(i+1),float(volts.size()));
             }
             output={{"preview",true},{"valid",true},{"mesh_node_count",mesh.x_m.size()}};outputValid=true;result->meta.prim=output;return;
         }
@@ -890,7 +895,7 @@ void Operation::Execute(JobContext &ctx) {
         outputValid=output.value("valid",false);output.erase("points");
         if(const auto iv=std::dynamic_pointer_cast<const IvResult>(typedOut))std::const_pointer_cast<IvResult>(iv)->meta.prim=output;else std::const_pointer_cast<AcResult>(std::static_pointer_cast<const AcResult>(typedOut))->meta.prim=output;
     }
-}
+} catch(const scaps_core::ExecutionCancelled&) {throw JobCancelledException();}
 void Workflow::HistoryOp(const Json &request) {
     const auto op=request.at("operation").get<std::string>();
     const auto scope=request.value("scope",std::string("device"));
@@ -1405,6 +1410,11 @@ void Workflow::ApplyDraft(DeviceState &d,Ref<const ProjectDraft> draft) {
     d.SetDraft(std::move(draft));
     d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";
     ++d.revision;Emit(DocumentEdited(d.id,d.revision));
+    ReturnToLive(d);
+}
+void Workflow::ReturnToLive(DeviceState &d) { // owner 2026-11-23: an edit shows Live again; the stored run stays drawn as "(previous)"
+    if(d.selectedRun.empty())return;
+    d.selectedRun.clear();d.selectedAttempt=0;Emit(SelectionChanged(d.id));
 }
 Result<void> Workflow::Step(bool undo) {
     const auto id=project.active_device;
@@ -1431,7 +1441,7 @@ void Workflow::RunAll() {
 }
 void Workflow::Changed() {
     auto &d=Current();d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();
-    d.status=d.history.empty()?"no results":"previous";
+    d.status=d.history.empty()?"no results":"previous";ReturnToLive(d);
 }
 namespace {
 class FreeJob final : public IJob { // last owner of replaced/dropped results: destroying a big result (megabytes of Json) takes tens of ms, so it happens here
@@ -1522,7 +1532,7 @@ void Workflow::UpdateOperation() {
             d.needsBand=false;lastBandLive=now;++liveBandsStarted;
             Submit(d.id,{{"operation","band"},{"voltage_V",d.biasVoltage_V},{"live",true},{"rev",d.revision}},"auto-band");
         } else if(previewDue) { // live preview: previous run finished (never queued), <=10/s
-            const double estimate=lastFullMs>0?lastFullMs:d.Iv()->meta.prim.value("compute_time_ms",0.);
+            const auto& ivMeta=d.Iv()->meta.prim;const double estimate=lastFullMs>0?lastFullMs:ivMeta.is_object()?ivMeta.value("compute_time_ms",0.):0.; // no I-V yet: prim is null
             lastLive=now;d.previewRev=d.revision;liveSeen=true;++previewsStarted;
             Submit(d.id,{{"operation","run"},{"preview",true},{"stride",estimate>150?4:1}},"auto");
         } else if(anyAuto && d.needsRecalculate && !interacting && !dragging && now-d.changedAt>=std::chrono::milliseconds(liveSeen?100:250)) {
@@ -1606,7 +1616,7 @@ void Workflow::FinishOperation(Lane &L) {
             if(snapshot->status==JobStatus::Completed && outValid && !dropped) {
                 d.previewV.clear();d.previewJ.clear();d.previewCoarse=true;
                 for(const auto &pt:std::static_pointer_cast<const IvResult>(pending->typedOut)->points) {d.previewV.push_back(pt.voltage_V);d.previewJ.push_back(pt.J_A_m2);}
-                d.status="preview";status="Preview (coarse: <=101 nodes/layer, <=26 biases); exact run on release";
+                d.status="preview";status=std::string("Preview (")+(pending->request.value("stride",1)>1?"every "+std::to_string(pending->request.value("stride",1))+". point":"all points")+"); exact run on release";
             } else {d.status=d.result.empty()?"no results":"previous";status="Preview dropped";}
             response=Json();L.active=0;pending.reset();return;
         }
@@ -1650,7 +1660,7 @@ void Workflow::FinishOperation(Lane &L) {
             if(IsEditOp(op)) {
                 if(op=="import_def") {d.selectedLayer=0;d.selectedInterface=-1;}
                 d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";d.dirty=!d.undo.IsClean();
-                ++d.revision;Emit(DocumentEdited(d.id,d.revision));
+                ++d.revision;Emit(DocumentEdited(d.id,d.revision));ReturnToLive(d);
                 if(op=="import_def") Emit(SelectionChanged(d.id));
             }
             if(op=="save" && project.devices.size()==1) {d.dirty=false;d.metadataDirty=false;d.undo.MarkClean();}

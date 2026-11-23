@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "ScientificRuntime/Python/PythonGilScope.hpp"
 
 #include "IO/JFMPythonPrefitBridge.hpp"
 
@@ -227,11 +228,6 @@ namespace SST::Prototypes::JFM
 			return output;
 		}
 
-		std::mutex &prefitPythonMutex()
-		{
-			static std::mutex mutex;
-			return mutex;
-		}
 #endif
 	}
 
@@ -243,12 +239,12 @@ namespace SST::Prototypes::JFM
 	Result<JFMPrefitBridgeResult> JFMPythonPrefitBridge::Run(const JFMCharacteristicRecord &characteristic) const
 	{
 #if DS_PYTHON_CAPI_AVAILABLE
-		std::scoped_lock lock(prefitPythonMutex());
 		if (m_PythonRoot.Empty() || !FileSystem::Exists(m_PythonRoot.Native()))
 			return makePrefitError("Python root was not found: " + m_PythonRoot.Utf8());
 		if (!PythonInterpreter::IsRuntimeInitialized())
 			return makePrefitError("Embedded Python runtime is not initialized.");
-		if (!PyGILState_Check())
+        PythonGilAcquireScope gil;
+        if (!gil.IsActive())
 			return makePrefitError("Python GIL is not held by the current prefit job.");
 		try
 		{
@@ -271,12 +267,12 @@ namespace SST::Prototypes::JFM
 	Result<JFMPrefitBridgeResult> JFMPythonPrefitBridge::RunAuto(const JFMCharacteristicRecord &characteristic) const
 	{
 #if DS_PYTHON_CAPI_AVAILABLE
-		std::scoped_lock lock(prefitPythonMutex());
 		if (m_PythonRoot.Empty() || !FileSystem::Exists(m_PythonRoot.Native()))
 			return makePrefitError("Python root was not found: " + m_PythonRoot.Utf8());
 		if (!PythonInterpreter::IsRuntimeInitialized())
 			return makePrefitError("Embedded Python runtime is not initialized.");
-		if (!PyGILState_Check())
+        PythonGilAcquireScope gil;
+        if (!gil.IsActive())
 			return makePrefitError("Python GIL is not held by the current prefit job.");
 		try
 		{

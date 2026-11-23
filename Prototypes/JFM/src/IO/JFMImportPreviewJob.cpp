@@ -121,7 +121,7 @@ namespace SST::Prototypes::JFM
 
 	bool JFMImportPreviewJob::UsesPythonRuntime() const
 	{
-		return true;
+		return false; // the Python bridge acquires the GIL only around its calls
 	}
 
 	void JFMImportPreviewJob::Execute(JobContext &context) try

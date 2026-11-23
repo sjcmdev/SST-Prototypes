@@ -98,7 +98,9 @@ TEST(RunActions, IncludeAndOnEditAreIndependentAndAutoExactNeverStores) {
     ASSERT_TRUE(w.Exec(Cmd::CaptureLive::Make(ActionKind::Iv)).value("ok",false));EXPECT_EQ(w.Current().history.size(),1u);
     const auto stored=w.Current().RunResult(w.Current().selectedRun);EXPECT_EQ(stored,w.Current().result.typed());
     auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=310;ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));Wait(w);
-    EXPECT_FALSE(w.Exec(Cmd::CaptureLive::Make(ActionKind::Iv)).value("ok",true));EXPECT_EQ(w.Current().history.size(),1u);EXPECT_EQ(stored,w.Current().RunResult(w.Current().selectedRun));
+    EXPECT_FALSE(w.Exec(Cmd::CaptureLive::Make(ActionKind::Iv)).value("ok",true));EXPECT_EQ(w.Current().history.size(),1u);
+    // owner 2026-11-23: an edit returns the view to Live; the stored run is kept unchanged
+    EXPECT_TRUE(w.Current().selectedRun.empty());EXPECT_EQ(stored,w.Current().RunResult(w.Current().history.back().at("run_id").get<std::string>()));
 }
 TEST(RunActions, InheritedIvMatchesLegacyExactAndOnlyVisibleBiasGetsDetails) {
     Workflow w(CreateRef<JobSystem>(nullptr,1)),reference(CreateRef<JobSystem>(nullptr,1));w.lightResponse=reference.lightResponse=true;
@@ -129,16 +131,16 @@ TEST(RunActions, PauseResumeAndStopKeepCompletedActions) {
         }
     }
 }
-TEST(RunActions, PreviewIsBoundedProgressiveAndCancellationBecomesCoreCancelled) {
+TEST(RunActions, PreviewIsEveryStridePointOnExactMeshProgressiveAndCancellable) { // owner 2026-11-23: same mesh as exact, every 4th bias when slow
     auto draft=CreateRef<ProjectDraft>(*SmallDraft());draft->project.mesh.points_per_layer=401;draft->project.voltage={0,.2,.001};
-    Operation preview(draft,{{"operation","run"},{"preview",true}});preview.feed=CreateRef<LiveFeed>();preview.jsonResponse=false;
+    Operation preview(draft,{{"operation","run"},{"preview",true},{"stride",4}});preview.feed=CreateRef<LiveFeed>();preview.jsonResponse=false;
     bool progressive=false;JobContext ctx([&](float done,float total){if(done<total){progressive=true;EXPECT_GT(preview.feed->v.size(),0u);}},[](auto&){},[](auto&){},[](auto,auto&){},[]{return false;});
     preview.Execute(ctx);const auto result=std::static_pointer_cast<const IvResult>(preview.typedOut);
-    EXPECT_TRUE(progressive);EXPECT_LE(result->points.size(),26u);EXPECT_LE(preview.output.at("mesh_node_count").get<int>(),202);EXPECT_EQ(result->mesh_x_m.size(),0u);
+    EXPECT_TRUE(progressive);EXPECT_EQ(result->points.size(),51u);EXPECT_GT(preview.output.at("mesh_node_count").get<int>(),202);EXPECT_EQ(result->mesh_x_m.size(),0u);
     for(const auto& point:result->points){EXPECT_FALSE(point.details);EXPECT_EQ(point.x_m.size(),0u);}
     Operation cancelled(draft,{{"operation","run"},{"preview",true}});cancelled.feed=CreateRef<LiveFeed>();
     JobContext stopping([&](float,float){cancelled.cancellation.request_stop();},[](auto&){},[](auto&){},[](auto,auto&){},[]{return false;});
-    EXPECT_THROW(cancelled.Execute(stopping),JobCancelledException);EXPECT_EQ(cancelled.feed->v.size(),7u);
+    EXPECT_THROW(cancelled.Execute(stopping),JobCancelledException);EXPECT_EQ(cancelled.feed->v.size(),1u); // stops after the first point
 }
 TEST(RunActions, StalePreviewIsInvalidatedAtEditAndCannotPublish) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.Current().SetDraft(SmallDraft());w.dragging=true;

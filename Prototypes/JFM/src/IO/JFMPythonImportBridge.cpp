@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "ScientificRuntime/Python/PythonGilScope.hpp"
 
 #include "IO/JFMPythonImportBridge.hpp"
 
@@ -209,8 +210,6 @@ namespace SST::Prototypes::JFM
 		const ProgressCallback &progressCallback)
 	{
 #if DS_PYTHON_CAPI_AVAILABLE
-		static std::mutex pythonMutex;
-		std::scoped_lock lock(pythonMutex);
 
 		if (m_PythonRoot.Empty() || !FileSystem::Exists(m_PythonRoot.Native()))
 		{
@@ -224,7 +223,8 @@ namespace SST::Prototypes::JFM
 				"Python import failed.",
 				"Core ScientificRuntimeLayer has not initialized the embedded Python runtime.");
 
-		if (!PyGILState_Check())
+        PythonGilAcquireScope gil;
+        if (!gil.IsActive())
 			return makePythonBridgeError(
 				"Python import failed.",
 				"Python GIL is not held by the current job. Check JFMImportJob::UsesPythonRuntime() and ScientificRuntimeLayer job hooks.");

@@ -73,7 +73,18 @@ bool EndSavedPlot(PlotSession &s,const char *title) {
         const bool log=a.Scale==ImPlotScale_Log10;
         const bool manualAxis=v.manual && v.ranges[i].has_value();
         if(manualAxis){a.FitThisFrame=false;if(data)a.SetRange(v.ranges[i]->min,v.ranges[i]->max);}
-        if(!manualAxis && a.FitThisFrame){auto raw=r.explicitFit[i].value_or(PlotRange{a.FitExtents.Min,a.FitExtents.Max});if(log && raw.min>0 && raw.min==raw.max)raw={raw.min/std::sqrt(10.),raw.max*std::sqrt(10.)};if(raw.Valid(log)){const auto padded=PadPlotRange(raw,s.settings.margin,log);a.SetRange(padded.min,padded.max);a.FitThisFrame=false;}}
+        if(!manualAxis && a.FitThisFrame) {
+            auto raw=r.explicitFit[i].value_or(PlotRange{a.FitExtents.Min,a.FitExtents.Max});
+            if(log && a.Vertical) {
+                if(!std::isnormal(raw.max) || raw.max<=0)raw={1e-12,1.};
+                else {
+                    if(raw.min==raw.max)raw={raw.min/std::sqrt(10.),raw.max*std::sqrt(10.)};
+                    raw.min=std::max({raw.min,raw.max*1e-12,1e-200});
+                }
+            }
+            else if(log && raw.min>0 && raw.min==raw.max)raw={raw.min/std::sqrt(10.),raw.max*std::sqrt(10.)};
+            if(raw.Valid(log)){const auto padded=PadPlotRange(raw,s.settings.margin,log);a.SetRange(padded.min,padded.max);a.FitThisFrame=false;}
+        }
         if(log!=r.logBefore[i]){v.log[i]=log;changed=true;}
     }
     r.hasData=data;
