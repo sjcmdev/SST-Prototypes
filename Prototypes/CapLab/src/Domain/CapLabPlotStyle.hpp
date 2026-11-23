@@ -7,14 +7,7 @@ namespace SST::Prototypes::CapLab {
 inline bool SameStoredView(const sst::ui::plot::PlotViewState &a, const sst::ui::plot::PlotViewState &b) {
     if (a.camera) sst::ui::plot::ValidateCamera(*a.camera);
     if (b.camera) sst::ui::plot::ValidateCamera(*b.camera);
-    auto bounds=[](const auto &v) {return std::tie(v.minX,v.maxX,v.minY,v.maxY);};
-    auto ticks=[](const auto &x,const auto &y) {return std::equal(x.begin(),x.end(),y.begin(),y.end(),[](const auto &l,const auto &r) {
-        return std::tie(l.value,l.label,l.major)==std::tie(r.value,r.label,r.major);
-    });};
-    return a.visibility==b.visibility && a.viewport.has_value()==b.viewport.has_value() &&
-        (!a.viewport || bounds(*a.viewport)==bounds(*b.viewport)) && a.camera.has_value()==b.camera.has_value() &&
-        (!a.camera || (a.camera->rotation==b.camera->rotation && a.camera->limits==b.camera->limits)) &&
-        ticks(a.xTicks,b.xTicks) && ticks(a.yTicks,b.yTicks) && ticks(a.zTicks,b.zTicks);
+    return sst::ui::plot::StoredViewEqual(a,b);
 }
 inline sst::ui::plot::Color SampleTemperatureColor(std::uint64_t sample, const nlohmann::json &temperature) {
     std::uint64_t hash=14695981039346656037ull;

@@ -228,6 +228,7 @@ namespace SST
         {
             ResetWindowStates();
             if (ImGui::GetCurrentContext()) { ImGui::ClearIniSettings(); ImGui::MarkIniSettingsDirty(); }
+            if (m_DefaultLayout) m_DefaultLayout();
             return {};
         }
         auto windows = Windows();
@@ -251,7 +252,7 @@ namespace SST
         if (action == WindowAction::Cascade || action == WindowAction::TileHorizontal || action == WindowAction::TileVertical)
         {
             if (m_Locked) return invalid("Layout is locked.");
-            std::erase_if(windows, [](const auto &w) { return !w->IsVisible() || w->GetState().pinned || w->GetState().mode == WindowMode::Minimized; });
+            std::erase_if(windows, [](const auto &w) { const auto hosted = std::dynamic_pointer_cast<HostedEditorWindow>(w); return w->GetTitle().empty() || (hosted && !hosted->claimed) || !w->IsVisible() || w->GetState().pinned || w->GetState().mode == WindowMode::Minimized; });
             for (std::size_t i = 0; i < windows.size(); ++i)
             {
                 auto s = windows[i]->GetState(); s.dockId = 0; s.mode = WindowMode::Normal;

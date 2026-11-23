@@ -10,6 +10,17 @@
 namespace SST::Prototypes::PlotLab
 {
     using Json = nlohmann::json;
+    std::string FriendlyFontError(std::string_view details)
+    {
+        if (details.find("ModuleNotFoundError") != std::string_view::npos || details.find("ImportError") != std::string_view::npos || details.find("No module named") != std::string_view::npos)
+            return "Graph fonts need the Python export dependencies. Install them and click Retry.";
+        if (details.find("Embedded Python") != std::string_view::npos)
+            return "Graph fonts need Python. The default UI font is used for this preview.";
+        while (!details.empty() && (details.back() == '\n' || details.back() == '\r')) details.remove_suffix(1);
+        const auto end = details.find_last_of("\r\n");
+        if (end != std::string_view::npos) details.remove_prefix(end + 1);
+        return "Graph font unavailable: " + std::string(details.substr(0, 200));
+    }
 #if DS_PYTHON_CAPI_AVAILABLE
     namespace nb = nanobind;
     static void PreparePython(const std::filesystem::path &pythonRoot)
@@ -24,6 +35,7 @@ namespace SST::Prototypes::PlotLab
                     paths.append(text);
             };
             append(pythonRoot);
+            append(std::filesystem::path(SST_PLOTLAB_PYTHON_ROOT).parent_path().parent_path().parent_path() / "Core/ScientificRuntime/Python");
             // Use the repository environment during development; app-local runtime remains Core-owned.
             auto parent = pythonRoot;
             for (int depth = 0; depth < 8 && parent.has_parent_path(); ++depth)
@@ -48,60 +60,14 @@ namespace SST::Prototypes::PlotLab
             PreparePython(pythonRoot);
             auto result = nb::module_::import_("sst_plotlab.exporter").attr("resolve_font")(family.c_str(), file.c_str());
             return {nb::cast<std::string>(result[0]), nb::cast<std::string>(result[1])};
-        } catch (const nb::python_error &e) { throw std::runtime_error(e.what()); }
+        } catch (const nb::python_error &e) { throw std::runtime_error(FriendlyFontError(e.what())); }
 #else
         (void)family; (void)file; (void)pythonRoot;
         throw std::runtime_error("Rebuild with embedded Python to resolve graph fonts");
 #endif
     }
 
-    std::string SnapshotJson(const sst::plotlab::GraphSnapshot &s)
-    {
-        auto axis = [](const auto &spec, const auto &ticks)
-        {
-            Json t = Json::array();
-            for (const auto &tick : ticks)
-                t.push_back({{"value", tick.value}, {"label", tick.label}, {"major", tick.major}});
-            return Json{{"label", spec.label},
-                        {"log", spec.scale == sst::ui::plot::AxisScale::Log10},
-                        {"grid", spec.grid},
-                        {"ticks", t}};
-        };
-        Json series = Json::array();
-        for (const auto &entry : s.series)
-        {
-            const auto &st = entry.style;
-            series.push_back({{"plot_id", entry.plot},
-                              {"label", entry.label},
-                              {"x", entry.x},
-                              {"y", entry.y},
-                              {"y_error", entry.yError},
-                              {"kind", entry.kind},
-                              {"style",
-                               {{"color", st.color},
-                                {"fill", st.markerFill},
-                                {"outline", st.markerOutline},
-                                {"marker", st.marker},
-                                {"line_pt", st.lineWidthPt},
-                                {"marker_pt", st.markerSizePt},
-                                {"cap_pt", st.errorCapPt},
-                                {"legend", st.legend}}}});
-        }
-        return Json{{"project_id", s.project},
-                    {"graph_id", s.graph},
-                    {"revision", s.revision},
-                    {"width_mm", s.widthMm},
-                    {"height_mm", s.heightMm},
-                    {"font_family", s.fontFamily},
-                    {"font_file", s.fontFile},
-                    {"font_pt", s.fontSizePt},
-                    {"ranges", {s.ranges.minX, s.ranges.maxX, s.ranges.minY, s.ranges.maxY}},
-                    {"x_axis", axis(s.spec.x, s.xTicks)},
-                    {"y_axis", axis(s.spec.y, s.yTicks)},
-                    {"legend", {{"visible", s.spec.legend.visible}, {"outside", s.spec.legend.outside}}},
-                    {"series", series}}
-            .dump();
-    }
+    std::string SnapshotJson(const sst::plotlab::GraphSnapshot &snapshot) { return sst::plotlab::snapshotJson(snapshot); }
     void ExportGraph(const sst::plotlab::GraphSnapshot &snapshot, const std::filesystem::path &destination,
                      const std::string &format, double dpi, const std::filesystem::path &pythonRoot)
     {

@@ -741,7 +741,7 @@ namespace SST::Prototypes::JFM
 			ImGui::PushID(static_cast<int>(area.id));
 			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
 				(void)HandleUndoShortcuts();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F2))
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && area.document->editor.selected.empty() && ImGui::IsKeyPressed(ImGuiKey_F2))
 			{
 				area.renaming = true;
 				std::snprintf(area.renameBuffer.data(), area.renameBuffer.size(), "%s", area.title.c_str());
@@ -1022,9 +1022,13 @@ namespace SST::Prototypes::JFM
 
 			const ImPlotFlags plotFlags = area.showLegend ? ImPlotFlags_None : ImPlotFlags_NoLegend;
 			JFMPlotExportControls(*area.document);
+            sst::ui::plot::PlotSpec figureSpec;
+            figureSpec.x.label = "Voltage (V)"; figureSpec.y.label = "Current (A)";
+            figureSpec.y.scale = area.scale == PlotScale::SemiLog ? sst::ui::plot::AxisScale::Log10 : sst::ui::plot::AxisScale::Linear;
+            figureSpec.legend = {area.showLegend, true, true}; figureSpec.padding=area.fitPadding;
+            area.document->SetSpec(figureSpec);
 			const bool plotFont = BeginJFMPlotFrame(*area.document);
-            const float plotHeight = std::max(1.0f, ImGui::GetContentRegionAvail().y);
-			if (plotFont && ImPlot::BeginPlot(plotId.c_str(), ImVec2(-1.0f, plotHeight), plotFlags))
+			if (plotFont && ImPlot::BeginPlot(plotId.c_str(), area.document->preview.size, plotFlags))
 			{
 				ImPlot::SetupAxes("Voltage (V)", "Current (A)");
 				if (area.showLegend)
@@ -1085,9 +1089,11 @@ namespace SST::Prototypes::JFM
 					ImPlot::SetupAxesLimits(minX, maxX, minY, maxY, ImPlotCond_Always);
 				}
 
+				SetupJFMPlotAxes(*area.document);
 				const JFMUserSettings plotSettings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
 				for (const PlotCurveGroup &group : area.groups)
 				{
+                    area.document->currentGroup=group.key;
 					if (!group.visible)
 						continue;
 					for (CharacteristicId id : group.characteristicIds)
@@ -1203,11 +1209,7 @@ namespace SST::Prototypes::JFM
 					}
 				}
 				const bool rangeCursor = RenderRangeDragLines(area, records);
-				sst::ui::plot::PlotSpec figureSpec;
-				figureSpec.x.label = "Voltage (V)"; figureSpec.y.label = "Current (A)";
-				figureSpec.y.scale = area.scale == PlotScale::SemiLog ? sst::ui::plot::AxisScale::Log10 : sst::ui::plot::AxisScale::Linear;
-				figureSpec.legend = {area.showLegend, true, false};
-				EndJFMPlot(*area.document, figureSpec);
+				EndJFMPlot(*area.document, figureSpec, plotId.c_str());
 				if (rangeCursor)
 					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 			}

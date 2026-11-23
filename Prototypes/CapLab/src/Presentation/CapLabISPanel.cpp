@@ -1,3 +1,4 @@
+#include "Core/PlotExport/PlotEditing.hpp"
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include "Domain/CapLabAnalysis.hpp"
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
@@ -249,9 +250,9 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
         // The two residual components share frequency and units, so overlay them.
         if (index==5 && !series.empty()) {
             const auto other=project.engine->children(graphs.at(6).get<pl::Id>()).at(0);
-            series.front().id="Re residual";
+            series.front().id="Re residual###"+sst::ui::plot::SeriesKey(series.front().id);
             for (auto id : project.engine->children(other)) {
-                auto entry=project.engine->series(id); entry.id="Im residual";
+                auto entry=project.engine->series(id); entry.id="Im residual###"+entry.id;entry.style.legend=false;
                 entry.style.color={.85f,.25f,.12f,1}; series.push_back(std::move(entry));
             }
         }
@@ -267,19 +268,29 @@ void CapLabPrototypePanel::RenderISTabs(Project& project, const Json& analysis, 
                 y.push_back(index==0 ? -j : index==1 ? std::hypot(r,j) : std::atan2(j,r)*180/std::acos(-1.));
             }
             auto entry=series.front(); entry.id=index==0 ? "residual (model - measured)" : index==1 ? "|delta Z| (model - measured)" : "arg(delta Z) (model - measured)";
-            entry.data={x.data(),y.data(),x.size()}; entry.style.color={.3f,.75f,.4f,1};
+            entry.style.legend=false; entry.data={x.data(),y.data(),x.size()}; entry.style.color={.3f,.75f,.4f,1};
             series.push_back(std::move(entry));
         }
         ImGui::PushID(std::to_string(graph).c_str());
         if (refitPlot) ImPlot::SetNextAxesToFit();
         auto &currentView=index==2 ? bodePhaseView : viewState;
         if (!currentView.viewport) currentView=std::get<pl::Layer>(project.engine->object(layer).data).view;
-        RenderISPlot("##IS",spec,series.data(),series.size(),currentView,ImVec2(-1,height));
+        auto& editor=plotEditors[graph];
+        const auto& dimensions=std::get<pl::Graph>(project.engine->object(graph).data);
+        const auto preview=sst::ui::plot::PublicationPreview(dimensions.widthMm,dimensions.heightMm,{ImGui::GetContentRegionAvail().x,height});
+        ImGui::PushFont(ResolvePlotPreviewFont(dimensions.fontFamily,dimensions.fontFile),preview.metrics.ToPixels(static_cast<float>(dimensions.fontSizePt)));
+        RenderISPlot("##IS",spec,series.data(),series.size(),currentView,preview.size,&editor,preview.metrics);
+        ImGui::PopFont();
         if (&project==&state->Document().project) {
             state->graphViews[graph]=currentView;
             state->StoreGraphView(graph,currentView);
+            for (const auto& edit:editor.pending) {
+                const auto result=ExecuteCapLabPlotEdit(*state,layer,edit);
+                if (!result) editor.error=state->status=result.Error().technicalDetails;
+            }
+            currentView=state->GraphView(graph);
         }
-        
+        editor.pending.clear();
         ImGui::PopID();
     };
     if (ImGui::BeginTabBar("IS views")) {

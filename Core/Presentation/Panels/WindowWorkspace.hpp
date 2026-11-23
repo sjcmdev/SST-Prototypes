@@ -49,6 +49,7 @@ namespace SST
         [[nodiscard]] bool IsLocked() const { return m_Locked; }
         void SetActive(WindowId id) { if (!m_FocusRequested) m_Active = id; }
         void RenderMenu();
+        void SetDefaultLayout(std::function<void()> reset) { m_DefaultLayout = std::move(reset); }
         void RenderOverlays();
         void RenderContextMenu(EditorWindow &window);
         void InstallSettingsHandler();
@@ -77,5 +78,6 @@ namespace SST
         std::string m_Error, m_PendingSettings;
         std::string m_FrozenSettings;
         bool m_CapturingIni = false;
+        std::function<void()> m_DefaultLayout;
     };
 }

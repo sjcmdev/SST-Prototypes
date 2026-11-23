@@ -1041,10 +1041,15 @@ namespace SST::Prototypes::JFM
 		};
 		renderSeriesTable();
 		JFMPlotExportControls(*window.document);
-		const bool plotFont = BeginJFMPlotFrame(*window.document);
-		if (plotFont && ImPlot::BeginPlot(("##arrhenius_plot_" + std::to_string(window.id)).c_str(), ImVec2(-1.0f, 360.0f)))
+        sst::ui::plot::PlotSpec figureSpec;
+        figureSpec.x.label = JFMArrheniusUsesInvTemperature(quantity) ? "1000/T" : "T (K)";
+        figureSpec.y.label = JFMArrheniusQuantityName(quantity);
+        window.document->SetSpec(figureSpec);
+		const bool plotFont = BeginJFMPlotFrame(*window.document, {ImGui::GetContentRegionAvail().x,360});
+		if (plotFont && ImPlot::BeginPlot(("##arrhenius_plot_" + std::to_string(window.id)).c_str(), window.document->preview.size))
 		{
 			ImPlot::SetupAxes(JFMArrheniusUsesInvTemperature(quantity) ? "1000/T" : "T (K)", JFMArrheniusQuantityName(quantity));
+			SetupJFMPlotAxes(*window.document);
 			bool rangeCursor = false;
 
 			for (std::size_t seriesIndex = 0; seriesIndex < window.series.size(); ++seriesIndex)
@@ -1082,6 +1087,7 @@ namespace SST::Prototypes::JFM
 				}
 
 				const std::string sourceKey = std::to_string(series.sourceMode) + "_" + series.sourceId;
+                window.document->currentGroup=sourceKey;
 				const std::string label = series.title + "###arrhenius_data_" + sourceKey;
 				auto plotPoints = [&](const std::string &plotLabel, const std::vector<double> &x, const std::vector<double> &y, SeriesStyle &style) {
 					ImPlotSpec spec;
@@ -1223,10 +1229,7 @@ namespace SST::Prototypes::JFM
 					ImPlot::EndLegendPopup();
 				}
 			}
-			sst::ui::plot::PlotSpec figureSpec;
-			figureSpec.x.label = JFMArrheniusUsesInvTemperature(quantity) ? "1000/T" : "T (K)";
-			figureSpec.y.label = JFMArrheniusQuantityName(quantity);
-			EndJFMPlot(*window.document, figureSpec);
+			EndJFMPlot(*window.document, figureSpec, ("##arrhenius_plot_" + std::to_string(window.id)).c_str());
 			if (rangeCursor)
 				ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 		}

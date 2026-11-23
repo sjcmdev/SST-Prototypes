@@ -390,7 +390,7 @@ TEST(PlotLabWorksheet, DisplayFormattingNeverChangesStorage)
     EXPECT_EQ(pl::formatValue(1.25,{M::Text,2}),"1.25");
     EXPECT_EQ(pl::formatValue(3,{M::Categorical,2}),"3");
     for(auto mode:{M::General,M::Decimal,M::Significant,M::Scientific,M::Engineering,M::Text,M::DateTime,M::Categorical}) {
-        EXPECT_EQ(pl::formatValue(std::numeric_limits<double>::quiet_NaN(),{mode,3}),"nan");
+        EXPECT_TRUE(pl::formatValue(std::numeric_limits<double>::quiet_NaN(),{mode,3}).empty());
         EXPECT_EQ(pl::formatValue(std::numeric_limits<double>::infinity(),{mode,3}),"inf");
         EXPECT_EQ(pl::formatValue(-std::numeric_limits<double>::infinity(),{mode,3}),"-inf");
         EXPECT_FALSE(pl::formatValue(1e-300,{mode,3}).empty());
@@ -399,6 +399,7 @@ TEST(PlotLabWorksheet, DisplayFormattingNeverChangesStorage)
     EXPECT_FALSE(pl::formatValue(std::numeric_limits<double>::denorm_min(),{M::Engineering,3}).empty());
     EXPECT_EQ(ParseNumericCell(pl::fullPrecision(1.2345678901234567)),1.2345678901234567);
     EXPECT_THROW(pl::formatValue(1,{M::Significant,0}),std::invalid_argument);
+    EXPECT_THROW(pl::formatValue(std::numeric_limits<double>::quiet_NaN(),{M::Significant,0}),std::invalid_argument);
 }
 TEST_F(PlotLabApp, WorksheetParametersFormatsRoundtripUndoAndMigration)
 {
@@ -847,6 +848,23 @@ TEST(WindowMigration, OlderWorkspaceDoesNotOverrideMigratedPanelIni)
     EXPECT_FLOAT_EQ(gui->SizeFull.x, 777);
     EXPECT_FLOAT_EQ(gui->SizeFull.y, 555);
 }
+TEST(WindowMigration, UnclaimedGhostsDoNotTileAndActivationFocusesTheRenamedRealWindow) {
+    ImGui::CreateContext(); struct Cleanup { ~Cleanup() { ImGui::DestroyContext(); } } cleanup;
+    auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1200,800};io.Fonts->AddFontDefault();io.Fonts->Build();
+    PanelRegistry panels;auto workspace=CreateRef<WindowWorkspace>(panels);auto registry=CreateRef<CommandRegistry>();ASSERT_TRUE(workspace->Bind(registry,{}));
+    auto graph=CreateRef<HostedEditorWindow>("Graph: Graph1###Graph: 1:2");graph->claimed=true;
+    const auto id=panels.AddExisting(graph);
+    auto ghost=CreateRef<HostedEditorWindow>("###Worksheet: 1:3");panels.AddExisting(ghost);
+    auto old=CreateRef<HostedEditorWindow>("Worksheet: old###Worksheet: 1:4");panels.AddExisting(old);
+    workspace->SetAvailableArea(0,20,1200,780);
+    ASSERT_TRUE(workspace->Execute({WindowAction::TileVertical})); EXPECT_FLOAT_EQ(graph->GetState().width,1200);
+    EXPECT_FLOAT_EQ(ghost->GetState().width,640);EXPECT_FLOAT_EQ(old->GetState().width,640);
+    const auto frame=[&] {ImGui::NewFrame();graph->Render([]{ImGui::TextUnformatted("Data");});workspace->RenderOverlays();ImGui::Render();};
+    frame();frame();graph->SetLegacyName("Graph: Renamed###Graph: 1:2");
+    ASSERT_TRUE(workspace->Execute({WindowAction::Close,id}));frame();ASSERT_TRUE(workspace->Execute({WindowAction::Activate,id}));frame();
+    EXPECT_TRUE(graph->IsVisible());ASSERT_NE(GImGui->NavWindow,nullptr);EXPECT_EQ(GImGui->NavWindow->ID,ImHashStr(graph->ImGuiName().c_str()));
+    EXPECT_EQ(workspace->Find(id)->GetTitle(),"Graph: Renamed");
+}
 
 TEST_F(PlotLabApp, DataCommandsUseCoreHistoryAndPublishCreatedSheetIds) {
     using J=nlohmann::json;
@@ -952,3 +970,32 @@ TEST_F(PlotLabApp, TypedCommandsKeepStableDependenciesThroughCoreHistorySaveLoad
     doc.Delete(x);EXPECT_FALSE(doc.project->objects().contains(y));ASSERT_TRUE(undo->Undo());verify(7);ASSERT_TRUE(undo->Redo());EXPECT_FALSE(doc.project->objects().contains(x));ASSERT_TRUE(undo->Undo());verify(7);
     auto file=Temp("-typed-dependencies.plotlab");doc.Save(file);doc.Open(file);doc.WorksheetCommand(formula);verify(7);ASSERT_TRUE(undo->Undo());verify(7);ASSERT_TRUE(undo->Redo());verify(7);std::filesystem::remove(file);
 }
+#include "Core/PlotExport/PlotEditing.hpp"
+TEST_F(PlotLabApp, TypedPlotEditsUseCoreHistoryAndMergeOneLiveGesture) {
+    const auto layer=doc.project->children(graph).front();const auto series=doc.project->children(layer).front();
+    plot::PlotEdit edit;edit.kind=plot::PlotEditKind::Rename;edit.series={std::to_string(series)};edit.text="one";edit.gesture=77;
+    ASSERT_TRUE(ExecutePlotEdit(*registry,doc.project,layer,edit));edit.text="two";
+    ASSERT_TRUE(ExecutePlotEdit(*registry,doc.project,layer,edit));EXPECT_EQ(undo->GetUndoDepth(),1u);
+    ASSERT_TRUE(undo->Undo());EXPECT_NE(doc.project->object(series).name,"two");
+    ASSERT_TRUE(undo->Redo());EXPECT_EQ(doc.project->object(series).name,"two");
+    edit.kind=plot::PlotEditKind::Visibility;edit.gesture=0;edit.visible=false;
+    ASSERT_TRUE(ExecutePlotEdit(*registry,doc.project,layer,edit));EXPECT_FALSE(doc.project->series(series).visible);
+    ASSERT_TRUE(undo->Undo());EXPECT_TRUE(doc.project->series(series).visible);
+}
+TEST_F(PlotLabApp, PlotSessionPythonCallsTheTypedCoreHistory) {
+#if DS_PYTHON_CAPI_AVAILABLE
+    auto& runtime=TestPython();ASSERT_TRUE(runtime.Start());InstallWorksheetPython();
+    const auto gil=PythonInterpreter::AcquireRuntimeGil();
+    const auto layer=doc.project->children(graph).front();const auto curve=doc.project->children(layer).front();
+    const auto code=std::string("import json\nfrom _sst_plotlab import PlotSession\ns=PlotSession(")+nlohmann::json(doc.project->toJson()).dump()+")\n"+
+        "assert s.edit("+std::to_string(layer)+", {'action':'rename','series_ids':["+std::to_string(curve)+"],'text':'Python legend'})['ok']\n"+
+        "assert s.undo() and s.redo()\n"+
+        "assert s.edit("+std::to_string(layer)+", {'action':'axis','side':'bottom','axis':{'scale':4,'range':[1,4],'ticks':{'mode':2,'count':4}}})['ok']\n"+
+        "snapshot=s.snapshot("+std::to_string(graph)+",[1,4,1,8])\nassert snapshot['x_axis']['spec']['scale']==4\nassert snapshot['series'][0]['label']=='Python legend'\n"+
+        "assert not s.edit("+std::to_string(layer)+", {'action':'axis','axis':{'range':[-1,1]}})['ok']\n";
+    const int result=PyRun_SimpleString(code.c_str());PythonInterpreter::ReleaseRuntimeGil(gil);EXPECT_EQ(result,0);
+#else
+    GTEST_SKIP();
+#endif
+}
+

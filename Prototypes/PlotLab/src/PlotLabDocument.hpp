@@ -70,6 +70,7 @@ namespace SST::Prototypes::PlotLab
         void WorksheetCommand(pl::WorksheetEdit);
         DataResult WorksheetCommand(pl::DataRequest, bool wait = true);
         DataResult DataStatus();
+        void SetColumnValues(pl::Id column, pl::Formula);
         void PollDataOperation();
         void New();
         void Open(const std::filesystem::path &);
@@ -85,8 +86,12 @@ namespace SST::Prototypes::PlotLab
         void Delete(pl::Id);
         void ResizeRows(pl::Id sheet, std::optional<std::size_t> eraseRow = {});
         pl::Id AddColumn(pl::Id sheet, bool text = false);
+        void ClearCells(pl::Id sheet, const std::vector<pl::Id>& columns, const std::vector<pl::Id>& rows = {});
+        std::string NextName(std::size_t type, std::string_view prefix, pl::Id parent = 0) const;
         pl::Id AddGraph(pl::Id folder, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error = 0);
-        void AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error = 0);
+        pl::Id AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error = 0);
+        pl::Id PlotColumns(pl::Id sheet, const std::vector<pl::Id>& columns, plot::SeriesKind,
+                           pl::Id graph = 0, pl::Id explicitX = 0, pl::Id error = 0);
         void SelectRow(pl::Id sheet, std::size_t row, pl::Id sourceView, bool toggle = false, pl::Id series = 0);
         Ref<pl::Project> project;
         Ref<CommandRegistry> commands;

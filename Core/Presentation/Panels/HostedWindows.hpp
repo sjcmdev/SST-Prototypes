@@ -40,7 +40,8 @@ namespace SST
                 else ++it;
         }
         ~HostedWindows() { for (auto &[key, entry] : m_Windows) entry.window->SetVisible(false); }
-        bool Render(const std::string &name, bool &open, int flags, const std::function<void()> &content, bool auxiliary = false)
+        bool Render(const std::string &name, bool &open, int flags, const std::function<void()> &content, bool auxiliary = false,
+                    std::uint32_t defaultDock = 0, bool resetDock = false)
         {
             auto &editor = Application::Get().GetEditorLayer();
             const auto suffix = name.rfind("###");
@@ -49,6 +50,7 @@ namespace SST
             if (!window)
             {
                 auto candidate = CreateRef<HostedEditorWindow>(name, m_PreserveIdentity, auxiliary || (flags & ImGuiWindowFlags_NoSavedSettings));
+                if (defaultDock) { auto initial = candidate->GetState(); initial.dockId = defaultDock; candidate->ApplyState(initial); }
                 for (auto &saved : editor.GetWindows()->Windows())
                     if (auto hosted = std::dynamic_pointer_cast<HostedEditorWindow>(saved);
                         hosted && !hosted->claimed && hosted->GetType() == candidate->GetType() &&
@@ -74,6 +76,8 @@ namespace SST
             if (editor.FindPanel(window->GetId()).expired())
                 editor.RegisterWindow(window, window->GetId()); // Undo may have removed a host's child entries.
             entry.used = true;
+            if (defaultDock) window->m_DefaultState.dockId = defaultDock;
+            if (resetDock) { auto current = window->GetState(); current.dockId = defaultDock; window->ApplyState(current); }
             window->SetLegacyName(name);
             const bool wasOpen = open;
             const bool rendered = window->Render(content, flags);

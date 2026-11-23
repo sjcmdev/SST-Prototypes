@@ -66,7 +66,7 @@ def test_ranges_ticks_gaps_and_snapshot_are_preserved(snapshot, tmp_path):
     assert [t.get_text() for t in ax.get_xticklabels()] == ["two", "four"]
     assert np.isnan(ax.lines[0].get_ydata()[2])
     assert ax.lines[0].get_linewidth() == 1.5
-    assert ax.lines[0].get_markersize() == 6
+    assert ax.lines[0].get_markersize() == snapshot["series"][0]["style"]["marker_pt"]
     for format in ("svg", "pdf", "png"):
         assert export_graph(snapshot, tmp_path/f"out.{format}", format) == tuple(snapshot["ranges"])
     assert snapshot == before
@@ -257,9 +257,9 @@ def test_spatial_marker_style_is_exported(spatial, kind):
     if kind == 5:
         scatter = fig.axes[0].collections[0]
         assert np.allclose(scatter.get_facecolor()[0], [1,0,0,1])
-        assert np.allclose(scatter.get_sizes(), [36])
+        assert np.allclose(scatter.get_sizes(), [9])
     else:
         line = fig.axes[0].lines[0]
-        assert line.get_marker() == "s" and line.get_markersize() == 6
+        assert line.get_marker() == "s" and line.get_markersize() == 3
         assert line.get_markerfacecolor() == [1,0,0,1]
     fig.clear()

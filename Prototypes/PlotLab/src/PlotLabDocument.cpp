@@ -14,8 +14,10 @@
 #include <stdexcept>
 #include <nlohmann/json.hpp>
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include <sst/ui/Theme/ScientificPlotPreset.hpp>
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
+#include "Core/PlotExport/PlotEditingPython.hpp"
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/map.h>
 #include <nanobind/stl/vector.h>
@@ -334,27 +336,88 @@ namespace SST::Prototypes::PlotLab
     {
         const auto graph = project->reserveId(), layer = project->reserveId(), series = project->reserveId();
         pl::Layer l;
-        l.spec.x.label = project->object(x).name;
+        l.spec.x.label = x ? project->object(x).name : "Row";
         l.spec.y.label = project->object(y).name;
         l.spec.autoFit = plot::AutoFit::Once;
+        l.spec.legend.outside = true; l.spec.legend.position = plot::LegendPosition::OutsideRight;
         pl::Plot p{sheet, x, y, 0, error};
         p.kind = plot::SeriesKind::LineScatter;
         p.style.color = plot::Color{0.12f, 0.45f, 0.78f, 1};
         p.style.lineWidthPt = 1;
         p.style.markerSizePt = 4;
         p.style.marker = plot::Marker::Circle;
-        Execute(project->change("Create graph", {{graph, folder, "Graph" + std::to_string(graph), 0, pl::Graph{}},
+        Execute(project->change("Create graph", {{graph, folder, NextName(4, "Graph"), 0, pl::Graph{}},
                                                  {layer, graph, "Layer1", 0, l},
                                                  {series, layer, project->object(y).name, 0, p}}));
         return graph;
     }
-    void Document::AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error)
+    void Document::ClearCells(pl::Id sheet, const std::vector<pl::Id>& columns, const std::vector<pl::Id>& rowIds) {
+        auto& p = *project; const auto& rows = std::get<pl::Worksheet>(p.object(sheet).data).rows;
+        if (columns.empty()) throw std::invalid_argument("Select cells or columns first.");
+        for (auto column : columns) if (p.object(column).parent != sheet || !std::holds_alternative<pl::Column>(p.object(column).data)) throw std::invalid_argument("Selected column belongs to another worksheet.");
+        const std::set<pl::Id> selectedRows(rowIds.begin(), rowIds.end());
+        std::vector<std::pair<std::size_t,std::size_t>> runs;
+        std::size_t found = 0;
+        for (std::size_t row = 0; row < rows.size(); ++row) if (rowIds.empty() || selectedRows.contains(rows[row])) {
+            ++found;
+            if (p.rowVisible(sheet, row)) { if (runs.empty() || runs.back().second != row) runs.emplace_back(row, row + 1); else ++runs.back().second; }
+        }
+        if (!rowIds.empty() && found != selectedRows.size()) throw std::invalid_argument("Unknown worksheet row ID.");
+        auto group = undo->ScopedGroup("Clear cells");
+        try {
+            for (auto column : columns) for (const auto& [first,end] : runs) {
+                const auto& c = std::get<pl::Column>(p.object(column).data);
+                Execute(p.setCells(column, first, c.values.index() == 0 ? pl::Values{std::vector<double>(end-first, std::numeric_limits<double>::quiet_NaN())} : pl::Values{std::vector<std::string>(end-first)}));
+            }
+            const auto result = group.Commit(); if (!result) throw std::runtime_error(result.Error().technicalDetails);
+        } catch (...) { (void)group.Cancel(); throw; }
+    }
+    std::string Document::NextName(std::size_t type, std::string_view prefix, pl::Id parent) const {
+        for (unsigned i = 1;; ++i) {
+            auto name = std::string(prefix) + std::to_string(i);
+            if (std::none_of(project->objects().begin(), project->objects().end(), [&](const auto& entry) {
+                const auto& o = *entry.second; return o.data.index() == type && (!parent || o.parent == parent) && o.name == name;
+            })) return name;
+        }
+    }
+    pl::Id Document::AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error)
     {
         const auto layer = project->children(graph).at(0);
         pl::Plot p{sheet, x, y, 0, error};
         p.kind = plot::SeriesKind::LineScatter;
         const auto id = project->reserveId();
         Execute(project->change("Add series", {{id, layer, project->object(y).name, 0, p}}));
+        return id;
+    }
+    pl::Id Document::PlotColumns(pl::Id sheet, const std::vector<pl::Id>& selected, plot::SeriesKind kind,
+                                 pl::Id graph, pl::Id explicitX, pl::Id error)
+    {
+        if (kind != plot::SeriesKind::Line && kind != plot::SeriesKind::Scatter && kind != plot::SeriesKind::LineScatter && kind != plot::SeriesKind::Column)
+            throw std::invalid_argument("Choose Line, Scatter, Line + Symbol or Column");
+        auto& p = *project; const auto columns = p.children(sheet);
+        for (auto column : selected) if (std::find(columns.begin(), columns.end(), column) == columns.end()) throw std::invalid_argument("Selected column belongs to another worksheet");
+        for (auto column : selected) if (std::get<pl::Column>(p.object(column).data).role == pl::Role::X) explicitX = column;
+        auto group = undo->ScopedGroup(graph ? "Add Plot to Layer" : "Plot selected columns");
+        bool added = false;
+        try {
+            for (auto column : columns) if (std::find(selected.begin(), selected.end(), column) != selected.end()) {
+                const auto& c = std::get<pl::Column>(p.object(column).data);
+                if (c.values.index() != 0 || c.role == pl::Role::X || c.role == pl::Role::YError || c.role == pl::Role::XError || c.role == pl::Role::Label || c.role == pl::Role::Disregard) continue;
+                const auto x = explicitX ? explicitX : p.pairedX(column);
+                pl::Id addedSeries = 0;
+                if (!graph) graph = AddGraph(p.root(), sheet, x, column, error);
+                else addedSeries = AddSeries(graph, sheet, x, column, error);
+                const auto layer = p.children(graph).front();
+                auto o = p.object(addedSeries ? addedSeries : p.children(layer).front()); auto& series = std::get<pl::Plot>(o.data);
+                series.kind = kind; series.style.color = plot::ScientificColor(p.children(layer).size() - 1);
+                series.style.marker = kind == plot::SeriesKind::Line || kind == plot::SeriesKind::Column ? plot::Marker::None : plot::Marker::Circle;
+                series.style.markerAuto = false; series.group = "Worksheet selection";
+                Execute(p.change("Plot type", {std::move(o)})); added = true;
+            }
+            if (!added) throw std::invalid_argument("Select at least one numeric Y column first.");
+            const auto result = group.Commit(); if (!result) throw std::runtime_error(result.Error().technicalDetails);
+            return graph;
+        } catch (...) { (void)group.Cancel(); throw; }
     }
     void Document::SelectRow(pl::Id sheet, std::size_t row, pl::Id view, bool toggle, pl::Id series)
     {
@@ -393,6 +456,9 @@ namespace SST::Prototypes::PlotLab
         } catch(const std::exception& e) {dataResult={};dataResult.error=status->status==JobStatus::Completed?WorksheetError::Conflict:WorksheetError::Validation;dataResult.message=e.what();}
         work->operation.reset();work->snapshot.reset();work->base.reset();work->request={};
         dataJob=0;dataWork.reset();
+    }
+    void Document::SetColumnValues(pl::Id column, pl::Formula definition) {
+        WorksheetCommand(pl::SetColumnValues{column, std::move(definition)});
     }
     DataResult Document::DataStatus() {
         PollDataOperation();return dataJob?DataResult{DataState::Running,dataJob}:dataResult;
@@ -459,6 +525,15 @@ namespace SST::Prototypes::PlotLab
             else if (action == "undo" || action == "redo") {
                 auto changed = action == "undo" ? undo->Undo() : undo->Redo();
                 if (!changed) throw std::runtime_error(changed.Error().technicalDetails);
+            } else if (action == "clear_cells") {
+                const auto ids = [&](const char* key) {
+                    std::vector<pl::Id> values;
+                    if (!request.contains(key) && std::string_view(key) == "row_ids") return values;
+                    const auto& input = request.at(key); if (!input.is_array()) throw std::invalid_argument("Expected ID array");
+                    for (const auto& value : input) values.push_back(pl::edges::id(value));
+                    return values;
+                };
+                doc.ClearCells(pl::edges::id(request.at("worksheet_id")), ids("column_ids"), ids("row_ids"));
             } else if (action == "paired_x") result["column_id"] = project->pairedX(request.at("column_id").get<pl::Id>());
             else if (action == "render_cell" || action == "copy_cell") {
                 const auto& c = std::get<pl::Column>(project->object(request.at("column_id").get<pl::Id>()).data);
@@ -520,11 +595,26 @@ NB_MODULE(_sst_plotlab, module)
 {
     using namespace SST;
     using namespace SST::Prototypes::PlotLab;
+    SST::PlotEditingPython::Bind<Document>(module);
     nanobind::class_<Document>(module, "WorksheetSession")
         .def("__init__", [](Document* self) {
             new (self) Document(CreateRef<CommandRegistry>(), CreateRef<UndoStack>(), CreateRef<EventBus>());
         })
-        .def("command_json", [](Document& doc,const std::string& request){return PythonBinding::WorksheetCommandJson(doc,request);});
+        .def("command_json", [](Document& doc,const std::string& request){return PythonBinding::WorksheetCommandJson(doc,request);})
+        .def("plot_columns", [](Document& doc, pl::Id sheet, const std::vector<pl::Id>& columns, int kind, pl::Id graph, pl::Id x, pl::Id error) {
+            try {
+                const auto result = doc.PlotColumns(sheet, columns, static_cast<plot::SeriesKind>(kind), graph, x, error);
+                return SST::PlotEditingPython::Response(nlohmann::json{{"ok",true},{"graph_id",result},{"error",nullptr}});
+            } catch (const std::exception& e) {
+                return SST::PlotEditingPython::Response(nlohmann::json{{"ok",false},{"error",{{"code","plot.columns"},{"message",e.what()}}}});
+            }
+        }, nanobind::arg("worksheet_id"), nanobind::arg("column_ids"), nanobind::arg("kind") = 2,
+           nanobind::arg("graph_id") = 0, nanobind::arg("x_column_id") = 0, nanobind::arg("y_error_column_id") = 0)
+        .def("plot_edit", [](Document& doc, pl::Id layer, nanobind::dict request) {
+            auto edit=SST::PlotEditingPython::Decode(SST::PlotEditingPython::Request(request),*doc.project,layer);
+            auto result=SST::ExecutePlotEdit(*doc.commands,doc.project,layer,edit);
+            return SST::PlotEditingPython::Response(result ? nlohmann::json{{"ok",true},{"error",nullptr}} : nlohmann::json{{"ok",false},{"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}});
+        });
 }
 namespace {
     const bool worksheetModuleRegistered = [] {

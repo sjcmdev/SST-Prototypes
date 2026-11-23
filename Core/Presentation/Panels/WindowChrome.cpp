@@ -1,5 +1,6 @@
 #include "Core/dspch.hpp"
 #include "Presentation/Panels/WindowWorkspace.hpp"
+#include "Presentation/Panels/HostedEditorWindow.hpp"
 #include <imgui.h>
 #include "IconsFontAwesome6.h"
 #include <imgui_internal.h>
@@ -338,6 +339,8 @@ namespace SST
         if (!ImGui::BeginMenu("Window")) return;
         for (auto &window : Windows())
         {
+            if (window->GetTitle().empty()) continue;
+            if (auto hosted = std::dynamic_pointer_cast<HostedEditorWindow>(window); hosted && !hosted->claimed) continue;
             ImGui::PushID(static_cast<int>(window->GetId()));
             auto state = window->GetState();
             const auto label = state.shortName + (window->IsDirty() ? " *" : "") +
@@ -353,7 +356,8 @@ namespace SST
         if (ImGui::MenuItem("Reset layout")) (void)Execute({WindowAction::ResetLayout});
         if (ImGui::MenuItem("Lock layout", nullptr, m_Locked)) (void)Execute({WindowAction::LockLayout});
         ImGui::Separator();
-        ImGui::InputText("Workspace name", m_WorkspaceName.data(), m_WorkspaceName.size());
+        ImGui::TextUnformatted("Workspace name"); ImGui::SameLine();
+        ImGui::InputText("##workspace-name", m_WorkspaceName.data(), m_WorkspaceName.size());
         if (ImGui::MenuItem("Save workspace", nullptr, false, m_WorkspaceName[0] != '\0'))
         { WindowRequest r{WindowAction::SaveWorkspace}; r.shortName = m_WorkspaceName.data(); (void)Execute(r); }
         for (const auto &[name, data] : m_Workspaces)
@@ -396,8 +400,8 @@ namespace SST
         if (m_RenameId) { ImGui::OpenPopup("Rename window"); m_RenameOpenId = std::exchange(m_RenameId, 0); }
         if (ImGui::BeginPopupModal("Rename window", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::InputText("Short name", m_ShortName.data(), m_ShortName.size());
-            ImGui::InputText("Long name", m_LongName.data(), m_LongName.size());
+            ImGui::TextUnformatted("Short name"); ImGui::SameLine(); ImGui::InputText("##short-name", m_ShortName.data(), m_ShortName.size());
+            ImGui::TextUnformatted("Long name"); ImGui::SameLine(); ImGui::InputText("##long-name", m_LongName.data(), m_LongName.size());
             if (ImGui::Button("Apply"))
             {
                 WindowRequest r{WindowAction::Rename, m_RenameOpenId}; r.shortName = m_ShortName.data(); r.longName = m_LongName.data();

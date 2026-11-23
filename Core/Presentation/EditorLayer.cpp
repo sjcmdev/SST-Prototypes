@@ -344,11 +344,12 @@ namespace SST
 		EditorServices services = GetServices();
 		for (MenuRendererEntry &entry : m_MenuRenderers)
 		{
-			if (entry.renderer)
+			if (entry.renderer && entry.id != "help")
 				entry.renderer(services);
 		}
 
 		m_Windows->RenderMenu();
+        for (auto& entry : m_MenuRenderers) if (entry.id == "help" && entry.renderer) entry.renderer(services);
         const float menuBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
         ImGui::EndMainMenuBar();
         // ImGui applies menu work-area reservations on the following frame.

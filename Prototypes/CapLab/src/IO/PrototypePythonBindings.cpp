@@ -20,6 +20,7 @@
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
+#include "Core/PlotExport/PlotEditingPython.hpp"
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/function.h>
@@ -114,6 +115,7 @@ std::filesystem::path MaterialDataPath(const char *name = "caplab-materials.json
 }
 NB_MODULE(sst_caplab, module)
 {
+    SST::PlotEditingPython::Bind<SST::Prototypes::CapLab::CapLabWorkflow>(module);
     using namespace SST::Prototypes::CapLab;
     module.def("project_from_preview", [](const std::string &preview, std::optional<double> temperature)
     {
@@ -247,7 +249,12 @@ NB_MODULE(sst_caplab, module)
             if (operation!="select" && r.contains("selection")) state.Select(r.at("selection"));
             const auto analysisCount=state.Document().project.analyses.size();
             auto subscription=bus->Subscribe<DocumentRequested>([&](const auto &event) {state.Start(event.operation,event.target,event.sources,event.recursive);});
-            if (operation=="tree" || operation=="select") {
+            if (operation=="plot_edit") {
+                const auto layer=r.at("layer_id").get<pl::Id>();
+                const auto edit=SST::PlotEditingPython::Decode(r.at("edit"),*state.Document().project.engine,layer);
+                const auto result=ExecuteCapLabPlotEdit(state,layer,edit);
+                if (!result) return Json{{"ok",false},{"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}}.dump();
+            } else if (operation=="tree" || operation=="select") {
                 CommandContext context; context.Set("edit",operation=="tree" ? r.at("edit") : r.at("selection"));
                 const auto result=commands->Execute(CommandID{operation=="tree" ? "caplab.tree" : "caplab.select"},std::move(context));
                 if (!result) return Json{{"ok",false},{"project",ProjectJson(state.Document().project)},
@@ -500,8 +507,15 @@ namespace SST::Prototypes::CapLab
     void ExportGraphs(const GraphExportResult &result, double dpi, JobContext &context)
     {
         std::vector<PlotExportRequest> exports;
-        for (const auto &graph:result.graphs)
-            exports.push_back({pl::SnapshotJson(*graph.snapshot),graph.path.Native(),graph.path.extension().Utf8().substr(1),dpi});
+        for (const auto &graph:result.graphs) {
+            PlotExportRequest request{{},graph.path.Native(),graph.path.extension().Utf8().substr(1),dpi};
+#if DS_PYTHON_CAPI_AVAILABLE
+            request.pythonSnapshot=[snapshot=graph.snapshot]() -> nanobind::object {
+                return nanobind::module_::import_("json").attr("loads")(nanobind::str(pl::SnapshotJson(*snapshot).c_str()));
+            };
+#endif
+            exports.push_back(std::move(request));
+        }
         ExportPlotsJson(context,exports);
     }
     Json GraphExportJson(const GraphExportResult &result)

@@ -1,4 +1,5 @@
 #include "Presentation/JFMPlotWidgets.hpp"
+#include "Core/PlotExport/PlotEditing.hpp"
 #include "IO/JFMPlotExport.hpp"
 #include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
@@ -13,56 +14,71 @@ namespace SST::Prototypes::JFM
 {
     namespace pl = sst::plotlab;
     namespace plot = sst::ui::plot;
-    bool BeginJFMPlotFrame(JFMPlotDocument &doc)
+    bool BeginJFMPlotFrame(JFMPlotDocument &doc, ImVec2 available)
     {
-        static std::map<std::string, ImFont *> fonts;
         const auto &g = std::get<pl::Graph>(doc.project.object(doc.graph).data);
         try {
-            const auto key = g.fontFamily + "\n" + g.fontFile;
-            auto &font = fonts[key];
-            auto *atlas = ImGui::GetIO().Fonts;
-            if (!font || !atlas->Fonts.contains(font)) {
-                auto resolved = ResolvePlotFont(g.fontFamily, g.fontFile);
-                ImFontConfig config; config.Flags |= ImFontFlags_NoLoadError;
-                font = atlas->AddFontFromFileTTF(resolved.first.c_str(), 0, &config);
-                if (!font) throw std::runtime_error("Cannot load graph font");
-            }
-            ImGui::PushFont(font, static_cast<float>(g.fontSizePt * 96.0 / 72.0));
-            doc.BeginFrame();
-            return true;
+            if (available.x<=0 || available.y<=0) available=ImGui::GetContentRegionAvail();
+            doc.preview=plot::PublicationPreview(g.widthMm,g.heightMm,available);
+            ImGui::PushFont(ResolvePlotPreviewFont(g.fontFamily,g.fontFile),doc.preview.metrics.ToPixels(static_cast<float>(g.fontSizePt)));
+            doc.BeginFrame();return true;
         } catch (const std::exception &e) { ImGui::TextWrapped("Graph font unavailable: %s", e.what()); return false; }
     }
     void AddJFMPlotSeries(JFMPlotDocument &doc, const plot::SeriesEntryView &input, bool absoluteCurrent)
     {
-        const auto id = doc.SetSeries(input, absoluteCurrent);
-        auto entry = doc.project.series(id);
-        entry.id = input.id; // Keep existing legend interaction IDs; references use engine IDs.
-        plot::RenderSeries(entry);
+        auto source=input;source.group=doc.currentGroup;
+        const auto id = doc.SetSeries(source, absoluteCurrent);
+        (void)id; // Draw once in persisted z-order after all domain series have been refreshed.
     }
-    void EndJFMPlot(JFMPlotDocument &doc, plot::PlotSpec spec)
+    void SetupJFMPlotAxes(JFMPlotDocument &doc)
     {
-        doc.EndFrame(std::move(spec));
-        const auto limits = ImPlot::GetPlotLimits();
-        doc.view.viewport = plot::Bounds{limits.X.Min, limits.X.Max, limits.Y.Min, limits.Y.Max};
-        auto *current = ImPlot::GetCurrentPlot();
-        std::vector<std::pair<pl::Id, ImGuiID>> ids;
-        for (const auto &[id, label] : doc.rendered) ids.emplace_back(id, ImGui::GetID(label.c_str()));
-        ImPlot::EndPlot();
-        auto ticks = [](const ImPlotAxis &axis, auto &out) {
-            out.clear();
-            for (int i = 0; i < axis.Ticker.Ticks.Size; ++i) {
-                const auto &t = axis.Ticker.Ticks[i];
-                if (t.PlotPos >= axis.Range.Min && t.PlotPos <= axis.Range.Max)
-                    out.push_back({t.PlotPos, t.ShowLabel && t.TextOffset >= 0 ? axis.Ticker.GetText(i) : "", t.Major});
+        const auto& spec = std::get<pl::Layer>(doc.project.object(doc.layer).data).spec;
+        if(spec.x.rescale==plot::RescaleMode::Auto || spec.y.rescale==plot::RescaleMode::Auto) {
+            auto fit=spec;fit.autoFit=plot::AutoFit::Always;fit.bounds.reset();
+            std::vector<plot::SeriesEntryView> entries;for(auto id:doc.project.children(doc.layer)) entries.push_back(doc.project.series(id));
+            if(const auto bounds=plot::ResolveBounds(fit,entries.data(),entries.size(),doc.view)) {
+                if(spec.x.rescale==plot::RescaleMode::Auto) ImPlot::SetupAxisLimits(ImAxis_X1,bounds->minX,bounds->maxX,ImPlotCond_Always);
+                if(spec.y.rescale==plot::RescaleMode::Auto) ImPlot::SetupAxisLimits(ImAxis_Y1,bounds->minY,bounds->maxY,ImPlotCond_Always);
             }
-        };
-        ticks(current->Axes[ImAxis_X1], doc.view.xTicks); ticks(current->Axes[ImAxis_Y1], doc.view.yTicks);
-        for (const auto &[id, itemId] : ids)
-            if (const auto *item = current->Items.GetItem(itemId)) doc.view.visibility[std::to_string(id)] = item->Show;
+        }
+        plot::SetupPlotEditorAxes(spec, doc.view, doc.preview.metrics, &doc.editor);
+    }
+    void EndJFMPlot(JFMPlotDocument &doc, plot::PlotSpec requested, const char* plotId)
+    {
+        const auto id = std::string(plotId);
+        const auto spec = std::get<pl::Layer>(doc.project.object(doc.layer).data).spec;
+        std::vector<plot::SeriesEntryView> entries;
+        for (auto key : doc.project.children(doc.layer)) {
+            if (std::none_of(doc.rendered.begin(),doc.rendered.end(),[&](const auto& e) {return e.first==key;})) continue;
+            auto entry = doc.project.series(key);
+            entry.id = doc.project.object(key).name + "###" + std::to_string(key);
+            entries.push_back(entry);
+        }
+        plot::PaintPlotEditorAxes(spec, doc.view, true, doc.preview.metrics);
+        for (auto entry : entries) {
+            if (std::find(doc.editor.selected.begin(),doc.editor.selected.end(),plot::SeriesKey(entry.id))!=doc.editor.selected.end())
+                entry.style.lineWidthPt=(entry.style.lineWidthPt<0 ? 1 : entry.style.lineWidthPt)+1.5f;
+            plot::RenderSeries(entry, doc.preview.metrics, &spec);
+        }
+        plot::PaintPlotEditorAxes(spec, doc.view, false, doc.preview.metrics);
+        ImPlot::EndPlot();
+        doc.EndFrame(std::move(requested));
+        plot::RenderPlotEditor(id.c_str(), spec, entries.data(), entries.size(), doc.view, doc.editor, doc.preview.metrics);
+        doc.ApplyEdits();
     }
     void JFMPlotExportControls(JFMPlotDocument &doc)
     {
         ImGui::PushID(&doc);
+        if (ImGui::Button("Undo plot")) (void)doc.editUndo->Undo();
+        ImGui::SameLine(); if (ImGui::Button("Redo plot")) (void)doc.editUndo->Redo();
+        ImGui::SameLine(); if (ImGui::Button("Save figure...")) {
+            try { if (auto file=SaveFileDialog({"JFM figure", "plotlab"}, "figure.plotlab", JFMPlotExportDirectory())) doc.Save(file->Native()); }
+            catch (const std::exception& e) { doc.exportStatus=e.what(); }
+        }
+        ImGui::SameLine(); if (ImGui::Button("Open figure...")) {
+            try { if (auto file=OpenFileDialog({"JFM figure", "plotlab"})) doc.Load(file->Native()); }
+            catch (const std::exception& e) { doc.exportStatus=e.what(); }
+        }
         if (ImGui::Button("Export SVG/PDF/PNG...")) ImGui::OpenPopup("Publication export");
         // Stretch columns need a resolved width inside an auto-sized popup.
         ImGui::SetNextWindowSize({30 * ImGui::GetFontSize(), 0});

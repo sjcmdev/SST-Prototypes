@@ -1,3 +1,4 @@
+#include "Core/PlotExport/PlotEditing.hpp"
 #include "Core/dspch.hpp"
 #include "Presentation/CapLabPrototypePanel.hpp"
 #include "Presentation/SelectionLabel.hpp"
@@ -516,8 +517,16 @@ void CapLabPrototypePanel::RenderPlot() {
             series.push_back(std::move(entry));
         }
         ImGui::PushID(std::to_string(project.graph).c_str());
-        sst::ui::plot::RenderPlot("##cf", std::get<pl::Layer>(p.object(layer).data).spec,
-            series.data(), series.size(), state->view, {}, ImVec2(-1, std::max(200.0f, ImGui::GetContentRegionAvail().y - 40)));
+        auto spec = std::get<pl::Layer>(p.object(layer).data).spec; spec.customAxes = true;
+        auto& editor = plotEditors[project.graph];
+        const auto& dimensions=std::get<pl::Graph>(p.object(project.graph).data);
+        const auto preview=sst::ui::plot::PublicationPreview(dimensions.widthMm,dimensions.heightMm,{ImGui::GetContentRegionAvail().x,std::max(200.f,ImGui::GetContentRegionAvail().y-40)});
+        try {
+            ImGui::PushFont(ResolvePlotPreviewFont(dimensions.fontFamily,dimensions.fontFile),preview.metrics.ToPixels(static_cast<float>(dimensions.fontSizePt)));
+            try {sst::ui::plot::RenderPlot("##cf", spec,series.data(),series.size(),state->view,preview.metrics,preview.size,&editor);}
+            catch (...) {ImGui::PopFont();throw;}
+            ImGui::PopFont();
+        } catch (const std::exception& e) {state->status=e.what();ImGui::TextWrapped("%s",e.what());}
         ImGui::PopID();
         if (state->view.picked && state->view.picked->series==0) {
             for (const auto &a : project.analyses) if (a.at("type")=="AS" && a.at("status")=="valid" &&
@@ -526,7 +535,14 @@ void CapLabPrototypePanel::RenderPlot() {
             state->view.picked.reset();
         }
         state->graphViews[project.graph]=state->view;
-        if (!state->analysisDraft) state->StoreGraphView(project.graph,state->view);
+        if (!state->analysisDraft) {
+            state->StoreGraphView(project.graph,state->view);
+            for (const auto& edit : editor.pending) {
+                const auto result = ExecuteCapLabPlotEdit(*state, layer, edit);
+                if (!result) editor.error = state->status = result.Error().technicalDetails;
+            }
+        }
+        editor.pending.clear();
     }
 }
 void CapLabPrototypePanel::RenderContent() {

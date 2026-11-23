@@ -1,4 +1,5 @@
 #pragma once
+#include <sst/ui/Plot/Editor.hpp>
 #include <map>
 #include <set>
 #include "Presentation/Panels/EditorWindow.hpp"
@@ -46,6 +47,7 @@ private:
     std::uint64_t shownProject = 0;
     View view;
     std::map<pl::Id, double> areaDraft;
+    std::map<pl::Id, sst::ui::plot::PlotEditorState> plotEditors;
     std::uint64_t selectionSeen=UINT64_MAX;
     std::set<pl::Id> treeMeasurements;
     pl::Id detailsSample=0, moveTarget=0;

@@ -47,6 +47,32 @@ def test_png_rounded_pixels(snapshot, tmp_path):
         assert image.info["dpi"] == pytest.approx((300, 300), abs=.01)
 
 
+def test_column_plot_uses_bars_and_validates_errors(snapshot):
+    snapshot["series"][0]["kind"] = 8
+    figure = build_figure(snapshot)
+    bars = figure.axes[0].patches
+    assert len(bars) == 5
+    assert bars[0].get_width() == pytest.approx(.8)
+    assert bars[0].get_height() == 2
+    snapshot["series"][0]["y_error"] = [-1] * 5
+    with pytest.raises(ValueError, match="Invalid yErr"):
+        build_figure(snapshot)
+
+
+def test_masked_points_are_red_crosses_and_invalid_indices_fail(snapshot):
+    snapshot["series"][0]["masked_rows"] = [1, 3]
+    figure = build_figure(snapshot)
+    crosses = figure.axes[0].collections[0]
+    assert crosses.get_offsets().tolist() == [[2., 4.], [4., 8.]]
+    assert crosses.get_facecolor()[0].tolist() == pytest.approx([1, 0, 0, 1])
+    snapshot["series"][0]["style"]["masked_color"] = [0, 1, 0, 1]
+    assert build_figure(snapshot).axes[0].collections[0].get_facecolor()[0].tolist() == pytest.approx([0, 1, 0, 1])
+    for invalid in ([-1], [100], [1.5], [True]):
+        snapshot["series"][0]["masked_rows"] = invalid
+        with pytest.raises(ValueError, match="Invalid worksheet mask row"):
+            build_figure(snapshot)
+
+
 def test_svg_is_vector_and_font_outlines(snapshot, tmp_path):
     target = tmp_path / "figure.svg"
     export_graph(snapshot, target, "svg")
@@ -66,10 +92,16 @@ def test_ranges_ticks_gaps_and_snapshot_are_preserved(snapshot, tmp_path):
     assert [t.get_text() for t in ax.get_xticklabels()] == ["two", "four"]
     assert np.isnan(ax.lines[0].get_ydata()[2])
     assert ax.lines[0].get_linewidth() == 1.5
-    assert ax.lines[0].get_markersize() == 6
+    assert ax.lines[0].get_markersize() == snapshot["series"][0]["style"]["marker_pt"]
     for format in ("svg", "pdf", "png"):
         assert export_graph(snapshot, tmp_path/f"out.{format}", format) == tuple(snapshot["ranges"])
     assert snapshot == before
+
+
+@pytest.mark.parametrize("points", [4, 6, 9])
+def test_marker_size_is_diameter_in_points(snapshot, points):
+    snapshot["series"][0]["style"]["marker_pt"] = points
+    assert build_figure(snapshot).axes[0].lines[0].get_markersize() == pytest.approx(points)
 
 
 def test_log_keeps_gaps_and_limits(snapshot):
@@ -111,7 +143,7 @@ def test_invalid_export_preserves_destination(snapshot, tmp_path, invalid):
 def test_failed_replace_keeps_old_file_and_cleans_temp(snapshot, tmp_path, monkeypatch):
     target=tmp_path/"figure.pdf"; target.write_bytes(b"old")
     def fail(*args): raise PermissionError("replacement denied")
-    monkeypatch.setattr("sst_plotlab.exporter.os.replace",fail)
+    monkeypatch.setattr("sst_plot_export.exporter.os.replace",fail)
     with pytest.raises(PermissionError): export_graph(snapshot,target,"pdf")
     assert target.read_bytes()==b"old"
     assert list(tmp_path.iterdir())==[target]

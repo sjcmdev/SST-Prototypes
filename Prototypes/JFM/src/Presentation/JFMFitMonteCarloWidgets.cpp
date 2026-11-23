@@ -293,11 +293,11 @@ namespace SST::Prototypes::JFM
 		}
 
         JFMPlotExportControls(document);
-        const bool plotFont = BeginJFMPlotFrame(document);
+        const bool plotFont = BeginJFMPlotFrame(document,{ImGui::GetContentRegionAvail().x,std::min(height,std::max(1.f,ImGui::GetContentRegionAvail().y))});
         const auto xLabel = JFMParameterLabel(result.parameterNames[options.xParameter], characteristic);
         const auto yLabel = JFMParameterLabel(result.parameterNames[options.yParameter], characteristic);
         const auto bounds = PopulateJFMMonteCarloPlot(document, *statistics, options, xLabel, yLabel);
-		if (plotFont && ImPlot::BeginPlot("##Covariance", ImVec2(-1.0f, std::min(height, std::max(1.0f, ImGui::GetContentRegionAvail().y))), ImPlotFlags_NoTitle))
+		if (plotFont && ImPlot::BeginPlot("##Covariance", document.preview.size, ImPlotFlags_NoTitle))
 		{
 			ImPlot::SetupAxes(xLabel.c_str(), yLabel.c_str());
             ImPlot::SetupAxisFormat(ImAxis_X1, "%.6g");
@@ -305,10 +305,7 @@ namespace SST::Prototypes::JFM
             ImPlot::SetupLegend(ImPlotLocation_NorthEast, ImPlotLegendFlags_Outside);
             if (options.autoFit)
                 ImPlot::SetupAxesLimits(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, ImGuiCond_Always);
-            for (const auto &[plotId, label] : document.rendered) {
-                auto entry = document.project.series(plotId); entry.id = label;
-                sst::ui::plot::RenderSeries(entry);
-            }
+            SetupJFMPlotAxes(document);
 			const ImPlotRect limits = ImPlot::GetPlotLimits();
 			options.xMinimum = limits.X.Min;
 			options.xMaximum = limits.X.Max;
@@ -319,7 +316,7 @@ namespace SST::Prototypes::JFM
 			figureSpec.x.label = xLabel;
 			figureSpec.y.label = yLabel;
             figureSpec.legend.outside = true;
-			EndJFMPlot(document, figureSpec);
+			EndJFMPlot(document, figureSpec, "##Covariance");
 		}
 		if (plotFont) ImGui::PopFont();
 		ImGui::PopID();

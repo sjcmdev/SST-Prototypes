@@ -1215,15 +1215,6 @@
     {
       "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
       "rule": "python",
-      "line": 121,
-      "code": "if (!IsRuntimeInitialized() || !Py_IsInitialized() || g_PythonRuntimeThreadState == nullptr)",
-      "sha256": "f77b254dd9e5d9293db457a680f6e1dd42a511d63c6f610a70cded579519a3e2",
-      "count": 1,
-      "reason": "Embedded interpreter runtime owns Python lifetime/GIL and script execution."
-    },
-    {
-      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
-      "rule": "python",
       "line": 124,
       "code": "return PyGILState_Ensure();",
       "sha256": "33ad87eec282bcf5b9f6a097e3959cc0dc0f889698599946c4ba3268c7b2caf0",
@@ -4120,15 +4111,6 @@
       "reason": "JFM project/bundle file adapter or embedded Python import/runtime binding."
     },
     {
-      "file": "Prototypes/JFM/src/IO/JFMPythonImportBridge.cpp",
-      "rule": "python",
-      "line": 227,
-      "code": "if (!PyGILState_Check())",
-      "sha256": "9635aa581c03300f3615af3fa9894275b3cdf5e9ba5e6bd13ce0bcd020323235",
-      "count": 1,
-      "reason": "JFM project/bundle file adapter or embedded Python import/runtime binding."
-    },
-    {
       "file": "Prototypes/JFM/src/IO/JFMPythonRuntime.cpp",
       "rule": "python",
       "line": 18,
@@ -4265,15 +4247,6 @@
     },
     {
       "file": "Prototypes/PlotLab/src/PlotLabExport.cpp",
-      "rule": "text-json",
-      "line": 103,
-      "code": ".dump();",
-      "sha256": "cfb9ef9bebfdb4c2118193ce8cc66a6059a0113489d525597a296e951ed34bd8",
-      "count": 1,
-      "reason": "Export-to-disk/Python plotting adapter."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabExport.cpp",
       "rule": "python",
       "line": 17,
       "code": "auto sys = nb::module_::import_(\"sys\");",
@@ -4342,15 +4315,6 @@
       "code": "return {nb::cast<std::string>(result[0]), nb::cast<std::string>(result[1])};",
       "sha256": "403f481b23beb31eef902316ef595033e74a3a4df12baa8956d9ceed877a57ba",
       "count": 2,
-      "reason": "Export-to-disk/Python plotting adapter."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabExport.cpp",
-      "rule": "python",
-      "line": 51,
-      "code": "} catch (const nb::python_error &e) { throw std::runtime_error(e.what()); }",
-      "sha256": "e03911c2e1802be2d8ee4881e71245ae38741b11fa65f51bb4d52e118761f0f3",
-      "count": 1,
       "reason": "Export-to-disk/Python plotting adapter."
     },
     {
@@ -4982,6 +4946,204 @@
       "sha256": "e8b4207850b45111ac34ede8010c1e6aa1c699a70431b39dedb0b0b8a07ffaa6",
       "count": 1,
       "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "text-json",
+      "line": 59,
+      "code": "return Json::parse(nb::cast<std::string>(nb::module_::import_(\"json\").attr(\"dumps\")(request)));",
+      "sha256": "6804f87ce561625782887a4b6b1951d9702115f0fd1d9506ac843eeaff2f2283",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "text-json",
+      "line": 61,
+      "code": "inline nb::object Response(const Json& value) { return nb::module_::import_(\"json\").attr(\"loads\")(nb::str(value.dump().c_str())); }",
+      "sha256": "c32a440b77132d8587218b8e4cf6bd1d464c575ed6389b9370925f79b21130ec",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 58,
+      "code": "inline Json Request(nb::dict request) {",
+      "sha256": "b58c82a28d0e29f2e047807ed7ba79b3323fb88bc6880fd8fd3b4f2b129dd431",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 59,
+      "code": "return Json::parse(nb::cast<std::string>(nb::module_::import_(\"json\").attr(\"dumps\")(request)));",
+      "sha256": "6804f87ce561625782887a4b6b1951d9702115f0fd1d9506ac843eeaff2f2283",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 61,
+      "code": "inline nb::object Response(const Json& value) { return nb::module_::import_(\"json\").attr(\"loads\")(nb::str(value.dump().c_str())); }",
+      "sha256": "c32a440b77132d8587218b8e4cf6bd1d464c575ed6389b9370925f79b21130ec",
+      "count": 3,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 68,
+      "code": "nb::object Edit(pl::Id layer, nb::dict request) {",
+      "sha256": "bc5d5047fc2d04eeabd4e15373789ea1c696f55a66ccc6884eb99503e5e82700",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 76,
+      "code": "template<class Host> void Bind(nb::module_& module) {",
+      "sha256": "d1d7f75935cb00a62b42caac226a725d32d116a908bce9b603940cec7caecdc2",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 78,
+      "code": "nb::class_<S>(module,\"PlotSession\")",
+      "sha256": "03125788aab489c5a1954fdb17e4dc3766d562934e7aeddfb851af92404fff10",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 79,
+      "code": ".def(nb::init<const std::string&>(),nb::arg(\"project_json\"))",
+      "sha256": "76579d7dafca565f20a63d09e7aa3adaa2a31d8f3ae23970bf7b1b7a42c2b518",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 80,
+      "code": ".def(\"edit\",&S::Edit,nb::arg(\"layer_id\"),nb::arg(\"request\"))",
+      "sha256": "2f9e9910c94f5032933852bd1e18a0462276aae8675b5a25568280a9ae1dc571",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 85,
+      "code": ".def(\"snapshot\",[](S& s,pl::Id graph,nb::list ranges) {",
+      "sha256": "8aef4c9d42ae93973d29ac36ab9b91258da0c18fc5c4225ab2033286617e0216",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 86,
+      "code": "if(nb::len(ranges)!=4) throw std::invalid_argument(\"Expected four axis limits\");",
+      "sha256": "0a534d8379d018df578fdaab7567a308a0f0d0a21e3b1314504b318c15ba7d8e",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 88,
+      "code": "return nb::module_::import_(\"json\").attr(\"loads\")(nb::str(pl::snapshotJson(*pl::snapshotGraph(*s.project,graph,view)).c_str()));",
+      "sha256": "9ab49e3fffe7fbeaf0b6aa1951f63d8705aae4e37414307f20596f81ddb3f1db",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 89,
+      "code": "},nb::arg(\"graph_id\"),nb::arg(\"ranges\"));",
+      "sha256": "d138c43684b86ddc21d52fd56112959bdade5a44a184221b556b8a8466218c3e",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "text-json",
+      "line": 256,
+      "code": "if (!result) return Json{{\"ok\",false},{\"error\",{{\"code\",result.Error().code},{\"message\",result.Error().technicalDetails}}}}.dump();",
+      "sha256": "831ef7a4e2ce526a328237af26eb31e8fa74335b26aed8e3a83a77b63051d748",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 513,
+      "code": "request.pythonSnapshot=[snapshot=graph.snapshot]() -> nanobind::object {",
+      "sha256": "180cb6f311f34db52a7511c098e27c2632254ad55fe320ce11b8ec65f127808e",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 514,
+      "code": "return nanobind::module_::import_(\"json\").attr(\"loads\")(nanobind::str(pl::SnapshotJson(*snapshot).c_str()));",
+      "sha256": "f3df2cf50068b01a17a4056a388f4189eefd5f5525fdf3171df9b5ea49988326",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 492,
+      "code": ".def(\"plot_edit\", [](Document& doc, pl::Id layer, nanobind::dict request) {",
+      "sha256": "5d6d3580b797a6203fa92b53e0b5c8e5e16ef4762cbc4ab823bcc4594a13b9d4",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 90,
+      "code": "view.viewport=plot::Bounds{nb::cast<double>(ranges[0]),nb::cast<double>(ranges[1]),nb::cast<double>(ranges[2]),nb::cast<double>(ranges[3])};",
+      "sha256": "8de971bfcfe326893ad122cf8a9c7d68f61a4e8f003562a7d5b0cc72c8a5beee",
+      "count": 4,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 563,
+      "code": "}, nanobind::arg(\"worksheet_id\"), nanobind::arg(\"column_ids\"), nanobind::arg(\"kind\") = 2,",
+      "sha256": "fb2c32b5af375361d2c96ae88bca93f302256d85c7f0fbf9398fb3eda81134cb",
+      "reason": "Nanobind plot_columns edge: stable IDs and plot kind convert directly to typed C++ inputs.",
+      "count": 3
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 564,
+      "code": "nanobind::arg(\"graph_id\") = 0, nanobind::arg(\"x_column_id\") = 0, nanobind::arg(\"y_error_column_id\") = 0)",
+      "sha256": "8503122fcb50c0b6bde944e3dda946cd6fc0c014d6d17359899bc785bc8291bb",
+      "reason": "Nanobind plot_columns edge: stable IDs and plot kind convert directly to typed C++ inputs.",
+      "count": 3
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabExport.cpp",
+      "rule": "python",
+      "line": 63,
+      "code": "} catch (const nb::python_error &e) { throw std::runtime_error(FriendlyFontError(e.what())); }",
+      "sha256": "2a98aced9c1d2c93f660f43e75cba5f73e4a8911c1c73a9f58d7beb5ba596e76",
+      "reason": "Python export/font edge: translate interpreter errors into a short user-facing message; no C++ data transport.",
+      "count": 1
     }
   ],
   "known-debt": [
@@ -5909,15 +6071,6 @@
       "line": 249,
       "code": "if (!PythonInterpreter::IsRuntimeInitialized())",
       "sha256": "9faeef77c6913b536085ccb053571211f6df166cfad6e00c2d3216756a064765",
-      "count": 2,
-      "reason": "F33: embedded Python prefit bridge converts typed curves; retained until prefit migration."
-    },
-    {
-      "file": "Prototypes/JFM/src/IO/JFMPythonPrefitBridge.cpp",
-      "rule": "python",
-      "line": 251,
-      "code": "if (!PyGILState_Check())",
-      "sha256": "9635aa581c03300f3615af3fa9894275b3cdf5e9ba5e6bd13ce0bcd020323235",
       "count": 2,
       "reason": "F33: embedded Python prefit bridge converts typed curves; retained until prefit migration."
     },

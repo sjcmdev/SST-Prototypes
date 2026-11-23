@@ -49,4 +49,15 @@ assert command("analysis_column", column_id=6)["values_column_units"] == [2, Non
 command("statistics", worksheet_id=4)
 command("recompute")
 assert not session.command(dict(action="reduce",worksheet_id=4,every_n=0))["ok"]
+command("load_project", project=fixture)
+before = content()
+command("clear_cells", worksheet_id=4, column_ids=[6], row_ids=[8])
+assert next(obj for obj in content() if obj["id"] == 6)["values"] == [2, "nan", 6]
+assert command("analysis_column", column_id=6)["values_column_units"] == [2, None, 6]
+assert command("render_cell", column_id=6, row_index=1)["text"] == ""
+command("undo")
+assert content() == before
+for columns, rows in [([6], [8.5]), ([6], [999]), ([0], [8]), ([5.5], [8]), ([4], [8])]:
+    assert not session.command(dict(action="clear_cells", worksheet_id=4, column_ids=columns, row_ids=rows))["ok"]
+    assert content() == before
 print("P6c embedded operations passed", flush=True)

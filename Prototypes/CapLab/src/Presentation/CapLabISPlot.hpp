@@ -11,7 +11,14 @@ struct NyquistScale {
 // Read the rendered ranges after ImPlot has constrained resize and wheel zoom.
 inline NyquistScale RenderISPlot(const char* id, const sst::ui::plot::PlotSpec& spec,
     const sst::ui::plot::SeriesEntryView* series, std::size_t count,
-    sst::ui::plot::PlotViewState& state, ImVec2 size) {
+    sst::ui::plot::PlotViewState& state, ImVec2 size, sst::ui::plot::PlotEditorState* editor = nullptr, const sst::ui::plot::PreviewMetrics& metrics = {}) {
+    if (editor) {
+        auto editable=spec; editable.customAxes=true;
+        sst::ui::plot::RenderPlot(id,editable,series,count,state,metrics,size,editor);
+        const auto* plot=ImPlot::GetPlot(id);
+        if (!plot || !spec.equalAspect) return {};
+        return {plot->PlotRect.GetWidth()/plot->Axes[ImAxis_X1].Range.Size(),plot->PlotRect.GetHeight()/plot->Axes[ImAxis_Y1].Range.Size()};
+    }
     state.picked.reset();
     // Native fitting expands both equal-scale axes without cropping the data.
     if (spec.equalAspect && !state.fitted) ImPlot::SetNextAxesToFit();

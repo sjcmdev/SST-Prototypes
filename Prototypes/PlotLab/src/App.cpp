@@ -103,22 +103,6 @@ namespace SST
             if (!bound)
                 throw std::runtime_error(bound.Error().technicalDetails);
         }
-        application.GetEditorLayer().RegisterMenuRenderer("plotlab",
-                                                          [state, safe](EditorServices &)
-                                                          {
-                                                              if (ImGui::BeginMenu("PlotLab"))
-                                                              {
-                                                                  if (ImGui::MenuItem("New", "Ctrl+N"))
-                                                                      safe([&] { state->File(FileAction::New); });
-                                                                  if (ImGui::MenuItem("Open", "Ctrl+O"))
-                                                                      safe([&] { state->File(FileAction::Open); });
-                                                                  if (ImGui::MenuItem("Save", "Ctrl+S"))
-                                                                      safe([&] { state->Save(); });
-                                                                  if (ImGui::MenuItem("Save as"))
-                                                                      safe([&] { state->Save(true); });
-                                                                  ImGui::EndMenu();
-                                                              }
-                                                          });
         if (smokeTest)
         {
             auto table = pl::CsvImporter{}.read("X,Y\n1,2\n2,4\n3,6\n");
@@ -148,7 +132,13 @@ namespace SST
             state->RefreshWindows();
         }
         // The preview flag opens the fixture's derived B column for CLI screenshot validation.
-        application.GetEditorLayer().RegisterPanel<WorkspacePanel>(state,columnValuesPreview?pl::Id{6}:pl::Id{0},dataFilterPreview?1:0);
+        auto& editor = application.GetEditorLayer();
+        const auto panelId = editor.RegisterPanel<WorkspacePanel>(state,columnValuesPreview?pl::Id{6}:pl::Id{0},dataFilterPreview?1:0);
+        auto panel = std::dynamic_pointer_cast<WorkspacePanel>(editor.FindPanel(panelId).lock());
+        panel->RegisterCommands(runtime.keymapResolver.lock());
+        editor.GetWindows()->SetDefaultLayout([panel = WeakRef<WorkspacePanel>(panel)] { if (auto p = panel.lock()) p->ResetLayout(); });
+        editor.RegisterMenuRenderer("plotlab", [panel](EditorServices&) { panel->RenderMenus(); });
+        editor.RegisterMenuRenderer("help", [panel](EditorServices&) { panel->RenderMenus(true); });
         application.InsertLayerBefore(LayerId::ImGui, CreateUnique<WorkspaceLayer>(state, smokeTest));
     }
 } // namespace SST

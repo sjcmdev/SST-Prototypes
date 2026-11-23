@@ -1,4 +1,5 @@
-#include "Presentation/JFMPlotDocument.hpp"
+﻿#include "Presentation/JFMPlotDocument.hpp"
+#include "Core/PlotExport/PlotEditing.hpp"
 #include "Presentation/JFMFitMonteCarloWidgets.hpp"
 #include "Analysis/JFMMonteCarloStatistics.hpp"
 #include <algorithm>
@@ -15,6 +16,7 @@ namespace SST::Prototypes::JFM
     namespace plot = sst::ui::plot;
     JFMPlotDocument::JFMPlotDocument()
     {
+        editCommands->SetUndoStack(editUndo);
         graph = project.reserveId(); layer = project.reserveId(); workbook = project.reserveId();
         project.change("JFM figure", {{graph, project.root(), "Figure", 0, pl::Graph{}},
             {layer, graph, "Axes", 0, pl::Layer{}}, {workbook, project.root(), "Results", 0, pl::Workbook{}}}).apply(project);
@@ -36,7 +38,24 @@ namespace SST::Prototypes::JFM
             id = project.reserveId();
             source.worksheet = project.reserveId(); source.x = project.reserveId(); source.y = project.reserveId();
         }
+        else if (!project.objects().contains(found->second)) return 0;
         else { id = found->second; source = std::get<pl::Plot>(project.object(id).data); }
+        bool unchanged=false;
+        if(found!=series.end() && bool(source.yError)==bool(entry.data.yError)) {
+            const auto& oldX=std::get<std::vector<double>>(std::get<pl::Column>(project.object(source.x).data).values);
+            const auto& oldY=std::get<std::vector<double>>(std::get<pl::Column>(project.object(source.y).data).values);
+            const auto* oldError=source.yError ? &std::get<std::vector<double>>(std::get<pl::Column>(project.object(source.yError).data).values) : nullptr;
+            std::size_t row=0;unchanged=true;
+            for(std::size_t i=0;i<entry.data.count;++i) {
+                const double value=absoluteCurrent?std::abs(entry.data.y[i]):entry.data.y[i];
+                if(!std::isfinite(entry.data.x[i]) || !std::isfinite(value) || (absoluteCurrent && value<=0)) continue;
+                if(row>=oldX.size() || std::memcmp(&oldX[row],entry.data.x+i,sizeof(double)) || std::memcmp(&oldY[row],&value,sizeof(double)) ||
+                   (oldError && std::memcmp(&(*oldError)[row],entry.data.yError+i,sizeof(double)))) {unchanged=false;break;}
+                ++row;
+            }
+            unchanged=unchanged && row==oldX.size();
+        }
+        if(!unchanged) {
         pl::Worksheet sheet;
         if (found != series.end()) sheet = std::get<pl::Worksheet>(project.object(source.worksheet).data);
         std::vector<double> x, y, error;
@@ -67,34 +86,86 @@ namespace SST::Prototypes::JFM
             if (!source.yError) source.yError = project.reserveId();
             column(source.yError, "YError", pl::Role::YError, std::move(error));
         } else { if (source.yError) erase.push_back(source.yError); source.yError = 0; }
-        source.kind = entry.kind; source.style = entry.style; source.visible = entry.visible;
-        const auto order = static_cast<std::uint64_t>(rendered.size());
-        auto styleKey = [](const plot::SeriesStyle &s) { return std::tie(s.color,s.markerFill,s.markerOutline,s.marker,s.lineWidthPt,s.markerSizePt,s.errorCapPt,s.legend); };
+        }
+        source.kind = entry.kind;
+        const auto previous=lastInput.find(id);
+        const bool created=found==series.end();
+        if(created || (previous!=lastInput.end() && !(previous->second.style==entry.style))) source.style=entry.style;
+        if(created || (previous!=lastInput.end() && previous->second.visible!=entry.visible)) source.visible=entry.visible;
+        source.group=entry.group;
+        const auto order=created ? static_cast<std::uint64_t>(project.children(layer).size()) : project.object(id).order;
+        const auto displayName=created || !source.legendNameOverridden ? name : project.object(id).name;
+        lastInput[id]={name,entry.style,entry.visible};
         bool changed = found == series.end();
         if (!changed) {
             const auto &o = project.object(id); const auto &old = std::get<pl::Plot>(o.data);
-            changed = o.name != name || o.order != order || old.kind != source.kind || old.visible != source.visible
-                || old.yError != source.yError || styleKey(old.style) != styleKey(source.style);
+            changed = o.name != displayName || o.order != order || old.kind != source.kind || old.visible != source.visible
+                || old.yError != source.yError || old.group != source.group || !(old.style == source.style);
         }
-        if (changed) changes.push_back({id, layer, name, 0, source, order});
+        if (changed) changes.push_back({id, layer, displayName, 0, source, order});
         if (!changes.empty()) project.change("Refresh JFM results", std::move(changes), std::move(erase)).apply(project);
-        series[key] = id; active.insert(id); rendered.emplace_back(id, entry.id);
+        series[key] = id; active.insert(id); rendered.emplace_back(id, displayName + "###" + std::to_string(id));
         return id;
     }
     void JFMPlotDocument::EndFrame(plot::PlotSpec spec)
     {
         std::vector<pl::Object> changes;
-        for (const auto &[key, id] : series) if (!active.contains(id)) {
-            auto o = project.object(id); auto &p = std::get<pl::Plot>(o.data);
-            if (p.visible) { p.visible = false; changes.push_back(std::move(o)); }
+        view.excluded.clear();
+        for (const auto& [key,id]:series) if(project.objects().contains(id) && !active.contains(id)) view.excluded.push_back(std::to_string(id));
+        SetSpec(std::move(spec));
+        if (!plot::StoredViewEqual(std::get<pl::Layer>(project.object(layer).data).view,view)) {
+            auto saved = project.object(layer); std::get<pl::Layer>(saved.data).view = view;
+            changes.push_back(std::move(saved));
         }
-        const auto &old = std::get<pl::Layer>(project.object(layer).data).spec;
-        if (old.x.label != spec.x.label || old.y.label != spec.y.label || old.x.scale != spec.x.scale
-            || old.y.scale != spec.y.scale
-            || old.legend.visible != spec.legend.visible
-            || old.legend.outside != spec.legend.outside || old.legend.interactive != spec.legend.interactive)
-            changes.push_back({layer, graph, "Axes", 0, pl::Layer{std::move(spec)}});
         if (!changes.empty()) project.change("Refresh JFM figure", std::move(changes)).apply(project);
+    }
+    void JFMPlotDocument::SetSpec(plot::PlotSpec requested)
+    {
+        auto object = project.object(layer);
+        auto& current = std::get<pl::Layer>(object.data).spec;
+        auto spec = current;
+        if (!baseSpec && !current.customAxes) spec = requested;
+        else if (baseSpec) {
+            if (requested.x.label != baseSpec->x.label) spec.x.label = requested.x.label;
+            if (requested.y.label != baseSpec->y.label) spec.y.label = requested.y.label;
+            if (requested.x.scale != baseSpec->x.scale) { spec.x.scale = requested.x.scale; spec.x.range.reset(); }
+            if (requested.y.scale != baseSpec->y.scale) { spec.y.scale = requested.y.scale; spec.y.range.reset(); }
+            if (!(requested.legend == baseSpec->legend)) spec.legend = requested.legend;
+        }
+        spec.padding = requested.padding; spec.customAxes = true;
+        baseSpec = requested;
+        if (!(current == spec)) { current = std::move(spec); project.change("Refresh JFM axes", {std::move(object)}).apply(project); }
+    }
+    void JFMPlotDocument::ApplyEdits()
+    {
+        auto pending = std::move(editor.pending); editor.pending.clear();
+        for (const auto& edit : pending) {
+            const auto result = ExecutePlotEdit(*editCommands, engine, layer, edit,
+                [owner=weak_from_this()] { if (auto doc=owner.lock()) { doc->view = std::get<pl::Layer>(doc->project.object(doc->layer).data).view; doc->view.visibility.clear(); } });
+            if (!result) editor.error = result.Error().technicalDetails;
+        }
+    }
+    void JFMPlotDocument::Save(const std::filesystem::path& path) const { project.save(path); }
+    void JFMPlotDocument::Load(const std::filesystem::path& path)
+    {
+        auto loaded = pl::Project::load(path);
+        pl::Id loadedGraph=0, loadedLayer=0, loadedWorkbook=0;
+        for (const auto& [id,object] : loaded.objects()) {
+            if (std::holds_alternative<pl::Graph>(object->data)) { if (loadedGraph) throw std::invalid_argument("Expected one JFM figure"); loadedGraph=id; }
+            if (std::holds_alternative<pl::Workbook>(object->data)) loadedWorkbook=id;
+        }
+        if (!loadedGraph || !loadedWorkbook || loaded.children(loadedGraph).size()!=1) throw std::invalid_argument("Expected a JFM figure with its source workbook");
+        loadedLayer=loaded.children(loadedGraph).front();
+        std::map<std::string,pl::Id> sources;
+        for (auto id : loaded.children(loadedLayer)) {
+            const auto& plot = std::get<pl::Plot>(loaded.object(id).data);
+            sources[loaded.object(plot.worksheet).name]=id;
+        }
+        for (auto sheet : loaded.children(loadedWorkbook)) if (!sources.contains(loaded.object(sheet).name)) sources[loaded.object(sheet).name]=loaded.reserveId();
+        project=std::move(loaded); graph=loadedGraph; layer=loadedLayer; workbook=loadedWorkbook;
+        series=std::move(sources); lastInput.clear(); baseSpec.reset(); active.clear(); rendered.clear();
+        view=std::get<pl::Layer>(project.object(layer).data).view;
+        editor={}; editUndo->Clear();
     }
     std::shared_ptr<const pl::GraphSnapshot> JFMPlotDocument::Snapshot() const
     {
@@ -146,7 +217,7 @@ namespace SST::Prototypes::JFM
                 plot::SeriesKind::Scatter, style, options.showSigmaClasses[group] && !x[group].empty()});
         }
         plot::PlotSpec spec; spec.x.label = xLabel; spec.y.label = yLabel;
-        spec.legend.outside = true;
+        spec.legend.outside = true;spec.padding=options.zoomOut;
         doc.EndFrame(spec);
         auto padded = [&](double lo, double hi) {
             // Physical values can be far below one ampere; never impose an absolute span.
@@ -160,3 +231,4 @@ namespace SST::Prototypes::JFM
     }
 
 }
+
