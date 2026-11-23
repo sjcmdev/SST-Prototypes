@@ -36,7 +36,7 @@ void Idle(Workflow &w) {ASSERT_TRUE(Pump(w,[&]{return !w.Pending();}));}
 struct TwoDevices {
     Workflow w{CreateRef<JobSystem>(nullptr,4)};Gate gate{*w.jobs};std::string a,b;
     TwoDevices() {
-        w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);a=w.project.active_device;
+        w.lightResponse=true;w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));a=w.project.active_device;
         EXPECT_TRUE(w.Dispatch({{"operation","device_duplicate"},{"name","Second"}}).at("ok").get<bool>());Idle(w);b=w.project.active_device;
         w.project.compare_set={a,b};
     }
@@ -63,7 +63,7 @@ TEST(Lanes,CancellingOneDeviceLeavesTheOtherRunning) {
     EXPECT_TRUE(t.w.Device(t.a).result.empty());EXPECT_FALSE(t.w.Device(t.b).result.empty());
 }
 TEST(Lanes,PerDeviceOrderEditEditRunIsKept) {
-    TwoDevices t;auto d1=t.w.Device(t.a).document,d2=d1;d1["temperature_K"]=301;d2["temperature_K"]=302;
+    TwoDevices t;auto d1=t.w.Device(t.a).Document(),d2=d1;d1["temperature_K"]=301;d2["temperature_K"]=302;
     ASSERT_TRUE(t.w.jobs->PauseAllJobs());
     t.w.Submit(t.a,{{"operation","edit"},{"document",d1}});
     t.w.Submit(t.a,{{"operation","edit"},{"document",d2}});
@@ -71,10 +71,10 @@ TEST(Lanes,PerDeviceOrderEditEditRunIsKept) {
     EXPECT_EQ(t.w.LaneOf(t.a).queue.size(),2u);EXPECT_FALSE(t.w.Busy(t.b));
     t.gate.order.clear();ASSERT_TRUE(t.w.jobs->ResumeAllJobs());Idle(t.w);
     ASSERT_EQ(t.gate.order.size(),3u);EXPECT_EQ(t.gate.order[0],"edit");EXPECT_EQ(t.gate.order[1],"edit");EXPECT_EQ(t.gate.order[2],"run");
-    EXPECT_EQ(t.w.Device(t.a).document.at("temperature_K"),302);EXPECT_FALSE(t.w.Device(t.a).result.empty());
+    EXPECT_EQ(t.w.Device(t.a).Document().at("temperature_K"),302);EXPECT_FALSE(t.w.Device(t.a).result.empty());
 }
 TEST(Lanes,NewestQueuedRequestOfAKeyWins) {
-    TwoDevices t;auto d=t.w.Device(t.a).document;d["temperature_K"]=303;
+    TwoDevices t;auto d=t.w.Device(t.a).Document();d["temperature_K"]=303;
     ASSERT_TRUE(t.w.jobs->PauseAllJobs());
     t.w.Submit(t.a,{{"operation","edit"},{"document",d}});
     t.w.Submit(t.a,{{"operation","run"},{"tag",1}},"auto");

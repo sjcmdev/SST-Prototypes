@@ -45,7 +45,12 @@ SL_JOB(PreviewBatch, "preview_batch", "Preview batch", "Member list of a batch s
 SL_JOB(QuickSweep, "quick_sweep", "Quick parameter sweep", "Sweep one parameter around its value", "", "", true);
 SL_JOB(BatchParameters, "batch_parameters", "List batch parameters", "Sweepable parameters of the active device");
 SL_JOB(SelectBatchMember, "batch_select", "Select batch member", "Show one batch member", "", "", true);
-SL_JOB(SetBatchSettings, "batch_settings", "Batch settings", "Store the batch spec and recorder columns", "", "", true);
+struct SetBatchSettings : Req<SetBatchSettings> {
+    static constexpr Info info{"batch_settings","Batch settings","Store the batch spec and recorder columns","","",true};
+    std::shared_ptr<const BatchDraft> batch;std::shared_ptr<const RecorderDraft> recorder;
+    static SetBatchSettings Make(std::shared_ptr<const BatchDraft> batch,std::shared_ptr<const RecorderDraft> recorder={}){SetBatchSettings c;c.batch=std::move(batch);c.recorder=std::move(recorder);return c;}
+    Out Execute(ILabStore& s) const {if(batch || recorder){if(s.Busy())return Reject("busy","Busy","A job is still active");s.BatchTyped(batch,recorder);return {};}return Job(s,ToJson());}
+};
 SL_JOB(Inspect, "inspect", "Inspect device model", "Validate the active device and report its model");
 struct RunAll : Req<RunAll> {
     static constexpr Info info{"run_all", "Calculate all compared devices", "One run per device checked for compare", "", "", false, true};
@@ -63,6 +68,9 @@ struct SetAutoRecalculate : Req<SetAutoRecalculate> {
 };
 // Document and history (Edit.cpp)
 struct EditDocument : Req<EditDocument> {
+    std::shared_ptr<const ProjectDraft> draft;
+    std::string gesture;
+    static EditDocument Make(std::shared_ptr<const ProjectDraft> value,std::string gesture={}) {EditDocument c;c.draft=std::move(value);c.gesture=std::move(gesture);return c;}
     static constexpr Info info{"edit", "Edit device", "Replace the device document or apply a patch", "", "", true};
     static EditDocument Replace(Json document, std::string gesture = {}) {auto c = With({{"document", std::move(document)}});if(!gesture.empty())c.args["gesture_id"] = std::move(gesture);return c;}
     static EditDocument Patch(Json patch) {return With({{"patch", std::move(patch)}});}

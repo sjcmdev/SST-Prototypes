@@ -24,7 +24,7 @@ bool Settled(Workflow &w) {return Pump(w,[&]{return !w.Pending() && !w.IoPending
 std::string Read(const std::filesystem::path &p) {std::ifstream in(p,std::ios::binary);return {std::istreambuf_iterator<char>(in),{}};}
 struct App {
     Ref<EventBus> bus=CreateRef<EventBus>();IOLayer io{bus};Workflow w{CreateRef<JobSystem>(nullptr,2),{},bus};
-    App() {w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.RegisterIo(io);}
+    App() {w.lightResponse=true;w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));w.RegisterIo(io);}
 };
 }
 TEST(Io,SaveAsAndOpenThroughEvents) {

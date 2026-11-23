@@ -1,3 +1,4 @@
+#include "DocumentFixture.hpp"
 #include <gtest/gtest.h>
 #include "Workflow.hpp"
 #include <scaps_core/batch.hpp>
@@ -28,7 +29,7 @@ TEST(Typed2Probe, SetupAndWorkflow) {
         const auto execute=[&](Json request) {EXPECT_TRUE(w.Dispatch(request).value("ok",false));while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response;};
         execute({{"operation","project_load"},{"path",sweep}});
         for(const auto& d:w.project.devices)if(d->name=="light")w.project.active_device=d->id;
-        const auto document=w.Current().document;const auto plan=BatchPreview(document,w.Current().batchSpec);
+        const auto document=w.Current().Document();const auto plan=BatchPreview(document,w.Current().BatchSpec());
         ASSERT_EQ(plan.at("combinations").size(),342u);
         const auto parameters=BatchParameters(document);
         const auto draft=DraftFromDocument(document);
@@ -110,14 +111,14 @@ TEST(TypedBatch, GoldenJsonAdapter) {
     std::ifstream input(path);ASSERT_TRUE(input.good());Json expected;input>>expected;EXPECT_EQ(actual,expected);
 }
 TEST(TypedBatch, RecorderAcquiresOnlyRequestedProfile) {
-    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().document["mesh"]["points_per_layer"]=21;w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));EditFixture(w.Current(),[&](Json& document){document["mesh"]["points_per_layer"]=21;});EditFixture(w.Current(),[&](Json& document){document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};});
     const auto execute=[&](Json request){EXPECT_TRUE(w.Dispatch(request).value("ok",false));while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response;};
     auto spec=BatchDefaults();spec["axes"][0]={{"parameter_id","temperature_K"},{"values",{300.}}};execute({{"operation","run_batch"},{"spec",spec}});
     for(const auto& p:w.Current().batchResult.typed()->rows[0]->iv)EXPECT_FALSE(p.profiles);
     execute({{"operation","record_batch"},{"columns",Json::array({{{"id","n"},{"quantity","profile"},{"field","n_m3"},{"voltage_V",0.},{"x_m",0.}}})}});
     const auto row=w.Current().batchResult.typed()->rows[0];ASSERT_TRUE(row->iv[0].profiles);EXPECT_EQ(row->iv[0].profiles->fields.size(),1u);EXPECT_FALSE(row->iv[1].profiles);
     scaps_core::BatchSpec expected;expected.voltages_V={0.,.01};scaps_core::BatchOptions options;options.include_curves=true;options.profile_biases={0.};options.profile_fields={"n_m3"};
-    const auto direct=scaps_core::run_batch(Model(w.Current().document),expected,options);
+    const auto direct=scaps_core::run_batch(Model(w.Current().Document()),expected,options);
     EXPECT_EQ(std::bit_cast<std::uint64_t>(row->values.at("n").value),std::bit_cast<std::uint64_t>(direct.rows[0]->iv[0].profiles->fields.at("n_m3")[0]));
 }
 TEST(TypedBoundary, IntegerFileNumbersRemainLosslessAndAvailableToPlots) {
@@ -129,14 +130,14 @@ TEST(TypedBoundary, IntegerFileNumbersRemainLosslessAndAvailableToPlots) {
 TEST(TypedBatch, InitialWorkingPointPreservedAtJsonEdge) {
     auto project=scaps_core::make_default_device_project();project.layers.resize(1);project.layers[0].defects.clear();project.mesh.points_per_layer=11;
     Json spec={{"voltages_V",{0.,.01}},{"include_curves",true},{"initial_state",{{"temperature_K",320.},{"voltage_V",.02},{"generation_total_m2_s",0.}}},{"export_initial_state_wp2",true}};
-    scaps_core::BatchSpec input;input.voltages_V={0.,.01};input.initial_state=BatchInitialStateModel(project,spec);scaps_core::BatchOptions options;options.include_curves=true;options.profile_biases=input.voltages_V;
+    scaps_core::BatchSpec input;input.voltages_V={0.,.01};auto settings=BatchDefaults();settings.update(spec);input=PrepareBatchMember(project,*ReadBatchDraft(settings),std::move(input));scaps_core::BatchOptions options;options.include_curves=true;options.profile_biases=input.voltages_V;
     const auto actual=BatchRowJson(scaps_core::run_batch_member(project,input,options));
     const auto expected=Json::parse(scaps_core::run_batch_json(scaps_core::serialize_device_project_yaml(project),spec.dump())).at("rows")[0];
     for(const auto* key:{"initial_state","initial_state_status","initial_state_hash","initial_state_wp2","curves"})EXPECT_EQ(actual.at(key),expected.at(key))<<key;
 }
 TEST(TypedBatch, RecorderAndRetryPreserveOpaqueLegacyFields) {
     Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.autoRecalculate=false;w.autoRecalculateBand=false;
-    w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().document["mesh"]["points_per_layer"]=11;w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};
+    w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));EditFixture(w.Current(),[&](Json& document){document["mesh"]["points_per_layer"]=11;});EditFixture(w.Current(),[&](Json& document){document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};});
     const auto execute=[&](Json request){ASSERT_TRUE(w.Dispatch(request).value("ok",false));while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}ASSERT_TRUE(w.response.value("ok",false))<<w.response;};
     auto spec=BatchDefaults();spec["axes"][0]={{"parameter_id","temperature_K"},{"values",{300.,301.}}};execute({{"operation","run_batch"},{"spec",spec}});
     auto saved=w.Current().batchResult.typed()->Dump();

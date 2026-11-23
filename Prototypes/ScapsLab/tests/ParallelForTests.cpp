@@ -95,7 +95,7 @@ namespace {
 using namespace SST::ScapsLab;
 Json RunBatchRows(std::size_t workers) {
     using namespace SST::ScapsLab;
-    Workflow w(SST::CreateRef<SST::JobSystem>(nullptr,workers));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(SST::CreateRef<SST::JobSystem>(nullptr,workers));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     auto spec=BatchDefaults();spec["axes"][0]["count"]=5;
     (void)w.Dispatch({{"operation","run_batch"},{"spec",spec}});
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}

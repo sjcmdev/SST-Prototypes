@@ -118,8 +118,8 @@ public:
         layerWindows.BeginFrame();
         for(auto it=w.pinnedLayers.begin();it!=w.pinnedLayers.end();) {
             std::string name;
-            for(const auto &d:w.project.devices) if(d->id==it->first && d->document.is_object() && d->document.contains("layers"))
-                for(const auto &l:d->document.at("layers")) if(l.value("scapslab_id",std::string{})==it->second) name=l.value("name",std::string("layer"));
+            for(const auto &d:w.project.devices) if(d->id==it->first && d->Document().is_object() && d->Document().contains("layers"))
+                for(const auto &l:d->Document().at("layers")) if(l.value("scapslab_id",std::string{})==it->second) name=l.value("name",std::string("layer"));
             if(name.empty()) {layerPanels.erase(it->second);it=w.pinnedLayers.erase(it);continue;} // device or layer deleted
             auto &panel=layerPanels[it->second];
             if(!panel) {panel=CreateRef<Panel>(&w,1);panel->PinLayer(it->first,it->second);}

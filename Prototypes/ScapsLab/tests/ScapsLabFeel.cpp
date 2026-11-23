@@ -37,7 +37,7 @@ struct Rig {
     std::vector<SubscriptionHandle> subs;std::vector<std::pair<Clock::time_point,std::string>> completed;int cancelled=0,failedOther=0;
     explicit Rig(const std::vector<int> &views={0,1,4,5,10,22,18,6,8}):w(CreateRef<JobSystem>(nullptr,std::max(2u,std::thread::hardware_concurrency()))) {
         ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1920,1080);io.Fonts->AddFontDefault();io.Fonts->Build();
-        w.lightResponse=true;if(std::getenv("SCAPSLAB_APP_VIEWS"))w.viewIdleSeconds=5;w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.WatchPlots();
+        w.lightResponse=true;if(std::getenv("SCAPSLAB_APP_VIEWS"))w.viewIdleSeconds=5;w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));w.WatchPlots();
         this->views=views;for(int v:views)panels.push_back(CreateRef<Panel>(&w,v));
         subs.push_back(w.bus->Subscribe<RunCompleted>([this](const RunCompleted &e){completed.push_back({Clock::now(),e.kind});}));
         subs.push_back(w.bus->Subscribe<RunFailed>([this](const RunFailed &e){e.cancelled?++cancelled:++failedOther;}));
@@ -115,7 +115,7 @@ TEST(Feel,Actions) {
         if(Wanted("open")) Print(name,"open",Measure(r,[&]{(void)r.Send({{"operation","project_load"},{"path",path}});}),big?"big":"");
         else {(void)r.Send({{"operation","project_load"},{"path",path}});Settle(r);}
         Settle(r,300);
-        std::printf("FEEL|%s|info|devices=%zu|history=%zu|layers=%zu|file_mb=%.1f\n",name.c_str(),r.w.project.devices.size(),r.w.Current().history.size(),r.w.Current().document.at("layers").size(),double(std::filesystem::file_size(path))/1e6);
+        std::printf("FEEL|%s|info|devices=%zu|history=%zu|layers=%zu|file_mb=%.1f\n",name.c_str(),r.w.project.devices.size(),r.w.Current().history.size(),r.w.Current().Document().at("layers").size(),double(std::filesystem::file_size(path))/1e6);
         // 2. idle CPU (UI thread only: frames at the 500 ms idle cadence)
         if(Wanted("idle")) {Settle(r,500);const double c0=CpuMs();const auto t0=Clock::now();std::vector<double> fr;r.sink=&fr;while(Since(t0)<3000)r.Frame();r.sink=nullptr;Res m;m.frames=Summ(fr);m.cpuPct=100.*(CpuMs()-c0)/Since(t0);m.latency=Since(t0);Print(name,"idle3s",m,"cadence 500ms");}
         // 3. I-V, band, AC
@@ -146,7 +146,7 @@ TEST(Feel,Actions) {
             (void)r.Send({{"operation","auto_recalculate"},{"enabled",true}});Settle(r,600);
             for(int pass=0;pass<2;++pass) {
                 const bool drag=pass==0;Res res;std::vector<double> fr;r.sink=&fr;const size_t c0=r.completed.size();const int cancel0=r.cancelled;const auto s0=r.started;
-                std::vector<double> ap,dsp;std::map<int,std::vector<double>> pan;r.sinkApply=&ap;r.sinkDispatch=&dsp;r.sinkPanel=&pan;const double cpu0=CpuMs();const auto tStart=Clock::now();const Json base=r.w.Current().document;const double th=base["layers"][0]["thickness_m"].get<double>();
+                std::vector<double> ap,dsp;std::map<int,std::vector<double>> pan;r.sinkApply=&ap;r.sinkDispatch=&dsp;r.sinkPanel=&pan;const double cpu0=CpuMs();const auto tStart=Clock::now();const Json base=r.w.Current().Document();const double th=base["layers"][0]["thickness_m"].get<double>();
                 if(drag) {for(int i=0;i<45;++i){r.held=true;auto d=base;d["layers"][0]["thickness_m"]=th*(1+0.004*(i+1));(void)r.Send({{"operation","edit"},{"document",d},{"gesture_id","feel"}});r.Frame();}}
                 else {auto d=base;d["layers"][0]["thickness_m"]=th*1.05;(void)r.Send({{"operation","edit"},{"document",d}});}
                 const auto tRelease=Clock::now();r.held=false;r.Input();const auto hold=Summ(fr);const auto holdAp=Summ(ap),holdDsp=Summ(dsp);
@@ -168,10 +168,10 @@ TEST(Feel,Actions) {
         // 9. sllive1: slider change (doping of layer 0, held) -> updated band diagram + carrier profiles (live band job on the device lane)
         if(Wanted("band_live")) {
             (void)r.Send({{"operation","auto_recalculate"},{"enabled",true},{"band_enabled",true}});r.w.autoRecalculateBand=true;Settle(r,600);
-            const Json base=r.w.Current().document;const double nd0=base["layers"][0]["doping"].value("Nd_m3",0.)>0?base["layers"][0]["doping"]["Nd_m3"].get<double>():1e22;
+            const Json base=r.w.Current().Document();const double nd0=base["layers"][0]["doping"].value("Nd_m3",0.)>0?base["layers"][0]["doping"]["Nd_m3"].get<double>():1e22;
             std::vector<double> fr,lat;r.sink=&fr;r.w.dragging=true;r.held=true;int timeouts=0;
             for(int i=0;i<25;++i) {
-                const auto rev0=r.w.Current().revision;auto d=r.w.Current().document;d["layers"][0]["doping"]["Nd_m3"]=nd0*(1+.03*(i+1));
+                const auto rev0=r.w.Current().revision;auto d=r.w.Current().Document();d["layers"][0]["doping"]["Nd_m3"]=nd0*(1+.03*(i+1));
                 const auto t=Clock::now();(void)r.Send({{"operation","edit"},{"document",d},{"gesture_id","feel-band"}});
                 while(!(r.w.Current().revision!=rev0 && r.w.Current().BandFresh())) {r.Frame();if(Since(t)>20000){++timeouts;break;}}
                 lat.push_back(Since(t,r.frameEnd));
@@ -190,7 +190,7 @@ TEST(Feel,EngineOnly) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
     for(const auto &path:Projects()) {
         Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;(void)w.Dispatch({{"operation","project_load"},{"path",path}});while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-        const auto doc=w.Current().document;using namespace scaps_core;
+        const auto doc=w.Current().Document();using namespace scaps_core;
         for(int rep=0;rep<3;++rep) {
             const auto t0=Clock::now();const auto p=Model(doc);const auto device=make_device_from_project(p);const auto pc=physical_constants(p.constants_mode);auto volts=make_voltage_list(p.voltage);for(auto &v:volts)v=-v;
             const auto t1=Clock::now();const auto mesh=prepare_mesh(device,p.mesh,volts,{p.temperature_K},p.solver,pc);const auto t2=Clock::now();

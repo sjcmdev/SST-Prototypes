@@ -1,3 +1,4 @@
+#include "DocumentFixture.hpp"
 // S3: panel plot caches. Draw paths read cached vectors; events (RunCompleted/HistoryChanged/...) invalidate them.
 #include <gtest/gtest.h>
 #include "Panel.hpp"
@@ -48,7 +49,7 @@ void Frame(Panel &panel) {
     ImGui::Begin("Plot cache");panel.RenderContent();ImGui::End();ImGui::Render();
 }
 void SeedRuns(Workflow &w,int runs) {
-    w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};w.project.ui["history_retention"]=100;
+    w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));EditFixture(w.Current(),[&](Json& document){document["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};});w.project.ui["history_retention"]=100;
     ASSERT_TRUE(w.Dispatch({{"operation","run"}}).value("ok",false));Finish(w);
     const auto seed=w.Current().history.front();
     for(int i=0;i<runs;++i) {auto run=seed;run["run_id"]="cache-"+std::to_string(i);run["pinned"]=true;run["visible"]=true;run["name"]="#"+std::to_string(i+1);w.Current().history.mut().push_back(run);auto runs=CreateRef<RunMap>(*w.Current().runs);(*runs)[run["run_id"].get<std::string>()]=w.Current().RunResult(seed.at("run_id"));w.Current().runs=std::move(runs);}
@@ -80,7 +81,7 @@ TEST(PlotCache,StaleCacheIsRebuiltByEventsOnly) {
     w.Emit(HistoryChanged(w.Current().id));Frame(panel);
     EXPECT_NE(PlotCacheSum(),before);EXPECT_GT(PlotCacheBuildCount(),builds);
     // a real edit (job -> RunCompleted/DocumentEdited) changes the live curve in the plot
-    const double mid=PlotCacheSum();auto doc=w.Current().document;doc["layers"][0]["thickness_m"]=doc["layers"][0]["thickness_m"].get<double>()*1.2;
+    const double mid=PlotCacheSum();auto doc=w.Current().Document();doc["layers"][0]["thickness_m"]=doc["layers"][0]["thickness_m"].get<double>()*1.2;
     ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",doc}}).value("ok",false));Finish(w);ASSERT_TRUE(w.Dispatch({{"operation","run"}}).value("ok",false));Finish(w);
     Frame(panel);Frame(panel);EXPECT_NE(PlotCacheSum(),mid);
 }
@@ -95,8 +96,8 @@ TEST(PlotCache,DocumentEditsDoNotRebuildResultPlots) {
     for(int i=0;i<3;++i)Frame(panel);
     const int builds=PlotCacheBuildCount();const double sum=PlotCacheSum();const auto gen=w.plotGen;
     for(int i=0;i<5;++i) { // a drag: every frame a new document, results untouched
-        auto doc=w.Current().document;doc["layers"][0]["thickness_m"]=doc["layers"][0]["thickness_m"].get<double>()*(1+.01*(i+1));
-        w.Current().document=doc;++w.Current().revision;w.Emit(DocumentEdited(w.Current().id,w.Current().revision));Frame(panel);
+        auto doc=w.Current().Document();doc["layers"][0]["thickness_m"]=doc["layers"][0]["thickness_m"].get<double>()*(1+.01*(i+1));
+        w.Current().SetDocument(doc);++w.Current().revision;w.Emit(DocumentEdited(w.Current().id,w.Current().revision));Frame(panel);
     }
     EXPECT_EQ(w.plotGen,gen) << "DocumentEdited must not invalidate result plots";
     EXPECT_EQ(PlotCacheBuildCount(),builds);EXPECT_EQ(PlotCacheSum(),sum);

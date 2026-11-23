@@ -76,7 +76,7 @@ TEST_F(SavedPlots,LargeBatchKeepsPositivePlotArea) {
     }
 }
 TEST_F(SavedPlots,PanelRenderingDoesNotDirtyOrChangeProjectUi) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().liveRunning=true;const auto ui=w.project.ui;Panel panel(&w,10);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));w.Current().liveRunning=true;const auto ui=w.project.ui;Panel panel(&w,10);
     for(int i=0;i<4;++i){ImGui::NewFrame();ImGui::SetNextWindowSize(ImVec2(900,700));ImGui::Begin("Compare");panel.RenderContent();ImGui::End();ImGui::Render();}
     EXPECT_EQ(w.project.ui,ui);EXPECT_FALSE(w.dirty);EXPECT_FALSE(w.projectDirty);
     w.Current().liveV={10,20};w.Current().liveJ={1e-6,1e-2};
@@ -85,8 +85,8 @@ TEST_F(SavedPlots,PanelRenderingDoesNotDirtyOrChangeProjectUi) {
     EXPECT_TRUE(found);EXPECT_EQ(w.project.ui,ui);EXPECT_FALSE(w.dirty);
 }
 TEST_F(SavedPlots,RealBatchPanelsKeepSpaceFor342Members) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);auto &d=w.Current();d.liveMemberTotal=342;
-    d.batchSpec={{"mode","nested"},{"axes",Json::array({{{"parameter_id","temperature_K"},{"unit","K"},{"values",{270.,300.,350.}}}})}};
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));auto &d=w.Current();d.liveMemberTotal=342;
+    d.SetBatchSpec({{"mode","nested"},{"axes",Json::array({{{"parameter_id","temperature_K"},{"unit","K"},{"values",{270.,300.,350.}}}})}});
     auto result=CreateRef<BatchResult>();result->native=true;result->body.prim={{"spec",{{"axes",Json::array({{{"path","temperature_K"},{"unit","K"}}})}}}};
     const auto v=Column::Intern({0,1}),j=Column::Intern({1,2});
     for(int i=0;i<342;++i){d.liveMembers.push_back({i,v,j});auto row=CreateRef<scaps_core::BatchRow>();row->id="member "+std::to_string(i);row->parameters["temperature_K"]=300.+i;row->iv={{0.,1.,1.,scaps_core::SolverStatus::Converged},{1.,2.,2.,scaps_core::SolverStatus::Converged}};result->rows.push_back(std::move(row));}
@@ -116,7 +116,7 @@ TEST(PlotSettings,BrokenEvidenceLayoutIsRejectedForGlobalAndProjectSettings) {
 }
 TEST_F(SavedPlots,ShutdownKeepsLastSubmittedDockSpaceAndRestoresClosedRun) {
     auto &io=ImGui::GetIO();io.ConfigFlags|=ImGuiConfigFlags_DockingEnable;
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);PanelRegistry registry;
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));PanelRegistry registry;
     auto run=CreateRef<Panel>(&w,4);registry.AddExisting(run,9);
     auto recorder=CreateRef<Panel>(&w,17);registry.AddExisting(recorder,16);
     WindowWorkspace workspace(registry);workspace.InstallSettingsHandler();
@@ -155,7 +155,7 @@ TEST_F(SavedPlots,OutsideLegendsKeepPlotInsideItsFrame) {
     }
 }
 TEST_F(SavedPlots,Recorder18SeriesDoesNotOverlapWorksheet) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     auto result=CreateRef<BatchResult>();result->native=true;
     result->body.prim={{"columns",Json::array({{{"id","J"},{"unit","A/m^2"}}})},{"spec",{{"axes",Json::array({{{"path","voltage_V"},{"unit","V"}},{{"path","temperature_K"},{"unit","K"}}})}}}};
     for(int t=0;t<18;++t)for(int v=0;v<19;++v){auto row=CreateRef<scaps_core::BatchRow>();row->id=std::to_string(t*19+v);row->status="ok";row->parameters["temperature_K"]=110.+t*280./17;row->parameters["voltage_V"]=v*.05;row->values["J"].value=double(t+v);row->values["J"].status="ok";result->rows.push_back(std::move(row));}

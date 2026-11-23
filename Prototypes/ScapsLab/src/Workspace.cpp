@@ -271,7 +271,7 @@ Json Workflow::Workspace(bool withResults) const {
     Json devices=Json::array();
     for(const auto &d:project.devices) {
         Json device={{"id",d->id},{"name",d->name},{"colour",d->colour},{"description",d->description},
-            {"history",noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",none},{"band_result",none},{"ac_results",none},{"batch_result",none},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},{"status",withResults?d->status:std::string("no results")}};
+            {"history",noHistory},{"selected_run",withResults?d->selectedRun:std::string{}},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->Document()},{"result",none},{"band_result",none},{"ac_results",none},{"batch_result",none},{"batch_spec",d->BatchSpec()},{"recorder_columns",d->RecorderSpec()},{"status",withResults?d->status:std::string("no results")}};
         if(withResults) AttachResults(device,*d->history,d->Results(),!lightResponse);
         devices.push_back(std::move(device));
     }
@@ -312,7 +312,8 @@ void ValidateActions(const Json &actions) {
 // Pure check of a whole workspace document (no live state touched, no JobSystem).
 void ValidateWorkspace(const Json &value) {
     if(value.value("schema_version",0)<0 || value.value("schema_version",0)>3) throw std::invalid_argument("Unsupported ScapsLab schema_version");
-    const auto &devices=value.at("devices");if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::invalid_argument("Expected 1..1000 devices");
+    const auto &devices=value.at("devices");
+if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::invalid_argument("Expected 1..1000 devices");
     Project checked;checked.name=value.at("name").get<std::string>();if(checked.name.empty()) throw std::invalid_argument("Project name is empty");
     checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
     const auto retention=ValidateUi(checked.ui,false); // optional legacy view ranges are validated/ignored by the plot reader
@@ -411,12 +412,14 @@ Json SingleDeviceWorkspace(Json document,std::string projectName) { // what Work
     Json device={{"id","device-1"},{"name",name},{"colour",Json::array({0.25,0.65,0.95,1.0})},{"description",""},{"history",Json::array()},{"selected_run",""},{"selection",{{"layer",0},{"interface",-1},{"bias",0},{"member",0},{"voltage_V",0.}}},{"actions",Json::object()},{"document",std::move(document)},{"result",Json::object()},{"band_result",Json::object()},{"ac_results",Json::object()},{"batch_result",Json::object()},{"batch_spec",BatchDefaults()},{"recorder_columns",RecorderDefaults()},{"status","no results"}};
     return NormalizeWorkspace({{"schema_version",3},{"name",std::move(projectName)},{"devices",Json::array({std::move(device)})},{"active_device","device-1"},{"compare_set",Json::array({"device-1"})},{"ui",Json::object()}});
 }
-void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<DeviceResults> *typed) { // validated: value came from NormalizeWorkspace (already checked and normalized)
+void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<DeviceResults> *typed,const std::vector<Ref<const ProjectDraft>>* drafts) { // validated: value came from NormalizeWorkspace (already checked and normalized)
     ++plotGen;
     if(!validated) ValidateWorkspace(value);
     std::vector<DeviceResults> own;
     if(!typed) {Json copy=value;own=ExtractResults(copy);typed=&own;} // Python/tests hand over Json with results: convert it here
     const auto &devices=value.at("devices");
+    std::vector<Ref<const ProjectDraft>> imported;
+    if(!drafts){for(const auto& device:devices)imported.push_back(DraftFromDocument(NormalizeDocument(device.at("document"))));drafts=&imported;}
     Project checked;checked.schema_version=3;checked.name=value.at("name").get<std::string>();checked.active_device=value.at("active_device").get<std::string>();checked.compare_set=value.at("compare_set").get<std::set<std::string>>();checked.ui=value.value("ui",Json::object());
     const auto retention=checked.ui.value("history_retention",5);
     std::size_t index=0;
@@ -432,8 +435,8 @@ void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<D
         state->selectedLayer=selection.value("layer",0);state->selectedInterface=selection.value("interface",-1);state->selectedBias=selection.value("bias",0);state->selectedMember=selection.value("member",0);state->biasVoltage_V=selection.value("voltage_V",0.);
         state->actions=item.value("actions",Json::object());
         state->id=id;state->name=item.at("name");state->colour=item.at("colour");state->description=item.value("description",std::string{});
-        state->batchSpec=item.value("batch_spec",BatchDefaults());state->recorderColumns=item.value("recorder_columns",RecorderDefaults());
-        state->document=validated?item.at("document"):NormalizeDocument(item.at("document"));state->SetResults(index<typed->size()?(*typed)[index]:DeviceResults{});state->SyncRuns();state->status=item.value("status",std::string("no results"));
+        state->SetBatchSpec(item.value("batch_spec",BatchDefaults()));state->SetRecorderSpec(item.value("recorder_columns",RecorderDefaults()));
+        state->SetDraft(drafts->at(index));state->SetResults(index<typed->size()?(*typed)[index]:DeviceResults{});state->SyncRuns();state->status=item.value("status",std::string("no results"));
         checked.devices.push_back(state);++index;
     }
     project=std::move(checked);
@@ -442,7 +445,7 @@ void Workflow::RefreshDirty() {const bool was=dirty;for(auto &d:project.devices)
 Json Workflow::Snapshot() const {
     const auto &d=*std::find_if(project.devices.begin(),project.devices.end(),[&](const auto &d){return d->id==project.active_device;});
     Json list=Json::array();for(const auto &item:project.devices) list.push_back({{"device_id",item->id},{"name",item->name},{"description",item->description},{"colour",item->colour},{"status",item->status},{"dirty",item->dirty},{"compare",project.compare_set.contains(item->id)}});
-    return {{"ok",true},{"history",HistoryJson(*d->history,*d->runs,true)},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->document},{"result",d->result.json()},{"band_result",d->bandResult.json()},{"ac_results",d->acResults.json(true)},{"batch_result",d->batchResult.json()},{"batch_spec",d->batchSpec},{"recorder_columns",d->recorderColumns},
+    return {{"ok",true},{"history",HistoryJson(*d->history,*d->runs,true)},{"selected_run",d->selectedRun},{"selection",{{"layer",d->selectedLayer},{"interface",d->selectedInterface},{"bias",d->selectedBias},{"member",d->selectedMember},{"voltage_V",d->biasVoltage_V}}},{"actions",d->actions},{"document",d->Document()},{"result",d->result.json()},{"band_result",d->bandResult.json()},{"ac_results",d->acResults.json(true)},{"batch_result",d->batchResult.json()},{"batch_spec",d->BatchSpec()},{"recorder_columns",d->RecorderSpec()},
         {"devices",list},{"active_device",project.active_device},{"project",Workspace()},{"runs",Runs()},{"dirty",dirty},{"auto_recalculate",autoRecalculate},{"auto_recalculate_band",autoRecalculateBand},{"error",nullptr}};
 }
 }

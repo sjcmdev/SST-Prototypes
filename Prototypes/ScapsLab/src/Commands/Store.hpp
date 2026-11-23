@@ -2,6 +2,8 @@
 // S8: the surface the typed ScapsLab commands need from the application state. Workflow implements it; tests implement it with a recording mock
 // (no JobSystem). Commands decide (reject / queue / start); the store performs. Keep it narrow: every method is one decision-free action or one query.
 #include <nlohmann/json.hpp>
+#include "Domain/ProjectDraft.hpp"
+#include "Domain/BatchDraft.hpp"
 #include <optional>
 #include <string>
 #include <vector>
@@ -25,6 +27,8 @@ public:
     virtual bool CancelAll() = 0;                                    // true when something was running
     virtual void CancelDevice(const std::string &device) = 0;
     virtual void DeferProjectLoad(const Json &request) = 0;          // cancel calculations, open the project when the lanes are idle
+    virtual void BatchTyped(std::shared_ptr<const BatchDraft>,std::shared_ptr<const RecorderDraft>){throw std::logic_error("Typed batch settings unavailable");}
+    virtual void EditTyped(std::shared_ptr<const ProjectDraft>,const std::string&) {throw std::logic_error("Typed editing unavailable");}
     virtual void QueueEdit(const Json &request) = 0;                 // merge into the active device's edit queue (latest wins per gesture)
     virtual void PublishSnapshot() = 0;                              // response = workspace snapshot (read-only commands)
     virtual void HistoryOp(const Json &request) = 0;                 // in place on the UI thread

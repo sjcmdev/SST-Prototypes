@@ -1,3 +1,4 @@
+#include "DocumentFixture.hpp"
 #include <gtest/gtest.h>
 #include "Panel.hpp"
 #include "Core/App/Application.hpp"
@@ -18,7 +19,7 @@ TEST(TypedBoundary, PanelsReadTypedResultsWithoutJsonViews) {
     ImGui::CreateContext();ImPlot::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,1000);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
     {
         Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.autoRecalculate=false;w.autoRecalculateBand=false;w.viewIdleSeconds=5;
-        w.Current().document=ReadProject(SCAPSLAB_PROJECT);w.Current().document["mesh"]["points_per_layer"]=21;w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};
+        w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));EditFixture(w.Current(),[&](Json& document){document["mesh"]["points_per_layer"]=21;});EditFixture(w.Current(),[&](Json& document){document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};});
         const auto execute=[&](Json request){EXPECT_TRUE(w.Dispatch(request).value("ok",false));while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response;};
         execute({{"operation","run"}});execute({{"operation","band"},{"voltage_V",0.}});
         execute({{"operation","cv"},{"temperature_K",300.},{"start_V",0.},{"stop_V",.01},{"step_V",.01},{"frequency_Hz",1e3}});
@@ -40,7 +41,7 @@ TEST(ScapsLab,ProjectTitleAndTabHaveNoConflictingIds) {
     auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1280,800);
     io.ConfigFlags|=ImGuiConfigFlags_DockingEnable;io.ConfigDebugHighlightIdConflicts=true;
     io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     PanelRegistry registry;auto panel=CreateRef<Panel>(&w,0);registry.AddExisting(panel,5);
     auto workspace=CreateRef<WindowWorkspace>(registry);auto commands=CreateRef<CommandRegistry>();
     ASSERT_TRUE(workspace->Bind(commands,{}));workspace->InstallSettingsHandler();
@@ -71,8 +72,8 @@ TEST(ScapsLab,UiAddsDefectAndMatchesYamlBitwise) {
     ImGui::CreateContext();ImPlot::CreateContext();
     auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,1000);io.ConfigDebugHighlightIdConflicts=true;
     io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    w.Current().document["layers"][0]["defects"]=Json::array();w.Current().document["voltage"]={{"start_V",0.0},{"stop_V",0.05},{"step_V",0.05}};
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
+    EditFixture(w.Current(),[&](Json& document){document["layers"][0]["defects"]=Json::array();});EditFixture(w.Current(),[&](Json& document){document["voltage"]={{"start_V",0.0},{"stop_V",0.05},{"step_V",0.05}};});
     Panel panel(&w,11);bool found=false;ImVec2 button;
     auto frame=[&] {
         io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(600,950));
@@ -87,9 +88,9 @@ TEST(ScapsLab,UiAddsDefectAndMatchesYamlBitwise) {
     EXPECT_TRUE(found);
     if(found) {io.AddMousePosEvent(button.x,button.y);io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}
     while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_EQ(w.Current().document["layers"][0]["defects"].size(),1u);
-    const auto path=std::filesystem::temp_directory_path()/"scapslab-ui-defect.yaml";WriteProject(w.Current().document,path.string());
-    Workflow yaml(CreateRef<JobSystem>(nullptr,1));yaml.Current().document=ReadProject(path.string());
+    EXPECT_EQ(w.Current().Document()["layers"][0]["defects"].size(),1u);
+    const auto path=std::filesystem::temp_directory_path()/"scapslab-ui-defect.yaml";WriteProject(w.Current().Document(),path.string());
+    Workflow yaml(CreateRef<JobSystem>(nullptr,1));yaml.Current().SetDocument(ReadProject(path.string()));
     EXPECT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());EXPECT_TRUE(yaml.Dispatch({{"operation","run"}}).at("ok").get<bool>());
     while(w.Pending() || yaml.Busy()) {w.OnUpdate(0);yaml.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.Current().result.at("points"),yaml.Current().result.at("points"));EXPECT_EQ(w.Current().result.at("mesh_x_m"),yaml.Current().result.at("mesh_x_m"));
@@ -114,9 +115,9 @@ TEST(ScapsLab,UiAddsDefectAndMatchesYamlBitwise) {
 TEST(ScapsLab,AllEditorControlsHaveUniqueIdsAtNarrowWidth) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1280,1600);
     io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    auto second=w.Current().document["layers"][0];second["scapslab_id"]="test-layer";w.Current().document["layers"].push_back(second);
-    w.Current().document["layers"][0]["defects"]=Json::array({NewDefect()});w.Current().document["interface_defects"]=Json::array({NewDefect(true)});
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
+    auto second=w.Current().Document()["layers"][0];second["scapslab_id"]="test-layer";EditFixture(w.Current(),[&](Json& document){document["layers"].push_back(second);});
+    EditFixture(w.Current(),[&](Json& document){document["layers"][0]["defects"]=Json::array({NewDefect()});});EditFixture(w.Current(),[&](Json& document){document["interface_defects"]=Json::array({NewDefect(true)});});
     for(int view:{1,2,3,4,11,12,13,14,15,16,17,18,19,20,21}) {
         Panel panel(&w,view);
         auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(340,1500));ImGui::Begin("Editor IDs");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1)<<view;};
@@ -127,10 +128,10 @@ TEST(ScapsLab,AllEditorControlsHaveUniqueIdsAtNarrowWidth) {
 
 TEST(ScapsLab,StructureShowsEveryEditorGradingLaw) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,800);
-    io.Fonts->AddFontDefault();io.Fonts->Build();Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);Panel panel(&w,14);
+    io.Fonts->AddFontDefault();io.Fonts->Build();Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));Panel panel(&w,14);
     int expected=0;
     for(const auto *law:{"linear","uniform","parabolic","logarithmic","exponential"}) {
-        w.Current().document["layers"][0]["grading"]={{"Eg_eV",{{"law",law},{"left",1.12},{"right",1.15},{"bowing",.5}}}};
+        EditFixture(w.Current(),[&](Json& document){document["layers"][0]["grading"]={{"Eg_eV",{{"law",law},{"left",1.12},{"right",1.15},{"bowing",.5}}}};});
         int green=0;
         for(int frame=0;frame<2;++frame) {
             io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1000,700));ImGui::Begin("Grading laws");panel.RenderContent();
@@ -145,21 +146,21 @@ TEST(ScapsLab,StructureShowsEveryEditorGradingLaw) {
 
 TEST(ScapsLab,StructureThicknessDragIsUndoable) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,800);
-    io.Fonts->AddFontDefault();io.Fonts->Build();Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    const auto original=w.Current().document;Panel panel(&w,14);
+    io.Fonts->AddFontDefault();io.Fonts->Build();Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
+    const auto original=w.Current().Document();Panel panel(&w,14);
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1000,700));ImGui::Begin("Structure drag");panel.RenderContent();ImGui::End();ImGui::Render();};
     frame();frame();io.AddMousePosEvent(988,120);frame();frame();io.AddMouseButtonEvent(0,true);frame();
     io.AddMousePosEvent(968,120);frame();io.AddMouseButtonEvent(0,false);frame();
     while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_LT(w.Current().document["layers"][0]["thickness_m"].get<double>(),original["layers"][0]["thickness_m"].get<double>());
+    EXPECT_LT(w.Current().Document()["layers"][0]["thickness_m"].get<double>(),original["layers"][0]["thickness_m"].get<double>());
     EXPECT_TRUE(w.Dispatch({{"operation","undo"}}).at("ok").get<bool>());
     while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_EQ(w.Current().document,original);ImPlot::DestroyContext();ImGui::DestroyContext();
+    EXPECT_EQ(w.Current().Document(),original);ImPlot::DestroyContext();ImGui::DestroyContext();
 }
 
 Json RunBatchViaUi(const Json &document,const Json &spec) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,1100);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=document;w.Current().batchSpec=spec;Panel panel(&w,16);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(document);w.Current().SetBatchSpec(spec);Panel panel(&w,16);
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1100,1050));ImGui::Begin("Batch parity");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);};
     frame();frame();const auto button=ImGui::FindWindowByName("Batch parity")->GetID("Run batch");bool found=false;
     for(float y=40;y<1000 && !found;y+=4) {io.AddMousePosEvent(40,y);frame();frame();if(GImGui->HoveredId==button) {found=true;io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();}}
@@ -169,7 +170,7 @@ Json RunBatchViaUi(const Json &document,const Json &spec) {
 
 Json RunLightViaUi() {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,1100);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string());Panel panel(&w,19);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string()));Panel panel(&w,19);
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1100,1050));ImGui::Begin("Light parity");panel.RenderContent();ImGui::End();ImGui::Render();EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);};
     frame();frame();
     // Select the actual I-V tab, then its Calculate button.
@@ -197,12 +198,12 @@ Json RunLightViaUi() {
         }
     }
     EXPECT_TRUE(pvPlot);
-    Json result={{"document",w.Current().document},{"result",*w.Current().result}};
+    Json result={{"document",w.Current().Document()},{"result",*w.Current().result}};
     ImPlot::DestroyContext();ImGui::DestroyContext();return result;
 }
 
 TEST(ScapsLab,GenerationRecombinationPanelHasNoConflictingIds) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string());
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string()));
     ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).at("ok").get<bool>());
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.at("ok").get<bool>())<<w.response.dump();w.Current().result=w.Current().bandResult;
@@ -216,7 +217,7 @@ TEST(ScapsLab,GenerationRecombinationPanelHasNoConflictingIds) {
 TEST(ScapsLab,HistoryControlsAndNumericRowsHaveNoConflictingIds) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;
     io.DisplaySize=ImVec2(1600,1200);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).value("ok",false));
     while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.value("ok",false));
@@ -233,8 +234,8 @@ TEST(ScapsLab,HistoryControlsAndNumericRowsHaveNoConflictingIds) {
 TEST(ScapsLab,CurrentIvRemainsVisibleAfterAnotherTechniqueEvictsItsHistory) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;
     io.DisplaySize=ImVec2(1200,900);io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};w.project.ui["history_retention"]=1;
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
+    EditFixture(w.Current(),[&](Json& document){document["voltage"]={{"start_V",0.},{"stop_V",.1},{"step_V",.05}};});w.project.ui["history_retention"]=1;
     for(const auto *operation:{"run","band"}) {
         ASSERT_TRUE(w.Dispatch({{"operation",operation},{"voltage_V",0.}}).value("ok",false));
         while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
@@ -254,7 +255,7 @@ TEST(ScapsLab,CurrentIvRemainsVisibleAfterAnotherTechniqueEvictsItsHistory) {
 TEST(ScapsLab,CompactHistoryRowsEditAndCollapseWithoutChangingTheSchema) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;
     io.DisplaySize=ImVec2(1200,1000);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
     auto finish=[&] {while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_TRUE(w.response.value("ok",false))<<w.response.dump();};
     ASSERT_TRUE(w.Dispatch({{"operation","band"},{"voltage_V",0.}}).value("ok",false));finish();
     const auto seed=w.Current().history.front();w.project.ui["history_retention"]=20;
@@ -331,15 +332,15 @@ TEST(ScapsLab,MainLoopPreservesProjectAndReportsLayerExceptions) {
     const auto previousDirectory=std::filesystem::current_path();
     struct RestoreDirectory {std::filesystem::path path;~RestoreDirectory(){std::filesystem::current_path(path);}} restore{previousDirectory};
     std::filesystem::current_path(std::filesystem::path(SCAPSLAB_HEADLESS).parent_path().parent_path()/"ScapsLab");
-    int updates=0,renders=0;Workflow project(CreateRef<JobSystem>(nullptr,1));project.Current().document=ReadProject(SCAPSLAB_PROJECT);project.projectDirty=true;const auto before=project.Workspace();
+    int updates=0,renders=0;Workflow project(CreateRef<JobSystem>(nullptr,1));project.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));project.projectDirty=true;const auto before=project.Workspace();
     auto app=Application::Create(6,argv,[&](Application &application){application.PushLayer(CreateUnique<Broken>(updates,false));application.PushLayer(CreateUnique<Broken>(renders,true));application.PushLayer(CreateUnique<Probe>(dialogSeen));});
     EXPECT_EQ(app.Run(),0);EXPECT_EQ(updates,1);EXPECT_EQ(renders,1);EXPECT_TRUE(dialogSeen);EXPECT_EQ(project.Workspace(),before);EXPECT_TRUE(project.projectDirty);EXPECT_TRUE(std::filesystem::exists(file));
 }
 
 TEST(ScapsLab,ProfilePreviewRightClickOpensExportMenu) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1100,1000);io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    w.Current().document["layers"][0]["grading"]["Eg_eV"]={{"law","linear"},{"left",1.1},{"right",1.2}};
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
+    EditFixture(w.Current(),[&](Json& document){document["layers"][0]["grading"]["Eg_eV"]={{"law","linear"},{"left",1.1},{"right",1.2}};});
     Panel panel(&w,21);
     auto frame=[&]{io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(io.DisplaySize);ImGui::Begin("Profile export test");panel.RenderContent();ImGui::End();ImGui::Render();};
     frame();frame();ImVec2 at;bool found=false;
@@ -377,17 +378,17 @@ TEST(ScapsLab,LogSliderRoundTripsValueToPositionToValue) {
 }
 TEST(ScapsLab,EscapeDuringSliderDragRestoresTheStartValue) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1200,900);io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);const auto original=w.Current().document;Panel panel(&w,4);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));const auto original=w.Current().Document();Panel panel(&w,4);
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(900,800));ImGui::Begin("Esc drag");panel.RenderContent();ImGui::End();ImGui::Render();};
     frame();frame();const auto id=ImHashStr("##value",0,ImHashStr("T [K]",0,ImGui::FindWindowByName("Esc drag")->GetID("T [K]")));
     ImVec2 at;bool found=false;for(float y=30;y<500 && !found;y+=2) {io.AddMousePosEvent(450,y);frame();frame();if(GImGui->HoveredId==id) {found=true;at=ImVec2(450,y);}}
     ASSERT_TRUE(found);
     io.AddMouseButtonEvent(0,true);frame();io.AddMousePosEvent(at.x-150,at.y);frame();frame();io.AddMousePosEvent(at.x-250,at.y);frame();
     EXPECT_TRUE(w.dragSeen)<<"a held slider announces itself to the workflow";
-    EXPECT_NE((w.EditDraft()?*w.EditDraft():w.Current().document)["temperature_K"].get<double>(),original["temperature_K"].get<double>());
+    EXPECT_NE((w.EditDraft()?DraftDocument(*w.EditDraft()):w.Current().Document())["temperature_K"].get<double>(),original["temperature_K"].get<double>());
     io.AddKeyEvent(ImGuiKey_Escape,true);frame();io.AddKeyEvent(ImGuiKey_Escape,false);frame();io.AddMouseButtonEvent(0,false);frame();
     while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
-    EXPECT_EQ(w.Current().document["temperature_K"],original["temperature_K"]);EXPECT_EQ(w.Current().document,original);
+    EXPECT_EQ(w.Current().Document()["temperature_K"],original["temperature_K"]);EXPECT_EQ(w.Current().Document(),original);
     ImPlot::DestroyContext();ImGui::DestroyContext();
 }
 namespace {
@@ -395,32 +396,32 @@ Json TinyDevice() {auto d=ReadProject(SCAPSLAB_PROJECT);d["voltage"]={{"start_V"
 void Settle(Workflow &w,int maxMs=60000) {for(int i=0;i<maxMs && (w.Pending() || w.Current().needsRecalculate);++i) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}}
 }
 TEST(ScapsLab,LiveDragLatestWinsStartsFewJobsAndEndsWithTheExactFinalRun) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=TinyDevice();w.autoRecalculate=true;
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(TinyDevice());w.autoRecalculate=true;
     ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
     const auto baseline=w.Current().history.size();ASSERT_EQ(baseline,1u);
     w.dragging=true;const auto t0=std::chrono::steady_clock::now();
     for(int i=0;i<30;++i) {
-        auto doc=w.Current().document;doc["temperature_K"]=300.+i;
+        auto doc=w.Current().Document();doc["temperature_K"]=300.+i;
         EXPECT_TRUE(w.Dispatch({{"operation","edit"},{"document",doc},{"gesture_id","drag"}}).at("ok").get<bool>());
         for(int k=0;k<5;++k) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     }
     const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
     EXPECT_LE(w.previewsStarted,unsigned(ms/100)+2)<<"<=10 per second, never queued; ms="<<ms;
     EXPECT_EQ(w.Current().history.size(),baseline)<<"previews never enter history";
-    auto last=w.EditDraft()?*w.EditDraft():w.Current().document;last["temperature_K"]=329.;
+    auto last=w.EditDraft()?DraftDocument(*w.EditDraft()):w.Current().Document();last["temperature_K"]=329.;
     w.dragging=false;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",last},{"gesture_id","drag"}}).at("ok").get<bool>());
     Settle(w);
     EXPECT_EQ(w.Current().result.at("project_snapshot").at("temperature_K").get<double>(),329.)<<"exact run of the final value";
     EXPECT_TRUE(w.Current().previewV.empty());EXPECT_EQ(w.Current().history.size(),baseline+1);
-    Workflow ref(CreateRef<JobSystem>(nullptr,1));ref.Current().document=w.Current().document;ASSERT_TRUE(ref.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(ref);
+    Workflow ref(CreateRef<JobSystem>(nullptr,1));ref.Current().SetDocument(w.Current().Document());ASSERT_TRUE(ref.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(ref);
     ASSERT_EQ(w.Current().result.at("points").size(),ref.Current().result.at("points").size());
     for(std::size_t i=0;i<ref.Current().result.at("points").size();++i) EXPECT_EQ(w.Current().result.at("points")[i].at("J_A_m2"),ref.Current().result.at("points")[i].at("J_A_m2"));
 }
 TEST(ScapsLab,CoarsePreviewIsNeverSavedStoredOrUsedForReadouts) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=TinyDevice();w.autoRecalculate=true;
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(TinyDevice());w.autoRecalculate=true;
     ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
     const Json resultBefore=*w.Current().result,historyBefore=*w.Current().history;
-    w.lastFullMs=1000;w.dragging=true;auto doc=w.Current().document;doc["temperature_K"]=310.;
+    w.lastFullMs=1000;w.dragging=true;auto doc=w.Current().Document();doc["temperature_K"]=310.;
     ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",doc},{"gesture_id","drag"}}).at("ok").get<bool>());
     for(int i=0;i<20000 && w.Current().previewV.empty();++i) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     auto &d=w.Current();ASSERT_FALSE(d.previewV.empty());
@@ -444,8 +445,8 @@ TEST(ScapsLab,MantissaExponentWidgetMathRoundTripsAndClamps) {
 }
 TEST(ScapsLab,LayerLogParameterIsTwoSlidersAndCtrlClickTypesValueOrMantissa) {
     ImGui::CreateContext();ImPlot::CreateContext();auto &io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1400,2400);io.Fonts->AddFontDefault();io.Fonts->Build();
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    w.Current().document["layers"][0]["doping"]["Nd_m3"]=1e22;w.Current().document["layers"][0]["doping"]["Na_m3"]=0.;Panel panel(&w,1);
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));
+    EditFixture(w.Current(),[&](Json& document){document["layers"][0]["doping"]["Nd_m3"]=1e22;});EditFixture(w.Current(),[&](Json& document){document["layers"][0]["doping"]["Na_m3"]=0.;});Panel panel(&w,1);
     auto frame=[&] {io.DeltaTime=1.f/60;ImGui::NewFrame();ImGui::SetNextWindowPos(ImVec2(0,0));ImGui::SetNextWindowSize(ImVec2(1300,2300));ImGui::Begin("Log widget");panel.RenderContent();ImGui::End();ImGui::Render();};
     frame();frame();
     const auto row=ImGui::FindWindowByName("Log widget")->GetID("Donors [cm^-3]");
@@ -457,7 +458,7 @@ TEST(ScapsLab,LayerLogParameterIsTwoSlidersAndCtrlClickTypesValueOrMantissa) {
         EXPECT_TRUE(ImGui::TempInputIsActive(GImGui->ActiveId)||GImGui->ActiveId!=0)<<"Ctrl+click opens exact text entry";
         io.AddInputCharactersUTF8(text);frame();io.AddKeyEvent(ImGuiKey_Enter,true);frame();io.AddKeyEvent(ImGuiKey_Enter,false);frame();frame();settle();frame();
     };
-    const auto nd=[&]{return w.Current().document["layers"][0]["doping"]["Nd_m3"].get<double>();};
+    const auto nd=[&]{return w.Current().Document()["layers"][0]["doping"]["Nd_m3"].get<double>();};
     const auto m=hover(mantissaId);ASSERT_GE(m.x,0)<<"mantissa slider exists with its own ID";
     const auto e=hover(exponentId);ASSERT_GE(e.x,0)<<"exponent slider exists with its own ID";
     EXPECT_EQ(m.y,e.y)<<"both sliders on one row";EXPECT_LT(m.x,e.x);
@@ -469,10 +470,10 @@ TEST(ScapsLab,LayerLogParameterIsTwoSlidersAndCtrlClickTypesValueOrMantissa) {
 TEST(ScapsLab,LiveBandRefreshesOnDraftChangeIsCoalescedAndKeepsHistoryClean) {
     auto doc=TinyDevice();
         {   // I-V auto off, band auto on: a discrete edit refreshes the band at the working bias, no history entry, no "running" noise
-        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=doc;w.autoRecalculate=false;w.autoRecalculateBand=true;
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(doc);w.autoRecalculate=false;w.autoRecalculateBand=true;
         ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
         const auto history=w.Current().history.size();
-        auto d=w.Current().document;d["layers"][0]["doping"]["Nd_m3"]=d["layers"][0]["doping"]["Nd_m3"].get<double>()*10+1e21;
+        auto d=w.Current().Document();d["layers"][0]["doping"]["Nd_m3"]=d["layers"][0]["doping"]["Nd_m3"].get<double>()*10+1e21;
         ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d}}).at("ok").get<bool>());
         for(int i=0;i<60000 && !w.Current().BandFresh();++i) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         EXPECT_TRUE(w.Current().BandFresh());EXPECT_EQ(w.Current().history.size(),history);EXPECT_GE(w.liveBandsStarted,1u);
@@ -481,25 +482,25 @@ TEST(ScapsLab,LiveBandRefreshesOnDraftChangeIsCoalescedAndKeepsHistoryClean) {
         const auto before=w.liveBandsStarted;for(int i=0;i<200;++i){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_EQ(w.liveBandsStarted,before)<<"no recompute while nothing changed";
     }
     {   // toggle off: no band jobs at all
-        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=doc;w.autoRecalculate=false;w.autoRecalculateBand=false;
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(doc);w.autoRecalculate=false;w.autoRecalculateBand=false;
         ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
-        auto d=w.Current().document;d["layers"][0]["doping"]["Nd_m3"]=3e21;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d}}).at("ok").get<bool>());
+        auto d=w.Current().Document();d["layers"][0]["doping"]["Nd_m3"]=3e21;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d}}).at("ok").get<bool>());
         for(int i=0;i<400;++i) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         EXPECT_EQ(w.liveBandsStarted,0u);EXPECT_FALSE(w.Current().BandFresh());
     }
     {   // drag: <=10 band jobs/s, latest wins, alternates with the I-V preview, final band is for the final draft
-        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().document=doc;w.autoRecalculate=true;w.autoRecalculateBand=true;
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(doc);w.autoRecalculate=true;w.autoRecalculateBand=true;
         ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);const auto history=w.Current().history.size();
         w.dragging=true;const auto t0=std::chrono::steady_clock::now();const double nd0=doc["layers"][0]["doping"]["Nd_m3"].get<double>();
         for(int i=0;i<40;++i) {
-            auto d=w.Current().document;d["layers"][0]["doping"]["Nd_m3"]=nd0*(1+.05*i);
+            auto d=w.Current().Document();d["layers"][0]["doping"]["Nd_m3"]=nd0*(1+.05*i);
             ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",d},{"gesture_id","drag"}}).at("ok").get<bool>());
             for(int k=0;k<5;++k) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         }
         const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
         EXPECT_GE(w.liveBandsStarted,1u);EXPECT_LE(w.liveBandsStarted,unsigned(ms/100)+2)<<"coalesced: <=10 per second; ms="<<ms;
         EXPECT_GE(w.previewsStarted,1u)<<"the I-V preview is not starved";EXPECT_EQ(w.Current().history.size(),history);
-        auto last=w.EditDraft()?*w.EditDraft():w.Current().document;last["layers"][0]["doping"]["Nd_m3"]=nd0*7;
+        auto last=w.EditDraft()?DraftDocument(*w.EditDraft()):w.Current().Document();last["layers"][0]["doping"]["Nd_m3"]=nd0*7;
         w.dragging=false;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",last},{"gesture_id","drag"}}).at("ok").get<bool>());
         Settle(w);EXPECT_EQ(w.Current().result.at("project_snapshot").at("layers")[0]["doping"]["Nd_m3"].get<double>(),nd0*7);
     }

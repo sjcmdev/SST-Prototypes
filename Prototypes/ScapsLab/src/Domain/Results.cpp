@@ -232,6 +232,10 @@ BatchResult BatchFromJson(const Json &j) {
     }} catch(const Json::exception&) {r.rows.clear();}
     // Preserve unknown historical fields and numeric representations at the file import edge.
     if(r.Dump().dump()!=j.dump()){r.legacySchema=std::move(r.body.prim);r.body=Pack(j);r.native=false;}
+    if(j.contains("project_snapshot") && j.contains("spec")) {
+        r.projectSnapshot=DraftFromDocument(j.at("project_snapshot"));r.batchDraft=ReadBatchDraft(j.at("spec"));
+        r.recorderDraft=ReadRecorderDraft(j.value("columns",Json::array()));
+    }
     return r;
 }
 const Column& PointColumn(const IvPoint& p,const std::string& key) {

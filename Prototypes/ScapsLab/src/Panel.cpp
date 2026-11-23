@@ -1,4 +1,5 @@
 #include "Panel.hpp"
+#include <numbers>
 #include "PlotUi.hpp"
 #include <imgui.h>
 #include <scaps_core/grading.hpp>
@@ -27,7 +28,7 @@ Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.
     if(gallery) s.mode=WindowMode::Maximized;
     s.width=gallery?1100.f:405.f; s.height=gallery?650.f:325.f; ApplyState(s);
     acRequest={{"operation",v<8?"cv":"cf"},{"start_V",-0.5},{"stop_V",0.5},{"step_V",0.05},{"frequency_Hz",1e4},
-        {"voltage_V",0.0},{"start_Hz",10.0},{"stop_Hz",1e7},{"points",61},{"temperature_K",w->Current().document.value("temperature_K",300.0)}};
+        {"voltage_V",0.0},{"start_Hz",10.0},{"stop_Hz",1e7},{"points",61},{"temperature_K",w->Current().Document().value("temperature_K",300.0)}};
     absoluteLog=w->plotSession.settings.ivAbsoluteLog;
     if(const auto q=w->Current().acResults.get("qe");q && q->meta.prim.contains("request"))qeRequest.update(q->meta.prim.at("request"),true);
     std::snprintf(file,sizeof(file),"%s",w->path.c_str());
@@ -49,33 +50,21 @@ void TextInput(const char *label,char *text,std::size_t size) {
 }
 namespace {
 // New defect with a unique id; bulk default = SCAPS-like single neutral level at mid-gap (Ei), Nt 1e14 cm^-3, sigma 1e-15 cm^2.
-int AddDefectToDraft(Json &draft,int layer,bool sheet) {
-    auto &layers=draft["layers"];auto &defects=sheet?draft["interface_defects"]:layers[layer]["defects"];
-    if(!defects.is_array()) defects=Json::array();
-    auto d=NewDefect(sheet);unsigned n=1;std::set<std::string> ids;
-    if(sheet) for(const auto &v:defects) ids.insert(v.at("id"));
-    else for(const auto &l:layers) for(const auto &v:l["defects"]) ids.insert(v.at("scapslab_id"));
-    const std::string prefix=sheet?"interface-defect-":"defect-";
-    while(ids.contains(prefix+std::to_string(n))) ++n;
-    d[sheet?"id":"scapslab_id"]=prefix+std::to_string(n);
-    if(sheet) d["left_layer_index"]=layer;else {d["Nt_m3"]=1e20;d["sigma_n_m2"]=1e-19;d["sigma_p_m2"]=1e-19;}
-    defects.push_back(d);return int(defects.size())-1;
-}
+int AddDefectToDraft(ProjectDraft& draft,int layer,bool sheet) {return AddDraftDefect(draft,layer,sheet);}
 }
 namespace {
 Workflow *numericWorkflow=nullptr;
-Json *numericDocument=nullptr;
-void SweepMenu(Json &object,const char *key,double scale=1,const char *title="") {
-    if(!numericWorkflow || !numericDocument)return;
+ProjectDraft *numericDraft=nullptr;
+void SweepMenu(const void* address,const char *key,double scale=1,const char *title="") {
+    if(!numericWorkflow || !numericDraft || !address)return;
     const ImVec2 itemMin=ImGui::GetItemRectMin(),itemMax=ImGui::GetItemRectMax();
     const auto *vp=ImGui::GetWindowViewport();const float popupWidth=380.f;
     ImGui::SetNextWindowSizeConstraints(ImVec2(360,0),ImVec2(FLT_MAX,FLT_MAX));
     ImGui::SetNextWindowPos(ImVec2(std::clamp(itemMin.x,vp->WorkPos.x,std::max(vp->WorkPos.x,vp->WorkPos.x+vp->WorkSize.x-popupWidth)),std::clamp(itemMax.y,vp->WorkPos.y,std::max(vp->WorkPos.y,vp->WorkPos.y+vp->WorkSize.y-230.f))),ImGuiCond_Appearing);
     if(!ImGui::BeginPopupContextItem("Sweep"))return;
-    const auto parameters=BatchParameters(*numericDocument);
+    const auto parameters=BatchParameters(*numericDraft);
     for(const auto &p:parameters) {
-        const auto pointer=Json::json_pointer(p.at("pointer").get<std::string>());
-        if(&numericDocument->at(pointer)!=&object.at(key))continue;
+        if(p.at("path")!=ProjectFieldPath(numericDraft->project,address))continue;
         // Range is edited in the control's display units (scale = display/native); the request stays native.
         ImGui::Text("Sweep: %s",*title?title:p.at("label").get<std::string>().c_str());ImGui::Separator();
         static double delta=1.;static int points=5;static bool logarithmic=false;
@@ -85,7 +74,7 @@ void SweepMenu(Json &object,const char *key,double scale=1,const char *title="")
         row("Points");ImGui::SliderInt("##points",&points,2,100);
         row("Log spacing");ImGui::Checkbox("##log",&logarithmic);
         Json request={{"operation","quick_sweep"},{"parameter_id",p.at("id")},{"delta_native_units",delta/scale},{"points",points},{"spacing",logarithmic?"log":"linear"}};
-        std::string error;try{(void)QuickSweep(*numericDocument,request);}catch(const std::exception &e){error=e.what();}
+        std::string error;try{(void)QuickSweep(*numericDraft,request);}catch(const std::exception &e){error=e.what();}
         if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
         ImGui::BeginDisabled(numericWorkflow->Busy() || !error.empty());
         if(ImGui::Button("Run sweep")){(void)numericWorkflow->Exec(Cmd::QuickSweep::FromJson(request));ImGui::CloseCurrentPopup();}ImGui::EndDisabled();break;
@@ -152,6 +141,8 @@ void DashedLine(const std::vector<double> &x,const std::vector<double> &y,ImVec4
 // Shaded band + boundary line + name per layer; x in um. Call inside a plot after the data.
 int LayerType(const Json &l) {const double net=l.value("doping",Json::object()).value("Nd_m3",0.)-l.value("doping",Json::object()).value("Na_m3",0.);return std::abs(net)<1e15?0:net>0?1:-1;} // 1 = n, -1 = p, 0 = i
 // Opaque strip colour per layer type, same hue as the translucent regions in the Bands/Carriers plots: n blue, p red, i grey.
+int LayerType(const scaps_core::ProjectLayer& l) {const double net=l.Nd_m3-l.Na_m3;return std::abs(net)<1e15?0:net>0?1:-1;}
+ImU32 LayerStripColour(const scaps_core::ProjectLayer& l) {const int t=LayerType(l);return t>0?IM_COL32(40,75,130,255):t<0?IM_COL32(130,48,52,255):IM_COL32(78,78,84,255);}
 ImU32 LayerStripColour(const Json &l) {const int t=LayerType(l);return t>0?IM_COL32(40,75,130,255):t<0?IM_COL32(130,48,52,255):IM_COL32(78,78,84,255);}
 void DrawLayerRegions(const Json &layers) {
     const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();ImPlot::PushPlotClipRect();
@@ -332,7 +323,7 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
                 if(const auto iv=dynamic_cast<const IvResult *>(typed.get()))each(iv->points);else if(const auto ac=dynamic_cast<const AcResult *>(typed.get()))each(ac->points);
             }
             if(l.x.empty())continue;
-            if(!hashed) {currentHash=DocumentHash(device.document);hashed=true;}
+            if(!hashed) {currentHash=DocumentHash(device.Document());hashed=true;}
             const auto c=run.at("colour").get<std::vector<float>>();
             const bool selected=run.at("run_id")==device.selectedRun;
             l.colour=ImVec4(c[0],c[1],c[2],dim&&!selected?.3f:c[3]);l.weight=selected?4.f:1.5f;l.runId=run.at("run_id").get<std::string>();
@@ -343,7 +334,7 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
         }
     }
     if(e->docGen!=w.docGen) { // a document edit does not touch result data: only the "(previous)" tags can change, so no curve is rebuilt
-        e->docGen=w.docGen;const auto hash=DocumentHash(device.document);
+        e->docGen=w.docGen;const auto hash=DocumentHash(device.Document());
         for(auto &l:e->lines) if((l.modelHash!=hash)!=l.previous) {l.previous=!l.previous;l.name=l.head+(l.previous?" (previous)":"")+l.tail;}
     }
     for(const auto &l:e->lines) {
@@ -565,9 +556,8 @@ static bool SlideMantissaExponent(double &value,const SliderMap &r,bool zero) {
     if(changed) value=v;
     return changed;
 }
-static bool Number(const char *label,Json &j,const char *key,double scale=1) {
-    const auto &n=j.at(key); if(!n.is_number()) return false;
-    const std::string k=key; double value=n.get<double>()*scale;
+static bool NumberControl(const char *label,double &native,const char *key,double scale,const void* address) {
+    const std::string k=key; double value=native*scale;
     const bool logarithmic=k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3" || k=="Sn_m_s" || k=="Sp_m_s" ||
         k=="residual_tolerance" || k=="adaptive_target_relative_J_error" || k=="frequency_Hz" || k=="start_Hz" || k=="stop_Hz" || k=="dose_m2" || k=="surface_density_m3" || k=="uniform_generation_m3_s" || k.find("vth_")==0;
     BeginRow(label);ImGui::BeginGroup(); bool changed=false;
@@ -606,9 +596,21 @@ static bool Number(const char *label,Json &j,const char *key,double scale=1) {
         changed=Slide("##value",value,{lo,hi,false},"%.4g");TrackGesture();
     }
     if(ImGui::IsItemHovered() && !ImGui::IsItemActive()) ImGui::SetTooltip("Ctrl+click: exact value. Shift: 10x finer, Ctrl+Shift: 100x, F: fine toggle. Esc while dragging: cancel. Arrows / Ctrl+wheel: step (Shift: finer).");
-    ImGui::EndGroup();SweepMenu(j,key,scale,label);EndRow();
-    if(changed) j[key]=(k=="points_per_layer" || k=="points" || k=="max_newton_iterations")?Json(std::int64_t(value/scale)):Json(value/scale);
+    ImGui::EndGroup();SweepMenu(address,key,scale,label);EndRow();
+    if(changed)native=value/scale;
     return changed;
+}
+template<class T> requires std::is_arithmetic_v<T>
+static bool Number(const char* label,T& native,const char* key,double scale=1) {double value=double(native);const bool changed=NumberControl(label,value,key,scale,&native);if(changed)native=static_cast<T>(value);return changed;}
+static bool Number(const char* label,Json& object,const char* key,double scale=1) {if(!object.at(key).is_number())return false;double value=object.at(key);const bool changed=NumberControl(label,value,key,scale,nullptr);if(changed)object[key]=(std::string_view(key)=="points_per_layer" || std::string_view(key)=="points" || std::string_view(key)=="max_newton_iterations")?Json(std::int64_t(value)):Json(value);return changed;}
+static bool Choice(const char* label,std::string& current,const char*,std::initializer_list<std::pair<const char*,const char*>> items) {
+    bool changed=false;const char* preview=current.c_str();for(const auto& [name,value]:items)if(current==value)preview=name;
+    BeginRow(label);if(ImGui::BeginCombo("##value",preview)){for(const auto& [name,value]:items)if(ImGui::Selectable(name,current==value)){current=value;changed=true;++gesture;}ImGui::EndCombo();}EndRow();return changed;
+}
+template<class T> requires std::is_enum_v<T>
+static bool Choice(const char* label,T& current,const char*,std::initializer_list<std::pair<const char*,T>> items) {
+    bool changed=false;const char* preview="";for(const auto& [name,value]:items)if(current==value)preview=name;
+    BeginRow(label);if(ImGui::BeginCombo("##value",preview)){for(const auto& [name,value]:items)if(ImGui::Selectable(name,current==value)){current=value;changed=true;++gesture;}ImGui::EndCombo();}EndRow();return changed;
 }
 static bool Choice(const char *label,Json &j,const char *key,std::initializer_list<std::pair<const char*,const char*>> items) {
     const auto current=j.at(key).get<std::string>(); bool changed=false;
@@ -621,8 +623,8 @@ void Panel::RenderContent() {
     struct PerfScope {const char *n;std::chrono::steady_clock::time_point t=std::chrono::steady_clock::now();~PerfScope(){static const bool on=std::getenv("SCAPSLAB_PERF")!=nullptr;if(on)SST::PerfAdd(std::string("panel ")+n,std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t).count());}} perfScope{names[view]};
     w->tutorialOverlay.Window(std::string("scapslab.")+names[view]);
     w->WatchPlots();
-    numericWorkflow=w;numericDocument=nullptr;
-    struct ResetNumeric {~ResetNumeric(){numericDocument=nullptr;numericWorkflow=nullptr;}} resetNumeric;
+    numericWorkflow=w;numericDraft=nullptr;
+    struct ResetNumeric {~ResetNumeric(){numericDraft=nullptr;numericWorkflow=nullptr;}} resetNumeric;
     if(!placed && !gallery) {auto s=GetState();const auto *vp=ImGui::GetMainViewport();s.x+=vp->Pos.x;s.y+=vp->Pos.y;ApplyState(s);placed=true;}
     ImGui::TextDisabled("SCAPSLAB / %s",names[view]);
     if(w->fineLock || ImGui::GetIO().KeyShift) {ImGui::SameLine();ImGui::TextColored(ImVec4(1.f,.75f,.2f,1.f),"[FINE%s]",w->fineLock?" lock, F":"");}
@@ -632,7 +634,7 @@ void Panel::RenderContent() {
          if(view==5 && !w->status.empty()){ImGui::SameLine();ImGui::TextDisabled("| %s",w->status.c_str());}}}
     if(view==4 || (view!=5 && w->response.is_object() && !w->response.value("ok",true))) ImGui::TextWrapped("%s",w->status.c_str());
     if(view==5 || view==10 || view==22) {} else ImGui::Separator();
-    if(w->Current().document.contains("scaps_native")) for(const auto &warning:w->Current().document.at("scaps_native").value("warnings",Json::array())) ImGui::TextWrapped("SCAPS import warning: %s",warning.get<std::string>().c_str());
+    if(w->Current().Document().contains("scaps_native")) for(const auto &warning:w->Current().Document().at("scaps_native").value("warnings",Json::array())) ImGui::TextWrapped("SCAPS import warning: %s",warning.get<std::string>().c_str());
     if(!pinLayer.empty() && w->project.active_device!=pinDevice) { // extra "Layer: <name>" window of a device that is not active
         ImGui::TextWrapped("This layer belongs to another device.");
         if(ImGui::Button("Activate that device")) Do(Cmd::SelectDevice::With({{"device_id",pinDevice}}));
@@ -650,10 +652,9 @@ void Panel::RenderContent() {
     if(view>=6 && view<10) {AC();return;}
     const bool replacing=w->ReplacingProject();
     ImGui::BeginDisabled(replacing);
-    if(w->Current().document.is_object()) {
-        auto draft=w->Current().document;
-        if(const auto *queued=w->EditDraft()) draft=*queued;
-        numericDocument=&draft;
+    if(w->Current().draft) {
+        auto draft=*(w->EditDraft()?w->EditDraft():w->Current().draft.get());
+        numericDraft=&draft;
         bool changed=false;
         if(view==19) changed|=Illumination(draft);
         else if(view==20) changed|=Absorption(draft);
@@ -667,56 +668,56 @@ void Panel::RenderContent() {
             if(wide) ImGui::EndTable();
         }
         else if(view==13) {
-            auto &e=draft["external"];
+            auto &e=draft.project.external;
             ImGui::TextWrapped("R_area = R x area. The solver stores Ohm m^2; controls show Ohm cm^2. Rs = 0 is allowed.");
-            changed|=Number("Device area [cm^2]",e,"area_m2",1e4);
-            changed|=Number("Rs area [Ohm cm^2]",e,"series_ohm_m2",1e4);
-            bool open=e["shunt_ohm_m2"].is_string();
-            if(Toggle("Rsh infinite (open)",open)) {e["shunt_ohm_m2"]=open?Json(".inf"):Json(1.0);changed=true;}
-            if(!open) changed|=Number("Rsh area [Ohm cm^2]",e,"shunt_ohm_m2",1e4);
-            const double area=e.at("area_m2");
-            ImGui::Text("Rs = %.6g Ohm",e.at("series_ohm_m2").get<double>()/area);
-            if(open) ImGui::TextUnformatted("Rsh = infinite Ohm");else ImGui::Text("Rsh = %.6g Ohm",e.at("shunt_ohm_m2").get<double>()/area);
+            changed|=Number("Device area [cm^2]",e.area_m2,"area_m2",1e4);
+            changed|=Number("Rs area [Ohm cm^2]",e.series_ohm_m2,"series_ohm_m2",1e4);
+            bool open=std::isinf(e.shunt_ohm_m2);
+            if(Toggle("Rsh infinite (open)",open)) {e.shunt_ohm_m2=open?INFINITY:1.;changed=true;}
+            if(!open) changed|=Number("Rsh area [Ohm cm^2]",e.shunt_ohm_m2,"shunt_ohm_m2",1e4);
+            const double area=e.area_m2;
+            ImGui::Text("Rs = %.6g Ohm",e.series_ohm_m2/area);
+            if(open) ImGui::TextUnformatted("Rsh = infinite Ohm");else ImGui::Text("Rsh = %.6g Ohm",e.shunt_ohm_m2/area);
         } else if(view==14) changed|=Structure(draft);
         else if(view==1) {
-            auto &layers=draft["layers"]; int pinned=0; auto &selected=pinLayer.empty()?w->Current().selectedLayer:pinned; // pinned window: layer found by stable ID, independent of the tree selection
-            if(!pinLayer.empty()) for(int i=0;i<int(layers.size());++i) if(layers[i].at("scapslab_id")==pinLayer) pinned=i;
+            auto &layers=draft.project.layers; int pinned=0; auto &selected=pinLayer.empty()?w->Current().selectedLayer:pinned; // pinned window: layer found by stable ID, independent of the tree selection
+            if(!pinLayer.empty()) for(int i=0;i<int(layers.size());++i) if(draft.layers[i].id==pinLayer) pinned=i;
             selected=std::clamp(selected,0,int(layers.size())-1);
-            if(pinLayer.empty()) {BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {
-                for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i); if(ImGui::Selectable(layers[i].at("name").get<std::string>().c_str(),selected==i)) selected=i; ImGui::PopID();} ImGui::EndCombo();
+            if(pinLayer.empty()) {BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].name.c_str())) {
+                for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i); if(ImGui::Selectable(layers[i].name.c_str(),selected==i)) selected=i; ImGui::PopID();} ImGui::EndCombo();
             }
             EndRow();}
-            auto &l=layers[selected]; const auto id=l.at("scapslab_id");
+            auto &l=layers[selected]; const auto& id=draft.layers[selected].id;
             if(ImGui::Button("Add")) Do(Cmd::EditLayer::With({{"action","add"}})); if(pinLayer.empty()) w->tutorialOverlay.Item("scapslab.Layers","add-layer"); ImGui::SameLine();
             if(ImGui::Button("Remove")) Do(Cmd::EditLayer::With({{"action","remove"},{"layer_id",id}})); ImGui::SameLine();
             if(ImGui::Button("Up") && selected>0) Do(Cmd::EditLayer::With({{"action","move"},{"layer_id",id},{"index",selected-1}})); ImGui::SameLine();
             if(ImGui::Button("Down") && selected+1<int(layers.size())) Do(Cmd::EditLayer::With({{"action","move"},{"layer_id",id},{"index",selected+1}}));
-            if(pinLayer.empty()) {ImGui::SameLine();if(ImGui::Button("Open in new window")) OpenLayerWindow(w,w->project.active_device,id.get<std::string>());if(ImGui::IsItemHovered())ImGui::SetTooltip("Edit this layer in a separate window, side by side with other layers");}
-            ImGui::TextDisabled("Stable ID: %s",id.get<std::string>().c_str());
+            if(pinLayer.empty()) {ImGui::SameLine();if(ImGui::Button("Open in new window")) OpenLayerWindow(w,w->project.active_device,id);if(ImGui::IsItemHovered())ImGui::SetTooltip("Edit this layer in a separate window, side by side with other layers");}
+            ImGui::TextDisabled("Stable ID: %s",id.c_str());
             {   // Defects / interface shortcuts: edit through the Defects and Interfaces panels.
                 static std::string picked;const bool last=selected+1>=int(layers.size());
-                if(ImGui::Button("Add defect")) {w->pendingDefect=AddDefectToDraft(draft,selected,false);w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;picked=draft["layers"][selected]["defects"].back().at("scapslab_id");changed=true;++gesture;}
+                if(ImGui::Button("Add defect")){w->pendingDefect=AddDraftDefect(draft,selected,false);w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;picked=draft.layers[selected].defects.back().id;changed=true;++gesture;}
                 ImGui::SameLine();ImGui::BeginDisabled(last);
-                if(ImGui::Button("Add interface")) {w->pendingDefect=AddDefectToDraft(draft,selected,true);w->pendingSheet=true;w->Current().selectedInterface=selected;w->focusPanel=12;picked=draft["interface_defects"].back().at("id");changed=true;++gesture;}
+                if(ImGui::Button("Add interface")){w->pendingDefect=AddDraftDefect(draft,selected,true);w->pendingSheet=true;w->Current().selectedInterface=selected;w->focusPanel=12;picked=draft.project.interface_defects.back().id;changed=true;++gesture;}
                 ImGui::EndDisabled();if(last&&ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("The last layer has no next layer to form an interface with.");
                 ImGui::SameLine();
                 if(ImGui::Button("Remove##defect")&&!picked.empty()) {
-                    auto &bulk=draft["layers"][selected]["defects"];auto &sheets=draft["interface_defects"];
-                    const auto bi=std::find_if(bulk.begin(),bulk.end(),[&](const Json &v){return v.at("scapslab_id")==picked;});
-                    if(bi!=bulk.end()) {bulk.erase(bi);changed=true;++gesture;picked.clear();}
-                    else if(sheets.is_array()) {const auto si=std::find_if(sheets.begin(),sheets.end(),[&](const Json &v){return v.at("id")==picked;});if(si!=sheets.end()) {sheets.erase(si);changed=true;++gesture;picked.clear();}}
+                    const auto& ids=draft.layers[selected].defects;auto& sheets=draft.project.interface_defects;
+                    const auto bulk=std::find_if(ids.begin(),ids.end(),[&](const auto& d){return d.id==picked;});
+                    if(bulk!=ids.end()){RemoveDraftDefect(draft,selected,int(bulk-ids.begin()),false);changed=true;++gesture;picked.clear();}
+                    else if(const auto at=std::find_if(sheets.begin(),sheets.end(),[&](const auto& d){return d.id==picked;});at!=sheets.end()){RemoveDraftDefect(draft,selected,int(at-sheets.begin()),true);changed=true;++gesture;picked.clear();}
                 }
-                const auto &bulk=draft["layers"][selected]["defects"];
+                const auto& bulk=draft.project.layers[selected].defects;
                 for(int i=0;i<int(bulk.size());++i) {
-                    const auto &d=bulk[i];const std::string idv=d.at("scapslab_id");
-                    const char *type=d.value("amphoteric",false)?"amphoteric":d.value("charge_type",std::string("neutral"))=="donor_like"?"donor":d.value("charge_type",std::string("neutral"))=="acceptor_like"?"acceptor":"neutral";
-                    char row[160];std::snprintf(row,sizeof(row),"%s | Et %+.3g eV | Nt %.3g cm^-3##d%d",type,d.value("energy_offset_eV",0.0),d.value("Nt_m3",0.0)*1e-6,i);
-                    if(ImGui::Selectable(row,picked==idv)) {picked=idv;w->pendingDefect=i;w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;}
+                    const auto& d=bulk[i];const auto& idv=draft.layers[selected].defects[i].id;
+                    const char* type=d.amphoteric?"amphoteric":d.charge_type==scaps_core::TrapChargeType::DonorLike?"donor":d.charge_type==scaps_core::TrapChargeType::AcceptorLike?"acceptor":"neutral";
+                    char row[160];std::snprintf(row,sizeof(row),"%s | Et %+.3g eV | Nt %.3g cm^-3##d%d",type,d.energy_offset_eV,d.Nt_m3*1e-6,i);
+                    if(ImGui::Selectable(row,picked==idv)){picked=idv;w->pendingDefect=i;w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;}
                 }
-                if(draft.contains("interface_defects")&&draft["interface_defects"].is_array()) for(int i=0;i<int(draft["interface_defects"].size());++i) {
-                    const auto &d=draft["interface_defects"][i];if(d.at("left_layer_index")!=selected)continue;const std::string idv=d.at("id");
-                    char row[160];std::snprintf(row,sizeof(row),"interface | Et %+.3g eV | Nt %.3g cm^-2##i%d",d.value("energy_offset_eV",0.0),d.value("Nt_m2",0.0)*1e-4,i);
-                    if(ImGui::Selectable(row,picked==idv)) {picked=idv;w->pendingDefect=i;w->pendingSheet=true;w->Current().selectedInterface=selected;w->focusPanel=12;}
+                for(int i=0;i<int(draft.project.interface_defects.size());++i) {
+                    const auto& d=draft.project.interface_defects[i];if(d.left_layer_index!=selected)continue;const auto& idv=d.id;
+                    char row[160];std::snprintf(row,sizeof(row),"interface | Et %+.3g eV | Nt %.3g cm^-2##i%d",d.energy_offset_eV,d.Nt_m2*1e-4,i);
+                    if(ImGui::Selectable(row,picked==idv)){picked=idv;w->pendingDefect=i;w->pendingSheet=true;w->Current().selectedInterface=selected;w->focusPanel=12;}
                 }
             }
             static int materialSelection=0;BeginRow("Material selection");ImGui::Combo("##material_selection",&materialSelection,"Both A/B\0Pure A\0Pure B\0");EndRow();
@@ -724,47 +725,47 @@ void Panel::RenderContent() {
             BeginRow("SCAPS material [.material]");
             const bool materialLoad=ImGui::Button("Load...");w->tutorialOverlay.Item("scapslab.Layers","material-load");if(materialLoad)try {if(const auto path=OpenFileDialog({"SCAPS material","material"}))Do(Cmd::LoadMaterial::With({{"layer_id",id},{"selection",selection},{"path",path->Utf8()}}));}catch(const std::exception &e){w->status=e.what();}
             ImGui::SameLine();const bool materialSave=ImGui::Button("Save...");w->tutorialOverlay.Item("scapslab.Layers","material-save");if(materialSave)try {if(const auto path=SaveFileDialog({"SCAPS material","material"},"layer.material"))Do(Cmd::SaveMaterial::With({{"layer_id",id},{"selection",selection},{"path",path->Utf8()}}));}catch(const std::exception &e){w->status=e.what();}EndRow();
-            char name[256]; std::snprintf(name,sizeof(name),"%s",l.at("name").get<std::string>().c_str());
-            BeginRow("Name");if(ImGui::InputText("##name",name,sizeof(name),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {l["name"]=name;changed=true;++gesture;}EndRow();
-            changed|=Number("Thickness [µm]",l,"thickness_m",1e6);
-            auto &m=l["material"];
-            changed|=Number("Relative permittivity",m,"eps_r"); changed|=Number("Band gap [eV]",m,"Eg_eV"); changed|=Number("Affinity [eV]",m,"chi_eV");
-            changed|=Number("Nc [cm^-3]",m,"Nc_ref_m3",1e-6); changed|=Number("Nv [cm^-3]",m,"Nv_ref_m3",1e-6);
-            changed|=Number("Electron mobility [cm^2/(V s)]",m,"mu_n_m2_V_s",1e4); changed|=Number("Hole mobility [cm^2/(V s)]",m,"mu_p_m2_V_s",1e4);
-            changed|=Number("Donors [cm^-3]",l["doping"],"Nd_m3",1e-6); changed|=Number("Acceptors [cm^-3]",l["doping"],"Na_m3",1e-6);
+            char name[256]; std::snprintf(name,sizeof(name),"%s",l.name.c_str());
+            BeginRow("Name");if(ImGui::InputText("##name",name,sizeof(name),ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {l.name=name;changed=true;++gesture;}EndRow();
+            changed|=Number("Thickness [µm]",l.thickness_m,"thickness_m",1e6);
+            auto &m=l.material;
+            changed|=Number("Relative permittivity",m.eps_r,"eps_r"); changed|=Number("Band gap [eV]",m.Eg_eV,"Eg_eV"); changed|=Number("Affinity [eV]",m.chi_eV,"chi_eV");
+            changed|=Number("Nc [cm^-3]",m.Nc_ref_m3,"Nc_ref_m3",1e-6); changed|=Number("Nv [cm^-3]",m.Nv_ref_m3,"Nv_ref_m3",1e-6);
+            changed|=Number("Electron mobility [cm^2/(V s)]",m.mu_n_m2Vs,"mu_n_m2_V_s",1e4); changed|=Number("Hole mobility [cm^2/(V s)]",m.mu_p_m2Vs,"mu_p_m2_V_s",1e4);
+            changed|=Number("Donors [cm^-3]",l.Nd_m3,"Nd_m3",1e-6); changed|=Number("Acceptors [cm^-3]",l.Na_m3,"Na_m3",1e-6);
         } else if(view==2) {
             for(const auto *side:{"left","right"}) {
-                ImGui::PushID(side); ImGui::SeparatorText(side); auto &c=draft["contacts"][side];
-                bool flat=c.value("flat_band",false);
-                if(Toggle("Flat band (ohmic, automatic phi_m)",flat)) {c["flat_band"]=flat;changed=true;++gesture;}
+                ImGui::PushID(side); ImGui::SeparatorText(side); auto &c=std::string_view(side)=="left"?draft.project.left_contact:draft.project.right_contact;
+                bool flat=c.flat_band.value_or(false);
+                if(Toggle("Flat band (ohmic, automatic phi_m)",flat)) {c.flat_band=flat;changed=true;++gesture;}
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("Checked (SCAPS 'flat band'): phi_m follows the adjacent semiconductor, the contact is ohmic, no band bending.\nUnchecked: phi_m is used as entered; a metal on the wrong side of the semiconductor work function makes a depleting (Schottky-like) contact.");
-                ImGui::BeginDisabled(flat);changed|=Number("Work function phi_m [eV]",c,"phi_m_eV");ImGui::EndDisabled();
+                ImGui::BeginDisabled(flat);changed|=Number("Work function phi_m [eV]",c.phi_m_eV,"phi_m_eV");ImGui::EndDisabled();
                 if(flat) ImGui::TextDisabled("phi_m is derived from the adjacent layer (flat band).");
                 else {
                     // Documented formula (same non-degenerate model as scaps_core semiconductor_work_function_eV; Nc/Nv at reference T, full ionisation):
                     // ni = sqrt(Nc Nv) exp(-Eg/2kT); n0 = (net+sqrt(net^2+4ni^2))/2 for net=Nd-Na>=0 (else n0=ni^2/p0); phi_s = chi - kT ln(n0/Nc).
                     // n-type barrier = phi_m - phi_s, p-type barrier = phi_s - phi_m; barrier > 0 means depleting.
-                    const auto &layer=draft.at("layers")[std::string(side)=="left"?0:draft.at("layers").size()-1];const auto &m=layer.at("material");
-                    const double kT=8.617333262e-5*draft.value("temperature_K",300.),Nc=m.at("Nc_ref_m3"),Nv=m.at("Nv_ref_m3"),Eg=m.at("Eg_eV");
-                    const double net=layer.value("doping",Json::object()).value("Nd_m3",0.)-layer.value("doping",Json::object()).value("Na_m3",0.);
+                    const auto &layer=draft.project.layers[std::string(side)=="left"?0:draft.project.layers.size()-1];const auto &m=layer.material;
+                    const double kT=8.617333262e-5*draft.project.temperature_K,Nc=m.Nc_ref_m3,Nv=m.Nv_ref_m3,Eg=m.Eg_eV;
+                    const double net=layer.Nd_m3-layer.Na_m3;
                     const double ni=std::sqrt(Nc*Nv)*std::exp(-Eg/(2*kT)),root=std::sqrt(net*net+4*ni*ni),n0=net>=0?(net+root)/2:ni*ni/((-net+root)/2);
-                    const double phiS=m.at("chi_eV").get<double>()-kT*std::log(n0/Nc),barrier=net>=0?c.value("phi_m_eV",0.)-phiS:phiS-c.value("phi_m_eV",0.);
+                    const double phiS=m.chi_eV-kT*std::log(n0/Nc),barrier=net>=0?c.phi_m_eV-phiS:phiS-c.phi_m_eV;
                     if(barrier>1e-3) ImGui::TextColored(ImVec4(1.f,.7f,.3f,1.f),"semiconductor phi_s = %.3f eV -> barrier %.3f eV (depleting, Schottky-like)",phiS,barrier);
                     else ImGui::TextColored(ImVec4(.5f,.9f,.5f,1.f),"semiconductor phi_s = %.3f eV -> barrier %.3f eV (ohmic, no depletion)",phiS,barrier);
-                    if(!c.contains("flat_band")) ImGui::TextDisabled("flat_band not set: engine default (ohmic only when phi_m is on the ohmic side of phi_s).");
+                    if(!c.flat_band.has_value()) ImGui::TextDisabled("flat_band not set: engine default (ohmic only when phi_m is on the ohmic side of phi_s).");
                 }
                 for(const auto *key:{"Sn_m_s","Sp_m_s"}) {
-                    ImGui::PushID(key); bool infinite=c[key].is_string();
-                    if(Toggle(key==std::string("Sn_m_s")?"Infinite Sn [m/s]":"Infinite Sp [m/s]",infinite)) {c[key]=infinite?Json(".inf"):Json(1e5);changed=true;}
+                    ImGui::PushID(key); auto& velocity=std::string_view(key)=="Sn_m_s"?c.Sn_mps:c.Sp_mps;bool infinite=std::isinf(velocity);
+                    if(Toggle(key==std::string("Sn_m_s")?"Infinite Sn [m/s]":"Infinite Sp [m/s]",infinite)) {velocity=infinite?INFINITY:1e5;changed=true;}
                     
-                    if(!infinite) changed|=Number("Surface velocity [m/s]",c,key);
+                    if(!infinite) changed|=Number("Surface velocity [m/s]",velocity,key);
                     else ImGui::TextDisabled("S is infinite: clear the toggle to edit velocity [m/s]."); ImGui::PopID();
                 }
                 ImGui::PopID();
             }
             const auto &computed=(w->Current().bandResult.empty()?w->Current().Iv():w->Current().Band())->meta.prim;
             if(computed.contains("contact_phi_eV") && ImGui::CollapsingHeader("Contact view",ImGuiTreeNodeFlags_DefaultOpen)) {
-                double total=0;for(const auto &layer:draft.at("layers")) total+=layer.at("thickness_m").get<double>()*1e6;
+                double total=0;for(const auto &layer:draft.project.layers) total+=layer.thickness_m*1e6;
                 const double x[]={0,total},phi[]={computed.at("contact_phi_eV")[0],computed.at("contact_phi_eV")[1]};
                 ImGui::Text("Effective phi: left %.3f eV | right %.3f eV",phi[0],phi[1]);
                 if(BeginSavedPlot(*w,"Contact work functions",ImVec2(-1,180))) {
@@ -773,18 +774,18 @@ void Panel::RenderContent() {
                 }
             }
         } else if(view==3) {
-            changed|=Choice("Constants",draft,"constants_mode",{{"CODATA","codata"},{"SCAPS compatible","scaps_compat"}});
-            changed|=Choice("Mobility µ(T)",draft,"mobility_temperature_model",{{"Constant","constant"},{"SqrtT","sqrt_T"},{"Arora (Caughey-Thomas T)","caughey_thomas_T"}});
+            changed|=Choice<scaps_core::ConstantsMode>("Constants",draft.project.constants_mode,"constants_mode",{{"CODATA",scaps_core::ConstantsMode::CODATA},{"SCAPS compatible",scaps_core::ConstantsMode::ScapsCompat}});
+            changed|=Choice<scaps_core::MobilityTemperatureModel>("Mobility µ(T)",draft.project.mobility_temperature_model,"mobility_temperature_model",{{"Constant",scaps_core::MobilityTemperatureModel::Constant},{"SqrtT",scaps_core::MobilityTemperatureModel::SqrtT},{"Arora (Caughey-Thomas T)",scaps_core::MobilityTemperatureModel::CaugheyThomasT}});
             ImGui::TextWrapped("Arora uses the sourced caughey_thomas material parameters from the project; missing parameters are reported by the core.");
-            auto &mesh=draft["mesh"];
-            changed|=Choice("Mesh level",mesh,"adaptivity_level",{{"0","0"},{"1","1"},{"2","2"},{"3","3"},{"A","A"}});
-            changed|=Number("Target relative J error",mesh,"adaptive_target_relative_J_error");
-            changed|=Number("Points per layer",mesh,"points_per_layer");
-            changed|=Number("Newton residual tolerance",draft["solver"],"residual_tolerance");
-            changed|=Number("Newton iteration limit",draft["solver"],"max_newton_iterations");
+            auto &mesh=draft.project.mesh;
+            changed|=Choice("Mesh level",mesh.adaptivity_level,"adaptivity_level",{{"0","0"},{"1","1"},{"2","2"},{"3","3"},{"A","A"}});
+            changed|=Number("Target relative J error",mesh.adaptive_target_relative_J_error,"adaptive_target_relative_J_error");
+            changed|=Number("Points per layer",mesh.points_per_layer,"points_per_layer");
+            changed|=Number("Newton residual tolerance",draft.project.solver.residual_tolerance,"residual_tolerance");
+            changed|=Number("Newton iteration limit",draft.project.solver.max_newton_iterations,"max_newton_iterations");
         } else if(view==4) {
-            changed|=Number("Start [V]",draft["voltage"],"start_V"); changed|=Number("Stop [V]",draft["voltage"],"stop_V");
-            changed|=Number("Step [V]",draft["voltage"],"step_V"); changed|=Number("T [K]",draft,"temperature_K");w->tutorialOverlay.Item("scapslab.Run","temperature");
+            changed|=Number("Start [V]",draft.project.voltage.start_V,"start_V"); changed|=Number("Stop [V]",draft.project.voltage.stop_V,"stop_V");
+            changed|=Number("Step [V]",draft.project.voltage.step_V,"step_V"); changed|=Number("T [K]",draft.project.temperature_K,"temperature_K");w->tutorialOverlay.Item("scapslab.Run","temperature");
             ImGui::TextWrapped("Applied voltage: left minus right. Signed J follows the scaps_core terminal-current convention.");
             bool automatic=w->autoRecalculate,bandAutomatic=w->autoRecalculateBand;
             if(ImGui::Checkbox("Auto##iv",&automatic)) Do(Cmd::SetAutoRecalculate::With({{"enabled",automatic}}));TrackGesture();ImGui::SameLine();
@@ -797,7 +798,7 @@ void Panel::RenderContent() {
             ImGui::EndDisabled();
             if(w->Busy()) ImGui::TextDisabled("Calculation active: wait or Cancel. Parameter edits cancel an outdated sweep.");
         }
-        if(changed) Do(Cmd::EditDocument::With({{"document",draft},{"gesture_id",std::to_string(gesture)}}));
+        if(changed)Do(Cmd::EditDocument::Make(CreateRef<const ProjectDraft>(std::move(draft)),std::to_string(gesture)));
     }
     ImGui::EndDisabled();
     if(replacing) ImGui::TextWrapped("Project structure is changing; editing resumes when the operation finishes.");
@@ -820,45 +821,34 @@ template<class X,class Y> void PlotJson(Workflow &w,const char *title,const char
     if(BeginSavedPlot(w,title,ImVec2(-1,height))) {ImPlot::SetupAxes(xLabel,yLabel,ImPlotAxisFlags_None,ImPlotAxisFlags_None);if(log) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);SetupSavedPlot(w.plotSession,title);ImPlot::PlotLine(title,xs.data(),ys.data(),int(xs.size()));EndSavedPlot(w,title);}
 }
 }
-bool Panel::OpticalFile(Json &object,const char *file,const char *table,const char *extension,const char *label) {
-    ImGui::PushID(file);const auto previous=object;bool changed=FileField(label,object,file);
-    BeginRow("Select file");if(ImGui::Button("Browse...")) {
-        try {if(const auto path=OpenFileDialog({label,extension})){object[file]=path->Utf8();changed=true;}}catch(const std::exception &e){w->status=e.what();}
-    }w->tutorialOverlay.Item(std::string(extension)=="abs"?"scapslab.Absorption":std::string(extension)=="opt"?"scapslab.Defects":"scapslab.Illumination",file);EndRow();
-    if(changed) {
-        try {
-            const auto path=object.at(file).get<std::string>();Json points;
-            const std::string kind=extension;
-            if(kind=="gen")points=scaps_core::read_scaps_generation(path);
-            else if(kind=="spe")points=scaps_core::read_scaps_spectrum(path);
-            else if(kind=="abs")points=scaps_core::read_scaps_absorption(path);
-            else if(kind=="ftr")points=scaps_core::read_scaps_filter(path);
-            else points=scaps_core::read_scaps_absorption(path);
-            object[table]=points;object[std::string("scapslab_")+file]=path;object[file]="";
-        }catch(const std::exception &e){w->status=std::string(label)+": "+e.what();object=previous;changed=false;}
-    }
-    const auto points=object.value(table,Json::array());
-    if(!points.empty()) {
-        ImGui::TextWrapped("%s | %d points",object.value(std::string("scapslab_")+file,std::string("Embedded table")).c_str(),int(points.size()));
-        Json x=Json::array(),y=Json::array();for(const auto &point:points){x.push_back(point[0].get<double>()*(std::string(extension)=="gen"?1e9:1.));y.push_back(point[1].get<double>()*(std::string(extension)=="gen"?1e-6:1.));}
+bool Panel::OpticalFile(ProjectDraft& draft,std::string& file,scaps_core::OpticalTable& table,const char* extension,const char* label) {
+    const auto field=ProjectFieldPath(draft.project,&file);const auto dot=field.rfind('.');const auto key=field.substr(dot+1);
+    std::string pointer="/";for(char c:field.substr(0,dot)){if(c=='.' || c=='[')pointer+='/';else if(c!=']')pointer+=c;}pointer+="/scapslab_"+key;
+    ImGui::PushID(field.c_str());const auto previous=file;bool changed=false;
+    char text[1024];std::snprintf(text,sizeof(text),"%s",file.c_str());BeginRow(label);if(ImGui::InputText("##value",text,sizeof(text),ImGuiInputTextFlags_EnterReturnsTrue)){file=text;changed=true;}EndRow();
+    BeginRow("Select file");if(ImGui::Button("Browse..."))try{if(const auto path=OpenFileDialog({label,extension})){file=path->Utf8();changed=true;}}catch(const std::exception& e){w->status=e.what();}
+    w->tutorialOverlay.Item(std::string(extension)=="abs"?"scapslab.Absorption":std::string(extension)=="opt"?"scapslab.Defects":"scapslab.Illumination",key);EndRow();
+    if(changed)try {
         const std::string kind=extension;
+        auto points=kind=="gen"?scaps_core::read_scaps_generation(file):kind=="spe"?scaps_core::read_scaps_spectrum(file):kind=="ftr"?scaps_core::read_scaps_filter(file):scaps_core::read_scaps_absorption(file);
+        draft.extensions[pointer]=file;table=std::move(points);file.clear();
+    }catch(const std::exception& e){w->status=std::string(label)+": "+e.what();file=previous;changed=false;}
+    if(!table.empty()) {
+        const auto source=draft.extensions.find(pointer);const auto name=source!=draft.extensions.end() && source->second.is_string()?source->second.get<std::string>():std::string("Embedded table");
+        ImGui::TextWrapped("%s | %d points",name.c_str(),int(table.size()));
+        std::vector<double> x,y;const std::string kind=extension;for(const auto& [at,value]:table){x.push_back(at*(kind=="gen"?1e9:1.));y.push_back(value*(kind=="gen"?1e-6:1.));}
         PlotJson(*w,label,kind=="gen"?"x [nm]":"Wavelength [nm]",kind=="gen"?"G [cm^-3 s^-1]":kind=="spe"?"Power [W/m^2]":kind=="abs"?"alpha [m^-1]":kind=="ftr"?"Fraction [1]":"Cross section [m^2]",x,y,false,180);
         if(kind=="gen" && ImGui::BeginPopupContextItem("Export generation")) {
-            ImGui::BeginDisabled(w->Busy());
-            for(const auto *format:{"csv","grd"})if(ImGui::MenuItem((std::string("Export .")+format).c_str()))try {
-                if(const auto path=SaveFileDialog({"Generation profile",format},(std::string("generation.")+format).c_str())) {
-                    Do(Cmd::ExportProfile::With({{"parameter_id","generation_m3_s"},{"path",path->Utf8()}}));
-                }
-            }catch(const std::exception &e){w->status=e.what();}ImGui::EndDisabled();ImGui::EndPopup();
+            ImGui::BeginDisabled(w->Busy());for(const auto* format:{"csv","grd"})if(ImGui::MenuItem((std::string("Export .")+format).c_str()))try{if(const auto path=SaveFileDialog({"Generation profile",format},(std::string("generation.")+format).c_str()))Do(Cmd::ExportProfile::With({{"parameter_id","generation_m3_s"},{"path",path->Utf8()}}));}catch(const std::exception& e){w->status=e.what();}ImGui::EndDisabled();ImGui::EndPopup();
         }
     }
     ImGui::PopID();return changed;
 }
-bool Panel::Illumination(Json &draft) {
-    bool changed=false;auto &light=draft["illumination"];
+bool Panel::Illumination(ProjectDraft &draft) {
+    bool changed=false;auto &light=draft.project.illumination;
     if(!w->Busy() && w->Current().actions.contains("qe"))qeRequest.update(w->Current().actions.at("qe"),true);
     const auto previousQe=qeRequest;
-    bool enabled=light.value("enabled",false);if(Toggle("Light enabled",enabled)) {light["enabled"]=enabled;changed=true;}
+    bool enabled=light.enabled;if(Toggle("Light enabled",enabled)) {light.enabled=enabled;changed=true;}
     const char *galleryTab=gallery?std::getenv("SCAPSLAB_OPTICAL_TAB"):nullptr;
     const int savedTab=w->plotSession.settings.opticalTab;const bool restoreTab=opticalTab!=savedTab;
     int tutorialTab=-1;if(const auto *step=w->tutorial.Step();step && step->at("target").value("window",std::string{})=="scapslab.Illumination"){const auto item=step->at("target").value("item",std::string{});tutorialTab=item=="light-iv"?1:item=="qe"?2:-1;} // the coach must point at a visible button
@@ -868,20 +858,20 @@ bool Panel::Illumination(Json &draft) {
         if(ImGui::BeginTabItem("Spectrum / G(x)",nullptr,tabFlags(0))) {selectTab(0);
             const bool wide=ImGui::GetContentRegionAvail().x>750;
             if(wide) {ImGui::BeginTable("Spectrum and generation",2,ImGuiTableFlags_SizingStretchSame);ImGui::TableNextColumn();}
-            int source=light.value("mode",std::string("uniform"))=="generation_file"?3:light.value("mode",std::string("uniform"))=="uniform"?4:light.value("mode",std::string{})=="monochromatic"?2:light.value("scapslab_spectrum",std::string{})=="AM1.5G"?0:1;
+            int source=light.mode=="generation_file"?3:light.mode=="uniform"?4:light.mode=="monochromatic"?2:(draft.extensions.contains("/illumination/scapslab_spectrum")?draft.extensions.at("/illumination/scapslab_spectrum").get<std::string>():std::string{})=="AM1.5G"?0:1;
             BeginRow("Spectrum");const bool sourceChanged=ImGui::Combo("##source",&source,"AM1.5G\0Spectrum from file\0Monochromatic\0Generation profile from file\0Uniform generation\0");w->tutorialOverlay.Item("scapslab.Illumination","source");if(sourceChanged) {
                 std::string spectrumPath;bool apply=true;
                 if(source==1 || source==3) {try {const auto path=OpenFileDialog({source==3?"SCAPS generation":"SCAPS spectrum",source==3?"gen":"spe"});if(path)spectrumPath=path->Utf8();else apply=false;}catch(const std::exception &e){w->status=e.what();apply=false;}}
-                if(apply) {light["mode"]=source==3?"generation_file":source==4?"uniform":source==2?"monochromatic":"spectrum";light["scapslab_spectrum"]=source==0?"AM1.5G":"custom";light["spectrum_file"]="";light["spectrum_nm_W_m2"]=source==0?AM15Spectrum():Json::array();if(source==1)light["spectrum_file"]=spectrumPath;if(source==3){light["generation_file"]=spectrumPath;light["generation_m_m3s"]=Json::array();}changed=true;++gesture;}
+                if(apply) {light.mode=source==3?"generation_file":source==4?"uniform":source==2?"monochromatic":"spectrum";draft.extensions["/illumination/scapslab_spectrum"]=source==0?"AM1.5G":"custom";light.spectrum_file="";light.spectrum_nm_W_m2=source==0?AM15SpectrumValues():scaps_core::OpticalTable{};if(source==1)light.spectrum_file=spectrumPath;if(source==3){light.generation_file=spectrumPath;light.generation_m_m3s.clear();}changed=true;++gesture;}
             }EndRow();
-            if(source==1) {if(OpticalFile(light,"spectrum_file","spectrum_nm_W_m2","spe","Spectrum file [.spe]")) {light["mode"]="spectrum";light["scapslab_spectrum"]="custom";changed=true;}}
-            if(source==3)changed|=OpticalFile(light,"generation_file","generation_m_m3s","gen","Generation profile [.gen]");
-            if(source==4)changed|=Number("Uniform G [m^-3 s^-1]",light,"uniform_generation_m3_s");
-            if(source==2) {changed|=Number("Wavelength [nm]",light,"wavelength_nm");changed|=Number("Power [W/m^2]",light,"monochromatic_power_W_m2");}
-            changed|=Number("Intensity multiplier",light,"intensity_multiplier");
-            bool right=light.value("from_right",false);if(Toggle("Illuminate from right",right)) {light["from_right"]=right;changed=true;}
-            changed|=Number("Front transmission",light,"front_transmission");changed|=Number("Back reflection",light,"back_reflection");changed|=Number("Internal reflection",light,"front_internal_reflection");
-            changed|=OpticalFile(light,"front_filter_file","front_filter_nm_fraction","ftr","Front transmission [.ftr]");changed|=OpticalFile(light,"back_filter_file","back_filter_nm_fraction","ftr","Back reflection [.ftr]");
+            if(source==1) {if(OpticalFile(draft,light.spectrum_file,light.spectrum_nm_W_m2,"spe","Spectrum file [.spe]")) {light.mode="spectrum";draft.extensions["/illumination/scapslab_spectrum"]="custom";changed=true;}}
+            if(source==3)changed|=OpticalFile(draft,light.generation_file,light.generation_m_m3s,"gen","Generation profile [.gen]");
+            if(source==4)changed|=Number("Uniform G [m^-3 s^-1]",light.uniform_generation_m3s,"uniform_generation_m3_s");
+            if(source==2) {changed|=Number("Wavelength [nm]",light.wavelength_nm,"wavelength_nm");changed|=Number("Power [W/m^2]",light.monochromatic_power_W_m2,"monochromatic_power_W_m2");}
+            changed|=Number("Intensity multiplier",light.intensity_multiplier,"intensity_multiplier");
+            bool right=light.from_right;if(Toggle("Illuminate from right",right)) {light.from_right=right;changed=true;}
+            changed|=Number("Front transmission",light.front_transmission,"front_transmission");changed|=Number("Back reflection",light.back_reflection,"back_reflection");changed|=Number("Internal reflection",light.front_internal_reflection,"front_internal_reflection");
+            changed|=OpticalFile(draft,light.front_filter_file,light.front_filter_nm_fraction,"ftr","Front transmission [.ftr]");changed|=OpticalFile(draft,light.back_filter_file,light.back_filter_nm_fraction,"ftr","Back reflection [.ftr]");
             if(wide) ImGui::TableNextColumn();
             const auto &r=*(w->Current().Band()->optics?w->Current().Band():w->Current().Iv());
             if(r.optics) {const auto &o=*r.optics;ImGui::Text("Incident power %.6g W/m^2",o.incident_power_W_m2);PlotJson(*w,"G(x)","x [m]","G [m^-3 s^-1]",o.x_m.get(),o.generation_m3_s.get(),false,330,true);}
@@ -965,223 +955,201 @@ bool Panel::Illumination(Json &draft) {
     if(previousQe!=qeRequest && !w->Busy()) {auto actions=w->Current().actions;actions["qe"]=qeRequest;Do(Cmd::SetActionSettings::With({{"actions",actions}}));}
     ImGui::TextWrapped("%s",w->status.c_str());return changed;
 }
-bool Panel::Absorption(Json &draft) {
-    auto &selected=w->Current().selectedLayer;auto &layers=draft["layers"];selected=std::clamp(selected,0,int(layers.size())-1);
-    BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i);if(ImGui::Selectable(layers[i].at("name").get<std::string>().c_str(),i==selected)) selected=i;ImGui::PopID();}ImGui::EndCombo();}EndRow();
+bool Panel::Absorption(ProjectDraft &draft) {
+    auto &selected=w->Current().selectedLayer;auto &layers=draft.project.layers;selected=std::clamp(selected,0,int(layers.size())-1);
+    BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].name.c_str())) {for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i);if(ImGui::Selectable(layers[i].name.c_str(),i==selected)) selected=i;ImGui::PopID();}ImGui::EndCombo();}EndRow();
     const bool wide=ImGui::GetContentRegionAvail().x>750;if(wide){ImGui::BeginTable("Absorption editor and plot",2,ImGuiTableFlags_SizingStretchSame);ImGui::TableNextColumn();}
-    auto &a=layers[selected]["absorption"];const auto before=a;bool changed=Choice("Absorption model",a,"model",{{"None","none"},{"Square root","sqrt"},{"SCAPS model","scaps"},{"File","file"}});w->tutorialOverlay.Item("scapslab.Absorption","model");
-    if(changed && a["model"]=="file" && a.value("file",std::string{}).empty()) {try {const auto path=OpenFileDialog({"SCAPS absorption","abs"});if(path)a["file"]=path->Utf8();else {a=before;changed=false;}}catch(const std::exception &e){w->status=e.what();a=before;changed=false;}}
-    if(a["model"]=="file") changed|=OpticalFile(a,"file","table_nm_m1","abs","Absorption file [.abs]");
-    if(a["model"]=="sqrt") {changed|=Number("A [m^-1 eV^1/2]",a,"A_m1_eV_half");changed|=Number("B [m^-1 eV^-1/2]",a,"B_m1_eV_minus_half");}
-    if(a["model"]=="scaps") {changed|=Number("Background [m^-1]",a,"background_m1");changed|=Number("Step [m^-1]",a,"step_m1");changed|=Number("Sqrt alpha [m^-1]",a,"sqrt_alpha_m1");changed|=Number("Sqrt beta [m^-1]",a,"sqrt_beta_m1");}
-    bool mixing=a.contains("composition");
+    auto &a=layers[selected].absorption;const auto before=a;bool changed=Choice("Absorption model",a.model,"model",{{"None","none"},{"Square root","sqrt"},{"SCAPS model","scaps"},{"File","file"}});w->tutorialOverlay.Item("scapslab.Absorption","model");
+    if(changed && a.model=="file" && a.file.empty()) {try {const auto path=OpenFileDialog({"SCAPS absorption","abs"});if(path)a.file=path->Utf8();else {a=before;changed=false;}}catch(const std::exception &e){w->status=e.what();a=before;changed=false;}}
+    if(a.model=="file") changed|=OpticalFile(draft,a.file,a.table_nm_m1,"abs","Absorption file [.abs]");
+    if(a.model=="sqrt") {changed|=Number("A [m^-1 eV^1/2]",a.A_m1_eV_half,"A_m1_eV_half");changed|=Number("B [m^-1 eV^-1/2]",a.B_m1_eV_minus_half,"B_m1_eV_minus_half");}
+    if(a.model=="scaps") {changed|=Number("Background [m^-1]",a.background_m1,"background_m1");changed|=Number("Step [m^-1]",a.step_m1,"step_m1");changed|=Number("Sqrt alpha [m^-1]",a.sqrt_alpha_m1,"sqrt_alpha_m1");changed|=Number("Sqrt beta [m^-1]",a.sqrt_beta_m1,"sqrt_beta_m1");}
+    bool mixing=bool(a.composition);
     if(Toggle("Composition absorption A/B",mixing)) {
-        if(!mixing){a.erase("composition");changed=true;}
+        if(!mixing){a.composition.reset();changed=true;}
         else try {
             const auto fileA=OpenFileDialog({"Pure A absorption","abs"});
             if(fileA)if(const auto fileB=OpenFileDialog({"Pure B absorption","abs"})) {
-                const double gap=layers[selected].at("material").at("Eg_eV");
-                a["composition"]={{"table_a_nm_m1",scaps_core::read_scaps_absorption(fileA->Utf8())},{"table_b_nm_m1",scaps_core::read_scaps_absorption(fileB->Utf8())},
-                    {"file_a",""},{"file_b",""},{"scapslab_file_a",fileA->Utf8()},{"scapslab_file_b",fileB->Utf8()},{"Eg_a_eV",gap},{"Eg_b_eV",gap},{"uv_a_nm",200.},{"uv_b_nm",200.}};
+                const double gap=layers[selected].material.Eg_eV;
+                a.composition.emplace();auto& mixed=*a.composition;mixed.table_a_nm_m1=scaps_core::read_scaps_absorption(fileA->Utf8());mixed.table_b_nm_m1=scaps_core::read_scaps_absorption(fileB->Utf8());mixed.Eg_a_eV=mixed.Eg_b_eV=gap;mixed.uv_a_nm=mixed.uv_b_nm=200.;
                 changed=true;
             }
         }catch(const std::exception &e){w->status=e.what();}
     }
-    if(a.contains("composition")) {
-        auto &c=a["composition"];
-        changed|=OpticalFile(c,"file_a","table_a_nm_m1","abs","Pure A absorption [.abs]");
-        changed|=OpticalFile(c,"file_b","table_b_nm_m1","abs","Pure B absorption [.abs]");
-        changed|=Number("Pure A gap [eV]",c,"Eg_a_eV");changed|=Number("Pure B gap [eV]",c,"Eg_b_eV");
-        changed|=Number("Pure A UV limit [nm]",c,"uv_a_nm");changed|=Number("Pure B UV limit [nm]",c,"uv_b_nm");
+    if(bool(a.composition)) {
+        auto &c=*a.composition;
+        changed|=OpticalFile(draft,c.file_a,c.table_a_nm_m1,"abs","Pure A absorption [.abs]");
+        changed|=OpticalFile(draft,c.file_b,c.table_b_nm_m1,"abs","Pure B absorption [.abs]");
+        changed|=Number("Pure A gap [eV]",c.Eg_a_eV,"Eg_a_eV");changed|=Number("Pure B gap [eV]",c.Eg_b_eV,"Eg_b_eV");
+        changed|=Number("Pure A UV limit [nm]",c.uv_a_nm,"uv_a_nm");changed|=Number("Pure B UV limit [nm]",c.uv_b_nm,"uv_b_nm");
     }
-    bool tail=a.value("urbach_enabled",false);if(Toggle("Urbach tail",tail)) {a["urbach_enabled"]=tail;changed=true;}if(tail) changed|=Number("Urbach E_U [eV]",a,"urbach_energy_eV");
+    bool tail=a.urbach_enabled;if(Toggle("Urbach tail",tail)) {a.urbach_enabled=tail;changed=true;}if(tail) changed|=Number("Urbach E_U [eV]",a.urbach_energy_eV,"urbach_energy_eV");
     ImGui::TextWrapped("Eg-joint Urbach extension. A pure square-root model has alpha(Eg)=0 and therefore no tail; use a nonzero step/background or a file.");
     if(wide) ImGui::TableNextColumn();
     const auto &r=*(w->Current().Band()->optics?w->Current().Band():w->Current().Iv());
-    if(r.optics) for(const auto &curve:r.optics->absorption) if(curve.layer_id==layers[selected].at("scapslab_id").get<std::string>()) {
+    if(r.optics) for(const auto &curve:r.optics->absorption) if(curve.layer_id==draft.layers[selected].id) {
         const auto &x=Vec(curve.wavelength_nm.get()),&y=Vec(curve.alpha_m1.get(),1.,1),&base=Vec(curve.without_tail_m1.get(),1.,1);
         if(BeginSavedPlot(*w,"Absorption preview",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","alpha [m^-1]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);SetupSavedPlot(w->plotSession,"Absorption preview");ImPlot::PlotLine("With tail",x.data(),y.data(),int(x.size()));ImPlot::PlotLine("Without tail",x.data(),base.data(),int(x.size()));EndSavedPlot(*w,"Absorption preview");}
     }if(wide) ImGui::EndTable();return changed;
 }
-bool Panel::ProfileEditor(Json &g,double thickness,const std::string &parameter,const Json &composition,bool diffusion) {
-    ImGui::PushID(parameter.c_str());bool changed=false;
-    const bool density=parameter.find("_m3")!=std::string::npos;
-    const bool mobility=parameter.find("_m2_V_s")!=std::string::npos;
-    const double scale=density?1e-6:mobility?1e4:1.;
-    const std::string unit=density?"cm^-3":mobility?"cm^2/(V s)":parameter=="composition" || parameter=="eps_r"?"1":parameter.find("vth_")==0?"m/s":"eV";
-    const auto old=g;
-    if(!g.contains("law"))g["law"]="uniform";
-    changed|=Choice("Profile law",g,"law",{{"Uniform","uniform"},{"Linear","linear"},{"Parabolic","parabolic"},{"Two parabolas","parabolic2"},
-        {"Logarithmic","logarithmic"},{"Exponential","exponential"},{"Beta","beta"},{"Power","power"},{"Effective medium","effective_medium"},{"Gaussian","gaussian"},{"From file","table"}});
+bool Panel::ProfileEditor(scaps_core::Profile& g,double thickness,const std::string& parameter,const scaps_core::Profile* composition,bool diffusion) {
+    using namespace scaps_core;
+    ImGui::PushID(parameter.c_str());bool changed=false;const bool density=parameter.find("_m3")!=std::string::npos,mobility=parameter.find("_m2_V_s")!=std::string::npos;
+    const double scale=density?1e-6:mobility?1e4:1.;const std::string unit=density?"cm^-3":mobility?"cm^2/(V s)":parameter=="composition" || parameter=="eps_r"?"1":parameter.find("vth_")==0?"m/s":"eV";
+    const auto old=g;auto law=std::string(grading_law_name(g.law));
+    if(Choice("Profile law",law,"law",{{"Uniform","uniform"},{"Linear","linear"},{"Parabolic","parabolic"},{"Two parabolas","parabolic2"},{"Logarithmic","logarithmic"},{"Exponential","exponential"},{"Beta","beta"},{"Power","power"},{"Effective medium","effective_medium"},{"Gaussian","gaussian"},{"From file","table"}})){g.law=grading_law_from_string(law);changed=true;}
     w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","law");
-    if(diffusion) {BeginRow("Diffusion law");const char* owner=parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading";if(ImGui::Button("Gauss")){g["law"]="gauss_diffusion";changed=true;}w->tutorialOverlay.Item(owner,"diffusion-gauss");ImGui::SameLine();if(ImGui::Button("erfc")){g["law"]="erfc_diffusion";changed=true;}w->tutorialOverlay.Item(owner,"diffusion-erfc");EndRow();}
+    if(diffusion){BeginRow("Diffusion law");const char* owner=parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading";if(ImGui::Button("Gauss")){g.law=GradingLaw::GaussDiffusion;changed=true;}w->tutorialOverlay.Item(owner,"diffusion-gauss");ImGui::SameLine();if(ImGui::Button("erfc")){g.law=GradingLaw::ErfcDiffusion;changed=true;}w->tutorialOverlay.Item(owner,"diffusion-erfc");EndRow();}
     auto load=[&] {
-        try {if(const auto file=OpenFileDialog({"SCAPS grading","grd"})) {
-            auto loaded=ProfileFromFile(file->Utf8(),density);
-            if(!w->path.empty()) {std::error_code ec;const auto relative=std::filesystem::relative(file->Native(),std::filesystem::path(w->path).parent_path(),ec);if(!ec)loaded["source_file"]=relative.generic_string();}
-            g=std::move(loaded);changed=true;
-        }else if(old.value("law",std::string{})!="table") {g=old;changed=false;}}catch(const std::exception &e){w->status=e.what();g=old;changed=false;}
+        try{if(const auto file=OpenFileDialog({"SCAPS grading","grd"})) {
+            auto loaded=ReadProfileFile(file->Utf8(),density);g=std::move(loaded.profile);
+            if(!w->path.empty()){std::error_code ec;const auto relative=std::filesystem::relative(file->Native(),std::filesystem::path(w->path).parent_path(),ec);if(!ec)g.source_file=relative.generic_string();}
+            if(numericDraft){ResetProfileFields(*numericDraft,g);const auto field=ProjectFieldPath(numericDraft->project,&g);std::string pointer="/";for(char c:field){if(c=='.' || c=='[')pointer+='/';else if(c!=']')pointer+=c;}numericDraft->extensions[pointer+"/scapslab_warnings"]=loaded.warnings;}
+            changed=true;
+        }else if(old.law!=GradingLaw::Table){g=old;changed=false;}}catch(const std::exception& e){w->status=e.what();g=old;changed=false;}
     };
-    if(changed && g["law"]=="table" && !g.contains("coordinate"))load();
-    if(g.value("law",std::string{})=="table") {
+    if(changed && g.law==GradingLaw::Table && g.coordinate.empty())load();
+    if(g.law==GradingLaw::Table) {
         BeginRow("Grading file [.grd]");if(ImGui::Button("Browse..."))load();w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","load-profile");EndRow();
-        ImGui::TextWrapped("%s | %d points",g.value("source_file",std::string("Embedded table")).c_str(),int(g.value("coordinate",Json::array()).size()));
-        bool log=g.value("interpolation_logarithmic",density);if(Toggle("Logarithmic interpolation",log)){g["interpolation_logarithmic"]=log;changed=true;}
-    } else {
-        auto number=[&](const char *key,const char *label,double fallback,double factor=1.) {
-            if(!g.contains(key))g[key]=fallback;
-            const char *valueKey=factor==scale?(density?"Nt_m3":parameter.c_str()):key;Json value={{valueKey,g.at(key)}};
-            ImGui::PushID(key);
-            if(Number(label,value,valueKey,factor)){g[key]=value.at(valueKey);changed=true;}ImGui::PopID();
-        };
+        ImGui::TextWrapped("%s | %d points",g.source_file.empty()?"Embedded table":g.source_file.c_str(),int(g.coordinate.size()));changed|=Toggle("Logarithmic interpolation",g.interpolation_logarithmic);
+    }else {
+        auto number=[&](const char* key,const char* label,double fallback,double factor=1.){const char* valueKey=factor==scale?(density?"Nt_m3":parameter.c_str()):key;ImGui::PushID(key);changed|=Number(label,ProfileParameter(*numericDraft,g,key,fallback),valueKey,factor);ImGui::PopID();};
         number("left",("Left / amplitude ["+unit+"]").c_str(),0.,scale);number("right",("Right ["+unit+"]").c_str(),0.,scale);
-        const auto law=g.at("law").get<std::string>();
-        if(law=="parabolic")number("bowing",("Bowing ["+unit+"]").c_str(),0.,scale);
-        if(law=="parabolic2"){number("midpoint","Middle coordinate [x/d or y]",.5);number("middle",("Middle value ["+unit+"]").c_str(),0.,scale);}
-        if(law=="exponential"){number("background",("Background ["+unit+"]").c_str(),0.,scale);number("length_left","Left length [x/d or y]",1.);number("length_right","Right length [x/d or y]",1.);}
-        if(law=="beta"){number("beta_a","Beta a [1]",1.);number("beta_b","Beta b [1]",1.);}
-        if(law=="power")number("power","Power [1]",1.);
-        if(law=="gaussian"){number("background",("Background ["+unit+"]").c_str(),0.,scale);number("gaussian_center","Centre [x/d or y]",.5);number("gaussian_width","Sigma [x/d or y]",.1);}
-        if(law=="gauss_diffusion" || law=="erfc_diffusion") {
-            number("diffusion_depth_m","Signed diffusion depth [um]",-1e-6,1e6);
-            if(law=="gauss_diffusion"){number("projected_range_m","Projected range [um]",0.,1e6);number("dose_m2","Dose [cm^-2]",1e14,1e-4);}
-            else number("surface_density_m3","Surface density [cm^-3]",1e20,1e-6);
-        }
+        const auto law=g.law;
+        if(law==GradingLaw::Parabolic)number("bowing",("Bowing ["+unit+"]").c_str(),0.,scale);
+        if(law==GradingLaw::Parabolic2){number("midpoint","Middle coordinate [x/d or y]",.5);number("middle",("Middle value ["+unit+"]").c_str(),0.,scale);}
+        if(law==GradingLaw::Exponential){number("background",("Background ["+unit+"]").c_str(),0.,scale);number("length_left","Left length [x/d or y]",1.);number("length_right","Right length [x/d or y]",1.);}
+        if(law==GradingLaw::Beta){number("beta_a","Beta a [1]",1.);number("beta_b","Beta b [1]",1.);}
+        if(law==GradingLaw::Power)number("power","Power [1]",1.);
+        if(law==GradingLaw::Gaussian){number("background",("Background ["+unit+"]").c_str(),0.,scale);number("gaussian_center","Centre [x/d or y]",.5);number("gaussian_width","Sigma [x/d or y]",.1);}
+        if(law==GradingLaw::GaussDiffusion || law==GradingLaw::ErfcDiffusion){number("diffusion_depth_m","Signed diffusion depth [um]",-1e-6,1e6);if(law==GradingLaw::GaussDiffusion){number("projected_range_m","Projected range [um]",0.,1e6);number("dose_m2","Dose [cm^-2]",1e14,1e-4);}else number("surface_density_m3","Surface density [cm^-3]",1e20,1e-6);}
     }
-    if(parameter=="Nd_m3" || parameter=="Na_m3" || parameter=="Nt_m3") {bool dependent=g.value("composition_dependent",false);if(Toggle("Depends on composition y",dependent)){g["composition_dependent"]=dependent;changed=true;}}
+    if(parameter=="Nd_m3" || parameter=="Na_m3" || parameter=="Nt_m3")changed|=Toggle("Depends on composition y",g.composition_dependent);
     try {
-        const auto layerId=w->Current().document.at("layers")[w->Current().selectedLayer].at("scapslab_id").get<std::string>();
-        const auto &document=numericDocument?*numericDocument:w->Current().document;
-        auto displayProfile=g;
-        if(parameter!="composition" && parameter!="Nd_m3" && parameter!="Na_m3" && parameter!="Nt_m3") {
-            displayProfile["composition_dependent"]=true;ImGui::TextDisabled("Material P(y): x is mapped through composition y(x).");
-        }
-        auto samples=ProfileSamples(ResolveSharedProfile(displayProfile,document,layerId,parameter),thickness,ResolveSharedProfile(composition,document,layerId,"composition"));
-        samples["parameter_id"]=parameter;
-        for(const auto &warning:g.value("scapslab_warnings",Json::array()))ImGui::TextWrapped("File warning: %s",warning.get<std::string>().c_str());
-        auto x=samples.at("x_m").get<std::vector<double>>(),y=samples.at("value_SI").get<std::vector<double>>();for(auto &v:x)v*=1e9;for(auto &v:y)v*=scale;
+        const auto& draft=numericDraft?*numericDraft:*w->Current().draft;const auto& layerId=draft.layers[w->Current().selectedLayer].id;
+        auto display=g;if(parameter!="composition" && parameter!="Nd_m3" && parameter!="Na_m3" && parameter!="Nt_m3"){display.composition_dependent=true;ImGui::TextDisabled("Material P(y): x is mapped through composition y(x).");}
+        auto c=composition?std::optional<Profile>(ResolveSharedProfile(*composition,draft,layerId,"composition")):std::nullopt;auto samples=ProfileSamples(ResolveSharedProfile(display,draft,layerId,parameter),thickness,c?&*c:nullptr);
+        const auto field=ProjectFieldPath(draft.project,&g);std::string pointer="/";for(char ch:field){if(ch=='.' || ch=='[')pointer+='/';else if(ch!=']')pointer+=ch;}
+        if(const auto it=draft.extensions.find(pointer+"/scapslab_warnings");it!=draft.extensions.end())for(const auto& warning:it->second)ImGui::TextWrapped("File warning: %s",warning.get<std::string>().c_str());
+        auto x=std::move(samples.x_m),y=std::move(samples.value_SI);for(auto& v:x)v*=1e9;for(auto& v:y)v*=scale;
         PlotJson(*w,"Profile preview","Local x [nm]",("Value ["+unit+"]").c_str(),x,y,density,220);w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","export-profile");
-        if(ImGui::BeginPopupContextItem("Export profile")) {
-            ImGui::BeginDisabled(w->Busy());
-            for(const auto *format:{"csv","grd"}) if(ImGui::MenuItem((std::string("Export .")+format).c_str())) {
-                try {if(const auto path=SaveFileDialog({"Profile",format},(std::string("profile.")+format).c_str())) {
-                    Json request={{"operation","export_profile"},{"layer_id",layerId},{"parameter_id",parameter},{"path",path->Utf8()}};
-                    if(parameter=="Nt_m3")request["defect_id"]=w->Current().document.at("layers")[w->Current().selectedLayer].at("defects")[selectedDefect].at("scapslab_id");
-                    Do(Cmd::ExportProfile::FromJson(request));
-                }}catch(const std::exception &e){w->status=e.what();}
-            }ImGui::EndDisabled();ImGui::EndPopup();
-        }
+        if(ImGui::BeginPopupContextItem("Export profile")){ImGui::BeginDisabled(w->Busy());for(const auto* format:{"csv","grd"})if(ImGui::MenuItem((std::string("Export .")+format).c_str()))try{if(const auto path=SaveFileDialog({"Profile",format},(std::string("profile.")+format).c_str())){Json request={{"operation","export_profile"},{"layer_id",layerId},{"parameter_id",parameter},{"path",path->Utf8()}};if(parameter=="Nt_m3")request["defect_id"]=draft.layers[w->Current().selectedLayer].defects[selectedDefect].id;Do(Cmd::ExportProfile::FromJson(request));}}catch(const std::exception& e){w->status=e.what();}ImGui::EndDisabled();ImGui::EndPopup();}
         ImGui::TextDisabled("Right-click preview to export CSV / .grd (SI values).");
-    }catch(const std::exception &e){ImGui::TextWrapped("Profile error: %s",e.what());}
+    }catch(const std::exception& e){ImGui::TextWrapped("Profile error: %s",e.what());}
     ImGui::PopID();return changed;
 }
-bool Panel::Grading(Json &draft) {
-    bool changed=false;auto &layers=draft["layers"];auto &selected=w->Current().selectedLayer;selected=std::clamp(selected,0,int(layers.size())-1);
-    BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].at("name").get<std::string>().c_str())) {for(int i=0;i<int(layers.size());++i) {ImGui::PushID(i);if(ImGui::Selectable(layers[i].at("name").get<std::string>().c_str(),i==selected)) selected=i;ImGui::PopID();}ImGui::EndCombo();}EndRow();
-    auto &l=layers[selected];BeginRow("Parameter (SI / eV)");const bool parameterOpen=ImGui::BeginCombo("##parameter",gradingParameter.c_str());w->tutorialOverlay.Item("scapslab.Grading","parameter");if(parameterOpen) {for(const auto *key:{"composition","Eg_eV","chi_eV","eps_r","Nd_m3","Na_m3","Nc_ref_m3","Nv_ref_m3","mu_n_m2_V_s","mu_p_m2_V_s","vth_n_ref_m_s","vth_p_ref_m_s"}) if(ImGui::Selectable(key,gradingParameter==key)) gradingParameter=key;ImGui::EndCombo();}EndRow();
-    bool enabled=l.contains("grading") && l["grading"].contains(gradingParameter);
-    if(Toggle("Grade parameter",enabled)) {if(enabled) {const auto &obj=(gradingParameter=="Nd_m3" || gradingParameter=="Na_m3")?l.at("doping"):l.at("material");const double value=gradingParameter=="composition"?.5:obj.at(gradingParameter).get<double>();l["grading"][gradingParameter]={{"law","linear"},{"left",value},{"right",value}};}else {l["grading"].erase(gradingParameter);if(l["grading"].empty()) l.erase("grading");}changed=true;}
-    if(enabled) {
-        const auto composition=l["grading"].value("composition",Json::object());
-        changed|=ProfileEditor(l["grading"][gradingParameter],l.at("thickness_m"),gradingParameter,composition,gradingParameter=="Nd_m3" || gradingParameter=="Na_m3");
-        if(gradingParameter=="composition") {
-            ImGui::TextUnformatted("Derived material parameters (left / right, SI / eV)");
-            for(const auto &[key,value]:l.at("material").items())if(value.is_number()) {
-                try {double left=value,right=value;if(l["grading"].contains(key)){auto profile=l["grading"].at(key);profile["composition_dependent"]=true;const auto sample=ProfileSamples(profile,l.at("thickness_m"),l["grading"]["composition"]);left=sample["value_SI"].front();right=sample["value_SI"].back();}BeginRow(key.c_str());ImGui::Text("%.6g / %.6g",left,right);EndRow();}catch(const std::exception &e){ImGui::TextWrapped("%s",e.what());}
-            }
-        }
+bool Panel::Grading(ProjectDraft& draft) {
+    bool changed=false;auto& layers=draft.project.layers;auto& selected=w->Current().selectedLayer;selected=std::clamp(selected,0,int(layers.size())-1);
+    BeginRow("Layer");if(ImGui::BeginCombo("##layer",layers[selected].name.c_str())){for(int i=0;i<int(layers.size());++i){ImGui::PushID(i);if(ImGui::Selectable(layers[i].name.c_str(),i==selected))selected=i;ImGui::PopID();}ImGui::EndCombo();}EndRow();
+    auto& l=layers[selected];BeginRow("Parameter (SI / eV)");const bool parameterOpen=ImGui::BeginCombo("##parameter",gradingParameter.c_str());w->tutorialOverlay.Item("scapslab.Grading","parameter");if(parameterOpen){for(const auto* key:{"composition","Eg_eV","chi_eV","eps_r","Nd_m3","Na_m3","Nc_ref_m3","Nv_ref_m3","mu_n_m2_V_s","mu_p_m2_V_s","vth_n_ref_m_s","vth_p_ref_m_s"})if(ImGui::Selectable(key,gradingParameter==key))gradingParameter=key;ImGui::EndCombo();}EndRow();
+    bool enabled=l.grading && GradingProfile(*l.grading,gradingParameter).has_value();
+    if(Toggle("Grade parameter",enabled)) {
+        if(enabled){if(!l.grading)l.grading.emplace();auto& profile=GradingProfile(*l.grading,gradingParameter);profile.emplace();profile->law=scaps_core::GradingLaw::Linear;const auto path="layers["+std::to_string(selected)+"]"+(gradingParameter=="Nd_m3" || gradingParameter=="Na_m3"?".doping.":".material.")+gradingParameter;const double value=gradingParameter=="composition"?.5:ProjectParameter(draft.project,path);ResetProfileFields(draft,*profile);ProfileParameter(draft,*profile,"left",value);ProfileParameter(draft,*profile,"right",value);}
+        else {GradingProfile(*l.grading,gradingParameter).reset();bool any=false;for(const auto* key:{"composition","Eg_eV","chi_eV","eps_r","Nd_m3","Na_m3","Nc_ref_m3","Nv_ref_m3","mu_n_m2_V_s","mu_p_m2_V_s","vth_n_ref_m_s","vth_p_ref_m_s"})any|=GradingProfile(*l.grading,key).has_value();if(!any)l.grading.reset();}
+        changed=true;
+    }
+    if(enabled){const auto& composition=l.grading->composition;changed|=ProfileEditor(*GradingProfile(*l.grading,gradingParameter),l.thickness_m,gradingParameter,composition?&*composition:nullptr,gradingParameter=="Nd_m3" || gradingParameter=="Na_m3");
+        if(gradingParameter=="composition") {ImGui::TextUnformatted("Derived material parameters (left / right, SI / eV)");const auto prefix="layers["+std::to_string(selected)+"].material.";for(const auto& [path,value]:ProjectNumbers(draft.project))if(path.starts_with(prefix) && path.find('.',prefix.size())==path.npos){const auto key=path.substr(prefix.size());try{double left=value,right=value;const auto& profile=GradingProfile(*l.grading,key);if(profile){auto p=*profile;p.composition_dependent=true;const auto samples=ProfileSamples(p,l.thickness_m,&*composition);left=samples.value_SI.front();right=samples.value_SI.back();}BeginRow(key.c_str());ImGui::Text("%.6g / %.6g",left,right);EndRow();}catch(const std::exception& e){ImGui::TextWrapped("%s",e.what());}}}
     }
     changed|=Structure(draft);return changed;
 }
-bool Panel::Defects(Json &draft,bool sheet) {
-    bool changed=false;auto &layers=draft["layers"];
+namespace {
+void ChangeSheetDistributionTyped(scaps_core::ProjectInterfaceDefect& d,const std::string& shape,const std::string& convention) {
+    const auto width=[&](const std::string& kind){return d.characteristic_energy_eV*(kind=="gaussian"?std::sqrt(std::numbers::pi)*std::erf(d.gaussian_width*.5):1);};
+    const double total=d.energy_distribution=="single" || d.density_convention=="integrated_sheet"?d.Nt_m2:d.peak_density_m2_eV*width(d.energy_distribution);
+    d.energy_distribution=shape;d.density_convention=convention;const bool integrated=shape=="single" || convention=="integrated_sheet";d.Nt_m2=integrated?total:0.;d.peak_density_m2_eV=integrated?0.:total/width(shape);
+}
+}
+bool Panel::Defects(ProjectDraft &draft,bool sheet) {
+    bool changed=false;auto &layers=draft.project.layers;
     if(sheet && layers.size()<2) {ImGui::TextWrapped("Add a second layer to create a heterointerface.");return false;}
     auto &selected=sheet?w->Current().selectedInterface:w->Current().selectedLayer;
     selected=std::clamp(selected,0,int(layers.size())-(sheet?2:1));
     BeginRow(sheet?"Interface":"Layer");
-    const auto name=layers[selected].at("name").get<std::string>()+(sheet?" / "+layers[selected+1].at("name").get<std::string>():"");
+    const auto name=layers[selected].name+(sheet?" / "+layers[selected+1].name:"");
     if(ImGui::BeginCombo("##selection",name.c_str())) {
         for(int i=0;i<int(layers.size())-(sheet?1:0);++i) {
-            ImGui::PushID(i);const auto label=layers[i].at("name").get<std::string>()+(sheet?" / "+layers[i+1].at("name").get<std::string>():"");
+            ImGui::PushID(i);const auto label=layers[i].name+(sheet?" / "+layers[i+1].name:"");
             if(ImGui::Selectable(label.c_str(),selected==i)) {selected=i;selectedDefect=0;}ImGui::PopID();
         }ImGui::EndCombo();
     }EndRow();
-    auto &defects=sheet?draft["interface_defects"]:layers[selected]["defects"];
-    if(!defects.is_array()) defects=Json::array();
-    if(w->pendingDefect>=0 && w->pendingSheet==sheet) {selectedDefect=w->pendingDefect;w->pendingDefect=-1;}
-    if(ImGui::Button("Add defect")) {selectedDefect=AddDefectToDraft(draft,selected,sheet);changed=true;++gesture;}
-    std::vector<int> indices;for(int i=0;i<int(defects.size());++i) if(!sheet || defects[i].at("left_layer_index")==selected) indices.push_back(i);
+    auto render=[&]<class D>(std::vector<D>& defects) {
+    constexpr bool sheet=std::is_same_v<D,scaps_core::ProjectInterfaceDefect>;
+    if(w->pendingDefect>=0 && w->pendingSheet==sheet){selectedDefect=w->pendingDefect;w->pendingDefect=-1;}
+    if(ImGui::Button("Add defect")){selectedDefect=AddDraftDefect(draft,selected,sheet);changed=true;++gesture;}
+    const auto idOf=[&](int i)->const std::string& {if constexpr(sheet)return defects[i].id;else return draft.layers[selected].defects[i].id;};
+    std::vector<int> indices;for(int i=0;i<int(defects.size());++i) {if constexpr(sheet){if(defects[i].left_layer_index==selected)indices.push_back(i);}else indices.push_back(i);}
     if(indices.empty()) {ImGui::TextUnformatted("No defects on this object.");return changed;}
     if(std::find(indices.begin(),indices.end(),selectedDefect)==indices.end()) selectedDefect=indices.front();
     BeginRow("Defect ID");
-    if(ImGui::BeginCombo("##defect",defects[selectedDefect].at(sheet?"id":"scapslab_id").get<std::string>().c_str())) {
-        for(int i:indices) if(ImGui::Selectable(defects[i].at(sheet?"id":"scapslab_id").get<std::string>().c_str(),i==selectedDefect)) selectedDefect=i;
+    if(ImGui::BeginCombo("##defect",idOf(selectedDefect).c_str())) {
+        for(int i:indices) if(ImGui::Selectable(idOf(i).c_str(),i==selectedDefect)) selectedDefect=i;
         ImGui::EndCombo();
     }EndRow();
     ImGui::Text("%d defects on this %s",int(indices.size()),sheet?"interface":"layer");
-    if(ImGui::Button("Remove selected defect")) {defects.erase(defects.begin()+selectedDefect);++gesture;return true;}
+    if(ImGui::Button("Remove selected defect")) {RemoveDraftDefect(draft,selected,selectedDefect,sheet);++gesture;return true;}
     auto &d=defects[selectedDefect];
-    // Materialize editor defaults without replacing imported values or unknown fields.
-    auto defaults=NewDefect(sheet);defaults.update(d,true);d=std::move(defaults);
-    if(!sheet) {
-        bool amphoteric=d.value("amphoteric",false);
-        if(Toggle("Amphoteric (+/0/-)",amphoteric)) {d["amphoteric"]=amphoteric;if(amphoteric)d["energy_distribution"]="single";changed=true;}
+    if constexpr(!sheet) {
+        bool amphoteric=d.amphoteric;
+        if(Toggle("Amphoteric (+/0/-)",amphoteric)) {d.amphoteric=amphoteric;if(amphoteric)d.energy_distribution="single";changed=true;}
         if(amphoteric) {
-            bool correlated=d.value("correlated",true);if(Toggle("Correlated transitions",correlated)) {d["correlated"]=correlated;changed=true;}
-            changed|=Number("Second Et offset [eV]",d,"second_energy_offset_eV");
-            changed|=Number("Second sigma n [cm^2]",d,"second_sigma_n_m2",1e4);
-            changed|=Number("Second sigma p [cm^2]",d,"second_sigma_p_m2",1e4);
+            bool correlated=d.correlated;if(Toggle("Correlated transitions",correlated)) {d.correlated=correlated;changed=true;}
+            changed|=Number("Second Et offset [eV]",d.second_energy_offset_eV,"second_energy_offset_eV");
+            changed|=Number("Second sigma n [cm^2]",d.second_sigma_n_m2,"second_sigma_n_m2",1e4);
+            changed|=Number("Second sigma p [cm^2]",d.second_sigma_p_m2,"second_sigma_p_m2",1e4);
         }
         if(amphoteric) ImGui::TextWrapped("Amphoteric model: two discrete transitions.");
         ImGui::BeginDisabled(amphoteric);
-        changed|=Choice("Distribution",d,"energy_distribution",{{"Discrete","single"},{"Uniform","uniform"},{"Gaussian","gaussian"},{"CB tail","cb_tail"},{"VB tail","vb_tail"}});
+        changed|=Choice("Distribution",d.energy_distribution,"energy_distribution",{{"Discrete","single"},{"Uniform","uniform"},{"Gaussian","gaussian"},{"CB tail","cb_tail"},{"VB tail","vb_tail"}});
         ImGui::EndDisabled();
-        changed|=Choice("Energy reference",d,"energy_reference",{{"Ec - offset","relative_to_Ec"},{"Ev + offset","relative_to_Ev"},{"Ei + offset","relative_to_Ei"}});
-        changed|=Number("Integrated Nt [cm^-3]",d,"Nt_m3",1e-6);
-        bool spatial=d.contains("density_profile_m3");if(Toggle("Spatial Nt(x)",spatial)){if(spatial)d["density_profile_m3"]={{"law","uniform"},{"left",d.at("Nt_m3")},{"right",d.at("Nt_m3")}};else d.erase("density_profile_m3");changed=true;}
+        changed|=Choice<scaps_core::DefectEnergyReference>("Energy reference",d.energy_reference,"energy_reference",{{"Ec - offset",scaps_core::DefectEnergyReference::RelativeToEc},{"Ev + offset",scaps_core::DefectEnergyReference::RelativeToEv},{"Ei + offset",scaps_core::DefectEnergyReference::RelativeToEi}});
+        changed|=Number("Integrated Nt [cm^-3]",d.Nt_m3,"Nt_m3",1e-6);
+        bool spatial=d.density_profile_m3.has_value();if(Toggle("Spatial Nt(x)",spatial)){if(spatial){d.density_profile_m3.emplace();ResetProfileFields(draft,*d.density_profile_m3);ProfileParameter(draft,*d.density_profile_m3,"left",d.Nt_m3);ProfileParameter(draft,*d.density_profile_m3,"right",d.Nt_m3);}else d.density_profile_m3.reset();changed=true;}
         const bool opticalOpen=ImGui::CollapsingHeader("Optical capture / IPV");w->tutorialOverlay.Item("scapslab.Defects","optical-capture");
         if(opticalOpen) {
-            auto &opt=d["optical"];if(!opt.is_object())opt=Json::object();bool enabled=opt.value("enabled",false);if(Toggle("Optical capture enabled",enabled)){opt["enabled"]=enabled;changed=true;}
-            changed|=OpticalFile(opt,"electron_file","electron_table_nm_m2","opt","Electron capture [.opt]");
-            changed|=OpticalFile(opt,"hole_file","hole_table_nm_m2","opt","Hole capture [.opt]");
+            auto &opt=d.optical;bool enabled=opt.enabled;if(Toggle("Optical capture enabled",enabled)){opt.enabled=enabled;changed=true;}
+            changed|=OpticalFile(draft,opt.electron_file,opt.electron_table_nm_m2,"opt","Electron capture [.opt]");
+            changed|=OpticalFile(draft,opt.hole_file,opt.hole_table_nm_m2,"opt","Hole capture [.opt]");
         }
-        if(spatial)changed|=ProfileEditor(d["density_profile_m3"],layers[selected].at("thickness_m"),"Nt_m3",layers[selected].value("grading",Json::object()).value("composition",Json::object()),true);
-        changed|=Number("sigma n [cm^2]",d,"sigma_n_m2",1e4);changed|=Number("sigma p [cm^2]",d,"sigma_p_m2",1e4);
-        changed|=Choice("Normalization",d,"distribution_normalization",{{"SCAPS analytic integral","scaps"},{"In-gap continuum integral","normalized_continuum"}});
+        if(spatial)changed|=ProfileEditor(*d.density_profile_m3,layers[selected].thickness_m,"Nt_m3",layers[selected].grading && layers[selected].grading->composition?&*layers[selected].grading->composition:nullptr,true);
+        changed|=Number("sigma n [cm^2]",d.sigma_n_m2,"sigma_n_m2",1e4);changed|=Number("sigma p [cm^2]",d.sigma_p_m2,"sigma_p_m2",1e4);
+        changed|=Choice("Normalization",d.distribution_normalization,"distribution_normalization",{{"SCAPS analytic integral","scaps"},{"In-gap continuum integral","normalized_continuum"}});
     } else {
         auto previous=d;
-        const bool shapeChanged=Choice("Distribution",d,"energy_distribution",{{"Discrete","single"},{"Uniform","uniform"},{"Gaussian","gaussian"}});
+        const bool shapeChanged=Choice("Distribution",d.energy_distribution,"energy_distribution",{{"Discrete","single"},{"Uniform","uniform"},{"Gaussian","gaussian"}});
         changed|=shapeChanged;
         const char *refs[]={"3: higher Ev + offset","4: lower Ec - offset","5: left Ei + offset","6: right Ei + offset","7: left Ev + offset","8: right Ev + offset","9: overlap midgap + offset"};
-        int ref=d.at("energy_reference").get<int>()-3;BeginRow("Energy reference");
-        if(ImGui::Combo("##reference",&ref,refs,7)) {d["energy_reference"]=ref+3;changed=true;++gesture;}EndRow();
-        if(d.at("energy_distribution")=="single") ImGui::TextWrapped("Discrete states use integrated sheet Nt; peak density applies to distributions.");
-        ImGui::BeginDisabled(d.at("energy_distribution")=="single");
-        const bool conventionChanged=Choice("Sheet density convention",d,"density_convention",{{"Integrated sheet","integrated_sheet"},{"SCAPS peak / eV","scaps_peak"}});
+        int ref=d.energy_reference-3;BeginRow("Energy reference");
+        if(ImGui::Combo("##reference",&ref,refs,7)) {d.energy_reference=ref+3;changed=true;++gesture;}EndRow();
+        if(d.energy_distribution=="single") ImGui::TextWrapped("Discrete states use integrated sheet Nt; peak density applies to distributions.");
+        ImGui::BeginDisabled(d.energy_distribution=="single");
+        const bool conventionChanged=Choice("Sheet density convention",d.density_convention,"density_convention",{{"Integrated sheet","integrated_sheet"},{"SCAPS peak / eV","scaps_peak"}});
         ImGui::EndDisabled();
-        if(shapeChanged || conventionChanged) {ChangeSheetDistribution(previous,d.at("energy_distribution"),d.at("density_convention"));d=std::move(previous);changed=true;}
-        if(d.at("energy_distribution")=="single" || d.at("density_convention")=="integrated_sheet") {
-            changed|=Number("Sheet Nt [cm^-2]",d,"Nt_m2",1e-4);
-        } else {changed|=Number("Peak Dit [cm^-2/eV]",d,"peak_density_m2_eV",1e-4);}
-        changed|=Number("Left sigma n [cm^2]",d,"sigma_n_left_m2",1e4);changed|=Number("Left sigma p [cm^2]",d,"sigma_p_left_m2",1e4);
-        changed|=Number("Right sigma n [cm^2]",d,"sigma_n_right_m2",1e4);changed|=Number("Right sigma p [cm^2]",d,"sigma_p_right_m2",1e4);
+        if(shapeChanged || conventionChanged) {ChangeSheetDistributionTyped(previous,d.energy_distribution,d.density_convention);d=std::move(previous);changed=true;}
+        if(d.energy_distribution=="single" || d.density_convention=="integrated_sheet") {
+            changed|=Number("Sheet Nt [cm^-2]",d.Nt_m2,"Nt_m2",1e-4);
+        } else {changed|=Number("Peak Dit [cm^-2/eV]",d.peak_density_m2_eV,"peak_density_m2_eV",1e-4);}
+        changed|=Number("Left sigma n [cm^2]",d.sigma_n_left_m2,"sigma_n_left_m2",1e4);changed|=Number("Left sigma p [cm^2]",d.sigma_p_left_m2,"sigma_p_left_m2",1e4);
+        changed|=Number("Right sigma n [cm^2]",d.sigma_n_right_m2,"sigma_n_right_m2",1e4);changed|=Number("Right sigma p [cm^2]",d.sigma_p_right_m2,"sigma_p_right_m2",1e4);
     }
-    ImGui::BeginDisabled(!sheet && d.value("amphoteric",false));
-    changed|=Choice("Charge type",d,"charge_type",{{"Neutral","neutral"},{"Donor (+/0)","donor_like"},{"Acceptor (0/-)","acceptor_like"}});
+    bool amphoteric=false;if constexpr(!sheet)amphoteric=d.amphoteric;ImGui::BeginDisabled(amphoteric);
+    changed|=Choice<scaps_core::TrapChargeType>("Charge type",d.charge_type,"charge_type",{{"Neutral",scaps_core::TrapChargeType::Neutral},{"Donor (+/0)",scaps_core::TrapChargeType::DonorLike},{"Acceptor (0/-)",scaps_core::TrapChargeType::AcceptorLike}});
     ImGui::EndDisabled();
-    changed|=Number("Et offset [eV]",d,"energy_offset_eV");
-    if(d.at("energy_distribution")!="single") {
-        changed|=Number("Characteristic energy [eV]",d,"characteristic_energy_eV");
-        if(d.at("energy_distribution")=="gaussian") changed|=Number("Gaussian span [Echar]",d,"gaussian_width");
-        if(d.at("energy_distribution")=="cb_tail" || d.at("energy_distribution")=="vb_tail") changed|=Number("Tail span [Echar]",d,"tail_width");
+    changed|=Number("Et offset [eV]",d.energy_offset_eV,"energy_offset_eV");
+    if(d.energy_distribution!="single") {
+        changed|=Number("Characteristic energy [eV]",d.characteristic_energy_eV,"characteristic_energy_eV");
+        if(d.energy_distribution=="gaussian") changed|=Number("Gaussian span [Echar]",d.gaussian_width,"gaussian_width");
+        if(d.energy_distribution=="cb_tail" || d.energy_distribution=="vb_tail") changed|=Number("Tail span [Echar]",d.tail_width,"tail_width");
         ImGui::TextWrapped("Gaussian: exp(-((E-Et)/Echar)^2), sigma = Echar/sqrt(2). Uniform width = Echar. Tails decay from the selected reference offset.");
     }
     return changed;
+    };
+    if(sheet)return render(draft.project.interface_defects);return render(layers[selected].defects);
 }
 void Panel::Preview(bool sheet) {
     if(w->Current().bandResult.empty() && w->Current().result.empty()) {ImGui::TextWrapped("Preview waiting for auto-recalculate band. The previous model's occupancy is cleared on every edit.");return;}
     const auto &point=PointAtBias(*w->Current().Iv(),*w->Current().Band(),w->Current().selectedBias);
-    ImGui::TextWrapped("Occupancy at %.5g V, %.5g K | %s | %s",point.voltage_V,w->Current().document.at("temperature_K").get<double>(),sheet?"interface sheet":"layer midpoint",point.validity_status.c_str());
+    ImGui::TextWrapped("Occupancy at %.5g V, %.5g K | %s | %s",point.voltage_V,w->Current().Document().at("temperature_K").get<double>(),sheet?"interface sheet":"layer midpoint",point.validity_status.c_str());
     ImPlot::PushStyleVar(ImPlotStyleVar_FitPadding,ImVec2(w->plotSession.settings.margin*.02f,w->plotSession.settings.margin*.02f));
     if(!BeginSavedPlot(*w,"Nt(E) and occupancy",ImVec2(-1,std::max(300.f,ImGui::GetContentRegionAvail().y-8)))) {ImPlot::PopStyleVar();return;}
     ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside);
@@ -1191,7 +1159,7 @@ void Panel::Preview(bool sheet) {
     bool edgesDrawn=false;
     for(const auto &c:point.details->defect_previews) {
         if(c.sheet!=sheet) continue;
-        if(sheet?c.left_layer_index!=w->Current().selectedInterface:c.layer_id!=w->Current().document.at("layers")[w->Current().selectedLayer].at("scapslab_id").get<std::string>()) continue;
+        if(sheet?c.left_layer_index!=w->Current().selectedInterface:c.layer_id!=w->Current().Document().at("layers")[w->Current().selectedLayer].at("scapslab_id").get<std::string>()) continue;
         const auto id=c.id;const auto *xp=&Vec(c.energy_eV),*yp=&Vec(c.density,sheet?1e-4:1e-6);
         ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);
         if(c.single) {const double e=c.level_energy_eV;ImPlot::PlotInfLines((id+" (discrete Nt)").c_str(),&e,1);if(bool(c.second_level_energy_eV)) {const double e2=*c.second_level_energy_eV;ImPlot::PlotInfLines((id+" second transition").c_str(),&e2,1);}}
@@ -1203,52 +1171,53 @@ void Panel::Preview(bool sheet) {
         }
     }EndSavedPlot(*w,"Nt(E) and occupancy");ImPlot::PopStyleVar();
 }
-bool Panel::Structure(Json &draft) {
-    auto &layers=draft["layers"];double total=0,emin=0,emax=-1e10;
-    for(const auto &l:layers) {total+=l.at("thickness_m").get<double>();const auto &m=l.at("material");emin=std::min(emin,-m.at("chi_eV").get<double>()-m.at("Eg_eV").get<double>());emax=std::max(emax,-m.at("chi_eV").get<double>());}
+bool Panel::Structure(ProjectDraft &draft) {
+    auto &layers=draft.project.layers;double total=0,emin=0,emax=-1e10;
+    for(const auto &l:layers) {total+=l.thickness_m;const auto &m=l.material;emin=std::min(emin,-m.chi_eV-m.Eg_eV);emax=std::max(emax,-m.chi_eV);}
     const bool compact=view==22 || view==5;
     if(!compact) ImGui::TextWrapped("Structure to scale | total %.5g um. Click layer/interface; drag a layer's right edge to change thickness.",total*1e6);
     const auto origin=ImGui::GetCursorScreenPos();const float width=std::max(1.f,ImGui::GetContentRegionAvail().x),height=compact?40.f:view==14?std::max(190.f,ImGui::GetContentRegionAvail().y-12):190.f;
     auto *draw=ImGui::GetWindowDrawList();double offset=0;bool changed=false;
     auto y=[&](double e){return origin.y+16+float((emax-e)/(emax-emin))*std::max(78.f,height-120);};
     for(int i=0;i<int(layers.size());++i) {
-        auto &l=layers[i];const auto &m=l.at("material");const float x1=origin.x+float(offset/total)*width;offset+=l.at("thickness_m").get<double>();const float x2=origin.x+float(offset/total)*width;
+        auto &l=layers[i];const auto &m=l.material;const float x1=origin.x+float(offset/total)*width;offset+=l.thickness_m;const float x2=origin.x+float(offset/total)*width;
         draw->AddRectFilled(ImVec2(x1,origin.y),ImVec2(x2,origin.y+height),LayerStripColour(l));
         if(w->Current().selectedInterface<0 && w->Current().selectedLayer==i) draw->AddRect(ImVec2(x1+1,origin.y+1),ImVec2(x2-1,origin.y+height-1),IM_COL32(255,190,70,255),0,0,2.f); // selection = border, never a different fill
-        const double ec=-m.at("chi_eV").get<double>(),ev=ec-m.at("Eg_eV").get<double>();
+        const double ec=-m.chi_eV,ev=ec-m.Eg_eV;
         if(!compact) {draw->AddLine(ImVec2(x1,y(ec)),ImVec2(x2,y(ec)),IM_COL32(110,200,255,255),2);draw->AddLine(ImVec2(x1,y(ev)),ImVec2(x2,y(ev)),IM_COL32(255,173,110,255),2);
-        if(i>0) {const auto &a=layers[i-1].at("material");const double prevEc=-a.at("chi_eV").get<double>();draw->AddLine(ImVec2(x1,y(prevEc)),ImVec2(x1,y(ec)),IM_COL32(110,200,255,255),2);draw->AddLine(ImVec2(x1,y(prevEc-a.at("Eg_eV").get<double>())),ImVec2(x1,y(ev)),IM_COL32(255,173,110,255),2);}
+        if(i>0) {const auto &a=layers[i-1].material;const double prevEc=-a.chi_eV;draw->AddLine(ImVec2(x1,y(prevEc)),ImVec2(x1,y(ec)),IM_COL32(110,200,255,255),2);draw->AddLine(ImVec2(x1,y(prevEc-a.Eg_eV)),ImVec2(x1,y(ev)),IM_COL32(255,173,110,255),2);}
         }
         draw->PushClipRect(ImVec2(x1+2,origin.y),ImVec2(x2-2,origin.y+height),true);
-        draw->AddText(ImVec2(x1+5,origin.y+(compact?4:height-90)),IM_COL32_WHITE,l.at("name").get<std::string>().c_str());
-        char thickness[80];std::snprintf(thickness,sizeof(thickness),"%.4g um",l.at("thickness_m").get<double>()*1e6);
+        draw->AddText(ImVec2(x1+5,origin.y+(compact?4:height-90)),IM_COL32_WHITE,l.name.c_str());
+        char thickness[80];std::snprintf(thickness,sizeof(thickness),"%.4g um",l.thickness_m*1e6);
         if(x2-x1>ImGui::CalcTextSize(thickness).x+10) draw->AddText(ImVec2(x1+5,origin.y+(compact?20:height-50)),IM_COL32_WHITE,thickness);
         char parameters[100];std::snprintf(parameters,sizeof(parameters),"chi %.3g eV | Eg %.3g eV",-ec,ec-ev);
         if(!compact && x2-x1>ImGui::CalcTextSize(parameters).x+10) draw->AddText(ImVec2(x1+5,origin.y+height-70),IM_COL32(205,220,235,255),parameters);
-        if(!compact && l.contains("grading") && !l["grading"].empty()) {
-            const auto label=std::string("Graded: ")+l["grading"].begin().key();draw->AddText(ImVec2(x1+5,origin.y+height-35),IM_COL32(140,235,170,255),label.c_str());
-            const auto &g=l["grading"].begin().value();if(g.contains("left") && g.contains("right") && (g.value("law",std::string{})=="linear" || g.value("law",std::string{})=="uniform" || g.value("law",std::string{})=="parabolic" || g.value("law",std::string{})=="logarithmic" || g.value("law",std::string{})=="exponential")) {
-                scaps_core::Profile profile;profile.law=scaps_core::grading_law_from_string(g.value("law",std::string("linear")));profile.left=g["left"];profile.right=g["right"];profile.bowing=g.value("bowing",0.);
-                profile.background=g.value("background",0.);profile.length_left=g.value("length_left",1.);profile.length_right=g.value("length_right",1.);
-                std::vector<double> samples;for(int n=0;n<=40;++n) samples.push_back(scaps_core::evaluate_profile(profile,n/40.));
-                const auto [lo,hi]=std::minmax_element(samples.begin(),samples.end());const double low=*lo,span=std::max(1e-30,*hi-low);
-                for(int n=1;n<=40;++n) {auto at=[&](int k){return ImVec2(x1+(x2-x1)*k/40.f,origin.y+height-8-float((samples[k]-low)/span)*18);};draw->AddLine(at(n-1),at(n),IM_COL32(140,235,170,255));}
+        if(!compact && l.grading) {
+            const scaps_core::Profile* profile=nullptr;std::string key;
+            for(const auto* name:{"Eg_eV","Na_m3","Nc_ref_m3","Nd_m3","Nv_ref_m3","chi_eV","composition","eps_r","mu_n_m2_V_s","mu_p_m2_V_s","vth_n_ref_m_s","vth_p_ref_m_s"})if(const auto& g=GradingProfile(*l.grading,name);g){profile=&*g;key=name;break;}
+            if(profile){const auto label="Graded: "+key;draw->AddText(ImVec2(x1+5,origin.y+height-35),IM_COL32(140,235,170,255),label.c_str());
+                using scaps_core::GradingLaw;const auto law=profile->law;
+                if(law==GradingLaw::Linear || law==GradingLaw::Uniform || law==GradingLaw::Parabolic || law==GradingLaw::Logarithmic || law==GradingLaw::Exponential) {
+                    std::vector<double> samples;for(int n=0;n<=40;++n)samples.push_back(scaps_core::evaluate_profile(*profile,n/40.));const auto [lo,hi]=std::minmax_element(samples.begin(),samples.end());const double low=*lo,span=std::max(1e-30,*hi-low);
+                    for(int n=1;n<=40;++n){const auto at=[&](int k){return ImVec2(x1+(x2-x1)*k/40.f,origin.y+height-8-float((samples[k]-low)/span)*18);};draw->AddLine(at(n-1),at(n),IM_COL32(140,235,170,255));}
+                }
             }
         }
         draw->PopClipRect();
         ImGui::PushID(i);ImGui::SetCursorScreenPos(ImVec2(x1,origin.y));ImGui::InvisibleButton("##select-layer",ImVec2(std::max(1.f,x2-x1-7),height));
         if(ImGui::IsItemClicked()) {w->Current().selectedLayer=i;w->Current().selectedInterface=-1;w->focusLayers=true;}
-        if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s) | %.6g um | chi %.4g eV | Eg %.4g eV\nClick: select layer. Drag right edge: thickness (total %.5g um).",l.at("name").get<std::string>().c_str(),LayerType(l)>0?"n":LayerType(l)<0?"p":"i",l.at("thickness_m").get<double>()*1e6,m.at("chi_eV").get<double>(),m.at("Eg_eV").get<double>(),total*1e6);
+        if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s) | %.6g um | chi %.4g eV | Eg %.4g eV\nClick: select layer. Drag right edge: thickness (total %.5g um).",l.name.c_str(),LayerType(l)>0?"n":LayerType(l)<0?"p":"i",l.thickness_m*1e6,m.chi_eV,m.Eg_eV,total*1e6);
         ImGui::SetCursorScreenPos(ImVec2(x2-7,origin.y));ImGui::InvisibleButton("##thickness-interface",ImVec2(7,height));TrackGesture();
         if(ImGui::IsItemClicked()) {w->Current().selectedInterface=i+1<int(layers.size())?i:-1;w->Current().selectedLayer=i;w->focusLayers=true;}
-        if(ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {l["thickness_m"]=std::max(1e-9,l.at("thickness_m").get<double>()+ImGui::GetIO().MouseDelta.x*total/width);changed|=ImGui::GetIO().MouseDelta.x!=0;}
-        if(ImGui::IsItemHovered()) {ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);ImGui::SetTooltip("Drag: thickness [um]. Click: interface after %s",l.at("name").get<std::string>().c_str());}
+        if(ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {l.thickness_m=std::max(1e-9,l.thickness_m+ImGui::GetIO().MouseDelta.x*total/width);changed|=ImGui::GetIO().MouseDelta.x!=0;}
+        if(ImGui::IsItemHovered()) {ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);ImGui::SetTooltip("Drag: thickness [um]. Click: interface after %s",l.name.c_str());}
         if(i+1<int(layers.size())) {
-            const auto &right=layers[i+1].at("material");char offsets[100];
-            const double deltaEc=m.at("chi_eV").get<double>()-right.at("chi_eV").get<double>();
-            std::snprintf(offsets,sizeof(offsets),"dEc %.3g eV / dEv %.3g eV",deltaEc,deltaEc+m.at("Eg_eV").get<double>()-right.at("Eg_eV").get<double>());
+            const auto &right=layers[i+1].material;char offsets[100];
+            const double deltaEc=m.chi_eV-right.chi_eV;
+            std::snprintf(offsets,sizeof(offsets),"dEc %.3g eV / dEv %.3g eV",deltaEc,deltaEc+m.Eg_eV-right.Eg_eV);
             if(!compact && x2-origin.x>ImGui::CalcTextSize(offsets).x+14) draw->AddText(ImVec2(x2-ImGui::CalcTextSize(offsets).x-14,origin.y+height-24),IM_COL32(230,210,140,255),offsets);
-            int count=0;for(const auto &d:draft.value("interface_defects",Json::array())) if(d.at("left_layer_index")==i) ++count;
+            int count=0;for(const auto &d:draft.project.interface_defects) if(d.left_layer_index==i) ++count;
             draw->AddLine(ImVec2(x2-3,origin.y),ImVec2(x2-3,origin.y+height),IM_COL32(235,196,90,255),2);
             const auto badge=std::to_string(count);draw->AddCircleFilled(ImVec2(x2-13,origin.y+12),9,IM_COL32(120,85,22,255));draw->AddText(ImVec2(x2-13-ImGui::CalcTextSize(badge.c_str()).x*.5f,origin.y+5),IM_COL32_WHITE,badge.c_str());
         }ImGui::PopID();
@@ -1258,15 +1227,12 @@ bool Panel::Structure(Json &draft) {
 }
 // Layer-edge drag: edit a local preview while the mouse is down, send ONE edit (one undo step, one recalculation) on release.
 void Panel::StructureEdit() {
-    static Json dragDoc;static std::string dragDevice;
-    auto &device=w->Current();
-    if(!dragDoc.empty() && dragDevice!=device.id) dragDoc=Json();
-    const bool held=ImGui::IsMouseDown(ImGuiMouseButton_Left);
-    auto draft=dragDoc.empty()?device.document:dragDoc;
-    const bool changed=Structure(draft);
-    if(changed && held) {dragDoc=std::move(draft);dragDevice=device.id;return;}
-    if(changed) {dragDoc=Json();Do(Cmd::EditDocument::With({{"document",draft},{"gesture_id",std::to_string(gesture)}}));return;}
-    if(!dragDoc.empty() && !held) {auto doc=std::move(dragDoc);dragDoc=Json();if(doc!=device.document)Do(Cmd::EditDocument::With({{"document",doc},{"gesture_id",std::to_string(gesture)}}));}
+    static Ref<const ProjectDraft> dragDraft;static std::string dragDevice;auto& device=w->Current();
+    if(dragDraft && dragDevice!=device.id)dragDraft.reset();if(!device.draft)return;
+    const bool held=ImGui::IsMouseDown(ImGuiMouseButton_Left);auto draft=*(dragDraft?dragDraft:device.draft);const bool changed=Structure(draft);
+    if(changed && held){dragDraft=CreateRef<const ProjectDraft>(std::move(draft));dragDevice=device.id;return;}
+    if(changed){dragDraft.reset();Do(Cmd::EditDocument::Make(CreateRef<const ProjectDraft>(std::move(draft)),std::to_string(gesture)));return;}
+    if(dragDraft && !held){auto next=std::move(dragDraft);if(!CompareDrafts(*device.draft,*next).Empty())Do(Cmd::EditDocument::Make(std::move(next),std::to_string(gesture)));}
 }
 void Panel::Results() {
     const Json *selected=nullptr;
@@ -1284,7 +1250,7 @@ void Panel::Results() {
     const bool bandOnly=view==5 && w->Current().result.empty() && !w->Current().bandResult.empty();
     const auto resultRef=selected?std::static_pointer_cast<const IvResult>(HistoryTyped(w->Current(),*selected)):bandOnly?w->Current().Band():w->Current().Iv();const auto& result=*resultRef;
     const auto profileKind=selected?selected->at("kind").get<std::string>():bandOnly?"band":"iv";
-    const auto &layers=(selected?selected->at("document"):w->Current().document).at("layers");
+    const auto &layers=(selected?selected->at("document"):w->Current().Document()).at("layers");
     double total=0;for(const auto &l:layers) total+=l.at("thickness_m").get<double>();
     if(view==5) StructureEdit();
     if(result.points.empty()) {ImGui::TextUnformatted("Calculate I-V to view results.");return;}
@@ -1333,7 +1299,7 @@ void Panel::Results() {
     const float splitterH=8.f,availH=std::max(160.f,ImGui::GetContentRegionAvail().y-splitterH-2*ImGui::GetStyle().ItemSpacing.y);
     float split=std::clamp(w->plotSession.settings.bandSplit,.15f,.85f);
     const float h=std::max(60.f,availH*split),h2=std::max(60.f,availH-h);
-    const auto &contactDoc=(selected?selected->at("document"):w->Current().document).at("contacts");
+    const auto &contactDoc=(selected?selected->at("document"):w->Current().Document()).at("contacts");
     if(BeginSavedPlot(*w,"Bands / contacts",ImVec2(-1,h))) {
         ImPlot::SetupAxes("Position [um]","Energy [eV]");ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
         const double end=total*1e6,metal=end*.04;
@@ -1516,7 +1482,7 @@ void Panel::Devices() {
                 ImGui::BeginDisabled(w->Busy());if(ImGui::Checkbox("##compare",&compare)) Do(Cmd::UpdateDevice::With({{"device_id",d.id},{"compare",compare}}));ImGui::EndDisabled();
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("Compare: show in plots");
                 if(open) {
-                    const auto &doc=d.document;
+                    const auto &doc=d.Document();
                     const auto layers=doc.is_object() && doc.contains("layers")?doc.at("layers"):Json::array();
                     const auto sheets=doc.is_object()?doc.value("interface_defects",Json::array()):Json::array();
                     if(ImGui::TreeNodeEx("##layers",ImGuiTreeNodeFlags_DefaultOpen|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_OpenOnArrow)) {
@@ -1591,7 +1557,7 @@ void Panel::Devices() {
                                 if(ImGui::BeginPopupContextItem("interface-menu")) {
                                     select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;
                                     if(ImGui::MenuItem("Add interface defect")) {AddDefectTo(true,i);go(12);}
-                                    if(ImGui::MenuItem("Remove defects")) {auto draft=d.document;auto &arr=draft["interface_defects"];for(int k=int(arr.size())-1;k>=0;--k) if(arr[k].value("left_layer_index",-1)==i) arr.erase(arr.begin()+k);Do(Cmd::EditDocument::With({{"document",draft}}));}
+                                    if(ImGui::MenuItem("Remove defects")) {auto draft=CreateRef<ProjectDraft>(*d.draft);auto &arr=draft->project.interface_defects;for(int k=int(arr.size())-1;k>=0;--k)if(arr[k].left_layer_index==i)RemoveDraftDefect(*draft,i,k,true);Do(Cmd::EditDocument::Make(std::move(draft)));}
                                     ImGui::EndPopup();
                                 }
                                 text(ICON_FA_ARROWS_LEFT_RIGHT " Interface "+std::to_string(i+1)+" ("+layers[i].value("name",std::string{})+" / "+layers[i+1].value("name",std::string{})+")",std::to_string(sheetIdx.size())+" defect(s)");
@@ -1681,16 +1647,9 @@ void Panel::Devices() {
     }
 }
 void Panel::AddDefectTo(bool sheet,int layer) {
-    auto draft=w->Current().document;if(!draft.is_object() || !draft.contains("layers") || layer<0 || layer>=int(draft["layers"].size()) || (sheet && layer+1>=int(draft["layers"].size()))) return;
-    auto d=NewDefect(sheet);unsigned n=1;std::set<std::string> ids;
-    if(sheet) for(const auto &v:draft.value("interface_defects",Json::array())) ids.insert(v.at("id"));
-    else for(const auto &l:draft["layers"]) for(const auto &v:l["defects"]) ids.insert(v.at("scapslab_id"));
-    const std::string prefix=sheet?"interface-defect-":"defect-";
-    while(ids.contains(prefix+std::to_string(n))) ++n;
-    d[sheet?"id":"scapslab_id"]=prefix+std::to_string(n);
-    if(sheet) {d["left_layer_index"]=layer;if(!draft.contains("interface_defects") || !draft["interface_defects"].is_array()) draft["interface_defects"]=Json::array();draft["interface_defects"].push_back(d);selectedDefect=int(draft["interface_defects"].size())-1;}
-    else {draft["layers"][layer]["defects"].push_back(d);selectedDefect=int(draft["layers"][layer]["defects"].size())-1;}
-    Do(Cmd::EditDocument::With({{"document",draft}}));
+    auto draft=CreateRef<ProjectDraft>(*(w->EditDraft()?w->EditDraft():w->Current().draft.get()));
+    w->pendingDefect=AddDraftDefect(*draft,layer,sheet);w->pendingSheet=sheet;
+    Do(Cmd::EditDocument::Make(std::move(draft)));w->Current().selectedLayer=layer;w->Current().selectedInterface=sheet?layer:-1;
 }
 void Panel::Compare() {
     absoluteLog=w->plotSession.settings.plots["I-V compare"].log[ImAxis_Y1].value_or(w->plotSession.settings.ivAbsoluteLog);
@@ -1754,67 +1713,51 @@ std::string MemberLabel(const scaps_core::BatchRow &row,const Json &spec) {
     for(const auto &a:spec.at("axes")) {const auto path=a.at("path").get<std::string>();label+=" | "+ParameterLabel(path,a.value("unit",std::string("1")),ParameterNumber(row,path));}
     return label;
 }
-bool AxisNumber(const char *label,Json &axis,const char *key,const Json &parameter) {
-    const auto path=parameter.at("path").get<std::string>();const auto name=path.substr(path.find_last_of('.')==std::string::npos?0:path.find_last_of('.')+1);
-    Json value={{name,axis.at(key)}};const bool changed=Number(label,value,name.c_str());if(changed)axis[key]=value[name];return changed;
-}
+bool AxisNumber(const char* label,double& value,const NumericParameter& parameter) {const auto& path=parameter.path;const auto name=path.substr(path.find_last_of('.')==std::string::npos?0:path.find_last_of('.')+1);return Number(label,value,name.c_str());}
 }
 void Panel::Batch() {
-    auto &d=w->Current();auto spec=d.batchSpec;bool changed=false;const auto parameters=BatchParameters(d.document);
-    ImGui::TextWrapped("%s | independent members; failed points remain in the worksheet. Ctrl+click for exact values.",d.name.c_str());
-    ImGui::BeginDisabled(w->Busy());
-    BeginRow("Dimensions / mode");int mode=spec.at("axes").size()==1?0:spec.value("mode",std::string("nested"))=="together"?2:1;
-    if(ImGui::Combo("##mode",&mode,"1-D\0 2-D (nested)\0Together\0")) {changed=true;spec["mode"]=mode==2?"together":"nested";if(mode==0)spec["axes"].erase(spec["axes"].begin()+1,spec["axes"].end());else if(spec["axes"].size()==1)spec["axes"].push_back({{"parameter_id",parameters[0].at("id")},{"values",Json::array({parameters[0].at("value"),parameters[0].at("value"),parameters[0].at("value")})}});}EndRow();
+    auto& d=w->Current();if(!d.draft)return;auto spec=*d.batch;bool changed=false;const auto parameters=ProjectParameters(*d.draft);
+    ImGui::TextWrapped("%s | independent members; failed points remain in the worksheet. Ctrl+click for exact values.",d.name.c_str());ImGui::BeginDisabled(w->Busy());
+    BeginRow("Dimensions / mode");int mode=spec.axes.size()==1?0:spec.mode=="together"?2:1;
+    if(ImGui::Combo("##mode",&mode,"1-D\0 2-D (nested)\0Together\0")){changed=true;spec.mode=mode==2?"together":"nested";if(mode==0)spec.axes.resize(1);else if(spec.axes.size()==1){BatchAxis axis;axis.parameter_id=parameters[0].id;axis.values=std::vector<double>(3,parameters[0].value);spec.axes.push_back(std::move(axis));}}EndRow();
     TextInput("Search project tree",parameterSearch,sizeof(parameterSearch));
-    for(std::size_t i=0;i<spec["axes"].size();++i) {
-        ImGui::PushID(int(i));auto &axis=spec["axes"][i];auto selected=std::find_if(parameters.begin(),parameters.end(),[&](const Json &p){return p.at("id")==axis.at("parameter_id");});
-        ImGui::SeparatorText(i==0?"Axis 1":"Axis 2");BeginRow("Project parameter");
-        const auto title=selected==parameters.end()?std::string("Select parameter"):selected->at("label").get<std::string>()+" ["+selected->at("unit").get<std::string>()+"]";
+    for(std::size_t i=0;i<spec.axes.size();++i) {
+        ImGui::PushID(int(i));auto& axis=spec.axes[i];auto selected=std::find_if(parameters.begin(),parameters.end(),[&](const auto& p){return p.id==axis.parameter_id;});ImGui::SeparatorText(i==0?"Axis 1":"Axis 2");BeginRow("Project parameter");
+        const auto title=selected==parameters.end()?std::string("Select parameter"):selected->label+" ["+selected->unit+"]";
         if(ImGui::BeginCombo("##parameter",title.c_str(),ImGuiComboFlags_HeightLargest)) {
-            std::string group;
-            for(const auto &p:parameters) {const auto label=p.at("label").get<std::string>();if(parameterSearch[0] && label.find(parameterSearch)==std::string::npos)continue;
-                const auto root=label.substr(0,label.find(" / "));if(group!=root) {ImGui::SeparatorText(root.c_str());group=root;}
-                if(ImGui::Selectable((label+" ["+p.at("unit").get<std::string>()+"]##"+p.at("id").get<std::string>()).c_str(),selected!=parameters.end() && p.at("id")==selected->at("id"))) {axis={{"parameter_id",p.at("id")},{"values",Json::array({p.at("value")})}};changed=true;}
-            }ImGui::EndCombo();
+            std::string group;for(const auto& p:parameters){const auto& label=p.label;if(parameterSearch[0] && label.find(parameterSearch)==std::string::npos)continue;const auto root=label.substr(0,label.find(" / "));if(group!=root){ImGui::SeparatorText(root.c_str());group=root;}
+                if(ImGui::Selectable((label+" ["+p.unit+"]##"+p.id).c_str(),selected!=parameters.end() && p.id==selected->id)){axis=BatchAxis{};axis.parameter_id=p.id;axis.values=std::vector<double>{p.value};changed=true;}}
+            ImGui::EndCombo();
         }EndRow();
-        selected=std::find_if(parameters.begin(),parameters.end(),[&](const Json &p){return p.at("id")==axis.at("parameter_id");});
+        selected=std::find_if(parameters.begin(),parameters.end(),[&](const auto& p){return p.id==axis.parameter_id;});
         if(selected!=parameters.end()) {
-            BeginRow("Values");int spacing=axis.contains("values")?0:axis.value("spacing",std::string("linear"))=="log"?2:1;
-            if(ImGui::Combo("##spacing",&spacing,"List\0Linear\0Log\0")) {changed=true;const auto v=selected->at("value");axis={{"parameter_id",selected->at("id")}};if(spacing==0)axis["values"]=Json::array({v});else {axis["start"]=v;axis["stop"]=v;axis["count"]=3;axis["spacing"]=spacing==2?"log":"linear";}}EndRow();
-            if(spacing==0) {
-                BeginRow("List length");int count=int(axis["values"].size());if(ImGui::SliderInt("##count",&count,1,100)) {while(axis["values"].size()<std::size_t(count))axis["values"].push_back(selected->at("value"));while(axis["values"].size()>std::size_t(count))axis["values"].erase(axis["values"].end()-1);changed=true;}EndRow();
-                for(std::size_t j=0;j<axis["values"].size();++j) {ImGui::PushID(int(j));Json v={{"value",axis["values"][j]}};const auto label="Value "+std::to_string(j+1)+" ["+selected->at("unit").get<std::string>()+"]";if(AxisNumber(label.c_str(),v,"value",*selected)) {axis["values"][j]=v["value"];changed=true;}ImGui::PopID();}
-            } else {changed|=AxisNumber(("Start ["+selected->at("unit").get<std::string>()+"]").c_str(),axis,"start",*selected);changed|=AxisNumber(("Stop ["+selected->at("unit").get<std::string>()+"]").c_str(),axis,"stop",*selected);BeginRow("Member count");int count=axis.at("count");if(ImGui::SliderInt("##count",&count,1,100)) {axis["count"]=count;changed=true;}EndRow();}
+            BeginRow("Values");int spacing=axis.values?0:axis.spacing=="log"?2:1;
+            if(ImGui::Combo("##spacing",&spacing,"List\0Linear\0Log\0")){changed=true;const double v=selected->value;axis=BatchAxis{};axis.parameter_id=selected->id;if(spacing==0)axis.values=std::vector<double>{v};else{axis.start=axis.stop=v;axis.count=3;axis.spacing=spacing==2?"log":"linear";}}EndRow();
+            if(spacing==0){BeginRow("List length");int count=int(axis.values->size());if(ImGui::SliderInt("##count",&count,1,100)){axis.values->resize(count,selected->value);changed=true;}EndRow();for(std::size_t j=0;j<axis.values->size();++j){ImGui::PushID(int(j));const auto label="Value "+std::to_string(j+1)+" ["+selected->unit+"]";changed|=AxisNumber(label.c_str(),(*axis.values)[j],*selected);ImGui::PopID();}}
+            else {changed|=AxisNumber(("Start ["+selected->unit+"]").c_str(),axis.start,*selected);changed|=AxisNumber(("Stop ["+selected->unit+"]").c_str(),axis.stop,*selected);BeginRow("Member count");if(ImGui::SliderInt("##count",&axis.count,1,100))changed=true;EndRow();}
         }ImGui::PopID();
     }
-    if(changed) Do(Cmd::SetBatchSettings::With({{"spec",spec}}));
-    Json preview;std::string error;
-    try {auto configured=spec;configured["columns"]=d.recorderColumns;preview=BatchPreview(d.document,configured);}catch(const std::exception &e){error=e.what();}
-    if(!error.empty())ImGui::TextWrapped("Configuration: %s",error.c_str());
-    ImGui::BeginDisabled(!error.empty());if(ImGui::Button("Run batch"))Do(Cmd::RunBatch::With());ImGui::EndDisabled();ImGui::EndDisabled();
-    ImGui::SameLine();ImGui::BeginDisabled(!w->AnyActive());if(ImGui::Button("Stop"))Do(Cmd::Cancel::With());ImGui::EndDisabled();
-    if(w->ActiveJob()) {const auto job=w->jobs->GetJob(w->ActiveJob());if(job) {ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0);ImGui::TextWrapped("%s",job->currentStage.c_str());}}
-    ImGui::TextWrapped("%s",w->status.c_str());
-    if(!preview.empty()) {
-        ImGui::TextWrapped("Preview: %zu members x %zu biases x (DC + %zu AC frequencies) = %zu samples. Polarity: left minus right.",preview.at("member_count").get<std::size_t>(),preview.at("bias_count").get<std::size_t>(),preview.at("frequency_count").get<std::size_t>(),preview.at("sample_count").get<std::size_t>());
-        if(!d.batchResult.empty())ImGui::Text("Estimated time: %.3g s (previous mean/member)",d.batchResult.typed()->Schema().value("elapsed_s",0.)/std::max(std::size_t(1),d.batchResult.typed()->rows.size())*preview.at("member_count").get<double>());else ImGui::TextUnformatted("Estimated time: unavailable before first run");
-        const auto &biases=preview.at("voltages_V");
-        ImGui::Text("Bias: %.5g ... %.5g V | DC + %zu AC frequencies",biases.front().get<double>(),biases.back().get<double>(),preview.at("frequency_count").get<std::size_t>());
-        if(ImGui::TreeNode("Bias / frequency samples")) {ImGui::BeginChild("Samples",ImVec2(0,100),ImGuiChildFlags_Borders);for(const auto &v:biases) ImGui::Text("%.7g V",v.get<double>());ImGui::TextWrapped("AC frequencies [Hz]: %s",preview.at("frequencies_Hz").dump().c_str());ImGui::EndChild();ImGui::TreePop();}
-        if(ImGui::BeginChild("Combinations",ImVec2(0,140),ImGuiChildFlags_Borders)) for(std::size_t i=0;i<preview.at("combinations").size();++i)ImGui::TextWrapped("%zu: %s",i+1,preview.at("combinations")[i].dump().c_str());ImGui::EndChild();
+    if(changed)Do(Cmd::SetBatchSettings::Make(CreateRef<const BatchDraft>(spec)));
+    std::optional<BatchPlan> preview;std::string error;try{preview=PrepareBatch(*d.draft,spec,*d.recorder);}catch(const std::exception& e){error=e.what();}if(!error.empty())ImGui::TextWrapped("Configuration: %s",error.c_str());
+    ImGui::BeginDisabled(!error.empty());if(ImGui::Button("Run batch"))Do(Cmd::RunBatch::With());ImGui::EndDisabled();ImGui::EndDisabled();ImGui::SameLine();ImGui::BeginDisabled(!w->AnyActive());if(ImGui::Button("Stop"))Do(Cmd::Cancel::With());ImGui::EndDisabled();
+    if(w->ActiveJob()){const auto job=w->jobs->GetJob(w->ActiveJob());if(job){ImGui::ProgressBar(job->totalWork>0?job->completedWork/job->totalWork:0);ImGui::TextWrapped("%s",job->currentStage.c_str());}}ImGui::TextWrapped("%s",w->status.c_str());
+    if(preview){const auto& p=*preview;const auto& biases=p.engine.voltages_V;const auto& frequencies=p.engine.frequencies_Hz;
+        ImGui::TextWrapped("Preview: %zu members x %zu biases x (DC + %zu AC frequencies) = %zu samples. Polarity: left minus right.",p.combinations.size(),biases.size(),frequencies.size(),p.SampleCount());
+        if(!d.batchResult.empty())ImGui::Text("Estimated time: %.3g s (previous mean/member)",d.batchResult.typed()->Schema().value("elapsed_s",0.)/std::max(std::size_t(1),d.batchResult.typed()->rows.size())*p.combinations.size());else ImGui::TextUnformatted("Estimated time: unavailable before first run");
+        ImGui::Text("Bias: %.5g ... %.5g V | DC + %zu AC frequencies",biases.front(),biases.back(),frequencies.size());
+        if(ImGui::TreeNode("Bias / frequency samples")){ImGui::BeginChild("Samples",ImVec2(0,100),ImGuiChildFlags_Borders);for(double v:biases)ImGui::Text("%.7g V",v);std::string values="[";for(double f:frequencies){if(values.size()>1)values+=", ";char text[64];std::snprintf(text,sizeof(text),"%.17g",f);values+=text;}values+=']';ImGui::TextWrapped("AC frequencies [Hz]: %s",values.c_str());ImGui::EndChild();ImGui::TreePop();}
+        if(ImGui::BeginChild("Combinations",ImVec2(0,140),ImGuiChildFlags_Borders))for(std::size_t i=0;i<p.combinations.size();++i){std::string label=std::to_string(i+1)+": ";for(const auto& [path,value]:p.combinations[i]){char text[64];std::snprintf(text,sizeof(text),"%.17g",value);label+=path+" = "+text+"; ";}ImGui::TextWrapped("%s",label.c_str());}ImGui::EndChild();
     }
 }
 void Panel::Recorder() {
-    auto &d=w->Current();auto columns=d.recorderColumns;auto spec=d.batchSpec;bool changed=false;
-    ImGui::TextWrapped("Configure before or after batch. Re-extract uses retained curves without solving. Solar metrics and illuminated batches are unavailable in this engine (pending st6); missing values stay flagged.");
-    ImGui::BeginDisabled(w->Busy());
-    ImGui::SetNextItemOpen(d.batchResult.empty(),ImGuiCond_Once);
+    auto& d=w->Current();auto recorder=*d.recorder;auto& columns=recorder.columns;auto spec=*d.batch;bool changed=false;
+    ImGui::TextWrapped("Configure before or after batch. Re-extract uses retained curves without solving. Solar metrics and illuminated batches are unavailable in this engine (pending st6); missing values stay flagged.");ImGui::BeginDisabled(w->Busy());ImGui::SetNextItemOpen(d.batchResult.empty(),ImGuiCond_Once);
     if(ImGui::TreeNode("Quantities and sampling")) {
-    for(const char *q:{"Voc","Jsc","FF","eta","J","C","G","Vbi"}) {bool enabled=std::any_of(columns.begin(),columns.end(),[&](const Json &c){return c.at("quantity")==q;});if(Toggle(q,enabled)) {changed=true;columns.erase(std::remove_if(columns.begin(),columns.end(),[&](const Json &c){return c.at("quantity")==q;}),columns.end());if(enabled) {Json c={{"id",q},{"quantity",q}};if(std::string(q)=="J" || std::string(q)=="C" || std::string(q)=="G")c["voltage_V"]=0.;if(std::string(q)=="C" || std::string(q)=="G" || std::string(q)=="Vbi")c["frequency_Hz"]=1e4;columns.push_back(c);}}}
-    for(auto &c:columns) {ImGui::PushID(c.at("id").get<std::string>().c_str());if(c.contains("voltage_V"))changed|=Number((c.at("quantity").get<std::string>()+" @ bias [V]").c_str(),c,"voltage_V");if(c.contains("frequency_Hz"))changed|=Number((c.at("quantity").get<std::string>()+" @ f [Hz]").c_str(),c,"frequency_Hz");ImGui::PopID();}
-    auto frequencies=Json::array();for(const auto &c:columns)if(c.contains("frequency_Hz") && std::find(frequencies.begin(),frequencies.end(),c["frequency_Hz"])==frequencies.end())frequencies.push_back(c["frequency_Hz"]);spec["frequencies_Hz"]=frequencies;
-    if(changed)Do(Cmd::SetBatchSettings::With({{"spec",spec},{"columns",columns}}));
-    ImGui::TreePop();}
+        for(const char* q:{"Voc","Jsc","FF","eta","J","C","G","Vbi"}){bool enabled=std::any_of(columns.begin(),columns.end(),[&](const auto& c){return c.quantity==q;});if(Toggle(q,enabled)){changed=true;std::erase_if(columns,[&](const auto& c){return c.quantity==q;});if(enabled){scaps_core::RecorderColumn c;c.id=c.quantity=q;if(std::string_view(q)=="J" || std::string_view(q)=="C" || std::string_view(q)=="G")c.voltage_V=0;if(std::string_view(q)=="C" || std::string_view(q)=="G" || std::string_view(q)=="Vbi")c.frequency_Hz=1e4;columns.push_back(std::move(c));}}}
+        for(auto& c:columns){ImGui::PushID(c.id.c_str());if(std::isfinite(c.voltage_V))changed|=Number((c.quantity+" @ bias [V]").c_str(),c.voltage_V,"voltage_V");if(std::isfinite(c.frequency_Hz))changed|=Number((c.quantity+" @ f [Hz]").c_str(),c.frequency_Hz,"frequency_Hz");ImGui::PopID();}
+        std::vector<double> frequencies;for(const auto& c:columns)if(std::isfinite(c.frequency_Hz) && std::find(frequencies.begin(),frequencies.end(),c.frequency_Hz)==frequencies.end())frequencies.push_back(c.frequency_Hz);spec.frequencies_Hz=std::move(frequencies);
+        if(changed)Do(Cmd::SetBatchSettings::Make(CreateRef<const BatchDraft>(std::move(spec)),CreateRef<const RecorderDraft>(std::move(recorder))));ImGui::TreePop();
+    }
     ImGui::BeginDisabled(d.batchResult.empty());if(ImGui::Button("Re-extract Recorder"))Do(Cmd::RecordBatch::With());ImGui::SameLine();
     if(ImGui::Button("Export all CSV...")) {if(const auto target=SaveFileDialog({"Recorder CSV","csv"},"scapslab-batch.csv"))Do(Cmd::ExportBatch::With({{"path",target->Utf8()}}));}ImGui::SameLine();
     if(ImGui::Button("Send to PlotLab...")) {if(const auto target=SaveFileDialog({"PlotLab workbook","plotlab"},"scapslab-batch.plotlab"))Do(Cmd::SendToPlotLab::With({{"path",target->Utf8()}}));}ImGui::EndDisabled();ImGui::EndDisabled();
@@ -1844,12 +1787,12 @@ void Panel::BatchPlots() {
     if(!d.liveMembers.empty()) { // members finished so far in the running batch: curves only, marked, never stored (the table replaces them when the batch ends)
         ImGui::TextColored(ImVec4(1.f,.6f,.15f,1.f),"RUNNING: %d of %d members finished (partial curves, not saved; the table follows)",int(d.liveMembers.size()),int(d.liveMemberTotal));
         const bool compact=CompactBatchLegend(d.liveMemberTotal);
-        const auto &axis=d.batchSpec.at("axes")[0];
-        const int count=axis.contains("values")?int(axis.at("values").size()):axis.value("count",1);
-        const auto valueAt=[&](int i){if(axis.contains("values"))return axis.at("values")[i].get<double>();const double a=axis.at("start"),b=axis.at("stop"),t=count<2?0.:double(i)/(count-1);return i==0?a:i==count-1?b:axis.value("spacing",std::string("linear"))=="log"?std::exp(std::lerp(std::log(a),std::log(b),t)):std::lerp(a,b,t);};
+        const auto &axis=d.batch->axes[0];
+        const int count=axis.values?int(axis.values->size()):axis.count;
+        const auto valueAt=[&](int i){if(axis.values)return (*axis.values)[i];const double a=axis.start,b=axis.stop,t=count<2?0.:double(i)/(count-1);return i==0?a:i==count-1?b:axis.spacing=="log"?std::exp(std::lerp(std::log(a),std::log(b),t)):std::lerp(a,b,t);};
         double lo=INFINITY,hi=-INFINITY;for(int i=0;i<count;++i){const double v=valueAt(i);lo=std::min(lo,v);hi=std::max(hi,v);}
-        const auto stride=d.batchSpec.value("mode",std::string("nested"))=="nested"?std::max(std::size_t(1),d.liveMemberTotal/std::max(1,count)):std::size_t(1);
-        const auto colourLabel=axis.value("path",axis.value("parameter_id",std::string{}))+(axis.contains("unit")?" ["+axis.at("unit").get<std::string>()+"]":"");
+        const auto stride=d.batch->mode=="nested"?std::max(std::size_t(1),d.liveMemberTotal/std::max(1,count)):std::size_t(1);
+        const auto colourLabel=(axis.path.empty()?axis.parameter_id:axis.path)+(axis.unit.empty()?"":" ["+axis.unit+"]");
         if(compact && w->plotSession.settings.plots["Batch I-V running"].legend.value_or(true))BatchColourScale(colourLabel.c_str(),lo,hi);
         if(BeginSavedPlot(*w,"Batch I-V running",ImVec2(-1,-1))) {
             ImPlot::SetupLegend(ImPlotLocation_NorthWest);ImPlot::SetupAxes("Voltage [V] (left minus right)","J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);SetupSavedPlot(w->plotSession,"Batch I-V running",compact);
