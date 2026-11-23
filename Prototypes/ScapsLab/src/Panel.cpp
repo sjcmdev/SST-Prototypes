@@ -1399,11 +1399,14 @@ void Panel::StructureEdit() {
 void Panel::Results() {
     const Json *selected=nullptr;
     // A live band/profile job of the current model (changed Eg, Nd, ...) replaces the outdated run's profiles until the exact I-V run lands.
-    const bool liveBand=view==5 && w->Current().BandFresh() && (w->Current().result.empty() || !SelectedOffLive(w->Current(),"iv"));
+    // Owner 2026-11-23 (no blinking): while dragging or while a newer band job is pending, keep showing the last live band
+    // instead of falling back to the outdated exact run for a frame and back again.
+    const bool bandPending=w->dragging || w->Current().needsBand || w->Busy();
+    const bool liveBand=view==5 && !w->Current().bandResult.empty() && (w->Current().BandFresh() || bandPending) && (w->Current().result.empty() || !SelectedOffLive(w->Current(),"iv"));
     const auto bandBadge=[&]{
         const auto &d=w->Current();
         if(liveBand && d.result.empty()==false && d.Stale()) PlotBadge("LIVE band (exact I-V follows)",IM_COL32(255,140,25,230),IM_COL32(0,0,0,255),0);
-        else if(view==5 && !d.BandFresh() && (d.Stale() || d.needsBand)) PlotBadge("outdated: model edited",IM_COL32(95,95,105,210),IM_COL32(235,235,240,255),0);
+        else if(view==5 && !liveBand && !d.BandFresh() && (d.Stale() || d.needsBand)) PlotBadge("outdated: model edited",IM_COL32(95,95,105,210),IM_COL32(235,235,240,255),0);
     };
     if(!liveBand) for(const auto &run:w->Current().history) if(run.at("run_id")==w->Current().selectedRun && (run.at("kind")=="iv" || run.at("kind")=="band")) {
         if(!run.value("profiles_stored",true) && std::static_pointer_cast<const IvResult>(HistoryTyped(w->Current(),run))->points.front().x_m.empty()){ImGui::TextUnformatted("Profiles not stored. Recalculate this model to view spatial profiles.");return;}
@@ -1415,7 +1418,20 @@ void Panel::Results() {
     const auto &layers=(selected?selected->at("document"):w->Current().Document()).at("layers");
     double total=0;for(const auto &l:layers) total+=l.at("thickness_m").get<double>();
     if(view==5) StructureEdit();
-    if(result.points.empty()) {ImGui::TextUnformatted("Calculate I-V to view results.");return;}
+    if(result.points.empty()) {
+        // Owner 2026-11-23: the changing curve must be visible while dragging even before the first exact I-V exists.
+        const auto& d=w->Current();
+        if(view==10 && (!d.previewV.empty() || (d.liveRunning && !d.liveV.empty()))) {
+            const bool absoluteLog=w->plotSession.settings.ivAbsoluteLog;
+            if(BeginSavedPlot(*w,"I-V",ImVec2(-1,-1))) {
+                ImPlot::SetupAxes("Voltage [V]",absoluteLog?"|J| [A/m^2]":"Signed J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
+                if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
+                SetupSavedPlot(w->plotSession,"I-V");PreviewOverlay(d,absoluteLog);EndSavedPlot(*w,"I-V");
+            }
+            return;
+        }
+        ImGui::TextUnformatted("Calculate I-V to view results.");return;
+    }
     const auto &points=result.points;int bias=bandOnly?0:w->Current().selectedBias;bias=std::clamp(bias,0,int(points.size())-1);
     { // one row: Bias point [slider showing V] | Single shot | Shots
         char biasFormat[64];std::snprintf(biasFormat,sizeof(biasFormat),"%.4g V  (#%%d)",points[bias].voltage_V);
@@ -1424,22 +1440,26 @@ void Panel::Results() {
         ImGui::SameLine();ShotBar(*w,"iv");
     }
     ImGui::TextDisabled("%s",selected?"STORED result (frozen snapshot)":"LIVE result (store with Capture live)");
-    if(!selected && view==5 && !points[bias].details && !w->Current().Stale()) {
-        // Owner 2026-11-23: moving the bias point must update the profiles. With Band "On edit" the details of the newly selected
-        // bias load automatically (once per bias/revision); otherwise the explicit button stays.
+    const auto &band=*w->Current().Band();
+    // Owner 2026-11-23: moving the bias point must not blank/re-layout the panel (flicker). While the details of the newly
+    // selected bias load, keep drawing the last point that has details, and keep a fixed one-line status row.
+    const IvPoint* drawn=&(selected?points[bias]:view==5?PointAtBias(*w->Current().Iv(),band,bias):points[bias]);
+    if(!selected && view==5 && !w->Current().Stale()) {
+        const bool need=!drawn->details;
         static std::tuple<std::string,int,std::uint64_t> requested{};
         const auto key=std::make_tuple(w->Current().id,bias,std::uint64_t(w->Current().revision));
         const bool autoBand=w->autoRecalculateBand || w->Current().runPlan->actions[0].onEdit;
-        if(autoBand && !w->Busy() && requested!=key) {requested=key;Do(Cmd::RunBand::With({{"voltage_V",points[bias].voltage_V},{"live",true},{"rev",w->Current().revision}}));}
-        ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Load selected live details"))Do(Cmd::RunBand::With({{"voltage_V",points[bias].voltage_V},{"live",true},{"rev",w->Current().revision}}));ImGui::EndDisabled();
+        if(need && autoBand && !w->Busy() && requested!=key) {requested=key;Do(Cmd::RunBand::With({{"voltage_V",points[bias].voltage_V},{"live",true},{"rev",w->Current().revision}}));}
+        if(need && !band.empty() && band.points[0].details) drawn=&band.points[0]; // previous live band point stays visible until the new one arrives
+        if(autoBand) ImGui::TextDisabled(need?"Loading details at %.4g V ...":"Details at %.4g V",points[bias].voltage_V);
+        else {ImGui::BeginDisabled(!need || w->Busy());if(ImGui::Button("Load selected live details"))Do(Cmd::RunBand::With({{"voltage_V",points[bias].voltage_V},{"live",true},{"rev",w->Current().revision}}));ImGui::EndDisabled();}
     }
-    const auto &band=*w->Current().Band();
-    const auto &p=selected?points[bias]:view==5?PointAtBias(*w->Current().Iv(),band,bias):points[bias];
+    const auto &p=*drawn;
     const bool preview=view==5 && !band.empty() && &p==&band.points[0];
     const auto before=w->Current().changeBand?w->Current().changeBand:w->Current().changeIv;
     const bool profileIsReference=!selected && w->liveChangeReference!=3 && before && std::any_of(before->points.begin(),before->points.end(),[&](const auto& point){return &point==&p;});
     const auto &metrics=(preview?band:result).meta.prim;
-    w->Current().biasVoltage_V=p.voltage_V;
+    w->Current().biasVoltage_V=points[bias].voltage_V; // the selected bias, even while the previous point is still drawn
     {   // one small grey status line
         const double jAbs=std::isfinite(p.J_A_m2)?std::abs(p.J_A_m2):0;char residual[80]="";
         if(jAbs>0 && std::isfinite(p.residual)) std::snprintf(residual,sizeof(residual)," | residual %.2e | dJ/J %.1e",p.residual,p.conservation_error_A_m2/jAbs);

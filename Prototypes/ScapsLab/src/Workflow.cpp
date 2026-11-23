@@ -1406,7 +1406,7 @@ bool Workflow::CanUndo() const {
 bool Workflow::CanRedo() const {return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanRedo();}
 void Workflow::ApplyDraft(DeviceState &d,Ref<const ProjectDraft> draft) {
     d.RememberChange();
-    d.previewV.clear();d.previewJ.clear();d.liveV.clear();d.liveJ.clear();
+    d.liveV.clear();d.liveJ.clear(); // the last preview curve stays visible until a newer one replaces it point by point (owner: no blinking)
     d.SetDraft(std::move(draft));
     d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";
     ++d.revision;Emit(DocumentEdited(d.id,d.revision));
@@ -1491,9 +1491,18 @@ void Workflow::PullLive(Lane &lane) {
     std::lock_guard g(feed.lock);
     if(feed.seq==lane.liveSeq) return;
     lane.liveSeq=feed.seq;lane.liveAt=now;
-    if(lane.pending->request.value("preview",false)) {d.previewV=feed.v;d.previewJ=feed.j;d.previewCoarse=true;d.status="preview";return;}
+    // Owner 2026-11-23: the changing curve stays visible the whole time. New points replace the old curve from the sweep start;
+    // beyond the last computed voltage the previous curve (preview, else the last exact result) is kept.
+    auto merge=[](const std::vector<double>& v,const std::vector<double>& j,const std::vector<double>& oldV,const std::vector<double>& oldJ,std::vector<double>& outV,std::vector<double>& outJ) {
+        outV=v;outJ=j;if(v.empty() || oldV.size()<2)return;
+        const bool up=oldV.back()>=oldV.front();const double last=v.back();
+        for(std::size_t i=0;i<oldV.size();++i) if(up?oldV[i]>last:oldV[i]<last){outV.push_back(oldV[i]);outJ.push_back(oldJ[i]);}
+    };
+    std::vector<double> baseV=d.previewV,baseJ=d.previewJ;
+    if(baseV.empty() && !d.result.empty()) for(const auto& pt:d.Iv()->points){baseV.push_back(pt.voltage_V);baseJ.push_back(pt.J_A_m2);}
+    if(lane.pending->request.value("preview",false)) {merge(feed.v,feed.j,baseV,baseJ,d.previewV,d.previewJ);d.previewCoarse=true;d.status="preview";return;}
     d.liveRunning=true;
-    d.liveV=feed.v;d.liveJ=feed.j;d.pvEstimate=feed.pv;d.liveMembers=feed.members;d.liveMemberTotal=feed.memberTotal;d.liveBatch=feed.batch;
+    merge(feed.v,feed.j,baseV,baseJ,d.liveV,d.liveJ);d.pvEstimate=feed.pv;d.liveMembers=feed.members;d.liveMemberTotal=feed.memberTotal;d.liveBatch=feed.batch;
 }
 // One pass over the lanes: running jobs are checked with a cheap status read (no snapshot copy); an idle lane starts its next queued request.
 // Lanes of different devices run concurrently; project-level requests (a load that cancelled calculations) wait until every lane is idle.
@@ -1503,7 +1512,7 @@ void Workflow::UpdateOperation() {
     for(auto &[id,L]:lanes) {
         if(L.active) {
             busy=true;
-            if(L.pending && !dragging && L.pending->request.value("preview",false)) {L.pending->superseded=true;Device(id).previewV.clear();Device(id).previewJ.clear();(void)CancelLane(L);} // slider released: drop the preview, the exact run follows
+            if(L.pending && !dragging && L.pending->request.value("preview",false)) {L.pending->superseded=true;(void)CancelLane(L);} // slider released: drop the preview, the exact run follows
             const auto live=jobs->TryGetStatus(L.active);
             if((!live || *live==JobStatus::Completed) && L.pending->runPlan && (L.pending->actionBatch?L.pending->nextMember<L.pending->actionBatch->rows.size():L.pending->nextAction<L.pending->runPlan->actions.size())) {
                 if(!L.pending->paused)L.active=jobs->Submit(L.pending);
