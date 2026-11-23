@@ -1,4 +1,5 @@
 #pragma once
+#include <stop_token>
 
 #include <atomic>
 #include <cstdint>
@@ -103,7 +104,8 @@ namespace SST
 	{
 		JobSnapshot snapshot;
 		std::vector<JobLogEntry> logs;
-		Ref<std::atomic_bool> cancellationRequested = CreateRef<std::atomic_bool>(false);
+		Ref<std::stop_source> cancellationRequested = CreateRef<std::stop_source>();
+        Ref<std::atomic_bool> executionClaimed;
 		WeakRef<IJob> job; // Retry/Resume require a live consumer-owned request.
 	};
 

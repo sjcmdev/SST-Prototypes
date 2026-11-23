@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/JobSystem/ParallelFor.hpp"
 
 #include "Analysis/JFMFitEngine.hpp"
 
@@ -481,8 +482,9 @@ namespace SST::Prototypes::JFM
 		const JFMCharacteristicRecord &characteristic,
 		const JFMPrefitState &prefit,
 		const JFMFitState &fit,
-		const JFMFitMonteCarloSettings &settings)
+		const JFMFitMonteCarloSettings &settings, JobContext* context)
 	{
+        if (context) context->ThrowIfCancellationRequested();
 		if (characteristic.data == nullptr || !characteristic.info.temperatureK)
 			return MakeError("Characteristic data or temperature is unavailable.");
 		const ModelSpec *model = FindModel(fit.modelId);
@@ -639,19 +641,24 @@ namespace SST::Prototypes::JFM
 		const auto started = std::chrono::steady_clock::now();
 		
 
-		output.result.samples.reserve(settings.monteCarloSamples);
+		output.result.samples.resize(settings.monteCarloSamples);
+        output.result.noisyCurrent.resize(retainedCurves*output.result.voltage.size());
+        constexpr std::size_t chunkSize = 8;
+        const auto chunks = (static_cast<std::size_t>(settings.monteCarloSamples) + chunkSize - 1) / chunkSize;
+        const auto runChunk = [&](std::size_t chunk) {
 		FitData noisyData;
 		noisyData.voltage = output.result.voltage;
 		noisyData.sigma = output.result.currentSigma;
         noisyData.objective = source.objective;
 		noisyData.current.resize(output.result.idealCurrent.size());
-		for (int run = 0; run < settings.monteCarloSamples; ++run)
+		for (int run = static_cast<int>(chunk*chunkSize); run < std::min(settings.monteCarloSamples, static_cast<int>((chunk+1)*chunkSize)); ++run)
 		{
+            if (context) context->ThrowIfCancellationRequested();
 			for (std::size_t point = 0; point < output.result.idealCurrent.size(); ++point)
 			{
 				const double noiseAmplitude = source.objective.objective == JfmObjective::LogLegacy ? output.result.idealCurrent[point]*factor : output.result.currentSigma[point];
 				noisyData.current[point] = output.result.idealCurrent[point] + lm::normal(settings.monteCarloSeed + static_cast<uint64_t>(run)*0xD1B54A32D192ED03ULL, static_cast<int>(point)) * noiseAmplitude;
-				if (static_cast<std::size_t>(run)<retainedCurves) output.result.noisyCurrent.push_back(noisyData.current[point]);
+				if (static_cast<std::size_t>(run)<retainedCurves) output.result.noisyCurrent[static_cast<std::size_t>(run)*output.result.voltage.size()+point] = noisyData.current[point];
 			}
 			ParameterArray start = prefitValues;
             const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations, settings.monteCarloSeed, run, settings.monteCarloStartPerturbationPercent);
@@ -671,10 +678,17 @@ namespace SST::Prototypes::JFM
             const auto branches = ObjectiveSummary(noisyData, characteristic);
             sample.linearPoints = branches.linearPoints; sample.logPoints = branches.logPoints;
             sample.stopReason = !sample.accepted ? "non_finite" : solved.result.stop_reason;
-            output.state.convergedCount += sample.solverConverged ? 1 : 0;
-			output.state.acceptedCount += sample.converged ? 1 : 0;
-			output.result.samples.push_back(std::move(sample));
+            output.result.samples[run] = std::move(sample);
 		}
+        };
+        if (context) {
+            (void)ParallelFor(*context, chunks, runChunk);
+            context->ThrowIfCancellationRequested();
+        } else for (std::size_t chunk = 0; chunk < chunks; ++chunk) runChunk(chunk);
+        for (const auto& sample : output.result.samples) {
+            output.state.convergedCount += sample.solverConverged ? 1 : 0;
+            output.state.acceptedCount += sample.converged ? 1 : 0;
+        }
 		output.state.totalMilliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
 		output.state.status = "completed";
 		attachCurvesToResult();

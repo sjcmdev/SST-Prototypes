@@ -6,6 +6,8 @@
 
 #include <string_view>
 
+namespace SST { class JobContext; }
+
 namespace SST::Prototypes::JFM
 {
 	struct JFMFitComputation
@@ -34,7 +36,7 @@ namespace SST::Prototypes::JFM
 		const JFMCharacteristicRecord &characteristic,
 		const JFMPrefitState &prefit,
 		const JFMFitState &fit,
-		const JFMFitMonteCarloSettings &settings);
+		const JFMFitMonteCarloSettings &settings, JobContext* context = nullptr);
 	// One curve of scratch space; live results regenerate noise with the original sample index.
 	[[nodiscard]] std::vector<double> JFMMonteCarloNoisyCurve(const JFMMonteCarloResult &result, std::size_t sample);
 	[[nodiscard]] bool JFMGpuAvailable(std::string *message = nullptr);

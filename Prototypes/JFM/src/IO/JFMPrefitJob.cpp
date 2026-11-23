@@ -64,7 +64,7 @@ namespace SST::Prototypes::JFM
 
 	bool JFMPrefitJob::UsesPythonRuntime() const
 	{
-		return true;
+		return false; // the Python bridge acquires the GIL only around its calls
 	}
 
 	void JFMPrefitJob::Execute(JobContext &context)

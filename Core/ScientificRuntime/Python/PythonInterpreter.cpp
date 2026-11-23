@@ -118,9 +118,7 @@ namespace SST
 #if DS_PYTHON_CAPI_AVAILABLE
 	PyGILState_STATE PythonInterpreter::AcquireRuntimeGil()
 	{
-		if (!IsRuntimeInitialized() || !Py_IsInitialized() || g_PythonRuntimeThreadState == nullptr)
-			return PyGILState_UNLOCKED;
-
+        // Stop() leaves the interpreter alive, so a concurrent shutdown cannot invalidate this GIL acquisition.
 		return PyGILState_Ensure();
 	}
 

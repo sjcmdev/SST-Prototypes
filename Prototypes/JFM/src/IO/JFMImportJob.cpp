@@ -66,7 +66,7 @@ namespace SST::Prototypes::JFM
 
 	bool JFMImportJob::UsesPythonRuntime() const
 	{
-		return true;
+		return false; // the Python bridge acquires the GIL only around its calls
 	}
 
 	void JFMImportJob::reportProgress(JobContext &context, std::size_t completed, std::size_t total, const std::string &message) const

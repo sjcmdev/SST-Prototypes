@@ -10,6 +10,7 @@
 
 #include "Analysis/JFMFitEngine.hpp"
 #include "Core/JobSystem/JobContext.hpp"
+#include "Core/JobSystem/ParallelFor.hpp"
 #include "Events/JFMEvents.hpp"
 
 #include <chrono>
@@ -142,22 +143,25 @@ namespace SST::Prototypes::JFM
 				auto items = m_Queue->TakeNext();
 				if (!items)
 					break;
-				for (std::size_t index = 0; index < items->size(); ++index)
+				const auto fitOne = [&](std::size_t index)
 				{
 					context.ThrowIfCancellationRequested();
 					const JFMFitWorkItem &item = (*items)[index];
-					context.SetProgress(static_cast<float>(index), static_cast<float>(items->size()));
 					context.SetMessage(item.characteristic.info.name);
 					if (m_Store == nullptr || !m_Store->IsFitGenerationCurrent(item.ref, item.generation))
-						continue;
+						return;
 					auto result = RunJFMSimplexFit(item.characteristic, item.settings, item.useTunedStart);
 					if (m_EventBus == nullptr)
-						continue;
+						return;
 					if (result)
 						m_EventBus->Queue(FitCompleted{item.ref, item.generation, std::move(result->state), std::move(result->curve)});
 					else
 						m_EventBus->Queue(FitFailed{item.ref, item.generation, result.Error().technicalDetails});
-				}
+				};
+                const bool gpu = std::any_of(items->begin(), items->end(), [](const auto& item) { return item.settings.preferGpu; }) && JFMGpuAvailable();
+                if (gpu) for (std::size_t index = 0; index < items->size(); ++index) fitOne(index);
+                else (void)ParallelFor(context, items->size(), fitOne);
+                context.ThrowIfCancellationRequested();
 				context.SetProgress(static_cast<float>(items->size()), static_cast<float>(items->size()));
 			}
 		}
@@ -199,7 +203,7 @@ namespace SST::Prototypes::JFM
 					context.SetMessage(item.characteristic.info.name);
 					if (m_Store == nullptr || !m_Store->IsMonteCarloGenerationCurrent(item.ref, item.generation))
 						continue;
-					auto result = RunJFMMonteCarlo(item.characteristic, item.prefit, item.fit, item.settings);
+					auto result = RunJFMMonteCarlo(item.characteristic, item.prefit, item.fit, item.settings, &context);
                     if (!result || result->state.acceptedCount == 0)
                     {
                         if (m_EventBus != nullptr)

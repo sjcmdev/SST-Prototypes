@@ -278,7 +278,7 @@ namespace SST::Prototypes::JFM
 
 	bool MaterializeProjectDataJob::UsesPythonRuntime() const
 	{
-		return true;
+		return false; // the Python bridge acquires the GIL only around its calls
 	}
 
 	void MaterializeProjectDataJob::Execute(JobContext &context)

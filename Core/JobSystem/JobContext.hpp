@@ -1,6 +1,8 @@
 #pragma once
 
 #include <functional>
+#include <cstddef>
+#include <stop_token>
 #include <memory>
 #include <string>
 
@@ -26,7 +28,8 @@ namespace SST
 			LogCallback logCallback,
 			CancelQuery cancelQuery,
 			SubmitJobCallback submitJobCallback = {},
-			WaitJobCallback waitJobCallback = {});
+			WaitJobCallback waitJobCallback = {},
+            std::size_t workerCount = 1, std::stop_token stop = {});
 
 		void SetProgress(float completedWork, float totalWork) const;
 		void SetStage(const std::string &stage) const;
@@ -44,7 +47,12 @@ namespace SST
 		[[nodiscard]] bool WaitForJob(JobId id) const;
 		[[nodiscard]] JobId SubmitJobSequential(const Ref<IJob> &job, JobPriority priority = JobPriority::Normal) const;
 
+        [[nodiscard]] std::size_t GetWorkerCount() const { return m_WorkerCount; }
+        [[nodiscard]] std::stop_token GetStopToken() const { return m_Stop; }
+
 	private:
+        std::size_t m_WorkerCount;
+        std::stop_token m_Stop;
 		ProgressCallback m_ProgressCallback;
 		StageCallback m_StageCallback;
 		MessageCallback m_MessageCallback;
