@@ -559,6 +559,7 @@ void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<D
         state->id=id;state->name=item.at("name");state->colour=item.at("colour");state->description=item.value("description",std::string{});
         state->SetBatchSpec(item.value("batch_spec",BatchDefaults()));state->SetRecorderSpec(item.value("recorder_columns",RecorderDefaults()));
         state->SetDraft(drafts->at(index));state->SetResults(index<typed->size()?(*typed)[index]:DeviceResults{});state->SyncRuns();state->status=item.value("status",std::string("no results"));
+        state->needsRecalculate=state->needsBand=true;state->changedAt=std::chrono::steady_clock::now();state->pinStoredView=false;state->needsBiasDetails=false;state->storedBand.reset();state->detailRun.clear();
         checked.devices.push_back(state);++index;
     }
     project=std::move(checked);

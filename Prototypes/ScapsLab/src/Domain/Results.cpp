@@ -122,7 +122,7 @@ template<class J, class R, class P, size_t N, size_t M> R FromJson(J &j, const F
     if (!j.is_object()) return r;
     Json meta;
     Read(j, r, r.has, meta, top, "points");
-    if(meta.contains("run_plan") && meta.contains("project_snapshot"))r.snapshot=DraftFromDocument(meta.at("project_snapshot"));
+    if(meta.contains("project_snapshot"))r.snapshot=DraftFromDocument(meta.at("project_snapshot"));
     if(meta.contains("run_plan")) {r.runPlan=CreateRef<const RunPlan>(ReadRunPlan(meta.at("run_plan")));meta.erase("run_plan");}
     if constexpr(std::is_same_v<R,IvResult>) {
         if(meta.contains("optics"))try {const auto& o=meta.at("optics");OpticsResult optics;optics.x_m=Column::Intern(Numbers(o.at("x_m")));optics.generation_m3_s=Column::Intern(Numbers(o.at("generation_m3_s")));optics.incident_power_W_m2=Number(o,"incident_power_W_m2");for(const auto& c:o.at("absorption"))optics.absorption.push_back({c.at("layer_id"),Column::Intern(Numbers(c.at("wavelength_nm"))),Column::Intern(Numbers(c.at("alpha_m1"))),Column::Intern(Numbers(c.at("without_tail_m1")))});IvResult check;check.optics=std::move(optics);r.preserve_optics=check.Dump().at("optics").dump()!=o.dump();r.optics=std::move(check.optics);if(!r.preserve_optics)meta.erase("optics");}catch(const Json::exception&){}

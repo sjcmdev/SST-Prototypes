@@ -497,7 +497,7 @@ void Operation::Execute(JobContext &ctx) try {
                 if(next.temperature_K>0) {auto d=CreateRef<ProjectDraft>(*original);d->project.temperature_K=next.temperature_K;draft=std::move(d);}
                 measurement=PrepareBatchMember(draft->project,*batch,scaps_core::BatchSpec{});
                 typedOut.reset();output=Json{};Execute(ctx);valid &=outputValid;
-                auto result=std::const_pointer_cast<ResultBase>(typedOut);result->runPlan=runPlan;result->snapshot=original;result->liveOnly=automatic;
+                auto result=std::const_pointer_cast<ResultBase>(typedOut);result->runPlan=runPlan;result->liveOnly=automatic;
                 completedActions.emplace_back(next.kind,std::move(result));
                 nextAction=i+1;
                 const bool more=std::any_of(runPlan->actions.begin()+i+1,runPlan->actions.end(),[&](const auto& a){return automatic?a.onEdit:a.include;});
@@ -928,7 +928,7 @@ void Workflow::HistoryOp(const Json &request) {
     for(auto *dp:targets) before.emplace_back(*dp);
     for(auto *dp:targets) {
         auto &d=*dp;
-        if(op=="history_select") {d.selectedRun=request.at("run_id").get<std::string>();if(auto batch=std::dynamic_pointer_cast<const BatchResult>(d.RunResult(d.selectedRun)))d.batchResult.adopt(batch);d.selectedMember=request.value("member_index",0);d.selectedAttempt=request.value("attempt",0);if(request.contains("action"))project.ui["results_action"]=request.at("action");LimitProfiles(d);continue;}
+        if(op=="history_select") {d.selectedRun=request.at("run_id").get<std::string>();d.pinStoredView=false;if(auto batch=std::dynamic_pointer_cast<const BatchResult>(d.RunResult(d.selectedRun)))d.batchResult.adopt(batch);d.selectedMember=request.value("member_index",0);d.selectedAttempt=request.value("attempt",0);if(request.contains("action"))project.ui["results_action"]=request.at("action");LimitProfiles(d);continue;}
         auto &history=d.history.mut();
         const auto noSelection=[&]{if(std::none_of(history.begin(),history.end(),[&](const Json &r){return r.at("run_id")==d.selectedRun;}))d.selectedRun.clear();};
         if(op=="history_clear") {
@@ -990,6 +990,7 @@ void Workflow::DeviceOp(const Json &request,Ref<const ProjectDraft> importedDraf
             d->name=src.name+" copy";d->description=src.description;d->fileExtensions=src.fileExtensions;d->SetDraft(src.draft);d->actions=src.actions;d->runPlan=src.runPlan;d->runPlanEdited=src.runPlanEdited;d->SetBatch(src.batch);d->SetRecorder(src.recorder);
             d->batchResult.adopt(src.batchResult.share());d->selectedLayer=src.selectedLayer;d->selectedInterface=src.selectedInterface;d->selectedBias=src.selectedBias;d->selectedMember=src.selectedMember;d->biasVoltage_V=src.biasVoltage_V;
         } else {
+            d->runPlan=Current().runPlan;d->runPlanEdited=Current().runPlanEdited;
             if(importedDraft)d->SetDraft(std::move(importedDraft));
             else {const auto doc=request.contains("document")?SelfContained(request.at("document")):NewDeviceDocument();d->SetDocument(NormalizeDocument(doc));}
             d->name=d->draft->project.case_id;d->description=request.value("description",std::string{});
@@ -1000,6 +1001,7 @@ void Workflow::DeviceOp(const Json &request,Ref<const ProjectDraft> importedDraf
         static const double colours[][4]={{.25,.65,.95,1},{.95,.55,.25,1},{.4,.8,.45,1},{.8,.45,.85,1},{.9,.8,.3,1}};
         d->colour=Json::array({colours[devices.size()%5][0],colours[devices.size()%5][1],colours[devices.size()%5][2],colours[devices.size()%5][3]});d->metadataDirty=true;
         devices.push_back(d);project.active_device=d->id;project.compare_set.insert(d->id);
+        d->needsRecalculate=d->needsBand=true;d->changedAt=std::chrono::steady_clock::now();
         record=Undo::DeviceAdded(*this,d,devices.size()-1,activeBefore,op=="device_duplicate"?"Duplicate device":"Add device");
     } else if(op=="action_settings") {
         known();if(!request.at("actions").is_object()) throw std::invalid_argument("Invalid action list");
@@ -1181,9 +1183,10 @@ bool Workflow::ReplacingProject() const {
     auto it=lanes.find(project.active_device);if(it==lanes.end() || !it->second.active) return false;
     const std::string op=it->second.Op();return op=="project_load" || op=="load" || op=="layer";
 }
-void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const ProjectDraft> edit,Ref<const BatchDraft> batch,Ref<const RecorderDraft> recorder,Ref<const RunPlan> plan) {
+void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const ProjectDraft> edit,Ref<const BatchDraft> batch,Ref<const RecorderDraft> recorder,Ref<const RunPlan> plan,std::string detailRun) {
     auto &d=Device(id);auto &L=LaneOf(id);if(L.active) throw std::invalid_argument("A job is still active on this device");L.pending=CreateRef<Operation>(d.draft,r);auto &pending=L.pending;pending->jsonResponse=!lightResponse;const std::string op0=r.at("operation");if(op0=="edit"){pending->draft=edit?std::move(edit):ReadDraftEdit(d.draft.get(),r);pending->request.erase("document");pending->request.erase("patch");pending->request.erase("pointer_set");}if(op0.starts_with("export_"))pending->acResults=d.acResults.json();if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchInput=d.batchResult.typed();pending->batch=batch?std::move(batch):r.contains("spec")?ReadBatchDraft(r.at("spec")):d.batch;pending->recorder=recorder?std::move(recorder):r.contains("columns")?ReadRecorderDraft(r.at("columns")):d.recorder;
     const std::string op=r.at("operation");
+    if(!detailRun.empty()){pending->draft=std::move(edit);pending->detailRun=std::move(detailRun);}
     if(op=="retry_batch" || op=="record_batch")pending->request["source_run"]=d.selectedRun;
     if(op=="run_batch" || op=="quick_sweep" || op=="retry_batch") {
         if(plan)pending->runPlan=std::move(plan);
@@ -1214,11 +1217,15 @@ void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const Proj
     if(op=="export_results") pending->workspace=Workspace(); // the only job that still needs the whole workspace
 
     const bool liveBand=op=="band" && r.value("live",false); // background band refresh: no "running" status, no history
+    if(liveBand && pending->detailRun.empty()) {
+        pending->action=d.runPlan->actions[0];pending->action->voltage_V=r.at("voltage_V").get<double>();
+        if(pending->action->temperature_K>0){auto snapshot=CreateRef<ProjectDraft>(*d.draft);snapshot->project.temperature_K=pending->action->temperature_K;pending->draft=std::move(snapshot);}
+    }
     pending->automatic=liveBand;
     if((op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") && !liveBand) d.status="running";
     const bool preview=op=="run" && r.value("preview",false);if(op=="run" || op=="run_batch" || op=="quick_sweep" || op=="retry_batch") pending->feed=CreateRef<LiveFeed>();L.liveSeq=0;L.liveAt=std::chrono::steady_clock::time_point{};
     if(op=="run") L.runStarted=std::chrono::steady_clock::now();
-    if(op=="run" && !preview) {d.needsRecalculate=false;d.needsBand=false;}if(op=="band")d.needsBand=false;
+    if(op=="run" && !preview) {d.needsRecalculate=false;d.needsBand=false;}if(op=="band" && pending->detailRun.empty())d.needsBand=false;
     L.active=jobs->Submit(pending);if(!r.value("autosave",false) && !liveBand){status=preview?(r.value("stride",1)>1?"Preview (coarse, every "+std::to_string(r.value("stride",1))+". point): "+d.name:"Preview: "+d.name):"Running: "+d.name;response=Json();}
 }
 void Workflow::StartSave(const Json &r) {
@@ -1362,6 +1369,27 @@ void Workflow::StartActions(const std::string& device,Ref<const RunPlan> plan,bo
     d.needsRecalculate=false;d.needsBand=false;d.status="running";status=automatic?"Live Actions":"Single shot";response=Json{};
 }
 void Workflow::SingleShotTyped(Ref<const RunPlan> plan) {StartActions(project.active_device,plan?std::move(plan):Current().runPlan);}
+void Workflow::RecalculateLive(ActionKind kind) {
+    auto& d=Current();auto plan=CreateRef<RunPlan>(*d.runPlan);
+    for(auto& a:plan->actions)a.onEdit=a.kind==kind;
+    if(kind==ActionKind::Band)plan->actions[0].voltage_V=d.biasVoltage_V;
+    StartActions(d.id,std::move(plan),true);
+    d.pinStoredView=false;ReturnToLive(d);
+}
+void Workflow::SelectBias(int index) {
+    auto& d=Current();auto source=std::dynamic_pointer_cast<const IvResult>(d.RunResult(d.selectedRun));
+    if(!source)source=d.Iv();
+    if(index<0 || index>=int(source->points.size()))throw std::invalid_argument("Bias index out of range");
+    d.selectedBias=index;d.biasVoltage_V=source->points[index].voltage_V;
+    if(d.selectedRun.empty())d.needsBiasDetails=!source->points[index].details && !(d.BandFresh() && !d.Band()->points.empty() && d.Band()->points.front().voltage_V==d.biasVoltage_V);
+    d.changedAt=std::chrono::steady_clock::now();Emit(SelectionChanged(d.id));
+}
+void Workflow::RecalculateStoredBias() {
+    auto& d=Current();auto source=std::dynamic_pointer_cast<const IvResult>(d.RunResult(d.selectedRun));
+    if(!source || source->points.empty() || !source->snapshot)throw std::invalid_argument("Stored model snapshot unavailable");
+    const auto voltage=source->points.at(std::clamp(d.selectedBias,0,int(source->points.size())-1)).voltage_V;
+    StartOperation({{"operation","band"},{"voltage_V",voltage},{"live",true}},d.id,source->snapshot,{},{},{},d.selectedRun);
+}
 void Workflow::ResumeActions() {
     auto& lane=LaneOf(project.active_device);
     if(!lane.pending || !lane.pending->paused)throw std::invalid_argument("No paused Actions");
@@ -1413,7 +1441,7 @@ void Workflow::ApplyDraft(DeviceState &d,Ref<const ProjectDraft> draft) {
     ReturnToLive(d);
 }
 void Workflow::ReturnToLive(DeviceState &d) { // owner 2026-11-23: an edit shows Live again; the stored run stays drawn as "(previous)"
-    if(d.selectedRun.empty())return;
+    if(d.selectedRun.empty() || d.pinStoredView)return;
     d.selectedRun.clear();d.selectedAttempt=0;Emit(SelectionChanged(d.id));
 }
 Result<void> Workflow::Step(bool undo) {
@@ -1526,10 +1554,10 @@ void Workflow::UpdateOperation() {
         // Live band + carrier profiles at the working point (d.biasVoltage_V): same lane, <=10/s while dragging, latest wins, alternating with the I-V preview.
         const bool autoIv=autoRecalculate || d.runPlan->actions[1].onEdit,autoBand=autoRecalculateBand || d.runPlan->actions[0].onEdit;
         const bool anyAuto=autoIv || std::any_of(d.runPlan->actions.begin()+2,d.runPlan->actions.end(),[](const auto& a){return a.onEdit;});
-        const bool bandDue=autoBand && d.needsBand && (dragging || (!interacting && now-d.changedAt>=std::chrono::milliseconds(250))) && now-lastBandLive>=std::chrono::milliseconds(100);
+        const bool bandDue=((autoBand && d.needsBand) || (d.selectedRun.empty() && d.needsBiasDetails)) && (dragging || (!interacting && now-d.changedAt>=std::chrono::milliseconds(250))) && now-lastBandLive>=std::chrono::milliseconds(100);
         const bool previewDue=autoIv && dragging && d.needsRecalculate && d.revision!=d.previewRev && now-lastLive>=std::chrono::milliseconds(100);
         if(bandDue && (!previewDue || lastBandLive<=lastLive)) {
-            d.needsBand=false;lastBandLive=now;++liveBandsStarted;
+            d.needsBand=false;d.needsBiasDetails=false;lastBandLive=now;++liveBandsStarted;
             Submit(d.id,{{"operation","band"},{"voltage_V",d.biasVoltage_V},{"live",true},{"rev",d.revision}},"auto-band");
         } else if(previewDue) { // live preview: previous run finished (never queued), <=10/s
             const auto& ivMeta=d.Iv()->meta.prim;const double estimate=lastFullMs>0?lastFullMs:ivMeta.is_object()?ivMeta.value("compute_time_ms",0.):0.; // no I-V yet: prim is null
@@ -1558,7 +1586,7 @@ void Workflow::FinishOperation(Lane &L) {
     if(!pending->completedActions.empty() && (!dropped || !pending->automatic)) {
         auto runs=CreateRef<RunMap>(*d.runs);
         for(const auto& [kind,result]:pending->completedActions) {
-            if(!dropped && kind==ActionKind::Iv) {d.result.adopt(std::static_pointer_cast<const IvResult>(result));if(std::none_of(pending->completedActions.begin(),pending->completedActions.end(),[](const auto& a){return a.first==ActionKind::Band;}))d.bandResult.clear();d.resultRevision=d.revision;}
+            if(!dropped && kind==ActionKind::Iv) {d.result.adopt(std::static_pointer_cast<const IvResult>(result));if(!d.BandFresh() && std::none_of(pending->completedActions.begin(),pending->completedActions.end(),[](const auto& a){return a.first==ActionKind::Band;}))d.bandResult.clear();d.resultRevision=d.revision;}
             else if(!dropped && kind==ActionKind::Band) {d.bandResult.adopt(std::static_pointer_cast<const IvResult>(result));d.bandRevision=d.revision;}
             else if(!dropped) {d.acResults.set(ActionId(kind),std::static_pointer_cast<const AcResult>(result));d.acRevisions[ActionId(kind)]=d.revision;}
             if(!pending->automatic) {
@@ -1626,7 +1654,7 @@ void Workflow::FinishOperation(Lane &L) {
             SetWorkspace(pending->workspace,true,&pending->loaded,&pending->loadedDrafts);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
             ++epoch;path=op=="project_new"?std::string{}:pending->request.at("path").get<std::string>();
             if(op!="project_new" && std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
-            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();device->needsBand=false;device->needsRecalculate=false;}
+            for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();}
             Emit(ProjectLoaded(path));Emit(DeviceListChanged());
         } else if(op=="device_read") {
             Json add={{"operation","device_add"},{"loaded",true}};
@@ -1648,10 +1676,10 @@ void Workflow::FinishOperation(Lane &L) {
             if(op=="batch_settings") {d.SetBatch(pending->batch);d.SetRecorder(pending->recorder);projectDirty=true;}
             if(op=="quick_sweep" || op=="run_batch" || op=="retry_batch" || op=="record_batch") {d.batchResult.adopt(std::static_pointer_cast<const BatchResult>(pending->typedOut));projectDirty=true;Emit(RunCompleted(d.id,d.selectedRun,op,d.revision));}
             if(op=="run") {d.result.adopt(std::static_pointer_cast<const IvResult>(pending->typedOut));d.bandResult.clear();d.resultRevision=d.revision;}
-            if(op=="band") {d.bandResult.adopt(std::static_pointer_cast<const IvResult>(pending->typedOut));d.bandRevision=pending->revision;}
+            if(op=="band") {if(!pending->detailRun.empty()){d.storedBand=std::static_pointer_cast<const IvResult>(pending->typedOut);d.detailRun=pending->detailRun;}else {d.bandResult.adopt(std::static_pointer_cast<const IvResult>(pending->typedOut));d.bandRevision=pending->revision;}}
             if(op=="cv" || op=="cf" || op=="qe") {d.acResults.set(op,std::static_pointer_cast<const AcResult>(pending->typedOut));d.acRevisions[op]=d.revision;}
-            if(!dragging){if(op=="run"){d.changeIv.reset();d.changeBand.reset();}else if(op=="band")d.changeBand.reset();else if(op=="cv" || op=="cf" || op=="qe")d.changeAc.erase(op);}
-            if(op=="run" || op=="band") LimitProfiles(d);
+            if(!dragging){if(op=="run"){d.changeIv.reset();d.changeBand.reset();}else if(op=="band" && pending->detailRun.empty())d.changeBand.reset();else if(op=="cv" || op=="cf" || op=="qe")d.changeAc.erase(op);}
+            if(op=="run" || (op=="band" && pending->detailRun.empty())) LimitProfiles(d);
             if(liveBand) d.status=d.result.empty()?"solved":"previous";
             else if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") {if(!pending->automatic)d.actions[op=="run"?"iv":op]=pending->request;d.status=outValid?"solved":"failed";projectDirty=true;
                 if(outValid) Emit(RunCompleted(d.id,d.selectedRun,op=="run"?"iv":op,d.revision));
@@ -1673,7 +1701,8 @@ void Workflow::FinishOperation(Lane &L) {
         if(op=="project_load" && !recoveryPath.empty() && pending->request.at("path")==recoveryPath) {path.clear();projectDirty=true;RefreshDirty();response=Snapshot();status="Recovered unsaved project; use Save As";}
         if(op=="project_save" && !pending->request.value("autosave",false)) DropRecovery(path);
         if(!lightResponse && !pending->output.empty()) response["operation_result"]=pending->typedOut?pending->typedOut->Dump():pending->output;
-        if(quiet) {status=keepStatus;response=keepResponse;}
+        if(quiet) {status=liveBand?(pending->detailRun.empty()?"Live band updated":"Stored bias loaded"):keepStatus;response=keepResponse;}
+        if(op=="single_shot" && pending->automatic)status="Live Actions completed";
     } else {
         const bool wasCancelled=dropped || snapshot->status==JobStatus::Cancelled;
         if(!dropped && (op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->typedOut) {d.batchResult.adopt(std::static_pointer_cast<const BatchResult>(pending->typedOut));projectDirty=true;}

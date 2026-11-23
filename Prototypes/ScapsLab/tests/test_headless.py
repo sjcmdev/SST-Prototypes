@@ -26,6 +26,16 @@ def check_run_actions(document):
     single = run.single_shot()
     assert single['ok'], single
     assert len(single['project']['devices'][0]['history']) == 5
+    iv_id = next(r['run_id'] for r in single['project']['devices'][0]['history'] if r['kind'] == 'iv')
+    assert run.results_select(iv_id)['ok']
+    selected = run.select_bias(2)
+    assert selected['ok'] and selected['project']['devices'][0]['selection']['bias'] == 2
+    stored = run.recalculate_stored_bias()
+    assert stored['ok'] and stored['selected_run'] == iv_id
+    live = run.recalculate_live('band')
+    assert live['ok'] and live['selected_run'] == ''
+    assert len(live['project']['devices'][0]['history']) == 5
+    assert not run.select_bias(99)['ok']
     columns = [dict(id='J0', quantity='J', voltage_V=0)]
     spec = dict(mode='linked', axes=[dict(parameter_id='temperature_K', values=[300])], include_curves=True)
     batch = run.run_batch(spec=spec, columns=columns, actions=actions)

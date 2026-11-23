@@ -35,6 +35,9 @@ public:
     virtual void SetRunPlanTyped(std::shared_ptr<const RunPlan>) {throw std::logic_error("Run Actions unavailable");}
     virtual void SingleShotTyped(std::shared_ptr<const RunPlan>) {throw std::logic_error("Single shot unavailable");}
     virtual void CaptureLiveTyped(ActionKind) {throw std::logic_error("Capture live unavailable");}
+    virtual void RecalculateLive(ActionKind) {throw std::logic_error("Live recalculation unavailable");}
+    virtual void SelectBias(int) {throw std::logic_error("Bias selection unavailable");}
+    virtual void RecalculateStoredBias() {throw std::logic_error("Stored bias unavailable");}
     virtual void ResumeActions() {throw std::logic_error("No paused Actions");}
     virtual void QueueEdit(const Json &request) = 0;                 // merge into the active device's edit queue (latest wins per gesture)
     virtual void PublishSnapshot() = 0;                              // response = workspace snapshot (read-only commands)
