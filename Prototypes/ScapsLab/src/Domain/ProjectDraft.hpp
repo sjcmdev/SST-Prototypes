@@ -20,7 +20,7 @@ struct ProjectDraft {
     std::vector<DraftIdentity> layers;
     std::map<std::string,nlohmann::json> extensions;
     std::shared_ptr<const DraftFileData> file;
-    std::set<std::string> profileFields; // explicit analytic fields, including values equal to engine defaults
+    std::set<std::string> profileFields; // explicit scalars; profile root marks a replacement with authoritative presence
 };
 using ProjectValue = std::variant<std::monostate,bool,std::int64_t,double,std::string,
     scaps_core::ConstantsMode,scaps_core::MobilityTemperatureModel,scaps_core::CarrierStatistics,
@@ -44,8 +44,9 @@ void SetProjectParameter(scaps_core::DeviceProject&,const std::string& path,doub
 [[nodiscard]] std::set<std::string> ProjectFieldPaths(const scaps_core::DeviceProject&);
 [[nodiscard]] std::optional<scaps_core::Profile>& GradingProfile(scaps_core::LayerGrading&,const std::string&);
 void EditLayer(ProjectDraft&,const std::string& action,const std::string& id={},int index=0);
-void ResetProfileFields(ProjectDraft&,const scaps_core::Profile&);
+void ResetProfileFields(ProjectDraft&,const scaps_core::Profile&,const std::set<std::string>& explicitFields={});
 double& ProfileParameter(ProjectDraft&,scaps_core::Profile&,const std::string&,double fallback);
+bool& ProfileParameter(ProjectDraft&,scaps_core::Profile&,const std::string&,bool fallback);
 int AddDraftDefect(ProjectDraft&,int layer,bool sheet);
 void MoveDraftDefect(ProjectDraft&,int layer,int from,int to,bool sheet);
 void RemoveDraftDefect(ProjectDraft&,int layer,int index,bool sheet);
