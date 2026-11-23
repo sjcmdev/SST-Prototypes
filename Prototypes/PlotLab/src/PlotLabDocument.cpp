@@ -11,10 +11,12 @@
 #include <stdexcept>
 #include <nlohmann/json.hpp>
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include <sst/ui/Theme/ScientificPlotPreset.hpp>
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
 #include "Core/PlotExport/PlotEditingPython.hpp"
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
 #endif
 namespace SST::Prototypes::PlotLab
 {
@@ -315,7 +317,7 @@ namespace SST::Prototypes::PlotLab
     {
         const auto graph = project->reserveId(), layer = project->reserveId(), series = project->reserveId();
         pl::Layer l;
-        l.spec.x.label = project->object(x).name;
+        l.spec.x.label = x ? project->object(x).name : "Row";
         l.spec.y.label = project->object(y).name;
         l.spec.autoFit = plot::AutoFit::Once;
         pl::Plot p{sheet, x, y, 0, error};
@@ -329,13 +331,44 @@ namespace SST::Prototypes::PlotLab
                                                  {series, layer, project->object(y).name, 0, p}}));
         return graph;
     }
-    void Document::AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error)
+    pl::Id Document::AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error)
     {
         const auto layer = project->children(graph).at(0);
         pl::Plot p{sheet, x, y, 0, error};
         p.kind = plot::SeriesKind::LineScatter;
         const auto id = project->reserveId();
         Execute(project->change("Add series", {{id, layer, project->object(y).name, 0, p}}));
+        return id;
+    }
+    pl::Id Document::PlotColumns(pl::Id sheet, const std::vector<pl::Id>& selected, plot::SeriesKind kind,
+                                 pl::Id graph, pl::Id explicitX, pl::Id error)
+    {
+        if (kind != plot::SeriesKind::Line && kind != plot::SeriesKind::Scatter && kind != plot::SeriesKind::LineScatter && kind != plot::SeriesKind::Column)
+            throw std::invalid_argument("Choose Line, Scatter, Line + Symbol or Column");
+        auto& p = *project; const auto columns = p.children(sheet);
+        for (auto column : selected) if (std::find(columns.begin(), columns.end(), column) == columns.end()) throw std::invalid_argument("Selected column belongs to another worksheet");
+        for (auto column : selected) if (std::get<pl::Column>(p.object(column).data).role == pl::Role::X) explicitX = column;
+        auto group = undo->ScopedGroup(graph ? "Add Plot to Layer" : "Plot selected columns");
+        bool added = false;
+        try {
+            for (auto column : columns) if (std::find(selected.begin(), selected.end(), column) != selected.end()) {
+                const auto& c = std::get<pl::Column>(p.object(column).data);
+                if (c.values.index() != 0 || c.role == pl::Role::X || c.role == pl::Role::YError || c.role == pl::Role::XError || c.role == pl::Role::Label || c.role == pl::Role::Disregard) continue;
+                const auto x = explicitX ? explicitX : p.pairedX(column);
+                pl::Id addedSeries = 0;
+                if (!graph) graph = AddGraph(p.root(), sheet, x, column, error);
+                else addedSeries = AddSeries(graph, sheet, x, column, error);
+                const auto layer = p.children(graph).front();
+                auto o = p.object(addedSeries ? addedSeries : p.children(layer).front()); auto& series = std::get<pl::Plot>(o.data);
+                series.kind = kind; series.style.color = plot::ScientificColor(p.children(layer).size() - 1);
+                series.style.marker = kind == plot::SeriesKind::Line || kind == plot::SeriesKind::Column ? plot::Marker::None : plot::Marker::Circle;
+                series.style.markerAuto = false; series.group = "Worksheet selection";
+                Execute(p.change("Plot type", {std::move(o)})); added = true;
+            }
+            if (!added) throw std::invalid_argument("Select at least one numeric Y column first.");
+            const auto result = group.Commit(); if (!result) throw std::runtime_error(result.Error().technicalDetails);
+            return graph;
+        } catch (...) { (void)group.Cancel(); throw; }
     }
     void Document::SelectRow(pl::Id sheet, std::size_t row, pl::Id view, bool toggle, pl::Id series)
     {
@@ -375,6 +408,22 @@ namespace SST::Prototypes::PlotLab
         } catch(const std::exception& e) {dataResult=nlohmann::json{{"ok",false},{"error",{{"type",status->status==JobStatus::Completed?"conflict":"validation"},{"message",e.what()}}}}.dump();}
         work->operation.reset();work->snapshot.reset();work->base.reset();std::string{}.swap(work->request);
         dataJob=0;dataWork.reset();
+    }
+    void Document::SetColumnValues(pl::Id column, pl::Formula definition)
+    {
+        definition.variables.clear(); definition.scriptInputs.clear();
+        if (!definition.beforeScript.empty()) {
+#if DS_PYTHON_CAPI_AVAILABLE
+            if (!PythonInterpreter::IsRuntimeInitialized()) throw std::invalid_argument("Embedded Python is unavailable");
+            nanobind::gil_scoped_acquire gil;
+            auto validator = nanobind::module_::import_("sst_plotlab.formula_script");
+            definition.variables = nanobind::cast<std::vector<std::string>>(validator.attr("declared")(definition.beforeScript));
+            definition.scriptInputs = nanobind::cast<std::vector<pl::Id>>(validator.attr("inputs")(definition.beforeScript));
+#else
+            throw std::invalid_argument("Embedded Python is unavailable");
+#endif
+        }
+        Execute(project->setColumnValues(column, std::move(definition)));
     }
     std::string Document::WorksheetCommand(const std::string& requestJson)
     {
@@ -420,20 +469,35 @@ namespace SST::Prototypes::PlotLab
                     result["text"] = action == "copy_cell" ? pl::fullPrecision(values->at(row)) : pl::formatValue(values->at(row), c.display);
                 else result["text"] = std::get<std::vector<std::string>>(c.values).at(row);
             } else if(action=="set_column_values") {
-#if DS_PYTHON_CAPI_AVAILABLE
-                auto script=request.value("before_script",std::string{});
-                request["variables"]=Json::array(); request["script_input_ids"]=Json::array();
-                if(!script.empty()) {
-                    if(!PythonInterpreter::IsRuntimeInitialized()) throw std::invalid_argument("Embedded Python is unavailable");
-                    nanobind::gil_scoped_acquire gil;
-                    auto validator=nanobind::module_::import_("sst_plotlab.formula_script");
-                    request["variables"]=Json::parse(nanobind::cast<std::string>(validator.attr("declared_json")(script)));
-                    request["script_input_ids"]=Json::parse(nanobind::cast<std::string>(validator.attr("inputs_json")(script)));
-                }
-#else
-                if(!request.value("before_script",std::string{}).empty()) throw std::invalid_argument("Embedded Python is unavailable");
-#endif
-                Execute(project->worksheetEdit(request.dump()));
+                pl::Formula definition;
+                definition.expression = request.at("expression").get<std::string>();
+                definition.beforeScript = request.value("before_script", std::string{});
+                definition.excludeFiltered = request.value("exclude_filtered", false);
+                definition.excludeMasked = request.value("exclude_masked", false);
+                auto row = [&](const char* key, std::size_t fallback) {
+                    if (!request.contains(key)) return fallback;
+                    const auto& value = request.at(key);
+                    if (!value.is_number_unsigned() && !(value.is_number_integer() && value.get<std::int64_t>() >= 0)) throw std::invalid_argument("Expected nonnegative row index");
+                    return value.get<std::size_t>();
+                };
+                definition.rowFrom = row("row_from", 1); definition.rowTo = row("row_to", 0);
+                const auto mode = request.value("recalculate", std::string{"Auto"});
+                auto it = std::find(std::begin(pl::recalculateModes), std::end(pl::recalculateModes), mode);
+                if (it == std::end(pl::recalculateModes)) throw std::invalid_argument("Invalid recalculate mode");
+                definition.recalculate = static_cast<pl::RecalculateMode>(it - std::begin(pl::recalculateModes));
+                auto bindings = [&](const char* key, auto& target) {
+                    if (!request.contains(key)) return;
+                    const auto& values = request.at(key);
+                    if (!values.is_object()) throw std::invalid_argument("Expected bindings object");
+                    for (auto entry = values.begin(); entry != values.end(); ++entry) {
+                        const auto& value = entry.value();
+                        if (!value.is_number_unsigned() && !(value.is_number_integer() && value.get<std::int64_t>() > 0)) throw std::invalid_argument("Expected positive binding ID");
+                        const auto id = value.get<pl::Id>(); if (!id) throw std::invalid_argument("Expected positive binding ID");
+                        target[entry.key()] = id;
+                    }
+                };
+                bindings("bindings", definition.bindings); bindings("parameter_bindings", definition.parameterBindings);
+                SetColumnValues(request.at("column_id").get<pl::Id>(), std::move(definition));
             } else if(action=="recompute") {
 #if DS_PYTHON_CAPI_AVAILABLE
                 std::optional<nanobind::gil_scoped_release> release;
@@ -489,6 +553,15 @@ NB_MODULE(_sst_plotlab, module)
             new (self) Document(CreateRef<CommandRegistry>(), CreateRef<UndoStack>(), CreateRef<EventBus>());
         })
         .def("command_json", &Document::WorksheetCommand)
+        .def("plot_columns", [](Document& doc, pl::Id sheet, const std::vector<pl::Id>& columns, int kind, pl::Id graph, pl::Id x, pl::Id error) {
+            try {
+                const auto result = doc.PlotColumns(sheet, columns, static_cast<plot::SeriesKind>(kind), graph, x, error);
+                return SST::PlotEditingPython::Response(nlohmann::json{{"ok",true},{"graph_id",result},{"error",nullptr}});
+            } catch (const std::exception& e) {
+                return SST::PlotEditingPython::Response(nlohmann::json{{"ok",false},{"error",{{"code","plot.columns"},{"message",e.what()}}}});
+            }
+        }, nanobind::arg("worksheet_id"), nanobind::arg("column_ids"), nanobind::arg("kind") = 2,
+           nanobind::arg("graph_id") = 0, nanobind::arg("x_column_id") = 0, nanobind::arg("y_error_column_id") = 0)
         .def("plot_edit", [](Document& doc, pl::Id layer, nanobind::dict request) {
             auto edit=SST::PlotEditingPython::Decode(SST::PlotEditingPython::Request(request),*doc.project,layer);
             auto result=SST::ExecutePlotEdit(*doc.commands,doc.project,layer,edit);

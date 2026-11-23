@@ -10,6 +10,17 @@
 namespace SST::Prototypes::PlotLab
 {
     using Json = nlohmann::json;
+    std::string FriendlyFontError(std::string_view details)
+    {
+        if (details.find("ModuleNotFoundError") != std::string_view::npos || details.find("ImportError") != std::string_view::npos || details.find("No module named") != std::string_view::npos)
+            return "Graph fonts need the Python export dependencies. Install them and click Retry.";
+        if (details.find("Embedded Python") != std::string_view::npos)
+            return "Graph fonts need Python. The default UI font is used for this preview.";
+        while (!details.empty() && (details.back() == '\n' || details.back() == '\r')) details.remove_suffix(1);
+        const auto end = details.find_last_of("\r\n");
+        if (end != std::string_view::npos) details.remove_prefix(end + 1);
+        return "Graph font unavailable: " + std::string(details.substr(0, 200));
+    }
 #if DS_PYTHON_CAPI_AVAILABLE
     namespace nb = nanobind;
     static void PreparePython(const std::filesystem::path &pythonRoot)
@@ -49,7 +60,7 @@ namespace SST::Prototypes::PlotLab
             PreparePython(pythonRoot);
             auto result = nb::module_::import_("sst_plotlab.exporter").attr("resolve_font")(family.c_str(), file.c_str());
             return {nb::cast<std::string>(result[0]), nb::cast<std::string>(result[1])};
-        } catch (const nb::python_error &e) { throw std::runtime_error(e.what()); }
+        } catch (const nb::python_error &e) { throw std::runtime_error(FriendlyFontError(e.what())); }
 #else
         (void)family; (void)file; (void)pythonRoot;
         throw std::runtime_error("Rebuild with embedded Python to resolve graph fonts");

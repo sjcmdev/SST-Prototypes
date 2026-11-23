@@ -24,6 +24,18 @@ objects = command("snapshot")["objects"]
 sheet = next(o["id"] for o in objects if o["type"] == 2)
 columns = [o["id"] for o in objects if o["parent"] == sheet]
 x, y = columns[:2]
+
+first_graph = session.plot_columns(sheet, [y], kind=2)
+assert first_graph["ok"], first_graph
+second_graph = session.plot_columns(sheet, [y], kind=8)
+assert second_graph["ok"] and second_graph["graph_id"] != first_graph["graph_id"]
+added = session.plot_columns(sheet, [y], graph_id=first_graph["graph_id"])
+assert added["ok"] and added["graph_id"] == first_graph["graph_id"]
+command("undo")
+command("undo")
+command("undo")
+bad = session.plot_columns(sheet, [0])
+assert not bad["ok"] and bad["error"]["code"] == "plot.columns"
 def snapshot_object(id):
     return next(o for o in command("snapshot")["objects"] if o["id"] == id)
 def content():

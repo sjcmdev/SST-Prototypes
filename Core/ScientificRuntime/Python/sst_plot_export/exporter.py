@@ -255,10 +255,14 @@ def _draw_legend(fig, snapshot, font):
     for i, entry in enumerate(entries):
         xx, yy = x+gap+cell*(i % columns), y+gap+row*(i//columns)
         alpha = 1 if entry["visible"] else .35
-        line = Line2D([xx/width, (xx+size*2)/width], [1-(yy+size/2)/height]*2,
-                      transform=fig.transFigure, color=entry["color"], linewidth=entry["line_pt"],
-                      solid_capstyle="butt", dash_capstyle="butt",
-                      linestyle="none" if entry.get("kind", 0) == 1 else _LINE_STYLES[entry.get("line_style", 0)], alpha=alpha, zorder=11)
+        if entry.get("kind") == 8:
+            line = Rectangle(((xx+size*.5)/width, 1-(yy+size)/height), size/width, size/height,
+                             transform=fig.transFigure, facecolor=entry["color"], alpha=alpha, zorder=11)
+        else:
+            line = Line2D([xx/width, (xx+size*2)/width], [1-(yy+size/2)/height]*2,
+                          transform=fig.transFigure, color=entry["color"], linewidth=entry["line_pt"],
+                          solid_capstyle="butt", dash_capstyle="butt",
+                          linestyle="none" if entry.get("kind", 0) == 1 else _LINE_STYLES[entry.get("line_style", 0)], alpha=alpha, zorder=11)
         line.set_gid("sst-legend-sample"); fig.add_artist(line)
         if entry["marker"]:
             marker = Line2D([(xx+size)/width], [1-(yy+size/2)/height], transform=fig.transFigure,
@@ -366,7 +370,24 @@ def build_figure(snapshot, dpi=300):
             if scale in (1,2,3): valid &= values > 0
             if scale == 4: valid &= values != 0
         x, y = np.where(valid, x, np.nan), np.where(valid, y, np.nan)
+        if series.get("masked_rows"):
+            indices = np.asarray(series["masked_rows"])
+            if indices.ndim != 1 or indices.dtype.kind not in "iu" or np.any(indices < 0) or np.any(indices >= x.size):
+                raise ValueError("Invalid worksheet mask row")
+            ax.scatter(x[indices], y[indices], color=(1, .3, .3, 1), marker="x", s=144,
+                       linewidths=1, label="_nolegend_", zorder=4)
         style, kind = series["style"], series["kind"]
+        if kind == 8:
+            gaps = np.abs(np.diff(x))
+            gaps = gaps[np.isfinite(gaps) & (gaps > 0)]
+            bar_width = .8 * float(np.min(gaps)) if gaps.size else .8
+            error = np.asarray(series["y_error"], dtype=float) if series["y_error"] else None
+            if error is not None and (error.shape != y.shape or np.any(error < 0) or np.any(np.isinf(error))):
+                raise ValueError("Invalid yErr")
+            ax.bar(x, y, width=bar_width, color=style["color"], edgecolor=style["outline"],
+                   linewidth=style["line_pt"], label=series["label"] if style["legend"] else "_nolegend_",
+                   yerr=error, ecolor=style["color"], capsize=style["cap_pt"]/2)
+            continue
         marker = markers[style["marker"]]
         if kind in (1, 2) and not marker and style.get("marker_auto", True): marker = "o"
         args = dict(color=style["color"], linewidth=style["line_pt"],

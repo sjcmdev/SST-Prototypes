@@ -63,7 +63,7 @@ namespace SST::Prototypes::PlotLab
     {
       public:
         explicit WorkspacePanel(Ref<Session> session, pl::Id previewColumn = 0, int dataPreview = 0)
-            : IPanel("Project Explorer"), state(std::move(session)), previewColumn(previewColumn), dataAction(dataPreview) {}
+            : IPanel("Project Explorer"), state(std::move(session)), previewColumn(previewColumn), previewData(dataPreview != 0), dataAction(dataPreview) {}
         Ref<IPanel> Clone() const override
         {
             auto copy = CreateRef<WorkspacePanel>(state);
@@ -71,27 +71,61 @@ namespace SST::Prototypes::PlotLab
             return copy;
         }
         void Render() override;
+        // Component entry points also used by backend-free ImGui validation.
+        void WorksheetContents(pl::Id);
+        void GraphContents(pl::Id);
+        void Dialogs();
 
       private:
+        friend struct WorkspaceTestAccess;
         HostedWindows windows;
         Ref<Session> state;
+        std::weak_ptr<pl::Project> viewProject;
+        bool projectSeen = false;
+        void SyncProject();
         pl::Id rename = 0, remove = 0, metadata = 0, exportGraph = 0;
         pl::Id previewColumn = 0;
+        bool previewData = false;
         bool previewLibrary = false;
-        pl::Id targetGraph = 0, sheetChoice = 0, xChoice = 0, yChoice = 0, errorChoice = 0;
+        pl::Id targetGraph = 0, sheetChoice = 0, xChoice = 0, errorChoice = 0;
+        std::set<pl::Id> availableColumns, plottedSeries;
+        int plotType = 2;
+        void BeginGraphDialog(pl::Id graph = 0, pl::Id sheet = 0);
+        void AddAvailablePlots();
         std::string name, units, longName, formula, comments, parameterName, cellText;
         int displayMode = 0, displayDigits = 6;
         int rowFrom = 1, rowTo = 0, recalculate = 1;
         std::string beforeScript;
         int role = 0, format = 0;
-        bool textColumn = false, graphDialog = false, importDialog = false;
+        bool graphDialog = false, importDialog = false;
         std::string importText, importName, importPath;
         pl::ImportOptions importOptions;
         std::optional<pl::Table> preview;
         struct MaskPreview { std::weak_ptr<pl::Project> owner; std::uint64_t revision=0; std::vector<double> x,y; };
         std::map<pl::Id,MaskPreview> maskPreviews;
-        std::map<pl::Id, int> columnPages;
+        struct SheetView {
+            std::set<pl::Id> columns;
+            pl::Id anchorColumn = 0, column = 0, anchorRow = 0, row = 0;
+            float zoom = 1;
+        };
+        std::map<pl::Id, SheetView> sheetViews;
+        std::map<pl::Id, pl::Id> activeSheets, renderedSheets;
+        void NewWorkbook(pl::Id folder);
+        void NewWorksheet(pl::Id book);
+        pl::Id contextColumn = 0, operationsSheet = 0;
+        bool valuesDialog = false;
+        void SelectColumn(pl::Id, pl::Id, bool extend, bool toggle);
+        void SelectCell(pl::Id, pl::Id, pl::Id, bool extend);
+        void ColumnMenu(pl::Id);
+        void HeaderMenu(pl::Id);
+        void MaskSelection(pl::Id, bool);
+        void MoveColumn(pl::Id, int);
+        void FillSelection(pl::Id, bool);
+        void CopySelection(pl::Id);
+        void PasteSelection(pl::Id, const char*);
+        void PlotSelection(pl::Id, plot::SeriesKind);
         std::map<std::string, ImFont *> graphFonts;
+        std::map<std::string, std::string> fontFailures;
         std::map<pl::Id, std::string> fontErrors;
         double width = 80, height = 60;
         int dpi = 300;
@@ -107,7 +141,6 @@ namespace SST::Prototypes::PlotLab
         ImVec4 maskTint{1,.35f,.35f,.6f};
         std::string filterText, replacement, operationName="Result";
         void Graph(pl::Id);
-        void Dialogs();
         void EditColumn(pl::Id);
         void BeginImport();
         void PreviewImport();

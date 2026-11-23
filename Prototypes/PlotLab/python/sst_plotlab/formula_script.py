@@ -43,12 +43,18 @@ def _tree(script):
             raise ValueError("Only finite numeric constants are allowed")
     return tree
 
+def declared(script):
+    return [node.targets[0].id for node in _tree(script).body]
+
+def inputs(script):
+    return sorted({node.args[0].value for node in ast.walk(_tree(script))
+                   if isinstance(node, ast.Call) and node.func.id == "col"})
+
 def declared_json(script):
-    return json.dumps([node.targets[0].id for node in _tree(script).body])
+    return json.dumps(declared(script))
 
 def inputs_json(script):
-    return json.dumps(sorted({node.args[0].value for node in ast.walk(_tree(script))
-                              if isinstance(node, ast.Call) and node.func.id == "col"}))
+    return json.dumps(inputs(script))
 
 def run(script, data_json):
     data = json.loads(data_json)

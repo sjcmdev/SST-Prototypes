@@ -25,12 +25,13 @@ export uses the root `.venv` during development. This is not a portable packaged
 1. **Import CSV / TXT** → `Prototypes/PlotLab/examples/demo.csv`. Inspect detected
    delimiter, decimal, header and units; explicit overrides refresh the preview.
    Import commits one undoable operation. The source file is never modified.
-2. In the worksheet click **Calculated**. Set formula `Y * 2`, then close the dialog.
+2. Select the **Calculated** column header and press **Ctrl+Q**. Set formula `Y * 2`, then **OK**.
    Watch clean/dirty/running/failed/blocked and stale diagnostics. Edit `Y` and press
    **Enter**: calculated values and graphs refresh. Detach freezes current results
    and permits raw editing; an unfinished/stale calculation cannot be detached.
-3. **Create graph from columns…** → worksheet, X=`X`, Y=`Calculated`, yErr=`yErr`.
-   **Add series…** can add `Y` to that graph. All references use engine IDs.
+3. Select Y headers and use the **Line**, **Scatter**, **Line + Symbol** or **Column** toolbar icon.
+   X defaults to the nearest designated X column or row numbers. **Layer Contents**
+   adds/removes curves; its X/yErr pickers override the defaults. All references use engine IDs.
 4. Select a worksheet row; the graph highlights it. **Ctrl+click** a graph point
    selects and opens its source worksheet. Ctrl+click row toggles selection;
    Ctrl+Shift+click point toggles a point. Selection stays outside undo history.
@@ -47,7 +48,15 @@ Rename and delete use Core Commands. Delete lists the subtree and all dependent
 formulas/plots/error columns before confirmation; one undo restores the operation.
 The worksheet supports numeric/text cells, rows, columns, role, units and long name.
 Enter commits a cell; invalid numeric text is rejected. Blank numeric cells become NaN.
-Rows are virtualized; wide sheets use pages of 64 columns and horizontal scrolling.
+Rows are virtualized; up to 510 data columns share one horizontally scrolling grid.
+Larger worksheets retain every column in the model; horizontal virtualization remains future work.
+Workbook tabs switch sheets. Shift/Ctrl extend header selection; drag or Shift+click/arrows
+select cell ranges. Ctrl+wheel zooms the grid; Ctrl+C/V copy/paste plain TSV with atomic undo.
+Right-click a header or use Shift+F10 for designation, properties, sort, fill, mask and plot menus.
+Ctrl+Q opens **Set Values**, Ctrl+D adds a column, F4 opens **Column Properties**.
+Graph F2 opens the shared **Plot Details**; **Axes** and **Legend** use the shared editors.
+Masked cells are red; plots and exports mark their points with red crosses. Analysis skips masks.
+New saves use project format v9 (reads v1–v9); older v8 applications reject these files.
 Import preview shows up to five rows/eight columns; the full table is imported.
 
 Ctrl+N: new; Ctrl+O: open; Ctrl+S: save; Ctrl+Z/Y: Core undo/redo.
@@ -76,12 +85,12 @@ Save copies custom .ttf/.otf files into `<project>.fonts/` beside the project,
 using an FNV-1a 64-bit checksum. Move that directory together with the project.
 Open uses the checksum-verified copy first, then the original path as fallback;
 if neither matches, opening fails with a diagnostic and keeps the current document.
-Missing/corrupt/mismatched fonts show a diagnostic and block rendering/export.
+Missing Python export dependencies show a short message and keep the graph interactive
+using the UI font. Install the dependencies and use **Font > Retry** to restore the publication font.
 Preview converts pt to logical pixels at 96 DPI with ImGui display scaling.
 Live ImPlot layout and matplotlib remain separate; 0.5 mm UI/export layout parity
 is not claimed. See `experiments/README.md` for the native/Cairo comparison.
-No annotations, style editor, analysis, Python
-console, bulk paste or JPEG in PL3. No portable runtime packaging, autosave/recovery,
+No annotations, Python console or JPEG. No portable runtime packaging, autosave/recovery,
 non-Windows/Release validation, or million-point interactive performance gate here.
 The engine remains responsible for its existing formula worker/lifecycle policy.
 

@@ -47,6 +47,30 @@ def test_png_rounded_pixels(snapshot, tmp_path):
         assert image.info["dpi"] == pytest.approx((300, 300), abs=.01)
 
 
+def test_column_plot_uses_bars_and_validates_errors(snapshot):
+    snapshot["series"][0]["kind"] = 8
+    figure = build_figure(snapshot)
+    bars = figure.axes[0].patches
+    assert len(bars) == 5
+    assert bars[0].get_width() == pytest.approx(.8)
+    assert bars[0].get_height() == 2
+    snapshot["series"][0]["y_error"] = [-1] * 5
+    with pytest.raises(ValueError, match="Invalid yErr"):
+        build_figure(snapshot)
+
+
+def test_masked_points_are_red_crosses_and_invalid_indices_fail(snapshot):
+    snapshot["series"][0]["masked_rows"] = [1, 3]
+    figure = build_figure(snapshot)
+    crosses = figure.axes[0].collections[0]
+    assert crosses.get_offsets().tolist() == [[2., 4.], [4., 8.]]
+    assert crosses.get_facecolor()[0].tolist() == pytest.approx([1, .3, .3, 1])
+    for invalid in ([-1], [100], [1.5], [True]):
+        snapshot["series"][0]["masked_rows"] = invalid
+        with pytest.raises(ValueError, match="Invalid worksheet mask row"):
+            build_figure(snapshot)
+
+
 def test_svg_is_vector_and_font_outlines(snapshot, tmp_path):
     target = tmp_path / "figure.svg"
     export_graph(snapshot, target, "svg")

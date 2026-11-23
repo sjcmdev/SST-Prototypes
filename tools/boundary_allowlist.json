@@ -4991,6 +4991,94 @@
       "sha256": "8de971bfcfe326893ad122cf8a9c7d68f61a4e8f003562a7d5b0cc72c8a5beee",
       "count": 4,
       "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 385,
+      "code": "if (!PythonInterpreter::IsRuntimeInitialized()) throw std::invalid_argument(\"Embedded Python is unavailable\");",
+      "sha256": "9ef60cfba587684723b4b75575043820d3a5238179b58a65b8b8fd398f119a7b",
+      "reason": "Python binding edge: restricted Before Formula Scripts validator returns typed variable names and stable IDs through nanobind; no C++ text transport."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 387,
+      "code": "auto validator = nanobind::module_::import_(\"sst_plotlab.formula_script\");",
+      "sha256": "f46f78cdb242f1b537e199d35cbcbf9023f6869b01e804d9981582c6fcb9d9ab",
+      "reason": "Python binding edge: restricted Before Formula Scripts validator returns typed variable names and stable IDs through nanobind; no C++ text transport."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 388,
+      "code": "definition.variables = nanobind::cast<std::vector<std::string>>(validator.attr(\"declared\")(definition.beforeScript));",
+      "sha256": "2e6c7ca1ffe805be9bd3b00fbdc4792e18d6752dda38c1f29a2330d8382251a1",
+      "reason": "Python binding edge: restricted Before Formula Scripts validator returns typed variable names and stable IDs through nanobind; no C++ text transport."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 389,
+      "code": "definition.scriptInputs = nanobind::cast<std::vector<pl::Id>>(validator.attr(\"inputs\")(definition.beforeScript));",
+      "sha256": "9d1c9c4b0855e7c10b448cffdd499b48ca6aafeefd09ff081ff176d10de6aeea",
+      "reason": "Python binding edge: restricted Before Formula Scripts validator returns typed variable names and stable IDs through nanobind; no C++ text transport."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 563,
+      "code": "}, nanobind::arg(\"worksheet_id\"), nanobind::arg(\"column_ids\"), nanobind::arg(\"kind\") = 2,",
+      "sha256": "fb2c32b5af375361d2c96ae88bca93f302256d85c7f0fbf9398fb3eda81134cb",
+      "reason": "Nanobind plot_columns edge: stable IDs and plot kind convert directly to typed C++ inputs."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 563,
+      "code": "}, nanobind::arg(\"worksheet_id\"), nanobind::arg(\"column_ids\"), nanobind::arg(\"kind\") = 2,",
+      "sha256": "fb2c32b5af375361d2c96ae88bca93f302256d85c7f0fbf9398fb3eda81134cb",
+      "reason": "Nanobind plot_columns edge: stable IDs and plot kind convert directly to typed C++ inputs."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 563,
+      "code": "}, nanobind::arg(\"worksheet_id\"), nanobind::arg(\"column_ids\"), nanobind::arg(\"kind\") = 2,",
+      "sha256": "fb2c32b5af375361d2c96ae88bca93f302256d85c7f0fbf9398fb3eda81134cb",
+      "reason": "Nanobind plot_columns edge: stable IDs and plot kind convert directly to typed C++ inputs."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 564,
+      "code": "nanobind::arg(\"graph_id\") = 0, nanobind::arg(\"x_column_id\") = 0, nanobind::arg(\"y_error_column_id\") = 0)",
+      "sha256": "8503122fcb50c0b6bde944e3dda946cd6fc0c014d6d17359899bc785bc8291bb",
+      "reason": "Nanobind plot_columns edge: stable IDs and plot kind convert directly to typed C++ inputs."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 564,
+      "code": "nanobind::arg(\"graph_id\") = 0, nanobind::arg(\"x_column_id\") = 0, nanobind::arg(\"y_error_column_id\") = 0)",
+      "sha256": "8503122fcb50c0b6bde944e3dda946cd6fc0c014d6d17359899bc785bc8291bb",
+      "reason": "Nanobind plot_columns edge: stable IDs and plot kind convert directly to typed C++ inputs."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 564,
+      "code": "nanobind::arg(\"graph_id\") = 0, nanobind::arg(\"x_column_id\") = 0, nanobind::arg(\"y_error_column_id\") = 0)",
+      "sha256": "8503122fcb50c0b6bde944e3dda946cd6fc0c014d6d17359899bc785bc8291bb",
+      "reason": "Nanobind plot_columns edge: stable IDs and plot kind convert directly to typed C++ inputs."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabExport.cpp",
+      "rule": "python",
+      "line": 63,
+      "code": "} catch (const nb::python_error &e) { throw std::runtime_error(FriendlyFontError(e.what())); }",
+      "sha256": "2a98aced9c1d2c93f660f43e75cba5f73e4a8911c1c73a9f58d7beb5ba596e76",
+      "reason": "Python export/font edge: translate interpreter errors into a short user-facing message; no C++ data transport."
     }
   ],
   "known-debt": [

@@ -56,6 +56,7 @@ namespace SST::Prototypes::PlotLab
         ~Document() override;
         void changed(const pl::Event &) noexcept override;
         void Execute(pl::Operation);
+        void SetColumnValues(pl::Id column, pl::Formula);
         std::string WorksheetCommand(const std::string& requestJson);
         void PollDataOperation();
         void New();
@@ -73,7 +74,9 @@ namespace SST::Prototypes::PlotLab
         void ResizeRows(pl::Id sheet, std::optional<std::size_t> eraseRow = {});
         pl::Id AddColumn(pl::Id sheet, bool text = false);
         pl::Id AddGraph(pl::Id folder, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error = 0);
-        void AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error = 0);
+        pl::Id AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error = 0);
+        pl::Id PlotColumns(pl::Id sheet, const std::vector<pl::Id>& columns, plot::SeriesKind,
+                           pl::Id graph = 0, pl::Id explicitX = 0, pl::Id error = 0);
         void SelectRow(pl::Id sheet, std::size_t row, pl::Id sourceView, bool toggle = false, pl::Id series = 0);
         Ref<pl::Project> project;
         Ref<CommandRegistry> commands;

@@ -27,5 +27,16 @@ class WorksheetSession:
         import json
         return json.loads(self._session.command_json(json.dumps(request, allow_nan=False)))
 
+    def plot_columns(self, worksheet_id, column_ids, kind=2, graph_id=0,
+                     x_column_id=0, y_error_column_id=0):
+        """Plot stable column IDs; kinds: 0 line, 1 scatter, 2 line+symbol, 8 column.
+
+        graph_id=0 creates a graph; otherwise adds to its first layer.
+        X defaults to the nearest designated X column or one-based row numbers.
+        Returns {ok, graph_id, error}; uses the GUI's Core command/undo path.
+        """
+        return self._session.plot_columns(worksheet_id, column_ids, kind, graph_id,
+                                          x_column_id, y_error_column_id)
+
 
 __all__.append("WorksheetSession")

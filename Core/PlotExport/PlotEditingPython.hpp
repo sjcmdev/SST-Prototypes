@@ -16,7 +16,7 @@ namespace nb = nanobind;
 // Called only at nanobind edges; GUI callers construct PlotEdit directly.
 inline plot::PlotEdit Decode(const Json& request, const pl::Project& project, pl::Id layer) {
     plot::PlotEdit edit;
-    const char* actions[]={"axis","legend","style","group_style","visibility","rename","move","remove","rescale"};
+    const char* actions[]={"axis","legend","style","group_style","visibility","rename","move","remove","rescale","group_colors"};
     const auto action=request.at("action").get<std::string>();
     const auto found=std::find(std::begin(actions),std::end(actions),action);
     if(found==std::end(actions)) throw std::invalid_argument("plot.edit.action: unknown action");
