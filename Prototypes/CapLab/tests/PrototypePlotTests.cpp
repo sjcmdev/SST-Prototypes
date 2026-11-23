@@ -39,3 +39,20 @@ TEST(CapLabPlot, SelectionLabelsUseNamesAndEmptyHints) {
     EXPECT_EQ(SelectionLabel(p,0,"no defects yet"),"no defects yet");
     EXPECT_EQ(SelectionLabel(p,p.engine->reserveId()),"none — select");
 }
+#include "CapLabCommands.hpp"
+TEST(CapLabPlot, TypedEditUndoSurvivesViewportCopyOnWriteAndFileRoundtrip) {
+    using namespace SST;using namespace SST::Prototypes::CapLab;namespace plot=sst::ui::plot;
+    auto bus=CreateRef<EventBus>();auto history=CreateRef<UndoStack>();auto registry=CreateRef<CommandRegistry>();
+    CapLabWorkflow state({},bus,history);RegisterCommands(registry,bus,state);state.Document().project=FixtureProject();
+    const auto graph=state.Document().project.graph,layer=state.Document().project.engine->children(graph).front();
+    const auto series=state.Document().project.engine->children(layer).front();
+    plot::PlotEdit edit;edit.kind=plot::PlotEditKind::Rename;edit.series={std::to_string(series)};edit.text="Edited";
+    ASSERT_TRUE(ExecuteCapLabPlotEdit(state,layer,edit));
+    auto view=state.GraphView(graph);view.viewport=plot::Bounds{100,1e6,1e-12,1e-8};state.StoreGraphView(graph,view);
+    ASSERT_TRUE(history->Undo());EXPECT_NE(state.Document().project.engine->object(series).name,"Edited");
+    ASSERT_TRUE(history->Redo());EXPECT_EQ(state.Document().project.engine->object(series).name,"Edited");
+    edit.kind=plot::PlotEditKind::Visibility;edit.visible=false;ASSERT_TRUE(ExecuteCapLabPlotEdit(state,layer,edit));
+    auto serialized=Serialize(state.Document().project);auto loaded=Parse(serialized);
+    EXPECT_FALSE(loaded.engine->series(series).visible);EXPECT_EQ(loaded.engine->object(series).name,"Edited");
+    ASSERT_TRUE(history->Undo());EXPECT_TRUE(state.Document().project.engine->series(series).visible);
+}

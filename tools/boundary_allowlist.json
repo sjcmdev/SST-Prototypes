@@ -4820,6 +4820,177 @@
       "sha256": "909553f7a1fd3c41daedbe61671bc6f261042769e7255f29ec9b1ff7f4dfdbc8",
       "count": 1,
       "reason": "Disk export edge: bounded 64 KiB TSV buffer flushed to FILE by atomic TextFileIO::Save (perfret1)."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "text-json",
+      "line": 59,
+      "code": "return Json::parse(nb::cast<std::string>(nb::module_::import_(\"json\").attr(\"dumps\")(request)));",
+      "sha256": "6804f87ce561625782887a4b6b1951d9702115f0fd1d9506ac843eeaff2f2283",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "text-json",
+      "line": 61,
+      "code": "inline nb::object Response(const Json& value) { return nb::module_::import_(\"json\").attr(\"loads\")(nb::str(value.dump().c_str())); }",
+      "sha256": "c32a440b77132d8587218b8e4cf6bd1d464c575ed6389b9370925f79b21130ec",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 58,
+      "code": "inline Json Request(nb::dict request) {",
+      "sha256": "b58c82a28d0e29f2e047807ed7ba79b3323fb88bc6880fd8fd3b4f2b129dd431",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 59,
+      "code": "return Json::parse(nb::cast<std::string>(nb::module_::import_(\"json\").attr(\"dumps\")(request)));",
+      "sha256": "6804f87ce561625782887a4b6b1951d9702115f0fd1d9506ac843eeaff2f2283",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 61,
+      "code": "inline nb::object Response(const Json& value) { return nb::module_::import_(\"json\").attr(\"loads\")(nb::str(value.dump().c_str())); }",
+      "sha256": "c32a440b77132d8587218b8e4cf6bd1d464c575ed6389b9370925f79b21130ec",
+      "count": 3,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 68,
+      "code": "nb::object Edit(pl::Id layer, nb::dict request) {",
+      "sha256": "bc5d5047fc2d04eeabd4e15373789ea1c696f55a66ccc6884eb99503e5e82700",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 76,
+      "code": "template<class Host> void Bind(nb::module_& module) {",
+      "sha256": "d1d7f75935cb00a62b42caac226a725d32d116a908bce9b603940cec7caecdc2",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 78,
+      "code": "nb::class_<S>(module,\"PlotSession\")",
+      "sha256": "03125788aab489c5a1954fdb17e4dc3766d562934e7aeddfb851af92404fff10",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 79,
+      "code": ".def(nb::init<const std::string&>(),nb::arg(\"project_json\"))",
+      "sha256": "76579d7dafca565f20a63d09e7aa3adaa2a31d8f3ae23970bf7b1b7a42c2b518",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 80,
+      "code": ".def(\"edit\",&S::Edit,nb::arg(\"layer_id\"),nb::arg(\"request\"))",
+      "sha256": "2f9e9910c94f5032933852bd1e18a0462276aae8675b5a25568280a9ae1dc571",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 85,
+      "code": ".def(\"snapshot\",[](S& s,pl::Id graph,nb::list ranges) {",
+      "sha256": "8aef4c9d42ae93973d29ac36ab9b91258da0c18fc5c4225ab2033286617e0216",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 86,
+      "code": "if(nb::len(ranges)!=4) throw std::invalid_argument(\"Expected four axis limits\");",
+      "sha256": "0a534d8379d018df578fdaab7567a308a0f0d0a21e3b1314504b318c15ba7d8e",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 88,
+      "code": "return nb::module_::import_(\"json\").attr(\"loads\")(nb::str(pl::snapshotJson(*pl::snapshotGraph(*s.project,graph,view)).c_str()));",
+      "sha256": "9ab49e3fffe7fbeaf0b6aa1951f63d8705aae4e37414307f20596f81ddb3f1db",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 89,
+      "code": "},nb::arg(\"graph_id\"),nb::arg(\"ranges\"));",
+      "sha256": "d138c43684b86ddc21d52fd56112959bdade5a44a184221b556b8a8466218c3e",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "text-json",
+      "line": 256,
+      "code": "if (!result) return Json{{\"ok\",false},{\"error\",{{\"code\",result.Error().code},{\"message\",result.Error().technicalDetails}}}}.dump();",
+      "sha256": "831ef7a4e2ce526a328237af26eb31e8fa74335b26aed8e3a83a77b63051d748",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 513,
+      "code": "request.pythonSnapshot=[snapshot=graph.snapshot]() -> nanobind::object {",
+      "sha256": "180cb6f311f34db52a7511c098e27c2632254ad55fe320ce11b8ec65f127808e",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 514,
+      "code": "return nanobind::module_::import_(\"json\").attr(\"loads\")(nanobind::str(pl::SnapshotJson(*snapshot).c_str()));",
+      "sha256": "f3df2cf50068b01a17a4056a388f4189eefd5f5525fdf3171df9b5ea49988326",
+      "count": 2,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
+      "rule": "python",
+      "line": 492,
+      "code": ".def(\"plot_edit\", [](Document& doc, pl::Id layer, nanobind::dict request) {",
+      "sha256": "5d6d3580b797a6203fa92b53e0b5c8e5e16ef4762cbc4ab823bcc4594a13b9d4",
+      "count": 1,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
+    },
+    {
+      "file": "Core/PlotExport/PlotEditingPython.hpp",
+      "rule": "python",
+      "line": 90,
+      "code": "view.viewport=plot::Bounds{nb::cast<double>(ranges[0]),nb::cast<double>(ranges[1]),nb::cast<double>(ranges[2]),nb::cast<double>(ranges[3])};",
+      "sha256": "8de971bfcfe326893ad122cf8a9c7d68f61a4e8f003562a7d5b0cc72c8a5beee",
+      "count": 4,
+      "reason": "Nanobind-only PlotSession/edit/snapshot boundary. JSON/dict conversion occurs here; UI and engine edits use typed PlotEdit and Core Commands/Undo."
     }
   ],
   "known-debt": [

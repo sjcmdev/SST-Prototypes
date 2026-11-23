@@ -1,4 +1,5 @@
 #include "PlotLabWorkspace.hpp"
+#include "Core/PlotExport/PlotEditing.hpp"
 #include "Core/App/Application.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -883,9 +884,24 @@ namespace SST::Prototypes::PlotLab
             if (!view.fitted)
                 spec.autoFit = plot::AutoFit::Once;
             // pt to logical pixels at 96 DPI; ImGui applies the display DPI scale.
-            ImGui::PushFont(graphFont, static_cast<float>(chosen.fontSizePt * 96.0 / 72.0));
-            plot::RenderPlot("##graph", spec, entries.data(), entries.size(), view, {}, ImVec2(-1, -1));
+            const auto preview=plot::PublicationPreview(chosen.widthMm,chosen.heightMm,ImGui::GetContentRegionAvail());
+            ImGui::PushFont(graphFont, preview.metrics.ToPixels(static_cast<float>(chosen.fontSizePt)));
+            spec.customAxes = true;
+            auto& editor = state->plotEditors[id];
+            plot::RenderPlot("##graph", spec, entries.data(), entries.size(), view, preview.metrics, preview.size, &editor);
             ImGui::PopFont();
+            auto pending = std::move(editor.pending); editor.pending.clear();
+            for (const auto& edit : pending) Attempt([&] {
+                auto saved = p.object(layer); std::get<pl::Layer>(saved.data).view = view;
+                p.change("Graph viewport", {std::move(saved)}).apply(p);
+                const auto result = ExecutePlotEdit(*doc.commands, doc.project, layer, edit, [owner=std::weak_ptr<Session>(state), id, layer] {
+                    if (auto session=owner.lock()) {
+                        session->views[id] = std::get<pl::Layer>(session->document->project->object(layer).data).view;
+                        session->views[id].visibility.clear();
+                    }
+                });
+                if (!result) { editor.error = result.Error().technicalDetails; throw std::runtime_error(editor.error); }
+            });
             for (std::size_t i = 0; i < entryPlots.size(); ++i)
                 if (entries[i].kind != plot::SeriesKind::ErrorBars || entries[i].style.legend)
                     if (view.visibility.contains(entries[i].id))

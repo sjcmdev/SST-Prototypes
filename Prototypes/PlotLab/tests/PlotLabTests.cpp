@@ -922,3 +922,32 @@ TEST(PlotLabDataJobs, SharedCorePoolSurvivesDocumentAndPublishedJobPayloadIsRele
     do {std::this_thread::sleep_for(std::chrono::milliseconds(1));status=jobs->GetJob(next);} while(status && (status->status==JobStatus::Queued || status->status==JobStatus::Running));
     ASSERT_TRUE(status);EXPECT_EQ(status->status,JobStatus::Completed);
 }
+#include "Core/PlotExport/PlotEditing.hpp"
+TEST_F(PlotLabApp, TypedPlotEditsUseCoreHistoryAndMergeOneLiveGesture) {
+    const auto layer=doc.project->children(graph).front();const auto series=doc.project->children(layer).front();
+    plot::PlotEdit edit;edit.kind=plot::PlotEditKind::Rename;edit.series={std::to_string(series)};edit.text="one";edit.gesture=77;
+    ASSERT_TRUE(ExecutePlotEdit(*registry,doc.project,layer,edit));edit.text="two";
+    ASSERT_TRUE(ExecutePlotEdit(*registry,doc.project,layer,edit));EXPECT_EQ(undo->GetUndoDepth(),1u);
+    ASSERT_TRUE(undo->Undo());EXPECT_NE(doc.project->object(series).name,"two");
+    ASSERT_TRUE(undo->Redo());EXPECT_EQ(doc.project->object(series).name,"two");
+    edit.kind=plot::PlotEditKind::Visibility;edit.gesture=0;edit.visible=false;
+    ASSERT_TRUE(ExecutePlotEdit(*registry,doc.project,layer,edit));EXPECT_FALSE(doc.project->series(series).visible);
+    ASSERT_TRUE(undo->Undo());EXPECT_TRUE(doc.project->series(series).visible);
+}
+TEST_F(PlotLabApp, PlotSessionPythonCallsTheTypedCoreHistory) {
+#if DS_PYTHON_CAPI_AVAILABLE
+    auto& runtime=TestPython();ASSERT_TRUE(runtime.Start());InstallWorksheetPython();
+    const auto gil=PythonInterpreter::AcquireRuntimeGil();
+    const auto layer=doc.project->children(graph).front();const auto curve=doc.project->children(layer).front();
+    const auto code=std::string("import json\nfrom _sst_plotlab import PlotSession\ns=PlotSession(")+nlohmann::json(doc.project->toJson()).dump()+")\n"+
+        "assert s.edit("+std::to_string(layer)+", {'action':'rename','series_ids':["+std::to_string(curve)+"],'text':'Python legend'})['ok']\n"+
+        "assert s.undo() and s.redo()\n"+
+        "assert s.edit("+std::to_string(layer)+", {'action':'axis','side':'bottom','axis':{'scale':4,'range':[1,4],'ticks':{'mode':2,'count':4}}})['ok']\n"+
+        "snapshot=s.snapshot("+std::to_string(graph)+",[1,4,1,8])\nassert snapshot['x_axis']['spec']['scale']==4\nassert snapshot['series'][0]['label']=='Python legend'\n"+
+        "assert not s.edit("+std::to_string(layer)+", {'action':'axis','axis':{'range':[-1,1]}})['ok']\n";
+    const int result=PyRun_SimpleString(code.c_str());PythonInterpreter::ReleaseRuntimeGil(gil);EXPECT_EQ(result,0);
+#else
+    GTEST_SKIP();
+#endif
+}
+

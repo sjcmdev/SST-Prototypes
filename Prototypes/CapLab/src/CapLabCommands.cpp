@@ -103,6 +103,46 @@ protected:
 public:
     std::size_t ByteSize() const noexcept override {return bytes;}
 };
+class PlotChange final : public ICommand {
+public:
+    explicit PlotChange(CapLabWorkflow& state) : state(state), document(state.workspace.active) {}
+    Result<void> Execute(CommandContext& context) override {
+        try {
+            const auto* edit=context.TryGet<sst::ui::plot::PlotEdit>("plot.edit");
+            const auto* layerId=context.TryGet<pl::Id>("plot.layer");
+            if (!edit || !layerId || state.closeRequested) throw std::invalid_argument("Missing typed plot edit or pending close");
+            layer=*layerId; gesture=edit->gesture;
+            before=state.Document().project.engine; after=CloneEngine(*before);
+            auto operation=pl::editPlot(*after,layer,*edit); operation.apply(*after); bytes=operation.storedBytes();
+            return Restore(after);
+        } catch (const std::exception& e) { return StructuredError{ErrorCategory::Validation,Severity::Error,"Plot edit failed",e.what(),{},"CapLab","plot.edit.invalid"}; }
+    }
+    Result<void> Undo(CommandContext&) override { return Restore(before); }
+    Result<void> Redo(CommandContext&) override { return Restore(after); }
+    bool IsUndoable() const noexcept override { return true; }
+    std::string Description() const override { return "Edit axes / legend / series"; }
+    std::size_t ByteSize() const noexcept override { return sizeof(*this)+bytes+(before->objects().size()+after->objects().size())*64; }
+    bool CanMerge(const ICommand& other) const noexcept override {
+        const auto* next=dynamic_cast<const PlotChange*>(&other);
+        return gesture && next && &state==&next->state && document==next->document && layer==next->layer && gesture==next->gesture;
+    }
+    Result<void> Merge(std::unique_ptr<ICommand> other) override { auto& next=static_cast<PlotChange&>(*other);after=std::move(next.after);bytes+=next.bytes;return {}; }
+private:
+    Result<void> Restore(const Ref<pl::Project>& engine) {
+        if (document!=state.workspace.active) return StructuredError{ErrorCategory::Validation,Severity::Error,"Activate the figure's project",{}, {},"CapLab","plot.edit.document"};
+        state.Document().project.engine=engine;
+        const auto graph=engine->object(layer).parent;
+        state.graphViews[graph]=std::get<pl::Layer>(engine->object(layer).data).view;
+        state.graphViews[graph].visibility.clear();
+        if (graph==state.Document().project.graph) state.view=state.graphViews[graph];
+        state.Changed(false); return {};
+    }
+    CapLabWorkflow& state;
+    std::uint64_t document, gesture=0;
+    pl::Id layer=0;
+    std::size_t bytes=0;
+    Ref<pl::Project> before,after;
+};
 class TreeCommand final : public ProjectCommand {
 public:
     TreeCommand(CapLabWorkflow &state, bool selection) : state(state), selection(selection) {}
@@ -295,8 +335,15 @@ private:
     CapLabWorkflow &state; bool profile,changed=false,inputChange=false; 
 };
 }
+Result<void> ExecuteCapLabPlotEdit(CapLabWorkflow& state, pl::Id layer, const sst::ui::plot::PlotEdit& edit) {
+    CommandContext context; context.Set("plot.layer",layer);context.Set("plot.edit",edit);
+    auto result=state.commands->Execute(CommandID{"caplab.plot_edit"},std::move(context));
+    return result ? Result<void>{} : Result<void>{result.Error()};
+}
 void RegisterCommands(Ref<CommandRegistry> registry, Ref<EventBus> bus, CapLabWorkflow &state) {
     registry->SetUndoStack(state.undo); state.commands = registry;
+    const auto plot=registry->Register({CommandID{"caplab.plot_edit"},"Edit axes / legend / series","CapLab","",{},CommandFlags::Undoable},[&state](CommandContext&) {return CreateUnique<PlotChange>(state);});
+    if (!plot) throw std::runtime_error(plot.Error().technicalDetails);
     for (bool profile:{false,true}) {
         const auto registered=registry->Register({CommandID{profile ? "caplab.profile" : "caplab.accept_source"},profile ? "Format profiles" : "Accept source diff","CapLab","",{},CommandFlags::Undoable},
             [&state,profile](CommandContext &) {return CreateUnique<SourceCommand>(state,profile);});

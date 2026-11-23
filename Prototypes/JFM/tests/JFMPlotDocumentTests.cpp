@@ -206,3 +206,32 @@ namespace SST::Prototypes::JFM
     }
 
 }
+namespace SST::Prototypes::JFM {
+TEST(JFMPlotDocumentTests, EditorChangesSurviveDomainRefreshRemoveUndoAndSavedFigure) {
+    auto doc=CreateRef<JFMPlotDocument>();const double x[]={200,300,400},y[]={1,2,3};
+    doc->BeginFrame();auto id=doc->SetSeries({"Raw###source",{x,y,3}});doc->EndFrame({});
+    plot::PlotEdit edit;edit.kind=plot::PlotEditKind::Rename;edit.series={std::to_string(id)};edit.text="Edited legend";
+    doc->editor.pending.push_back(edit);doc->ApplyEdits();
+    doc->BeginFrame();doc->SetSeries({"Domain name###source",{x,y,3}});doc->EndFrame({});
+    EXPECT_EQ(doc->project.object(id).name,"Edited legend");
+    edit.kind=plot::PlotEditKind::Remove;doc->editor.pending.push_back(edit);doc->ApplyEdits();
+    doc->BeginFrame();EXPECT_EQ(doc->SetSeries({"Domain name###source",{x,y,3}}),0);doc->EndFrame({});
+    ASSERT_TRUE(doc->editUndo->Undo());EXPECT_TRUE(doc->project.objects().contains(id));
+    auto path=std::filesystem::temp_directory_path()/"axisui1-jfm-figure.plotlab";
+    doc->Save(path);auto loaded=CreateRef<JFMPlotDocument>();loaded->Load(path);
+    loaded->BeginFrame();EXPECT_EQ(loaded->SetSeries({"Domain name###source",{x,y,3}}),id);loaded->EndFrame({});
+    EXPECT_EQ(loaded->project.object(id).name,"Edited legend");std::filesystem::remove(path);
+}
+}
+namespace SST::Prototypes::JFM {
+TEST(JFMPlotDocumentTests, SameAddressDataChangesAreDetectedAndHistoryDoesNotRetainFigure) {
+    auto doc=CreateRef<JFMPlotDocument>();std::weak_ptr<JFMPlotDocument> lifetime=doc;
+    double x[]={1,2},y[]={3,4};doc->BeginFrame();auto id=doc->SetSeries({"Data###data",{x,y,2}});doc->EndFrame({});
+    const auto* original=doc->project.series(id).data.y;
+    doc->BeginFrame();doc->SetSeries({"Data###data",{x,y,2}});doc->EndFrame({});EXPECT_EQ(doc->project.series(id).data.y,original);
+    y[0]=7;doc->BeginFrame();doc->SetSeries({"Data###data",{x,y,2}});doc->EndFrame({});EXPECT_EQ(doc->project.series(id).data.y[0],7);
+    plot::PlotEdit edit;edit.kind=plot::PlotEditKind::Visibility;edit.series={std::to_string(id)};edit.visible=false;
+    doc->editor.pending.push_back(edit);doc->ApplyEdits();ASSERT_TRUE(doc->editUndo->CanUndo());
+    doc.reset();EXPECT_TRUE(lifetime.expired());
+}
+}

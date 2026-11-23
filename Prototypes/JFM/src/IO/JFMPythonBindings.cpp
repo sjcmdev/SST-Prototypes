@@ -210,6 +210,8 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
 #include "ScientificRuntime/Python/PythonInterpreter.hpp"
 
 #include <nanobind/nanobind.h>
+#include "Core/PlotExport/PlotEditingPython.hpp"
+#include "Presentation/JFMPlotDocument.hpp"
 #include <nanobind/stl/optional.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/unordered_map.h>
@@ -221,6 +223,7 @@ namespace nb = nanobind;
 
 NB_MODULE(sst_jfm, module)
 {
+    SST::PlotEditingPython::Bind<SST::Prototypes::JFM::JFMPlotDocument>(module);
 	using namespace SST::Prototypes::JFM;
 	module.attr("schema_version") = JFMProjectSchemaVersion;
     module.def("plot", [](nb::dict request) -> nb::object {

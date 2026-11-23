@@ -13,6 +13,7 @@
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
+#include "Core/PlotExport/PlotEditingPython.hpp"
 #include <nanobind/stl/string.h>
 #endif
 namespace SST::Prototypes::PlotLab
@@ -482,11 +483,17 @@ NB_MODULE(_sst_plotlab, module)
 {
     using namespace SST;
     using namespace SST::Prototypes::PlotLab;
+    SST::PlotEditingPython::Bind<Document>(module);
     nanobind::class_<Document>(module, "WorksheetSession")
         .def("__init__", [](Document* self) {
             new (self) Document(CreateRef<CommandRegistry>(), CreateRef<UndoStack>(), CreateRef<EventBus>());
         })
-        .def("command_json", &Document::WorksheetCommand);
+        .def("command_json", &Document::WorksheetCommand)
+        .def("plot_edit", [](Document& doc, pl::Id layer, nanobind::dict request) {
+            auto edit=SST::PlotEditingPython::Decode(SST::PlotEditingPython::Request(request),*doc.project,layer);
+            auto result=SST::ExecutePlotEdit(*doc.commands,doc.project,layer,edit);
+            return SST::PlotEditingPython::Response(result ? nlohmann::json{{"ok",true},{"error",nullptr}} : nlohmann::json{{"ok",false},{"error",{{"code",result.Error().code},{"message",result.Error().technicalDetails}}}});
+        });
 }
 namespace {
     const bool worksheetModuleRegistered = [] {

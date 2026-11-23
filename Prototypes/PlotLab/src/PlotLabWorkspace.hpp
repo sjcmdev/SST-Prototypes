@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <sst/ui/Plot/Editor.hpp>
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Layer.hpp"
 #include "Core/Presentation/Panels/HostedWindows.hpp"
@@ -27,6 +28,7 @@ namespace SST::Prototypes::PlotLab
         std::filesystem::path pythonRoot;
         std::set<pl::Id> sheets, graphs;
         std::map<pl::Id, plot::PlotViewState> views;
+        std::map<pl::Id, plot::PlotEditorState> plotEditors;
         pl::Id selected = 0;
         std::string status = "Create a Workbook and Worksheet, or import CSV/TXT.";
         FileAction pending = FileAction::None;

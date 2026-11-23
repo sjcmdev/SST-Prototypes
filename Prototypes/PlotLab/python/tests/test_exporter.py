@@ -111,7 +111,7 @@ def test_invalid_export_preserves_destination(snapshot, tmp_path, invalid):
 def test_failed_replace_keeps_old_file_and_cleans_temp(snapshot, tmp_path, monkeypatch):
     target=tmp_path/"figure.pdf"; target.write_bytes(b"old")
     def fail(*args): raise PermissionError("replacement denied")
-    monkeypatch.setattr("sst_plotlab.exporter.os.replace",fail)
+    monkeypatch.setattr("sst_plot_export.exporter.os.replace",fail)
     with pytest.raises(PermissionError): export_graph(snapshot,target,"pdf")
     assert target.read_bytes()==b"old"
     assert list(tmp_path.iterdir())==[target]

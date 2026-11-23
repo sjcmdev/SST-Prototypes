@@ -222,6 +222,8 @@ project "Core"
         "Core/Capabilities/**.cpp",
         "Core/Commands/**.hpp",
         "Core/Commands/**.cpp",
+        "Core/PlotExport/PlotEditing.hpp",
+        "Core/PlotExport/PlotEditing.cpp",
         "Core/Configuration/**.hpp",
         "Core/Diagnostics/**.hpp",
         "Core/Diagnostics/**.cpp",
@@ -382,6 +384,7 @@ project "Core"
         flags { "NoPCH" }
     filter {}
     sst_link_ui()
+    sst_link_plotlab()
 
     group "Prototypes"
 local selectedPrototypes = os.getenv("SST_BUILD_PROTOTYPES")
