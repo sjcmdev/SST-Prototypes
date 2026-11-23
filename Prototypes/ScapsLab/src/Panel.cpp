@@ -2293,8 +2293,12 @@ void Panel::GenerationRecombination() {
     const auto &snapshot=*(grFollow && !selectedBand?ivRef:bandRef);
     if(snapshot.points.empty()) {ImGui::TextWrapped("Calculate I-V or select a working voltage. %s",w->status.c_str());return;}
     const int index=grFollow && !selectedBand?std::clamp(device.selectedBias,0,int(snapshot.points.size())-1):0;
-    const auto &point=snapshot.points[index];
-    if(MissingProfiles(*w,point))return;
+    const IvPoint* drawnGr=&snapshot.points[index];
+    // Keep the last profiles on screen while the new bias loads (owner 2026-11-23: no blanking on bias change).
+    if(drawnGr->details) ImGui::TextDisabled("Details at %.4g V",drawnGr->voltage_V);
+    else if(!bandRef->points.empty() && bandRef->points.front().details) {drawnGr=&bandRef->points.front();ImGui::TextDisabled("Loading details at %.4g V ...",selectedVoltage);}
+    else if(MissingProfiles(*w,*drawnGr))return;
+    const auto &point=*drawnGr;
     const auto &gr=point.details->generation_recombination;
     const auto before=device.changeBand?device.changeBand:device.changeIv;
     const bool grIsReference=w->liveChangeReference!=3 && before && std::any_of(before->points.begin(),before->points.end(),[&](const auto& p){return &p==&point;});
