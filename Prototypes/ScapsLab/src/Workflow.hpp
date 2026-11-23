@@ -37,7 +37,7 @@ struct ProfileSamplesData {std::vector<double> x_m,value_SI;std::string source_f
 struct ProfileFileData {scaps_core::Profile profile;std::vector<std::string> warnings;};
 ProfileFileData ReadProfileFile(const std::string&,bool logarithmic=false);
 ProfileSamplesData ProfileSamples(const scaps_core::Profile&,double thickness_m,const scaps_core::Profile* composition=nullptr);
-scaps_core::Profile ResolveSharedProfile(scaps_core::Profile,const ProjectDraft&,const std::string& layerId,const std::string& parameter);
+scaps_core::Profile ResolveSharedProfile(const scaps_core::Profile&,const ProjectDraft&,const std::string& layerId,const std::string& parameter);
 void ExportProfile(const ProfileSamplesData&,const std::string& path,const std::string& parameter="value_SI");
 Json ProfileSamples(const Json &spec, double thickness_m, const Json &composition=Json::object());
 Json ResolveSharedProfile(Json spec,const Json &document,const std::string &layerId,const std::string &parameter);

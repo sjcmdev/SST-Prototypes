@@ -1056,6 +1056,33 @@
       "sha256": "a341e2739891ec8fb62e85c75bbcdaa004eb410dcc195a5706e5272769455b3a",
       "count": 1,
       "reason": "Human-readable tutorial diagnostic display."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/BatchDraft.cpp",
+      "rule": "text-json",
+      "line": 60,
+      "code": "if(i.explicitObject){const auto& v=input.at(\"initial_state\");if(!v.is_object())throw std::invalid_argument(\"initial_state must be an object\");for(const auto& [key,value]:v.items())if(key!=\"temperature_K\" && key!=\"voltage_V\" && key!=\"number_of_points\" && key!=\"generation_total_m2_s\" && key!=\"illumination\"){if(key==\"frequency_Hz\")throw scaps_core::DefError(\"unsupported_parameter\",\"SCAPS initial working point has no supported frequency (manual 4.4, 7.3)\");throw std::invalid_argument(\"unknown initial_state field: \"+key);}if(v.contains(\"temperature_K\"))i.temperature_K=v.at(\"temperature_K\");if(v.contains(\"voltage_V\"))i.voltage_V=v.at(\"voltage_V\");if(v.contains(\"number_of_points\")){if(!v.at(\"number_of_points\").is_number_integer())throw std::invalid_argument(\"initial_state.number_of_points must be an integer\");i.number_of_points=v.at(\"number_of_points\").get<int>();}if(v.contains(\"generation_total_m2_s\"))i.generation_total_m2_s=v.at(\"generation_total_m2_s\").is_null()?std::optional<double>{}:std::optional<double>{v.at(\"generation_total_m2_s\").get<double>()};if(v.contains(\"illumination\"))i.illumination=ReadIlluminationPatch(v.at(\"illumination\"));for(const auto& [key,value]:v.items())if(key==\"illumination\"){for(const auto& [field,scalar]:value.items())i.provenance_spellings[\"illumination.\"+field]=scalar.dump();}else i.provenance_spellings[key]=value.dump();if(i.generation_total_m2_s && *i.generation_total_m2_s && i.illumination.contains(\"illumination.uniform_generation_m3_s\"))throw std::invalid_argument(\"initial_state must use total generation or volumetric generation, not both\");}",
+      "sha256": "45e5065b967cab633690447c30903dce2ea44536d55a982398895cd8996cddfa",
+      "count": 2,
+      "reason": "File/Python batch input decoder preserves source scalar spelling only for the persistent initial_state_hash; no solver input is serialized."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Domain/ProjectDraft.cpp",
+      "rule": "text-number",
+      "line": 360,
+      "code": "if(value.is_string()){const auto& text=value.get_ref<const std::string&>();std::size_t used=0;try{const double number=std::stod(text,&used);if(used==text.size())return number;}catch(const std::exception&){}throw std::invalid_argument(\"Expected number: \"+path);}",
+      "sha256": "2ed20a8d4ce26f533bfaebdd897d4f423dac670bdcf46d5920be164529f23a49",
+      "count": 1,
+      "reason": "Project file/Python input decoder accepts historical numeric strings while validating the full scalar."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-stream",
+      "line": 220,
+      "code": "const bool grd=std::filesystem::path(path).extension()==\".grd\";std::ostringstream out;out<<std::setprecision(17);",
+      "sha256": "3403aa78e001566f180cc6660b75c085b07adaca43e868756990601e164cf502",
+      "count": 1,
+      "reason": "ExportProfile writes the requested CSV or SCAPS .grd file on disk."
     }
   ],
   "known-debt": [
@@ -1264,24 +1291,6 @@
       "code": "ImGui::TextWrapped(\"Integrated Jsc: %s A/m^2 | Light Jsc: %s A/m^2\",q.at(\"integrated_Jsc_A_m2\").dump().c_str(),q.at(\"light_Jsc_A_m2\").dump().c_str());ImGui::TextWrapped(\"%s\",q.at(\"integration_note\").get<std::string>().c_str());",
       "sha256": "075d4ea518b2a29d98c3b0875f001e92d42d7564b8ea42e8483f87b399e83892",
       "count": 2,
-      "reason": "F04 F36: existing JSON display/preview in panel frame; expected to improve after typed3."
-    },
-    {
-      "file": "Prototypes/ScapsLab/src/Panel.cpp",
-      "rule": "text-json",
-      "line": 1803,
-      "code": "if(ImGui::TreeNode(\"Bias / frequency samples\")) {ImGui::BeginChild(\"Samples\",ImVec2(0,100),ImGuiChildFlags_Borders);for(const auto &v:biases) ImGui::Text(\"%.7g V\",v.get<double>());ImGui::TextWrapped(\"AC frequencies [Hz]: %s\",preview.at(\"frequencies_Hz\").dump().c_str());ImGui::EndChild();ImGui::TreePop();}",
-      "sha256": "c535274399abfa7f21acdc380a6794a225c883a9528340cd4a91a008d4fc267b",
-      "count": 1,
-      "reason": "F04 F36: existing JSON display/preview in panel frame; expected to improve after typed3."
-    },
-    {
-      "file": "Prototypes/ScapsLab/src/Panel.cpp",
-      "rule": "text-json",
-      "line": 1804,
-      "code": "if(ImGui::BeginChild(\"Combinations\",ImVec2(0,140),ImGuiChildFlags_Borders)) for(std::size_t i=0;i<preview.at(\"combinations\").size();++i)ImGui::TextWrapped(\"%zu: %s\",i+1,preview.at(\"combinations\")[i].dump().c_str());ImGui::EndChild();",
-      "sha256": "389eeed4f22053ebed25a226a4e3155ce2ccffc29147a671c4d6dd0c6e36e381",
-      "count": 1,
       "reason": "F04 F36: existing JSON display/preview in panel frame; expected to improve after typed3."
     },
     {

@@ -395,7 +395,7 @@ void ReadFields(ProjectDraft& d,const Json& input,const std::string& prefix="") 
         const bool optional=path.ends_with("?");if(optional)path.pop_back();
         const auto pointer=Pointer(path);
         const auto* value=node(pointer);if(!value)return;
-        if constexpr(std::is_same_v<T,double>)if(!profilePath.empty() && path.starts_with(profilePath+"."))d.profileFields.insert(pointer);
+        if constexpr(std::is_same_v<T,double> || std::is_same_v<T,bool>)if(!profilePath.empty() && path.starts_with(profilePath+"."))d.profileFields.insert(pointer);
         if constexpr(Optional<T>::value) {
             using V=typename Optional<T>::Value;
             if(value->is_null()){target.reset();std::erase_if(d.profileFields,[&](const auto& field){return field.starts_with(pointer+"/");});}
@@ -546,7 +546,7 @@ std::shared_ptr<const ProjectDraft> DraftFromProject(scaps_core::DeviceProject p
     auto d=std::make_shared<ProjectDraft>();d->project=std::move(project);
     unsigned defect=1;
     for(std::size_t i=0;i<d->project.layers.size();++i) {const auto& l=d->project.layers[i];DraftIdentity id{"layer-"+std::to_string(i+1),l.name};for(const auto& v:l.defects)id.defects.push_back({"defect-"+std::to_string(defect++),v.label});d->layers.push_back(std::move(id));}
-    std::string profilePath;Fields(d->project,[&](const std::string& path,const auto& value){using T=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<T,scaps_core::Profile>)profilePath=path;else if constexpr(std::is_same_v<T,double>)if(!profilePath.empty() && path.starts_with(profilePath+"."))d->profileFields.insert(Pointer(path));});
+    std::string profilePath;Fields(d->project,[&](const std::string& path,const auto& value){using T=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<T,scaps_core::Profile>)profilePath=path;else if constexpr(std::is_same_v<T,double> || std::is_same_v<T,bool>)if(!profilePath.empty() && path.starts_with(profilePath+"."))d->profileFields.insert(Pointer(path));});
     ValidateDraft(*d);return d;
 }
 std::shared_ptr<const ProjectDraft> PatchDraft(const ProjectDraft& source,const nlohmann::json& patch,const nlohmann::json& pointerSet) {
@@ -565,6 +565,10 @@ nlohmann::json DraftDocument(const ProjectDraft& draft) {
     auto out=draft.file?MergeFile(draft.file->canonical,canonical,draft.file->source):canonical;
     if(!draft.file)PruneFileFields(out);
     for(const auto& path:draft.profileFields){const Json::json_pointer key(path);if(canonical.contains(key) && !out.contains(key))out[key]=canonical.at(key);}
+    for(const auto& path:draft.profileFields) {
+        const Json::json_pointer key(path);if(!canonical.contains(key) || !canonical.at(key).is_object() || !out.contains(key))continue;
+        for(const auto& [name,value]:canonical.at(key).items())if((value.is_number() || value.is_boolean()) && !draft.profileFields.contains(path+"/"+name))out.at(key).erase(name);
+    }
     for(const auto& [path,value]:Extensions(out,canonical))if(!draft.extensions.contains(path)) {
         const Json::json_pointer pointer(path);const auto parent=pointer.parent_pointer();if(out.contains(parent) && out.at(parent).is_object())out.at(parent).erase(pointer.back());
     }
@@ -701,14 +705,18 @@ void EditLayer(ProjectDraft& draft,const std::string& action,const std::string& 
         ReindexExtensions(draft,previous,interfaces);
     }
 }
-void ResetProfileFields(ProjectDraft& draft,const scaps_core::Profile& profile) {
+void ResetProfileFields(ProjectDraft& draft,const scaps_core::Profile& profile,const std::set<std::string>& explicitFields) {
     const auto prefix=Pointer(ProjectFieldPath(draft.project,&profile))+"/";std::erase_if(draft.profileFields,[&](const auto& path){return path.starts_with(prefix);});
+    draft.profileFields.insert(prefix.substr(0,prefix.size()-1));
+    auto record=[&](const std::string& path,const auto& value){using T=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<T,double> || std::is_same_v<T,bool>)if(explicitFields.contains(path.substr(1)))draft.profileFields.insert(prefix+path.substr(1));};Profile("",profile,record);
 }
-double& ProfileParameter(ProjectDraft& draft,scaps_core::Profile& profile,const std::string& name,double fallback) {
-    double* result=nullptr;auto find=[&](const std::string& path,auto& value){if constexpr(std::is_same_v<std::decay_t<decltype(value)>,double>)if(path=="."+name)result=&value;};Profile("",profile,find);if(!result)throw std::invalid_argument("Unknown profile parameter: "+name);
+template<class T> T& ProfileParameterValue(ProjectDraft& draft,scaps_core::Profile& profile,const std::string& name,T fallback) {
+    T* result=nullptr;auto find=[&](const std::string& path,auto& value){if constexpr(std::is_same_v<std::decay_t<decltype(value)>,T>)if(path=="."+name)result=&value;};Profile("",profile,find);if(!result)throw std::invalid_argument("Unknown profile parameter: "+name);
     const auto path=ProjectFieldPath(draft.project,&profile);if(path.empty())throw std::invalid_argument("Profile is not in the draft");
     if(draft.profileFields.insert(Pointer(path)+"/"+name).second)*result=fallback;return *result;
 }
+double& ProfileParameter(ProjectDraft& draft,scaps_core::Profile& profile,const std::string& name,double fallback) {return ProfileParameterValue(draft,profile,name,fallback);}
+bool& ProfileParameter(ProjectDraft& draft,scaps_core::Profile& profile,const std::string& name,bool fallback) {return ProfileParameterValue(draft,profile,name,fallback);}
 int AddDraftDefect(ProjectDraft& draft,int layer,bool sheet) {
     if(layer<0 || layer>=int(draft.layers.size()) || (sheet && layer+1>=int(draft.layers.size())))throw std::invalid_argument("Invalid layer index");
     if(sheet) {

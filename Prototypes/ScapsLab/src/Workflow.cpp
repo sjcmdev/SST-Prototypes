@@ -191,6 +191,7 @@ scaps_core::Profile ProfileFromJson(const Json &spec,bool logarithmic) {
     p.coordinate=spec.value("coordinate",p.coordinate);p.value=spec.value("value",p.value);
     p.position_relative=spec.value("position_relative",p.position_relative);p.interpolation_logarithmic=spec.value("interpolation_logarithmic",p.interpolation_logarithmic);
     p.shared_range=spec.value("shared_range",p.shared_range);p.composition_dependent=spec.value("composition_dependent",p.composition_dependent);
+    p.source_file=spec.value("source_file",p.source_file);
     p.shared_offset_m=spec.value("shared_offset_m",0.);p.shared_thickness_m=spec.value("shared_thickness_m",0.);
     scaps_core::validate_profile(p);return p;
 }
@@ -205,12 +206,17 @@ ProfileSamplesData ProfileSamples(const scaps_core::Profile& p,double thickness,
     ProfileSamplesData out;out.source_file=p.source_file;out.source_point_count=p.coordinate.size();
     for(int i=0;i<=200;++i) {const double at=thickness*i/200.;out.x_m.push_back(at);const double coordinate=composition?scaps_core::evaluate_position_profile(*composition,at,thickness):at/thickness;out.value_SI.push_back(p.composition_dependent?scaps_core::evaluate_profile(p,coordinate):scaps_core::evaluate_position_profile(p,at,thickness));}return out;
 }
-scaps_core::Profile ResolveSharedProfile(scaps_core::Profile profile,const ProjectDraft& draft,const std::string& layerId,const std::string& parameter) {
+scaps_core::Profile ResolveSharedProfile(const scaps_core::Profile& source,const ProjectDraft& draft,const std::string& layerId,const std::string& parameter) {
+    auto profile=source;const auto field=ProjectFieldPath(draft.project,&source);std::string pointer="/";for(char c:field){if(c=='.' || c=='[')pointer+='/';else if(c!=']')pointer+=c;}
+    // Preview historically uses linear interpolation for an omitted flag; solver defaults stay intact.
+    if(!draft.profileFields.contains(pointer+"/interpolation_logarithmic"))profile.interpolation_logarithmic=false;
     if(!profile.shared_range)return profile;
     const auto device=scaps_core::make_device_from_project(draft.project);
     for(std::size_t i=0;i<device.layers.size();++i)if(draft.layers[i].id==layerId && device.layers[i].grading) {
         const auto& g=*device.layers[i].grading;const auto& resolved=parameter=="composition"?g.composition:parameter=="Na_m3"?g.Na_m3:g.Nd_m3;
-        if(resolved){profile.left=resolved->left;profile.right=resolved->right;profile.shared_range=false;profile.shared_offset_m=resolved->shared_offset_m;profile.shared_thickness_m=resolved->shared_thickness_m;}
+        if(resolved){profile.left=resolved->left;profile.right=resolved->right;profile.shared_range=false;
+            if(profile.interpolation_logarithmic!=resolved->interpolation_logarithmic){profile.left=scaps_core::evaluate_position_profile(profile,resolved->shared_offset_m,resolved->shared_thickness_m);profile.right=scaps_core::evaluate_position_profile(profile,resolved->shared_offset_m+draft.project.layers[i].thickness_m,resolved->shared_thickness_m);}
+            profile.shared_offset_m=resolved->shared_offset_m;profile.shared_thickness_m=resolved->shared_thickness_m;}
     }return profile;
 }
 void ExportProfile(const ProfileSamplesData& samples,const std::string& path,const std::string& parameter) {
@@ -503,9 +509,13 @@ void Operation::Execute(JobContext &ctx) {
                 if(op=="load_profile")next->extensions["/illumination/scapslab_generation_file"]=request.at("path");
             } else {
                 if(op=="load_profile") {
-                    auto loaded=ReadProfileFile(request.at("path"),parameter.find("_m3")!=std::string::npos);*target=std::move(loaded.profile);
+                    auto loaded=ReadProfileFile(request.at("path"),parameter.find("_m3")!=std::string::npos);*target=std::move(loaded.profile);ResetProfileFields(*next,**target,{"interpolation_logarithmic","position_relative","shared_range","composition_dependent"});
                     const auto field=ProjectFieldPath(project,&**target);std::string pointer="/";for(char c:field){if(c=='.' || c=='[')pointer+='/';else if(c!=']')pointer+=c;}next->extensions[pointer+"/scapslab_warnings"]=loaded.warnings;
-                }else *target=ProfileFromJson(request.at("profile"));
+                }else {
+                    *target=ProfileFromJson(request.at("profile"));std::set<std::string> fields;for(const auto& [key,value]:request.at("profile").items())fields.insert(key);
+                    if(!fields.contains("interpolation_logarithmic") && !fields.contains("file"))(*target)->interpolation_logarithmic=parameter.find("_m3")!=std::string::npos;
+                    if(request.at("profile").contains("file"))for(const auto* name:{"interpolation_logarithmic","position_relative","shared_range","composition_dependent"})fields.insert(name);ResetProfileFields(*next,**target,fields);
+                }
                 if(op=="load_profile" && !request.value("project_path",std::string{}).empty()) {std::error_code ec;const auto relative=std::filesystem::relative(request.at("path").get<std::string>(),std::filesystem::path(request.at("project_path").get<std::string>()).parent_path(),ec);if(!ec)(*target)->source_file=relative.generic_string();}
             }
             ValidateDraft(*next);draft=std::move(next);output={{"parameter_id",parameter}};
@@ -514,9 +524,9 @@ void Operation::Execute(JobContext &ctx) {
             if(parameter=="generation_m3_s") {
                 Profile profile;profile.law=GradingLaw::Table;profile.position_relative=false;for(const auto& [x,value]:project.illumination.generation_m_m3s){profile.coordinate.push_back(x*1e6);profile.value.push_back(value);}samples=ProfileSamples(profile,thickness);
             }else {
-                if(!*target)throw std::invalid_argument("Profile is not active");auto profile=**target;
+                if(!*target)throw std::invalid_argument("Profile is not active");auto profile=ResolveSharedProfile(**target,*next,layerId,parameter);
                 if(parameter!="composition" && parameter!="Nd_m3" && parameter!="Na_m3" && parameter!="Nt_m3")profile.composition_dependent=true;
-                profile=ResolveSharedProfile(std::move(profile),*next,layerId,parameter);auto c=composition?std::optional<Profile>(ResolveSharedProfile(*composition,*next,layerId,"composition")):std::nullopt;samples=ProfileSamples(profile,thickness,c?&*c:nullptr);
+                auto c=composition?std::optional<Profile>(ResolveSharedProfile(*composition,*next,layerId,"composition")):std::nullopt;samples=ProfileSamples(profile,thickness,c?&*c:nullptr);
             }
             output={{"x_m",samples.x_m},{"value_SI",samples.value_SI},{"source_file",samples.source_file},{"source_point_count",samples.source_point_count},{"parameter_id",parameter}};
             output["value_unit"]=parameter=="generation_m3_s"?"m^-3 s^-1":parameter.find("_m3")!=std::string::npos?"m^-3":parameter.find("_eV")!=std::string::npos?"eV":parameter.find("_m2_V_s")!=std::string::npos?"m^2/(V s)":parameter.find("vth_")==0?"m/s":"1";

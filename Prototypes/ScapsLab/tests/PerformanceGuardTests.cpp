@@ -16,9 +16,9 @@ void Wait(Workflow& w) {
 }
 void Small(Workflow& w) {
     w.lightResponse=true;w.autoRecalculate=false;w.autoRecalculateBand=false;
-    w.Current().document=ReadProject(SCAPSLAB_PROJECT);
-    w.Current().document["mesh"]["points_per_layer"]=21;
-    w.Current().document["voltage"]={{"start_V",0.},{"stop_V",.01},{"step_V",.01}};
+    auto draft=CreateRef<ProjectDraft>(*DraftFromDocument(ReadProject(SCAPSLAB_PROJECT)));
+    draft->project.mesh.points_per_layer=21;
+    draft->project.voltage={0.,.01,.01};w.Current().SetDraft(std::move(draft));
 }
 void Sweep5(Workflow& w) {
     w.lightResponse=true;w.autoRecalculate=false;w.autoRecalculateBand=false;
@@ -46,8 +46,8 @@ TEST(PerformanceGuard, Batch342PanelsFrameBudget_F04_F35) {
     {
         Workflow w(CreateRef<JobSystem>(nullptr,4));Sweep5(w);
         // Deterministic typed result fixture: real sweep5 spec and 342 retained member curves, without solving during frame timing.
-        auto configured=w.Current().batchSpec;configured["columns"]=RecorderDefaults();
-        const auto preview=BatchPreview(w.Current().document,configured);
+        auto configured=w.Current().BatchSpec();configured["columns"]=RecorderDefaults();
+        const auto preview=BatchPreview(*w.Current().draft,configured);
         ASSERT_EQ(preview.at("member_count"),342);
         auto table=CreateRef<BatchResult>();table->native=true;table->body.prim={{"columns",Json::array({{{"id","J_at_0V"},{"quantity","J"},{"unit","A/m^2"}}})},{"spec",preview.at("spec")}};
         for(int i=0;i<342;++i){auto row=CreateRef<scaps_core::BatchRow>();row->id="point_"+std::to_string(i);for(const auto& [path,value]:preview.at("combinations")[i].items())row->parameters[path]=value.get<double>();row->values["J_at_0V"]={double(i),"ok"};for(int v=0;v<200;++v){scaps_core::IVSample point;point.voltage_V=v*.005;point.J_Am2=i*.01+v;point.status=scaps_core::SolverStatus::Converged;row->iv.push_back(point);}table->rows.push_back(row);}

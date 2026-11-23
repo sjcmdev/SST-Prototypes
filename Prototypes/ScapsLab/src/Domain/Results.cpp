@@ -233,7 +233,9 @@ BatchResult BatchFromJson(const Json &j) {
     // Preserve unknown historical fields and numeric representations at the file import edge.
     if(r.Dump().dump()!=j.dump()){r.legacySchema=std::move(r.body.prim);r.body=Pack(j);r.native=false;}
     if(j.contains("project_snapshot") && j.contains("spec")) {
-        r.projectSnapshot=DraftFromDocument(j.at("project_snapshot"));r.batchDraft=ReadBatchDraft(j.at("spec"));
+        // Failed members retain rejected input as file evidence, never as a replayable live draft.
+        if(std::any_of(r.rows.begin(),r.rows.end(),[](const auto& row){return row->status=="Converged";}))r.projectSnapshot=DraftFromDocument(j.at("project_snapshot"));
+        r.batchDraft=ReadBatchDraft(j.at("spec"));
         r.recorderDraft=ReadRecorderDraft(j.value("columns",Json::array()));
     }
     return r;

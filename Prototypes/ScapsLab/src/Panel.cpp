@@ -1004,14 +1004,14 @@ bool Panel::ProfileEditor(scaps_core::Profile& g,double thickness,const std::str
         try{if(const auto file=OpenFileDialog({"SCAPS grading","grd"})) {
             auto loaded=ReadProfileFile(file->Utf8(),density);g=std::move(loaded.profile);
             if(!w->path.empty()){std::error_code ec;const auto relative=std::filesystem::relative(file->Native(),std::filesystem::path(w->path).parent_path(),ec);if(!ec)g.source_file=relative.generic_string();}
-            if(numericDraft){ResetProfileFields(*numericDraft,g);const auto field=ProjectFieldPath(numericDraft->project,&g);std::string pointer="/";for(char c:field){if(c=='.' || c=='[')pointer+='/';else if(c!=']')pointer+=c;}numericDraft->extensions[pointer+"/scapslab_warnings"]=loaded.warnings;}
+            if(numericDraft){ResetProfileFields(*numericDraft,g,{"interpolation_logarithmic","position_relative","shared_range","composition_dependent"});const auto field=ProjectFieldPath(numericDraft->project,&g);std::string pointer="/";for(char c:field){if(c=='.' || c=='[')pointer+='/';else if(c!=']')pointer+=c;}numericDraft->extensions[pointer+"/scapslab_warnings"]=loaded.warnings;}
             changed=true;
         }else if(old.law!=GradingLaw::Table){g=old;changed=false;}}catch(const std::exception& e){w->status=e.what();g=old;changed=false;}
     };
     if(changed && g.law==GradingLaw::Table && g.coordinate.empty())load();
     if(g.law==GradingLaw::Table) {
         BeginRow("Grading file [.grd]");if(ImGui::Button("Browse..."))load();w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","load-profile");EndRow();
-        ImGui::TextWrapped("%s | %d points",g.source_file.empty()?"Embedded table":g.source_file.c_str(),int(g.coordinate.size()));changed|=Toggle("Logarithmic interpolation",g.interpolation_logarithmic);
+        ImGui::TextWrapped("%s | %d points",g.source_file.empty()?"Embedded table":g.source_file.c_str(),int(g.coordinate.size()));changed|=Toggle("Logarithmic interpolation",numericDraft?ProfileParameter(*numericDraft,g,"interpolation_logarithmic",false):g.interpolation_logarithmic);
     }else {
         auto number=[&](const char* key,const char* label,double fallback,double factor=1.){const char* valueKey=factor==scale?(density?"Nt_m3":parameter.c_str()):key;ImGui::PushID(key);changed|=Number(label,ProfileParameter(*numericDraft,g,key,fallback),valueKey,factor);ImGui::PopID();};
         number("left",("Left / amplitude ["+unit+"]").c_str(),0.,scale);number("right",("Right ["+unit+"]").c_str(),0.,scale);
@@ -1024,11 +1024,11 @@ bool Panel::ProfileEditor(scaps_core::Profile& g,double thickness,const std::str
         if(law==GradingLaw::Gaussian){number("background",("Background ["+unit+"]").c_str(),0.,scale);number("gaussian_center","Centre [x/d or y]",.5);number("gaussian_width","Sigma [x/d or y]",.1);}
         if(law==GradingLaw::GaussDiffusion || law==GradingLaw::ErfcDiffusion){number("diffusion_depth_m","Signed diffusion depth [um]",-1e-6,1e6);if(law==GradingLaw::GaussDiffusion){number("projected_range_m","Projected range [um]",0.,1e6);number("dose_m2","Dose [cm^-2]",1e14,1e-4);}else number("surface_density_m3","Surface density [cm^-3]",1e20,1e-6);}
     }
-    if(parameter=="Nd_m3" || parameter=="Na_m3" || parameter=="Nt_m3")changed|=Toggle("Depends on composition y",g.composition_dependent);
+    if(parameter=="Nd_m3" || parameter=="Na_m3" || parameter=="Nt_m3")changed|=Toggle("Depends on composition y",numericDraft?ProfileParameter(*numericDraft,g,"composition_dependent",false):g.composition_dependent);
     try {
         const auto& draft=numericDraft?*numericDraft:*w->Current().draft;const auto& layerId=draft.layers[w->Current().selectedLayer].id;
-        auto display=g;if(parameter!="composition" && parameter!="Nd_m3" && parameter!="Na_m3" && parameter!="Nt_m3"){display.composition_dependent=true;ImGui::TextDisabled("Material P(y): x is mapped through composition y(x).");}
-        auto c=composition?std::optional<Profile>(ResolveSharedProfile(*composition,draft,layerId,"composition")):std::nullopt;auto samples=ProfileSamples(ResolveSharedProfile(display,draft,layerId,parameter),thickness,c?&*c:nullptr);
+        auto display=ResolveSharedProfile(g,draft,layerId,parameter);if(parameter!="composition" && parameter!="Nd_m3" && parameter!="Na_m3" && parameter!="Nt_m3"){display.composition_dependent=true;ImGui::TextDisabled("Material P(y): x is mapped through composition y(x).");}
+        auto c=composition?std::optional<Profile>(ResolveSharedProfile(*composition,draft,layerId,"composition")):std::nullopt;auto samples=ProfileSamples(display,thickness,c?&*c:nullptr);
         const auto field=ProjectFieldPath(draft.project,&g);std::string pointer="/";for(char ch:field){if(ch=='.' || ch=='[')pointer+='/';else if(ch!=']')pointer+=ch;}
         if(const auto it=draft.extensions.find(pointer+"/scapslab_warnings");it!=draft.extensions.end())for(const auto& warning:it->second)ImGui::TextWrapped("File warning: %s",warning.get<std::string>().c_str());
         auto x=std::move(samples.x_m),y=std::move(samples.value_SI);for(auto& v:x)v*=1e9;for(auto& v:y)v*=scale;
