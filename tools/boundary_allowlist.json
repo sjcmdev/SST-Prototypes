@@ -1119,6 +1119,24 @@
       "sha256": "82d602c186c4243fdb7629e937a02c74a1e1edb317c0640ebee616403e4a626c",
       "count": 1,
       "reason": "Project-save disk edge: inspect the existing workspace schema before preserving the original file and replacing it atomically."
+    },
+    {
+      "file": "Core/App/Serialization/ParameterBoundsYaml.cpp",
+      "rule": "text-yaml",
+      "line": 30,
+      "code": "const auto root=YAML::Load(std::string(text));",
+      "sha256": "6f00e9b4a12bc7f9b241005667a72f5be959515aff993870765df599b7036823",
+      "count": 1,
+      "reason": "Parameter bounds YAML configuration file codec (startup/reload only); no runtime data serialization."
+    },
+    {
+      "file": "Core/App/Serialization/ParameterBoundsYaml.cpp",
+      "rule": "text-yaml",
+      "line": 63,
+      "code": "YAML::Emitter out;out<<YAML::BeginMap<<YAML::Key<<\"schema_version\"<<YAML::Value<<1<<YAML::Key<<\"parameters\"<<YAML::Value<<YAML::BeginMap;",
+      "sha256": "22f7445d664b02f45aefe10e4dcffd9be089e027b5440f59237c2ee0fe93f4c4",
+      "count": 1,
+      "reason": "Parameter bounds YAML configuration file codec (startup/reload only); no runtime data serialization."
     }
   ],
   "known-debt": [
@@ -1504,8 +1522,8 @@
       "file": "Prototypes/ScapsLab/src/Workflow.cpp",
       "rule": "text-yaml",
       "line": 302,
-      "code": "Json ReadProject(const std::string &path) {return ImportProject(FromYaml(YAML::LoadFile(path)),std::filesystem::absolute(path).parent_path());}",
-      "sha256": "0f42dfa52a9ee80391e38b1f09f0fa3c18bca32835062ea6c67b55955f26e3fd",
+      "code": "Json ReadProject(const std::string &path,std::vector<std::string>* importWarnings) {return ImportProject(FromYaml(YAML::LoadFile(path)),std::filesystem::absolute(path).parent_path(),importWarnings);}",
+      "sha256": "63063d1eae3b69e45affd1bdc72f533652bea42f8259e9d25f87d2914c211723",
       "count": 1,
       "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
     },

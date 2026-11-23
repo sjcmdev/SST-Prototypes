@@ -1,5 +1,6 @@
 #pragma once
 #include "Domain/BatchDraft.hpp"
+#include "Domain/ParameterBounds.hpp"
 #include <array>
 
 namespace SST::ScapsLab {
@@ -42,6 +43,10 @@ inline void ValidateRunPlan(const RunPlan& plan,const ProjectDraft& draft,bool a
         if(a.kind!=ActionKind(i))throw std::invalid_argument("Action IDs/order must be Band, I-V, C-V, C-f, QE");
         if(!(automatic?a.onEdit:a.include))continue;
         any=true;const auto samples=ActionSamples(a,draft.project);
+        if(a.temperature_K!=0)RequireParameter("temperature_K",a.temperature_K);
+        RequireParameter("voltage_V",a.voltage_V);RequireParameter("frequency_Hz",a.frequency_Hz);
+        for(double value:samples)RequireParameter(a.kind==ActionKind::Cf?"frequency_Hz":a.kind==ActionKind::Qe?"wavelength_nm":"voltage_V",value);
+        if(a.kind==ActionKind::Qe){RequireParameter("probe_photon_flux_m2_s",a.photon_flux_m2_s);RequireParameter("probe_power_W_m2",a.probe_power_W_m2);}
         if(samples.empty())throw std::invalid_argument("Action range is empty");
         if(!std::isfinite(a.temperature_K) || a.temperature_K<0 || !std::isfinite(a.voltage_V))throw std::invalid_argument("Invalid Action working conditions");
         if(a.kind==ActionKind::Cv && (!std::isfinite(a.frequency_Hz) || a.frequency_Hz<=0))throw std::invalid_argument("C-V frequency must be positive");

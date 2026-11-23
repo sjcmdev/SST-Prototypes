@@ -1,10 +1,11 @@
-﻿#include "Core/dspch.hpp"
+#include "Core/dspch.hpp"
 #include "Core/App/Application.hpp"
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include <GLFW/glfw3.h>
 #include "Core/Presentation/EditorLayer.hpp"
 #include "Panel.hpp"
+#include "Core/Platform/ProcessRunner.hpp"
 #include "PlotUi.hpp"
 #include "Io.hpp"
 #include "Core/IO/IOLayer.hpp"
@@ -154,7 +155,7 @@ public:
             ImGui::SetNextWindowSize(ImVec2(470,360),ImGuiCond_FirstUseEver);
             if(ImGui::Begin("Plot settings",&w.plotPreferences) && ImGui::BeginTable("plot_preferences",2)){
                 ImGui::TableNextRow();ImGui::TableSetColumnIndex(0);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Auto-fit margin [%]");ImGui::TableSetColumnIndex(1);ImGui::SetNextItemWidth(-1);
-                if(ImGui::SliderFloat("##auto_fit_margin",&w.plotSession.settings.margin,0,30,"%.0f %%")){++w.plotSession.revision;w.projectDirty=true;w.RefreshDirty();}
+                double margin=w.plotSession.settings.margin;if(ScapsLab::DrawBoundValue("##auto_fit_margin",margin,"plot_margin_percent")){w.plotSession.settings.margin=float(margin);++w.plotSession.revision;w.projectDirty=true;w.RefreshDirty();}
                 auto &session=w.plotSession;
                 const auto row=[](const char *label){ImGui::TableNextRow();ImGui::TableSetColumnIndex(0);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);ImGui::TableSetColumnIndex(1);ImGui::SetNextItemWidth(-1);};
                 row("Live change reference");
@@ -252,6 +253,12 @@ void SetupApplication(Application &app) {
         const auto hardware=std::thread::hardware_concurrency();
         if(hardware>1 && jobs->GetThreadCount()<hardware-1)(void)jobs->SetThreadCount(hardware-1);
     }
+    if(const auto config=app.GetConfigManager().lock()) {
+        const auto executable=Platform::CurrentExecutablePath();
+        const auto defaults=executable?(Path{executable.Value().Native().parent_path()}/Path{"parameter_bounds.yaml"}).Utf8():std::string{};
+        const auto diagnostic=InitializeParameterBounds(defaults,(config->GetPaths().userConfigDirectory/Path{"scapslab/parameter_bounds.yaml"}).Utf8());
+        if(!diagnostic.empty())app.GetNotifierRef()->Warning("Parameter bounds",diagnostic,NotificationCategory::Project);
+    }
     auto state=CreateUnique<Workflow>(app.GetJobSystemHandle().lock(),app.GetCommandRegistryHandle().lock(),app.GetEventBusRef(),app.GetNotifierRef()); auto *w=state.get();
     w->RegisterIo(app.GetIOLayer());
     if(!startupSettings.empty()) {
@@ -329,6 +336,7 @@ void SetupApplication(Application &app) {
         while(w->Pending()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     auto &editor=app.GetEditorLayer();
+    editor.RegisterSettingsTab({"scapslab.parameter_bounds","Parameter bounds",[w]{DrawParameterBoundsPreferences(*w);}});
     std::vector<Ref<Panel>> panels;
     for(int v=0;v<23;++v) if(!single || std::atoi(gallery)==v) {
         auto panel=CreateRef<Panel>(w,v,single); panels.push_back(panel);

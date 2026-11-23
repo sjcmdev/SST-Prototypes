@@ -3,6 +3,8 @@
 #include "Commands/Commands.hpp"
 #include "Commands/UndoOps.hpp"
 #include "Io.hpp"
+#include "Core/App/Managers/ConfigManager.hpp"
+#include "Core/Platform/ProcessRunner.hpp"
 #include "Core/IO/IOLayer.hpp"
 #include "Core/Commands/SystemCommandEvents.hpp"
 #include <scaps_core/api.hpp>
@@ -266,7 +268,7 @@ void ExportProfile(const Json &samples,const std::string &path) {
     SaveText(path,out.str());
 }
 namespace {
-Json ImportProject(Json raw,const std::filesystem::path& base) {
+Json ImportProject(Json raw,const std::filesystem::path& base,std::vector<std::string>* importWarnings) {
     if(raw.value("schema_version",0)==0) raw["schema_version"]=1;
     auto anchor=[&](Json &object,const char *key) {if(object.contains(key) && object[key].is_string() && !object[key].get<std::string>().empty()) object[key]=(base/std::filesystem::path(object[key].get<std::string>())).lexically_normal().string();};
     if(raw.contains("illumination")) for(const auto *key:{"spectrum_file","generation_file","front_filter_file","back_filter_file"}) anchor(raw["illumination"],key);
@@ -278,6 +280,9 @@ Json ImportProject(Json raw,const std::filesystem::path& base) {
     }
     if(raw.contains("mesh")) anchor(raw["mesh"],"scaps_numerical_definition");
     raw=SelfContained(std::move(raw));
+    const auto bounded=DraftFromDocument(raw,true);
+    if(importWarnings)*importWarnings=bounded->importWarnings;
+    if(!bounded->importWarnings.empty())raw=DraftDocument(*bounded);
     const auto p=Model(raw);
     auto full=FromYaml(scaps_core::device_project_to_node(p));
     // JSON array updates replace layers; retain the core defaults within each layer.
@@ -304,7 +309,7 @@ Json ImportProject(Json raw,const std::filesystem::path& base) {
     return full;
 }
 }
-Json ReadProject(const std::string &path) {return ImportProject(FromYaml(YAML::LoadFile(path)),std::filesystem::absolute(path).parent_path());}
+Json ReadProject(const std::string &path,std::vector<std::string>* importWarnings) {return ImportProject(FromYaml(YAML::LoadFile(path)),std::filesystem::absolute(path).parent_path(),importWarnings);}
 Json NormalizeDocument(Json document) {
     // Older workspace documents bypass ReadProject's Core defaults.
     if(!document.contains("illumination") || !document.at("illumination").contains("mode") ||
@@ -629,7 +634,7 @@ void Operation::Execute(JobContext &ctx) try {
     }
     else if(op=="import_def") {
         const auto imported=import_def(request.at("path").get<std::string>(),request.value("scaps_root",std::string{}));
-        draft=DraftFromProject(imported);
+        draft=DraftFromProject(imported,true);
         output={{"warnings",imported.scaps_native.warnings}};
     } else if(op=="export_def") {export_def(draft->project,request.at("path").get<std::string>());output={{"warnings",draft->project.scaps_native.warnings}};}
     else if(op=="project_new") {
@@ -639,9 +644,22 @@ void Operation::Execute(JobContext &ctx) try {
         const auto file=request.at("path").get<std::string>();
         std::string source,error;if(!Io::Load(file,source,error)) throw std::runtime_error(error);
         auto raw=source.find_first_not_of(" \t\r\n")!=std::string::npos && source[source.find_first_not_of(" \t\r\n")]=='{'?Json::parse(source):FromYaml(YAML::Load(source));
-        if(raw.contains("devices")) {workspace=UnpackResults(raw);workspace["schema_version"]=raw.value("schema_version",0);workspace=NormalizeWorkspace(std::move(workspace));}
-        else workspace=SingleDeviceWorkspace(ReadProject(file),std::filesystem::path(file).stem().string());
-        for(const auto& d:workspace.at("devices"))loadedDrafts.push_back(DraftFromDocument(d.at("document")));
+        std::vector<std::vector<std::string>> importedWarnings;
+        if(raw.contains("devices")) {
+            for(auto& item:raw["devices"]) {
+                const auto bounded=DraftFromDocument(item.at("document"),true);importedWarnings.push_back(bounded->importWarnings);
+                if(!bounded->importWarnings.empty())item["document"]=DraftDocument(*bounded);
+            }
+            workspace=UnpackResults(raw);workspace["schema_version"]=raw.value("schema_version",0);workspace=NormalizeWorkspace(std::move(workspace));
+        }else {
+            std::vector<std::string> warnings;auto document=ReadProject(file,&warnings);importedWarnings.push_back(std::move(warnings));
+            workspace=SingleDeviceWorkspace(document,std::filesystem::path(file).stem().string());
+        }
+        for(const auto& item:workspace.at("devices")) {
+            auto read=CreateRef<ProjectDraft>(*DraftFromDocument(item.at("document"),true));
+            if(loadedDrafts.size()<importedWarnings.size())read->importWarnings=std::move(importedWarnings[loadedDrafts.size()]);
+            loadedDrafts.push_back(std::move(read));
+        }
         loaded=ExtractResults(workspace); // typed results leave the Json here, on the job thread
     }
     else if(op=="project_save" || (op=="save" && std::filesystem::path(request.at("path").get<std::string>()).extension()==".scapslab")) {
@@ -663,7 +681,7 @@ void Operation::Execute(JobContext &ctx) try {
         output={{"path",std::filesystem::absolute(request.at("path").get<std::string>()).string()},{"size_bytes",text.size()},{"save_status","saved"}};
         output["schema_version"]=4;output["original_copy"]=backup;
     }
-    else if(op=="device_read") {document=ReadProject(request.at("path").get<std::string>());draft=DraftFromDocument(document);} // device_add from a file: only the read runs as a job
+    else if(op=="device_read") {std::vector<std::string> warnings;document=ReadProject(request.at("path").get<std::string>(),&warnings);auto read=CreateRef<ProjectDraft>(*DraftFromDocument(document,true));read->importWarnings=std::move(warnings);draft=std::move(read);} // device_add from a file: only the read runs as a job
     else if (op=="save") WriteProject(document,request.at("path").get<std::string>());
     else if(op=="edit") {if(!draft)throw std::invalid_argument("No device document");ValidateDraft(*draft);
     }else if(op=="layer") {
@@ -1056,6 +1074,14 @@ void Workflow::DeviceOp(const Json &request,Ref<const ProjectDraft> importedDraf
 }
 
 Workflow::Workflow(Ref<JobSystem> j,Ref<CommandRegistry> registry,Ref<EventBus> eventBus,Ref<Notifier> note):Layer("ScapsLab workflow"),jobs(std::move(j)),commands(registry?std::move(registry):CreateRef<CommandRegistry>()),bus(eventBus?std::move(eventBus):CreateRef<EventBus>()),notifier(note?std::move(note):CreateRef<Notifier>(bus)) {
+    if(UserBoundsFile().empty()) {
+        if(const auto executable=Platform::CurrentExecutablePath()) {
+            const auto dir=executable.Value().Native().parent_path();
+            const auto user=(ConfigManager::ResolvePortablePaths(Path{dir/"install/app/config"}).userConfigDirectory/Path{"scapslab/parameter_bounds.yaml"}).Utf8();
+            const auto diagnostic=InitializeParameterBounds(Path{dir/"parameter_bounds.yaml"}.Utf8(),user);
+            if(!diagnostic.empty())notifier->Warning("Parameter bounds",diagnostic,NotificationCategory::Project);
+        }
+    }
     ++constructed;
     projectUndo.SetLimits(kUndoMaxDepth,kUndoMaxBytes);
     {static std::atomic<std::uint64_t> epoch{0};plotGen=++epoch<<32;} // high bits identify this Workflow so a plot cache never serves another instance's data
@@ -1112,6 +1138,12 @@ void Workflow::PersistRecent() {
     if(recentPath.empty() || !recentLoaded || recentWriting || recent==savedRecent) return;
     recentWriting=true;savedRecent=recent; // a failed write is reported once and retried only after the next change
     AsyncIo("Write recent files",[file=recentPath,text=recent.dump(2)]()->std::string {std::string error;return Io::Save(file,text,error)?std::string{}:error;},[this]{recentWriting=false;});
+}
+void Workflow::BoundsFileTyped(BoundsFileAction action) {
+    if(action==BoundsFileAction::Inspect)return;
+    if(boundsFileBusy)throw std::invalid_argument("Parameter bounds file operation is already running");
+    boundsFileBusy=true;boundsFileDiagnostic.clear();auto diagnostic=CreateRef<std::string>();
+    AsyncIo("Parameter bounds",[action,diagnostic]{*diagnostic=action==BoundsFileAction::Reset?ResetParameterBounds():ReloadParameterBounds();return *diagnostic;},[this,diagnostic]{boundsFileBusy=false;boundsFileDiagnostic=*diagnostic;status=diagnostic->empty()?"Parameter bounds reloaded":*diagnostic;});
 }
 void Workflow::SaveSettings() {
     if(settingsPath.empty()) return;
@@ -1222,6 +1254,7 @@ void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const Proj
         if(pending->action->temperature_K>0){auto snapshot=CreateRef<ProjectDraft>(*d.draft);snapshot->project.temperature_K=pending->action->temperature_K;pending->draft=std::move(snapshot);}
     }
     pending->automatic=liveBand;
+    if(op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe" || op=="run_batch" || op=="quick_sweep" || op=="retry_batch")ValidateDraft(*pending->draft);
     if((op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe") && !liveBand) d.status="running";
     const bool preview=op=="run" && r.value("preview",false);if(op=="run" || op=="run_batch" || op=="quick_sweep" || op=="retry_batch") pending->feed=CreateRef<LiveFeed>();L.liveSeq=0;L.liveAt=std::chrono::steady_clock::time_point{};
     if(op=="run") L.runStarted=std::chrono::steady_clock::now();
@@ -1359,7 +1392,7 @@ void Workflow::SetRunPlanTyped(Ref<const RunPlan> plan) {
     projectDirty=true;Changed();RefreshDirty();
 }
 void Workflow::StartActions(const std::string& device,Ref<const RunPlan> plan,bool automatic) {
-    auto& d=Device(device);ValidateRunPlan(*plan,*d.draft,automatic);
+    auto& d=Device(device);ValidateDraft(*d.draft);ValidateRunPlan(*plan,*d.draft,automatic);
     auto& lane=LaneOf(device);if(!lane.Idle())throw std::invalid_argument("A job is still active on this device");
     auto pending=CreateRef<Operation>(d.draft,Json{{"operation","single_shot"}});
     pending->runPlan=std::move(plan);pending->automatic=automatic;pending->revision=d.revision;pending->detailBias=d.selectedBias;
@@ -1377,6 +1410,7 @@ void Workflow::RecalculateLive(ActionKind kind) {
     d.pinStoredView=false;ReturnToLive(d);
 }
 void Workflow::SelectBias(int index) {
+    RequireParameter("selection.bias_index",index);
     auto& d=Current();auto source=std::dynamic_pointer_cast<const IvResult>(d.RunResult(d.selectedRun));
     if(!source)source=d.Iv();
     if(index<0 || index>=int(source->points.size()))throw std::invalid_argument("Bias index out of range");
@@ -1712,6 +1746,12 @@ void Workflow::FinishOperation(Lane &L) {
         if(!lightResponse && !pending->output.empty()) response["operation_result"]=pending->typedOut?pending->typedOut->Dump():pending->output;
         if(quiet) {status=liveBand?(pending->detailRun.empty()?"Live band updated":"Stored bias loaded"):keepStatus;response=keepResponse;}
         if(op=="single_shot" && pending->automatic)status="Live Actions completed";
+        if(op=="project_load" || op=="load" || op=="device_read" || op=="import_def") {
+            std::string warnings;
+            const auto append=[&](const ProjectDraft& draft){for(const auto& warning:draft.importWarnings){if(!warnings.empty())warnings+='\n';warnings+=warning;}};
+            if(pending->draft)append(*pending->draft);for(const auto& draft:pending->loadedDrafts)append(*draft);
+            if(!warnings.empty()){projectDirty=true;RefreshDirty();status="Imported values clamped: "+warnings;notifier->Warning("Imported parameter bounds",warnings,NotificationCategory::Project);}
+        }
     } else {
         const bool wasCancelled=dropped || snapshot->status==JobStatus::Cancelled;
         if(!dropped && (op=="quick_sweep" || op=="run_batch" || op=="retry_batch") && pending->typedOut) {d.batchResult.adopt(std::static_pointer_cast<const BatchResult>(pending->typedOut));projectDirty=true;}

@@ -223,3 +223,26 @@ Single shot and multi-action Batch share typed Actions and the existing Core job
 
 
 Owner plot and numerical controls (slux3 S5): Numerical lists Distribution levels and Quadrature for each distributed bulk/interface defect. New defects use engine defaults (currently 7 / SCAPS trapezoid); imported values are preserved. Bands uses an outside-right vertical legend with short contact entries; Contact annotations defaults off. G/R has one horizontally scrollable toolbar: mechanism checkboxes, Profiles / Integrated currents, CSV / JSON exports. Run Action ranges use compact table rows and sliders. Plot settings includes the per-user Live change reference preference (Dimmed, Dashed, Dimmed + dashed, Off; default Dimmed). References share the previous exact typed results, remain visible during drag previews and retire after the exact solve. Batch overlays and stored Action curves expose persisted Log X, Log Y and Log |J| controls.
+
+
+## Editable parameter bounds
+
+`config/parameter_bounds.yaml` is the versioned source for the shipped defaults and the compiled emergency fallback. Premake copies it next to ScapsLab.exe. Numeric limits and steps use SI, including joules for energy; `display_unit` and `display_scale` describe the UI conversion. Existing project keys retain their established engine units (eV, nm, cm-based recombination coefficients).
+
+Use **Tools > Preferences > Parameter bounds** to inspect effective limits and their default/user origin, open the user override, Reload, or Reset to defaults. The user file is `<user settings directory>/scapslab/parameter_bounds.yaml`; its full path is available in the panel tooltip. Only changed keys/fields are needed:
+
+```yaml
+schema_version: 1
+parameters:
+  temperature_K:
+    soft_min: 200
+    soft_max: 800
+```
+
+Hard limits are inclusive. Entries outside them are rejected with the field, value, allowed range and unit. Ctrl+click can exceed a typical slider range up to a hard limit; the slider expands and displays `outside typical range`. Log controls remain a mantissa/exponent pair. The exponent limits follow the effective range. Zero and ideal/open infinity states remain explicit controls where the model supports them.
+
+Reload parses files on a Core job and atomically publishes an immutable typed table. Invalid YAML, unknown keys, inconsistent ranges, unsupported units or unsafe formats produce a notification and restore compiled defaults. A narrower hard range leaves an open device unchanged and rejects its next calculation until it is corrected. Units, integer types and infinity semantics belong to the model; override limits, scale, step or format instead. Formats accept `%.0f` through `%.17g` (f/e/g conversions).
+
+Device imports clamp out-of-domain numeric fields and list every change in a notification; the project becomes dirty. Correct imports retain their existing file spelling. Structural errors and invalid coupled sweeps still fail validation. Invalid batch member values fail that member before solving and preserve other completed members. Inactive profile/distribution coefficients retain their engine defaults.
+
+Python uses the same command/job path: `Session.parameter_bounds()` returns a JSON-serializable table with explicit SI/display units, while `reload_parameter_bounds()` and `reset_parameter_bounds()` perform the file actions.

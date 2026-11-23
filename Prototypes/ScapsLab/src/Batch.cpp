@@ -149,7 +149,9 @@ bool BatchOperation(Operation& o,JobContext& ctx) {
             if(retry && nextAction==0){member->previous=table.actionMembers[i];member->results.clear();member->errors.clear();member->recorderSamples.clear();row->attempt++;}
             row->status="Running";table.rows[i]=row;table.actionMembers[i]=member;
             auto snapshot=CreateRef<ProjectDraft>(*table.projectSnapshot);
-            for(const auto& [path,value]:o.preparedBatch->combinations[i])SetProjectParameter(snapshot->project,path,value);
+            std::string parameterError;
+            try {for(const auto& [path,value]:o.preparedBatch->combinations[i])SetProjectParameter(snapshot->project,path,value);}
+            catch(const std::exception& e){parameterError=e.what();}
             for(const auto& [path,value]:o.preparedBatch->combinations[i])if(path.starts_with("illumination.") && path!="illumination.enabled")snapshot->project.illumination.enabled=true;
             member->illuminated=snapshot->project.illumination.enabled;
             const auto recorderSnapshot=[&](ActionKind kind)->Ref<const ProjectDraft> {const auto& a=o.runPlan->actions[int(kind)];if(a.temperature_K<=0)return snapshot;auto overridden=CreateRef<ProjectDraft>(*snapshot);overridden->project.temperature_K=a.temperature_K;return overridden;};
@@ -157,6 +159,7 @@ bool BatchOperation(Operation& o,JobContext& ctx) {
                 const auto& a=o.runPlan->actions[nextAction];if(!a.include)continue;
                 const auto started=std::chrono::steady_clock::now();
                 try {
+                    if(!parameterError.empty())throw std::invalid_argument(parameterError);
                     Ref<const ProjectDraft> actionDraft=snapshot;if(a.temperature_K>0){auto overrideDraft=CreateRef<ProjectDraft>(*snapshot);overrideDraft->project.temperature_K=a.temperature_K;actionDraft=std::move(overrideDraft);}
                     ValidateDraft(*actionDraft);
                     Operation child(actionDraft,{{"operation",ActionOperation(a.kind)}});child.action=a;child.deferMetadata=true;child.jsonResponse=false;child.retainProfiles=table.batchDraft->include_profiles;child.cancellation=memberStop;child.parallelMember=parallel;
@@ -178,6 +181,7 @@ bool BatchOperation(Operation& o,JobContext& ctx) {
                 }
             }
             try { // Recorder settings are explicit sampling requests, including when curves are discarded.
+                if(!parameterError.empty())throw std::invalid_argument(parameterError);
                 auto recorded=ExtractActions(*member,*table.recorderDraft);
                 for(const auto& column:table.recorderDraft->columns) {
                     const auto& existing=recorded.values.at(column.id);

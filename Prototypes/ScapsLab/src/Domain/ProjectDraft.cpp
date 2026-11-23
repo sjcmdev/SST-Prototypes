@@ -1,5 +1,6 @@
 #include "Domain/ProjectDraft.hpp"
 #include "Domain/BatchDraft.hpp"
+#include "Domain/ParameterBounds.hpp"
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -296,6 +297,7 @@ double ProjectParameter(const scaps_core::DeviceProject& project,const std::stri
     return result;
 }
 void SetProjectParameter(scaps_core::DeviceProject& project,const std::string& path,double value) {
+    RequireParameter(path,value);
     if(!std::isfinite(value))throw std::invalid_argument("Axis values must be finite numbers");
     bool found=false;
     Fields(project,[&](const std::string& key,auto& target){
@@ -367,6 +369,7 @@ template<class T> T ReadValue(const Json& value,const std::string& path) {
         return static_cast<T>(v);
     }else if constexpr(std::is_same_v<T,std::string>) {
         if(value.is_string())return value.get<std::string>();
+        if(path=="mesh.adaptivity_level" && value.is_number_integer())return std::to_string(value.get<int>());
         if(path.starts_with("scaps_native.") && value.is_primitive() && !value.is_null()) {
             if(value.is_boolean())return value.get<bool>()?"true":"false";
             if(value.is_number_integer())return std::to_string(value.get<std::int64_t>());
@@ -534,19 +537,76 @@ std::string ProjectFieldPath(const scaps_core::DeviceProject& project,const void
 std::string ProjectFieldPath(const scaps_core::DeviceProject& project,const scaps_core::Profile* address) {
     std::string result;Fields(project,[&](const std::string& path,const auto& value){if constexpr(std::is_same_v<std::decay_t<decltype(value)>,scaps_core::Profile>)if(&value==address)result=path;});return result;
 }
-std::shared_ptr<const ProjectDraft> DraftFromDocument(const nlohmann::json& document) {
+namespace {
+bool ActiveProfileField(const scaps_core::Profile& profile,std::string_view field) {
+    using enum scaps_core::GradingLaw;
+    const auto law=profile.law;
+    if(field=="left")return law!=Table && law!=GaussDiffusion && law!=ErfcDiffusion;
+    if(field=="right")return law==Linear || law==Parabolic || law==Parabolic2 || law==Logarithmic || law==Exponential || law==EffectiveMedium;
+    if(field=="middle" || field=="midpoint")return law==Parabolic2;
+    if(field=="bowing")return law==Parabolic;
+    if(field=="background")return law==Exponential || law==Gaussian;
+    if(field=="length_left" || field=="length_right")return law==Exponential;
+    if(field=="beta_a" || field=="beta_b")return law==Beta;
+    if(field=="power")return law==Power;
+    if(field=="gaussian_center" || field=="gaussian_width")return law==Gaussian;
+    if(field=="diffusion_depth_m")return law==GaussDiffusion || law==ErfcDiffusion;
+    if(field=="projected_range_m" || field=="dose_m2")return law==GaussDiffusion;
+    if(field=="surface_density_m3")return law==ErfcDiffusion;
+    return law==Table;
+}
+template<class D,class F> void BoundFields(D& draft,F f) {
+    const scaps_core::Profile* profile=nullptr;std::string profilePath;
+    std::string distribution,defectPath;
+    Fields(draft.project,[&](const std::string& path,auto& value){
+        using T=std::decay_t<decltype(value)>;
+        if constexpr(std::is_same_v<T,scaps_core::Profile>){profile=&value;profilePath=path;}
+        if constexpr(std::is_same_v<T,std::string>)if(path.ends_with(".energy_distribution")){distribution=value;defectPath=path.substr(0,path.size()-20);}
+        if constexpr(std::is_arithmetic_v<T> && !std::is_same_v<T,bool>) {
+            if(profile && path.starts_with(profilePath+".") && !ActiveProfileField(*profile,path.substr(profilePath.size()+1)))return;
+            if(!defectPath.empty() && path.starts_with(defectPath+".")) {
+                const auto field=path.substr(defectPath.size()+1);
+                if((field=="characteristic_energy_eV" && distribution=="single") || (field=="gaussian_width" && distribution!="gaussian") ||
+                    (field=="tail_width" && distribution!="cb_tail" && distribution!="vb_tail"))return;
+            }
+            auto key=ParameterBoundsKey(path);
+            if(profile && path.starts_with(profilePath+".coordinate[") && !profile->position_relative)key="grading.absolute_coordinate_um";
+            if(profile && path==profilePath+".left" && profile->law==scaps_core::GradingLaw::Gaussian)key="grading."+ParameterBoundsKey(path)+".amplitude";
+            f(path,key,value);
+        }
+    });
+}
+void ClampImportedBounds(ProjectDraft& draft) {
+    const auto table=BoundsTable();
+    BoundFields(draft,[&](const std::string& path,const std::string& key,auto& value){
+        using T=std::decay_t<decltype(value)>;
+        if constexpr(std::is_arithmetic_v<T> && !std::is_same_v<T,bool>) {
+            const auto found=table->find(key);if(found==table->end())return;
+            const auto& b=found->second;const auto factor=ParameterToSI(key);const double si=double(value)*factor;
+            if(b.Contains(si))return;
+            const double fixed=std::isnan(si)?b.softMin:std::clamp(si,b.hardMin,b.hardMax);
+            char text[48];std::snprintf(text,sizeof(text),"%.9g",fixed);
+            draft.importWarnings.push_back(b.Error(path,si)+"; clamped to "+text+" "+b.unit);
+            value=static_cast<T>((b.integer?std::round(fixed):fixed)/factor);
+        }
+    });
+}
+}
+std::shared_ptr<const ProjectDraft> DraftFromDocument(const nlohmann::json& document,bool imported) {
     auto d=std::make_shared<ProjectDraft>();d->project=scaps_core::make_default_device_project();
     ReadFields(*d,document);
     const auto canonical=Canonical(*d);
     d->extensions=Extensions(document,canonical);
     d->file=std::make_shared<DraftFileData>(DraftFileData{document,canonical});
+    if(imported)ClampImportedBounds(*d);
     ValidateDraft(*d);return d;
 }
-std::shared_ptr<const ProjectDraft> DraftFromProject(scaps_core::DeviceProject project) {
+std::shared_ptr<const ProjectDraft> DraftFromProject(scaps_core::DeviceProject project,bool imported) {
     auto d=std::make_shared<ProjectDraft>();d->project=std::move(project);
     unsigned defect=1;
     for(std::size_t i=0;i<d->project.layers.size();++i) {const auto& l=d->project.layers[i];DraftIdentity id{"layer-"+std::to_string(i+1),l.name};for(const auto& v:l.defects)id.defects.push_back({"defect-"+std::to_string(defect++),v.label});d->layers.push_back(std::move(id));}
     std::string profilePath;Fields(d->project,[&](const std::string& path,const auto& value){using T=std::decay_t<decltype(value)>;if constexpr(std::is_same_v<T,scaps_core::Profile>)profilePath=path;else if constexpr(std::is_same_v<T,double> || std::is_same_v<T,bool>)if(!profilePath.empty() && path.starts_with(profilePath+"."))d->profileFields.insert(Pointer(path));});
+    if(imported)ClampImportedBounds(*d);
     ValidateDraft(*d);return d;
 }
 std::shared_ptr<const ProjectDraft> PatchDraft(const ProjectDraft& source,const nlohmann::json& patch,const nlohmann::json& pointerSet) {
@@ -577,6 +637,14 @@ nlohmann::json DraftDocument(const ProjectDraft& draft) {
 }
 void ValidateDraft(const ProjectDraft& d) {
     const auto& p=d.project;
+    const auto table=BoundsTable();
+    BoundFields(d,[&](const std::string& path,const std::string& key,const auto& value){
+        using T=std::decay_t<decltype(value)>;
+        if constexpr(std::is_arithmetic_v<T> && !std::is_same_v<T,bool>) {
+            const auto found=table->find(key);
+            if(found!=table->end())found->second.Require(path,double(value)*ParameterToSI(key));
+        }
+    });
     const auto positive=[](double v,const char* field,bool zero=false){if(!std::isfinite(v) || (zero?v<0:v<=0))throw std::invalid_argument(std::string("Invalid ")+field);};
     if(p.schema_version!=1)throw std::invalid_argument("Unsupported project schema_version");
     positive(p.temperature_K,"temperature_K");positive(p.solver.residual_tolerance,"residual_tolerance");
@@ -617,6 +685,7 @@ void SetProjectField(scaps_core::DeviceProject& project,const std::string& path,
         if constexpr(std::is_arithmetic_v<T> && !std::is_same_v<T,bool>) {
             double number;
             if(const auto* n=std::get_if<double>(&value))number=*n;else if(const auto* n=std::get_if<std::int64_t>(&value))number=double(*n);else throw std::invalid_argument("Expected number: "+path);
+            RequireParameter(path,number);
             if(!std::isfinite(number))throw std::invalid_argument("Axis values must be finite numbers");
             if constexpr(std::is_integral_v<T>)if(number!=std::floor(number) || static_cast<long double>(number)<std::numeric_limits<T>::lowest() || static_cast<long double>(number)>std::numeric_limits<T>::max())throw std::invalid_argument("Expected integer parameter: "+path);
             target=static_cast<T>(number);found=true;

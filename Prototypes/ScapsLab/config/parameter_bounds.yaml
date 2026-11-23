@@ -1,0 +1,2815 @@
+# ScapsLab parameter bounds, schema 1. SI bounds; eV, nm and cm-based coefficients are display/engine units only.
+# Override only changed keys/fields at <user settings>/scapslab/parameter_bounds.yaml.
+# hard limits are inclusive numerical domains; soft limits describe typical devices.
+# References: https://scaps.elis.ugent.be/SCAPS%20manual%20most%20recent.pdf
+# https://www.ioffe.ru/SVA/NSM/index.html
+# Local manual: references/PyScaps/docs/scaps-manual/03-solar-cell-definition.md and 05-single-shot.md.
+# All estimates are explicit; hard maxima do not certify model accuracy at extremes.
+# +infinity is allowed only for named ideal/open/optical sentinels; NaN is never valid.
+schema_version: 1
+parameters:
+  thickness_m:
+    hard_min: 1e-11
+    hard_max: 1
+    soft_min: 1e-09
+    soft_max: 0.001
+    scale: "log"
+    step: 1e-09
+    unit: "m"
+    display_unit: "um"
+    display_scale: 1000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS manual section 3.4 (since 3.3.00)"
+    note: "SCAPS 3.3.00 thickness input limits; typical range includes thin films and wafers."
+  eps_r:
+    hard_min: 1
+    hard_max: 10000.0
+    soft_min: 1
+    soft_max: 40
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  Eg_eV:
+    hard_min: 1.602176634e-25
+    hard_max: 1.602176634e-17
+    soft_min: 1.602176634e-20
+    soft_max: 9.613059803999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  Eg_a_eV:
+    hard_min: 1.602176634e-25
+    hard_max: 1.602176634e-17
+    soft_min: 1.602176634e-20
+    soft_max: 9.613059803999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  Eg_b_eV:
+    hard_min: 1.602176634e-25
+    hard_max: 1.602176634e-17
+    soft_min: 1.602176634e-20
+    soft_max: 9.613059803999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  threshold_eV:
+    hard_min: 1.602176634e-25
+    hard_max: 1.602176634e-17
+    soft_min: 1.602176634e-20
+    soft_max: 9.613059803999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  phi_m_eV:
+    hard_min: 1.602176634e-25
+    hard_max: 4.806529902e-18
+    soft_min: 1.602176634e-19
+    soft_max: 1.1215236438e-18
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  chi_eV:
+    hard_min: -3.204353268e-18
+    hard_max: 4.806529902e-18
+    soft_min: 1.602176634e-19
+    soft_max: 1.1215236438e-18
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed affinity allowed for negative-electron-affinity surfaces; energy-reference convention matters."
+  temperature_K:
+    hard_min: 0.001
+    hard_max: 10000.0
+    soft_min: 100
+    soft_max: 600
+    scale: "linear"
+    step: 1
+    unit: "K"
+    display_unit: "K"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Positive absolute temperature; endpoints are numerical safeguards, not model-accuracy guarantees."
+  T_ref_K:
+    hard_min: 0.001
+    hard_max: 10000.0
+    soft_min: 100
+    soft_max: 600
+    scale: "linear"
+    step: 1
+    unit: "K"
+    display_unit: "K"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Positive absolute temperature; endpoints are numerical safeguards, not model-accuracy guarantees."
+  Nc_ref_m3:
+    hard_min: 1e-20
+    hard_max: 1e+32
+    soft_min: 1e+22
+    soft_max: 1e+27
+    scale: "log"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  Nv_ref_m3:
+    hard_min: 1e-20
+    hard_max: 1e+32
+    soft_min: 1e+22
+    soft_max: 1e+27
+    scale: "log"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  N_ref_m3:
+    hard_min: 1e-20
+    hard_max: 1e+32
+    soft_min: 1e+22
+    soft_max: 1e+27
+    scale: "log"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  Nd_m3:
+    hard_min: 0
+    hard_max: 1e+32
+    soft_min: 1e+16
+    soft_max: 1e+26
+    scale: "log"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero disables dopants/traps; upper hard limit is a numerical envelope; typical upper range near atomic density."
+  Na_m3:
+    hard_min: 0
+    hard_max: 1e+32
+    soft_min: 1e+16
+    soft_max: 1e+26
+    scale: "log"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero disables dopants/traps; upper hard limit is a numerical envelope; typical upper range near atomic density."
+  Nt_m3:
+    hard_min: 0
+    hard_max: 1e+32
+    soft_min: 1e+16
+    soft_max: 1e+26
+    scale: "log"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero disables dopants/traps; upper hard limit is a numerical envelope; typical upper range near atomic density."
+  surface_density_m3:
+    hard_min: 0
+    hard_max: 1e+32
+    soft_min: 1e+16
+    soft_max: 1e+26
+    scale: "log"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero disables dopants/traps; upper hard limit is a numerical envelope; typical upper range near atomic density."
+  total_density_m3:
+    hard_min: 0
+    hard_max: 1e+32
+    soft_min: 1e+16
+    soft_max: 1e+26
+    scale: "log"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero disables dopants/traps; upper hard limit is a numerical envelope; typical upper range near atomic density."
+  Nt_m2:
+    hard_min: 0
+    hard_max: 1e+26
+    soft_min: 100000000.0
+    soft_max: 1e+19
+    scale: "log"
+    step: 100000000.0
+    unit: "m^-2"
+    display_unit: "cm^-2"
+    display_scale: 0.0001
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  dose_m2:
+    hard_min: 0
+    hard_max: 1e+26
+    soft_min: 100000000.0
+    soft_max: 1e+19
+    scale: "log"
+    step: 100000000.0
+    unit: "m^-2"
+    display_unit: "cm^-2"
+    display_scale: 0.0001
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  peak_density_m2_eV:
+    hard_min: 0.0
+    hard_max: 6.241509074460763e+45
+    soft_min: 6.241509074460763e+27
+    soft_max: 6.2415090744607635e+37
+    scale: "log"
+    step: 6.241509074460764e+26
+    unit: "m^-2 J^-1"
+    display_unit: "cm^-2 eV^-1"
+    display_scale: 1.602176634e-23
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  sigma_n_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_p_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  second_sigma_n_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  second_sigma_p_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_n_left_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_n_right_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_p_left_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_p_right_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_don_n_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_don_p_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_acc_n_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  sigma_acc_p_m2:
+    hard_min: 0
+    hard_max: 1e-08
+    soft_min: 1e-24
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-24
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Zero is the existing solver non-capturing-channel sentinel; positive cross sections use the log controls."
+  mu_n_m2_V_s:
+    hard_min: 1e-30
+    hard_max: 10000.0
+    soft_min: 1e-06
+    soft_max: 1
+    scale: "log"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  mu_p_m2_V_s:
+    hard_min: 1e-30
+    hard_max: 10000.0
+    soft_min: 1e-06
+    soft_max: 1
+    scale: "log"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  mu_min_m2_V_s:
+    hard_min: 1e-30
+    hard_max: 10000.0
+    soft_min: 1e-06
+    soft_max: 1
+    scale: "log"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  mu_delta_m2_V_s:
+    hard_min: 0
+    hard_max: 10000.0
+    soft_min: 1e-06
+    soft_max: 1
+    scale: "log"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Engineering envelope, not a universal material limit."
+  vth_n_ref_m_s:
+    hard_min: 1e-12
+    hard_max: 299792458
+    soft_min: 1000.0
+    soft_max: 1000000.0
+    scale: "log"
+    step: 1000.0
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  vth_p_ref_m_s:
+    hard_min: 1e-12
+    hard_max: 299792458
+    soft_min: 1000.0
+    soft_max: 1000000.0
+    scale: "log"
+    step: 1000.0
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  Sn_m_s:
+    hard_min: 0
+    hard_max: 1e+30
+    soft_min: 1e-06
+    soft_max: 10000000.0
+    scale: "log"
+    step: 1e-06
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: true
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Phenomenological boundary rate, not particle speed: the SCAPS .def 1e30 ideal-contact convention remains valid. Zero = blocking; +infinity = explicit ideal-contact state."
+  Sp_m_s:
+    hard_min: 0
+    hard_max: 1e+30
+    soft_min: 1e-06
+    soft_max: 10000000.0
+    scale: "log"
+    step: 1e-06
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: true
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Phenomenological boundary rate, not particle speed: the SCAPS .def 1e30 ideal-contact convention remains valid. Zero = blocking; +infinity = explicit ideal-contact state."
+  area_m2:
+    hard_min: 1e-24
+    hard_max: 100000000.0
+    soft_min: 1e-10
+    soft_max: 0.1
+    scale: "log"
+    step: 1e-10
+    unit: "m^2"
+    display_unit: "cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  series_ohm_m2:
+    hard_min: 0
+    hard_max: 1e+20
+    soft_min: 1e-10
+    soft_max: 0.1
+    scale: "log"
+    step: 1e-10
+    unit: "Ohm m^2"
+    display_unit: "Ohm cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  shunt_ohm_m2:
+    hard_min: 1e-30
+    hard_max: 1e+30
+    soft_min: 0.0001
+    soft_max: 100000000.0
+    scale: "log"
+    step: 0.0001
+    unit: "Ohm m^2"
+    display_unit: "Ohm cm^2"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: true
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "+infinity is the explicit open-shunt sentinel."
+  radiative_cm3_s:
+    hard_min: 0
+    hard_max: 1e-12
+    soft_min: 1e-22
+    soft_max: 1e-15
+    scale: "log"
+    step: 1e-22
+    unit: "m^3 s^-1"
+    display_unit: "cm^3/s"
+    display_scale: 1000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "File/engine coefficient is cm^3/s; bounds stored in SI and converted once by the typed adapter."
+  auger_n_cm6_s:
+    hard_min: 0
+    hard_max: 1e-30
+    soft_min: 1e-46
+    soft_max: 1e-39
+    scale: "log"
+    step: 1e-46
+    unit: "m^6 s^-1"
+    display_unit: "cm^6/s"
+    display_scale: 1000000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "File/engine coefficient is cm^6/s; bounds stored in SI and converted once by the typed adapter."
+  auger_p_cm6_s:
+    hard_min: 0
+    hard_max: 1e-30
+    soft_min: 1e-46
+    soft_max: 1e-39
+    scale: "log"
+    step: 1e-46
+    unit: "m^6 s^-1"
+    display_unit: "cm^6/s"
+    display_scale: 1000000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "File/engine coefficient is cm^6/s; bounds stored in SI and converted once by the typed adapter."
+  A_m1_eV_half:
+    hard_min: 0.0
+    hard_max: 2.498301237733505e+24
+    soft_min: 249830123773.35046
+    soft_max: 2.498301237733505e+18
+    scale: "log"
+    step: 249830123773.35046
+    unit: "m^-1 J^-1/2"
+    display_unit: "m^-1 eV^-1/2"
+    display_scale: 4.002719867789901e-10
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Legacy stable key has reversed exponent spelling. Units follow alpha=(A+B/E)*sqrt(E-Eg) in scaps_core/illumination.cpp; envelope is an estimate."
+  B_m1_eV_minus_half:
+    hard_min: 0.0
+    hard_max: 400271.9867789901
+    soft_min: 4.0027198677899005e-08
+    soft_max: 0.40027198677899006
+    scale: "log"
+    step: 4.0027198677899005e-08
+    unit: "m^-1 J^1/2"
+    display_unit: "m^-1 eV^1/2"
+    display_scale: 2498301237.733505
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Legacy stable key has reversed exponent spelling. Units follow alpha=(A+B/E)*sqrt(E-Eg) in scaps_core/illumination.cpp; envelope is an estimate."
+  background_m1:
+    hard_min: 0
+    hard_max: 1000000000000000.0
+    soft_min: 1
+    soft_max: 1000000000.0
+    scale: "log"
+    step: 1
+    unit: "m^-1"
+    display_unit: "m^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  step_m1:
+    hard_min: 0
+    hard_max: 1000000000000000.0
+    soft_min: 1
+    soft_max: 1000000000.0
+    scale: "log"
+    step: 1
+    unit: "m^-1"
+    display_unit: "m^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  sqrt_alpha_m1:
+    hard_min: 0
+    hard_max: 1000000000000000.0
+    soft_min: 1
+    soft_max: 1000000000.0
+    scale: "log"
+    step: 1
+    unit: "m^-1"
+    display_unit: "m^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  sqrt_beta_m1:
+    hard_min: 0
+    hard_max: 1000000000000000.0
+    soft_min: 1
+    soft_max: 1000000000.0
+    scale: "log"
+    step: 1
+    unit: "m^-1"
+    display_unit: "m^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  alpha_m1:
+    hard_min: 0
+    hard_max: 1000000000000000.0
+    soft_min: 1
+    soft_max: 1000000000.0
+    scale: "log"
+    step: 1
+    unit: "m^-1"
+    display_unit: "m^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  beta_m1:
+    hard_min: 0
+    hard_max: 1000000000000000.0
+    soft_min: 1
+    soft_max: 1000000000.0
+    scale: "log"
+    step: 1
+    unit: "m^-1"
+    display_unit: "m^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  urbach_energy_eV:
+    hard_min: 1.6021766339999998e-31
+    hard_max: 1.602176634e-17
+    soft_min: 1.6021766339999998e-22
+    soft_max: 3.204353268e-20
+    scale: "log"
+    step: 1.6021766339999998e-22
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  characteristic_energy_eV:
+    hard_min: 1.6021766339999998e-31
+    hard_max: 1.602176634e-17
+    soft_min: 1.6021766339999998e-22
+    soft_max: 3.204353268e-20
+    scale: "log"
+    step: 1.6021766339999998e-22
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  energy_offset_eV:
+    hard_min: -1.602176634e-17
+    hard_max: 1.602176634e-17
+    soft_min: -4.806529901999999e-19
+    soft_max: 4.806529901999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed offset relative to chosen band edge/Ei; reference enum is not a scalar. No fixed-gap clipping for heterojunction references."
+  second_energy_offset_eV:
+    hard_min: -1.602176634e-17
+    hard_max: 1.602176634e-17
+    soft_min: -4.806529901999999e-19
+    soft_max: 4.806529901999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed offset relative to chosen band edge/Ei; reference enum is not a scalar. No fixed-gap clipping for heterojunction references."
+  EC_eV:
+    hard_min: -1.602176634e-17
+    hard_max: 1.602176634e-17
+    soft_min: -4.806529901999999e-19
+    soft_max: 4.806529901999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed offset relative to chosen band edge/Ei; reference enum is not a scalar. No fixed-gap clipping for heterojunction references."
+  HC_eV:
+    hard_min: -1.602176634e-17
+    hard_max: 1.602176634e-17
+    soft_min: -4.806529901999999e-19
+    soft_max: 4.806529901999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed offset relative to chosen band edge/Ei; reference enum is not a scalar. No fixed-gap clipping for heterojunction references."
+  TR_eV:
+    hard_min: -1.602176634e-17
+    hard_max: 1.602176634e-17
+    soft_min: -4.806529901999999e-19
+    soft_max: 4.806529901999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed offset relative to chosen band edge/Ei; reference enum is not a scalar. No fixed-gap clipping for heterojunction references."
+  gaussian_width:
+    hard_min: 1e-09
+    hard_max: 10000.0
+    soft_min: 1
+    soft_max: 20
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Dimensionless span in characteristic energies; not an energy in eV."
+  tail_width:
+    hard_min: 1e-09
+    hard_max: 10000.0
+    soft_min: 1
+    soft_max: 20
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Dimensionless span in characteristic energies; not an energy in eV."
+  energy_levels:
+    hard_min: 1
+    hard_max: 10001
+    soft_min: 1
+    soft_max: 101
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  voltage_V:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -2
+    soft_max: 2
+    scale: "linear"
+    step: 0.001
+    unit: "V"
+    display_unit: "V"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  start_V:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -2
+    soft_max: 2
+    scale: "linear"
+    step: 0.001
+    unit: "V"
+    display_unit: "V"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  stop_V:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -2
+    soft_max: 2
+    scale: "linear"
+    step: 0.001
+    unit: "V"
+    display_unit: "V"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  step_V:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: 0.001
+    soft_max: 0.2
+    scale: "linear"
+    step: 0.001
+    unit: "V"
+    display_unit: "V"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Signed for descending project sweeps; zero is rejected by relational sweep validation."
+  frequency_Hz:
+    hard_min: 1e-20
+    hard_max: 1e+16
+    soft_min: 1
+    soft_max: 100000000.0
+    scale: "log"
+    step: 1
+    unit: "Hz"
+    display_unit: "Hz"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  start_Hz:
+    hard_min: 1e-20
+    hard_max: 1e+16
+    soft_min: 1
+    soft_max: 100000000.0
+    scale: "log"
+    step: 1
+    unit: "Hz"
+    display_unit: "Hz"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  stop_Hz:
+    hard_min: 1e-20
+    hard_max: 1e+16
+    soft_min: 1
+    soft_max: 100000000.0
+    scale: "log"
+    step: 1
+    unit: "Hz"
+    display_unit: "Hz"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  phonon_frequency_Hz:
+    hard_min: 1e-20
+    hard_max: 1e+16
+    soft_min: 1
+    soft_max: 100000000.0
+    scale: "log"
+    step: 1
+    unit: "Hz"
+    display_unit: "Hz"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  wavelength_nm:
+    hard_min: 1e-12
+    hard_max: 1
+    soft_min: 2e-07
+    soft_max: 4.1e-06
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "nm"
+    display_scale: 1000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Stable engine key uses nm; the adapter converts engine nm to SI m."
+  start_nm:
+    hard_min: 1e-12
+    hard_max: 1
+    soft_min: 2e-07
+    soft_max: 4.1e-06
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "nm"
+    display_scale: 1000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Stable engine key uses nm; the adapter converts engine nm to SI m."
+  stop_nm:
+    hard_min: 1e-12
+    hard_max: 1
+    soft_min: 2e-07
+    soft_max: 4.1e-06
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "nm"
+    display_scale: 1000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Stable engine key uses nm; the adapter converts engine nm to SI m."
+  uv_a_nm:
+    hard_min: 1e-12
+    hard_max: 1
+    soft_min: 2e-07
+    soft_max: 4.1e-06
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "nm"
+    display_scale: 1000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Stable engine key uses nm; the adapter converts engine nm to SI m."
+  uv_b_nm:
+    hard_min: 1e-12
+    hard_max: 1
+    soft_min: 2e-07
+    soft_max: 4.1e-06
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "nm"
+    display_scale: 1000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Stable engine key uses nm; the adapter converts engine nm to SI m."
+  wavelength_min_nm:
+    hard_min: 0
+    hard_max: 1
+    soft_min: 2e-07
+    soft_max: 4.1e-06
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "nm"
+    display_scale: 1000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Zero is the unbounded lower optical window sentinel."
+  wavelength_max_nm:
+    hard_min: 1e-12
+    hard_max: 1
+    soft_min: 2e-07
+    soft_max: 4.1e-06
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "nm"
+    display_scale: 1000000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: true
+    source: "scaps_core typed model / numerical input domain"
+    note: "+infinity is the unbounded upper optical window sentinel."
+  monochromatic_power_W_m2:
+    hard_min: 0
+    hard_max: 1000000000000.0
+    soft_min: 1e-06
+    soft_max: 2000.0
+    scale: "log"
+    step: 1e-06
+    unit: "W m^-2"
+    display_unit: "W m^-2"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  probe_power_W_m2:
+    hard_min: 1e-30
+    hard_max: 1000000000000.0
+    soft_min: 1e-06
+    soft_max: 2000.0
+    scale: "log"
+    step: 1e-06
+    unit: "W m^-2"
+    display_unit: "W m^-2"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  incident_power_W_m2:
+    hard_min: 0
+    hard_max: 1000000000000.0
+    soft_min: 1e-06
+    soft_max: 2000.0
+    scale: "log"
+    step: 1e-06
+    unit: "W m^-2"
+    display_unit: "W m^-2"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  intensity_multiplier:
+    hard_min: 0
+    hard_max: 1000000000000.0
+    soft_min: 0.0001
+    soft_max: 1000.0
+    scale: "log"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  uniform_generation_m3_s:
+    hard_min: 0
+    hard_max: 1e+45
+    soft_min: 1000000000000000.0
+    soft_max: 1e+32
+    scale: "log"
+    step: 1000000000000000.0
+    unit: "m^-3 s^-1"
+    display_unit: "m^-3 s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  probe_photon_flux_m2_s:
+    hard_min: 1e-30
+    hard_max: 1e+40
+    soft_min: 10000000000.0
+    soft_max: 1e+25
+    scale: "log"
+    step: 10000000000.0
+    unit: "m^-2 s^-1"
+    display_unit: "m^-2 s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  generation_total_m2_s:
+    hard_min: 0
+    hard_max: 1e+40
+    soft_min: 10000000000.0
+    soft_max: 1e+25
+    scale: "log"
+    step: 10000000000.0
+    unit: "m^-2 s^-1"
+    display_unit: "m^-2 s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Engineering envelope, not a universal material limit."
+  front_transmission:
+    hard_min: 0
+    hard_max: 1
+    soft_min: 0
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Fraction; hard domain [0,1]."
+  back_reflection:
+    hard_min: 0
+    hard_max: 1
+    soft_min: 0
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Fraction; hard domain [0,1]."
+  front_internal_reflection:
+    hard_min: 0
+    hard_max: 1
+    soft_min: 0
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Fraction; hard domain [0,1]."
+  composition:
+    hard_min: 0
+    hard_max: 1
+    soft_min: 0
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Fraction; hard domain [0,1]."
+  initial_acceptor_fraction:
+    hard_min: 0
+    hard_max: 1
+    soft_min: 0
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Fraction; hard domain [0,1]."
+  points_per_layer:
+    hard_min: 3
+    hard_max: 100000
+    soft_min: 11
+    soft_max: 1001
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  points:
+    hard_min: 1
+    hard_max: 10000
+    soft_min: 2
+    soft_max: 1001
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  sweep.points:
+    hard_min: 1
+    hard_max: 10000
+    soft_min: 2
+    soft_max: 1001
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  max_newton_iterations:
+    hard_min: 1
+    hard_max: 100000
+    soft_min: 10
+    soft_max: 1000
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  residual_tolerance:
+    hard_min: 1e-30
+    hard_max: 1
+    soft_min: 1e-12
+    soft_max: 0.01
+    scale: "log"
+    step: 1e-12
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  adaptive_target_relative_J_error:
+    hard_min: 1e-30
+    hard_max: 1
+    soft_min: 1e-12
+    soft_max: 0.01
+    scale: "log"
+    step: 1e-12
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  max_line_search_backtracks:
+    hard_min: 0
+    hard_max: 100000
+    soft_min: 0
+    soft_max: 100
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  recalculate_max_adaptions_per_voltage:
+    hard_min: 0
+    hard_max: 100000
+    soft_min: 0
+    soft_max: 100
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  recalculate_points:
+    hard_min: 0
+    hard_max: 100000
+    soft_min: 0
+    soft_max: 100
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  adaptive_max_bias:
+    hard_min: 0
+    hard_max: 100000
+    soft_min: 0
+    soft_max: 100
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  clustering_beta:
+    hard_min: 0
+    hard_max: 100000000.0
+    soft_min: 0
+    soft_max: 10
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Zero selects a uniform mesh; positive beta clusters cells."
+  max_step_multiple_of_Vt:
+    hard_min: 1e-12
+    hard_max: 100000000.0
+    soft_min: 0.01
+    soft_max: 10
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  adaptive_delta_psi_Vt:
+    hard_min: 1e-12
+    hard_max: 100000000.0
+    soft_min: 0.01
+    soft_max: 10
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  adaptive_delta_log_carrier:
+    hard_min: 1e-12
+    hard_max: 100000000.0
+    soft_min: 0.01
+    soft_max: 10
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  recalculate_min_ratio:
+    hard_min: 1e-12
+    hard_max: 100000000.0
+    soft_min: 0.01
+    soft_max: 10
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  recalculate_max_ratio:
+    hard_min: 1e-12
+    hard_max: 100000000.0
+    soft_min: 0.01
+    soft_max: 10
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  adaptive_max_layer_fraction:
+    hard_min: 1e-12
+    hard_max: 1
+    soft_min: 0.001
+    soft_max: 0.5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  adaptive_target_profile_error_eV:
+    hard_min: 1.6021766339999998e-31
+    hard_max: 1.602176634e-17
+    soft_min: 1.602176634e-23
+    soft_max: 1.602176634e-20
+    scale: "log"
+    step: 1.602176634e-23
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  recalculate_generation_limit_uA_cm2:
+    hard_min: 0
+    hard_max: 1000000000000.0
+    soft_min: 1e-06
+    soft_max: 10
+    scale: "linear"
+    step: 0.01
+    unit: "A m^-2"
+    display_unit: "uA/cm^2"
+    display_scale: 100
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  recalculate_recombination_limit_uA_cm2:
+    hard_min: 0
+    hard_max: 1000000000000.0
+    soft_min: 1e-06
+    soft_max: 10
+    scale: "linear"
+    step: 0.01
+    unit: "A m^-2"
+    display_unit: "uA/cm^2"
+    display_scale: 100
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  alpha:
+    hard_min: -100
+    hard_max: 100
+    soft_min: -5
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  beta_min:
+    hard_min: -100
+    hard_max: 100
+    soft_min: -5
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  beta_N:
+    hard_min: -100
+    hard_max: 100
+    soft_min: -5
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  beta_alpha:
+    hard_min: -100
+    hard_max: 100
+    soft_min: -5
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  beta_delta:
+    hard_min: -100
+    hard_max: 100
+    soft_min: -5
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  exponent:
+    hard_min: -100
+    hard_max: 100
+    soft_min: -5
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.midpoint:
+    hard_min: 1e-12
+    hard_max: 0.999999999999
+    soft_min: 0.01
+    soft_max: 0.99
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.gaussian_center:
+    hard_min: -1000000.0
+    hard_max: 1000000.0
+    soft_min: 0
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Centre may lie outside a layer; typical position is inside [0,1]."
+  grading.gaussian_width:
+    hard_min: 1e-12
+    hard_max: 1000000.0
+    soft_min: 0.01
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.length_left:
+    hard_min: 1e-12
+    hard_max: 1000000.0
+    soft_min: 0.01
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.length_right:
+    hard_min: 1e-12
+    hard_max: 1000000.0
+    soft_min: 0.01
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.beta_a:
+    hard_min: 1e-12
+    hard_max: 1000000.0
+    soft_min: 0.01
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.beta_b:
+    hard_min: 1e-12
+    hard_max: 1000000.0
+    soft_min: 0.01
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.power:
+    hard_min: 1e-12
+    hard_max: 1000000.0
+    soft_min: 0.01
+    soft_max: 5
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.composition.background:
+    hard_min: -1
+    hard_max: 1
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.composition.amplitude:
+    hard_min: -1
+    hard_max: 1
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.composition.bowing:
+    hard_min: -1
+    hard_max: 1
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Eg_eV.background:
+    hard_min: -1.602176634e-17
+    hard_max: 1.602176634e-17
+    soft_min: -9.613059803999999e-19
+    soft_max: 9.613059803999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Eg_eV.amplitude:
+    hard_min: -1.602176634e-17
+    hard_max: 1.602176634e-17
+    soft_min: -9.613059803999999e-19
+    soft_max: 9.613059803999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Eg_eV.bowing:
+    hard_min: -1.602176634e-17
+    hard_max: 1.602176634e-17
+    soft_min: -9.613059803999999e-19
+    soft_max: 9.613059803999999e-19
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.chi_eV.background:
+    hard_min: -4.806529902e-18
+    hard_max: 4.806529902e-18
+    soft_min: -1.1215236438e-18
+    soft_max: 1.1215236438e-18
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.chi_eV.amplitude:
+    hard_min: -4.806529902e-18
+    hard_max: 4.806529902e-18
+    soft_min: -1.1215236438e-18
+    soft_max: 1.1215236438e-18
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.chi_eV.bowing:
+    hard_min: -4.806529902e-18
+    hard_max: 4.806529902e-18
+    soft_min: -1.1215236438e-18
+    soft_max: 1.1215236438e-18
+    scale: "linear"
+    step: 1.6021766339999998e-21
+    unit: "J"
+    display_unit: "eV"
+    display_scale: 6.241509074460763e+18
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.eps_r.background:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -40
+    soft_max: 40
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.eps_r.amplitude:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -40
+    soft_max: 40
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.eps_r.bowing:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -40
+    soft_max: 40
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nd_m3.background:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nd_m3.amplitude:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nd_m3.bowing:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Na_m3.background:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Na_m3.amplitude:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Na_m3.bowing:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nt_m3.background:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nt_m3.amplitude:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nt_m3.bowing:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+26
+    soft_max: 1e+26
+    scale: "linear"
+    step: 1e+16
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nc_ref_m3.background:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+27
+    soft_max: 1e+27
+    scale: "linear"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nc_ref_m3.amplitude:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+27
+    soft_max: 1e+27
+    scale: "linear"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nc_ref_m3.bowing:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+27
+    soft_max: 1e+27
+    scale: "linear"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nv_ref_m3.background:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+27
+    soft_max: 1e+27
+    scale: "linear"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nv_ref_m3.amplitude:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+27
+    soft_max: 1e+27
+    scale: "linear"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.Nv_ref_m3.bowing:
+    hard_min: -1e+32
+    hard_max: 1e+32
+    soft_min: -1e+27
+    soft_max: 1e+27
+    scale: "linear"
+    step: 1e+20
+    unit: "m^-3"
+    display_unit: "cm^-3"
+    display_scale: 1e-06
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.mu_n_m2_V_s.background:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.mu_n_m2_V_s.amplitude:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.mu_n_m2_V_s.bowing:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.mu_p_m2_V_s.background:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.mu_p_m2_V_s.amplitude:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.mu_p_m2_V_s.bowing:
+    hard_min: -10000.0
+    hard_max: 10000.0
+    soft_min: -1
+    soft_max: 1
+    scale: "linear"
+    step: 1e-06
+    unit: "m^2 V^-1 s^-1"
+    display_unit: "cm^2/(V s)"
+    display_scale: 10000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "Ioffe NSM semiconductor database"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.vth_n_ref_m_s.background:
+    hard_min: -299792458
+    hard_max: 299792458
+    soft_min: -1000000.0
+    soft_max: 1000000.0
+    scale: "linear"
+    step: 1000.0
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.vth_n_ref_m_s.amplitude:
+    hard_min: -299792458
+    hard_max: 299792458
+    soft_min: -1000000.0
+    soft_max: 1000000.0
+    scale: "linear"
+    step: 1000.0
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.vth_n_ref_m_s.bowing:
+    hard_min: -299792458
+    hard_max: 299792458
+    soft_min: -1000000.0
+    soft_max: 1000000.0
+    scale: "linear"
+    step: 1000.0
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.vth_p_ref_m_s.background:
+    hard_min: -299792458
+    hard_max: 299792458
+    soft_min: -1000000.0
+    soft_max: 1000000.0
+    scale: "linear"
+    step: 1000.0
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.vth_p_ref_m_s.amplitude:
+    hard_min: -299792458
+    hard_max: 299792458
+    soft_min: -1000000.0
+    soft_max: 1000000.0
+    scale: "linear"
+    step: 1000.0
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  grading.vth_p_ref_m_s.bowing:
+    hard_min: -299792458
+    hard_max: 299792458
+    soft_min: -1000000.0
+    soft_max: 1000000.0
+    scale: "linear"
+    step: 1000.0
+    unit: "m s^-1"
+    display_unit: "m s^-1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Signed additive grading coefficient in property units; the resulting profile must obey its material domain."
+  diffusion_depth_m:
+    hard_min: -1
+    hard_max: 1
+    soft_min: -1e-05
+    soft_max: 1e-05
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "um"
+    display_scale: 1000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Signed depth selects the diffusion side; zero rejected for active diffusion by engine."
+  projected_range_m:
+    hard_min: 0
+    hard_max: 1
+    soft_min: 0
+    soft_max: 1e-05
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "um"
+    display_scale: 1000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  x_m:
+    hard_min: 0
+    hard_max: 1
+    soft_min: 0
+    soft_max: 1e-05
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "um"
+    display_scale: 1000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  sweep.mantissa:
+    hard_min: 1
+    hard_max: 9.999999999
+    soft_min: 1
+    soft_max: 9.99
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  sweep.exponent:
+    hard_min: -300
+    hard_max: 300
+    soft_min: -24
+    soft_max: 24
+    scale: "linear"
+    step: 1
+    unit: "decade"
+    display_unit: "decade"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  sweep.exponent_step:
+    hard_min: 1
+    hard_max: 300
+    soft_min: 1
+    soft_max: 3
+    scale: "linear"
+    step: 1
+    unit: "decade"
+    display_unit: "decade"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  sweep.decades:
+    hard_min: 1e-12
+    hard_max: 300
+    soft_min: 0.01
+    soft_max: 2
+    scale: "linear"
+    step: 0.01
+    unit: "decade"
+    display_unit: "decade"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  sweep.step:
+    hard_min: 1e-30
+    hard_max: 1e+32
+    soft_min: 1e-06
+    soft_max: 1
+    scale: "linear"
+    step: 1e-06
+    unit: "native unit"
+    display_unit: "native unit"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.coordinate:
+    hard_min: -1000000000000.0
+    hard_max: 1000000000000.0
+    soft_min: 0
+    soft_max: 1
+    scale: "linear"
+    step: 0.01
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Table abscissa may extend beyond a layer for shared profiles; absolute tables use um in the engine."
+  left_layer_index:
+    hard_min: 0
+    hard_max: 99999
+    soft_min: 0
+    soft_max: 99
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  layer_index:
+    hard_min: 0
+    hard_max: 99999
+    soft_min: 0
+    soft_max: 99
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  donor_index:
+    hard_min: 0
+    hard_max: 99999
+    soft_min: 0
+    soft_max: 99
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  acceptor_index:
+    hard_min: 0
+    hard_max: 99999
+    soft_min: 0
+    soft_max: 99
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  energy_reference:
+    hard_min: 3
+    hard_max: 9
+    soft_min: 3
+    soft_max: 9
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "SCAPS 3.3.11 manual, chapters 3-5"
+    note: "Interface reference codes 3..9. Bulk energy references are typed enums."
+  most_positive_charge:
+    hard_min: -10
+    hard_max: 10
+    soft_min: -2
+    soft_max: 2
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  donor_charge:
+    hard_min: -10
+    hard_max: 10
+    soft_min: -2
+    soft_max: 2
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  spectral_irradiance_W_m2_nm:
+    hard_min: 0
+    hard_max: 1e+30
+    soft_min: 0
+    soft_max: 5000000000.0
+    scale: "linear"
+    step: 1000000.0
+    unit: "W m^-3"
+    display_unit: "W m^-2 nm^-1"
+    display_scale: 1e-09
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  selection.bias_index:
+    hard_min: 0
+    hard_max: 2147483647
+    soft_min: 0
+    soft_max: 2147483647
+    scale: "linear"
+    step: 1
+    unit: "index"
+    display_unit: "index"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Navigation index: the effective upper limit is also capped by the available result count."
+  selection.attempt_index:
+    hard_min: 1
+    hard_max: 2147483647
+    soft_min: 1
+    soft_max: 2147483647
+    scale: "linear"
+    step: 1
+    unit: "index"
+    display_unit: "index"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Navigation index: capped by the attempts available in the selected result."
+  history_retention:
+    hard_min: 1
+    hard_max: 10000
+    soft_min: 1
+    soft_max: 100
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.0f"
+    integer: true
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  plot_margin_percent:
+    hard_min: 0
+    hard_max: 100
+    soft_min: 0
+    soft_max: 30
+    scale: "linear"
+    step: 1
+    unit: "%"
+    display_unit: "%"
+    display_scale: 1
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Engineering envelope, not a universal material limit."
+  grading.absolute_coordinate_um:
+    hard_min: -1000000.0
+    hard_max: 1000000.0
+    soft_min: 0
+    soft_max: 1e-05
+    scale: "linear"
+    step: 1e-09
+    unit: "m"
+    display_unit: "um"
+    display_scale: 1000000.0
+    format: "%.4g"
+    integer: false
+    allow_infinity: false
+    source: "scaps_core typed model / numerical input domain"
+    note: "Absolute profile table abscissae use um in the engine, metres in this table."

@@ -5,6 +5,14 @@ import subprocess
 import tempfile
 import scapslab
 
+# Bounds inspection and Reload use the same typed command/job entry as Preferences.
+_bounds_session = scapslab.Session()
+_bounds = _bounds_session.parameter_bounds()
+assert _bounds['ok'] and _bounds['parameter_bounds']['temperature_K']['unit'] == 'K'
+assert _bounds['parameter_bounds']['Eg_eV']['unit'] == 'J'
+assert _bounds_session.reload_parameter_bounds()['ok']
+print('Parameter bounds: Python inspection (SI units) and command/job Reload PASS')
+
 # S4: public wrappers use the same typed command/job path as GUI Actions.
 def check_run_actions(document):
     import copy

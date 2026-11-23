@@ -1,4 +1,6 @@
 #include "Panel.hpp"
+#include "Domain/ParameterBounds.hpp"
+#include "Core/Platform/ProcessRunner.hpp"
 #include <numbers>
 #include "PlotUi.hpp"
 #include <imgui.h>
@@ -52,14 +54,34 @@ int AddDefectToDraft(ProjectDraft& draft,int layer,bool sheet) {return AddDraftD
 namespace {
 Workflow *numericWorkflow=nullptr;
 ProjectDraft *numericDraft=nullptr;
-void InitSweepControl(SweepControlState& state,SweepEditor editor) {
-    state={};state.editor=std::move(editor);
-    const auto& range=state.editor.range;const double extent=std::max({std::abs(range.minimum),std::abs(range.maximum),std::abs(range.step),1e-9});
-    state.sliderLo=std::min(0.,range.minimum)-extent;state.sliderHi=std::max(0.,range.maximum)+extent;state.stepHi=std::max(std::abs(range.maximum-range.minimum),std::abs(range.step)*10);
-    if(range.logarithmic && range.minimum>0){state.sliderLo=range.minimum/100;state.sliderHi=range.maximum*100;state.stepHi=10;}
-    if(state.editor.component==SweepComponent::Mantissa){state.sliderLo=1;state.sliderHi=9.999999;}
-    if(state.editor.component==SweepComponent::Exponent){state.sliderLo=-300;state.sliderHi=300;}
+bool BoundIndex(const char* id,int& value,const char* key,int last,const char* format="%d") {
+    const auto bounds=BoundsTable()->at(key);const auto [softMin,softMax]=bounds.SliderRange(value);
+    const int lo=int(std::max(bounds.hardMin,softMin)),hi=int(std::min({bounds.hardMax,softMax,double(last)}));
+    if(hi<lo){ImGui::TextDisabled("No selectable index in the configured bounds");return false;}
+    int edited=value;const bool changed=ImGui::SliderInt(id,&edited,lo,hi,format);
+    if(changed && (!bounds.Contains(edited) || edited>last)) {
+        const auto message=bounds.Error(key,edited)+"; available maximum "+std::to_string(last);
+        if(numericWorkflow)numericWorkflow->status=message;ImGui::TextColored({1,.45f,.25f,1},"%s",message.c_str());return false;
+    }
+    if(changed)value=edited;return changed;
+}
+void InitSweepControl(SweepControlState& state,SweepEditor editor,std::string key={}) {
+    if(key.empty())key=state.parameterKey;
+    if(key.empty())key=editor.displayUnit=="Hz"?"frequency_Hz":editor.displayUnit=="nm"?"wavelength_nm":"voltage_V";
+    state={};state.editor=std::move(editor);state.parameterKey=std::move(key);
     for(double value:state.editor.range.custom){char text[32];std::snprintf(text,sizeof(text),"%.17g",value);if(!state.customText.empty())state.customText+="; ";state.customText+=text;}
+}
+bool SweepNumber(SweepControlState& state,const char* id,double& displayValue,bool step=false) {
+    const auto& editor=state.editor;
+    const auto key=step?(editor.component==SweepComponent::Exponent?std::string("sweep.exponent_step"):editor.range.logarithmic?std::string("sweep.decades"):
+        "sweep.step:"+(editor.component==SweepComponent::Mantissa?std::string("sweep.mantissa"):state.parameterKey)):
+        editor.component==SweepComponent::Mantissa?std::string("sweep.mantissa"):editor.component==SweepComponent::Exponent?"sweep.exponent:"+state.parameterKey:state.parameterKey;
+    const double scale=editor.component==SweepComponent::FullValue && !(step && editor.range.logarithmic)?editor.displayScale:1;
+    double native=displayValue/scale;const bool changed=DrawBoundValue(id,native,key,scale);
+    if(changed)displayValue=native*scale;return changed;
+}
+bool SweepPoints(const char* id,int& points,const char* key="sweep.points") {
+    double value=points;const bool changed=DrawBoundValue(id,value,key);if(changed)points=int(value);return changed;
 }
 bool SweepRangeControl(SweepControlState& state,bool compact=false) {
     auto& editor=state.editor;auto& range=editor.range;bool changed=false,listChanged=false;
@@ -88,10 +110,10 @@ bool SweepRangeControl(SweepControlState& state,bool compact=false) {
         const bool opened=begin("Action range",false);
         if(opened) {
             ImGui::TableNextColumn();ImGui::Text("%s [%s]",editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage",editor.displayUnit.c_str());
-            const auto drag=[&](const char* id,double& value,double lo,double hi){ImGui::SetNextItemWidth(-1);return ImGui::SliderScalar(id,ImGuiDataType_Double,&value,&lo,&hi,"%.4g",ImGuiSliderFlags_NoRoundToFormat|(range.logarithmic && lo>0?ImGuiSliderFlags_Logarithmic:0));};
-            ImGui::TableNextColumn();ImGui::BeginDisabled(input!=0);changed|=drag("##minimum",range.minimum,state.sliderLo,state.sliderHi);
-            ImGui::TableNextColumn();changed|=drag("##maximum",range.maximum,state.sliderLo,state.sliderHi);
-            ImGui::TableNextColumn();if(sampling)changed|=drag("##step",range.step,0,state.stepHi);else {ImGui::SetNextItemWidth(-1);changed|=ImGui::DragInt("##points",&range.points,1,range.minimum==range.maximum?1:2,10000);}ImGui::EndDisabled();
+            const auto drag=[&](const char* id,double& value,bool step=false){return SweepNumber(state,id,value,step);};
+            ImGui::TableNextColumn();ImGui::BeginDisabled(input!=0);changed|=drag("##minimum",range.minimum);
+            ImGui::TableNextColumn();changed|=drag("##maximum",range.maximum);
+            ImGui::TableNextColumn();if(sampling)changed|=drag("##step",range.step,true);else {ImGui::SetNextItemWidth(-1);changed|=SweepPoints("##points",range.points);}ImGui::EndDisabled();
             if(split)ImGui::EndTable();
         }
         if((!split && opened) || (split && begin("Action modes",true))) {
@@ -113,14 +135,14 @@ bool SweepRangeControl(SweepControlState& state,bool compact=false) {
     const bool exponent=editor.component==SweepComponent::Exponent;
     if(!input) {
         if(!exponent){BeginRow("Scale");int scale=range.logarithmic?1:0;if(ImGui::Combo("##scale",&scale,"Linear\0Log\0")){range.logarithmic=scale==1;changed=true;}EndRow();}
-        const auto drag=[&](const std::string& label,double& value,bool integer=false){BeginRow(label.c_str());const bool step=&value==&range.step;const double lo=step?0:state.sliderLo,hi=step?state.stepHi:state.sliderHi;ImGuiSliderFlags flags=ImGuiSliderFlags_NoRoundToFormat;if(!step && range.logarithmic && lo>0)flags|=ImGuiSliderFlags_Logarithmic;const bool edit=ImGui::SliderScalar("##value",ImGuiDataType_Double,&value,&lo,&hi,integer?"%.0f":"%.4g",flags);EndRow();return edit;};
+        const auto drag=[&](const std::string& label,double& value,bool=false){BeginRow(label.c_str());const bool edit=SweepNumber(state,"##value",value,&value==&range.step);EndRow();return edit;};
         const auto unit=exponent?std::string("decades"):editor.component==SweepComponent::Mantissa?std::string("1"):editor.displayUnit;
         changed|=drag("Minimum ["+unit+"]",range.minimum,exponent);
         changed|=drag("Maximum ["+unit+"]",range.maximum,exponent);
         BeginRow("Sampling");int sampling=range.sampling==SweepSampling::Step?1:0;
         if(ImGui::Combo("##sampling",&sampling,"Points\0Step\0")){range.sampling=sampling?SweepSampling::Step:SweepSampling::Points;changed=true;}EndRow();
         if(sampling)changed|=drag(range.logarithmic || exponent?"Step [decades]":"Step ["+unit+"]",range.step,exponent);
-        else {BeginRow("Points");if(range.minimum==range.maximum)ImGui::TextUnformatted("1");else if(ImGui::DragInt("##points",&range.points,1,2,10000))changed=true;EndRow();}
+        else {BeginRow("Points");if(range.minimum==range.maximum)ImGui::TextUnformatted("1");else if(SweepPoints("##points",range.points))changed=true;EndRow();}
     } else if(sst::ui::widgets::MultilineText(("Values ["+(exponent?std::string("decades"):editor.component==SweepComponent::Mantissa?std::string("1"):editor.displayUnit)+"]").c_str(),&state.customText,ImVec2(-1,65))) {
         changed=true;listChanged=true;
     }
@@ -154,7 +176,7 @@ void SweepMenu(const void* address,const char *key,double scale=1,const char *ti
     if(found!=parameters.end()) {
         static SweepControlState state;static BatchAxis axis;static Ref<const ProjectDraft> snapshot;static Ref<const BatchDraft> base;static Ref<const RecorderDraft> recorder;static Ref<const RunPlan> runPlan;
         auto& workflow=*numericWorkflow;
-        const auto refresh=[&](SweepComponent part){snapshot=workflow.Current().draft;base=workflow.Current().batch;recorder=workflow.Current().recorder;runPlan=workflow.Current().runPlan;try{std::string unit=title;const auto left=unit.rfind('['),right=unit.rfind(']');unit=left!=unit.npos && right>left?unit.substr(left+1,right-left-1):found->unit;InitSweepControl(state,NewSweep(*found,part,scale,unit));axis=PrepareSweepAxis(*snapshot,found->id,state.editor);}catch(const std::exception& e){state={};state.error=e.what();}};
+        const auto refresh=[&](SweepComponent part){snapshot=workflow.Current().draft;base=workflow.Current().batch;recorder=workflow.Current().recorder;runPlan=workflow.Current().runPlan;try{std::string unit=title;const auto left=unit.rfind('['),right=unit.rfind(']');unit=left!=unit.npos && right>left?unit.substr(left+1,right-left-1):found->unit;InitSweepControl(state,NewSweep(*found,part,scale,unit),found->path);axis=PrepareSweepAxis(*snapshot,found->id,state.editor);}catch(const std::exception& e){state={};state.error=e.what();}};
         if(ImGui::IsWindowAppearing())refresh(component);
         ImGui::Text("Quick batch: %s / %s",*title?title:found->label.c_str(),state.editor.component==SweepComponent::Mantissa?"Mantissa":state.editor.component==SweepComponent::Exponent?"Exponent":"Full value");ImGui::Separator();
         if(state.editor.component!=SweepComponent::FullValue || !state.error.empty())if(ImGui::Button("Sweep full value..."))refresh(SweepComponent::FullValue);
@@ -532,7 +554,7 @@ void DrawHistory(Workflow &w,bool global) {
         ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
     }
     int retention=w.project.ui.value("history_retention",5);
-    BeginRow("Legacy runs retained");if(ImGui::SliderInt("##retention",&retention,1,100)) {auto ui=w.project.ui;ui["history_retention"]=retention;(void)w.Exec(Cmd::EditProject::With({{"ui",ui}}));}EndRow();
+    BeginRow("Legacy runs retained");if(SweepPoints("##retention",retention,"history_retention")) {auto ui=w.project.ui;ui["history_retention"]=retention;(void)w.Exec(Cmd::EditProject::With({{"ui",ui}}));}EndRow();
     // Commands replace device state; draw from a snapshot while dispatching edits.
     const auto devices=w.project.devices;
     for(const auto &device:devices) {
@@ -661,83 +683,97 @@ static bool Slide(const char *id,double &value,const SliderMap &m,const char *fo
     }
     return changed;
 }
-// Log slider range in display units (key-specific so a decade is a useful number of pixels).
-static SliderMap LogMap(const std::string &k) {
-    if(k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3") return {1,1e24,true};
-    if(k=="Nt_m3") return {1,1e28,true};
-    if(k=="Nt_m2" || k=="peak_density_m2_eV") return {1,1e22,true};
-    if(k.find("sigma_")!=std::string::npos) return {1e-30,1e-10,true};
-    if(k=="Sn_m_s" || k=="Sp_m_s") return {1e-6,1e8,true};
-    if(k=="series_ohm_m2" || k=="area_m2") return {1e-6,1e4,true};
-    if(k=="shunt_ohm_m2") return {1e-2,1e10,true};
-    if(k=="thickness_m") return {1e-3,1e3,true};
-    if(k.find("vth_")==0) return {1e2,1e8,true};
-    if(k=="frequency_Hz" || k=="start_Hz" || k=="stop_Hz") return {1e-2,1e12,true};
-    if(k=="residual_tolerance" || k=="adaptive_target_relative_J_error") return {1e-18,1,true};
-    if(k=="uniform_generation_m3_s") return {1e-30,1e36,true};
-    return {1e-30,1e21,true};
+Bounds DisplayBounds(std::string_view key,double scale) {
+    if(key.starts_with("sweep.step:") || key.starts_with("sweep.exponent:")) {
+        const bool exponent=key.starts_with("sweep.exponent:");const auto property=DisplayBounds(key.substr(key.find(':')+1),scale);
+        auto bounds=BoundsTable()->at(exponent?"sweep.exponent":"sweep.step");
+        if(exponent) {
+            bounds.hardMin=property.hardMin>0?std::ceil(std::log10(property.hardMin)):bounds.hardMin;
+            bounds.hardMax=std::floor(std::log10(property.hardMax));
+            bounds.softMin=std::floor(std::log10(std::max(property.softMin,property.step)));
+            bounds.softMax=std::floor(std::log10(property.softMax));
+        }else {
+            bounds.hardMax=property.hardMax-property.hardMin;
+            bounds.softMin=property.step;bounds.softMax=std::max(property.step*2,property.softMax-property.softMin);
+            bounds.unit=property.unit;bounds.format=property.format;bounds.integer=property.integer;
+            if(property.integer){bounds.hardMin=property.step;bounds.step=property.step;}
+        }
+        return bounds;
+    }
+    const auto canonical=ParameterBoundsKey(key);auto bounds=BoundsTable()->at(canonical);
+    const double factor=scale/ParameterToSI(canonical);
+    const double uiScale=bounds.displayScale*ParameterToSI(canonical);
+    if(std::abs(scale-uiScale)<=1e-12*uiScale)bounds.unit=bounds.displayUnit;
+    bounds.hardMin*=factor;bounds.hardMax*=factor;bounds.softMin*=factor;bounds.softMax*=factor;bounds.step*=factor;
+    return bounds;
 }
-// Log parameter = mantissa slider (1.00..9.99) x integer exponent slider; value = m*10^e clamped to [lo,hi].
-// Ctrl+click on either slider types an exact value: a mantissa >=10 or an exponent beyond +-100 is read as the full value (e.g. 3.2e15).
-// Mantissa goes through Slide() so live drag, fine mode, Esc revert and arrows keep working.
-static bool SlideMantissaExponent(double &value,const SliderMap &r,bool zero,const void* address,const char* key,double scale,const char* label) {
-    double m;int e;SplitMantissaExponent(std::clamp(value,r.lo,r.hi),m,e);
-    const double emin=std::floor(std::log10(r.lo)),emax=std::floor(std::log10(r.hi));
-    const float gap=ImGui::GetStyle().ItemSpacing.x;
-    bool changed=false;double v=value;
-    ImGui::SetNextItemWidth(std::max(40.f,(ImGui::GetContentRegionAvail().x-gap)*.58f));
-    if(Slide("##mantissa",m,SliderMap{1,9.99,false},zero?"0":"%.2f")) {changed=true;v=m>=10?std::clamp(m,r.lo,r.hi):m>0?MantissaExponentValue(m,e,r):r.lo;}
-    TrackGesture();SweepMenu(address,key,scale,label,SweepComponent::Mantissa);ImGui::SameLine();
-    double x=e;ImGui::SetNextItemWidth(-1);
-    if(ImGui::SliderScalar("##exponent",ImGuiDataType_Double,&x,&emin,&emax,zero?"0":"10^%.0f")) {changed=true;v=std::fabs(x)>100?std::clamp(x,r.lo,r.hi):MantissaExponentValue(m,std::round(x),r);}
-    TrackGesture();SweepMenu(address,key,scale,label,SweepComponent::Exponent);
-    if(changed) value=v;
-    return changed;
+bool DrawBoundValue(const char* id,double& native,std::string_view key,double scale,const void* address,const char* label) {
+    const auto bounds=DisplayBounds(key,scale);const double before=native;double value=native*scale;
+    const auto [lo,hi]=bounds.SliderRange(value);const bool logarithmic=bounds.scale==ParameterScale::Log;
+    bool changed=false;const bool scoped=std::string_view(id)!="##number";if(scoped)ImGui::PushID(id);ImGui::BeginGroup();
+    if(logarithmic) {
+        bool zero=value==0;
+        if(bounds.hardMin==0) {ImGui::TextUnformatted("Zero");ImGui::SameLine();changed=ImGui::Checkbox("##zero",&zero);TrackGesture();ImGui::SameLine();}
+        double v=value>0?value:bounds.softMin,m=1;int e=0;SplitMantissaExponent(v,m,e);
+        const auto [emin,emax]=bounds.ExponentRange(v);const auto mantissa=BoundsTable()->at("sweep.mantissa");
+        ImGui::BeginDisabled(zero);const float gap=ImGui::GetStyle().ItemSpacing.x;
+        ImGui::SetNextItemWidth(std::max(40.f,(ImGui::GetContentRegionAvail().x-gap)*.58f));
+        if(Slide("##mantissa",m,{mantissa.softMin,mantissa.softMax,false,bounds.step/std::pow(10.,e)},zero?"0":bounds.format.c_str())) {
+            changed=true;v=(m<1 || m>=10)?m:m*std::pow(10.,e);
+        }
+        TrackGesture();SweepMenu(address,std::string(key).c_str(),scale,label,SweepComponent::Mantissa);ImGui::SameLine();
+        double exponent=e;ImGui::SetNextItemWidth(-1);
+        if(ImGui::SliderScalar("##exponent",ImGuiDataType_Double,&exponent,&emin,&emax,zero?"0":"10^%.0f")) {
+            changed=true;v=m*std::pow(10.,exponent);
+        }
+        TrackGesture();SweepMenu(address,std::string(key).c_str(),scale,label,SweepComponent::Exponent);ImGui::EndDisabled();
+        if(changed)value=zero?0:v;
+    }else {
+        ImGui::SetNextItemWidth(-1);
+        changed=Slide("##value",value,{lo,hi,false,bounds.step},bounds.format.c_str());TrackGesture();
+        SweepMenu(address,std::string(key).c_str(),scale,label);
+    }
+    if(ImGui::IsItemHovered())ImGui::SetTooltip("%s | hard [%.6g, %.6g], typical [%.6g, %.6g]\nCtrl+click: exact entry (log: full value in mantissa if outside [1,10)).\nShift / Ctrl+Shift: fine; F: lock; Esc: cancel.\n%s\n%s",label,bounds.hardMin,bounds.hardMax,bounds.softMin,bounds.softMax,bounds.source.c_str(),bounds.note.c_str());
+    if(changed && !bounds.Contains(value)) {
+        const auto message=bounds.Error(key,value);
+        if(numericWorkflow)numericWorkflow->status=message;
+        ImGui::TextColored({1,.45f,.25f,1},"%s",message.c_str());changed=false;value=before*scale;
+    }
+    else if(!bounds.Contains(value))ImGui::TextColored({1,.45f,.25f,1},"outside hard limits: %s",bounds.Error(key,value).c_str());
+    if(!bounds.Typical(value) && bounds.Contains(value))ImGui::TextColored({1,.72f,.25f,1},"outside typical range");
+    ImGui::EndGroup();if(scoped)ImGui::PopID();if(changed)native=value/scale;return changed;
+}
+void DrawParameterBoundsPreferences(Workflow& w) {
+    ImGui::TextWrapped("Hard limits reject edits; typical ranges guide sliders. Values outside the typical range remain editable within hard limits. Units are fixed by the model.");
+    ImGui::BeginDisabled(w.boundsFileBusy);
+    if(ImGui::Button("Open user file"))w.AsyncIo("Open parameter bounds",[]{
+        auto error=EnsureUserBoundsFile();if(!error.empty())return error;
+        const auto windows=std::getenv("WINDIR");if(!windows)return std::string("Windows directory is unavailable");
+        Platform::ProcessRunOptions options;options.executable=Path{std::filesystem::path(windows)/"System32/notepad.exe"};options.arguments={UserBoundsFile()};
+        const auto result=Platform::LaunchDetached(options);return result?std::string{}:result.Error().technicalDetails;
+    });
+    ImGui::SameLine();if(ImGui::Button("Reload"))(void)w.Exec(Cmd::BoundsFile::Make(BoundsFileAction::Reload));
+    ImGui::SameLine();if(ImGui::Button("Reset to defaults"))(void)w.Exec(Cmd::BoundsFile::Make(BoundsFileAction::Reset));ImGui::EndDisabled();
+    ImGui::TextDisabled("scapslab/parameter_bounds.yaml");if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",UserBoundsFile().c_str());
+    if(!w.boundsFileDiagnostic.empty())ImGui::TextWrapped("%s",w.boundsFileDiagnostic.c_str());
+    if(ImGui::BeginTable("Parameter bounds",7,ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_RowBg|ImGuiTableFlags_ScrollX|ImGuiTableFlags_ScrollY,ImVec2(0,ImGui::GetContentRegionAvail().y),1080)) {
+        for(const auto* title:{"Parameter","UI unit","Hard limits","Typical slider range","Scale","Step / format","Origin"})ImGui::TableSetupColumn(title);
+        ImGui::TableSetupScrollFreeze(1,1);ImGui::TableHeadersRow();const auto table=BoundsTable();
+        for(const auto& [key,b]:*table) {
+            ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextUnformatted(key.c_str());
+            if(ImGui::IsItemHovered())ImGui::SetTooltip("SI: %s\n%s\n%s",b.unit.c_str(),b.source.c_str(),b.note.c_str());
+            ImGui::TableNextColumn();ImGui::TextUnformatted(b.displayUnit.c_str());
+            ImGui::TableNextColumn();ImGui::Text("%.5g .. %.5g%s",b.hardMin*b.displayScale,b.hardMax*b.displayScale,b.allowInfinity?"; +inf":"");
+            ImGui::TableNextColumn();ImGui::Text("%.5g .. %.5g",b.softMin*b.displayScale,b.softMax*b.displayScale);
+            ImGui::TableNextColumn();ImGui::TextUnformatted(b.scale==ParameterScale::Log?"log":"linear");
+            ImGui::TableNextColumn();ImGui::Text("%.4g / %s",b.step*b.displayScale,b.format.c_str());
+            ImGui::TableNextColumn();ImGui::TextUnformatted(b.userOverride?"user":"default");
+        }
+        ImGui::EndTable();
+    }
 }
 static bool NumberControl(const char *label,double &native,const char *key,double scale,const void* address) {
-    const std::string k=key; double value=native*scale;
-    const bool logarithmic=k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3" || k=="Sn_m_s" || k=="Sp_m_s" ||
-        k=="residual_tolerance" || k=="adaptive_target_relative_J_error" || k=="frequency_Hz" || k=="start_Hz" || k=="stop_Hz" || k=="dose_m2" || k=="surface_density_m3" || k=="uniform_generation_m3_s" || k.find("vth_")==0;
-    const bool logControl=logarithmic || k=="Nt_m3" || k=="Nt_m2" || k=="peak_density_m2_eV" || k.find("sigma_")!=std::string::npos || k=="area_m2" || k=="series_ohm_m2" || k=="shunt_ohm_m2" || k=="probe_photon_flux_m2_s" || k=="probe_power_W_m2" || k.find("_m1")!=std::string::npos || k=="intensity_multiplier" || k=="thickness_m";
-    BeginRow(label);if(logControl)SweepMenu(address,key,scale,label);ImGui::BeginGroup();bool changed=false;
-    if(logControl) {
-        const bool density=k=="Nd_m3" || k=="Na_m3" || k=="Nc_ref_m3" || k=="Nv_ref_m3";
-        const bool zeroAllowed=k=="Nd_m3" || k=="Na_m3" || k=="Sn_m_s" || k=="Sp_m_s" || k=="series_ohm_m2" || k=="Nt_m3" || k=="Nt_m2" || k=="peak_density_m2_eV" || k.find("sigma_")!=std::string::npos || k.find("_m1")!=std::string::npos || k=="intensity_multiplier";
-        bool zero=value==0;
-        if(zeroAllowed) {ImGui::TextUnformatted("Zero");ImGui::SameLine();changed=ImGui::Checkbox("##zero",&zero);TrackGesture();ImGui::SameLine();}
-        double v=value>0?value:(density?1e14:1.);
-        ImGui::BeginDisabled(zero);
-        changed|=SlideMantissaExponent(v,LogMap(k),zero,address,key,scale,label);
-        ImGui::EndDisabled();
-        if(zero) ImGui::TextWrapped("Clear Zero to edit.");
-        if(changed) value=zero?0:v;
-    } else if(k=="points_per_layer" || k=="points" || k=="max_newton_iterations" || k=="energy_levels") {
-        int v=int(value);const int minimum=k=="points_per_layer"?3:k=="points"?2:1;
-        ImGui::SetNextItemWidth(-1);
-        changed=ImGui::SliderInt("##value",&v,minimum,k=="energy_levels"?1001:k=="max_newton_iterations"?1000:2000,"%d");TrackGesture();value=v;
-    } else {
-        double lo=0.0,hi=10.0;
-        if(k=="thickness_m") {lo=0.01;hi=50;}
-        else if(k=="eps_r") {lo=1;hi=40;}
-        else if(k=="Eg_eV" || k=="Eg_a_eV" || k=="Eg_b_eV") {lo=0.1;hi=5;}
-        else if(k=="chi_eV" || k=="phi_m_eV") {lo=1;hi=7;}
-        else if(k=="mu_n_m2_V_s" || k=="mu_p_m2_V_s") {lo=0.1;hi=5000;}
-        else if(k=="temperature_K") {lo=100;hi=600;}
-        else if(k=="step_V") {lo=0.001;hi=0.2;}
-        else if(k=="wavelength_nm" || k=="start_nm" || k=="stop_nm" || k=="uv_a_nm" || k=="uv_b_nm") {lo=100;hi=5000;}
-        else if(k=="monochromatic_power_W_m2") {lo=0;hi=2000;}
-        else if(k=="urbach_energy_eV") {lo=.001;hi=.2;}
-        else if(k=="front_transmission" || k=="back_reflection" || k=="front_internal_reflection") {lo=0;hi=1;}
-        else if(k=="characteristic_energy_eV") {lo=0.001;hi=1;}
-        else if(k=="gaussian_width" || k=="tail_width") {lo=1;hi=20;}
-        else {lo=-5;hi=5;}
-        ImGui::SetNextItemWidth(-1);
-        changed=Slide("##value",value,{lo,hi,false},"%.4g");TrackGesture();
-    }
-    if(ImGui::IsItemHovered() && !ImGui::IsItemActive()) ImGui::SetTooltip("Ctrl+click: exact value. Shift: 10x finer, Ctrl+Shift: 100x, F: fine toggle. Esc while dragging: cancel. Arrows / Ctrl+wheel: step (Shift: finer).");
-    ImGui::EndGroup();if(!logControl)SweepMenu(address,key,scale,label);EndRow();
-    if(changed)native=value/scale;
-    return changed;
+    BeginRow(label);const bool changed=DrawBoundValue("##number",native,key,scale,address,label);EndRow();return changed;
 }
 template<class T> requires std::is_arithmetic_v<T>
 static bool Number(const char* label,T& native,const char* key,double scale=1) {double value=double(native);const bool changed=NumberControl(label,value,key,scale,&native);if(changed)native=static_cast<T>(value);return changed;}
@@ -768,7 +804,7 @@ bool Panel::RunActions(ProjectDraft& draft) {
             SweepEditor editor;editor.displayUnit=i==3?"Hz":i==4?"nm":"V";
             if(plan->actions[i].range)editor.range=*plan->actions[i].range;
             else {const auto& v=draft.project.voltage;editor.range={SweepSampling::Step,false,v.start_V,v.stop_V,std::abs(v.step_V),2};if(v.start_V>v.stop_V){editor.range.sampling=SweepSampling::List;editor.range.custom=ActionSamples(plan->actions[i],draft.project);}}
-            InitSweepControl(actionEditors[i],std::move(editor));
+            InitSweepControl(actionEditors[i],std::move(editor),i==3?"frequency_Hz":i==4?"wavelength_nm":"voltage_V");
         }
         actionSource=source;
     }
@@ -793,21 +829,18 @@ bool Panel::RunActions(ProjectDraft& draft) {
             ImGui::PushID(ActionId(a.kind));ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(labels[i]);
             ImGui::TableNextColumn();changed|=ImGui::Checkbox("##include",&a.include);
             ImGui::TableNextColumn();changed|=ImGui::Checkbox("##on-edit",&a.onEdit);
-            const auto cell=[&](const char* id,double& value,const char* unit,bool log=false) {
-                ImGui::SetNextItemWidth(-1);
-                if(log)return sst::ui::widgets::LogControl(id,&value);
-                const auto format=std::string("%.4g ")+unit;
-                return ImGui::DragScalar(id,ImGuiDataType_Double,&value,unit==std::string_view("V")?.001f:1.f,nullptr,nullptr,format.c_str(),ImGuiSliderFlags_NoRoundToFormat);
+            const auto cell=[&](const char* id,double& value,const char* unit,bool=false) {
+                return DrawBoundValue(id,value,std::string_view(unit)=="Hz"?"frequency_Hz":std::string_view(unit)=="nm"?"wavelength_nm":std::string_view(unit)=="dec"?"sweep.decades":"voltage_V");
             };
             ImGui::TableNextColumn();bool rangeChanged=false;
             if(i==0)changed|=cell("##bias",a.voltage_V,"V");
             else {
                 ImGui::BeginDisabled(range.sampling==SweepSampling::List);
-                rangeChanged|=cell("##from",range.minimum,state.editor.displayUnit.c_str(),range.logarithmic);
-                ImGui::TableNextColumn();rangeChanged|=cell("##to",range.maximum,state.editor.displayUnit.c_str(),range.logarithmic);
+                rangeChanged|=SweepNumber(state,"##from",range.minimum);
+                ImGui::TableNextColumn();rangeChanged|=SweepNumber(state,"##to",range.maximum);
                 ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);
-                if(range.sampling==SweepSampling::Step)rangeChanged|=cell("##step",range.step,range.logarithmic?"dec":state.editor.displayUnit.c_str());
-                else rangeChanged|=ImGui::DragInt("##points",&range.points,1,range.minimum==range.maximum?1:2,10000,"%d pts");
+                if(range.sampling==SweepSampling::Step)rangeChanged|=SweepNumber(state,"##step",range.step,true);
+                else rangeChanged|=SweepPoints("##points",range.points);
                 ImGui::EndDisabled();
             }
             ImGui::TableSetColumnIndex(6);
@@ -1200,7 +1233,7 @@ bool Panel::Absorption(ProjectDraft &draft) {
     auto &a=layers[selected].absorption;const auto before=a;bool changed=Choice("Absorption model",a.model,"model",{{"None","none"},{"Square root","sqrt"},{"SCAPS model","scaps"},{"File","file"}});w->tutorialOverlay.Item("scapslab.Absorption","model");
     if(changed && a.model=="file" && a.file.empty()) {try {const auto path=OpenFileDialog({"SCAPS absorption","abs"});if(path)a.file=path->Utf8();else {a=before;changed=false;}}catch(const std::exception &e){w->status=e.what();a=before;changed=false;}}
     if(a.model=="file") changed|=OpticalFile(draft,a.file,a.table_nm_m1,"abs","Absorption file [.abs]");
-    if(a.model=="sqrt") {changed|=Number("A [m^-1 eV^1/2]",a.A_m1_eV_half,"A_m1_eV_half");changed|=Number("B [m^-1 eV^-1/2]",a.B_m1_eV_minus_half,"B_m1_eV_minus_half");}
+    if(a.model=="sqrt") {changed|=Number("A [m^-1 eV^-1/2]",a.A_m1_eV_half,"A_m1_eV_half");changed|=Number("B [m^-1 eV^1/2]",a.B_m1_eV_minus_half,"B_m1_eV_minus_half");}
     if(a.model=="scaps") {changed|=Number("Background [m^-1]",a.background_m1,"background_m1");changed|=Number("Step [m^-1]",a.step_m1,"step_m1");changed|=Number("Sqrt alpha [m^-1]",a.sqrt_alpha_m1,"sqrt_alpha_m1");changed|=Number("Sqrt beta [m^-1]",a.sqrt_beta_m1,"sqrt_beta_m1");}
     bool mixing=bool(a.composition);
     if(Toggle("Composition absorption A/B",mixing)) {
@@ -1251,11 +1284,11 @@ bool Panel::ProfileEditor(scaps_core::Profile& g,double thickness,const std::str
         BeginRow("Grading file [.grd]");if(ImGui::Button("Browse..."))load();w->tutorialOverlay.Item(parameter=="Nt_m3"?"scapslab.Defects":"scapslab.Grading","load-profile");EndRow();
         ImGui::TextWrapped("%s | %d points",g.source_file.empty()?"Embedded table":g.source_file.c_str(),int(g.coordinate.size()));changed|=Toggle("Logarithmic interpolation",numericDraft?ProfileParameter(*numericDraft,g,"interpolation_logarithmic",false):g.interpolation_logarithmic);
     }else {
-        auto number=[&](const char* key,const char* label,double fallback,double factor=1.){const char* valueKey=factor==scale?(density?"Nt_m3":parameter.c_str()):key;ImGui::PushID(key);changed|=Number(label,ProfileParameter(*numericDraft,g,key,fallback),valueKey,factor);ImGui::PopID();};
+        auto number=[&](const char* key,const char* label,double fallback,double factor=1.){const std::string field=key;const std::string valueKey=field=="background" || field=="bowing" || (field=="left" && g.law==GradingLaw::Gaussian)?"grading."+parameter+"."+(field=="left"?"amplitude":field):field=="left" || field=="right" || field=="middle"?parameter:field=="diffusion_depth_m" || field=="projected_range_m" || field=="dose_m2" || field=="surface_density_m3"?field:"grading."+field;ImGui::PushID(key);changed|=Number(label,ProfileParameter(*numericDraft,g,key,fallback),valueKey.c_str(),factor);ImGui::PopID();};
         number("left",("Left / amplitude ["+unit+"]").c_str(),0.,scale);number("right",("Right ["+unit+"]").c_str(),0.,scale);
         const auto law=g.law;
         if(law==GradingLaw::Parabolic)number("bowing",("Bowing ["+unit+"]").c_str(),0.,scale);
-        if(law==GradingLaw::Parabolic2){number("midpoint","Middle coordinate [x/d or y]",.5);number("middle",("Middle value ["+unit+"]").c_str(),0.,scale);}
+        if(law==GradingLaw::Parabolic2){number("midpoint","Middle coordinate [x/d or y]",.5);number("middle",("Middle value ["+unit+"]").c_str(),g.left,scale);}
         if(law==GradingLaw::Exponential){number("background",("Background ["+unit+"]").c_str(),0.,scale);number("length_left","Left length [x/d or y]",1.);number("length_right","Right length [x/d or y]",1.);}
         if(law==GradingLaw::Beta){number("beta_a","Beta a [1]",1.);number("beta_b","Beta b [1]",1.);}
         if(law==GradingLaw::Power)number("power","Power [1]",1.);
@@ -1448,7 +1481,7 @@ bool Panel::Structure(ProjectDraft &draft) {
         if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s (%s) | %.6g um | chi %.4g eV | Eg %.4g eV\nClick: select layer. Drag right edge: thickness (total %.5g um).",l.name.c_str(),LayerType(l)>0?"n":LayerType(l)<0?"p":"i",l.thickness_m*1e6,m.chi_eV,m.Eg_eV,total*1e6);
         ImGui::SetCursorScreenPos(ImVec2(x2-7,origin.y));ImGui::InvisibleButton("##thickness-interface",ImVec2(7,height));TrackGesture();
         if(ImGui::IsItemClicked()) {w->Current().selectedInterface=i+1<int(layers.size())?i:-1;w->Current().selectedLayer=i;w->focusLayers=true;}
-        if(ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {l.thickness_m=std::max(1e-9,l.thickness_m+ImGui::GetIO().MouseDelta.x*total/width);changed|=ImGui::GetIO().MouseDelta.x!=0;}
+        if(ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {const auto bounds=BoundsTable()->at("thickness_m");const double next=l.thickness_m+ImGui::GetIO().MouseDelta.x*total/width;if(bounds.Contains(next)){l.thickness_m=next;changed|=ImGui::GetIO().MouseDelta.x!=0;}else w->status=bounds.Error("thickness_m",next);}
         if(ImGui::IsItemHovered()) {ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);ImGui::SetTooltip("Drag: thickness [um]. Click: interface after %s",l.name.c_str());}
         if(i+1<int(layers.size())) {
             const auto &right=layers[i+1].material;char offsets[100];
@@ -1512,7 +1545,7 @@ void Panel::Results() {
     { // one row: Bias point [slider showing V] | Single shot | Shots
         char biasFormat[64];std::snprintf(biasFormat,sizeof(biasFormat),"%.4g V  (#%%d)",points[bias].voltage_V);
         ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Bias point");ImGui::SameLine();
-        ImGui::SetNextItemWidth(std::max(120.f,ImGui::GetContentRegionAvail().x*.5f));if(ImGui::SliderInt("##bias",&bias,0,int(points.size())-1,biasFormat) && !bandOnly)Do(Cmd::SelectBias::Make(bias));
+        ImGui::SetNextItemWidth(std::max(120.f,ImGui::GetContentRegionAvail().x*.5f));if(BoundIndex("##bias",bias,"selection.bias_index",int(points.size())-1,biasFormat) && !bandOnly)Do(Cmd::SelectBias::Make(bias));
     }
     ImGui::TextDisabled("%s",selected?"STORED result (frozen snapshot)":"LIVE result (store with Capture live)");
     const auto bandRef=w->Current().ProfileBand();const auto &band=*bandRef;
@@ -1984,13 +2017,13 @@ void Panel::Batch() {
     changed|=Toggle("Store curves",spec.include_curves);changed|=Toggle("Store profiles (selected bias)",spec.include_profiles);
     if(!w->Busy() && (sweepSource.lock()!=d.batch || sweepEditors.size()!=spec.axes.size())) {
         sweepEditors.clear();
-        for(const auto& axis:spec.axes){const auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto& p){return p.id==axis.parameter_id || (axis.parameter_id.empty() && p.path==axis.path);});SweepControlState state;if(p!=parameters.end())InitSweepControl(state,EditSweep(axis,*p));sweepEditors.push_back(std::move(state));}
+        for(const auto& axis:spec.axes){const auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto& p){return p.id==axis.parameter_id || (axis.parameter_id.empty() && p.path==axis.path);});SweepControlState state;if(p!=parameters.end())InitSweepControl(state,EditSweep(axis,*p),p->path);sweepEditors.push_back(std::move(state));}
         sweepSource=d.batch;
     }
     BeginRow("Dimensions / mode");int mode=spec.mode=="together" || spec.mode=="linked"?2:spec.axes.size()==1?0:1;
     if(ImGui::Combo("##mode",&mode,"1-D\0Nested 2-D\0Linked\0")) {
         if(mode!=2 && spec.axes.size()>2)w->status="Remove extra linked parameters before selecting 1-D / Nested 2-D";
-        else {changed=true;spec.mode=mode==2?"linked":"nested";if(mode==0){spec.axes.resize(1);sweepEditors.resize(1);}else if(mode==1 && spec.axes.size()==1){const auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto& p){return p.id!=spec.axes[0].parameter_id;});if(p!=parameters.end()){BatchAxis axis;axis.parameter_id=p->id;axis.values=std::vector<double>{p->value};spec.axes.push_back(axis);SweepControlState state;InitSweepControl(state,EditSweep(axis,*p));sweepEditors.push_back(std::move(state));}}}
+        else {changed=true;spec.mode=mode==2?"linked":"nested";if(mode==0){spec.axes.resize(1);sweepEditors.resize(1);}else if(mode==1 && spec.axes.size()==1){const auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto& p){return p.id!=spec.axes[0].parameter_id;});if(p!=parameters.end()){BatchAxis axis;axis.parameter_id=p->id;axis.values=std::vector<double>{p->value};spec.axes.push_back(axis);SweepControlState state;InitSweepControl(state,EditSweep(axis,*p),p->path);sweepEditors.push_back(std::move(state));}}}
     }EndRow();
     TextInput("Search project tree",parameterSearch,sizeof(parameterSearch));
     std::optional<std::size_t> remove;
@@ -1999,7 +2032,7 @@ void Panel::Batch() {
         const auto title=selected==parameters.end()?std::string("Unresolved parameter: ")+axis.parameter_id:selected->label+" ["+selected->unit+"]";
         if(ImGui::BeginCombo("##parameter",title.c_str(),ImGuiComboFlags_HeightLargest)) {
             std::string group;for(const auto& p:parameters){const auto& label=p.label;if(parameterSearch[0] && label.find(parameterSearch)==std::string::npos)continue;const auto root=label.substr(0,label.find(" / "));if(group!=root){ImGui::SeparatorText(root.c_str());group=root;}
-                if(ImGui::Selectable((label+" ["+p.unit+"]##"+p.id).c_str(),selected!=parameters.end() && p.id==selected->id)){axis=BatchAxis{};axis.parameter_id=p.id;axis.values=std::vector<double>{p.value};InitSweepControl(state,EditSweep(axis,p));changed=true;}}
+                if(ImGui::Selectable((label+" ["+p.unit+"]##"+p.id).c_str(),selected!=parameters.end() && p.id==selected->id)){axis=BatchAxis{};axis.parameter_id=p.id;axis.values=std::vector<double>{p.value};InitSweepControl(state,EditSweep(axis,p),p.path);changed=true;}}
             ImGui::EndCombo();
         }EndRow();
         selected=std::find_if(parameters.begin(),parameters.end(),[&](const auto& p){return p.id==axis.parameter_id || (axis.parameter_id.empty() && p.path==axis.path);});
@@ -2013,7 +2046,7 @@ void Panel::Batch() {
     if(remove){spec.axes.erase(spec.axes.begin()+*remove);sweepEditors.erase(sweepEditors.begin()+*remove);changed=true;}
     if((spec.mode=="linked" || spec.mode=="together") && ImGui::Button("Add linked parameter")) {
         const auto p=std::find_if(parameters.begin(),parameters.end(),[&](const auto& p){return std::none_of(spec.axes.begin(),spec.axes.end(),[&](const auto& axis){return axis.parameter_id==p.id;});});
-        if(p!=parameters.end()){BatchAxis axis;axis.parameter_id=p->id;axis.values=std::vector<double>(BatchAxisValues(spec.axes.front()).size(),p->value);spec.axes.push_back(axis);SweepControlState state;InitSweepControl(state,EditSweep(axis,*p));sweepEditors.push_back(std::move(state));changed=true;}
+        if(p!=parameters.end()){BatchAxis axis;axis.parameter_id=p->id;axis.values=std::vector<double>(BatchAxisValues(spec.axes.front()).size(),p->value);spec.axes.push_back(axis);SweepControlState state;InitSweepControl(state,EditSweep(axis,*p),p->path);sweepEditors.push_back(std::move(state));changed=true;}
     }
     if(changed){auto next=CreateRef<const BatchDraft>(spec);sweepSource=next;Do(Cmd::SetBatchSettings::Make(next));}
     std::optional<BatchPlan> preview;std::string error;try{preview=PrepareBatch(*d.draft,spec,*d.recorder);}catch(const std::exception& e){error=e.what();}if(!error.empty())ImGui::TextWrapped("Configuration: %s",error.c_str());
@@ -2169,7 +2202,7 @@ void Panel::ResultsBrowser() {
                 for(const auto& c:table->recorderDraft->columns){ImGui::TableNextColumn();const auto found=row.values.find(c.id);if(found!=row.values.end()){if(std::isfinite(found->second.value))ImGui::Text("%.7g",found->second.value);else ImGui::TextUnformatted("--");ImGui::TextDisabled("%s",found->second.status.c_str());}}ImGui::PopID();
             }ImGui::EndTable();
         }
-        const auto& row=*table->rows[d.selectedMember];BeginRow("Attempt");int attempt=d.selectedAttempt?d.selectedAttempt:row.attempt;if(ImGui::SliderInt("##attempt",&attempt,1,row.attempt)){d.selectedAttempt=attempt;++w->plotGen;}EndRow();
+        const auto& row=*table->rows[d.selectedMember];BeginRow("Attempt");int attempt=d.selectedAttempt?d.selectedAttempt:row.attempt;if(BoundIndex("##attempt",attempt,"selection.attempt_index",row.attempt)){d.selectedAttempt=attempt;++w->plotGen;}EndRow();
         ImGui::BeginDisabled(w->Busy());if(ImGui::Button("Retry selected member"))Do(Cmd::RetryBatchMember::With({{"member_id",row.id}}));ImGui::EndDisabled();
     } else {
         ImGui::TextUnformatted("Member: point_0 | attempt 1");d.selectedMember=0;
@@ -2205,7 +2238,7 @@ void Panel::ResultsBrowser() {
         }
         if(ImGui::BeginTabItem("Profiles")) {
             const auto iv=std::dynamic_pointer_cast<const IvResult>(selected);
-            if(iv && !iv->points.empty()) {d.selectedBias=std::clamp(d.selectedBias,0,int(iv->points.size())-1);BeginRow("Bias index");ImGui::SliderInt("##profile-bias",&d.selectedBias,0,int(iv->points.size())-1);EndRow();const auto& p=iv->points[d.selectedBias];if(p.x_m.empty())ImGui::TextUnformatted("Profiles not stored at this bias. Calculate missing explicitly from Recorder.");else if(BeginSavedPlot(*w,"Stored profiles",ImVec2(-1,-1))){ImPlot::SetupAxes("Position [um]","Energy [eV]");SetupSavedPlot(w->plotSession,"Stored profiles");const auto& x=Vec(p.x_m.get(),1e6);for(const auto* field:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}){const auto& y=PointColumn(p,field).get();if(y.size()==x.size())ImPlot::PlotLine(field,x.data(),y.data(),int(y.size()));}EndSavedPlot(*w,"Stored profiles");}}
+            if(iv && !iv->points.empty()) {d.selectedBias=std::clamp(d.selectedBias,0,int(iv->points.size())-1);BeginRow("Bias index");BoundIndex("##profile-bias",d.selectedBias,"selection.bias_index",int(iv->points.size())-1);EndRow();const auto& p=iv->points[d.selectedBias];if(p.x_m.empty())ImGui::TextUnformatted("Profiles not stored at this bias. Calculate missing explicitly from Recorder.");else if(BeginSavedPlot(*w,"Stored profiles",ImVec2(-1,-1))){ImPlot::SetupAxes("Position [um]","Energy [eV]");SetupSavedPlot(w->plotSession,"Stored profiles");const auto& x=Vec(p.x_m.get(),1e6);for(const auto* field:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}){const auto& y=PointColumn(p,field).get();if(y.size()==x.size())ImPlot::PlotLine(field,x.data(),y.data(),int(y.size()));}EndSavedPlot(*w,"Stored profiles");}}
             else ImGui::TextUnformatted("Select Band or I-V with stored profiles.");ImGui::EndTabItem();
         }
         if(ImGui::BeginTabItem("Recorder")){Recorder();ImGui::EndTabItem();}
@@ -2274,7 +2307,7 @@ void Panel::GenerationRecombination() {
     if(grFollow && !iv.points.empty()) {
         ImGui::SameLine();ImGui::SetNextItemWidth(std::max(100.f,ImGui::GetContentRegionAvail().x));
         {const auto &pts=iv.points;const int sel=std::clamp(device.selectedBias,0,int(pts.size())-1);char fmt[64];std::snprintf(fmt,sizeof(fmt),"%.4g V  (#%%d)",pts[sel].voltage_V);
-        int bias=sel;if(ImGui::SliderInt("##point",&bias,0,int(pts.size())-1,fmt))Do(Cmd::SelectBias::Make(bias));}
+        int bias=sel;if(BoundIndex("##point",bias,"selection.bias_index",int(pts.size())-1,fmt))Do(Cmd::SelectBias::Make(bias));}
     }
     if(!grFollow) {
         grBias["voltage_V"]=device.biasVoltage_V;

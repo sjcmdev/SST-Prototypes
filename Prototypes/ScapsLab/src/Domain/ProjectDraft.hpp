@@ -21,15 +21,16 @@ struct ProjectDraft {
     std::map<std::string,nlohmann::json> extensions;
     std::shared_ptr<const DraftFileData> file;
     std::set<std::string> profileFields; // explicit scalars; profile root marks a replacement with authoritative presence
+    std::vector<std::string> importWarnings; // transient diagnostics; never written into the project
 };
 using ProjectValue = std::variant<std::monostate,bool,std::int64_t,double,std::string,
     scaps_core::ConstantsMode,scaps_core::MobilityTemperatureModel,scaps_core::CarrierStatistics,
     scaps_core::RadiativeLimitMode,scaps_core::TrapChargeType,scaps_core::DefectEnergyReference,
     scaps_core::GradingLaw,scaps_core::MetastableProcess>;
 // File/Python adapters. Runtime edits and jobs use ProjectDraft directly.
-[[nodiscard]] std::shared_ptr<const ProjectDraft> DraftFromDocument(const nlohmann::json&);
+[[nodiscard]] std::shared_ptr<const ProjectDraft> DraftFromDocument(const nlohmann::json&,bool imported=false);
 [[nodiscard]] nlohmann::json DraftDocument(const ProjectDraft&);
-[[nodiscard]] std::shared_ptr<const ProjectDraft> DraftFromProject(scaps_core::DeviceProject);
+[[nodiscard]] std::shared_ptr<const ProjectDraft> DraftFromProject(scaps_core::DeviceProject,bool imported=false);
 [[nodiscard]] std::shared_ptr<const ProjectDraft> PatchDraft(const ProjectDraft&,const nlohmann::json& patch,const nlohmann::json& pointerSet=nlohmann::json::array());
 nlohmann::json IlluminationDocument(const scaps_core::Illumination&);
 void ValidateDraft(const ProjectDraft&);
