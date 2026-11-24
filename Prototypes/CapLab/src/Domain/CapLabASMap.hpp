@@ -18,6 +18,7 @@ inline void BuildASMapGraph(Project &p, const Json &request) {
     if (policy=="measured" && request.contains("frequency_Hz")) throw std::runtime_error("Select interpolate_log_f explicitly to use frequency_Hz.");
     struct Row {pl::Id id; double temperature; std::vector<double> f,z;};
     std::vector<Row> rows;
+    std::vector<AnalysisMeasurementData> snapshots;
     Json record{{"inputs",Json::array()},{"analysis_ids",Json::array()},{"diagnostics",Json::array()},
         {"plot_type",request.at("plot_type")},{"grid_policy",policy},{"requested_view",view}};
     std::set<pl::Id> seen;
@@ -28,23 +29,23 @@ inline void BuildASMapGraph(Project &p, const Json &request) {
         const auto id=value.get<pl::Id>();
         if (!seen.insert(id).second) throw std::runtime_error("Duplicate measurement_id.");
         auto m=AnalysisMeasurement(p,id);
-        if (m.at("kind")!="FrequencySweep") throw std::runtime_error("AS maps require frequency sweeps.");
-        if (sample && (m.at("sample_id")!=sample || m.value("bias_V",Json(nullptr))!=bias))
+        if (m.metadata.at("kind")!="FrequencySweep") throw std::runtime_error("AS maps require frequency sweeps.");
+        if (sample && (m.metadata.at("sample_id")!=sample || m.metadata.value("bias_V",Json(nullptr))!=bias))
             throw std::runtime_error("Select one sample and one bias for an AS temperature series.");
-        sample=m.at("sample_id"); bias=m.value("bias_V",Json(nullptr));
-        if (!m.at("temperature_K").is_number() || !std::isfinite(m.at("temperature_K").get<double>()) || m.at("temperature_K").get<double>()<=0)
+        sample=m.metadata.at("sample_id"); bias=m.metadata.value("bias_V",Json(nullptr));
+        if (!m.metadata.at("temperature_K").is_number() || !std::isfinite(m.metadata.at("temperature_K").get<double>()) || m.metadata.at("temperature_K").get<double>()<=0)
             throw std::runtime_error("AS maps require confirmed positive temperature_K for every measurement.");
         auto column=[&](const char *name) {
-            const auto names=m.at("names").get<std::vector<std::string>>();
+            const auto names=m.metadata.at("names").get<std::vector<std::string>>();
             auto it=std::find(names.begin(),names.end(),name);
             if (it==names.end()) throw std::runtime_error(std::string("AS measurement lacks ")+name);
             std::vector<double> out;
-            for (const auto &v:m.at("columns").at(std::distance(names.begin(),it))) out.push_back(v.is_null()?nan:v.get<double>());
+            out=*m.columns.at(std::distance(names.begin(),it));
             return out;
         };
         auto f=column("f");
         std::vector<double> z;
-        const std::string variant=m.at("variant");
+        const std::string variant=m.metadata.at("variant");
         if (variant=="ReZ_ImZ") {
             auto re=column("ReZ"),im=column("ImZ");
             for (std::size_t i=0;i<f.size();++i) {
@@ -66,12 +67,12 @@ inline void BuildASMapGraph(Project &p, const Json &request) {
         std::vector<std::size_t> order(f.size()); std::iota(order.begin(),order.end(),0);
         for (double v:f) if (!std::isfinite(v) || v<=0) throw std::runtime_error("AS frequency_Hz must be finite and positive.");
         std::sort(order.begin(),order.end(),[&](auto a,auto b) {return f[a]<f[b];});
-        Row row{id,m.at("temperature_K"),{}, {}};
+        Row row{id,m.metadata.at("temperature_K"),{}, {}};
         for (auto i:order) {
             if (!row.f.empty() && row.f.back()==f[i]) throw std::runtime_error("Duplicate AS frequency_Hz.");
             row.f.push_back(f[i]); row.z.push_back(std::isfinite(z[i])?z[i]:nan);
         }
-        rows.push_back(std::move(row)); record["inputs"].push_back(std::move(m));
+        rows.push_back(std::move(row)); record["inputs"].push_back(m.metadata);snapshots.push_back(std::move(m));
     }
     if (rows.size()<2) throw std::runtime_error("Select at least two AS temperatures.");
     std::sort(rows.begin(),rows.end(),[](const auto &a,const auto &b) {return a.temperature<b.temperature;});
@@ -149,7 +150,7 @@ inline void BuildASMapGraph(Project &p, const Json &request) {
         append(axes.spec.z.label,std::move(x),std::move(y),std::move(z),rows.front().f.size(),{});
     }
     p.engine->change(name,std::move(objects)).apply(*p.engine);
-    p.graph=graph; record["graph_id"]=graph; p.comparisons.push_back(std::move(record));
+    p.graph=graph; record["graph_id"]=graph; p.analysisInputs[graph]=std::move(snapshots); p.comparisons.push_back(std::move(record));
     Validate(p);
 }
 }

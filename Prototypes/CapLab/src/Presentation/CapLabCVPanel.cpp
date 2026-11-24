@@ -74,8 +74,8 @@ void CapLabPrototypePanel::RenderAnalysis() {
             if (source==0) { sst::ui::widgets::Double("AS bias (V)", &bias, .01f, "%.6g"); options["as_bias_V"]=bias; }
         }
         if (ImGui::TreeNode("Point mask (unchecked = excluded)")) {
-            for (const auto &row : m.at("row_ids")) {
-                const auto id=row.get<pl::Id>(); bool included=!masked.contains(id);
+            for (const auto &row : *m.rowIds) {
+                const auto id=row; bool included=!masked.contains(id);
                 if (sst::ui::widgets::Checkbox(std::to_string(id).c_str(), &included)) { if (included) masked.erase(id); else masked.insert(id); }
             }
             ImGui::TreePop();

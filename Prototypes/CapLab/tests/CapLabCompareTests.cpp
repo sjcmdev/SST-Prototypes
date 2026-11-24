@@ -11,9 +11,9 @@
 #include <cstdlib>
 
 namespace SST::Prototypes::CapLab {
-static Json PlotSpec() {
-    return {{"name","C-V"},{"x_label","Voltage (V)"},{"y_label","Capacitance (F)"},
-        {"curves",Json::array({{{"name","CV"},{"x",{0.,1.}},{"y",{1e-9,2e-9}}}})}};
+static AnalysisPlotData PlotSpec() {
+    AnalysisPlotData p;p.name="C-V";p.xLabel="Voltage (V)";p.yLabel="Capacitance (F)";
+    AnalysisCurveData curve;curve.name="CV";curve.x={0.,1.};curve.y={1e-9,2e-9};p.curves.push_back(std::move(curve));return p;
 }
 TEST(CapLabCompare, ImportNeverAppendsFrequencyToVoltageGraph) {
     auto p=FixtureProject(); const auto cf=p.graph;

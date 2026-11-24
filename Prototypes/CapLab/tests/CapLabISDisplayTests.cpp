@@ -21,7 +21,7 @@ TEST(CapLabISDisplay, ModelOnlyPlotAndControlsRenderWithoutMeasurementOrIdConfli
     auto& p=workflow.Document().project;
     EditCircuit(p,{{"action","create"},{"sample_name","Simulation"},{"name","RC"},{"topology","R0-C0"}});
     JobContext context({}, {}, {}, {}, [] {return false;});
-    AppendAnalysis(p,SimulateIS(nullptr,p.circuits[0],{{"frequency_Hz",{1.,10.,100.}},
+    AppendAnalysis(p,SimulateIS(AnalysisMeasurementData{},p.circuits[0],{{"frequency_Hz",{1.,10.,100.}},
         {"temperature_K",300.},{"bias_V",0.}},context));
     CapLabPrototypePanel panel(&workflow,commands,CapLabPrototypePanel::View::Plot);
     for (int frame=0;frame<3;++frame) {

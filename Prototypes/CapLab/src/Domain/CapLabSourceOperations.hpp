@@ -31,8 +31,8 @@ inline Json ReplaceMeasurement(Project &p, pl::Id id, const Json &preview) {
         for (auto cid:p.engine->children(id)) if (std::find(legacyColumns.begin(),legacyColumns.end(),cid)==legacyColumns.end()) {
             const auto &object=p.engine->object(cid);
             if (const auto *column=std::get_if<pl::Column>(&object.data)) {
-                legacyColumns.push_back(cid); old["names"].push_back(object.name); old["units"].push_back(column->units);
-                old["columns"].push_back(std::get<std::vector<double>>(column->values));
+                legacyColumns.push_back(cid); old.metadata["names"].push_back(object.name); old.metadata["units"].push_back(column->units);
+                old.columns.emplace_back(p.engine->objects().at(cid),&std::get<std::vector<double>>(column->values));
             }
         }
     }
@@ -40,20 +40,20 @@ inline Json ReplaceMeasurement(Project &p, pl::Id id, const Json &preview) {
     const auto block=origin.value("block_index",std::size_t{0});
     if (block>=items.size()) throw std::runtime_error("Source block no longer exists.");
     const auto &m=items.at(block);
-    if (m.at("kind")!=old.at("kind") || m.at("variant")!=old.at("variant") || m.at("names")!=old.at("names") || m.at("units")!=old.at("units"))
+    if (m.at("kind")!=old.metadata.at("kind") || m.at("variant")!=old.metadata.at("variant") || m.at("names")!=old.metadata.at("names") || m.at("units")!=old.metadata.at("units"))
         throw std::runtime_error("Re-import changed measurement schema; import as a new measurement instead.");
     auto table=MeasurementTable(m);
     auto object=p.engine->object(id);
     auto &sheet=std::get<pl::Worksheet>(object.data);
     const auto originalRows=sheet.rows;
-    const bool gridChanged=old.at("source_rows")!=m.at("source_rows") || old.at("columns").at(0)!=m.at("columns").at(0);
+    const bool gridChanged=old.metadata.at("source_rows")!=m.at("source_rows") || *old.columns.at(0)!=m.at("columns").at(0).get<std::vector<double>>();
     if (gridChanged) {
         sheet.rows.clear();
         for (std::size_t i=0;i<m.at("source_rows").size();++i) sheet.rows.push_back(p.engine->reserveId());
         sheet.masks.clear(); sheet.filters.clear(); sheet.filterFileText.clear(); sheet.fileFilters.clear(); sheet.visibleRows.clear();
     }
     auto meta=m; meta.erase("columns");
-    meta["normalization_area_m2"]=origin.value("normalization_area_m2",old.at("area_m2"));
+    meta["normalization_area_m2"]=origin.value("normalization_area_m2",old.metadata.at("area_m2"));
     for (auto key:{"groups","sweep_segments"}) if (meta.contains(key)) for (auto &group:meta[key]) {
         Json rows=Json::array(); for (const auto &r:group.at("rows")) rows.push_back(sheet.rows.at(r.get<std::size_t>()));
         group.erase("rows"); group["row_ids"]=std::move(rows);
@@ -68,8 +68,8 @@ inline Json ReplaceMeasurement(Project &p, pl::Id id, const Json &preview) {
     Json cells=Json::array();
     for (std::size_t i=0;i<columns.size();++i) {
         auto column=p.engine->object(columns[i]);
-        for (std::size_t r=0;r<std::max(old.at("columns").at(i).size(),m.at("columns").at(i).size());++r) {
-            const auto before=r<old.at("columns").at(i).size() ? old.at("columns").at(i).at(r) : Json(nullptr);
+        for (std::size_t r=0;r<std::max(old.columns.at(i)->size(),m.at("columns").at(i).size());++r) {
+            const auto before=r<old.columns.at(i)->size() ? Json(old.columns.at(i)->at(r)) : Json(nullptr);
             const auto after=r<m.at("columns").at(i).size() ? m.at("columns").at(i).at(r) : Json(nullptr);
             if (before!=after) {
                 ++changed;
@@ -85,7 +85,7 @@ inline Json ReplaceMeasurement(Project &p, pl::Id id, const Json &preview) {
         if (!temperature.is_null()) name+=", T = "+temperature.dump()+" K";
         return name;
     };
-    const auto oldLabel=label(origin.at("source"),old.at("temperature_K")), newLabel=label(m.at("source"),m.at("temperature_K"));
+    const auto oldLabel=label(origin.at("source"),old.metadata.at("temperature_K")), newLabel=label(m.at("source"),m.at("temperature_K"));
     if (oldLabel!=newLabel) for (const auto &[key,value]:p.engine->objects())
         if (const auto *plot=std::get_if<pl::Plot>(&value->data); plot && plot->worksheet==id && plot->x==columns[0] && plot->y==columns[1] && value->name==oldLabel) {
             auto object=*value; object.name=newLabel; objects.push_back(std::move(object));
@@ -94,7 +94,7 @@ inline Json ReplaceMeasurement(Project &p, pl::Id id, const Json &preview) {
     bool found=false;
     for (auto &item:p.measurements) if (item.at("id")==id) {item["metadata"]=meta; found=true;}
     if (!found) {
-        p.measurements.push_back({{"id",id},{"sample_id",old.at("sample_id")},{"columns",columns},{"metadata",meta}});
+        p.measurements.push_back({{"id",id},{"sample_id",old.metadata.at("sample_id")},{"columns",columns},{"metadata",meta}});
         std::erase_if(p.sweeps,[&](const auto &s) {return s.id==id;});
     }
     if (gridChanged) {
@@ -132,6 +132,7 @@ inline void RelinkSource(Project &p, pl::Id id, const Json &preview) {
     };
     for (auto &m:p.measurements) relink(m["metadata"]);
     relink(p.analyses); relink(p.imports); relink(p.historical); relink(p.comparisons);
+    for (auto &[record,inputs]:p.analysisInputs) for (auto &input:inputs) relink(input.metadata);
     std::vector<pl::Object> objects;
     for (const auto &[key,value]:p.engine->objects()) if (const auto *sheet=std::get_if<pl::Worksheet>(&value->data)) {
         auto object=*value; auto &source=std::get<pl::Worksheet>(object.data).source;

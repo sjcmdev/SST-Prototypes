@@ -9,7 +9,7 @@ TEST(CapLabTypedBoundary, FreshnessMatchesPackedSnapshotWithoutPackingCurrentCol
     const auto input=AnalysisMeasurement(p,id);
     auto check=[&] {
         bool sameSample=false;
-        EXPECT_EQ(SameAnalysisMeasurement(p,input,sameSample),AnalysisMeasurement(p,id)==input);
+        EXPECT_EQ(SameAnalysisMeasurement(p,input,sameSample),MeasurementJson(AnalysisMeasurement(p,id))==MeasurementJson(input));
         EXPECT_TRUE(sameSample);
     };
     check();
@@ -18,7 +18,7 @@ TEST(CapLabTypedBoundary, FreshnessMatchesPackedSnapshotWithoutPackingCurrentCol
     std::get<std::vector<double>>(std::get<pl::Column>(object.data).values)[0]*=2;
     p.engine->change("Edit analysis input",{std::move(object)}).apply(*p.engine);
     check();
-    auto missingRow=input; missingRow["row_ids"].erase(missingRow["row_ids"].begin());
+    auto missingRow=input;auto rows=std::make_shared<std::vector<pl::Id>>(*input.rowIds);rows->erase(rows->begin());missingRow.rowIds=rows;
     bool sameSample=false;
     EXPECT_FALSE(SameAnalysisMeasurement(p,missingRow,sameSample));
 }
@@ -109,5 +109,32 @@ TEST(CapLabTypedBoundary, PreviewReturnsDataWithoutSerializedTableMetadata) {
     ASSERT_EQ(invalid.sourcePreviews.size(),1);
     EXPECT_FALSE(invalid.sourcePreviews[0].value);
     EXPECT_TRUE(invalid.sourcePreviews[0].error);
+}
+TEST(CapLabTypedBoundary, MeasurementMatchesFrozenValuesAndSharesColumnOwnership) {
+    auto p=FixtureProject();const auto input=AnalysisMeasurement(p,p.sweeps[0].id);
+    ASSERT_EQ(input.columns.size(),3u);ASSERT_TRUE(input.rowIds);EXPECT_EQ(input.rowIds->size(),40u);
+    EXPECT_DOUBLE_EQ(input.columns[0]->front(),100.);EXPECT_DOUBLE_EQ(input.columns[1]->front(),8.8601e-10);EXPECT_DOUBLE_EQ(input.columns[2]->front(),134160.);
+    const auto &original=std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(p.sweeps[0].capacitance).data).values);
+    EXPECT_EQ(input.columns[1]->data(),original.data());EXPECT_FALSE(input.metadata.contains("columns"));EXPECT_FALSE(input.metadata.contains("row_ids"));
+    auto snapshot=CloneProject(p);auto object=p.engine->object(p.sweeps[0].capacitance);
+    std::get<std::vector<double>>(std::get<pl::Column>(object.data).values)[0]=42.;p.engine->change("Edit",{std::move(object)}).apply(*p.engine);
+    EXPECT_DOUBLE_EQ(input.columns[1]->front(),8.8601e-10);EXPECT_DOUBLE_EQ(AnalysisMeasurement(snapshot,snapshot.sweeps[0].id).columns[1]->front(),8.8601e-10);
+}
+TEST(CapLabTypedBoundary, AnalysisInputsStayTypedAcrossSaveLoadCloneAndFreshness) {
+    auto p=FixtureProject();const auto m=AnalysisMeasurement(p,p.sweeps[0].id);JobContext context({},{},{},{},[]{return false;});
+    Json circuit{{"id",p.engine->reserveId()},{"sample_id",p.samples[0].id},{"name","R"},{"schematic",CircuitJson(ccui::importString("R0"))}};
+    p.circuits.push_back(circuit);auto result=SimulateIS(m,circuit,{{"temperature_K",100.},{"bias_V",0.}},context);
+    ASSERT_EQ(result.inputs.size(),1u);EXPECT_EQ(result.inputs[0].columns[0],m.columns[0]);ASSERT_FALSE(result.plots.empty());
+    AppendAnalysis(p,std::move(result));const auto id=p.analyses[0].at("id").get<pl::Id>();
+    EXPECT_FALSE(p.analyses[0]["inputs"][0].contains("columns"));EXPECT_EQ(p.analysisInputs.at(id)[0].columns[0],m.columns[0]);
+    p.analyses[0]["settings"]["extension"]={{"measurements",Json::array({{{"id",p.sweeps[0].id},{"columns",{{42.}}},{"row_ids",{7u}}}})}};
+    const auto text=Serialize(p);auto loaded=Parse(text);EXPECT_EQ(Serialize(loaded),text);
+    EXPECT_EQ(loaded.analyses[0]["settings"]["extension"],p.analyses[0]["settings"]["extension"]);EXPECT_EQ(Serialize(CloneProject(p)),text);
+    bool sameSample=false;EXPECT_TRUE(SameAnalysisMeasurement(loaded,loaded.analysisInputs.at(id)[0],sameSample));EXPECT_TRUE(sameSample);
+    EXPECT_EQ(Json::parse(text)["analyses"][0]["inputs"][0],MeasurementJson(m));
+    auto conflict=Json::parse(text);auto source=conflict["analyses"][0];source["inputs"][0]["columns"][0][0]=42.;
+    conflict["analyses"][0]["source_analyses"]=Json::array({source});
+    EXPECT_THROW(ProjectFromJson(conflict),std::runtime_error);
+    loaded.samples[0].area_m2=2e-6;RefreshAnalyses(loaded);EXPECT_EQ(loaded.analyses[0]["status"],"stale");
 }
 }

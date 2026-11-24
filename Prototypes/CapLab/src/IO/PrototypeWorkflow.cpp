@@ -87,7 +87,8 @@ namespace SST::Prototypes::CapLab
         else if (operation == Operation::Analyze)
         {
             auto p = std::move(input);
-            Json measurement;
+            AnalysisMeasurementData measurement;
+            std::vector<AnalysisMeasurementData> measurements,pointInputs;
             if (analysisOptions.at("type")=="WalterSaved") {
                 bool found=false;
                 for (const auto &h : p.historical) if (h.at("sample_id")==analysisOptions.at("sample_id")) {
@@ -96,16 +97,15 @@ namespace SST::Prototypes::CapLab
                 }
                 if (!found) throw std::runtime_error("Missing historical Walter record");
             } else if (analysisOptions.at("type")=="Walter") {
-                analysisOptions["measurements"]=Json::array();
                 const auto ids=analysisOptions.contains("measurement_ids") ? analysisOptions.at("measurement_ids") : Json::array({analysisOptions.at("measurement_id")});
                 std::set<pl::Id> seen;
                 for (const auto &id : ids) {
                     const auto mid=id.get<pl::Id>();
                     if (!seen.insert(mid).second) throw std::runtime_error("Duplicate Walter measurement");
-                    analysisOptions["measurements"].push_back(AnalysisMeasurement(p,mid));
+                    measurements.push_back(AnalysisMeasurement(p,mid));
                 }
                 if (ids.empty()) throw std::runtime_error("Select Walter measurements");
-                measurement=analysisOptions.at("measurements").at(0);
+                measurement=measurements.front();
                 analysisOptions["source_analyses"]=Json::array();
                 for (const auto *key : {"cv_fit_id","arrhenius_fit_id","dlcp_fit_id"}) if (analysisOptions.contains(key)) {
                     bool found=false;
@@ -120,23 +120,23 @@ namespace SST::Prototypes::CapLab
                 bool found=false;
                 for (const auto &d : p.defects) if (d.at("id")==analysisOptions.at("defect_id")) { analysisOptions["defect"]=d; found=true; }
                 if (!found) throw std::runtime_error("Missing defect.");
-                analysisOptions["point_inputs"]=Json::array(); std::set<pl::Id> seen;
+                std::set<pl::Id> seen;
                 for (const auto &point : analysisOptions.at("defect").at("points"))
                     if (point.at("enabled").get<bool>() && !point.at("measurement_id").is_null()) {
                         const auto id=point.at("measurement_id").get<pl::Id>();
                         const auto m=AnalysisMeasurement(p,id);
-                        const auto rows=m.at("row_ids").get<std::vector<pl::Id>>();
+                        const auto &rows=*m.rowIds;
                         const auto row=std::find(rows.begin(),rows.end(),point.at("row_id").get<pl::Id>());
-                        const auto names=m.at("names").get<std::vector<std::string>>();
+                        const auto names=m.metadata.at("names").get<std::vector<std::string>>();
                         const auto f=std::find(names.begin(),names.end(),"f");
-                        if (row==rows.end() || f==names.end() || m.at("temperature_K")!=point.at("temperature_K") ||
-                            m.at("columns").at(std::distance(names.begin(),f)).at(std::distance(rows.begin(),row))!=point.at("frequency_Hz"))
+                        if (row==rows.end() || f==names.end() || m.metadata.at("temperature_K")!=point.at("temperature_K") ||
+                            m.columns.at(std::distance(names.begin(),f))->at(std::distance(rows.begin(),row))!=point.at("frequency_Hz"))
                             throw std::runtime_error("Point input changed; reassign the point before fitting.");
-                        if (seen.insert(id).second) analysisOptions["point_inputs"].push_back(m);
+                        if (seen.insert(id).second) pointInputs.push_back(m);
                     }
             } else if (analysisOptions.at("type")!="Circuit" || analysisOptions.value("fit",false) || analysisOptions.contains("measurement_id"))
                 measurement=AnalysisMeasurement(p,analysisOptions.at("measurement_id").get<pl::Id>());
-            Json xd;
+            AnalysisMeasurementData xd;
             if (analysisOptions.at("type")=="Walter" && analysisOptions.value("xd_source",std::string("CV"))=="CV" &&
                 !analysisOptions.contains("xd_measurement_id") && analysisOptions.contains("cv_fit_id"))
                 for (const auto &a : analysisOptions.at("source_analyses")) if (a.at("type")=="CV") {
@@ -149,30 +149,30 @@ namespace SST::Prototypes::CapLab
                 for (const auto &a : analysisOptions.at("source_analyses")) if (a.at("type")=="DLCPPolynomial")
                     analysisOptions["xd_measurement_id"]=a.at("inputs").at(0).at("id");
             if (analysisOptions.contains("xd_measurement_id")) xd = AnalysisMeasurement(p,analysisOptions.at("xd_measurement_id").get<pl::Id>());
-            Json result;
+            AnalysisResult result;
             if (analysisOptions.at("type")=="Circuit") {
                 const auto it=std::find_if(p.circuits.begin(),p.circuits.end(),[&](const auto &c) {return c.at("id")==analysisOptions.at("circuit_id");});
                 if (it==p.circuits.end()) throw std::runtime_error("Missing circuit");
                 if (analysisOptions.value("fit",false)) {
                     result=FitIS(measurement,*it,analysisOptions,context);
-                    *it=result.at("circuit");
+                    *it=result.record.at("circuit");
                     RefreshAnalyses(p);
                 } else {
                     result=SimulateIS(measurement,*it,analysisOptions,context);
-                    if (measurement.is_null()) {
+                    if (measurement.empty()) {
                         auto overlay=[&](pl::Id id) {
                             context.ThrowIfCancellationRequested();
                             const auto m=AnalysisMeasurement(p,id);
-                            if (m.at("sample_id")==it->at("sample_id") && m.at("kind")=="FrequencySweep" &&
-                                (m.at("variant")=="ReZ_ImZ" || m.at("variant")=="C_G" || m.at("variant")=="Cp_Rp"))
+                            if (m.metadata.at("sample_id")==it->at("sample_id") && m.metadata.at("kind")=="FrequencySweep" &&
+                                (m.metadata.at("variant")=="ReZ_ImZ" || m.metadata.at("variant")=="C_G" || m.metadata.at("variant")=="Cp_Rp"))
                                 OverlayISMeasurement(result,m);
                         };
                         for (const auto &m : p.sweeps) overlay(m.id);
                         for (const auto &m : p.measurements) overlay(m.at("id"));
                     }
                 }
-            } else result = ReadAnalysis(measurement,analysisOptions,xd,context);
-            result["input_revision"] = analysisOptions.at("input_revision");
+            } else result = ReadAnalysis(measurement,analysisOptions,xd,measurements,pointInputs,p.analysisInputs,context);
+            result.record["input_revision"] = analysisOptions.at("input_revision");
             AppendAnalysis(p,std::move(result)); opened = std::move(p);
         }
         else if (operation == Operation::Save)
@@ -610,7 +610,7 @@ void CapLabWorkflow::ReconcileSelection() {
         p.graph=0;
     }
     if (d.selectedMeasurement) {
-        try {d.selectedSample=AnalysisMeasurement(p,d.selectedMeasurement).at("sample_id");}
+        try {d.selectedSample=AnalysisMeasurement(p,d.selectedMeasurement).metadata.at("sample_id");}
         catch (const std::exception &) {d.selectedMeasurement=0; if (d.selectionKind=="measurement") p.graph=0;}
     }
     auto exists=[&](const Json &items,pl::Id id) {return std::any_of(items.begin(),items.end(),[&](const auto &v) {return v.at("id")==id;});};
@@ -620,7 +620,7 @@ void CapLabWorkflow::ReconcileSelection() {
     if (d.selectionKind=="analysis") for (const auto &a:p.analyses) if (a.at("id")==d.selectedAnalysis) d.selectedSample=AnalysisSample(a);
     if (d.selectionKind=="circuit") for (const auto &c:p.circuits) if (c.at("id")==d.selectedCircuit) d.selectedSample=c.at("sample_id");
     if (d.selectionKind=="defect") for (const auto &v:p.defects) if (v.at("id")==d.selectedDefect) d.selectedSample=v.at("sample_id");
-    if (d.selectedMeasurement && AnalysisMeasurement(p,d.selectedMeasurement).at("sample_id")!=d.selectedSample) d.selectedMeasurement=0;
+    if (d.selectedMeasurement && AnalysisMeasurement(p,d.selectedMeasurement).metadata.at("sample_id")!=d.selectedSample) d.selectedMeasurement=0;
     for (const auto &c:p.circuits) if (c.at("id")==d.selectedCircuit && c.at("sample_id")!=d.selectedSample) d.selectedCircuit=0;
     for (const auto &v:p.defects) if (v.at("id")==d.selectedDefect && v.at("sample_id")!=d.selectedSample) d.selectedDefect=0;
     if (importTargetSample && std::none_of(p.samples.begin(),p.samples.end(),[&](const auto &s) {return s.id==importTargetSample;})) importTargetSample=0;
@@ -636,7 +636,7 @@ void CapLabWorkflow::Select(const Json &request) {
     else if (kind=="sample") {
         for (const auto &s:p.samples) if (s.id==id) sample=id;
     } else if (kind=="measurement") {
-        sample=AnalysisMeasurement(p,id).at("sample_id"); measurement=id;
+        sample=AnalysisMeasurement(p,id).metadata.at("sample_id"); measurement=id;
         for (auto it=p.analyses.rbegin();it!=p.analyses.rend();++it)
             for (const auto &input:it->at("inputs")) if (input.at("id")==id && !graph && !it->at("graphs").empty()) graph=it->at("graphs").at(0);
         if (!graph) for (const auto &[oid,o]:p.engine->objects()) if (const auto *plot=std::get_if<pl::Plot>(&o->data); plot && plot->worksheet==id) graph=p.engine->object(o->parent).parent;
@@ -648,9 +648,9 @@ void CapLabWorkflow::Select(const Json &request) {
                 p.engine=EditSnapshot().engine;
                 graph=p.engine->reserveId(); const auto layer=p.engine->reserveId();
                 pl::Layer axes; const auto m=AnalysisMeasurement(p,id);
-                axes.spec.x.label=m.at("names").at(0).get<std::string>()+" ["+m.at("units").at(0).get<std::string>()+"]";
-                axes.spec.y.label=m.at("names").at(1).get<std::string>()+" ["+m.at("units").at(1).get<std::string>()+"]";
-                if (m.at("names").at(0)=="f") axes.spec.x.scale=sst::ui::plot::AxisScale::Log10;
+                axes.spec.x.label=m.metadata.at("names").at(0).get<std::string>()+" ["+m.metadata.at("units").at(0).get<std::string>()+"]";
+                axes.spec.y.label=m.metadata.at("names").at(1).get<std::string>()+" ["+m.metadata.at("units").at(1).get<std::string>()+"]";
+                if (m.metadata.at("names").at(0)=="f") axes.spec.x.scale=sst::ui::plot::AxisScale::Log10;
                 auto op=p.engine->change("Measurement plot",{{graph,p.engine->root(),"Measurement "+std::to_string(id),0,pl::Graph{}},
                     {layer,graph,"Measured",0,axes},{p.engine->reserveId(),layer,"Measured",0,pl::Plot{id,columns[0],columns[1]}}});
                 op.apply(*p.engine); d.Changed(); d.identityHighWater=NextEntityId(*p.engine);

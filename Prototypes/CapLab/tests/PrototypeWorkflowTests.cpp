@@ -131,7 +131,7 @@ TEST(CapLabDefects, CommandsUndoValidationAndPersistentReferences) {
     const auto sample=p.samples[0].id, mid=p.sweeps[0].id;
     ASSERT_TRUE(execute({{"action","create"},{"sample_id",sample},{"name","D1"}}));
     const auto did=p.defects[0].at("id").get<pl::Id>();
-    const auto row=AnalysisMeasurement(p,mid).at("row_ids").at(0);
+    const auto row=MeasurementJson(AnalysisMeasurement(p,mid)).at("row_ids").at(0);
     ASSERT_TRUE(execute({{"action","add"},{"defect_id",did},{"point",{{"measurement_id",mid},{"row_id",row},
         {"temperature_K",1},{"frequency_Hz",1},{"provenance","AS candidate approved"}}}}));
     EXPECT_EQ(p.defects[0]["points"][0]["temperature_K"],100);

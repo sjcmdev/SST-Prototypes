@@ -9,8 +9,8 @@
 
 namespace SST::Prototypes::CapLab {
 inline std::string CompareStatus(const Project &p, const Json &record) {
-    for (const auto &input:record.at("inputs")) {
-        try {if (AnalysisMeasurement(p,input.at("id"))!=input) return "stale";}
+    for (const auto &input:p.analysisInputs.at(record.at("graph_id").get<pl::Id>())) {
+        try {bool sameSample=false;if (!SameAnalysisMeasurement(p,input,sameSample)) return "stale";}
         catch (const std::exception &) {return "missing_input";}
     }
     for (const auto &id:record.at("analysis_ids")) {
@@ -101,24 +101,26 @@ inline void BuildCompareGraph(Project &p, const Json &request, const std::option
     }
     const std::string type=request.value("plot_type",std::string("C-f"));
     if (type=="AS C(f,T)" || type=="AS G/omega(f,T)") {BuildASMapGraph(p,request); return;}
-    Json spec{{"name",request.value("name",request.value("measurement_ids",Json::array()).empty() ? std::string("Stored results comparison") : type+" comparison")},{"curves",Json::array()}};
+    AnalysisPlotData spec;spec.name=request.value("name",request.value("measurement_ids",Json::array()).empty() ? std::string("Stored results comparison") : type+" comparison");
+    bool hasAxes=false;
     Json record{{"inputs",Json::array()},{"analysis_ids",Json::array()}};
-    struct Curve {std::string sample; double temperature; pl::Id id; Json data; sst::ui::plot::Color color;};
+    std::vector<AnalysisMeasurementData> snapshots;
+    struct Curve {std::string sample; double temperature; pl::Id id; AnalysisCurveData data; sst::ui::plot::Color color;};
     std::vector<Curve> curves;
     std::set<pl::Id> seen;
     auto axes=[&](const std::string &x,const std::string &y,bool logX=false,bool logY=false,bool equal=false) {
-        const Json config{{"x_label",x},{"y_label",y},{"log_x",logX},{"log_y",logY},{"equal_aspect",equal}};
-        if (spec.contains("x_label")) for (const auto &[key,value]:config.items())
-            if (spec.at(key)!=value) throw std::runtime_error("Incompatible comparison axes; select graphs with the same quantities and scales.");
-        spec.update(config);
+        if(hasAxes && (spec.xLabel!=x || spec.yLabel!=y || spec.logX!=logX || spec.logY!=logY || spec.equalAspect!=equal))
+            throw std::runtime_error("Incompatible comparison axes; select graphs with the same quantities and scales.");
+        spec.xLabel=x;spec.yLabel=y;spec.logX=logX;spec.logY=logY;spec.equalAspect=equal;hasAxes=true;
     };
-    auto append=[&](pl::Id sample,Json temperature,pl::Id id,Json curve,const std::string &suffix,pl::Id source=0) {
+    auto append=[&](pl::Id sample,Json temperature,pl::Id id,AnalysisCurveData curve,const std::string &suffix,pl::Id source=0) {
         const auto s=std::find_if(p.samples.begin(),p.samples.end(),[&](const auto &s) {return s.id==sample;});
         if (s==p.samples.end()) throw std::runtime_error("Missing comparison sample.");
         std::string label=s->name;
         if (temperature.is_number()) {char text[40]; std::snprintf(text,sizeof(text),", %.6g K",temperature.get<double>()); label+=text;}
-        curve["name"]=label+(source ? " / "+suffix : "");
-        curve["temperature_K"]=temperature;
+        curve.name=label+(source ? " / "+suffix : "");
+        curve.temperature_K=Optional(temperature);
+        if(temperature.is_number_integer())curve.integerTemperature=temperature.get<std::uint64_t>();
         auto color=SampleTemperatureColor(sample,temperature);
         const auto colors=request.value("source_colors",Json::object());
         if (!colors.is_object()) throw std::runtime_error("source_colors must map source IDs to RGBA arrays.");
@@ -133,23 +135,23 @@ inline void BuildCompareGraph(Project &p, const Json &request, const std::option
         const auto id=value.get<pl::Id>();
         if (!seen.insert(id).second) throw std::runtime_error("Duplicate measurement_id.");
         const auto m=AnalysisMeasurement(p,id);
-        record["inputs"].push_back(m);
+        record["inputs"].push_back(m.metadata);snapshots.push_back(m);
         auto column=[&](const char *name) {
-            const auto names=m.at("names").get<std::vector<std::string>>();
+            const auto names=m.metadata.at("names").get<std::vector<std::string>>();
             const auto it=std::find(names.begin(),names.end(),name);
             if (it==names.end()) throw std::runtime_error(std::string("Selected measurement lacks ")+name+"; use an existing analysis graph for derived results.");
-            return m.at("columns").at(std::distance(names.begin(),it)).get<std::vector<double>>();
+            return *m.columns.at(std::distance(names.begin(),it));
         };
         std::vector<double> x,y;
-        const std::string kind=m.at("kind");
+        const std::string kind=m.metadata.at("kind");
         if (type=="C-V" || type=="Mott-Schottky" || type=="N_CV(W)" || type=="N_DLCP(W)") {
             if (kind!="CVSweep" && kind!="DLCPProfile" && kind!="CV-derived") throw std::runtime_error("Select a CV sweep or imported profile.");
             if (type=="C-V") {x=column("V"); y=column(kind=="CVSweep" ? "C" : "C0"); axes("Voltage (V)","Capacitance (F)");}
             else if (type=="Mott-Schottky") {
                 x=column("V");
                 if (kind=="CVSweep") {
-                    if (m.at("area_m2").is_null()) throw std::runtime_error("Mott-Schottky requires sample area_m2.");
-                    y=column("C"); const double area=m.at("area_m2");
+                    if (m.metadata.at("area_m2").is_null()) throw std::runtime_error("Mott-Schottky requires sample area_m2.");
+                    y=column("C"); const double area=m.metadata.at("area_m2");
                     for (auto &v:y) v=v!=0 ? area*area/(v*v) : std::numeric_limits<double>::quiet_NaN();
                 } else y=column("A2_C02");
                 axes("Voltage (V)","A2/C2 (m4/F2)");
@@ -161,16 +163,16 @@ inline void BuildCompareGraph(Project &p, const Json &request, const std::option
         } else {
             if (kind!="FrequencySweep") throw std::runtime_error("Select a frequency sweep.");
             const auto f=column("f");
-            if (type=="C-f" && m.at("variant")!="ReZ_ImZ") {x=f; y=column("C"); axes("Frequency (Hz)","Capacitance (F)",true);}
+            if (type=="C-f" && m.metadata.at("variant")!="ReZ_ImZ") {x=f; y=column("C"); axes("Frequency (Hz)","Capacitance (F)",true);}
             else {
                 std::vector<std::complex<double>> z;
-                if (m.at("variant")=="ReZ_ImZ") {
+                if (m.metadata.at("variant")=="ReZ_ImZ") {
                     auto re=column("ReZ"),im=column("ImZ");
                     for (std::size_t i=0;i<f.size();++i) z.emplace_back(re[i],im[i]);
                 } else {
-                    auto c=column("C"),g=m.at("variant")=="Cp_Rp" ? column("Rp") : column("G");
+                    auto c=column("C"),g=m.metadata.at("variant")=="Cp_Rp" ? column("Rp") : column("G");
                     for (std::size_t i=0;i<f.size();++i) {
-                        if (m.at("variant")=="Cp_Rp") g[i]=sst::physics::parallelConductance(g[i]);
+                        if (m.metadata.at("variant")=="Cp_Rp") g[i]=sst::physics::parallelConductance(g[i]);
                         z.push_back(sst::physics::reciprocalImmittance(sst::physics::parallelAdmittance(f[i],c[i],g[i])));
                     }
                 }
@@ -190,7 +192,8 @@ inline void BuildCompareGraph(Project &p, const Json &request, const std::option
                 else axes("Frequency (Hz)",type=="Bode magnitude" ? "|Z| (Ohm)" : type=="Bode phase" ? "Phase (deg)" : type=="C-f" ? "Capacitance (F)" : "G/omega (F)",true,type=="Bode magnitude");
             }
         }
-        append(m.at("sample_id"),m.value("temperature_K",Json(nullptr)),id,Json{{"x",x},{"y",y}},type);
+        AnalysisCurveData curve;curve.x=std::move(x);curve.y=std::move(y);
+        append(m.metadata.at("sample_id"),m.metadata.value("temperature_K",Json(nullptr)),id,std::move(curve),type);
     }
     Json sourceGraphs=request.value("graph_ids",Json::array());
     seen.clear();
@@ -229,8 +232,8 @@ inline void BuildCompareGraph(Project &p, const Json &request, const std::option
             if (entry.kind!=sst::ui::plot::SeriesKind::Line && entry.kind!=sst::ui::plot::SeriesKind::Scatter && entry.kind!=sst::ui::plot::SeriesKind::LineScatter) throw std::runtime_error("Select a 2D XY graph.");
             std::vector<double> x,y;
             if (entry.data.count) {x.assign(entry.data.x,entry.data.x+entry.data.count); y.assign(entry.data.y,entry.data.y+entry.data.count);}
-            Json curve{{"x",x},{"y",y},
-                {"fit",entry.kind==sst::ui::plot::SeriesKind::Line},{"candidates",entry.kind==sst::ui::plot::SeriesKind::Scatter}};
+            AnalysisCurveData curve;curve.x=std::move(x);curve.y=std::move(y);
+            curve.fit=entry.kind==sst::ui::plot::SeriesKind::Line;curve.candidates=entry.kind==sst::ui::plot::SeriesKind::Scatter;
             auto temperature=t;
             if (analysis->at("type")=="Walter" && curveIndex<analysis->at("spectra").size()) temperature=analysis->at("spectra").at(curveIndex).value("temperature_K",Json(nullptr));
             const auto sheet=std::get<pl::Plot>(p.engine->object(plot).data).worksheet;
@@ -242,12 +245,12 @@ inline void BuildCompareGraph(Project &p, const Json &request, const std::option
     }
     if (curves.empty()) throw std::runtime_error("Select measurements or analysis graphs by ID.");
     std::stable_sort(curves.begin(),curves.end(),[](const auto &a,const auto &b) {return std::tie(a.sample,a.temperature,a.id)<std::tie(b.sample,b.temperature,b.id);});
-    for (const auto &c:curves) spec["curves"].push_back(c.data);
-    p.graph=AnalysisPlot(p,p.samples.front().id,spec);
+    for (auto &c:curves) spec.curves.push_back(std::move(c.data));
+    p.graph=AnalysisPlot(p,p.samples.front().id,std::move(spec));
     const auto layer=p.engine->children(p.graph).front();
     auto axesObject=p.engine->object(layer);
     auto &config=std::get<pl::Layer>(axesObject.data).spec;
-    if (spec.at("log_y").get<bool>()) config.y.scale=sst::ui::plot::AxisScale::Log10;
+    if (spec.logY) config.y.scale=sst::ui::plot::AxisScale::Log10;
     FormatCompareAxes(config);
     std::vector<pl::Object> styles{std::move(axesObject)};
     std::size_t i=0;
@@ -257,7 +260,7 @@ inline void BuildCompareGraph(Project &p, const Json &request, const std::option
         styles.push_back(std::move(object));
     }
     p.engine->change("Comparison styles",std::move(styles)).apply(*p.engine);
-    record["graph_id"]=p.graph; p.comparisons.push_back(std::move(record));
+    record["graph_id"]=p.graph; p.analysisInputs[p.graph]=std::move(snapshots); p.comparisons.push_back(std::move(record));
     Validate(p);
 }
 }

@@ -85,6 +85,19 @@ inline void DuplicateSample(Project &p, pl::Id source, const std::string &name) 
         else if (j.is_array()) { for (auto &v:j) remap(v,key); }
         else if (j.is_number_unsigned() && (key=="id" || key.ends_with("_id") || key.ends_with("_ids") || key=="graphs" || key=="columns" || key=="selections" || key=="plot_browser_settings")) j=mapped(j.get<pl::Id>());
     };
+    const auto snapshots=p.analysisInputs;
+    for(const auto &[oldId,inputs]:snapshots) if(ids.contains(oldId)) {
+        auto remapped=inputs;
+        for(auto &input:remapped) {
+            remap(input.metadata,"");
+            if(input.rowIds) {
+                auto rows=std::make_shared<std::vector<pl::Id>>(*input.rowIds);
+                for(auto &id:*rows)id=mapped(id);
+                input.rowIds=std::move(rows);
+            }
+        }
+        p.analysisInputs[ids.at(oldId)]=std::move(remapped);
+    }
     std::vector<pl::Object> objects;
     for (const auto &[oldId,newId]:ids) if (p.engine->objects().contains(oldId)) {
         auto o=p.engine->object(oldId); o.id=newId; o.parent=mapped(o.parent);
@@ -182,6 +195,15 @@ inline void EditProjectTree(Project &p, const Json &edit) {
             std::erase_if(p.samples,[&](const auto &s) {return s.id==id;});
         } else throw std::runtime_error("Unknown tree action.");
     }
+    std::set<pl::Id> retained;
+    std::function<void(const Json&)> retain=[&](const Json &r) {
+        if(r.is_array()) {for(const auto &v:r)retain(v);return;}
+        if(!r.is_object())return;
+        if(r.contains("inputs") && (r.contains("id") || r.contains("graph_id")))retained.insert(r.at(r.contains("id")?"id":"graph_id").get<pl::Id>());
+        for(const auto &[key,value]:r.items())if(key!="inputs")retain(value);
+    };
+    retain(p.analyses);retain(p.comparisons);
+    std::erase_if(p.analysisInputs,[&](const auto &entry){return !retained.contains(entry.first);});
     RefreshAnalyses(p); Validate(p);
 }
 }

@@ -422,42 +422,6 @@
     },
     {
       "file": "Core/IO/Hdf5/Hdf5Python.cpp",
-      "rule": "text-json",
-      "line": 11,
-      "code": "try { return session.Start(nlohmann::json::parse(request)).dump(); }",
-      "sha256": "43c92c3888761a22565a5960cec647810ecfe502469f0124ca4f206e9af70ea1",
-      "count": 2,
-      "reason": "HDF5 disk/Python adapter, including file interoperability tests."
-    },
-    {
-      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
-      "rule": "text-json",
-      "line": 13,
-      "code": "return nlohmann::json{{\"ok\", false}, {\"error\", {{\"code\", \"hdf5.invalid_request\"}, {\"message\", e.what()}}}}.dump();",
-      "sha256": "475234a021436d331b9961c9c2f53846322d93e969ad70acdb6edf4b46f01ca0",
-      "count": 1,
-      "reason": "HDF5 disk/Python adapter, including file interoperability tests."
-    },
-    {
-      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
-      "rule": "text-json",
-      "line": 16,
-      "code": ".def(\"poll\", [](SST::Hdf5Session& session) { return session.Poll().dump(); })",
-      "sha256": "f1086ca0bc10f1c58f228c7ced90dd9f925f6afc5b5a4e5d39328a5df062ebaa",
-      "count": 1,
-      "reason": "HDF5 disk/Python adapter, including file interoperability tests."
-    },
-    {
-      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
-      "rule": "text-json",
-      "line": 17,
-      "code": ".def(\"cancel\", [](SST::Hdf5Session& session) { return session.Cancel().dump(); });",
-      "sha256": "df816eaf96cad40b8ec7261584f34eca5207867b19aa3bb7199a5bd28565f371",
-      "count": 1,
-      "reason": "HDF5 disk/Python adapter, including file interoperability tests."
-    },
-    {
-      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
       "rule": "python",
       "line": 8,
       "code": "nanobind::class_<SST::Hdf5Session>(module, \"Session\")",
@@ -490,15 +454,6 @@
       "code": "if (Py_IsInitialized() || PyImport_AppendInittab(\"sst_hdf5\", PyInit_sst_hdf5) != 0)",
       "sha256": "43aed33f60b09b22c112aad3cb08dc8a541f6d90ff8ce978e9ed35274a61ff8f",
       "count": 2,
-      "reason": "HDF5 disk/Python adapter, including file interoperability tests."
-    },
-    {
-      "file": "Core/IO/Hdf5/Hdf5Session.cpp",
-      "rule": "text-json",
-      "line": 61,
-      "code": "if (request.contains(\"provenance\")) attrs[\"provenance_json\"] = request.at(\"provenance\").dump();",
-      "sha256": "83b3055b7f8cf6ca0f582ba74c7f53e2c85b2cb904bd37d6be8bcb96a3138e72",
-      "count": 1,
       "reason": "HDF5 disk/Python adapter, including file interoperability tests."
     },
     {
@@ -1497,15 +1452,6 @@
       "line": 107,
       "code": "{\"kappa_eV_K\",sst::physics::k_B_over_q},{\"k_B_J_K\",sst::physics::k_B},{\"source\",\"CODATA 2022 / SI; SST-Physics constants.hpp\"}}.dump(); });",
       "sha256": "e1f6d163f30f25741cf97539150b03bc7a53ca0c5733feb6c6360c090c7bf27e",
-      "count": 1,
-      "reason": "Public Python binding or file import/export adapter; F40 per-point binding granularity remains audit debt."
-    },
-    {
-      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
-      "rule": "text-json",
-      "line": 112,
-      "code": "module.def(\"measurement\", [](const std::string &text, pl::Id id) { return AnalysisMeasurement(Parse(text),id).dump(); });",
-      "sha256": "313bf65551f0640fcdbc9df548acbbaf41a912553d4c11bde0881f3a50eeb6b8",
       "count": 1,
       "reason": "Public Python binding or file import/export adapter; F40 per-point binding granularity remains audit debt."
     },
@@ -4372,15 +4318,6 @@
       "reason": "Export-to-disk/Python plotting adapter."
     },
     {
-      "file": "Prototypes/CapLab/src/Domain/CapLabIS.cpp",
-      "rule": "text-json",
-      "line": 345,
-      "code": "throw std::runtime_error(\"Invalid initial simulation/measurement: \"+initial.at(\"diagnostics\").dump());",
-      "sha256": "31d1bca30578e3b9e79d6e9dd222fc69c054a5b3d8fc85e77a355cb19c2139ce",
-      "count": 1,
-      "reason": "User-facing diagnostic error text for invalid initial IS simulation; no parse and outside objective/covariance data transport (perfis1)."
-    },
-    {
       "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
       "rule": "python",
       "line": 30,
@@ -4657,15 +4594,6 @@
       "code": "out[\"selected_indices\"]=nanobind::cast(std::move(result.selectedIndices));",
       "sha256": "f8c39f244e9953e64d1b4726c83f43fb88fcd362fd79dc31672c59621698654b",
       "count": 1,
-      "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
-    },
-    {
-      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
-      "rule": "python",
-      "line": 580,
-      "code": "auto value = nb::module_::import_(\"caplab.analysis\").attr(\"analyze\")(PythonValue(measurement),PythonValue(options),PythonValue(xd),cancel,progress);",
-      "sha256": "ec5d58ea7b1d9a2f62ff8303e2ab9924ecb0a268da4d17dc0185105a89c8009a",
-      "count": 4,
       "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
     },
     {
@@ -5144,6 +5072,384 @@
       "sha256": "2a98aced9c1d2c93f660f43e75cba5f73e4a8911c1c73a9f58d7beb5ba596e76",
       "reason": "Python export/font edge: translate interpreter errors into a short user-facing message; no C++ data transport.",
       "count": 1
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 70,
+      "code": "if (request.contains(\"provenance\")) out.attributes[\"provenance_json\"] = request.at(\"provenance\").dump();",
+      "sha256": "82ec302f99aad6f1e9c6b9bd1fbc19bc72b7b2a327000447b0b09f24e10c418b",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 93,
+      "code": "const auto parsed = Json::parse(request);",
+      "sha256": "a1d68a4478cdb4d8b64771fbf5beea50773e1f131b5c1537de82fb1859dd5e91",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 94,
+      "code": "if (session.Poll().running) return failure(Hdf5Error::Busy,\"A storage operation is already running\").dump();",
+      "sha256": "d5d4858d17b5ee03d702d1ac6f61c927085be8b9be2f480333ad9389ca5e7562",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 96,
+      "code": "if (operation != \"save\" && operation != \"read\") return failure(Hdf5Error::InvalidRequest,\"Expected save or read\").dump();",
+      "sha256": "48ce21bb2c04b0efc5bb8c660f7182160f2722097ee2ebdeec8825d24d2b205c",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 104,
+      "code": "return (result.error ? failure(*result.error,result.message) : Json{{\"ok\",true},{\"job_id\",result.jobId}}).dump();",
+      "sha256": "b19cfa2d226363e40d6621563578c1dcb3f49794b8127be7b1f98562d5d1adaa",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 105,
+      "code": "} catch (const Error& e) { return failure(Hdf5Error::InvalidRequest,e.what()).dump(); }",
+      "sha256": "15ebee5a0a9bcb2f55dc108adcb05c049c6b27b04b94fd17e581919aaecf4b49",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 106,
+      "code": "catch (const Json::exception& e) { return failure(Hdf5Error::InvalidRequest,e.what()).dump(); }",
+      "sha256": "f6a3f7924a3cb5d635897483462e4780b8951979582e05092f34523b1bf490ba",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 111,
+      "code": "{\"response\",result.response ? response(*result.response) : Json(nullptr)}}.dump();",
+      "sha256": "086ca0355f66a71a55bef9acb54cdb54b8d55748bb01d411751ae308eeaf222f",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Core/IO/Hdf5/Hdf5Python.cpp",
+      "rule": "text-json",
+      "line": 115,
+      "code": "return Json{{\"ok\",result.ok},{\"job_id\",result.jobId}}.dump();",
+      "sha256": "0cf96409133b822962abadfc253fb204bcfcec608e3f35a605719738f9197cda",
+      "count": 1,
+      "reason": "Nanobind Python input/output and persisted HDF5 provenance attribute; typed session/command/job never carries JSON."
+    },
+    {
+      "file": "Prototypes/CapLab/src/Domain/CapLabIS.cpp",
+      "rule": "text-json",
+      "line": 252,
+      "code": "auto curve=ISCurve(result.plots[i].name,\"measured / \"+m.metadata.at(\"id\").dump()+\" / T=\"+m.metadata.value(\"temperature_K\",Json(nullptr)).dump()+\" K / bias=\"+m.metadata.value(\"bias_V\",Json(nullptr)).dump()+\" V\",f,re,im,false);",
+      "sha256": "605a2b779c1b5b45aec4c13676614544b8570ac28dce5367f0fe87948032a128",
+      "count": 3,
+      "reason": "Display-only plot labels and user-facing diagnostic text; no serialization is consumed by another C++ module."
+    },
+    {
+      "file": "Prototypes/CapLab/src/Domain/CapLabIS.cpp",
+      "rule": "text-json",
+      "line": 349,
+      "code": "throw std::runtime_error(\"Invalid initial simulation/measurement: \"+initial.record.at(\"diagnostics\").dump());",
+      "sha256": "25bc726e52970ba60b59be135ff82122575dc3049fc5327362354320ae88fbe8",
+      "count": 1,
+      "reason": "Display-only plot labels and user-facing diagnostic text; no serialization is consumed by another C++ module."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "text-json",
+      "line": 195,
+      "code": "module.def(\"measurement\", [](const std::string &text, pl::Id id) { return MeasurementJson(AnalysisMeasurement(Parse(text),id)).dump(); });",
+      "sha256": "7614ce56863a8049f8e78c9c26f891499163edd370fd52123e224b4681a4c993",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 594,
+      "code": "std::vector<std::pair<nb::object,AnalysisMeasurementData>> inputs;",
+      "sha256": "b26e43dd90638e58be3a1534d4519e553a1674830a2f182cff95e91429723abb",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 595,
+      "code": "auto pythonMeasurement=[&](const AnalysisMeasurementData &m)->nb::object {",
+      "sha256": "98421789f1149eaeff1b71cedb43581ac604aa0789265f80a59fe32b215930c3",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 596,
+      "code": "if(m.empty())return nb::none();",
+      "sha256": "9765b0ec25d1e1107302239350651c97a2aecc11b80db4286c9fbffe64338d35",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 597,
+      "code": "auto value=nb::cast<nb::dict>(PythonValue(m.metadata));nb::list columns;",
+      "sha256": "01543ee22fa794e48cd70a318c91e92d22ac59c4ab4f5afcac54fa6e01be2c90",
+      "count": 4,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 598,
+      "code": "for(const auto &c:m.columns)columns.append(nb::cast(*c));",
+      "sha256": "44771116306aa388e60fb189c090a63dc130731087c727587584221f4a400379",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 599,
+      "code": "value[\"columns\"]=columns;if(m.rowIds)value[\"row_ids\"]=nb::cast(*m.rowIds);",
+      "sha256": "a6d67afa2108f70f6a053501f04d3c2a6985a8fa729f2a8fb6a7be105f647c99",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 603,
+      "code": "auto settings=nb::cast<nb::dict>(PythonValue(options));",
+      "sha256": "39748db1f42254ca89f87cf5f87b2b525fab912ccc4c4c98aa54790aa20a7fbe",
+      "count": 3,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 604,
+      "code": "if(!measurements.empty()) {nb::list list;for(const auto &m:measurements)list.append(pythonMeasurement(m));settings[\"measurements\"]=list;}",
+      "sha256": "577d6fa673a6eec6c31246cb75f8ebed4898cd95125d6092a020dd3c6998cb1e",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 605,
+      "code": "if(options.at(\"type\")==\"Arrhenius\") {nb::list list;for(const auto &m:pointInputs)list.append(pythonMeasurement(m));settings[\"point_inputs\"]=list;}",
+      "sha256": "f295ccfd6d912cca7bb825f6cc1abed84fd0de60d51e95dd014652bba8e75255",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 607,
+      "code": "auto sources=nb::borrow<nb::list>(settings[\"source_analyses\"]);",
+      "sha256": "3ec99b1886c31d7e1ae7b9377b6cc8a8dfd38e87f8f59c699c19a4d01a954607",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 610,
+      "code": "nb::list list;for(const auto &m:snapshots.at(id))list.append(pythonMeasurement(m));",
+      "sha256": "ad9f458728e62acea9e571113f20b2e3bc11febf7356ca66220d709ea2ca433e",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 611,
+      "code": "nb::borrow<nb::dict>(sources[i])[\"inputs\"]=list;",
+      "sha256": "8ee7b626221bab5eed3b5aaa2bdafee819b023e97edf3d8bdd822c55ad4dba8c",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 616,
+      "code": "const auto value=nb::cast<nb::dict>(nb::module_::import_(\"caplab.analysis\").attr(\"analyze\")(input,settings,width,cancel,progress));",
+      "sha256": "1862caed6cc9f7b81684818a647d9d2f53f8a0ac942999d35744f7e5d48e7988",
+      "count": 3,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 620,
+      "code": "const auto name=nb::cast<std::string>(key);",
+      "sha256": "9ba6bdc492b4d7b8c80ce3d6e3056d93b8ad7a4834bb3e74b1d4069e5ed32006",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 629,
+      "code": "for(auto item:nb::borrow<nb::iterable>(value[\"inputs\"])) {",
+      "sha256": "11692f974f7e59287cf05508cee490973ad60c8caf91ee87497b68a6061d4bbe",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 634,
+      "code": "auto values=[](nb::handle list) {std::vector<double> out;for(auto v:nb::borrow<nb::iterable>(list))out.push_back(v.is_none()?std::numeric_limits<double>::quiet_NaN():nb::cast<double>(v));return out;};",
+      "sha256": "0bbab9ccb9246abf5d9c9ba8c192fb6b3d2dc543b38013288eb9ebb56ad7bebe",
+      "count": 4,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 635,
+      "code": "for(auto item:nb::borrow<nb::iterable>(value[\"plots\"])) {",
+      "sha256": "ae5e23f925882a4e37722baf898b0209f7c932bd392977a7cc15b8805eedaf5b",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 636,
+      "code": "const auto plot=nb::borrow<nb::dict>(item);AnalysisPlotData p;",
+      "sha256": "565c76acdca56ecc74e766ea293aa9622fe41d39b0c0743bf2b8ffbaa37bf913",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 637,
+      "code": "p.name=nb::cast<std::string>(plot[\"name\"]);p.xLabel=nb::cast<std::string>(plot[\"x_label\"]);p.yLabel=nb::cast<std::string>(plot[\"y_label\"]);",
+      "sha256": "6cfe2af324ac0807eebc4cc5719d3d187e8376ff5d34efcc1f86336e9b5ab7fe",
+      "count": 3,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 638,
+      "code": "if(plot.contains(\"log_x\"))p.logX=nb::cast<bool>(plot[\"log_x\"]);if(plot.contains(\"log_y\"))p.logY=nb::cast<bool>(plot[\"log_y\"]);",
+      "sha256": "f9a92c65363028399251c14bde5223c1cb40c54babff4107ba7ab3d1676bb900",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 639,
+      "code": "if(plot.contains(\"equal_aspect\"))p.equalAspect=nb::cast<bool>(plot[\"equal_aspect\"]);",
+      "sha256": "4f1122618921e6e31b9ec14f7df3296702f03f69b3f32ee6f925342609e6867b",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 640,
+      "code": "for(auto item:nb::borrow<nb::iterable>(plot[\"curves\"])) {",
+      "sha256": "5a4911f51df2ba247df6d367db46eafee1225881362bb1e04e5353ff10b08d4d",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 641,
+      "code": "const auto curve=nb::borrow<nb::dict>(item);AnalysisCurveData c;",
+      "sha256": "4b9c8b7d2b1250f44d17911da8222a8ddccda60d29c76fca9563788d26034a47",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 642,
+      "code": "c.name=nb::cast<std::string>(curve[\"name\"]);c.x=values(curve[\"x\"]);c.y=values(curve[\"y\"]);",
+      "sha256": "ca0d0ce7c00ccb95b03d03acf3ed00bd6ac5de2b34624eefd1f69e3253e54ace",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 643,
+      "code": "if(curve.contains(\"fit\"))c.fit=nb::cast<bool>(curve[\"fit\"]);if(curve.contains(\"candidates\"))c.candidates=nb::cast<bool>(curve[\"candidates\"]);",
+      "sha256": "1ca7d9458a6a4bd7b62b654665957ffa63897b6383fb7cda7cccfe00d7ada34d",
+      "count": 2,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/Presentation/CapLabISPanel.cpp",
+      "rule": "text-json",
+      "line": 108,
+      "code": "const auto label=std::to_string(id)+\" / \"+m.metadata.at(\"temperature_K\").dump()+\" K\";",
+      "sha256": "a6c49dc94cb874981eef16bbe1232d2bbd5173aec96bc4ec5a3dc06cabd17c42",
+      "count": 1,
+      "reason": "Display-only scalar temperature/bias labels; no data transport or parsing."
+    },
+    {
+      "file": "Prototypes/CapLab/src/Presentation/CapLabISPanel.cpp",
+      "rule": "text-json",
+      "line": 121,
+      "code": "} else ImGui::Text(\"Measured temperature: %s K\",m.metadata.at(\"temperature_K\").dump().c_str());",
+      "sha256": "f0b72321bcc2587cdbed74e592ed118f666e0f13146fef4338c98f71483efee2",
+      "count": 1,
+      "reason": "Display-only scalar temperature/bias labels; no data transport or parsing."
+    },
+    {
+      "file": "Prototypes/CapLab/src/Presentation/CapLabISPanel.cpp",
+      "rule": "text-json",
+      "line": 125,
+      "code": "} else ImGui::Text(\"Measured bias: %s V\",m.metadata.at(\"bias_V\").dump().c_str());",
+      "sha256": "00d762b1fa2a4a7a6ff3a38e0008a59f29aecf05bd022431c39afc05434e4127",
+      "count": 1,
+      "reason": "Display-only scalar temperature/bias labels; no data transport or parsing."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 645,
+      "code": "c.temperature_K=nb::cast<double>(curve[\"temperature_K\"]);",
+      "sha256": "d98e0c583a45a8d40bc347486073787fd23e2b6910e29bdb13958bdedeacf0e3",
+      "count": 1,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
+    },
+    {
+      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
+      "rule": "python",
+      "line": 646,
+      "code": "if(nb::isinstance<nb::int_>(curve[\"temperature_K\"]))c.integerTemperature=nb::cast<std::uint64_t>(curve[\"temperature_K\"]);",
+      "sha256": "d4a457ea70594d8afa4d781d30100201a871677523c74312c5a35184da2f5ba4",
+      "count": 3,
+      "reason": "Nanobind Python edge converts typed measurement columns, row IDs and plot results directly; file-schema measurement export remains at this edge."
     }
   ],
   "known-debt": [
