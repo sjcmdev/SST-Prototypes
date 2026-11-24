@@ -1137,6 +1137,33 @@
       "sha256": "22f7445d664b02f45aefe10e4dcffd9be089e027b5440f59237c2ee0fe93f4c4",
       "count": 1,
       "reason": "Parameter bounds YAML configuration file codec (startup/reload only); no runtime data serialization."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/ResultsIO.cpp",
+      "rule": "text-json",
+      "line": 68,
+      "code": "for(const auto& run:runs)selected.push_back({{\"run_id\",run.runId},{\"device_id\",run.deviceId},{\"device_name\",run.deviceName},{\"kind\",run.kind},{\"result\",run.result?run.result->Dump():Json::object()}});",
+      "sha256": "8ce1ff444ac8ef7ef3e69728ccf47731d3ca43bf5918ac49636d34ef0bd79b5d",
+      "count": 1,
+      "reason": "Selected immutable typed results are materialized only in the worker file codec for CSV/JSON/plot export; no JSON state crosses the UI/job boundary."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 607,
+      "code": "const auto workspace=ivInput?ivInput->Dump():Json::object();",
+      "sha256": "d3045a6526b0111ad42282d6be3c967954a84d47badf581c2f4c17a5363894d7",
+      "count": 1,
+      "reason": "Selected immutable typed results are materialized only in the worker file codec for CSV/JSON/plot export; no JSON state crosses the UI/job boundary."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 697,
+      "code": "const auto result=acInput->Dump();",
+      "sha256": "65ec3b5319541aa4747bb0c8669e80cda635b5a7e8004cd86f4dba7b32d8e3b4",
+      "count": 1,
+      "reason": "Selected immutable typed results are materialized only in the worker file codec for CSV/JSON/plot export; no JSON state crosses the UI/job boundary."
     }
   ],
   "known-debt": [
