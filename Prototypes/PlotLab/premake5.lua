@@ -156,6 +156,7 @@ for _, target in ipairs { "PlotLab", "PlotLabTests" } do
 end
 project "PlotLabTests"
     files { _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabDocument.cpp", _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabExport.cpp",
+        _SST_ROOT .. "/Prototypes/PlotLab/src/WorksheetRuntime.cpp", _SST_ROOT .. "/Prototypes/PlotLab/src/WorksheetPythonUi.cpp",
             _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabWorkspace.cpp", _SST_ROOT .. "/Vendor/ImGui/misc/cpp/imgui_stdlib.cpp" }
 for _, target in ipairs { "PlotLab", "PlotLabTests" } do
     project(target)

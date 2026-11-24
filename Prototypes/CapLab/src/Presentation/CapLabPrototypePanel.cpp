@@ -50,12 +50,12 @@ void CapLabPrototypePanel::RenderImport() {
     if (custom) {
     bool comma = state->decimal == ',';
     if (sst::ui::widgets::Checkbox("Decimal comma (semicolon/whitespace columns)", &comma)) state->decimal = comma ? ',' : '.';
-    static int profile = 1;
-    const char *profiles[] = {"Lab AS Cp/Rp (SI)", "Lab AS Cp/Rp (mapped)", "Converted AS C/G", "ProPho DL/CV", "Lab CV", "Lab DLCP raw", "Lab IS Z", "Lab IS C/G", "Lab IS Cp/Rp", "SCAPS .cf", "SCAPS .cv", "ProPho manifest / project"};
-    const char *keys[] = {"", "lab_as_cp_rp", "converted_as_c_g", "propho_dl", "lab_cv", "lab_dlcp_raw", "lab_is_z", "lab_is_c_g", "lab_is_cp_rp", "scaps_cf", "scaps_cv", "propho_json"};
+    static int profile = 0;
+    const char *profiles[] = {"Automatic (file extension)", "Lab AS Cp/Rp (mapped)", "Converted AS C/G", "ProPho DL/CV", "Lab CV", "Lab DLCP raw", "Lab IS Z", "Lab IS C/G", "Lab IS Cp/Rp", "SCAPS .cf", "SCAPS .cv", "ProPho manifest / project"};
+    const char *keys[] = {"auto", "lab_as_cp_rp", "converted_as_c_g", "propho_dl", "lab_cv", "lab_dlcp_raw", "lab_is_z", "lab_is_c_g", "lab_is_cp_rp", "scaps_cf", "scaps_cv", "propho_json"};
     if (state->preview && !state->importOptions.empty()) {
         const auto importedProfile=state->importOptions.value("profile",std::string{});
-        for (int i=1;i<IM_ARRAYSIZE(keys);++i) if (importedProfile==keys[i]) profile=i;
+        for (int i=0;i<IM_ARRAYSIZE(keys);++i) if (importedProfile==keys[i]) profile=i;
     }
     static int mapping[5] = {1,2,3,4,5}, unitChoice[5] = {}, sign = -1, amplitude = 0, asVariant = -1;
     static bool areaKnown = false, temperatureKnown = false, frequencyKnown = false, biasKnown = false, optionalG = false, columnTF = false, maxKnown = false, maxConstant = false;
@@ -68,8 +68,8 @@ void CapLabPrototypePanel::RenderImport() {
         for (int i=0;i<5;++i) { mapping[i]=i+1; unitChoice[i]=0; }
         excluded.clear();
     }
+    options["profile"] = keys[profile];
     if (profile) {
-        options["profile"] = keys[profile];
         sst::ui::widgets::Checkbox("Area known", &areaKnown);
         if (areaKnown) { sst::ui::widgets::Double("Area (mm2)", &area, .01f, "%.6g"); options["area_m2"] = area * 1e-6; }
         sst::ui::widgets::Checkbox("Confirm temperature", &temperatureKnown);
@@ -79,7 +79,7 @@ void CapLabPrototypePanel::RenderImport() {
         sst::ui::widgets::Checkbox("Confirm bias", &biasKnown);
         if (biasKnown) { sst::ui::widgets::Double("Bias (V)", &bias, .01f, "%.6g"); options["bias_V"] = bias; }
         if (profile == 11) {
-            sst::ui::widgets::Text("Manifest base directory (empty = manifest directory)", baseDir, sizeof(baseDir));
+            sst::ui::widgets::Text("Manifest base directory (empty = automatic)", baseDir, sizeof(baseDir));
             if (baseDir[0]) options["base_dir"] = baseDir;
             sst::ui::widgets::Combo("AS columns in manifest / project", &asVariant, "Cp / Rp\0C / G\0");
             if (asVariant >= 0) options["as_profile"] = asVariant ? "converted_as_c_g" : "lab_as_cp_rp";
@@ -225,6 +225,7 @@ void CapLabPrototypePanel::RenderImport() {
             ImGui::SeparatorText("Import preview");
             ImGui::TextWrapped("%s",preview.at("source").get<std::string>().c_str());
             if (preview.contains("base_dir")) ImGui::TextWrapped("Base directory: %s",preview.at("base_dir").get<std::string>().c_str());
+            if (ImGui::BeginChild("manifest-measurements", ImVec2(0, 300), ImGuiChildFlags_Borders)) {
             for (const auto &sample : preview.at("samples")) {
                 ImGui::Text("%s; area=%s m2",sample.at("name").get<std::string>().c_str(),sample.at("area_m2").dump().c_str());
                 for (const auto &m : sample.at("measurements")) {
@@ -247,6 +248,8 @@ void CapLabPrototypePanel::RenderImport() {
                     ImGui::PopID();
                 }
             }
+            }
+            ImGui::EndChild();
             if (!preview.at("historical").empty()) ImGui::TextUnformatted("Saved ProPho fits, results and selections will be imported as historical.");
             ImGui::TextWrapped("To correct metadata, mapping or units, change import fields and read preview again. Filename values are suggestions only.");
             auto previousOptions=state->importOptions;

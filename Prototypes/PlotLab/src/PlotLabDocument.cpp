@@ -148,6 +148,7 @@ namespace SST::Prototypes::PlotLab
     {
         if(ownsDataJobs) dataJobs->Shutdown(true);
         else if(dataJob) (void)dataJobs->RequestCancel(dataJob);
+        try {ResetPython();} catch(...) {}
         StopWorker(*project);
         project->unsubscribe(*this);
     }
@@ -166,6 +167,7 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Replace(Ref<pl::Project> next)
     {
+        ResetPython();
         if (project)
         {
             StopWorker(*project);
@@ -191,16 +193,20 @@ namespace SST::Prototypes::PlotLab
 #endif
         });
         project->subscribe(*this);
+        activeSheet=0;pythonHistory=std::get<pl::Folder>(project->object(project->root()).data).pythonHistory;scriptDrafts.clear();scriptParameterDrafts.clear();pythonTrusted=true;
+        InstallPythonEvaluator();
         undo->MarkClean();
     }
     void Document::Execute(pl::Operation operation)
     {
+        const auto recorded=recordedOperations?std::optional<pl::Operation>(operation):std::nullopt;
         CommandContext context;
         context.Set("project", project);
         context.Set("operation", std::move(operation));
         auto result = commands->Execute(CommandID{"plotlab.edit"}, std::move(context));
         if (!result)
             throw std::runtime_error(result.Error().technicalDetails);
+        if(recorded)recordedOperations->push_back(*recorded);
     }
     void Document::New()
     {
@@ -216,12 +222,33 @@ namespace SST::Prototypes::PlotLab
     {
         Replace(std::move(next));
         path = source;
+        pythonTrusted=!HasPython();
+#if DS_PYTHON_CAPI_AVAILABLE
+        if(HasPython() && !source.empty()) {
+            try {pythonTrusted=PythonBinding::TrustedFile(source);}
+            catch(const std::exception&){pythonTrusted=false;}
+        }
+#endif
+        InstallPythonEvaluator();
     }
     void Document::Save(const std::filesystem::path &destination)
     {
+        for(const auto& [id,source]:scriptDrafts)if(project->objects().contains(id))SaveScript(project->object(id).name,source,id);
+        scriptDrafts.clear();
+        std::vector<pl::Object> updates;
+        for(const auto& [id,parameters]:scriptParameterDrafts)if(project->objects().contains(id)){auto object=project->object(id);std::get<pl::Script>(object.data).parameters=parameters;updates.push_back(std::move(object));}
+        scriptParameterDrafts.clear();
+        auto root=project->object(project->root());auto& history=std::get<pl::Folder>(root.data).pythonHistory;
+        if(history!=pythonHistory){history=pythonHistory;updates.push_back(std::move(root));}
+        if(!updates.empty())Execute(project->change("Save Python workspace",std::move(updates)));
         project->save(destination);
         path = destination;
         undo->MarkClean();
+        if(pythonTrusted && HasPython()) {
+#if DS_PYTHON_CAPI_AVAILABLE
+            PythonBinding::RememberTrustedFile(path);
+#endif
+        }
     }
     pl::Id Document::Create(pl::Id parent, int type, std::string name)
     {
@@ -282,7 +309,9 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Delete(pl::Id id)
     {
+        const auto& object=project->object(id);const auto line=std::holds_alternative<pl::Column>(object.data)?"del project.by_id("+std::to_string(object.parent)+")["+PythonString(object.name)+"]":"";
         Execute(project->change("Delete objects and confirmed dependents", {}, RemovalIds(id)));
+        if(!line.empty())RecordPython(line);
     }
     void Document::ResizeRows(pl::Id id, std::optional<std::size_t> eraseRow)
     {
@@ -330,6 +359,7 @@ namespace SST::Prototypes::PlotLab
             column.values = std::vector<double>(count, std::numeric_limits<double>::quiet_NaN());
         const auto id = project->reserveId();
         Execute(project->change("Add column", {{id, sheet, "C" + std::to_string(id), 0, std::move(column), id}}));
+        RecordPython("project.by_id("+std::to_string(sheet)+").add_column('C"+std::to_string(id)+"')");
         return id;
     }
     pl::Id Document::AddGraph(pl::Id folder, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error)
@@ -416,6 +446,11 @@ namespace SST::Prototypes::PlotLab
             }
             if (!added) throw std::invalid_argument("Select at least one numeric Y column first.");
             const auto result = group.Commit(); if (!result) throw std::runtime_error(result.Error().technicalDetails);
+            for(auto column:selected)if(std::get<pl::Column>(p.object(column).data).role!=pl::Role::X) {
+                const auto x=explicitX?explicitX:p.pairedX(column);
+                const char* name=kind==plot::SeriesKind::Line?"line":kind==plot::SeriesKind::Scatter?"scatter":kind==plot::SeriesKind::Column?"column":"line+symbol";
+                if(x)RecordPython("plot(project.by_id("+std::to_string(x)+"), project.by_id("+std::to_string(column)+"), kind='"+name+"')");
+            }
             return graph;
         } catch (...) { (void)group.Cancel(); throw; }
     }
@@ -439,6 +474,7 @@ namespace SST::Prototypes::PlotLab
     }
 
     void Document::PollDataOperation() {
+        PollPythonJobs();
         if(!dataJob) return;
         const auto status=dataJobs->GetJob(dataJob);
         if(!status || status->status==JobStatus::Queued || status->status==JobStatus::Running) return;
@@ -451,6 +487,9 @@ namespace SST::Prototypes::PlotLab
             const auto before=project->children(parent);
             project->acceptOperationSnapshot(*work->snapshot);
             Execute(std::move(*work->operation));
+            if(work->request.action==pl::DataAction::Sort && work->request.keys.size()==1 && !work->request.columnOnly) {
+                const auto [column,descending]=work->request.keys.front();RecordPython("project.by_id("+std::to_string(work->request.worksheet)+").sort(project.by_id("+std::to_string(column)+"), descending="+(descending?"True":"False")+")");
+            }
             for(auto id:project->children(parent)) if(std::find(before.begin(),before.end(),id)==before.end()) created.push_back(id);
             dataResult={DataState::Completed,dataJob,work->elapsedMs,std::move(created)};
         } catch(const std::exception& e) {dataResult={};dataResult.error=status->status==JobStatus::Completed?WorksheetError::Conflict:WorksheetError::Validation;dataResult.message=e.what();}
@@ -475,6 +514,10 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::WorksheetCommand(pl::WorksheetEdit request) {
         if(auto* values=std::get_if<pl::SetColumnValues>(&request)) {
+            if(values->formula.language==pl::FormulaLanguage::Python) {
+                PythonRequest python;python.action=PythonAction::Formula;python.column=values->column;python.worksheet=project->object(values->column).parent;python.source=values->formula.expression;python.formula=values->formula;
+                const auto result=WaitPython(SubmitPython(std::move(python)));if(!result.ok)throw std::runtime_error(result.error);return;
+            }
             auto& f=values->formula;f.variables.clear();f.scriptInputs.clear();
             if(!f.beforeScript.empty()) {
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -489,6 +532,7 @@ namespace SST::Prototypes::PlotLab
             }
         }
         Execute(project->worksheetEdit(request));
+        if(const auto* values=std::get_if<pl::SetColumnValues>(&request))RecordPython("project.by_id("+std::to_string(values->column)+").set_values("+PythonString(values->formula.expression)+", mode='origin')");
     }
     namespace PythonBinding {
     nlohmann::json DataResponse(const DataResult& r) {
@@ -583,6 +627,7 @@ namespace SST::Prototypes::PlotLab
         if(!nb::cast<bool>(paths.attr("__contains__")(path))) paths.attr("append")(path);
         auto module = nb::module_::import_("_sst_plotlab");
         if (active) module.attr("active_document") = nb::cast(active, nb::rv_policy::reference);
+        else if(!nb::hasattr(module,"active_document"))module.attr("active_document")=module.attr("WorksheetSession")();
 #else
         (void)active; (void)pythonRoot;
         throw std::runtime_error("Rebuild with embedded Python");
@@ -596,7 +641,9 @@ NB_MODULE(_sst_plotlab, module)
     using namespace SST;
     using namespace SST::Prototypes::PlotLab;
     SST::PlotEditingPython::Bind<Document>(module);
-    nanobind::class_<Document>(module, "WorksheetSession")
+    auto session=nanobind::class_<Document>(module, "WorksheetSession");
+    PythonBinding::BindWorksheetRuntime(module,session);
+    session
         .def("__init__", [](Document* self) {
             new (self) Document(CreateRef<CommandRegistry>(), CreateRef<UndoStack>(), CreateRef<EventBus>());
         })

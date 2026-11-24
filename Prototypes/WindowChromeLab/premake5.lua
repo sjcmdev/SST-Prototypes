@@ -82,7 +82,8 @@ project "WindowChromeLabTests"
 
     files {
         _SST_ROOT .. "/Prototypes/WindowChromeLab/tests/**.hpp",
-        _SST_ROOT .. "/Prototypes/WindowChromeLab/tests/**.cpp"
+        _SST_ROOT .. "/Prototypes/WindowChromeLab/tests/**.cpp",
+        _SST_ROOT .. "/Prototypes/WindowChromeLab/src/Presentation/LabWindows.cpp"
     }
 
     includedirs {

@@ -90,9 +90,82 @@ using the UI font. Install the dependencies and use **Font > Retry** to restore 
 Preview converts pt to logical pixels at 96 DPI with ImGui display scaling.
 Live ImPlot layout and matplotlib remain separate; 0.5 mm UI/export layout parity
 is not claimed. See `experiments/README.md` for the native/Cairo comparison.
-No annotations, Python console or JPEG. No portable runtime packaging, autosave/recovery,
+No annotations or JPEG. No portable runtime packaging, autosave/recovery,
 non-Windows/Release validation, or million-point interactive performance gate here.
 The engine remains responsible for its existing formula worker/lifecycle policy.
+
+## Python in worksheets, formulas and scripts
+
+**View > Python Console / Python Script / History as Python** share the same
+`sst_plotlab` objects and Core command path. In embedded/headless Python:
+
+```python
+from sst_plotlab import project, books, sheets, sheet, plot
+import numpy as np
+
+iv = sheets["I-V 300 K"]       # also sheets.IV_300_K or books["Sample A"][0]
+iv["Voltage"].units = "V"      # short name, long name, letter or zero-based index
+iv.columns[0] = range(0, 10, 2) # rows grow; other columns retain their data
+iv["J"] = iv["I"] / 0.105
+iv.J.long_name = "Current density"
+iv.J.units = "A/cm²"
+iv.J.mask[1:3] = True
+usable = iv.J.valid
+iv.rows.append(Voltage=0.85, I=1e-3)
+iv.add_column("P", -iv.Voltage * iv.J, units="W/cm²", role="Y")
+frame = iv.to_pandas()
+sheets.new("Copy", frame)
+plot(iv.Voltage, iv.J, kind="line+symbol")
+```
+
+References keep stable IDs after rename. Ambiguous names list the candidates;
+typos suggest close names. Row slices are views by row ID, including after sort.
+`np.asarray(column)` exposes an immutable snapshot: assign through the column
+to record undo. `project.run(code)` and every GUI run commit one Core undo step;
+a failed/cancelled script leaves the worksheet unchanged. Returned run results
+are JSON-serializable dictionaries (`ok`, `output`, `error`, `error_code`, `row`,
+`line`), with attribute access for interactive use. Standalone sessions use
+`sst_plotlab.WorksheetSession().project` and the same methods.
+
+**Ctrl+Q > Language** selects Python or the existing Origin `col(A)` syntax.
+Python accepts expressions or blocks assigning `result` / using `return`:
+
+```python
+np.log10(abs(I)) * 2
+# or a block:
+result = np.asarray(Voltage) * 2 + i
+return result
+```
+
+Current-sheet names are available directly; `i` is one-based and `x`/`y`
+resolve uniquely designated role columns. Live preview retains the previous
+results while computing and reports sample errors by row. Auto recalc tracks
+the columns actually read. The language and stable bindings survive save/load.
+F(x) keeps that language; prefix a new header formula with `py:` or use `np.`
+to select Python. Double-click F(x) opens the full editor and live preview.
+
+Completion is available in Ctrl+Q, F(x), the console and Script editor, including
+object members, names, keywords, NumPy signatures and help. Ctrl+Space requests
+completion; select a suggestion (Tab inserts the first suggestion in F(x)).
+The locked environment has pandas and no Jedi, so completion uses safe API
+metadata and never evaluates calls in the text being completed.
+
+Script windows include line numbers, basic syntax colours, Run / Run selection /
+Stop, output and error line navigation. Scripts are normal project objects under
+**Scripts** in Project Explorer; source can also be opened/saved as `.py` files.
+Declare a parameter form with `params(area=0.105, T=(200, 330))`; scalar parameters
+use drag fields and ranges use sliders. Parameter overrides are saved with the
+project. History records set-values, add/delete-column, mask, sort and plotting
+operations and can be sent to a new script.
+
+Loaded Python content stays disabled until **Trust this project**. Trust is
+remembered for the absolute path and SHA-256 of the file in user settings;
+changed/moved files need trust again. Locally created projects start trusted.
+Python runs on Core workers against immutable snapshots, with cancellation and
+an execution budget (2 seconds for recalc, 5 seconds for normal runs, maximum
+30 seconds headlessly). Cancellation/time limits are cooperative at Python
+opcode boundaries: a native extension call finishes before Python can stop it.
+Trusted Python has normal Python access to files and imports; it is not a sandbox.
 
 ## Verification
 

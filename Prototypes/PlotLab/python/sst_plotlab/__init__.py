@@ -1,12 +1,20 @@
 ﻿"""Headless PlotLab Core commands, worksheet operations and publication export."""
 def __getattr__(name):
+    if name == "plot":
+        from .worksheet import plot
+        return plot
+    if name in {"project", "books", "sheets", "sheet"}:
+        import _sst_plotlab
+        from .worksheet import Project, current_project
+        project = current_project.get() or Project(_sst_plotlab.active_document)
+        return project if name == "project" else getattr(project, name)
     if name == "export_graph":
         from .exporter import export_graph
         return export_graph
     raise AttributeError(name)
 
 
-__all__ = ["export_graph"]
+__all__ = ["export_graph", "project", "books", "sheets", "sheet", "plot"]
 
 
 class WorksheetSession:
@@ -22,8 +30,38 @@ class WorksheetSession:
 
     def __init__(self, active=False):
         import _sst_plotlab
-        self._session = (_sst_plotlab.active_document if active
+        from .worksheet import current_project
+        current = current_project.get()
+        self._session = (current._native if active and current is not None else _sst_plotlab.active_document if active
                          else _sst_plotlab.WorksheetSession())
+
+    @property
+    def project(self):
+        from .worksheet import Project
+        return Project(self._session)
+
+    @property
+    def books(self):
+        return self.project.books
+
+    @property
+    def sheets(self):
+        return self.project.sheets
+
+    @property
+    def sheet(self):
+        return self.project.sheet
+
+    def run(self, source, *, timeout_s=5, parameters=None):
+        return self.project.run(source, timeout_s=timeout_s, parameters=parameters)
+
+    def console(self, source):
+        from .worksheet import run_result
+        return run_result(self._session.console(source, self.sheet.id if len(self.sheets) else 0))
+
+    def complete(self, source, cursor=None, *, console=False):
+        entries = self._session.complete(source if cursor is None else source[:cursor], self.sheet.id if len(self.sheets) else 0, console)
+        return [dict(insert=insert, signature=signature, documentation=doc) for insert, signature, doc in entries]
 
     def command(self, request):
         import json

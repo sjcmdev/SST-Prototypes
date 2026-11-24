@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include "Core/Platform/ProcessRunner.hpp"
 
 #include "Core/Platform/PlatformPythonRuntime.hpp"
 
@@ -37,26 +38,28 @@ namespace SST::Platform
 		return {};
 	}
 
-	static Path findNearbyVenvHome(Path root)
-	{
-		for (int depth = 0; depth < 8 && !root.Empty(); ++depth)
-		{
-			const Path dotVenvHome = readVenvHome(root / ".venv");
-			if (!dotVenvHome.Empty())
-				return dotVenvHome;
-
-			const Path venvHome = readVenvHome(root / "venv");
-			if (!venvHome.Empty())
-				return venvHome;
-
-			const Path parent = root.parent_path();
-			if (parent == root)
-				break;
-			root = parent;
-		}
-
-		return {};
-	}
+    static Path findNearbyVenvExecutable(Path root)
+    {
+#if defined(DS_PLATFORM_WINDOWS)
+        const Path relative("Scripts/python.exe");
+#else
+        const Path relative("bin/python");
+#endif
+        for (int depth = 0; depth < 8 && !root.Empty(); ++depth)
+        {
+            for (const char *name : {".venv", "venv"})
+            {
+                const Path venv = root / name;
+                const Path executable = venv / relative;
+                if (FileSystem::Exists((venv / "pyvenv.cfg").Native()) && FileSystem::Exists(executable.Native()))
+                    return executable;
+            }
+            const Path parent = root.parent_path();
+            if (parent == root) break;
+            root = parent;
+        }
+        return {};
+    }
 
 	static Path getAppPythonPlatformExecutable()
 	{
@@ -76,14 +79,6 @@ namespace SST::Platform
 #endif
 	}
 
-	static Path getVenvPythonExecutable()
-	{
-#if defined(DS_PLATFORM_WINDOWS)
-		return Path(".venv") / "Scripts" / "python.exe";
-#else
-		return Path(".venv") / "bin" / "python";
-#endif
-	}
 
 	Path GetAppPythonRoot()
 	{
@@ -113,18 +108,21 @@ namespace SST::Platform
 		if (FileSystem::Exists(genericPython.Native()))
 			return genericPython;
 
-		const Path venvPython = getVenvPythonExecutable();
-		if (FileSystem::Exists(venvPython.Native()))
+		Path venvPython = findNearbyVenvExecutable(Path::FromResolved(FileSystem::CurrentPath()));
+        if (venvPython.Empty())
+            if (const auto executable = CurrentExecutablePath(); executable)
+                venvPython = findNearbyVenvExecutable(executable.Value().parent_path());
+		if (!venvPython.Empty() && FileSystem::Exists(venvPython.Native()))
 			return venvPython;
 
 		return Path("python");
 	}
 
 	Path ResolveEmbeddedPythonHome()
-	{
-		const Path venvHome = findNearbyVenvHome(Path::FromResolved(FileSystem::CurrentPath()));
-		if (!venvHome.Empty() && FileSystem::Exists(venvHome.Native()))
-			return venvHome;
+    {
+        const Path executable = findNearbyVenvExecutable(Path::FromResolved(FileSystem::CurrentPath()));
+        const Path venvHome = executable.Empty() ? Path{} : readVenvHome(executable.parent_path().parent_path());
+        if (!venvHome.Empty() && FileSystem::Exists(venvHome.Native())) return venvHome;
 
 		const Path platformRoot = GetAppPythonPlatformRoot();
 		if (!platformRoot.Empty() && FileSystem::Exists(platformRoot.Native()))

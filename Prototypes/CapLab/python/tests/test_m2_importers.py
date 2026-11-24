@@ -29,6 +29,17 @@ def test_frozen_source_hashes():
         assert hashlib.sha256((FIX / item['file']).read_bytes()).hexdigest() == item['sha256']
 
 
+def test_manifest_auto_profile_and_legacy_base_directory():
+    source = FIX / 'data_Cd/data_Cd.json'
+    result = import_preview(source.read_text(encoding='utf-8'), str(source), ',', {'profile': 'auto'})
+    explicit = import_preview(source.read_text(encoding='utf-8'), str(source), ',',
+                              {'profile': 'propho_json', 'base_dir': str(FIX)})
+    assert result == explicit
+    with pytest.raises(ValueError, match='base_dir'):
+        import_preview(source.read_text(encoding='utf-8'), str(source), ',',
+                       {'profile': 'auto', 'base_dir': str(source.parent)})
+
+
 def test_pfs_i1():
     updates = []
     result = import_preview(text('data_Cd/data_Cd.json'), str(FIX / 'data_Cd/data_Cd.json'), ',',

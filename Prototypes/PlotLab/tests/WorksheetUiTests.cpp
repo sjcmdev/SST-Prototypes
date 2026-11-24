@@ -5,7 +5,11 @@
 #include <implot_internal.h>
 #include <sst/plotlab/PlotEditing.hpp>
 #include <cmath>
+#include <chrono>
+#include <thread>
 #include "Core/Input/KeymapResolver.hpp"
+#include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include "WorksheetPython.hpp"
 
 using namespace SST;
 using namespace SST::Prototypes::PlotLab;
@@ -29,6 +33,14 @@ struct WorkspaceTestAccess {
     static void Process(WorkspacePanel& panel) { panel.ProcessCommands(); }
     static void Action(WorkspacePanel& panel, const std::string& action) { panel.RunAction(action); }
     static void TreeItem(WorkspacePanel& panel, pl::Id id) { panel.Tree(id); }
+    static void PythonFormula(WorkspacePanel& panel, pl::Id id,const std::string& source) {panel.EditColumn(id);panel.valuesDialog=true;panel.formulaMode=1;panel.formula=source;}
+    static JobId PreviewJob(const WorkspacePanel& panel) {return panel.previewJob;}
+    static const auto& Preview(const WorkspacePanel& panel) {return panel.formulaPreview;}
+    static JobId ApplyPython(WorkspacePanel& panel,pl::Id id,const std::string& source) {panel.StartPythonFormula(id,source,false);return panel.pythonRun;}
+    static int FormulaMode(const WorkspacePanel& panel) {return panel.formulaMode;}
+    static void Script(WorkspacePanel& panel,const std::string& source) {panel.OpenScript(0,source);}
+    static JobId ParametersJob(const WorkspacePanel& panel) {return panel.parameterJob;}
+    static const auto& Parameters(const WorkspacePanel& panel) {return panel.scriptParameters;}
 };
 }
 class WorksheetUi : public testing::Test {
@@ -82,6 +94,163 @@ protected:
         io.AddKeyEvent(key, false); io.AddKeyEvent(ImGuiMod_Ctrl, false); io.AddKeyEvent(ImGuiMod_Shift, false); Frame(dialogs);
     }
 };
+static void EnsureWorksheetPython() {
+    static PythonInterpreter interpreter;
+    if(!PythonInterpreter::IsRuntimeInitialized())ASSERT_TRUE(interpreter.Start());
+    InstallWorksheetPython();
+}
+TEST_F(WorksheetUi, EmbeddedRuntimeLoadsNumpyFromItsOwnEnvironment) {
+#if DS_PYTHON_CAPI_AVAILABLE
+    static PythonInterpreter interpreter;
+    if (!PythonInterpreter::IsRuntimeInitialized()) ASSERT_TRUE(interpreter.Start());
+    const auto gil = PythonInterpreter::AcquireRuntimeGil();
+    const int result = PyRun_SimpleString(
+        "import sys, numpy as np\n"
+        "from pathlib import Path\n"
+        "assert Path(np.__file__).resolve().is_relative_to(Path(sys.prefix).resolve())\n"
+        "assert (np.sqrt(np.array([1., 4., 9.])) * 10 + np.arange(1, 4)).tolist() == [11., 22., 33.]\n");
+    PythonInterpreter::ReleaseRuntimeGil(gil);
+    EXPECT_EQ(result, 0);
+#else
+    GTEST_SKIP() << "Embedded Python is unavailable";
+#endif
+}
+TEST_F(WorksheetUi, PythonColdStartPreview) {
+    static PythonInterpreter interpreter;
+    if(!PythonInterpreter::IsRuntimeInitialized())ASSERT_TRUE(interpreter.Start());
+    std::string pasted;
+    for(int row=1;row<=20;++row)pasted+=std::to_string(row*row)+"\t0\n";
+    WorkspaceTestAccess::SelectCell(panel,sheet,columns[0],rows[0]);
+    WorkspaceTestAccess::Paste(panel,sheet,pasted.c_str());
+    WorkspaceTestAccess::SelectColumn(panel,sheet,columns[1]);Key(ImGuiKey_Q,true,false,true);
+    const std::string source="np.sqrt(A) * 10 + i";
+    WorkspaceTestAccess::PythonFormula(panel,columns[1],source);
+    for(int n=0;n<15;++n)Frame(true);
+    const auto job=WorkspaceTestAccess::PreviewJob(panel);
+    const auto result=job?doc->WaitPython(job):WorkspaceTestAccess::Preview(panel);
+    ASSERT_TRUE(result.ok)<<result.error;
+    ASSERT_EQ(result.preview.size(),20u);
+    for(int row=1;row<=20;++row)EXPECT_DOUBLE_EQ(result.preview[row-1],11*row);
+    const auto applied=doc->WaitPython(WorkspaceTestAccess::ApplyPython(panel,columns[1],source));
+    ASSERT_TRUE(applied.ok)<<applied.error;
+    doc->project->recompute().wait();
+    doc->Execute(doc->project->setCells(columns[0],0,std::vector<double>{100}));
+    doc->project->recompute().wait();
+    const auto& values=std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[1]).data).values);
+    ASSERT_EQ(values.size(),20u);EXPECT_DOUBLE_EQ(values[0],101);EXPECT_DOUBLE_EQ(values[19],220);
+    Key(ImGuiKey_Escape,false,false,true);
+}
+TEST_F(WorksheetUi, PythonColdStartCompletionAndConsoleVariables) {
+    static PythonInterpreter interpreter;
+    if(!PythonInterpreter::IsRuntimeInitialized())ASSERT_TRUE(interpreter.Start());
+    PythonRequest request;request.action=PythonAction::Completion;request.worksheet=sheet;request.source="sheets.";
+    const auto completed=doc->WaitPython(doc->SubmitPython(request));
+    ASSERT_TRUE(completed.ok)<<completed.error;
+    EXPECT_TRUE(std::any_of(completed.completions.begin(),completed.completions.end(),[](const auto& c){return c.insert=="new";}));
+    request.action=PythonAction::Console;request.source="iv = sheet";
+    ASSERT_TRUE(doc->WaitPython(doc->SubmitPython(request)).ok);
+    request.action=PythonAction::Completion;request.source="iv.";request.consoleSession=1;
+    const auto variables=doc->WaitPython(doc->SubmitPython(request));
+    ASSERT_TRUE(variables.ok)<<variables.error;
+    EXPECT_TRUE(std::any_of(variables.completions.begin(),variables.completions.end(),[](const auto& c){return c.insert=="A";}));
+}
+TEST_F(WorksheetUi, PythonColdStartScriptRunAndStop) {
+    static PythonInterpreter interpreter;
+    if(!PythonInterpreter::IsRuntimeInitialized())ASSERT_TRUE(interpreter.Start());
+    WorkspaceTestAccess::Script(panel,"print('embedded script')\nsheet.B[0] = 7");
+    const auto parameters=WorkspaceTestAccess::ParametersJob(panel);
+    ASSERT_NE(parameters,0);ASSERT_TRUE(doc->WaitPython(parameters).ok);
+    ImGui::NewFrame();panel.PythonWindows();ImGui::Render();
+    EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);
+    PythonRequest request;request.worksheet=sheet;request.source="print('embedded script')\nsheet.B[0] = 7";
+    const auto run=doc->WaitPython(doc->SubmitPython(request));
+    ASSERT_TRUE(run.ok)<<run.error;EXPECT_EQ(run.output,"embedded script\n");
+    EXPECT_EQ(std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[1]).data).values)[0],7);
+    request.source="import builtins\nbuiltins._plotlab_stop_started = True\nsheet.B[0] = 99\nwhile True:\n    pass";
+    const auto depth=undo->GetUndoDepth();const auto job=doc->SubmitPython(request);
+    // Cancel a running interpreter, rather than only a queued job.
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    bool started=false;
+    while(!started && std::chrono::steady_clock::now()<deadline) {
+        const auto gil=PythonInterpreter::AcquireRuntimeGil();
+        started=PyDict_GetItemString(PyEval_GetBuiltins(),"_plotlab_stop_started")!=nullptr;
+        PythonInterpreter::ReleaseRuntimeGil(gil);
+        std::this_thread::yield();
+    }
+    doc->CancelPython(job);const auto stopped=doc->WaitPython(job);
+    EXPECT_TRUE(started);
+    const auto gil=PythonInterpreter::AcquireRuntimeGil();
+    if(started)EXPECT_EQ(PyDict_DelItemString(PyEval_GetBuiltins(),"_plotlab_stop_started"),0);
+    PythonInterpreter::ReleaseRuntimeGil(gil);
+    EXPECT_FALSE(stopped.ok);EXPECT_EQ(stopped.errorCode,PythonErrorCode::Cancelled);
+    EXPECT_EQ(undo->GetUndoDepth(),depth);
+    EXPECT_EQ(std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[1]).data).values)[0],7);
+}
+TEST_F(WorksheetUi, PythonCtrlQPreviewCompletionAutoRecalcAndLegacyMode) {
+    EnsureWorksheetPython();
+    WorkspaceTestAccess::SelectColumn(panel,sheet,columns[1]);Key(ImGuiKey_Q,true,false,true);
+    ASSERT_TRUE(WorkspaceTestAccess::ValuesDialog(panel));
+    WorkspaceTestAccess::PythonFormula(panel,columns[1],"np.asarray(A) * 2 + i");
+    for(int n=0;n<15;++n)Frame(true);
+    const auto previewJob=WorkspaceTestAccess::PreviewJob(panel);
+    const auto preview=previewJob?doc->WaitPython(previewJob):WorkspaceTestAccess::Preview(panel);ASSERT_FALSE(preview.running);ASSERT_TRUE(preview.ok)<<preview.error;
+    Frame(true);EXPECT_EQ(WorkspaceTestAccess::Preview(panel).preview,(std::vector<double>{3,6,9,12,15}));
+    const auto applied=doc->WaitPython(WorkspaceTestAccess::ApplyPython(panel,columns[1],"np.asarray(A) * 2 + i"));ASSERT_TRUE(applied.ok)<<applied.error;
+    doc->project->recompute().wait();
+    doc->Execute(doc->project->setCells(columns[0],0,std::vector<double>{10}));doc->project->recompute().wait();
+    EXPECT_EQ(std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[1]).data).values)[0],21);
+    PythonRequest completion;completion.action=PythonAction::Completion;completion.source="np.log";completion.worksheet=sheet;
+    const auto completions=doc->WaitPython(doc->SubmitPython(completion));ASSERT_TRUE(completions.ok)<<completions.error;
+    EXPECT_TRUE(std::any_of(completions.completions.begin(),completions.completions.end(),[](const auto& c){return c.insert=="log10" && !c.signature.empty() && !c.documentation.empty();}));
+    pl::Formula old;old.expression="col(A)*2";doc->SetColumnValues(columns[1],old);doc->project->recompute().wait();
+    EXPECT_EQ(std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[1]).data).values)[0],20);
+    const auto indexed=doc->WaitPython(WorkspaceTestAccess::ApplyPython(panel,columns[1],"sheet.columns[0] * 2"));ASSERT_TRUE(indexed.ok)<<indexed.error;doc->project->recompute().wait();
+    std::vector<pl::Object> reordered;for(std::size_t pos=0;pos<columns.size();++pos){auto moved=doc->project->object(columns[pos]);moved.order=pos==2?0:pos+1;reordered.push_back(std::move(moved));}
+    doc->Execute(doc->project->change("Move before source",std::move(reordered)));doc->project->recompute().wait();
+    EXPECT_EQ(doc->project->children(sheet).front(),columns[2]);
+    EXPECT_EQ(std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[1]).data).values)[0],20);
+    Key(ImGuiKey_Escape,false,false,true);
+}
+TEST_F(WorksheetUi, PythonPreviewReportsRowAndDoesNotChangeDataOrHistory) {
+    EnsureWorksheetPython();
+    doc->Execute(doc->project->setCells(columns[0],0,std::vector<double>{1,-1,3,4,5}));
+    doc->SetMasks(columns[0],{true,false,false,false,false});
+    const auto depth=undo->GetUndoDepth();
+    WorkspaceTestAccess::PythonFormula(panel,columns[1],"np.log(A)");
+    for(int n=0;n<15;++n)Frame(true);
+    const auto id=WorkspaceTestAccess::PreviewJob(panel);
+    const auto result=id?doc->WaitPython(id):WorkspaceTestAccess::Preview(panel);ASSERT_FALSE(result.running);EXPECT_FALSE(result.ok);EXPECT_NE(result.error.find("row 2"),std::string::npos)<<result.error;
+    Frame(true);EXPECT_EQ(undo->GetUndoDepth(),depth);EXPECT_EQ(std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[1]).data).values)[1],2);
+    Key(ImGuiKey_Escape,false,false,true);
+}
+TEST_F(WorksheetUi, PythonTrustBlocksPreviewAndScriptUntilExplicitTrust) {
+    EnsureWorksheetPython();
+    doc->SaveScript("Untrusted","print('no automatic execution')");
+    auto snapshot=Ref<pl::Project>(doc->project->operationSnapshot().release());doc->Open(snapshot,{});
+    ASSERT_FALSE(doc->PythonTrusted());ASSERT_TRUE(doc->HasPython());
+    // Render the same banner used in Project Explorer without a desktop backend.
+    ImGui::NewFrame();ImGui::Begin("Trust fixture");panel.PythonTrustBanner();EXPECT_EQ(GImGui->LastItemData.ID,0u);ImGui::End();ImGui::Render();
+    WorkspaceTestAccess::PythonFormula(panel,columns[1],"A*2");
+    for(int n=0;n<15;++n)Frame(true);
+    EXPECT_EQ(WorkspaceTestAccess::PreviewJob(panel),0);
+    PythonRequest script;script.source="sheet.A[:] = [99]";script.worksheet=sheet;
+    EXPECT_THROW(doc->SubmitPython(script),std::invalid_argument);
+    doc->TrustPython();EXPECT_TRUE(doc->WaitPython(doc->SubmitPython(script)).ok);
+    EXPECT_EQ(std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[0]).data).values)[0],99);
+    Key(ImGuiKey_Escape,false,false,true);
+}
+TEST_F(WorksheetUi, PythonScriptEditorRendersParametersAndCancellationKeepsData) {
+    EnsureWorksheetPython();
+    WorkspaceTestAccess::Script(panel,"params(area=.105, T=(200,330))\nprint(area, T)");
+    auto id=WorkspaceTestAccess::ParametersJob(panel);ASSERT_NE(id,0);ASSERT_TRUE(doc->WaitPython(id).ok);
+    for(int frame=0;frame<3;++frame){ImGui::NewFrame();panel.PythonWindows();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);}
+    ASSERT_EQ(WorkspaceTestAccess::Parameters(panel).size(),2);
+    auto* window=ImGui::FindWindowByName("Python Script");ASSERT_NE(window,nullptr);EXPECT_GT(window->Size.x,600);
+    PythonRequest run;run.source="sheet.A[0] = 99\nwhile True:\n    pass";run.worksheet=sheet;
+    const auto depth=undo->GetUndoDepth();id=doc->SubmitPython(run);doc->CancelPython(id);const auto result=doc->WaitPython(id);
+    EXPECT_FALSE(result.ok);EXPECT_EQ(result.errorCode,PythonErrorCode::Cancelled);EXPECT_EQ(undo->GetUndoDepth(),depth);
+    EXPECT_EQ(std::get<std::vector<double>>(std::get<pl::Column>(doc->project->object(columns[0]).data).values)[0],1);
+}
 TEST_F(WorksheetUi, HeaderClickShiftControlAndKeyboardContext) {
     auto* table = Table(); ASSERT_NE(table, nullptr);
     const float y = table->OuterRect.Min.y + ImGui::GetTextLineHeight() / 2 + 3;
@@ -403,6 +572,28 @@ TEST_F(WorksheetUi, RestoredSplitLayoutDoesNotRedockDocumentsOrReopenExplorer) {
     EXPECT_TRUE(WorkspaceTestAccess::LayoutRebuilt(panel)); EXPECT_TRUE(panel.IsVisible());
     WorkspaceTestAccess::Layout(panel); EXPECT_FALSE(WorkspaceTestAccess::LayoutRebuilt(panel));
     ImGui::Render();
+}
+TEST_F(WorksheetUi, StaleIniSplitWithoutCentralNodeRebuildsLayout) {
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    const auto root=ImGui::GetMainViewport()->ID;
+    char ini[512];
+    std::snprintf(ini,sizeof(ini),
+        "[Docking][Data]\nDockSpace ID=0x%08X Pos=0,0 Size=1400,900 Split=X\n"
+        " DockNode ID=0x00000011 Parent=0x%08X SizeRef=300,900\n"
+        " DockNode ID=0x00000012 Parent=0x%08X SizeRef=1100,900\n",root,root,root);
+    ImGui::LoadIniSettingsFromMemory(ini);
+    auto* stale=ImGui::DockBuilderGetNode(root);
+    ASSERT_NE(stale,nullptr);ASSERT_TRUE(stale->IsSplitNode());
+    ASSERT_EQ(ImGui::DockBuilderGetCentralNode(root),nullptr);
+    ImGui::NewFrame();
+    const auto docks=WorkspaceTestAccess::Layout(panel);
+    EXPECT_TRUE(WorkspaceTestAccess::LayoutRebuilt(panel));
+    EXPECT_NE(docks.first,0u);EXPECT_NE(docks.second,0u);EXPECT_NE(docks.first,docks.second);
+    ASSERT_NE(ImGui::DockBuilderGetCentralNode(root),nullptr);
+    EXPECT_EQ(ImGui::DockBuilderGetCentralNode(root)->ID,docks.second);
+    ImGui::Render();
+    ImGui::NewFrame();WorkspaceTestAccess::Layout(panel);
+    EXPECT_FALSE(WorkspaceTestAccess::LayoutRebuilt(panel));ImGui::Render();
 }
 TEST_F(WorksheetUi, PlotDialogsUseOwnerUiFontAndStayInsideMainViewport) {
     const auto graph = doc->PlotColumns(sheet, {columns[1]}, plot::SeriesKind::LineScatter);
