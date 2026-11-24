@@ -38,6 +38,22 @@ TEST(CapLabSources, ReimportPreservesUserCurveLabels) {
     ReplaceMeasurement(project,project.sweeps[0].id,SourcePreview());
     EXPECT_EQ(project.engine->object(plot).name,"My measured C-f");
 }
+TEST(CapLabSources, RelinkKeepsTypedAnalysisSnapshotsFreshAndSharesValues) {
+    auto p=FixtureProject();const auto mid=p.sweeps[0].id;
+    ReplaceMeasurement(p,mid,SourcePreview());
+    const auto measurement=AnalysisMeasurement(p,mid);
+    Json circuit{{"id",p.engine->reserveId()},{"sample_id",p.samples[0].id},{"name","R"},{"schematic",CircuitJson(ccui::importString("R0"))}};
+    p.circuits.push_back(circuit);JobContext context({},{},{},{},[]{return false;});
+    AppendAnalysis(p,SimulateIS(measurement,circuit,{{"temperature_K",200.},{"bias_V",0.}},context));
+    const auto aid=p.analyses[0].at("id").get<pl::Id>();
+    const auto column=p.analysisInputs.at(aid)[0].columns[0];
+    RelinkSource(p,mid,{{"source","moved/cf_100K_7.dat"},{"sha256",SourceMetadata(p,mid).at("sha256")}});
+    RefreshAnalyses(p);
+    EXPECT_EQ(p.analyses[0].at("status"),"valid");
+    EXPECT_EQ(p.analysisInputs.at(aid)[0].metadata.at("source"),"moved/cf_100K_7.dat");
+    EXPECT_EQ(p.analysisInputs.at(aid)[0].columns[0],column);
+    EXPECT_EQ(Serialize(Parse(Serialize(p))),Serialize(p));
+}
 TEST(CapLabSources, ImportAndSourceDiffRequireSeparateMetadataConfirmation) {
     auto jobs=CreateRef<JobSystem>(nullptr,1); auto bus=CreateRef<EventBus>(); auto undo=CreateRef<UndoStack>();
     auto commands=CreateRef<CommandRegistry>(); CapLabWorkflow state(jobs,bus,undo); RegisterCommands(commands,bus,state);

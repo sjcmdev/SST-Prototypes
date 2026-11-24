@@ -192,7 +192,7 @@ NB_MODULE(sst_caplab, module)
     module.def("cv_density", &sst::physics::cvDensity);
     module.def("dlcp_density", &sst::physics::dlcpDensity);
     module.def("fermi_energy", &sst::physics::bulkFermiEnergy);
-    module.def("measurement", [](const std::string &text, pl::Id id) { return AnalysisMeasurement(Parse(text),id).dump(); });
+    module.def("measurement", [](const std::string &text, pl::Id id) { return MeasurementJson(AnalysisMeasurement(Parse(text),id)).dump(); });
     module.def("edit_defect", [](const std::string &text, const std::string &edit) {
         auto p=Parse(text); EditDefect(p,Json::parse(edit)); RefreshAnalyses(p); return Serialize(p);
     });
@@ -551,9 +551,9 @@ namespace SST::Prototypes::CapLab
             const std::string root=FileSystem::Exists(local.Join("caplab").Native()) ? local.Utf8() : SST_PROTOTYPE_PYTHON_ROOT;
             if (!nb::cast<bool>(paths.attr("__contains__")(root))) paths.attr("insert")(0,root);
             Json data=ProjectJson(project,false); data["measurement_data"]=Json::array();
-            for (const auto &m : project.measurements) data["measurement_data"].push_back(AnalysisMeasurement(project,m.at("id").get<pl::Id>()));
+            for (const auto &m : project.measurements) data["measurement_data"].push_back(MeasurementJson(AnalysisMeasurement(project,m.at("id").get<pl::Id>())));
             for (const auto &m : project.sweeps) {
-                auto measurement=AnalysisMeasurement(project,m.id);
+                auto measurement=MeasurementJson(AnalysisMeasurement(project,m.id));
                 measurement["provenance"]=SourceParameters(project,m.id);
                 for (const auto cid : project.engine->children(m.id)) if (cid!=m.frequency && cid!=m.capacitance && cid!=m.resistance) {
                     const auto &object=project.engine->object(cid);
@@ -574,7 +574,9 @@ namespace SST::Prototypes::CapLab
         throw std::runtime_error("Embedded Python unavailable for export.");
 #endif
     }
-    Json ReadAnalysis(const Json &measurement, const Json &options, const Json &xd, JobContext &context)
+    AnalysisResult ReadAnalysis(const AnalysisMeasurementData &measurement, const Json &options, const AnalysisMeasurementData &xd,
+        const std::vector<AnalysisMeasurementData> &measurements, const std::vector<AnalysisMeasurementData> &pointInputs,
+        const std::map<pl::Id,std::vector<AnalysisMeasurementData>> &snapshots, JobContext &context)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
         if (!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python unavailable.");
@@ -589,13 +591,68 @@ namespace SST::Prototypes::CapLab
             const auto local = executable.Value().parent_path().Join("python");
             const std::string root = FileSystem::Exists(local.Join("caplab").Native()) ? local.Utf8() : SST_PROTOTYPE_PYTHON_ROOT;
             if (!nb::cast<bool>(paths.attr("__contains__")(root))) paths.attr("insert")(0,root);
+            std::vector<std::pair<nb::object,AnalysisMeasurementData>> inputs;
+            auto pythonMeasurement=[&](const AnalysisMeasurementData &m)->nb::object {
+                if(m.empty())return nb::none();
+                auto value=nb::cast<nb::dict>(PythonValue(m.metadata));nb::list columns;
+                for(const auto &c:m.columns)columns.append(nb::cast(*c));
+                value["columns"]=columns;if(m.rowIds)value["row_ids"]=nb::cast(*m.rowIds);
+                inputs.emplace_back(value,m);return value;
+            };
+            const auto input=pythonMeasurement(measurement),width=pythonMeasurement(xd);
+            auto settings=nb::cast<nb::dict>(PythonValue(options));
+            if(!measurements.empty()) {nb::list list;for(const auto &m:measurements)list.append(pythonMeasurement(m));settings["measurements"]=list;}
+            if(options.at("type")=="Arrhenius") {nb::list list;for(const auto &m:pointInputs)list.append(pythonMeasurement(m));settings["point_inputs"]=list;}
+            if(options.contains("source_analyses")) {
+                auto sources=nb::borrow<nb::list>(settings["source_analyses"]);
+                for(std::size_t i=0;i<options.at("source_analyses").size();++i) {
+                    const auto id=options.at("source_analyses")[i].at("id").get<pl::Id>();
+                    nb::list list;for(const auto &m:snapshots.at(id))list.append(pythonMeasurement(m));
+                    nb::borrow<nb::dict>(sources[i])["inputs"]=list;
+                }
+            }
             const std::function<bool()> cancel = [&] { return context.IsCancellationRequested(); };
             const std::function<void(double)> progress = [&](double v) { context.SetProgress(float(v),1); };
-            auto value = nb::module_::import_("caplab.analysis").attr("analyze")(PythonValue(measurement),PythonValue(options),PythonValue(xd),cancel,progress);
-            return AnalysisValue(value);
+            const auto value=nb::cast<nb::dict>(nb::module_::import_("caplab.analysis").attr("analyze")(input,settings,width,cancel,progress));
+            AnalysisResult result;
+            result.record=Json::object();
+            for(const auto &[key,v]:value) {
+                const auto name=nb::cast<std::string>(key);
+                if(name=="settings") {
+                    auto saved=options;
+                    if(!measurements.empty()) {saved["measurements"]=Json::array();for(const auto &m:measurements)saved["measurements"].push_back(m.metadata);}
+                    if(options.at("type")=="Arrhenius") {saved["point_inputs"]=Json::array();for(const auto &m:pointInputs)saved["point_inputs"].push_back(m.metadata);}
+                    result.record[name]=std::move(saved);
+                } else if(name=="source_analyses")result.record[name]=options.at(name);
+                else if(name!="inputs" && name!="plots")result.record[name]=AnalysisValue(v);
+            }
+            for(auto item:nb::borrow<nb::iterable>(value["inputs"])) {
+                auto found=std::find_if(inputs.begin(),inputs.end(),[&](const auto &known){return known.first.is(item);});
+                if(found==inputs.end())throw std::runtime_error("Analysis returned an unknown input snapshot");
+                result.inputs.push_back(found->second);
+            }
+            auto values=[](nb::handle list) {std::vector<double> out;for(auto v:nb::borrow<nb::iterable>(list))out.push_back(v.is_none()?std::numeric_limits<double>::quiet_NaN():nb::cast<double>(v));return out;};
+            for(auto item:nb::borrow<nb::iterable>(value["plots"])) {
+                const auto plot=nb::borrow<nb::dict>(item);AnalysisPlotData p;
+                p.name=nb::cast<std::string>(plot["name"]);p.xLabel=nb::cast<std::string>(plot["x_label"]);p.yLabel=nb::cast<std::string>(plot["y_label"]);
+                if(plot.contains("log_x"))p.logX=nb::cast<bool>(plot["log_x"]);if(plot.contains("log_y"))p.logY=nb::cast<bool>(plot["log_y"]);
+                if(plot.contains("equal_aspect"))p.equalAspect=nb::cast<bool>(plot["equal_aspect"]);
+                for(auto item:nb::borrow<nb::iterable>(plot["curves"])) {
+                    const auto curve=nb::borrow<nb::dict>(item);AnalysisCurveData c;
+                    c.name=nb::cast<std::string>(curve["name"]);c.x=values(curve["x"]);c.y=values(curve["y"]);
+                    if(curve.contains("fit"))c.fit=nb::cast<bool>(curve["fit"]);if(curve.contains("candidates"))c.candidates=nb::cast<bool>(curve["candidates"]);
+                    if(curve.contains("temperature_K") && !curve["temperature_K"].is_none()) {
+                        c.temperature_K=nb::cast<double>(curve["temperature_K"]);
+                        if(nb::isinstance<nb::int_>(curve["temperature_K"]))c.integerTemperature=nb::cast<std::uint64_t>(curve["temperature_K"]);
+                    }
+                    p.curves.push_back(std::move(c));
+                }
+                result.plots.push_back(std::move(p));
+            }
+            return result;
         } catch (const nb::python_error &e) { context.ThrowIfCancellationRequested(); throw std::runtime_error(e.what()); }
 #else
-        (void)measurement; (void)options; (void)xd; (void)context;
+        (void)measurement; (void)options; (void)xd; (void)measurements; (void)pointInputs; (void)snapshots; (void)context;
         throw std::runtime_error("Embedded Python unavailable.");
 #endif
     }

@@ -26,8 +26,8 @@ TEST_F(TreeFixture, MetadataDuplicateMoveDeleteUndoAndStableIds) {
     ASSERT_EQ(p.samples.size(),2); ASSERT_EQ(p.sweeps.size(),2);
     const auto target=p.samples.back().id, copyMid=p.sweeps.back().id;
     EXPECT_NE(copyMid,mid); EXPECT_EQ(p.samples.back().metadata.at("notes"),"wafer A");
-    EXPECT_EQ(AnalysisMeasurement(p,copyMid).at("columns"),AnalysisMeasurement(p,mid).at("columns"));
-    EXPECT_NE(AnalysisMeasurement(p,copyMid).at("row_ids"),AnalysisMeasurement(p,mid).at("row_ids"));
+    EXPECT_EQ(MeasurementJson(AnalysisMeasurement(p,copyMid)).at("columns"),MeasurementJson(AnalysisMeasurement(p,mid)).at("columns"));
+    EXPECT_NE(MeasurementJson(AnalysisMeasurement(p,copyMid)).at("row_ids"),MeasurementJson(AnalysisMeasurement(p,mid)).at("row_ids"));
     state.Select({{"kind","measurement"},{"id",mid}});
     ASSERT_TRUE(Edit({{"action","move_measurements"},{"measurement_ids",{mid}},{"target_sample_id",target}}));
     EXPECT_EQ(state.Document().selectedSample,target); EXPECT_EQ(p.sweeps[0].sample_id,target);
@@ -82,7 +82,7 @@ TEST_F(TreeFixture, SaveAfterUndoDoesNotReuseDiscardedIdentityOnReopen) {
 }
 TEST_F(TreeFixture, MovingHistoricalMeasurementPreservesOriginalReferencesWithoutRebinding) {
     auto &p=state.Document().project; const auto source=p.samples[0].id, mid=p.sweeps[0].id;
-    const auto row=AnalysisMeasurement(p,mid).at("row_ids").at(0);
+    const auto row=MeasurementJson(AnalysisMeasurement(p,mid)).at("row_ids").at(0);
     p.historical.push_back({{"sample_id",source},{"status","historical"},{"data",{
         {"selections",{{"AS",mid}}},{"points",Json::array({Json{{"measurement_id",mid},{"row_id",row}}})}}}});
     ASSERT_TRUE(Edit({{"action","create_sample"},{"name","target"}}));

@@ -4,6 +4,7 @@
 #include <optional>
 #include <set>
 #include <nlohmann/json.hpp>
+#include "Storage/AnalysisData.hpp"
 #include "Domain/CapLabCircuit.hpp"
 #include <sst/plotlab/Extensions.hpp>
 #include "Core/Utils/Memory.hpp"
@@ -42,10 +43,93 @@ namespace SST::Prototypes::CapLab
         std::vector<Sample> samples;
         std::vector<FrequencySweep> sweeps;
         Json measurements = Json::array(), historical = Json::array(), imports = Json::array(), analyses = Json::array(), defects = Json::array(), circuits = Json::array(), comparisons = Json::array();
+        std::map<pl::Id,std::vector<AnalysisMeasurementData>> analysisInputs;
         pl::Id graph = 0;
         std::map<std::string,ImportProfile> importProfiles;
         std::map<pl::Id,WorksheetSource> sources;
     };
+    // These codecs are used only when reading/writing files or the Python schema.
+    inline Json MeasurementHeaderFromJson(const Json &value) {
+        Json header=Json::object();
+        for(const auto &[key,v]:value.items())if(key!="columns" && key!="row_ids")header[key]=v;
+        return header;
+    }
+    inline bool MatchesStoredMeasurement(const AnalysisMeasurementData &input, const Json &value) {
+        if(!value.is_object() || MeasurementHeaderFromJson(value)!=input.metadata || !value.contains("columns") || !value.at("columns").is_array() || value.at("columns").size()!=input.columns.size())return false;
+        if(input.rowIds && (!value.contains("row_ids") || value.at("row_ids")!=Json(*input.rowIds)))return false;
+        if(!input.rowIds && value.contains("row_ids"))return false;
+        for(std::size_t i=0;i<input.columns.size();++i) {
+            const auto &values=value.at("columns")[i];const auto &stored=*input.columns[i];
+            if(!values.is_array() || values.size()!=stored.size())return false;
+            for(std::size_t j=0;j<stored.size();++j) {
+                if(values[j].is_null()) {if(!std::isnan(stored[j]))return false;}
+                else if(!values[j].is_number() || values[j].get<double>()!=stored[j])return false;
+            }
+        }
+        return true;
+    }
+    inline AnalysisMeasurementData MeasurementFromJson(const Json &value) {
+        if (value.is_null()) return {};
+        AnalysisMeasurementData result; result.metadata=MeasurementHeaderFromJson(value);
+        for (const auto &column:value.at("columns")) {
+            auto values=std::make_shared<std::vector<double>>(); values->reserve(column.size());
+            for (const auto &v:column) values->push_back(v.is_null()?std::numeric_limits<double>::quiet_NaN():v.get<double>());
+            result.columns.push_back(std::move(values));
+        }
+        if (value.contains("row_ids")) result.rowIds=std::make_shared<const std::vector<pl::Id>>(value.at("row_ids").get<std::vector<pl::Id>>());
+        return result;
+    }
+    inline Json MeasurementJson(const AnalysisMeasurementData &value) {
+        if (value.empty()) return nullptr;
+        auto result=value.metadata; result["columns"]=Json::array();
+        for (const auto &column:value.columns) result["columns"].push_back(*column);
+        if (value.rowIds) result["row_ids"]=*value.rowIds;
+        return result;
+    }
+    inline void ReadAnalysisInputs(Project &p, Json &records) {
+        if (records.is_array()) {for(auto &r:records)ReadAnalysisInputs(p,r);return;}
+        if (!records.is_object() || !records.contains("inputs") || (!records.contains("id") && !records.contains("graph_id"))) return;
+        const auto id=records.at(records.contains("id")?"id":"graph_id").get<pl::Id>();
+        auto [stored,inserted]=p.analysisInputs.try_emplace(id);
+        auto &inputs=stored->second;
+        if(inserted)for(const auto &value:records.at("inputs"))inputs.push_back(MeasurementFromJson(value));
+        else {
+            if(records.at("inputs").size()!=inputs.size())throw std::runtime_error("Conflicting analysis input snapshots.");
+            for(std::size_t i=0;i<inputs.size();++i)if(!MatchesStoredMeasurement(inputs[i],records.at("inputs")[i]))throw std::runtime_error("Conflicting analysis input snapshots.");
+        }
+        for(auto &value:records.at("inputs")) {value.erase("columns");value.erase("row_ids");}
+        if(records.contains("settings") && records.at("settings").is_object()) {
+            auto &settings=records.at("settings");
+            for(const char *key:{"measurements","point_inputs"})if(settings.contains(key) && settings.at(key).is_array()) {
+                for(auto &m:settings.at(key))if(m.is_object() && m.contains("id")) {
+                    const auto found=std::find_if(inputs.begin(),inputs.end(),[&](const auto &input){return input.metadata.at("id")==m.at("id");});
+                    if(found!=inputs.end() && MatchesStoredMeasurement(*found,m))m=found->metadata;
+                }
+            }
+            if(settings.contains("source_analyses"))ReadAnalysisInputs(p,settings.at("source_analyses"));
+        }
+        if(records.contains("source_analyses"))ReadAnalysisInputs(p,records.at("source_analyses"));
+    }
+    inline void WriteAnalysisInputs(const Project &p, Json &records) {
+        if (records.is_array()) {for(auto &r:records)WriteAnalysisInputs(p,r);return;}
+        if (!records.is_object() || !records.contains("inputs") || (!records.contains("id") && !records.contains("graph_id"))) return;
+        const auto id=records.at(records.contains("id")?"id":"graph_id").get<pl::Id>();
+        const auto stored=p.analysisInputs.find(id);
+        if(stored!=p.analysisInputs.end()) {
+            records["inputs"]=Json::array();for(const auto &m:stored->second)records["inputs"].push_back(MeasurementJson(m));
+        }
+        if(records.contains("settings") && records.at("settings").is_object()) {
+            auto &settings=records.at("settings");
+            for(const char *key:{"measurements","point_inputs"})if(stored!=p.analysisInputs.end() && settings.contains(key) && settings.at(key).is_array()) {
+                for(auto &m:settings.at(key)) {
+                    const auto found=std::find_if(stored->second.begin(),stored->second.end(),[&](const auto &input){return input.metadata==m;});
+                    if(found!=stored->second.end())m=MeasurementJson(*found);
+                }
+            }
+            if(settings.contains("source_analyses"))WriteAnalysisInputs(p,settings.at("source_analyses"));
+        }
+        if(records.contains("source_analyses"))WriteAnalysisInputs(p,records.at("source_analyses"));
+    }
     inline pl::Id NextEntityId(const pl::Project &p)
     {
         // PlotLab exposes reservations through its detached operation snapshot.
@@ -471,6 +555,8 @@ namespace SST::Prototypes::CapLab
             result["engine"]=std::move(engine);
         }
         if (!p.comparisons.empty()) result["comparisons"]=p.comparisons;
+        WriteAnalysisInputs(p,result["analyses"]);
+        if (result.contains("comparisons")) WriteAnalysisInputs(p,result["comparisons"]);
         return result;
     }
     inline std::string Serialize(const Project &p) { return ProjectJson(p).dump(); }
@@ -516,6 +602,7 @@ namespace SST::Prototypes::CapLab
         p.defects = j.value("defects",Json::array());
         p.circuits = j.value("circuits",Json::array());
         p.comparisons = j.value("comparisons",Json::array());
+        ReadAnalysisInputs(p,p.analyses); ReadAnalysisInputs(p,p.comparisons);
         Validate(p);
         return p;
     }

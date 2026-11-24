@@ -7,49 +7,39 @@ inline pl::Id AnalysisSample(const Json &a) {
     if (a.contains("defect")) return a.at("defect").at("sample_id");
     return a.at("inputs").at(0).at("sample_id");
 }
-inline Json AnalysisMeasurement(const Project &p, pl::Id id, bool includeData = true) {
-    for (const auto &m : p.measurements) if (m.at("id") == id) {
-        auto data = m.at("metadata"); data["id"] = id; data["columns"] = Json::array();
-        if (includeData) for (const auto &column : m.at("columns"))
-            data["columns"].push_back(std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(column.get<pl::Id>()).data).values));
-        if (includeData) data["row_ids"] = std::get<pl::Worksheet>(p.engine->object(id).data).rows;
-        for (const auto &s : p.samples) if (m.at("sample_id") == s.id) {
-            data["sample_id"] = s.id; data["area_m2"] = Nullable(s.area_m2); data["sample_metadata"] = s.metadata;
-        }
-        return data;
-    }
-    for (const auto &m : p.sweeps) if (m.id==id) {
-        Json data{{"id",id},{"sample_id",m.sample_id},{"kind","FrequencySweep"},{"variant","Cp_Rp"},
-            {"temperature_K",Nullable(m.temperature_K)},{"names",{"f","C","Rp"}},{"units",{"Hz","F","Ohm"}},
-            {"columns",Json::array()},{"row_ids",std::get<pl::Worksheet>(p.engine->object(id).data).rows}};
-        for (const auto &sample : p.samples) if (sample.id==m.sample_id) {
-            data["area_m2"]=Nullable(sample.area_m2); data["sample_metadata"]=sample.metadata;
-        }
-        data["source_rows"]=p.sources.at(id).rows;
-        if (includeData) for (auto cid : {m.frequency,m.capacitance,m.resistance}) data["columns"].push_back(std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(cid).data).values));
-        else data.erase("row_ids");
-        return data;
-    }
-    throw std::runtime_error("Missing analysis measurement.");
-}
-inline bool SameAnalysisMeasurement(const Project &p, const Json &input, bool &sameSample) {
-    const auto id=input.at("id").get<pl::Id>();
-    const auto header=AnalysisMeasurement(p,id,false);
-    sameSample=header.at("sample_id")==input.at("sample_id");
-    if (input.size()!=header.size()+1) return false; // row_ids is omitted; columns is an empty placeholder.
-    for (const auto &[key,value] : header.items()) if (key!="columns" && (!input.contains(key) || input.at(key)!=value)) return false;
-    const auto &rows=std::get<pl::Worksheet>(p.engine->object(id).data).rows;
-    const auto &oldRows=input.at("row_ids");
-    if (rows.size()!=oldRows.size() || !std::equal(rows.begin(),rows.end(),oldRows.begin(),[](auto a,const auto &b) {return b==a;})) return false;
+inline AnalysisMeasurementData AnalysisMeasurement(const Project &p, pl::Id id, bool includeData = true) {
+    AnalysisMeasurementData result;
     std::vector<pl::Id> columns;
-    for (const auto &m : p.measurements) if (m.at("id")==id) columns=m.at("columns").get<std::vector<pl::Id>>();
-    for (const auto &m : p.sweeps) if (m.id==id) columns={m.frequency,m.capacitance,m.resistance};
-    const auto &old=input.at("columns");
-    if (columns.size()!=old.size()) return false;
-    for (std::size_t i=0;i<columns.size();++i) {
-        const auto &values=std::get<std::vector<double>>(std::get<pl::Column>(p.engine->object(columns[i]).data).values);
-        if (values.size()!=old[i].size() || !std::equal(values.begin(),values.end(),old[i].begin(),[](double a,const auto &b) {return b==a;})) return false;
+    for (const auto &m:p.measurements) if (m.at("id")==id) {
+        result.metadata=m.at("metadata"); result.metadata["id"]=id;
+        result.metadata["sample_id"]=m.at("sample_id");
+        columns=m.at("columns").get<std::vector<pl::Id>>(); break;
     }
+    if (result.empty()) for (const auto &m:p.sweeps) if(m.id==id) {
+        result.metadata={{"id",id},{"sample_id",m.sample_id},{"kind","FrequencySweep"},{"variant","Cp_Rp"},
+            {"temperature_K",Nullable(m.temperature_K)},{"names",{"f","C","Rp"}},{"units",{"Hz","F","Ohm"}}};
+        if(includeData)result.metadata["source_rows"]=p.sources.at(id).rows;
+        columns={m.frequency,m.capacitance,m.resistance};break;
+    }
+    if (result.empty()) throw std::runtime_error("Missing analysis measurement.");
+    for (const auto &sample:p.samples) if(result.metadata.at("sample_id")==sample.id) {
+        result.metadata["area_m2"]=Nullable(sample.area_m2);result.metadata["sample_metadata"]=sample.metadata;
+    }
+    if(includeData) {
+        const auto owner=p.engine->objects().at(id);
+        result.rowIds=std::shared_ptr<const std::vector<pl::Id>>(owner,&std::get<pl::Worksheet>(owner->data).rows);
+        for(auto cid:columns) {
+            const auto column=p.engine->objects().at(cid);
+            result.columns.emplace_back(column,&std::get<std::vector<double>>(std::get<pl::Column>(column->data).values));
+        }
+    }
+    return result;
+}
+inline bool SameAnalysisMeasurement(const Project &p, const AnalysisMeasurementData &input, bool &sameSample) {
+    const auto current=AnalysisMeasurement(p,input.metadata.at("id").get<pl::Id>());
+    sameSample=current.metadata.at("sample_id")==input.metadata.at("sample_id");
+    if (current.metadata!=input.metadata || !input.rowIds || *current.rowIds!=*input.rowIds || current.columns.size()!=input.columns.size()) return false;
+    for(std::size_t i=0;i<current.columns.size();++i) if(*current.columns[i]!=*input.columns[i])return false;
     return true;
 }
 inline void EditDefect(Project &p, const Json &edit) {
@@ -74,15 +64,15 @@ inline void EditDefect(Project &p, const Json &edit) {
             }
             if (!point.at("measurement_id").is_null()) {
                 const auto m=AnalysisMeasurement(p,point.at("measurement_id").get<pl::Id>());
-                if (m.at("sample_id")!=it->at("sample_id") || m.at("kind")!="FrequencySweep" || !m.at("names").is_array()) throw std::runtime_error("Invalid point measurement.");
-                const auto rows=m.at("row_ids").get<std::vector<pl::Id>>();
+                if (m.metadata.at("sample_id")!=it->at("sample_id") || m.metadata.at("kind")!="FrequencySweep" || !m.metadata.at("names").is_array()) throw std::runtime_error("Invalid point measurement.");
+                const auto &rows=*m.rowIds;
                 auto row=std::find(rows.begin(),rows.end(),point.at("row_id").get<pl::Id>());
                 if (row==rows.end()) throw std::runtime_error("Missing point row.");
-                const auto names=m.at("names").get<std::vector<std::string>>();
+                const auto names=m.metadata.at("names").get<std::vector<std::string>>();
                 const auto f=std::find(names.begin(),names.end(),"f");
-                if (f==names.end() || m.at("temperature_K").is_null()) throw std::runtime_error("Missing point T/f.");
-                point["frequency_Hz"]=m.at("columns").at(std::distance(names.begin(),f)).at(std::distance(rows.begin(),row));
-                point["temperature_K"]=m.at("temperature_K");
+                if (f==names.end() || m.metadata.at("temperature_K").is_null()) throw std::runtime_error("Missing point T/f.");
+                point["frequency_Hz"]=m.columns.at(std::distance(names.begin(),f))->at(std::distance(rows.begin(),row));
+                point["temperature_K"]=m.metadata.at("temperature_K");
             }
             point["id"]=p.engine->reserveId(); point["enabled"]=true;
             it->at("points").push_back(std::move(point));
@@ -106,7 +96,7 @@ inline void DeleteMeasurement(Project &p, pl::Id id) {
 inline void RefreshAnalyses(Project &p) {
     for (auto &a : p.analyses) {
         bool missing = false, stale = false;
-        for (const auto &input : a.at("inputs")) {
+        for (const auto &input : p.analysisInputs.at(a.at("id").get<pl::Id>())) {
             try {
                 bool sameSample=false;
                 stale |= !SameAnalysisMeasurement(p,input,sameSample);
@@ -139,54 +129,56 @@ inline void RefreshAnalyses(Project &p) {
         a["status"] = missing ? "missing_input" : stale ? "stale" : a.at("computed_status").get<std::string>();
     }
 }
-inline pl::Id AnalysisPlot(Project &p, pl::Id workbook, const Json &spec) {
-    const std::string name = spec.at("name");
+inline pl::Id AnalysisPlot(Project &p, pl::Id workbook, AnalysisPlotData spec) {
+    const std::string &name = spec.name;
     const auto graph = p.engine->reserveId(), layer = p.engine->reserveId();
-    pl::Layer l; l.spec.x.label = spec.at("x_label"); l.spec.y.label = spec.at("y_label"); l.spec.autoFit = sst::ui::plot::AutoFit::Once;
-    l.spec.equalAspect=spec.value("equal_aspect",false);
-    if (spec.value("log_x",false)) l.spec.x.scale=sst::ui::plot::AxisScale::Log10;
-    if (spec.value("log_y",false)) l.spec.y.scale=sst::ui::plot::AxisScale::Log10;
+    pl::Layer l; l.spec.x.label = spec.xLabel; l.spec.y.label = spec.yLabel; l.spec.autoFit = sst::ui::plot::AutoFit::Once;
+    l.spec.equalAspect=spec.equalAspect;
+    if (spec.logX) l.spec.x.scale=sst::ui::plot::AxisScale::Log10;
+    if (spec.logY) l.spec.y.scale=sst::ui::plot::AxisScale::Log10;
     FormatCompareAxes(l.spec);
     std::vector<pl::Object> objects{{graph,p.engine->root(),name,0,pl::Graph{}},{layer,graph,name,0,l}};
-    for (const auto &curve : spec.at("curves")) {
+    for (auto &curve : spec.curves) {
         auto sheet = p.engine->reserveId(), x = p.engine->reserveId(), y = p.engine->reserveId();
         pl::Worksheet w;
-        if (curve.contains("temperature_K")) {
-            p.sources[sheet].temperatures["temperature_K"]=Optional(curve.at("temperature_K"));
-            if (curve.at("temperature_K").is_number_integer()) p.sources[sheet].integerTemperatures["temperature_K"]=curve.at("temperature_K").get<std::uint64_t>();
-        }
-        for (std::size_t i=0; i<curve.at("x").size(); ++i) w.rows.push_back(p.engine->reserveId());
-        pl::Column cx, cy; auto values=[](const Json &array) {std::vector<double> out; for (const auto &v : array) out.push_back(v.is_null() ? std::numeric_limits<double>::quiet_NaN() : v.get<double>()); return out;};
-        cx.values=values(curve.at("x")); cy.values=values(curve.at("y"));
+        if (curve.temperature_K) p.sources[sheet].temperatures["temperature_K"]=curve.temperature_K;
+        if (curve.integerTemperature) p.sources[sheet].integerTemperatures["temperature_K"]=*curve.integerTemperature;
+        for(std::size_t i=0;i<curve.x.size();++i)w.rows.push_back(p.engine->reserveId());
+        pl::Column cx,cy;cx.values=std::move(curve.x);cy.values=std::move(curve.y);
         cx.role = pl::Role::X; cy.role = pl::Role::Y;
         pl::Plot plot{sheet,x,y}; plot.kind = sst::ui::plot::SeriesKind::LineScatter;
-        if (curve.value("fit",false)) plot.kind=sst::ui::plot::SeriesKind::Line;
-        if (curve.value("candidates",false)) plot.kind=sst::ui::plot::SeriesKind::Scatter;
+        if (curve.fit) plot.kind=sst::ui::plot::SeriesKind::Line;
+        if (curve.candidates) plot.kind=sst::ui::plot::SeriesKind::Scatter;
         plot.style.marker=sst::ui::plot::Marker::Circle;
-        plot.style.color = curve.value("fit",false) ? sst::ui::plot::Color{.85f,.25f,.12f,1} : sst::ui::plot::Color{.12f,.45f,.78f,1};
-        if (curve.contains("color")) plot.style.color=curve.at("color").get<sst::ui::plot::Color>();
+        plot.style.color=curve.color;
         objects.push_back({sheet,workbook,name,0,std::move(w)});
         objects.push_back({x,sheet,"x",0,std::move(cx)}); objects.push_back({y,sheet,"y",0,std::move(cy)});
-        objects.push_back({p.engine->reserveId(),layer,curve.at("name").get<std::string>(),0,plot});
+        objects.push_back({p.engine->reserveId(),layer,curve.name,0,plot});
     }
     auto op = p.engine->change(name,std::move(objects)); op.apply(*p.engine); return graph;
 }
-inline void AppendAnalysis(Project &p, Json result) {
-    result["id"] = p.engine->reserveId();
-    if (result.contains("x_d") && result.at("type")!="Walter") result["x_d"]["fit_id"] = result.at("type")=="DLCPPolynomial" && result.at("x_d").at("measurement_id")==result.at("inputs").at(0).at("id") ? result.at("id") : Json(nullptr);
-    result["graphs"] = Json::array();
-    const auto sample=result.contains("sample_id") ? result.at("sample_id").get<pl::Id>() : result.at("inputs").at(0).at("sample_id").get<pl::Id>();
-    for (auto &plot : result.at("plots")) {
+inline void AppendAnalysis(Project &p, AnalysisResult result) {
+    auto &record=result.record;
+    const auto id=p.engine->reserveId();record["id"]=id;
+    record["inputs"]=Json::array();for(const auto &m:result.inputs)record["inputs"].push_back(m.metadata);
+    if (record.contains("x_d") && record.at("type")!="Walter") record["x_d"]["fit_id"] = record.at("type")=="DLCPPolynomial" && record.at("x_d").at("measurement_id")==record.at("inputs").at(0).at("id") ? record.at("id") : Json(nullptr);
+    record["graphs"]=Json::array();
+    const auto sample=record.contains("sample_id")?record.at("sample_id").get<pl::Id>():record.at("inputs").at(0).at("sample_id").get<pl::Id>();
+    for(auto &plot:result.plots) {
         std::size_t i=0;
-        for (auto &curve:plot.at("curves")) {
-            Json temperature=curve.value("temperature_K",result.value("temperature_K",Json(nullptr)));
-            if (temperature.is_null() && !result.at("inputs").empty()) temperature=result.at("inputs").at(0).value("temperature_K",Json(nullptr));
-            if (result.at("type")=="Walter" && i<result.at("spectra").size()) temperature=result.at("spectra").at(i).value("temperature_K",Json(nullptr));
-            curve["temperature_K"]=temperature; curve["color"]=SampleTemperatureColor(sample,temperature); ++i;
+        for(auto &curve:plot.curves) {
+            Json temperature=Nullable(curve.temperature_K);
+            if(temperature.is_null())temperature=record.value("temperature_K",Json(nullptr));
+            if(temperature.is_null() && !result.inputs.empty())temperature=result.inputs.front().metadata.value("temperature_K",Json(nullptr));
+            if(record.at("type")=="Walter" && i<record.at("spectra").size())temperature=record.at("spectra").at(i).value("temperature_K",Json(nullptr));
+            if(temperature.is_number_integer())curve.integerTemperature=temperature.get<std::uint64_t>();
+            curve.temperature_K=temperature.is_null()?std::optional<double>{}:std::optional<double>{temperature.get<double>()};
+            curve.color=SampleTemperatureColor(sample,temperature);++i;
         }
-        result["graphs"].push_back(AnalysisPlot(p,sample,plot));
+        record["graphs"].push_back(AnalysisPlot(p,sample,std::move(plot)));
     }
-    p.graph = result.at("graphs").at(0).get<pl::Id>();
-    result.erase("plots"); p.analyses.push_back(std::move(result));
+    p.graph=record.at("graphs").at(0).get<pl::Id>();
+    p.analysisInputs[id]=std::move(result.inputs);
+    p.analyses.push_back(std::move(record));
 }
 }

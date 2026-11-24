@@ -1,79 +1,41 @@
 #include "Core/dspch.hpp"
 #include "Hdf5Session.hpp"
 #include "Core/JobSystem/JobContext.hpp"
-#include "Core/Utils/Path.hpp"
-#include "sst/hdf5/storage.hpp"
-#include <cmath>
 
 namespace SST {
 namespace {
-using Json = nlohmann::json;
 using namespace sst::hdf5;
-Json failure(const std::string& code, const std::string& message) {
-    return {{"ok", false}, {"error", {{"code", code}, {"message", message}}}};
+std::shared_ptr<const Hdf5Result> failure(Hdf5Error code, const std::string& message) {
+    return std::make_shared<const Hdf5Result>(Hdf5Result{code, message});
 }
-const char* errorCode(ErrorCode code) {
+Hdf5Error errorCode(ErrorCode code) {
     switch (code) {
-    case ErrorCode::InvalidRequest: return "hdf5.invalid_request";
-    case ErrorCode::IO: return "hdf5.io";
-    case ErrorCode::Format: return "hdf5.format";
-    case ErrorCode::Cancelled: return "hdf5.cancelled";
+    case ErrorCode::InvalidRequest: return Hdf5Error::InvalidRequest;
+    case ErrorCode::IO: return Hdf5Error::IO;
+    case ErrorCode::Format: return Hdf5Error::Format;
+    case ErrorCode::Cancelled: return Hdf5Error::Cancelled;
     }
-    return "hdf5.internal";
+    return Hdf5Error::Internal;
 }
-Shape shape(const Json& input) {
-    if (!input.is_array()) throw Error(ErrorCode::InvalidRequest, "Shape must be an integer array");
-    Shape result;
-    for (const auto& n : input) {
-        if (!n.is_number_unsigned() && (!n.is_number_integer() || n.get<std::int64_t>() < 0))
-            throw Error(ErrorCode::InvalidRequest, "Shape/offset entries must be non-negative integers");
-        result.push_back(n.get<std::uint64_t>());
+const char* operationName(Hdf5Operation operation) { return operation == Hdf5Operation::Save ? "save" : "read"; }
+Hdf5Result run(const Hdf5Input& request, JobContext& context) {
+    Hdf5Result result;
+    if (request.operation == Hdf5Operation::Save) {
+        std::vector<Dataset> datasets;
+        datasets.reserve(request.datasets.size());
+        for (const auto& item : request.datasets) {
+            context.ThrowIfCancellationRequested();
+            datasets.push_back({item.id, item.shape, item.values, item.units, item.attributes, item.chunks, item.compression});
+        }
+        context.SetStage("Save HDF5 snapshot");
+        save(request.file, datasets, request.attributes, [&] { context.ThrowIfCancellationRequested(); });
+        result.datasetCount = datasets.size();
+    } else {
+        context.SetStage("Read HDF5 hyperslab");
+        result.datasetId = request.datasetId;
+        result.data = read(request.file, request.datasetId, request.offset, request.count);
     }
     return result;
-}
-Json run(const Json& request, JobContext& context) {
-    const auto path = Path(std::filesystem::u8path(request.at("file_path").get<std::string>())).Native();
-    if (request.at("operation") == "save") {
-        const auto& items = request.at("datasets");
-        if (!items.is_array()) throw Error(ErrorCode::InvalidRequest, "datasets must be an array");
-        std::vector<std::vector<double>> buffers;
-        std::vector<Dataset> datasets;
-        buffers.reserve(items.size()); datasets.reserve(items.size());
-        for (const auto& item : items) {
-            context.ThrowIfCancellationRequested();
-            const auto& values = item.at("values");
-            if (!values.is_array()) throw Error(ErrorCode::InvalidRequest, "values must be a flat numeric array");
-            auto& buffer = buffers.emplace_back();
-            buffer.reserve(values.size());
-            for (const auto& value : values) {
-                if (!value.is_number() || !std::isfinite(value.get<double>()))
-                    throw Error(ErrorCode::InvalidRequest, "JSON values must be finite numbers");
-                buffer.push_back(value.get<double>());
-            }
-            auto compression = item.value("compression", Json(4));
-            if (!compression.is_number_integer() || compression.get<std::int64_t>() < 0 || compression.get<std::int64_t>() > 9)
-                throw Error(ErrorCode::InvalidRequest, "compression must be an integer 0..9");
-            datasets.push_back({item.at("dataset_id").get<std::string>(), shape(item.at("shape")), buffer,
-                item.at("units").get<std::string>(), item.value("attributes", Attributes{}),
-                shape(item.value("chunks", Json::array())), compression.get<unsigned>()});
-        }
-        auto attrs = request.value("attributes", Attributes{});
-        if (request.contains("provenance")) attrs["provenance_json"] = request.at("provenance").dump();
-        context.SetStage("Save HDF5 snapshot");
-        save(path, datasets, attrs, [&] { context.ThrowIfCancellationRequested(); });
-        return {{"ok", true}, {"dataset_count", datasets.size()}};
-    }
-    context.SetStage("Read HDF5 hyperslab");
-    auto result = read(path, request.at("dataset_id").get<std::string>(),
-        shape(request.value("offset", Json::array())), shape(request.value("count", Json::array())));
-    Json values = Json::array();
-    for (auto value : result.values) {
-        if (!std::isfinite(value)) throw Error(ErrorCode::Format, "Non-finite doubles cannot be represented as JSON numbers");
-        values.push_back(value);
-    }
-    return {{"ok", true}, {"dataset_id", request.at("dataset_id")}, {"shape", result.shape},
-        {"count", result.count}, {"values", std::move(values)}, {"units", result.units},
-        {"attributes", result.attributes}, {"file_attributes", result.fileAttributes}};
 }
 class Hdf5Job final : public IJob {
 public:
@@ -84,15 +46,14 @@ public:
         auto input = std::move(request->input);
         try {
             context.ThrowIfCancellationRequested();
-            request->response.set_value(run(input, context));
+            if (input.validationError) throw Error(ErrorCode::InvalidRequest, input.validationError->message);
+            request->response.set_value(std::make_shared<const Hdf5Result>(run(input, context)));
         } catch (const JobCancelledException& e) {
-            request->response.set_value(failure("hdf5.cancelled", e.what())); throw;
+            request->response.set_value(failure(Hdf5Error::Cancelled, e.what())); throw;
         } catch (const Error& e) {
             request->response.set_value(failure(errorCode(e.code), e.what())); throw;
-        } catch (const Json::exception& e) {
-            request->response.set_value(failure("hdf5.invalid_request", e.what())); throw;
         } catch (const std::exception& e) {
-            request->response.set_value(failure("hdf5.internal", e.what())); throw;
+            request->response.set_value(failure(Hdf5Error::Internal, e.what())); throw;
         }
     }
 private:
@@ -100,29 +61,30 @@ private:
 };
 class Hdf5Command final : public ICommand {
 public:
-    Hdf5Command(Ref<JobSystem> jobs, std::string operation) : jobs(std::move(jobs)), operation(std::move(operation)) {}
+    Hdf5Command(Ref<JobSystem> jobs, Hdf5Operation operation) : jobs(std::move(jobs)), operation(operation) {}
     Result<void> Execute(CommandContext& context) override {
         auto request = context.GetCopy<Ref<Hdf5Request>>("hdf5.request");
         if (!request) return request.Error();
         if (!request.Value()) return StructuredError{ErrorCategory::Validation, Severity::Error,
             "Missing HDF5 request.", {}, {}, "Hdf5", "hdf5.invalid_request"};
-        request.Value()->input["operation"] = operation;
+        request.Value()->input.operation = operation;
         request.Value()->jobId = jobs->Submit(CreateRef<Hdf5Job>(request.Value()));
         if (!request.Value()->jobId) return StructuredError{ErrorCategory::Job, Severity::Error,
             "HDF5 job submission failed.", {}, {}, "Hdf5", "hdf5.job_rejected"};
         return {};
     }
-    std::string Description() const override { return "HDF5 " + operation; }
+    std::string Description() const override { return std::string("HDF5 ") + operationName(operation); }
 private:
     Ref<JobSystem> jobs;
-    std::string operation;
+    Hdf5Operation operation;
 };
 }
 Result<void> RegisterHdf5Commands(CommandRegistry& registry, Ref<JobSystem> jobs) {
     if (!jobs) return StructuredError{ErrorCategory::Job, Severity::Error,
         "HDF5 requires a Core JobSystem.", {}, {}, "Hdf5", "hdf5.no_job_system"};
-    for (std::string operation : {"save", "read"}) {
-        auto registered = registry.Register({CommandID{"storage.hdf5." + operation}, "HDF5 " + operation,
+    for (auto operation : {Hdf5Operation::Save, Hdf5Operation::Read}) {
+        const std::string name = operationName(operation);
+        auto registered = registry.Register({CommandID{"storage.hdf5." + name}, "HDF5 " + name,
             "Storage", "N-D double datasets with explicit units", {}, CommandFlags::AsyncCapable},
             [jobs, operation](CommandContext&) { return CreateUnique<Hdf5Command>(jobs, operation); });
         if (!registered) return registered;
@@ -135,34 +97,38 @@ Hdf5Session::Hdf5Session(Ref<JobSystem> jobs)
     auto registered = RegisterHdf5Commands(*m_Registry, m_Jobs);
     if (!registered) throw std::runtime_error(registered.Error().userMessage);
 }
-Json Hdf5Session::Start(const Json& input) {
-    if (m_JobId && Poll().at("running").get<bool>()) return failure("hdf5.busy", "A storage operation is already running");
-    try {
-        auto operation = input.at("operation").get<std::string>();
-        if (operation != "save" && operation != "read") return failure("hdf5.invalid_request", "Expected save or read");
-        auto request = CreateRef<Hdf5Request>();
-        request->input = input;
-        auto response = request->response.get_future();
-        CommandContext context;
-        context.Set("hdf5.request", request);
-        auto executed = m_Commands.Execute(CommandID{"storage.hdf5." + operation}, std::move(context));
-        if (!executed) return failure(executed.Error().code, executed.Error().userMessage);
-        m_Response = std::move(response);
-        m_JobId = request->jobId;
-        m_LastResponse = nullptr;
-        return {{"ok", true}, {"job_id", m_JobId}};
-    } catch (const Json::exception& e) { return failure("hdf5.invalid_request", e.what()); }
+Hdf5StartResult Hdf5Session::Start(Hdf5Input input) {
+    if (m_JobId && Poll().running) return {0, Hdf5Error::Busy, "A storage operation is already running"};
+    if (input.operation != Hdf5Operation::Save && input.operation != Hdf5Operation::Read)
+        return {0, Hdf5Error::InvalidRequest, "Expected save or read"};
+    const auto operation = input.operation;
+    auto request = CreateRef<Hdf5Request>();
+    request->input = std::move(input);
+    auto response = request->response.get_future();
+    CommandContext context;
+    context.Set("hdf5.request", request);
+    auto executed = m_Commands.Execute(CommandID{std::string("storage.hdf5.") + operationName(operation)}, std::move(context));
+    if (!executed) return {0, Hdf5Error::JobRejected, executed.Error().userMessage};
+    m_Response = std::move(response);
+    m_JobId = request->jobId;
+    m_LastResponse.reset();
+    return {m_JobId};
 }
-Json Hdf5Session::Poll() {
+Hdf5PollResult Hdf5Session::Poll() {
     auto snapshot = m_Jobs->GetJob(m_JobId);
     const bool running = snapshot && (snapshot->status == JobStatus::Queued || snapshot->status == JobStatus::Running);
-    if (m_Response.valid() && m_Response.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-        m_LastResponse = m_Response.get();
-    if (!running && snapshot && m_LastResponse.is_null()) {
-        // A queued cancellation can finish without ever entering Hdf5Job::Execute.
-        m_LastResponse = failure(snapshot->status == JobStatus::Cancelled ? "hdf5.cancelled" : "hdf5.job_failed", snapshot->errorMessage);
+    if (m_Response.valid() && m_Response.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        try { m_LastResponse = m_Response.get(); }
+        catch (const std::future_error& e) {
+            snapshot = m_Jobs->GetJob(m_JobId); // Cancellation can retire the request after the first snapshot.
+            m_LastResponse = failure(snapshot && snapshot->status == JobStatus::Cancelled ? Hdf5Error::Cancelled : Hdf5Error::JobFailed, e.what());
+        }
     }
-    return {{"running", running}, {"job_id", m_JobId}, {"response", m_LastResponse}};
+    if (!running && snapshot && !m_LastResponse) {
+        // A queued cancellation can finish without ever entering Hdf5Job::Execute.
+        m_LastResponse = failure(snapshot->status == JobStatus::Cancelled ? Hdf5Error::Cancelled : Hdf5Error::JobFailed, snapshot->errorMessage);
+    }
+    return {running, m_JobId, m_LastResponse};
 }
-Json Hdf5Session::Cancel() { return {{"ok", m_JobId != 0 && m_Jobs->RequestCancel(m_JobId)}, {"job_id", m_JobId}}; }
+Hdf5CancelResult Hdf5Session::Cancel() { return {m_JobId != 0 && m_Jobs->RequestCancel(m_JobId), m_JobId}; }
 }

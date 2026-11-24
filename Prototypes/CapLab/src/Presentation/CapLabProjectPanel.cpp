@@ -68,9 +68,9 @@ void CapLabPrototypePanel::RenderTree() {
                     using Group=std::tuple<std::string,double,double,double>;
                     std::map<Group,std::vector<pl::Id>> groups;
                     auto group=[&](pl::Id id) {
-                        const auto m=AnalysisMeasurement(p,id);
-                        auto value=[&](const char *key) {return m.contains(key) && m.at(key).is_number() ? m.at(key).get<double>() : -std::numeric_limits<double>::infinity();};
-                        groups[{m.at("kind").get<std::string>(),value("temperature_K"),value("frequency_Hz"),value("bias_V")}].push_back(id);
+                        const auto m=AnalysisMeasurement(p,id,false);
+                        auto value=[&](const char *key) {return m.metadata.contains(key) && m.metadata.at(key).is_number() ? m.metadata.at(key).get<double>() : -std::numeric_limits<double>::infinity();};
+                        groups[{m.metadata.at("kind").get<std::string>(),value("temperature_K"),value("frequency_Hz"),value("bias_V")}].push_back(id);
                     };
                     for (const auto &m:p.measurements) if (m.at("sample_id")==sample.id) group(m.at("id"));
                     for (const auto &m:p.sweeps) if (m.sample_id==sample.id) group(m.id);
@@ -128,9 +128,9 @@ void CapLabPrototypePanel::RenderTree() {
         if (!sample.area_m2) ImGui::TextDisabled("Area unknown");
         if (doc.selectedMeasurement) {
             const auto m=AnalysisMeasurement(p,doc.selectedMeasurement);
-            ImGui::TextWrapped("%s; %zu rows",SelectionLabel(p,doc.selectedMeasurement).c_str(),m.at("row_ids").size());
+            ImGui::TextWrapped("%s; %zu rows",SelectionLabel(p,doc.selectedMeasurement).c_str(),m.rowIds->size());
             ImGui::BeginDisabled(state->activeJob!=0);
-            const std::string kind=m.at("kind");
+            const std::string kind=m.metadata.at("kind");
             const auto types=kind=="DLCPProfile" ? std::vector<const char*>{"C-V","Mott-Schottky","N_CV(W)","N_DLCP(W)"} :
                 kind=="CV-derived" ? std::vector<const char*>{"C-V","Mott-Schottky","N_CV(W)"} :
                 kind=="CVSweep" ? std::vector<const char*>{"C-V","Mott-Schottky"} :

@@ -103,9 +103,9 @@ void CapLabPrototypePanel::RenderIS() {
             ImGui::Spacing(); ImGui::SeparatorText("Measurement and simulation");
             if (sst::ui::widgets::BeginCombo("IS measurement", circuitMeasurement ? std::to_string(circuitMeasurement).c_str() : "Select sweep")) {
                 auto item=[&](pl::Id id) {
-                    const auto m=AnalysisMeasurement(p,id);
-                    if (m.at("kind")!="FrequencySweep" || m.at("sample_id")!=selected->at("sample_id")) return;
-                    const auto label=std::to_string(id)+" / "+m.at("temperature_K").dump()+" K";
+                    const auto m=AnalysisMeasurement(p,id,false);
+                    if (m.metadata.at("kind")!="FrequencySweep" || m.metadata.at("sample_id")!=selected->at("sample_id")) return;
+                    const auto label=std::to_string(id)+" / "+m.metadata.at("temperature_K").dump()+" K";
                     if (ImGui::Selectable(label.c_str(),id==circuitMeasurement)) {SelectObject("measurement",id); circuitMeasurement=id; circuitRecalc=true; circuitAutoReady=false;}
                 };
                 for (const auto &m : p.sweeps) item(m.id);
@@ -113,20 +113,20 @@ void CapLabPrototypePanel::RenderIS() {
                 sst::ui::widgets::EndCombo();
             }
             if (circuitMeasurement) {
-                const auto m=AnalysisMeasurement(p,circuitMeasurement);
+                const auto m=AnalysisMeasurement(p,circuitMeasurement,false);
                 Json settings{{"preview",true},{"type","Circuit"},{"measurement_id",circuitMeasurement},{"circuit_id",selectedCircuit}};
-                if (!m.contains("temperature_K") || m.at("temperature_K").is_null()) {
+                if (!m.metadata.contains("temperature_K") || m.metadata.at("temperature_K").is_null()) {
                     if (sst::ui::widgets::Double("Confirm measurement temperature [K]", &confirmedTemperature, .01f, "%.6g")) circuitRecalc=true;
                     settings["temperature_K"]=confirmedTemperature;
-                } else ImGui::Text("Measured temperature: %s K",m.at("temperature_K").dump().c_str());
-                if (!m.contains("bias_V") || m.at("bias_V").is_null()) {
+                } else ImGui::Text("Measured temperature: %s K",m.metadata.at("temperature_K").dump().c_str());
+                if (!m.metadata.contains("bias_V") || m.metadata.at("bias_V").is_null()) {
                     if (sst::ui::widgets::Double("Confirm measurement bias [V]", &confirmedBias, .01f, "%.6g")) circuitRecalc=true;
                     settings["bias_V"]=confirmedBias;
-                } else ImGui::Text("Measured bias: %s V",m.at("bias_V").dump().c_str());
+                } else ImGui::Text("Measured bias: %s V",m.metadata.at("bias_V").dump().c_str());
                 ImGui::TextUnformatted("Exact measured frequencies; edits automatically resimulate the selected sweep in a cancellable Core job.");
                 ImGui::BeginDisabled(state->activeJob!=0);
-                const bool measuredConditions=m.contains("temperature_K") && !m.at("temperature_K").is_null() &&
-                    m.contains("bias_V") && !m.at("bias_V").is_null();
+                const bool measuredConditions=m.metadata.contains("temperature_K") && !m.metadata.at("temperature_K").is_null() &&
+                    m.metadata.contains("bias_V") && !m.metadata.at("bias_V").is_null();
                 if (!measuredConditions && !circuitAutoReady) ImGui::TextWrapped("Confirm unknown T / bias with Simulate IS before automatic recalculation.");
                 if (circuitRecalc && (measuredConditions || circuitAutoReady) && !state->activeJob && !ImGui::IsAnyItemActive() && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                     circuitRecalc=false; state->analysisOptions=settings;

@@ -29,13 +29,13 @@ TEST(Hdf5Core, RegisteredCommandsUseHostJobSystem) {
     ASSERT_TRUE(RegisterHdf5Commands(*registry, jobs));
     CommandService service(registry, {});
     auto request = CreateRef<Hdf5Request>();
-    request->input = {{"file_path", "missing.h5"}, {"dataset_id", "/missing"}};
+    request->input.file="missing.h5"; request->input.datasetId="/missing";
     auto result = request->response.get_future();
     CommandContext context; context.Set("hdf5.request", request);
     ASSERT_TRUE(service.Execute(CommandID{"storage.hdf5.read"}, context));
     ASSERT_NE(request->jobId, 0);
     ASSERT_EQ(result.wait_for(std::chrono::seconds(10)), std::future_status::ready);
-    EXPECT_EQ(result.get().at("error").at("code"), "hdf5.io");
+    EXPECT_EQ(result.get()->error, Hdf5Error::IO);
     jobs->Shutdown();
     EXPECT_EQ(jobs->GetJob(request->jobId)->status, JobStatus::Failed);
 }
@@ -57,16 +57,37 @@ TEST(Hdf5Core, QueuedCancellationAndBusySession) {
     ASSERT_EQ(entered.wait_for(std::chrono::seconds(10)), std::future_status::ready);
     Hdf5Session session(jobs);
     auto file = std::filesystem::temp_directory_path() / ("sst-hdf5-queued-" + std::to_string(GetCurrentProcessId()) + ".h5");
-    nlohmann::json request{{"operation", "save"}, {"file_path", Path(file).Utf8()}, {"datasets", nlohmann::json::array()}};
-    ASSERT_TRUE(session.Start(request).at("ok").get<bool>());
-    EXPECT_EQ(session.Start(request).at("error").at("code"), "hdf5.busy");
-    EXPECT_TRUE(session.Cancel().at("ok").get<bool>());
+    Hdf5Input request;request.operation=Hdf5Operation::Save;request.file=file;
+    ASSERT_FALSE(session.Start(request).error);
+    EXPECT_EQ(session.Start(request).error, Hdf5Error::Busy);
+    EXPECT_TRUE(session.Cancel().ok);
     release.set_value();
     jobs->Shutdown();
     auto response = session.Poll();
-    EXPECT_FALSE(response.at("running").get<bool>());
-    EXPECT_EQ(response.at("response").at("error").at("code"), "hdf5.cancelled");
+    EXPECT_FALSE(response.running);
+    EXPECT_EQ(response.response->error, Hdf5Error::Cancelled);
     EXPECT_FALSE(std::filesystem::exists(file));
+    std::filesystem::remove(file);
+}
+TEST(Hdf5Core, TypedSessionMatchesStorageAndKeepsPollBuffersShared) {
+    using namespace SST;
+    const auto file=std::filesystem::temp_directory_path()/("sst-hdf5-typed-"+std::to_string(GetCurrentProcessId())+".h5");
+    auto jobs=CreateRef<JobSystem>(nullptr,1);
+    Hdf5Session session(jobs);
+    Hdf5Input save;save.operation=Hdf5Operation::Save;save.file=file;save.attributes={{"source","typed golden"}};
+    save.datasets.push_back({"/golden",{2,3},{1.,2.,3.,4.,5.,6.},"V",{{"label","golden"}},{1,3},4});
+    ASSERT_FALSE(session.Start(std::move(save)).error);jobs->Shutdown();
+    auto saved=session.Poll();ASSERT_TRUE(saved.response);ASSERT_FALSE(saved.response->error);EXPECT_EQ(saved.response->datasetCount,1u);
+    const auto reference=sst::hdf5::read(file,"/golden",{1,1},{1,2});
+    auto readers=CreateRef<JobSystem>(nullptr,1);Hdf5Session read(readers);
+    Hdf5Input input;input.file=file;input.datasetId="/golden";input.offset={1,1};input.count={1,2};
+    ASSERT_FALSE(read.Start(std::move(input)).error);readers->Shutdown();
+    const auto result=read.Poll();ASSERT_TRUE(result.response);ASSERT_FALSE(result.response->error);ASSERT_TRUE(result.response->data);
+    EXPECT_EQ(result.response->data->values,(std::vector<double>{5.,6.}));
+    EXPECT_EQ(result.response->data->values,reference.values);EXPECT_EQ(result.response->data->shape,reference.shape);
+    EXPECT_EQ(result.response->data->count,reference.count);EXPECT_EQ(result.response->data->units,reference.units);
+    EXPECT_EQ(result.response->data->attributes,reference.attributes);EXPECT_EQ(result.response->data->fileAttributes,reference.fileAttributes);
+    EXPECT_EQ(result.response,read.Poll().response);EXPECT_EQ(result.response->data->values.data(),read.Poll().response->data->values.data());
     std::filesystem::remove(file);
 }
 int wmain(int argc, wchar_t** argv) {

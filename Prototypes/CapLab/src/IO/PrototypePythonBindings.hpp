@@ -9,6 +9,8 @@ void ExportGraphs(const GraphExportResult &, double dpi, JobContext &);
 Json GraphExportJson(const GraphExportResult &);
 void RegisterPrototypePythonModule();
 Json ExportData(const Project &, const Path &, JobContext &);
-Json ReadAnalysis(const Json &measurement, const Json &options, const Json &xd, JobContext &context);
+AnalysisResult ReadAnalysis(const AnalysisMeasurementData &measurement, const Json &options, const AnalysisMeasurementData &xd,
+    const std::vector<AnalysisMeasurementData> &measurements, const std::vector<AnalysisMeasurementData> &pointInputs,
+    const std::map<pl::Id,std::vector<AnalysisMeasurementData>> &snapshots, JobContext &context);
 Json ReadLabAS(const std::string &text, const Path &source, char decimal, JobContext &context, const Json &options = Json::object(), bool provenanceOnly = false);
 }

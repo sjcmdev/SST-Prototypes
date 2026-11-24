@@ -1,5 +1,7 @@
 #pragma once
 #include "Domain/CapLabImport.hpp"
+#include "Domain/CapLabIS.hpp"
+#include "Domain/CapLabAnalysis.hpp"
 #include <fstream>
 #include <sstream>
 namespace SST::Prototypes::CapLab {
@@ -21,4 +23,47 @@ inline Json FixturePreview() {
 inline Project FixtureProject() {
     Project p; ImportChange change(p,FixturePreview(),100,CFTemplate{}); return p;
 }
+// JSON here is the frozen file-schema fixture adapter, not a production API.
+inline Json ResultFixtureJson(const AnalysisResult &result) {
+    auto out=result.record;out["inputs"]=Json::array();out["plots"]=Json::array();
+    for(const auto &m:result.inputs)out["inputs"].push_back(MeasurementJson(m));
+    for(const auto &p:result.plots) {
+        Json plot{{"name",p.name},{"x_label",p.xLabel},{"y_label",p.yLabel},{"log_x",p.logX},{"log_y",p.logY},{"equal_aspect",p.equalAspect},{"curves",Json::array()}};
+        for(const auto &c:p.curves) {
+            auto array=[](const auto &v){Json a=Json::array();for(double x:v)a.push_back(std::isfinite(x)?Json(x):Json(nullptr));return a;};
+            Json curve{{"name",c.name},{"x",array(c.x)},{"y",array(c.y)},{"fit",c.fit},{"candidates",c.candidates}};
+            if(c.temperature_K)curve["temperature_K"]=*c.temperature_K;
+            plot["curves"].push_back(std::move(curve));
+        }
+        out["plots"].push_back(std::move(plot));
+    }
+    return out;
+}
+inline AnalysisResult ResultFromFixture(const Json &j) {
+    AnalysisResult result;result.record=j;result.record.erase("inputs");result.record.erase("plots");
+    for(const auto &m:j.at("inputs"))result.inputs.push_back(MeasurementFromJson(m));
+    for(const auto &p:j.at("plots")) {
+        AnalysisPlotData plot;plot.name=p.at("name");plot.xLabel=p.at("x_label");plot.yLabel=p.at("y_label");
+        plot.logX=p.value("log_x",false);plot.logY=p.value("log_y",false);plot.equalAspect=p.value("equal_aspect",false);
+        for(const auto &c:p.at("curves")) {
+            AnalysisCurveData curve;curve.name=c.at("name");curve.fit=c.value("fit",false);curve.candidates=c.value("candidates",false);
+            for(const auto &v:c.at("x"))curve.x.push_back(v.is_null()?std::numeric_limits<double>::quiet_NaN():v.get<double>());
+            for(const auto &v:c.at("y"))curve.y.push_back(v.is_null()?std::numeric_limits<double>::quiet_NaN():v.get<double>());
+            if(c.contains("temperature_K"))curve.temperature_K=Optional(c.at("temperature_K"));
+            plot.curves.push_back(std::move(curve));
+        }
+        result.plots.push_back(std::move(plot));
+    }
+    return result;
+}
+inline Json SimulateIS(const Json &m,const Json &c,const Json &settings,JobContext &context,bool plots=true) {
+    return ResultFixtureJson(SimulateIS(MeasurementFromJson(m),c,settings,context,plots));
+}
+inline Json FitIS(const Json &m,const Json &c,const Json &settings,JobContext &context,const ISEvaluationObserver &observer={}) {
+    return ResultFixtureJson(FitIS(MeasurementFromJson(m),c,settings,context,observer));
+}
+inline void OverlayISMeasurement(Json &r,const Json &m) {
+    auto result=ResultFromFixture(r);OverlayISMeasurement(result,MeasurementFromJson(m));r=ResultFixtureJson(result);
+}
+inline void AppendAnalysis(Project &p,Json result) {AppendAnalysis(p,ResultFromFixture(result));}
 }

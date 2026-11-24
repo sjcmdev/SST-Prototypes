@@ -42,7 +42,7 @@ void CapLabPrototypePanel::RenderAS() {
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Sample index; derivative uses ln f.");
     if (smoothing) {sst::ui::widgets::Int("Smoothing window (odd)", &window); sst::ui::widgets::Int("Smoothing degree", &degree);}
     const bool calculate=ImGui::Button("Preview AS derivative / candidates");
-    if (measurement && AnalysisMeasurement(p,measurement).at("kind")=="FrequencySweep" && (state->Document().selectionKind!="defect" || calculate)) PreviewAfterEdit(Json{{"type","AS"},{"measurement_id",measurement},
+    if (measurement && AnalysisMeasurement(p,measurement).metadata.at("kind")=="FrequencySweep" && (state->Document().selectionKind!="defect" || calculate)) PreviewAfterEdit(Json{{"type","AS"},{"measurement_id",measurement},
         {"smoothing",smoothing ? Json{{"method","Savitzky-Golay"},{"window",window},{"degree",degree}} : Json{{"method","none"}}}},calculate);
     if (sst::ui::widgets::BeginCombo("Active defect", SelectionLabel(p,selectedDefect,"no defects yet").c_str())) {
         for (const auto &d : p.defects) if (d.at("sample_id")==sample)

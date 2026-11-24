@@ -390,7 +390,7 @@ void CapLabPrototypePanel::RenderBrowser() {
             if (sst::ui::widgets::BeginLabelledRow(label.c_str(),("Source ID: "+std::to_string(id)).c_str())) {
                 if (ImGui::Checkbox("##selected",&selected)) {if (selected) selection.insert(id); else selection.erase(id);}
                 auto color=sst::ui::plot::ScientificColor(id);
-                if (measurements.contains(id)) {const auto m=AnalysisMeasurement(p,id); color=SampleTemperatureColor(m.at("sample_id"),m.value("temperature_K",Json(nullptr)));}
+                if (measurements.contains(id)) {const auto m=AnalysisMeasurement(p,id,false); color=SampleTemperatureColor(m.metadata.at("sample_id"),m.metadata.value("temperature_K",Json(nullptr)));}
                 const auto key=std::to_string(id);
                 if (compareColors.contains(key)) color=compareColors.at(key).get<sst::ui::plot::Color>();
                 ImGui::SameLine();

@@ -261,7 +261,7 @@ namespace SST::Prototypes::CapLab
             ASSERT_TRUE(edit({{"action","add"},{"defect_id",did},{"point",{{"measurement_id",nullptr},{"row_id",nullptr},
                 {"temperature_K",point.first},{"frequency_Hz",point.second},{"provenance","independent manual fixture"}}}}));
         const auto mid=workflow.Document().project.sweeps[0].id;
-        const auto measuredRow=AnalysisMeasurement(workflow.Document().project,mid).at("row_ids").at(0);
+        const auto measuredRow=MeasurementJson(AnalysisMeasurement(workflow.Document().project,mid)).at("row_ids").at(0);
         ASSERT_TRUE(edit({{"action","add"},{"defect_id",did},{"point",{{"measurement_id",mid},{"row_id",measuredRow},
             {"provenance","approved measured point"}}}}));
         const auto preFit=Serialize(workflow.Document().project);
