@@ -11,7 +11,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <charconv>
+#include <climits>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <cstdint>
 #include <iomanip>
 #include <limits>
@@ -894,36 +898,107 @@ std::string serializeGpuTrace(const GpuSimplexTraceResult& state)
 
 GpuDeviceStatus gpuQueryDevice()
 {
-    GpuDeviceStatus status;
+    static const GpuDeviceStatus cached = [] {
+        GpuDeviceStatus status;
+        if (const auto* value = std::getenv("JFM_CUDA_DEVICE")) {
+            const auto end = value + std::strlen(value);
+            const auto parsed = std::from_chars(value, end, status.device_id);
+            if (parsed.ec != std::errc{} || parsed.ptr != end || status.device_id < 0) {
+                status.message = "Invalid JFM_CUDA_DEVICE; expected a nonnegative device index";
+                return status;
+            }
+        }
 
-    int count = 0;
-    cudaError_t error = cudaGetDeviceCount(&count);
-    if (error != cudaSuccess || count <= 0)
-    {
-        status.message = "CUDA unavailable: " + cudaErrorMessage(error);
+        int count = 0;
+        cudaError_t error = cudaGetDeviceCount(&count);
+        if (error != cudaSuccess || count <= status.device_id)
+        {
+            status.message = error != cudaSuccess ? "CUDA unavailable: " + cudaErrorMessage(error) : "Selected CUDA device is unavailable";
+            return status;
+        }
+
+        cudaDeviceProp props{};
+        error = cudaGetDeviceProperties(&props, status.device_id);
+        if (error != cudaSuccess)
+        {
+            status.message = "cudaGetDeviceProperties failed: " + cudaErrorMessage(error);
+            return status;
+        }
+
+        status.available = true;
+        status.name = props.name;
+        status.compute_major = props.major;
+        status.compute_minor = props.minor;
+        status.multiprocessors = props.multiProcessorCount;
+        status.max_threads_per_multiprocessor = props.maxThreadsPerMultiProcessor;
+        status.message = "CUDA device ready";
         return status;
-    }
+    }();
+    return cached;
+}
 
-    cudaDeviceProp props{};
-    error = cudaGetDeviceProperties(&props, 0);
-    if (error != cudaSuccess)
-    {
-        status.message = "cudaGetDeviceProperties failed: " + cudaErrorMessage(error);
-        return status;
+namespace {
+GpuDeviceStatus activateDevice()
+{
+    auto device = gpuQueryDevice();
+    if (device.available) {
+        const auto error = cudaSetDevice(device.device_id);
+        if (error != cudaSuccess) {
+            device.available = false;
+            device.message = "cudaSetDevice failed: " + cudaErrorMessage(error);
+        }
     }
+    return device;
+}
+}
 
-    status.available = true;
-    status.name = props.name;
-    status.compute_major = props.major;
-    status.compute_minor = props.minor;
-    status.message = "CUDA device ready";
-    return status;
+GpuMonteCarloBatchPlan gpuPlanMonteCarlo(const GpuMonteCarloRequest& request)
+{
+    GpuMonteCarloBatchPlan plan;
+    const auto device = activateDevice();
+    if (!device.available) { plan.message = device.message; return plan; }
+    if (request.n_samples <= 0 || request.voltages.empty() || request.voltages.size() > INT_MAX) {
+        plan.message = "GPU MC: invalid sample or point count"; return plan;
+    }
+    auto error = cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &plan.active_blocks_per_multiprocessor, sharedFitKernel, 128, 0);
+    cudaFuncAttributes attributes{};
+    if (error == cudaSuccess) error = cudaFuncGetAttributes(&attributes, sharedFitKernel);
+    if (error == cudaSuccess) error = cudaMemGetInfo(&plan.free_bytes, &plan.total_bytes);
+    if (error != cudaSuccess) { plan.message = "GPU MC planning failed: " + cudaErrorMessage(error); return plan; }
+
+    const std::size_t pointBytes = request.voltages.size()*sizeof(double);
+    plan.bytes_per_sample = pointBytes + sizeof(GpuMcResult) + attributes.localSizeBytes;
+    const auto reserve = std::max(std::size_t{256}*1024*1024, plan.free_bytes/4);
+    const auto fixedBytes = 3*pointBytes;
+    // Leave room for the desktop, other CUDA jobs and runtime stack allocation.
+    const auto budget = plan.free_bytes > reserve + fixedBytes ? (plan.free_bytes-reserve-fixedBytes)/2 : 0;
+    const auto memoryLimit = std::min(budget/plan.bytes_per_sample, std::size_t{64}*1024*1024/(pointBytes+sizeof(GpuMcResult)));
+    const auto residentThreads = std::min(device.max_threads_per_multiprocessor, plan.active_blocks_per_multiprocessor*128);
+    std::size_t target = std::size_t(device.multiprocessors)*residentThreads*2;
+    if (const auto* value = std::getenv("JFM_GPU_MC_CHUNK_SIZE")) {
+        int size = 0; const auto end = value + std::strlen(value);
+        const auto parsed = std::from_chars(value, end, size);
+        if (parsed.ec != std::errc{} || parsed.ptr != end || size <= 0) {
+            plan.message = "Invalid JFM_GPU_MC_CHUNK_SIZE; expected a positive integer"; return plan;
+        }
+        target = static_cast<std::size_t>(size);
+    }
+    plan.chunk_size = static_cast<int>(std::min({target, memoryLimit, std::size_t{65536}, static_cast<std::size_t>(request.n_samples)}));
+    plan.message = "GPU MC device=" + std::to_string(device.device_id) + " (" + device.name + "), cc="
+        + std::to_string(device.compute_major) + "." + std::to_string(device.compute_minor)
+        + ", SMs=" + std::to_string(device.multiprocessors) + ", threads/SM=" + std::to_string(device.max_threads_per_multiprocessor)
+        + ", active blocks/SM=" + std::to_string(plan.active_blocks_per_multiprocessor)
+        + ", free/total bytes=" + std::to_string(plan.free_bytes) + "/" + std::to_string(plan.total_bytes)
+        + ", bytes/sample=" + std::to_string(plan.bytes_per_sample) + ", chunk=" + std::to_string(plan.chunk_size);
+    if (!plan.chunk_size) plan.message += "; insufficient memory for one sample";
+    return plan;
 }
 
 GpuLambertWValidationResult gpuValidateLambertW()
 {
     GpuLambertWValidationResult result;
-    const GpuDeviceStatus device = gpuQueryDevice();
+    const GpuDeviceStatus device = activateDevice();
     result.cuda_available = device.available;
     if (!device.available)
     {
@@ -1034,7 +1109,7 @@ cuda_failure:
 GpuNumericValidationResult gpuValidateDiodeCurrent()
 {
     GpuNumericValidationResult result;
-    const GpuDeviceStatus device = gpuQueryDevice();
+    const GpuDeviceStatus device = activateDevice();
     result.cuda_available = device.available;
     if (!device.available)
     {
@@ -1123,7 +1198,7 @@ cuda_failure:
 GpuNumericValidationResult gpuValidateNoise()
 {
     GpuNumericValidationResult result;
-    const GpuDeviceStatus device = gpuQueryDevice();
+    const GpuDeviceStatus device = activateDevice();
     result.cuda_available = device.available;
     if (!device.available)
     {
@@ -1196,7 +1271,7 @@ cuda_failure:
 GpuNumericValidationResult gpuValidateSimplexOneStep()
 {
     GpuNumericValidationResult result;
-    const GpuDeviceStatus device = gpuQueryDevice();
+    const GpuDeviceStatus device = activateDevice();
     result.cuda_available = device.available;
     if (!device.available)
     {
@@ -1326,7 +1401,7 @@ cuda_failure:
 GpuNumericValidationResult gpuValidateSimplexFull()
 {
     GpuNumericValidationResult result;
-    const auto device = gpuQueryDevice(); result.cuda_available = device.available;
+    const auto device = activateDevice(); result.cuda_available = device.available;
     if (!device.available) { result.message = device.message; return result; }
     constexpr int count = 24;
     const double truth[] = {1e-10,1.5,.1,1000.};
@@ -1359,7 +1434,7 @@ GpuNumericValidationResult gpuValidateSimplexFull()
 GpuSimplexParityReport gpuValidateSimplexParityTrace()
 {
     GpuSimplexParityReport report;
-    const GpuDeviceStatus device = gpuQueryDevice();
+    const GpuDeviceStatus device = activateDevice();
     report.cuda_available = device.available;
     if (!device.available)
     {
@@ -1574,18 +1649,18 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
 {
     GpuMonteCarloOutput output;
     const double totalStartMs = hostTimeMs();
-    const GpuDeviceStatus device = gpuQueryDevice();
+    const GpuDeviceStatus device = activateDevice();
     if (!device.available)
     {
         output.message = device.message;
         return output;
     }
-    if (request.n_samples <= 0)
+    if (request.n_samples <= 0 || request.noisy_samples < 0 || request.noisy_samples > request.n_samples)
     {
-        output.message = "GPU MC: n_samples must be > 0";
+        output.message = "GPU MC: invalid sample or retained curve count";
         return output;
     }
-    if (request.voltages.empty() || request.voltages.size() != request.true_current.size())
+    if (request.voltages.empty() || request.voltages.size() > INT_MAX || request.voltages.size() != request.true_current.size())
     {
         output.message = "GPU MC: voltages and true_current size mismatch";
         return output;
@@ -1602,6 +1677,9 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
     const int pointCount = static_cast<int>(request.voltages.size());
     const int sampleCount = request.n_samples;
     const size_t pointBytes = request.voltages.size() * sizeof(double);
+    if (static_cast<size_t>(sampleCount) > std::numeric_limits<size_t>::max()/pointBytes) {
+        output.message = "GPU MC: sample storage size overflow"; return output;
+    }
     const size_t noisyBytes = static_cast<size_t>(pointCount) * static_cast<size_t>(sampleCount) * sizeof(double);
     std::vector<double> noiseAmplitude(request.true_current.size());
     std::vector<double> sigma(request.true_current.size());
@@ -1615,7 +1693,6 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
 
     double* deviceVoltages = nullptr;
     double* deviceTrueCurrent = nullptr;
-    double* deviceNoiseAmplitude = nullptr;
     double* deviceSigma = nullptr;
     double* deviceNoisy = nullptr;
     GpuMcResult* deviceResults = nullptr;
@@ -1624,9 +1701,6 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
     if (error != cudaSuccess)
         goto cuda_failure;
     error = cudaMalloc(&deviceTrueCurrent, pointBytes);
-    if (error != cudaSuccess)
-        goto cuda_failure;
-    error = cudaMalloc(&deviceNoiseAmplitude, pointBytes);
     if (error != cudaSuccess)
         goto cuda_failure;
     error = cudaMalloc(&deviceSigma, pointBytes);
@@ -1645,9 +1719,6 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
     error = cudaMemcpy(deviceTrueCurrent, request.true_current.data(), pointBytes, cudaMemcpyHostToDevice);
     if (error != cudaSuccess)
         goto cuda_failure;
-    error = cudaMemcpy(deviceNoiseAmplitude, noiseAmplitude.data(), pointBytes, cudaMemcpyHostToDevice);
-    if (error != cudaSuccess)
-        goto cuda_failure;
     error = cudaMemcpy(deviceSigma, sigma.data(), pointBytes, cudaMemcpyHostToDevice);
     if (error != cudaSuccess)
         goto cuda_failure;
@@ -1662,28 +1733,28 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
                     lm::normal(request.noise_seed+uint64_t(run)*0xD1B54A32D192ED03ULL, i)*noiseAmplitude[i];
         error = cudaMemcpy(deviceNoisy, measured.data(), noisyBytes, cudaMemcpyHostToDevice);
         if (error != cudaSuccess) goto cuda_failure;
+        if (request.noisy_samples) {
+            measured.resize(static_cast<size_t>(request.noisy_samples)*pointCount);
+            output.noisy_current = std::move(measured);
+        }
         output.noise_ms = hostTimeMs()-stageStartMs;
     }
     stageStartMs = hostTimeMs();
     {
     auto layout = request.layout; layout.point_sigma = deviceSigma;
-    sharedFitKernel<<<(sampleCount+127)/128, 128>>>(request.model_type, layout, request.nm_config,
+    sharedFitKernel<<<1+(sampleCount-1)/128, 128>>>(request.model_type, layout, request.nm_config,
         deviceVoltages, deviceNoisy, deviceTrueCurrent, pointCount, sampleCount, request.noise_seed,
         request.start_perturbation_pct, noiseFactor, request.use_lm, deviceResults);
     }
     error = cudaGetLastError();
     if (error != cudaSuccess)
         goto cuda_failure;
-    error = cudaDeviceSynchronize();
+    error = cudaStreamSynchronize(nullptr);
     if (error != cudaSuccess)
         goto cuda_failure;
     output.simplex_ms = hostTimeMs() - stageStartMs;
 
     stageStartMs = hostTimeMs();
-    output.noisy_current.resize(static_cast<size_t>(pointCount) * static_cast<size_t>(sampleCount));
-    error = cudaMemcpy(output.noisy_current.data(), deviceNoisy, noisyBytes, cudaMemcpyDeviceToHost);
-    if (error != cudaSuccess)
-        goto cuda_failure;
     output.results.resize(static_cast<size_t>(sampleCount));
     error = cudaMemcpy(output.results.data(), deviceResults, static_cast<size_t>(sampleCount) * sizeof(GpuMcResult), cudaMemcpyDeviceToHost);
     if (error != cudaSuccess)
@@ -1695,7 +1766,6 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest& request)
     output.message = "GPU MC finished: samples=" + std::to_string(sampleCount);
     freeDevice(deviceVoltages);
     freeDevice(deviceTrueCurrent);
-    freeDevice(deviceNoiseAmplitude);
     freeDevice(deviceSigma);
     freeDevice(deviceNoisy);
     freeDevice(deviceResults);
@@ -1707,7 +1777,6 @@ cuda_failure:
     output.message = "GPU MC failed: " + cudaErrorMessage(error);
     freeDevice(deviceVoltages);
     freeDevice(deviceTrueCurrent);
-    freeDevice(deviceNoiseAmplitude);
     freeDevice(deviceSigma);
     freeDevice(deviceNoisy);
     freeDevice(deviceResults);

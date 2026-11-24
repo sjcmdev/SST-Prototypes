@@ -203,7 +203,22 @@ namespace SST::Prototypes::JFM
 					context.SetMessage(item.characteristic.info.name);
 					if (m_Store == nullptr || !m_Store->IsMonteCarloGenerationCurrent(item.ref, item.generation))
 						continue;
-					auto result = RunJFMMonteCarlo(item.characteristic, item.prefit, item.fit, item.settings, &context);
+                    JobContext sampleContext(
+                        [&](float done, float total) {
+                            context.SetProgress(static_cast<float>(index) + (total > 0 ? done/total : 0.f), static_cast<float>(items->size()));
+                        }, {}, {},
+                        [&](JobLogLevel level, const std::string& message) {
+                            switch (level) {
+                            case JobLogLevel::Debug: context.LogDebug(message); break;
+                            case JobLogLevel::Info: context.LogInfo(message); break;
+                            case JobLogLevel::Warning: context.LogWarning(message); break;
+                            case JobLogLevel::Error: context.LogError(message); break;
+                            }
+                        },
+                        [&] { return context.IsCancellationRequested(); },
+                        [&](const Ref<IJob>& job, JobPriority priority) { return context.SubmitJob(job, priority); },
+                        [&](JobId id) { return context.WaitForJob(id); }, context.GetWorkerCount(), context.GetStopToken());
+					auto result = RunJFMMonteCarlo(item.characteristic, item.prefit, item.fit, item.settings, &sampleContext);
                     if (!result || result->state.acceptedCount == 0)
                     {
                         if (m_EventBus != nullptr)
