@@ -6,31 +6,45 @@
 #include <cmath>
 #include <sstream>
 namespace SST::ScapsLab {
-Json ResultRuns(const Json &workspace) {
-    Json runs=Json::array();
-    for(const auto &d:workspace.at("devices")) {
-        auto add=[&](const std::string &kind,const Json &result) {
-            if(result.empty()) return;
-            for(const auto &run:d.value("history",Json::array())) if(run.at("provenance")==result.value("provenance",Json()) && run.at("kind")==kind && kind!="batch")return;
-            const auto id=d.at("id").get<std::string>()+"/"+kind+"/"+std::to_string(result.at("provenance").at("time_unix_ms").get<std::int64_t>());
-            runs.push_back({{"run_id",id},{"device_id",d.at("id")},{"device_name",d.at("name")},{"kind",kind},{"result",result}});
+std::vector<ResultRun> Workflow::ResultRuns() const {
+    std::vector<ResultRun> runs;
+    for(const auto& device:project.devices) {
+        const auto& d=*device;
+        const auto live=[&](const std::string& kind)->Ref<const ResultBase> {
+            Ref<const ResultBase> result=kind=="iv"?std::static_pointer_cast<const ResultBase>(d.result.typed()):kind=="band"?std::static_pointer_cast<const ResultBase>(d.bandResult.typed()):std::static_pointer_cast<const ResultBase>(d.acResults.get(kind));
+            return result && !result->liveOnly?result:nullptr;
         };
-        for(const auto &run:d.value("history",Json::array())) {
-            if(run.at("kind")=="batch" && !d.value("batch_result",Json::object()).empty() && run.at("provenance").at("time_unix_ms")==d.at("batch_result").at("provenance").at("time_unix_ms"))continue;
+        const auto time=[](const ResultBase& result)->std::int64_t {
+            if(const auto* batch=dynamic_cast<const BatchResult*>(&result);batch && batch->runPlan)return batch->time_unix_ms;
+            return result.Provenance().at("time_unix_ms").get<std::int64_t>();
+        };
+        for(const auto& run:d.history) {
             const auto kind=run.at("kind").get<std::string>();
-            const auto live=kind=="iv"?d.value("result",Json::object()):kind=="band"?d.value("band_result",Json::object()):d.value("ac_results",Json::object()).value(kind,Json::object());
-            const auto &result=!live.empty() && live.at("provenance")==run.at("provenance")?live:run.at("result");
-            runs.push_back({{"run_id",run.at("run_id")},{"device_id",d.at("id")},{"device_name",d.at("name")},{"kind",run.at("kind")},{"result",result}});
+            const auto stored=d.RunResult(run.at("run_id").get<std::string>());
+            const auto* storedBatch=dynamic_cast<const BatchResult*>(stored.get());
+            if(kind=="batch" && d.batchResult.typed()) {
+                const auto timestamp=storedBatch && storedBatch->runPlan?time(*stored):run.at("provenance").at("time_unix_ms").get<std::int64_t>();
+                if(timestamp==time(*d.batchResult.typed()))continue;
+            }
+            auto result=live(kind);
+            if(!result || result->Provenance()!=run.at("provenance"))result=stored;
+            runs.push_back({run.at("run_id"),d.id,d.name,kind,std::move(result)});
         }
-
-        add("iv",d.value("result",Json::object()));add("band",d.value("band_result",Json::object()));
-        for(auto it=d.at("ac_results").begin();it!=d.at("ac_results").end();++it) add(it.key(),it.value());
-        add("batch",d.value("batch_result",Json::object()));
+        const auto add=[&](const std::string& kind,Ref<const ResultBase> result) {
+            if(!result)return;
+            for(const auto& run:d.history)if(kind!="batch" && run.at("kind")==kind && run.at("provenance")==result->Provenance())return;
+            runs.push_back({d.id+"/"+kind+"/"+std::to_string(time(*result)),d.id,d.name,kind,std::move(result)});
+        };
+        add("iv",live("iv"));add("band",live("band"));
+        for(const auto& [kind,result]:d.acResults.all())add(kind,live(kind));
+        add("batch",d.batchResult.typed());
     }
     return runs;
 }
 Json Workflow::Runs() const {
-    auto runs=ResultRuns(Workspace());for(auto &run:runs)run.erase("result");return runs;
+    Json runs=Json::array();
+    for(const auto& run:ResultRuns())runs.push_back({{"run_id",run.runId},{"device_id",run.deviceId},{"device_name",run.deviceName},{"kind",run.kind}});
+    return runs;
 }
 
 namespace {
@@ -50,15 +64,13 @@ void Save(const std::string &path,const std::string &text) {
     std::string error;if(!Io::Save(path,text,error)) throw std::runtime_error(error);
 }
 }
-Json ExportResults(const Json &workspace,const Json &request) {
-    const auto runs=ResultRuns(workspace);Json selected=Json::array();
-    const auto ids=request.value("run_ids",Json::array());
-    if(!ids.is_array()) throw std::invalid_argument("run_ids must be an array");
-    for(const auto &id:ids) if(!id.is_string() || std::none_of(runs.begin(),runs.end(),[&](const Json &r){return r.at("run_id")==id;})) throw std::invalid_argument("Unknown run_id");
-    for(const auto &r:runs) if(request.value("all",false) || std::find(ids.begin(),ids.end(),r.at("run_id"))!=ids.end()) selected.push_back(r);
-    if(selected.empty()) throw std::invalid_argument("Select at least one saved run");
-    const auto path=request.at("path").get<std::string>(),format=request.value("format",std::string("csv"));
-    Json files=Json::array();
+std::vector<std::filesystem::path> ExportResults(const std::vector<ResultRun>& runs,const std::filesystem::path& destination,const std::string& format) {
+    if(runs.empty())throw std::invalid_argument("Select at least one saved run");
+    // File edge: materialize only selected immutable results, on the IO worker.
+    Json selected=Json::array();
+    for(const auto& run:runs)selected.push_back({{"run_id",run.runId},{"device_id",run.deviceId},{"device_name",run.deviceName},{"kind",run.kind},{"result",run.result?run.result->Dump():Json::object()}});
+    const auto path=destination.string();
+    std::vector<std::filesystem::path> files;
     if(format=="json") {
         for(auto &run:selected) if(run.at("kind")!="batch") {
             run["effective_conditions"]=Effective(run.at("result"),run.at("result").at("points").front());
@@ -128,8 +140,6 @@ Json ExportResults(const Json &workspace,const Json &request) {
             files.push_back(destination.string());
         }
     } else throw std::invalid_argument("format must be csv, json, png, svg or pdf");
-    Json output={{"export_status","saved"},{"run_count",selected.size()},{"files",Json::array()}};
-    for(const auto &file:files) output["files"].push_back({{"path",file},{"size_bytes",std::filesystem::file_size(file.get<std::string>())}});
-    return output;
+    return files;
 }
 }

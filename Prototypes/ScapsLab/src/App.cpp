@@ -199,7 +199,7 @@ public:
             if(std::getenv("SCAPSLAB_GALLERY_EXPORT"))ImGui::SetNextWindowFocus();
             ImGui::SetNextWindowSize(ImVec2(720,400),ImGuiCond_FirstUseEver);
             if(ImGui::Begin("Export results",&exporting)) {
-                const auto runs=w.Runs();
+                const auto runs=w.ResultRuns();
                 const char *formats[]={"csv","json","png","svg","pdf"};
                 ImGui::TextUnformatted("Saved snapshots only. Export does not calculate or change solver settings.");
                 if(ImGui::BeginTable("export_fields",2,ImGuiTableFlags_SizingStretchProp)) {
@@ -209,15 +209,15 @@ public:
                     row("All saved runs");ImGui::Checkbox("##all",&exportAll);
                     row("Selected run");ImGui::BeginDisabled(exportAll || runs.empty());
                     selectedRun=std::clamp(selectedRun,0,std::max(0,int(runs.size())-1));
-                    const std::string preview=runs.empty()?"No saved results":runs[selectedRun].at("run_id").get<std::string>();
-                    if(ImGui::BeginCombo("##run",preview.c_str())) {for(int i=0;i<int(runs.size());++i) if(ImGui::Selectable(runs[i].at("run_id").get<std::string>().c_str(),i==selectedRun))selectedRun=i;ImGui::EndCombo();}ImGui::EndDisabled();
+                    const std::string preview=runs.empty()?"No saved results":runs[selectedRun].runId;
+                    if(ImGui::BeginCombo("##run",preview.c_str())) {for(int i=0;i<int(runs.size());++i) if(ImGui::Selectable(runs[i].runId.c_str(),i==selectedRun))selectedRun=i;ImGui::EndCombo();}ImGui::EndDisabled();
                     row("Destination");ImGui::InputText("##destination",exportPath,sizeof(exportPath),ImGuiInputTextFlags_AutoSelectAll);
                     ImGui::EndTable();
                 }
                 if(ImGui::Button("Browse...")) {try {if(const auto file=SaveFileDialog({"Results export",formats[exportFormat]},exportPath))std::snprintf(exportPath,sizeof(exportPath),"%s",file->Utf8().c_str());}catch(const std::exception &e){w.status=e.what();}}
                 ImGui::TextWrapped("CSV/JSON include point status, provenance and effective settings. Plots: PNG/SVG/PDF via PlotLab (one file per run).");
                 ImGui::BeginDisabled(w.Busy() || runs.empty());
-                if(ImGui::Button("Export")) {std::vector<std::string> ids;if(!exportAll)ids.push_back(runs[selectedRun].at("run_id").get<std::string>());app.GetEventBusRef()->PublishNew<ScapsLab::ProjectExportRequested>(exportPath,formats[exportFormat],exportAll,ids);}
+                if(ImGui::Button("Export")) {std::vector<std::string> ids;if(!exportAll)ids.push_back(runs[selectedRun].runId);app.GetEventBusRef()->PublishNew<ScapsLab::ProjectExportRequested>(exportPath,formats[exportFormat],exportAll,ids);}
                 ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Close"))exporting=false;
                 ImGui::TextWrapped("%s",w.status.c_str());
             }ImGui::End();

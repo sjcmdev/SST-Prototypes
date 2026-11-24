@@ -21,6 +21,7 @@
 #include <atomic>
 #include <array>
 #include <deque>
+#include <exception>
 #include <set>
 #include <functional>
 #include <map>
@@ -47,8 +48,11 @@ void WriteProject(const Json &document, const std::string &path);
 Json AM15Spectrum();
 const scaps_core::OpticalTable& AM15SpectrumValues();
 Json SelfContained(Json document);
-Json ResultRuns(const Json &workspace);
-Json ExportResults(const Json &workspace, const Json &request);
+struct ResultRun {
+    std::string runId,deviceId,deviceName,kind;
+    Ref<const ResultBase> result;
+};
+std::vector<std::filesystem::path> ExportResults(const std::vector<ResultRun>& selected,const std::filesystem::path& path,const std::string& format);
 Json NewDefect(bool sheet = false);
 const Json &PointAtBias(const Json &sweep,const Json &band,int selected);
 void ChangeSheetDistribution(Json &defect,const std::string &shape,const std::string &convention);
@@ -114,7 +118,11 @@ public:
     std::uint64_t revision=0;
     int detailBias=0;
     std::string detailRun;
-    Json document, request, output, acResults, workspace, batchResult;
+    Json document, request, output, workspace, batchResult;
+    std::vector<ResultRun> exportRuns;
+    std::exception_ptr exportError;
+    Ref<const AcResult> acInput;
+    Ref<const IvResult> ivInput;
     Ref<const ResultBase> typedOut;       // typed form of `output` (run/band/cv/cf/qe/batch ops), built on the job thread
     Ref<const BatchResult> batchInput;
     Ref<const ProjectDraft> draft;
@@ -309,6 +317,7 @@ public:
     static inline std::atomic_size_t constructed{0}; // test counter: Workflow instances ever built
     Json Snapshot() const;
     std::string MemoryReport() const; // SCAPSLAB_PERF: private bytes + history/result sizes
+    std::vector<ResultRun> ResultRuns() const;
     Json Runs() const;
     void RefreshDirty();
     void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={},std::string detailRun={});

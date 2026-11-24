@@ -539,7 +539,7 @@ void Operation::Execute(JobContext &ctx) try {
         }
         return mesh;
     };
-    if(draft && (op.starts_with("export_") || op=="save"))document=DraftDocument(*draft);
+    if(draft && op=="save")document=DraftDocument(*draft);
     struct Phase {bool on=std::getenv("SCAPSLAB_PERF_PHASES")!=nullptr;Json log=Json::object();std::chrono::steady_clock::time_point t=std::chrono::steady_clock::now();void lap(const char *n){if(!on)return;const auto now=std::chrono::steady_clock::now();log[n]=log.value(n,0.)+std::chrono::duration<double,std::milli>(now-t).count();t=now;}} phase; // opt-in per-phase timing (SCAPSLAB_PERF_PHASES=1) -> output.perf_phase_ms
     if(op=="load_material" || op=="save_material") {
         auto next=CreateRef<ProjectDraft>(*draft);auto& model=next->project;std::size_t index=0;
@@ -597,9 +597,15 @@ void Operation::Execute(JobContext &ctx) try {
         return;
     }
 
-    if(op=="export_results") output=ExportResults(workspace,request);
+    if(op=="export_results") {
+        if(exportError)std::rethrow_exception(exportError);
+        const auto files=ExportResults(exportRuns,request.at("path").get<std::string>(),request.value("format",std::string("csv")));
+        output={{"export_status","saved"},{"run_count",exportRuns.size()},{"files",Json::array()}};
+        for(const auto& file:files)output["files"].push_back({{"path",file.string()},{"size_bytes",std::filesystem::file_size(file)}});
+    }
     else if(BatchOperation(*this,ctx)) {}
     else if(op=="export_gr") {
+        const auto workspace=ivInput?ivInput->Dump():Json::object(); // G/R file codec
         if(!workspace.contains("points") || workspace.at("points").empty()) throw std::invalid_argument("No G/R snapshot; calculate a working point first");
         if(request.contains("point_index") && !request.at("point_index").is_number_integer()) throw std::invalid_argument("point_index must be an integer");
         const auto index=request.value<std::int64_t>("point_index",0);
@@ -688,11 +694,12 @@ void Operation::Execute(JobContext &ctx) try {
         auto next=CreateRef<ProjectDraft>(*draft);EditLayer(*next,request.at("action"),request.value("layer_id",std::string{}),request.value("index",0));ValidateDraft(*next);draft=std::move(next);
     } else if (op=="export_ac") {
         const auto kind=request.at("kind").get<std::string>();
-        if ((kind!="cv" && kind!="cf") || !acResults.contains(kind)) throw std::invalid_argument("No AC result for kind");
+        if ((kind!="cv" && kind!="cf") || !acInput) throw std::invalid_argument("No AC result for kind");
+        const auto result=acInput->Dump(); // AC CSV file codec
         std::ostringstream csv; csv << std::setprecision(17);
         csv << "point_id,voltage_V,frequency_Hz,temperature_K,capacitance_F,conductance_S,G_over_omega_F,inverse_C2_F_minus2,status,valid,validity_status,conservation_relative,area_m2\n";
-        for (auto pt:acResults.at(kind).at("points")) {
-            pt["area_m2"]=acResults.at(kind).at("area_m2");
+        for (auto pt:result.at("points")) {
+            pt["area_m2"]=result.at("area_m2");
             ctx.ThrowIfCancellationRequested();
             for(const auto *key:{"point_id","voltage_V","frequency_Hz","temperature_K","capacitance_F","conductance_S","G_over_omega_F","inverse_C2_F_minus2","status","valid","validity_status","conservation_relative","area_m2"}) {
                 if (std::string(key)!="point_id") csv << ',';
@@ -1216,7 +1223,7 @@ bool Workflow::ReplacingProject() const {
     const std::string op=it->second.Op();return op=="project_load" || op=="load" || op=="layer";
 }
 void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const ProjectDraft> edit,Ref<const BatchDraft> batch,Ref<const RecorderDraft> recorder,Ref<const RunPlan> plan,std::string detailRun) {
-    auto &d=Device(id);auto &L=LaneOf(id);if(L.active) throw std::invalid_argument("A job is still active on this device");L.pending=CreateRef<Operation>(d.draft,r);auto &pending=L.pending;pending->jsonResponse=!lightResponse;const std::string op0=r.at("operation");if(op0=="edit"){pending->draft=edit?std::move(edit):ReadDraftEdit(d.draft.get(),r);pending->request.erase("document");pending->request.erase("patch");pending->request.erase("pointer_set");}if(op0.starts_with("export_"))pending->acResults=d.acResults.json();if(op0.find("batch")!=std::string::npos || op0.starts_with("export_") || op0=="send_to_plotlab")pending->batchInput=d.batchResult.typed();pending->batch=batch?std::move(batch):r.contains("spec")?ReadBatchDraft(r.at("spec")):d.batch;pending->recorder=recorder?std::move(recorder):r.contains("columns")?ReadRecorderDraft(r.at("columns")):d.recorder;
+    auto &d=Device(id);auto &L=LaneOf(id);if(L.active) throw std::invalid_argument("A job is still active on this device");L.pending=CreateRef<Operation>(d.draft,r);auto &pending=L.pending;pending->jsonResponse=!lightResponse;const std::string op0=r.at("operation");if(op0=="edit"){pending->draft=edit?std::move(edit):ReadDraftEdit(d.draft.get(),r);pending->request.erase("document");pending->request.erase("patch");pending->request.erase("pointer_set");}if(op0=="export_ac" && r.contains("kind") && r.at("kind").is_string())pending->acInput=d.acResults.get(r.at("kind").get<std::string>());if(op0.find("batch")!=std::string::npos || op0=="send_to_plotlab")pending->batchInput=d.batchResult.typed();pending->batch=batch?std::move(batch):r.contains("spec")?ReadBatchDraft(r.at("spec")):d.batch;pending->recorder=recorder?std::move(recorder):r.contains("columns")?ReadRecorderDraft(r.at("columns")):d.recorder;
     const std::string op=r.at("operation");
     if(!detailRun.empty()){pending->draft=std::move(edit);pending->detailRun=std::move(detailRun);}
     if(op=="retry_batch" || op=="record_batch")pending->request["source_run"]=d.selectedRun;
@@ -1245,8 +1252,22 @@ void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const Proj
         }
     }
     if(op=="load_profile")pending->request["project_path"]=path;
-    if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->workspace=r.value("source",std::string("iv"))=="band"?*d.bandResult:*d.result;}
-    if(op=="export_results") pending->workspace=Workspace(); // the only job that still needs the whole workspace
+    if(op=="export_gr") {if(r.contains("source") && r.at("source")!="iv" && r.at("source")!="band") throw std::invalid_argument("source must be iv or band");pending->request["device_id"]=id;pending->ivInput=r.value("source",std::string("iv"))=="band"?d.bandResult.typed():d.result.typed();}
+    if(op=="export_results") {
+        auto runs=ResultRuns();
+        try {
+            const auto input=r.value("run_ids",Json::array());std::vector<std::string> ids;
+            if(!input.is_array())throw std::invalid_argument("run_ids must be an array");
+            for(const auto& value:input) {
+                if(!value.is_string())throw std::invalid_argument("Unknown run_id");
+                auto runId=value.get<std::string>();
+                if(std::none_of(runs.begin(),runs.end(),[&](const auto& run){return run.runId==runId;}))throw std::invalid_argument("Unknown run_id");
+                ids.push_back(std::move(runId));
+            }
+            if(!r.value("all",false))std::erase_if(runs,[&](const auto& run){return std::find(ids.begin(),ids.end(),run.runId)==ids.end();});
+            pending->exportRuns=std::move(runs);
+        }catch(...){pending->exportError=std::current_exception();} // retain asynchronous export error codes
+    }
 
     const bool liveBand=op=="band" && r.value("live",false); // background band refresh: no "running" status, no history
     if(liveBand && pending->detailRun.empty()) {
