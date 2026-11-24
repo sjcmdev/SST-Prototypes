@@ -565,32 +565,44 @@ namespace SST::Prototypes::JFM
             request.layout.switch_k = source.objective.switch_k; request.sigma = output.result.currentSigma;
 			request.nm_config.max_iter = settings.monteCarloMaxIterations;
 			request.nm_config.reduced_chi2_tol = monteCarloSolverSettings.fitReducedChiSquaredTolerance;
-            // Each GPU call holds at most 64 curves / 16 MiB (or one input-sized curve).
-            const int chunkSize=static_cast<int>(std::max(std::size_t{1},std::min(std::size_t{64},noisyBudget/sizeof(double)/output.result.voltage.size())));
-			if (!request.use_lm && settings.autoCalibrateGpuSimplexIterations && settings.simplexCalibrationRuns > 0)
+            const auto plan = gpuPlanMonteCarlo(request);
+            const int chunkSize = plan.chunk_size;
+            if (context) context->LogInfo(plan.message);
+            bool gpuFailed = chunkSize == 0;
+            if (gpuFailed) output.state.warnings.push_back(plan.message + "; CPU fallback used.");
+            const int calibrationSamples = !request.use_lm && settings.autoCalibrateGpuSimplexIterations ? std::max(0, settings.simplexCalibrationRuns) : 0;
+            const float totalWork = static_cast<float>(settings.monteCarloSamples) + static_cast<float>(calibrationSamples);
+			if (!gpuFailed && calibrationSamples > 0)
 			{
                 GpuMonteCarloRequest calibration=request;
                 int maxIterations=0; bool calibrated=true;
-                for(int offset=0;offset<settings.simplexCalibrationRuns;offset+=calibration.n_samples) {
-                    calibration.n_samples=std::min(chunkSize,settings.simplexCalibrationRuns-offset);
+                for(int offset=0;offset<calibrationSamples;offset+=calibration.n_samples) {
+                    if (context) context->ThrowIfCancellationRequested();
+                    calibration.n_samples=std::min(chunkSize,calibrationSamples-offset);
                     calibration.noise_seed=static_cast<std::uint64_t>(settings.monteCarloSeed)+static_cast<std::uint64_t>(offset)*0xD1B54A32D192ED03ULL;
                     const auto calibrationOutput=gpuRunMonteCarlo(calibration);
+                    if (context) context->ThrowIfCancellationRequested();
                     if(!calibrationOutput.success || calibrationOutput.results.empty()) {
                         calibrated=false;
                         if(!calibrationOutput.message.empty())output.state.warnings.push_back("GPU simplex calibration failed: "+calibrationOutput.message);
                         break;
                     }
                     for(const auto &sample:calibrationOutput.results)maxIterations=std::max(maxIterations,sample.iterations);
+                    if (context) context->SetProgress(static_cast<float>(offset+calibration.n_samples), totalWork);
                 }
                 if(calibrated)request.nm_config.max_iter=std::max(1,maxIterations+settings.simplexCalibrationExtraIterations);
             }
 
-			// GPU scratch is bounded by 16 MiB / 64 samples; seed offsets preserve global indices.
-            bool gpuFailed=false;
-            for (int offset=0;offset<settings.monteCarloSamples;offset+=chunkSize) {
+            // Seed offsets preserve the original global sample index at every chunk size.
+            output.result.samples.reserve(settings.monteCarloSamples);
+            for (int offset=0;!gpuFailed && offset<settings.monteCarloSamples;offset+=request.n_samples) {
+            if (context) context->ThrowIfCancellationRequested();
             request.n_samples=std::min(chunkSize,settings.monteCarloSamples-offset);
+            request.noisy_samples=static_cast<int>(std::min(static_cast<std::size_t>(request.n_samples),
+                retainedCurves > static_cast<std::size_t>(offset) ? retainedCurves-offset : 0));
             request.noise_seed=static_cast<std::uint64_t>(settings.monteCarloSeed)+static_cast<std::uint64_t>(offset)*0xD1B54A32D192ED03ULL;
             GpuMonteCarloOutput gpu = gpuRunMonteCarlo(request);
+            if (context) context->ThrowIfCancellationRequested();
 			if (!gpu.success)
 				{ output.state.warnings.push_back(gpu.message + "; CPU fallback used."); gpuFailed=true; break; }
 			else
@@ -599,7 +611,6 @@ namespace SST::Prototypes::JFM
 				output.state.totalMilliseconds += gpu.total_ms;
 				const auto keep=std::min(gpu.noisy_current.size(),retainedCurves*output.result.voltage.size()-output.result.noisyCurrent.size());
                 output.result.noisyCurrent.insert(output.result.noisyCurrent.end(),gpu.noisy_current.begin(),gpu.noisy_current.begin()+keep);
-				output.result.samples.reserve(settings.monteCarloSamples);
 				for (const GpuMcResult &gpuSample : gpu.results)
 				{
 					JFMMonteCarloSample sample;
@@ -624,9 +635,11 @@ namespace SST::Prototypes::JFM
 					output.state.acceptedCount += sample.converged ? 1 : 0;
 					output.result.samples.push_back(std::move(sample));
 				}
+                if (context) context->SetProgress(static_cast<float>(calibrationSamples) + static_cast<float>(offset+request.n_samples), totalWork);
             }
             }
             if (!gpuFailed) {
+                if (context) context->ThrowIfCancellationRequested();
                 output.state.status="completed"; attachCurvesToResult(); return output;
             }
             output.result.samples.clear(); output.result.noisyCurrent.clear();

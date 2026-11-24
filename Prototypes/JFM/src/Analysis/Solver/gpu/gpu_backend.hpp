@@ -3,6 +3,7 @@
 #include "gpu_types.hpp"
 
 #include <string>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -13,6 +14,9 @@ struct GpuDeviceStatus
     int compute_major = 0;
     int compute_minor = 0;
     std::string message;
+    int device_id = 0;
+    int multiprocessors = 0;
+    int max_threads_per_multiprocessor = 0;
 };
 
 struct GpuLambertWValidationResult
@@ -46,9 +50,20 @@ struct GpuMonteCarloRequest
     std::vector<double> true_current;
     std::vector<double> sigma;
     int n_samples = 0;
+    int noisy_samples = 0; // Only this prefix is retained on the host; zero returns fit results only.
     double noise_pct = 0.0;
     std::uint64_t noise_seed = 42;
     double start_perturbation_pct = 0.0;
+};
+
+struct GpuMonteCarloBatchPlan
+{
+    int chunk_size = 0; // Zero means planning failed; use the existing CPU fallback.
+    int active_blocks_per_multiprocessor = 0;
+    std::size_t bytes_per_sample = 0;
+    std::size_t free_bytes = 0;
+    std::size_t total_bytes = 0;
+    std::string message;
 };
 
 struct GpuMonteCarloOutput
@@ -85,6 +100,7 @@ struct GpuSimplexParityReport
 };
 
 GpuDeviceStatus gpuQueryDevice();
+GpuMonteCarloBatchPlan gpuPlanMonteCarlo(const GpuMonteCarloRequest& request);
 GpuLambertWValidationResult gpuValidateLambertW();
 GpuNumericValidationResult gpuValidateDiodeCurrent();
 GpuNumericValidationResult gpuValidateNoise();

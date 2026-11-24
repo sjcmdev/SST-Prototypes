@@ -44,4 +44,11 @@ GpuMonteCarloOutput gpuRunMonteCarlo(const GpuMonteCarloRequest &)
     return result;
 }
 
+GpuMonteCarloBatchPlan gpuPlanMonteCarlo(const GpuMonteCarloRequest &)
+{
+    GpuMonteCarloBatchPlan plan;
+    plan.message = Unavailable;
+    return plan;
+}
+
 #endif
