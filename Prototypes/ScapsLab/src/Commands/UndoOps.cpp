@@ -43,6 +43,23 @@ public:
     }
 };
 
+class RunSettingsCmd final : public ICommand {
+    Workflow& w;std::string device,gesture;Ref<const RunPlan> before,after;
+    Result<void> Apply(Ref<const RunPlan> plan) {
+        auto& d=w.Device(device);d.runPlan=std::move(plan);d.runPlanEdited=true;w.autoRecalculate=false;w.autoRecalculateBand=false;w.projectDirty=true;w.Changed();w.RefreshDirty();return {};
+    }
+public:
+    RunSettingsCmd(Workflow& w,std::string device,Ref<const RunPlan> before,Ref<const RunPlan> after,std::string gesture):w(w),device(std::move(device)),gesture(std::move(gesture)),before(std::move(before)),after(std::move(after)) {}
+    std::string Description() const override {return "Edit Run settings";}
+    bool IsUndoable() const noexcept override {return true;}
+    Result<void> Execute(CommandContext&) override {return Apply(after);}
+    Result<void> Undo(CommandContext&) override {return Apply(before);}
+    std::size_t ByteSize() const noexcept override {
+        std::size_t bytes=sizeof(*this)+2*sizeof(RunPlan);for(const auto& plan:{before,after})for(const auto& a:plan->actions){if(a.range)bytes+=a.range->custom.capacity()*sizeof(double);bytes+=a.amplitudes.custom.capacity()*sizeof(double);}return bytes;
+    }
+    bool CanMerge(const ICommand& next) const noexcept override {const auto* n=dynamic_cast<const RunSettingsCmd*>(&next);return n && !gesture.empty() && gesture==n->gesture && device==n->device;}
+    Result<void> Merge(Unique<ICommand> next) override {after=static_cast<RunSettingsCmd&>(*next).after;return {};}
+};
 // ---- run history --------------------------------------------------------------------------------------------------------------------------------------
 struct RunsStep {
     struct Ins {std::size_t index;Json entry;Ref<const ResultBase> result;};
@@ -241,4 +258,5 @@ Unique<ICommand> DeviceRemoved(Workflow &w, Ref<DeviceState> device, std::size_t
 }
 Unique<ICommand> DeviceUpdated(Workflow &w, std::string device, DeviceMeta before, DeviceMeta after) {return CreateUnique<DeviceUpdateCmd>(w, std::move(device), std::move(before), std::move(after));}
 Unique<ICommand> DeviceMoved(Workflow &w, std::string device, std::size_t from, std::size_t to) {return CreateUnique<DeviceMoveCmd>(w, std::move(device), from, to);}
+Unique<ICommand> RunSettings(Workflow& w,std::string device,Ref<const RunPlan> before,Ref<const RunPlan> after,std::string gesture) {return CreateUnique<RunSettingsCmd>(w,std::move(device),std::move(before),std::move(after),std::move(gesture));}
 }

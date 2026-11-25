@@ -108,6 +108,39 @@ assert not session.execute({'operation':'edit','patch':{'temperature_K':-1}})['o
 assert not session.execute({'operation':'unknown'})['ok']
 check_run_actions(loaded['document'])
 
+# DLCP is a thin Python edge into the typed RunAction / Core job used by the GUI.
+import copy
+_dlcp_document = copy.deepcopy(loaded['document'])
+_dlcp_document['temperature_K'] = 300
+_dlcp_document['layers'] = _dlcp_document['layers'][:1]
+_dlcp_layer = _dlcp_document['layers'][0]
+_dlcp_layer['thickness_m'] = 4e-6
+_dlcp_layer['doping'] = dict(Nd_m3=0, Na_m3=1e21)
+_dlcp_layer['defects'] = []
+_dlcp_layer.pop('grading', None)
+_dlcp_document['interface_defects'] = []
+_dlcp_document['illumination'] = dict(enabled=False)
+_dlcp_document['external'] = dict(area_m2=2.2e-5)
+_dlcp_document['mesh'] = dict(points_per_layer=81, clustering_beta=3, adaptivity_level='0')
+_dlcp_document['contacts'] = dict(left=dict(flat_band=True, Sn_m_s=1e5, Sp_m_s=1e5),
+                                  right=dict(flat_band=False, phi_m_eV=4.45, Sn_m_s=1e5, Sp_m_s=1e5))
+_dlcp = scapslab.Session(_dlcp_document)
+_bad_dlcp = _dlcp.dlcp(V_max_V=[-.8], amplitudes_V=[.1,.1,.2])
+assert not _bad_dlcp['ok'] and _bad_dlcp['error']['code']
+_result_dlcp = _dlcp.dlcp(V_max_V=[-.8], samples_per_period=64, max_periods=16)
+assert _result_dlcp['ok'], _result_dlcp
+_row_dlcp = _result_dlcp['ac_results']['dlcp']['dlcp_points'][0]
+assert _row_dlcp['point_id'] == 'dlcp-0' and _row_dlcp['V_max_V'] == -.8
+assert len(_row_dlcp['samples']) == 5 and 'C1_F_per_V' in _row_dlcp
+assert _result_dlcp['ac_results']['dlcp']['amplitude_convention'] == 'peak_to_peak_V'
+with tempfile.TemporaryDirectory(prefix='scapslab-dlcp-python-') as _tmp_dlcp:
+    _csv_dlcp = Path(_tmp_dlcp) / 'dlcp.csv'
+    assert _dlcp.export_dlcp(_csv_dlcp)['ok']
+    with _csv_dlcp.open(newline='') as _stream_dlcp:
+        _csv_rows_dlcp = list(csv.DictReader(_stream_dlcp))
+    assert len(_csv_rows_dlcp) == 5 and 'Vpp_V' in _csv_rows_dlcp[0]
+print('DLCP Python: typed command/job, invalid input, stable IDs, units and CSV PASS', flush=True)
+
 
 for kind in ('cv', 'cf'):
     response = session.execute(dict(operation=kind, start_V=-0.1, stop_V=0.1, step_V=0.1,

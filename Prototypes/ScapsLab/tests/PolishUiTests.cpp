@@ -99,7 +99,7 @@ TEST_F(PolishUi,RunRangeKeepsReadableColumnsAtSavedDefaultAndWideWidths) {
         for(int f=0;f<3;++f)Frame(panel,width);
         const auto* window=ImGui::FindWindowByName("Polish UI");ASSERT_NE(window,nullptr);
         const auto* range=GImGui->Tables.GetByKey(ImHashStr("Run Actions",0,window->ID));ASSERT_NE(range,nullptr);
-        EXPECT_EQ(range->ColumnsCount,9);EXPECT_EQ(range->CurrentRow,5);
+        EXPECT_EQ(range->ColumnsCount,9);EXPECT_EQ(range->CurrentRow,int(w.Current().runPlan->actions.size()));
         for(int col:{3,4,5,7})EXPECT_GE(range->Columns[col].WidthGiven,110.f);
         EXPECT_LT(range->Columns[6].WidthGiven,range->Columns[3].WidthGiven);
         if(width<1000)EXPECT_TRUE(range->Flags&ImGuiTableFlags_ScrollX);

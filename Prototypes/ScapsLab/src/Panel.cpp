@@ -24,11 +24,12 @@
 #include "Vendor/ImGuiNotify/win32Example/fonts/IconsFontAwesome6.h"
 namespace SST {void PerfAdd(const std::string &name, double ms);}
 namespace SST::ScapsLab {
-static const char *names[]={"Project","Layers","Contacts","Solver","Run","Band diagram & profiles","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
+static const char *names[]={"Project","Layers","Contacts","Solver","Run","Band diagram & profiles","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination","DLCP"};
 Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.")+names[v],v==18?"Results":names[v],true),w(w),view(v),gallery(gallery) {
     auto s=GetState(); s.x=gallery?25.f:10.f+float(v%3)*415.f; s.y=gallery?50.f:45.f+float(v/3)*335.f;
     if(gallery) s.mode=WindowMode::Maximized;
-    s.width=gallery?1100.f:v==4?620.f:405.f; s.height=gallery?650.f:v==4?650.f:325.f; ApplyState(s);
+    s.width=gallery?1100.f:v==23?800.f:v==4?620.f:405.f; s.height=gallery?650.f:v==23?700.f:v==4?650.f:325.f;
+    if(v==23 && !gallery){s.x=50;s.y=50;}ApplyState(s);
     absoluteLog=w->plotSession.settings.ivAbsoluteLog;
     std::snprintf(file,sizeof(file),"%s",w->path.c_str());
 }
@@ -77,18 +78,19 @@ bool SweepNumber(SweepControlState& state,const char* id,double& displayValue,bo
         "sweep.step:"+(editor.component==SweepComponent::Mantissa?std::string("sweep.mantissa"):state.parameterKey)):
         editor.component==SweepComponent::Mantissa?std::string("sweep.mantissa"):editor.component==SweepComponent::Exponent?"sweep.exponent:"+state.parameterKey:state.parameterKey;
     const double scale=editor.component==SweepComponent::FullValue && !(step && editor.range.logarithmic)?editor.displayScale:1;
-    double native=displayValue/scale;const bool changed=DrawBoundValue(id,native,key,scale);
+    double native=displayValue/scale;const bool changed=DrawBoundValue(id,native,key,scale,nullptr,"",state.showUnit);
+    if(state.editor.range.sampling==SweepSampling::List && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Custom list supplies these values. Choose Range to edit From, To and Step / Points.");
     if(changed)displayValue=native*scale;return changed;
 }
 bool SweepPoints(const char* id,int& points,const char* key="sweep.points") {
     double value=points;const bool changed=DrawBoundValue(id,value,key);if(changed)points=int(value);return changed;
 }
-bool SweepRangeControl(SweepControlState& state,bool compact=false) {
+bool SweepRangeControl(SweepControlState& state,bool compact=false,const char* quantityName=nullptr) {
     auto& editor=state.editor;auto& range=editor.range;bool changed=false,listChanged=false;
     if(compact) {
         int input=range.sampling==SweepSampling::List?1:0,sampling=range.sampling==SweepSampling::Step?1:0,scale=range.logarithmic?1:0;
         const auto& style=ImGui::GetStyle();
-        const std::string quantityLabel=std::string(editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage")+" ["+editor.displayUnit+"]";
+        const std::string quantityLabel=std::string(quantityName?quantityName:editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage")+" ["+editor.displayUnit+"]";
         const float quantity=ImGui::CalcTextSize(quantityLabel.c_str()).x;
         const float number=std::max(ImGui::CalcTextSize("-1.234e+100").x+style.FramePadding.x*2,ImGui::CalcTextSize("Step [decades]").x);
         const float combo=ImGui::CalcTextSize("Custom list").x+ImGui::GetFrameHeight()+style.FramePadding.x*2;
@@ -109,11 +111,12 @@ bool SweepRangeControl(SweepControlState& state,bool compact=false) {
         };
         const bool opened=begin("Action range",false);
         if(opened) {
-            ImGui::TableNextColumn();ImGui::Text("%s [%s]",editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage",editor.displayUnit.c_str());
+            ImGui::TableNextColumn();ImGui::Text("%s [%s]",quantityName?quantityName:editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage",editor.displayUnit.c_str());
             const auto drag=[&](const char* id,double& value,bool step=false){return SweepNumber(state,id,value,step);};
             ImGui::TableNextColumn();ImGui::BeginDisabled(input!=0);changed|=drag("##minimum",range.minimum);
             ImGui::TableNextColumn();changed|=drag("##maximum",range.maximum);
             ImGui::TableNextColumn();if(sampling)changed|=drag("##step",range.step,true);else {ImGui::SetNextItemWidth(-1);changed|=SweepPoints("##points",range.points);}ImGui::EndDisabled();
+            if(input!=0 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Custom list supplies the values. Choose Range to edit From, To and Step / Points.");
             if(split)ImGui::EndTable();
         }
         if((!split && opened) || (split && begin("Action modes",true))) {
@@ -695,7 +698,7 @@ Bounds DisplayBounds(std::string_view key,double scale) {
         }else {
             bounds.hardMax=property.hardMax-property.hardMin;
             bounds.softMin=property.step;bounds.softMax=std::max(property.step*2,property.softMax-property.softMin);
-            bounds.unit=property.unit;bounds.format=property.format;bounds.integer=property.integer;
+            bounds.unit=property.unit;bounds.displayUnit=property.displayUnit;bounds.format=property.format;bounds.integer=property.integer;
             if(property.integer){bounds.hardMin=property.step;bounds.step=property.step;}
         }
         return bounds;
@@ -707,9 +710,10 @@ Bounds DisplayBounds(std::string_view key,double scale) {
     bounds.hardMin*=factor;bounds.hardMax*=factor;bounds.softMin*=factor;bounds.softMax*=factor;bounds.step*=factor;
     return bounds;
 }
-bool DrawBoundValue(const char* id,double& native,std::string_view key,double scale,const void* address,const char* label) {
+bool DrawBoundValue(const char* id,double& native,std::string_view key,double scale,const void* address,const char* label,bool showUnit) {
     const auto bounds=DisplayBounds(key,scale);const double before=native;double value=native*scale;
     const auto [lo,hi]=bounds.SliderRange(value);const bool logarithmic=bounds.scale==ParameterScale::Log;
+    const auto format=bounds.format+(showUnit?" "+bounds.displayUnit:std::string{});
     bool changed=false;const bool scoped=std::string_view(id)!="##number";if(scoped)ImGui::PushID(id);ImGui::BeginGroup();
     if(logarithmic) {
         bool zero=value==0;
@@ -723,14 +727,14 @@ bool DrawBoundValue(const char* id,double& native,std::string_view key,double sc
         }
         TrackGesture();SweepMenu(address,std::string(key).c_str(),scale,label,SweepComponent::Mantissa);ImGui::SameLine();
         double exponent=e;ImGui::SetNextItemWidth(-1);
-        if(ImGui::SliderScalar("##exponent",ImGuiDataType_Double,&exponent,&emin,&emax,zero?"0":"10^%.0f")) {
+        if(ImGui::SliderScalar("##exponent",ImGuiDataType_Double,&exponent,&emin,&emax,zero?"0":(showUnit?"x 10^%.0f "+bounds.displayUnit:std::string("10^%.0f")).c_str())) {
             changed=true;v=m*std::pow(10.,exponent);
         }
         TrackGesture();SweepMenu(address,std::string(key).c_str(),scale,label,SweepComponent::Exponent);ImGui::EndDisabled();
         if(changed)value=zero?0:v;
     }else {
         ImGui::SetNextItemWidth(-1);
-        changed=Slide("##value",value,{lo,hi,false,bounds.step},bounds.format.c_str());TrackGesture();
+        changed=Slide("##value",value,{lo,hi,false,bounds.step},format.c_str());TrackGesture();
         SweepMenu(address,std::string(key).c_str(),scale,label);
     }
     if(ImGui::IsItemHovered())ImGui::SetTooltip("%s | hard [%.6g, %.6g], typical [%.6g, %.6g]\nCtrl+click: exact entry (log: full value in mantissa if outside [1,10)).\nShift / Ctrl+Shift: fine; F: lock; Esc: cancel.\n%s\n%s",label,bounds.hardMin,bounds.hardMax,bounds.softMin,bounds.softMax,bounds.source.c_str(),bounds.note.c_str());
@@ -772,11 +776,11 @@ void DrawParameterBoundsPreferences(Workflow& w) {
         ImGui::EndTable();
     }
 }
-static bool NumberControl(const char *label,double &native,const char *key,double scale,const void* address) {
-    BeginRow(label);const bool changed=DrawBoundValue("##number",native,key,scale,address,label);EndRow();return changed;
+static bool NumberControl(const char *label,double &native,const char *key,double scale,const void* address,bool showUnit=false) {
+    BeginRow(label);const bool changed=DrawBoundValue("##number",native,key,scale,address,label,showUnit);EndRow();return changed;
 }
 template<class T> requires std::is_arithmetic_v<T>
-static bool Number(const char* label,T& native,const char* key,double scale=1) {double value=double(native);const bool changed=NumberControl(label,value,key,scale,&native);if(changed)native=static_cast<T>(value);return changed;}
+static bool Number(const char* label,T& native,const char* key,double scale=1,bool showUnit=false) {double value=double(native);const bool changed=NumberControl(label,value,key,scale,&native,showUnit);if(changed)native=static_cast<T>(value);return changed;}
 static bool Number(const char* label,Json& object,const char* key,double scale=1) {if(!object.at(key).is_number())return false;double value=object.at(key);const bool changed=NumberControl(label,value,key,scale,nullptr);if(changed)object[key]=(std::string_view(key)=="points_per_layer" || std::string_view(key)=="points" || std::string_view(key)=="max_newton_iterations")?Json(std::int64_t(value)):Json(value);return changed;}
 static bool Choice(const char* label,std::string& current,const char*,std::initializer_list<std::pair<const char*,const char*>> items) {
     bool changed=false;const char* preview=current.c_str();for(const auto& [name,value]:items)if(current==value)preview=name;
@@ -793,10 +797,40 @@ static bool Choice(const char *label,Json &j,const char *key,std::initializer_li
     BeginRow(label);
     if(ImGui::BeginCombo("##value",preview)) {for(const auto &[name,value]:items) if(ImGui::Selectable(name,current==value)) {j[key]=value;changed=true;++gesture;} ImGui::EndCombo();} EndRow();return changed;
 }
+bool Panel::DlcpControls(RunAction& a,const ProjectDraft& draft) {
+    bool changed=false;
+    if(dlcpSource.lock()!=w->Current().runPlan) {
+        SweepEditor v;v.displayUnit="V";v.range=*a.range;InitSweepControl(actionEditors[5],v,"voltage_V");actionEditors[5].showUnit=true;
+        v.range=a.amplitudes;InitSweepControl(dlcpAmplitudes,v,"voltage_V");dlcpAmplitudes.showUnit=true;dlcpSource=w->Current().runPlan;
+    }
+    changed|=Number("Frequency [Hz]",a.frequency_Hz,"frequency_Hz",1,true);
+    bool ownT=a.temperature_K>0;
+    if(Toggle("Override temperature",ownT)){a.temperature_K=ownT?draft.project.temperature_K:0;changed=true;}
+    ImGui::BeginDisabled(!ownT);double T=ownT?a.temperature_K:draft.project.temperature_K;
+    if(Number("Temperature [K]",T,"temperature_K",1,true) && ownT){a.temperature_K=T;changed=true;}ImGui::EndDisabled();
+    if(!ownT && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Uses the device temperature; enable Override temperature to edit it.");
+    ImGui::PushID("Vmax");if(SweepRangeControl(actionEditors[5],true,"V_max")){a.range=actionEditors[5].editor.range;changed=true;}ImGui::PopID();
+    ImGui::PushID("Vpp");if(SweepRangeControl(dlcpAmplitudes,true,"Vpp")){a.amplitudes=dlcpAmplitudes.editor.range;changed=true;}ImGui::PopID();
+    ImGui::TextWrapped("Vpp is peak-to-peak: Vdc = Vmax - Vpp/2. At least three increasing positive amplitudes; quadratic C0 + C1 Vpp + C2 Vpp^2 fit.");
+    if(ImGui::CollapsingHeader("... Advanced PSS / profiling")) {
+        bool automatic=a.dlcp.profiling_eps_r==0;
+        if(Toggle("Use absorber permittivity",automatic)){a.dlcp.profiling_eps_r=automatic?0:std::max_element(draft.project.layers.begin(),draft.project.layers.end(),[](const auto& l,const auto& r){return l.thickness_m<r.thickness_m;})->material.eps_r;changed=true;}
+        const double absorber=std::max_element(draft.project.layers.begin(),draft.project.layers.end(),[](const auto& l,const auto& r){return l.thickness_m<r.thickness_m;})->material.eps_r;
+        double eps=automatic?absorber:a.dlcp.profiling_eps_r;ImGui::BeginDisabled(automatic);
+        if(Number("Profiling epsilon_r [1]",eps,"eps_r",1,true) && !automatic){a.dlcp.profiling_eps_r=eps;changed=true;}ImGui::EndDisabled();
+        if(automatic && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Uses epsilon_r = %.6g from the thickest layer. Disable automatic selection for another profiling material.",absorber);
+        changed|=Number("Samples / period [1]",a.dlcp.samples_per_period,"dlcp.samples_per_period",1,true);
+        changed|=Number("Minimum periods [1]",a.dlcp.min_periods,"dlcp.min_periods",1,true);
+        changed|=Number("Maximum periods [1]",a.dlcp.max_periods,"dlcp.max_periods",1,true);
+        changed|=Number("PSS tolerance [1]",a.dlcp.periodic_tolerance,"residual_tolerance",1,true);
+    }
+    for(const auto* state:{&actionEditors[5],&dlcpAmplitudes})if(!state->error.empty())ImGui::TextWrapped("%s",state->error.c_str());
+    return changed;
+}
 bool Panel::RunActions(ProjectDraft& draft) {
     const auto source=w->Current().runPlan;auto plan=CreateRef<RunPlan>(*source);bool changed=false;
     plan->actions[1].onEdit |=w->autoRecalculate;plan->actions[0].onEdit |=w->autoRecalculateBand;
-    const char* labels[]={"Band / profiles","I-V","C-V","C-f","QE"};
+    const char* labels[]={"Band / profiles","I-V","C-V","C-f","QE","DLCP"};
     const bool conditions=Number("Temperature [K]",draft.project.temperature_K,"temperature_K");w->tutorialOverlay.Item("scapslab.Run","temperature");
     ImGui::TextWrapped("Voltage: left minus right. Include selects Single shot; On edit updates Live without storing Results.");
     if(actionSource.lock()!=source) {
@@ -804,7 +838,7 @@ bool Panel::RunActions(ProjectDraft& draft) {
             SweepEditor editor;editor.displayUnit=i==3?"Hz":i==4?"nm":"V";
             if(plan->actions[i].range)editor.range=*plan->actions[i].range;
             else {const auto& v=draft.project.voltage;editor.range={SweepSampling::Step,false,v.start_V,v.stop_V,std::abs(v.step_V),2};if(v.start_V>v.stop_V){editor.range.sampling=SweepSampling::List;editor.range.custom=ActionSamples(plan->actions[i],draft.project);}}
-            InitSweepControl(actionEditors[i],std::move(editor),i==3?"frequency_Hz":i==4?"wavelength_nm":"voltage_V");
+            InitSweepControl(actionEditors[i],std::move(editor),i==3?"frequency_Hz":i==4?"wavelength_nm":"voltage_V");actionEditors[i].showUnit=i==5;
         }
         actionSource=source;
     }
@@ -816,7 +850,7 @@ bool Panel::RunActions(ProjectDraft& draft) {
     const float moreWidth=ImGui::CalcTextSize("More").x+style.FramePadding.x*2;
     const float minimum=actionWidth+2*checkWidth+4*numeric+scaleWidth+moreWidth+18*style.CellPadding.x;
     const bool scroll=ImGui::GetContentRegionAvail().x<minimum;bool more=false;
-    if(ImGui::BeginTable("Run Actions",9,ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_RowBg|ImGuiTableFlags_SizingFixedFit|ImGuiTableFlags_NoKeepColumnsVisible|(scroll?ImGuiTableFlags_ScrollX:0),ImVec2(0,scroll?ImGui::GetFrameHeightWithSpacing()*6+style.ScrollbarSize+style.CellPadding.y*12:0),scroll?minimum:0)) {
+    if(ImGui::BeginTable("Run Actions",9,ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_RowBg|ImGuiTableFlags_SizingFixedFit|ImGuiTableFlags_NoKeepColumnsVisible|(scroll?ImGuiTableFlags_ScrollX:0),ImVec2(0,scroll?ImGui::GetFrameHeightWithSpacing()*7+style.ScrollbarSize+style.CellPadding.y*12:0),scroll?minimum:0)) {
         ImGui::TableSetupColumn("Action",ImGuiTableColumnFlags_WidthStretch);
         for(const auto* title:{"Include","On edit"})ImGui::TableSetupColumn(title,ImGuiTableColumnFlags_WidthFixed,checkWidth);
         for(const auto* title:{"From","To","Step / Points"})ImGui::TableSetupColumn(title,ImGuiTableColumnFlags_WidthFixed,numeric);
@@ -824,11 +858,12 @@ bool Panel::RunActions(ProjectDraft& draft) {
         ImGui::TableSetupColumn("At",ImGuiTableColumnFlags_WidthFixed,numeric);
         ImGui::TableSetupColumn("More",ImGuiTableColumnFlags_WidthFixed,moreWidth);
         ImGui::TableHeadersRow();
-        for(int i:{1,2,3,4,0}) {
+        for(int i:{1,2,3,5,4,0}) {
             auto& a=plan->actions[i];auto& state=actionEditors[i];auto& range=state.editor.range;
             ImGui::PushID(ActionId(a.kind));ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(labels[i]);
-            ImGui::TableNextColumn();changed|=ImGui::Checkbox("##include",&a.include);
-            ImGui::TableNextColumn();changed|=ImGui::Checkbox("##on-edit",&a.onEdit);
+            ImGui::TableNextColumn();changed|=ImGui::Checkbox("##include",&a.include);TrackGesture();
+            ImGui::TableNextColumn();ImGui::BeginDisabled(i==5);changed|=ImGui::Checkbox("##on-edit",&a.onEdit);TrackGesture();ImGui::EndDisabled();
+            if(i==5 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("DLCP takes 15 s to 3 min per profile. Use explicit Run; never recalculated on a drag.");
             const auto cell=[&](const char* id,double& value,const char* unit,bool=false) {
                 return DrawBoundValue(id,value,std::string_view(unit)=="Hz"?"frequency_Hz":std::string_view(unit)=="nm"?"wavelength_nm":std::string_view(unit)=="dec"?"sweep.decades":"voltage_V");
             };
@@ -846,7 +881,7 @@ bool Panel::RunActions(ProjectDraft& draft) {
             ImGui::TableSetColumnIndex(6);
             if(i!=0){int scale=range.logarithmic;ImGui::SetNextItemWidth(-1);if(ImGui::Combo("##scale",&scale,"Lin\0Log\0")){range.logarithmic=scale;rangeChanged=true;}}
             ImGui::TableNextColumn();
-            if(i==2){ImGui::TextUnformatted("f");ImGui::SameLine();changed|=cell("##frequency",a.frequency_Hz,"Hz",true);}
+            if(i==2 || i==5){ImGui::TextUnformatted("f");ImGui::SameLine();changed|=cell("##frequency",a.frequency_Hz,"Hz",true);}
             if(i==3){ImGui::TextUnformatted("Bias");ImGui::SameLine();changed|=cell("##voltage",a.voltage_V,"V");}
             if(rangeChanged){a.range=range;state.error.clear();changed=true;}
             ImGui::TableNextColumn();if(ImGui::Button("...")){selectedAction=i;more=true;}
@@ -858,12 +893,16 @@ bool Panel::RunActions(ProjectDraft& draft) {
     ImGui::SetNextWindowSize(ImVec2(600,0),ImGuiCond_Appearing);
     if(ImGui::BeginPopup("Action settings")) {
     ImGui::SeparatorText(labels[selectedAction]);auto& a=plan->actions[selectedAction];ImGui::PushID(ActionId(a.kind));
+    if(a.kind!=ActionKind::Dlcp) {
     bool ownTemperature=a.temperature_K>0;
     if(ImGui::BeginTable("Action temperature",2)) {
         ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Override temperature");ImGui::SameLine();
         if(ImGui::Checkbox("##override",&ownTemperature)){a.temperature_K=ownTemperature?draft.project.temperature_K:0;changed=true;}
         ImGui::TableNextColumn();ImGui::BeginDisabled(!ownTemperature);double temperature=ownTemperature?a.temperature_K:draft.project.temperature_K;if(Number("T [K]",temperature,"temperature_K") && ownTemperature){a.temperature_K=temperature;changed=true;}ImGui::EndDisabled();ImGui::EndTable();
     }
+    }
+    if(a.kind==ActionKind::Dlcp)changed|=DlcpControls(a,draft);
+    else {
     if(a.kind==ActionKind::Band || a.kind==ActionKind::Cf)changed|=Number("Bias [V]",a.voltage_V,"voltage_V");
     if(a.kind!=ActionKind::Band) {
         auto& state=actionEditors[selectedAction];
@@ -877,12 +916,13 @@ bool Panel::RunActions(ProjectDraft& draft) {
         if(a.constantFlux)changed|=Number("Photon flux [m^-2 s^-1]",a.photon_flux_m2_s,"probe_photon_flux_m2_s");
         else changed|=Number("Probe power [W/m^2]",a.probe_power_W_m2,"probe_power_W_m2");
     }
+    }
     ImGui::PopID();ImGui::EndPopup();
     }
     std::string error;try {ValidateRunPlan(*plan,draft);for(const auto& state:actionEditors)if(!state.error.empty())throw std::invalid_argument(state.error);}catch(const std::exception& e){error=e.what();}
-    if(changed && error.empty()) {Do(Cmd::SetRunPlan::Make(plan));actionSource=plan;}
+    if(changed && error.empty()) {Do(Cmd::SetRunPlan::Make(plan,std::to_string(gesture)));actionSource=plan;}
     else if(changed) { // Include may be empty while editing; invalid range text stays local until corrected.
-        try {for(const auto& next:plan->actions)if(next.range)(void)SweepValues(*next.range);Do(Cmd::SetRunPlan::Make(plan));actionSource=plan;}catch(const std::exception&){}
+        try {for(const auto& next:plan->actions)if(next.range)(void)SweepValues(*next.range);Do(Cmd::SetRunPlan::Make(plan,std::to_string(gesture)));actionSource=plan;}catch(const std::exception&){}
     }
     if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
     ImGui::BeginDisabled(w->Busy() || !error.empty());
@@ -891,7 +931,7 @@ bool Panel::RunActions(ProjectDraft& draft) {
     if(ImGui::Button("Results"))w->focusView=18;
     ImGui::SameLine();ImGui::TextUnformatted("Pause after Action");ImGui::SameLine();changed|=ImGui::Checkbox("##pause-action",&plan->pauseAfterAction);
     ImGui::SameLine();ImGui::TextUnformatted("Member");ImGui::SameLine();changed|=ImGui::Checkbox("##pause-member",&plan->pauseAfterMember);
-    if(changed && (plan->pauseAfterAction!=source->pauseAfterAction || plan->pauseAfterMember!=source->pauseAfterMember))Do(Cmd::SetRunPlan::Make(plan));
+    if(changed && (plan->pauseAfterAction!=source->pauseAfterAction || plan->pauseAfterMember!=source->pauseAfterMember))Do(Cmd::SetRunPlan::Make(plan,std::to_string(gesture)));
     if(const auto op=w->ActiveOp();op && op->paused) {if(ImGui::Button("Resume"))Do(Cmd::ResumeRun::With());}
     return conditions;
 }
@@ -926,6 +966,7 @@ void Panel::RenderContent() {
     if(view==10) {Compare();return;}
     if(view==5) {Results();return;}
     if(view==22) {GenerationRecombination();return;}
+    if(view==23) {DLCP();return;}
     if(view>=6 && view<10) {AC();return;}
     if(view==19)ShotBar(*w,"qe");
     const bool replacing=w->ReplacingProject();
@@ -1643,6 +1684,74 @@ void Panel::Results() {
         DrawLayerRegions(layers);bandBadge();EndSavedPlot(*w,"Carriers");
     }
 }
+void Panel::DLCP(Ref<const AcResult> stored) {
+    auto& d=w->Current();const bool frozen=bool(stored);
+    if(!frozen) {
+        auto plan=CreateRef<RunPlan>(*d.runPlan);auto& a=plan->actions[5];
+        if(ImGui::CollapsingHeader("DLCP settings",ImGuiTreeNodeFlags_DefaultOpen)) {
+            if(DlcpControls(a,*d.draft))try{Do(Cmd::SetRunPlan::Make(plan,std::to_string(gesture)));}catch(const std::exception& e){w->status=e.what();}
+        }
+        std::string error;try {auto check=*plan;for(auto& action:check.actions)action.include=action.kind==ActionKind::Dlcp;ValidateRunPlan(check,*d.draft);for(const auto* state:{&actionEditors[5],&dlcpAmplitudes})if(!state->error.empty())throw std::invalid_argument(state->error);}catch(const std::exception& e){error=e.what();}
+        ImGui::BeginDisabled(w->Busy() || !error.empty());
+        if(ImGui::Button("Run DLCP")){for(auto& action:plan->actions)action.include=action.kind==ActionKind::Dlcp;Do(Cmd::SingleShot::Make(plan));}ImGui::EndDisabled();
+        if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("%s",w->Busy()?"A job is active. Wait or cancel it.":error.empty()?"Explicit large-signal solve; no recompute on parameter drags.":error.c_str());
+        if(w->DeviceRunning(d.id)){ImGui::SameLine();if(ImGui::Button("Cancel DLCP"))Do(Cmd::Cancel::With({{"device_id",d.id}}));}
+        if(!error.empty())ImGui::TextWrapped("%s",error.c_str());
+    }
+    const auto source=frozen?stored:d.acResults.get("dlcp");
+    const auto live=(!frozen && !d.liveDlcp.empty())?d.liveDlcp.back():Ref<const DlcpProfilePoint>{};
+    if(dlcpPlotSource.lock()!=source || dlcpLastLive!=live || dlcpDevice!=d.id) {
+        dlcpPlotSource=source;dlcpLastLive=live;dlcpDevice=d.id;dlcpRows=source?source->dlcp:std::vector<Ref<const DlcpProfilePoint>>{};
+        if(!frozen)for(const auto& p:d.liveDlcp){const auto it=std::find_if(dlcpRows.begin(),dlcpRows.end(),[&](const auto& old){return old->value.V_max_V==p->value.V_max_V;});if(it==dlcpRows.end())dlcpRows.push_back(p);else *it=p;}
+        std::sort(dlcpRows.begin(),dlcpRows.end(),[](const auto& l,const auto& r){return l->value.V_max_V<r->value.V_max_V;});++w->plotGen;
+    }
+    ImGui::SameLine();ImGui::BeginDisabled(!source || source->dlcp.empty() || w->Busy());
+    if(ImGui::Button("Export DLCP CSV"))try{if(const auto path=SaveFileDialog({"DLCP CSV","csv"},"scapslab-dlcp.csv")){Do(Cmd::ExportDlcp::Make(source,path->Utf8()));}}catch(const std::exception& e){w->status=e.what();}ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("%s",w->Busy()?"Wait for the job to finish before exporting.":"CSV includes units, fit coefficients, C-V reference and every amplitude sample.");
+    if(!frozen && w->DeviceRunning(d.id)) {
+        const auto job=w->jobs->GetJob(w->ActiveJob());ImGui::TextWrapped("Running: %zu finished points; previous result remains visible. %s",d.liveDlcp.size(),job?job->currentStage.c_str():"");
+    }else ImGui::TextWrapped("%s | %zu points | %zu converged",frozen?"Stored / frozen":"Last completed DLCP",dlcpRows.size(),std::count_if(dlcpRows.begin(),dlcpRows.end(),[](const auto& p){return p->value.status==scaps_core::DlcpStatus::Converged;}));
+    if(source && !source->points.empty())ImGui::Text("Result: %.6g Hz | %.6g K | epsilon_r %.6g",source->points.front().frequency_Hz,source->points.front().temperature_K,source->dlcp_eps_r);
+    if(dlcpRows.empty()){ImGui::TextWrapped("Run DLCP to display N_DL(x), the same-device C-V reference and C(Vpp). Typical profile: 15 s to 3 min. Cancel checks run inside the transient solver.");return;}
+    dlcpSelected=std::clamp(dlcpSelected,0,int(dlcpRows.size())-1);
+    const float height=std::max(180.f,std::min(300.f,ImGui::GetContentRegionAvail().y*.32f));
+    const auto& dl=Derived(dlcpRows,700,[&](Cols& c){for(const auto& p:dlcpRows){c.a.push_back(p->value.x_m*1e6);c.b.push_back(p->value.status==scaps_core::DlcpStatus::Converged?p->value.N_DL_m3:NAN);}});
+    const auto& cv=Derived(dlcpRows,701,[&](Cols& c){for(const auto& p:dlcpRows){c.a.push_back(p->cv_x_m*1e6);c.b.push_back(p->N_CV_m3);}});
+    const auto& ticks=Derived(dlcpRows,703,[&](Cols& c){
+        double lo=INFINITY,hi=0;for(const auto& p:dlcpRows)for(double n:{p->value.status==scaps_core::DlcpStatus::Converged?p->value.N_DL_m3:double(NAN),p->N_CV_m3})if(std::isfinite(n) && n>0){lo=std::min(lo,n);hi=std::max(hi,n);}
+        if(std::isfinite(lo)){c.a.push_back(lo);if(hi>lo){c.a.push_back(std::exp((std::log(lo)+std::log(hi))/2));c.a.push_back(hi);}}
+    });
+    if(BeginSavedPlot(*w,"DLCP density",ImVec2(-1,height))) {
+        ImPlot::SetupAxes("x = epsilon A/C0 (DLCP), A/C (CV) [um]","N [m^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);ImPlot::SetupAxisFormat(ImAxis_Y1,"%.4g");if(!ticks.a.empty())ImPlot::SetupAxisTicks(ImAxis_Y1,ticks.a.data(),int(ticks.a.size()),nullptr,true);SetupSavedPlot(w->plotSession,"DLCP density");
+        ImPlot::PlotLine("N_DL (DLCP)",dl.a.data(),dl.b.data(),int(dl.a.size()),{ImPlotProp_Marker,ImPlotMarker_Circle});
+        ImPlot::PlotLine("N_CV (C-V)",cv.a.data(),cv.b.data(),int(cv.a.size()),{ImPlotProp_Marker,ImPlotMarker_Square});
+        ImPlot::PlotScatter("Current point",&dl.a[dlcpSelected],&dl.b[dlcpSelected],1,{ImPlotProp_MarkerSize,7.f});
+        if(ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(0)) {
+            float nearest=144;const auto mouse=ImGui::GetMousePos();for(int i=0;i<int(dl.a.size());++i)if(std::isfinite(dl.a[i]) && dl.b[i]>0){const auto p=ImPlot::PlotToPixels(dl.a[i],dl.b[i]);const float dx=p.x-mouse.x,dy=p.y-mouse.y;const float dist=dx*dx+dy*dy;if(dist<nearest){nearest=dist;dlcpSelected=i;}}
+        }
+        EndSavedPlot(*w,"DLCP density");
+    }
+    const auto& chosen=dlcpRows[dlcpSelected]->value;
+    ImGui::Text("V_max = %.6g V | C0 %.6g F | C1 %.6g F/V | C2 %.6g F/V^2",chosen.V_max_V,chosen.C0_F,chosen.C1_F_per_V,chosen.C2_F_per_V2);
+    if(BeginSavedPlot(*w,"DLCP capacitance fit",ImVec2(-1,height))) {
+        ImPlot::SetupAxes("Vpp [V] (peak-to-peak)","C [F]");SetupSavedPlot(w->plotSession,"DLCP capacitance fit");
+        const auto& p=chosen;const auto& c=Derived(p.samples,702,[&](Cols& c){for(const auto& s:p.samples){c.a.push_back(s.amplitude_V);c.b.push_back(s.C_F);c.c.push_back(p.C0_F+s.amplitude_V*(p.C1_F_per_V+s.amplitude_V*p.C2_F_per_V2));}});
+        ImPlot::PlotScatter("C(Vpp)",c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_MarkerSize,5.f});
+        ImPlot::PlotLine("C0 + C1 Vpp + C2 Vpp^2",c.a.data(),c.c.data(),int(c.a.size()),{ImPlotProp_LineWeight,3.f});
+        EndSavedPlot(*w,"DLCP capacitance fit");
+    }
+    if(ImGui::BeginTable("DLCP points",7,ImGuiTableFlags_Borders|ImGuiTableFlags_RowBg|ImGuiTableFlags_ScrollX|ImGuiTableFlags_ScrollY,ImVec2(0,std::max(110.f,ImGui::GetContentRegionAvail().y)))) {
+        for(const auto* label:{"V_max [V]","x [um]","C0 [F]","C1 [F/V]","N_DL [m^-3]","Fit relative rms [1]","Status"})ImGui::TableSetupColumn(label);
+        ImGui::TableSetupScrollFreeze(0,1);ImGui::TableHeadersRow();
+        for(int i=0;i<int(dlcpRows.size());++i) {
+            const auto& p=dlcpRows[i]->value;ImGui::PushID(i);ImGui::TableNextRow();ImGui::TableNextColumn();char text[64];std::snprintf(text,sizeof(text),"%.6g",p.V_max_V);
+            if(ImGui::Selectable(text,i==dlcpSelected,ImGuiSelectableFlags_SpanAllColumns))dlcpSelected=i;
+            for(double v:{p.x_m*1e6,p.C0_F,p.C1_F_per_V,p.N_DL_m3,p.fit_relative_rms}){ImGui::TableNextColumn();if(std::isfinite(v))ImGui::Text("%.6g",v);else ImGui::TextUnformatted("--");}
+            ImGui::TableNextColumn();ImGui::TextUnformatted(scaps_core::to_string(p.status));if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",p.message.empty()?"Periodic-state and quadratic-fit status":p.message.c_str());ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+}
 void Panel::AC() {
     const bool cv=view<8; const char *kind=cv?"cv":"cf";
     ShotBar(*w,kind);
@@ -1885,7 +1994,7 @@ void Panel::Devices() {
                             ImGui::PushID(id.c_str());
                             const auto [ropen,rclick]=node("##run",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,active && (d.selectedRun==id || multi.contains(id)));(void)ropen;
                             const std::string kind=run.value("kind",std::string{});
-                            const bool hiddenKind=!PanelShown(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:kind=="batch"?16:5);
+                            const bool hiddenKind=!PanelShown(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="dlcp"?23:kind=="qe"?19:kind=="band"?14:kind=="batch"?16:5);
                             if(hiddenKind && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("panel disabled in basic mode");
                             if(rclick && !hiddenKind) {
                                 const auto &io=ImGui::GetIO();
@@ -1895,7 +2004,7 @@ void Panel::Devices() {
                                 } else if(io.KeyCtrl) {if(!multi.erase(id))multi.insert(id);anchor=id;}
                                 else {multi={id};anchor=id;}
                                 deferred.push_back({{"operation","history_select"},{"device_id",d.id},{"run_id",id}});
-                                if(!io.KeyShift && !io.KeyCtrl)go(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="qe"?19:kind=="band"?14:5);
+                                if(!io.KeyShift && !io.KeyCtrl)go(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="dlcp"?23:kind=="qe"?19:kind=="band"?14:5);
                             }
                             if(ImGui::BeginPopupContextItem("runmenu")) {
                                 if(!multi.contains(id)){multi={id};anchor=id;}
@@ -2175,8 +2284,8 @@ void Panel::ResultsBrowser() {
     }
     ImGui::SameLine();if(ImGui::Button("Clear unpinned")){Do(Cmd::ClearHistory::With());ImGui::EndDisabled();return;}
     ImGui::EndDisabled();
-    for(int i=0;i<5;++i)if(w->project.ui.value("results_action",std::string("iv"))==ActionId(ActionKind(i)))resultAction=i;
-    BeginRow("Action");if(ImGui::Combo("##result-action",&resultAction,"Band / profiles\0I-V\0C-V\0C-f\0QE\0"))w->project.ui["results_action"]=ActionId(ActionKind(resultAction));EndRow();const auto kind=ActionKind(resultAction);
+    for(int i=0;i<6;++i)if(w->project.ui.value("results_action",std::string("iv"))==ActionId(ActionKind(i)))resultAction=i;
+    BeginRow("Action");if(ImGui::Combo("##result-action",&resultAction,"Band / profiles\0I-V\0C-V\0C-f\0QE\0DLCP\0"))w->project.ui["results_action"]=ActionId(ActionKind(resultAction));EndRow();const auto kind=ActionKind(resultAction);
     const auto resolve=[&](const DeviceState& device,const std::string& id,int index,int action,int attempt)->Ref<const ResultBase> {
         auto source=device.RunResult(id);
         if(auto batch=std::dynamic_pointer_cast<const BatchResult>(source);batch && batch->runPlan) {
@@ -2211,6 +2320,7 @@ void Panel::ResultsBrowser() {
     const auto key=std::make_tuple(d.id,d.selectedRun,d.selectedMember,resultAction,attempt);bool compare=w->resultCompare.contains(key);
     if(Toggle("Compare selected Action / attempt",compare)){if(compare)w->resultCompare.insert(key);else w->resultCompare.erase(key);}
     const auto selected=resolve(d,d.selectedRun,d.selectedMember,resultAction,attempt);
+    if(kind==ActionKind::Dlcp){if(selected)DLCP(std::dynamic_pointer_cast<const AcResult>(selected));else ImGui::TextUnformatted("DLCP was not sampled in this Run.");return;}
     if(ImGui::BeginTabBar("Results views")) {
         if(ImGui::BeginTabItem("Curves")) {
             if(!selected)ImGui::TextUnformatted("Action not sampled or curves not stored. Use Recorder / Calculate missing for an explicit new run.");

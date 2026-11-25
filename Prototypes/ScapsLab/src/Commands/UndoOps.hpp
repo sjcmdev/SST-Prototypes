@@ -23,6 +23,7 @@ struct Deltas {
     bool Empty() const {return items.empty();}
 };
 Deltas Compare(const std::vector<DeviceBefore> &before, Workflow &w, bool withLiveResults); // only devices that changed
+Unique<ICommand> RunSettings(Workflow&,std::string device,Ref<const RunPlan> before,Ref<const RunPlan> after,std::string gesture);
 Unique<ICommand> History(Workflow &w, std::string description, Deltas deltas);
 Unique<ICommand> ProjectEdit(Workflow &w, std::string nameBefore, std::string nameAfter, const Json &uiBefore, const Json &uiAfter, Deltas trimmedHistory);
 

@@ -63,7 +63,7 @@ TEST(Typed3, ProfileMetadataUsesProfilePathAndLegacyNumericScalarsLoad) {
 // slux3 S2: typed Actions, explicit storage, bounded/cancellable preview.
 TEST(RunActions, OwnRangesAndSingleGroupUseTypedResults) {
     Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDraft(SmallDraft());
-    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions)a.include=true;
+    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions)a.include=a.kind!=ActionKind::Dlcp;
     plan->actions[0].voltage_V=.013;
     plan->actions[1].range=SweepRange{SweepSampling::List,false,0,0,1,2,{0,.012,.024}};
     plan->actions[2].range=SweepRange{SweepSampling::List,false,0,0,1,2,{0,.021}};plan->actions[2].frequency_Hz=1234;plan->actions[2].temperature_K=315;
@@ -194,7 +194,7 @@ TEST(RunActions, OnEditSettingsDoNotEnableAnotherDevice) {
 }
 namespace {
 Ref<RunPlan> SmallActions() {
-    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions)a.include=true;
+    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions)a.include=a.kind!=ActionKind::Dlcp;
     plan->actions[0].voltage_V=.012;
     plan->actions[1].range=SweepRange{SweepSampling::List,false,0,0,1,1,{0,.012,.024}};
     plan->actions[2].range=SweepRange{SweepSampling::List,false,0,0,1,1,{0,.021}};plan->actions[2].frequency_Hz=1234;plan->actions[2].temperature_K=315;

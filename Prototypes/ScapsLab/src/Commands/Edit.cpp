@@ -26,7 +26,7 @@ Out ListHistory::Execute(ILabStore &s) const {
 }
 Out SelectDevice::Execute(ILabStore &s) const {
     for(const auto &op : s.ActiveOps())
-        if(op != "run" && op != "band" && op != "cv" && op != "cf") throw std::invalid_argument("Wait for the project operation before selecting a device");
+        if(op != "run" && op != "band" && op != "cv" && op != "cf" && op != "qe" && op != "dlcp" && op != "single_shot") throw std::invalid_argument("Wait for the project operation before selecting a device");
     const auto id = args.at("device_id").get<std::string>();
     s.RequireDevice(id);
     if(s.EditQueued()) throw std::invalid_argument("Wait for queued edits before selecting a device");

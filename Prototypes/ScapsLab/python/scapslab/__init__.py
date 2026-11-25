@@ -72,6 +72,13 @@ class Session:
     def run_batch(self, **request):
         return self.execute(dict(operation='run_batch', **request))
 
+    def dlcp(self, **settings):
+        """Explicit cancellable DLCP; V_max_V and amplitudes_V use V (peak-to-peak)."""
+        return self.execute(dict(operation='dlcp', **settings))
+
+    def export_dlcp(self, path):
+        return self.execute(dict(operation='export_dlcp', path=str(path)))
+
     def run_settings(self, actions):
         return self.execute(dict(operation='run_settings', actions=actions))
 

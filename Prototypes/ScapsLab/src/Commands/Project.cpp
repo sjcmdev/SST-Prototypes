@@ -4,7 +4,7 @@
 namespace SST::ScapsLab::Cmd {
 namespace {
 bool OnlyCalculations(const std::vector<std::string> &ops) {
-    for(const auto &o : ops) if(o != "run" && o != "band" && o != "cv" && o != "cf" && o != "qe" && o != "run_batch") return false;
+    for(const auto &o : ops) if(o != "run" && o != "band" && o != "cv" && o != "cf" && o != "qe" && o != "dlcp" && o != "single_shot" && o != "run_batch") return false;
     return true;
 }
 Out Open(ILabStore &s, const Json &request) {

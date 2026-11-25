@@ -75,11 +75,12 @@ Json ExportResults(const Json &workspace,const Json &request) {
         for(const auto &run:selected) {
             const auto &r=run.at("result"),&snapshot=r.at("project_snapshot");
             std::size_t index=0;
-            for(const auto &point:r.at(run.at("kind")=="batch"?"rows":"points")) {
+            for(const auto &point:r.at(run.at("kind")=="batch"?"rows":run.at("kind")=="dlcp"?"dlcp_points":"points")) {
                 Json row={{"run_id",run.at("run_id")},{"device_id",run.at("device_id")},{"kind",run.at("kind")},{"point_index",index++},
                     {"project_hash",r.at("provenance").at("device_hash")},{"provenance_json",r.at("provenance")},{"settings_json",snapshot},{"request_json",r.value("request",Json::object())},
                     {"effective_conditions_json",Effective(r,point)},
                     {"point_json",point}};
+                if(run.at("kind")=="dlcp"){row["frequency_Hz"]=r.at("points").front().at("frequency_Hz");row["temperature_K"]=r.at("points").front().at("temperature_K");row["profiling_eps_r"]=r.at("profiling_eps_r");}
                 for(auto field=point.begin();field!=point.end();++field) if(field->is_primitive()) row[field.key()]=field.value();
                 row["terminal_voltage_V"]=point.value("terminal_voltage_V",point.value("voltage_V",Json(nullptr)));
                 row["internal_voltage_V"]=point.value("internal_voltage_V",Json(nullptr));
@@ -107,14 +108,14 @@ Json ExportResults(const Json &workspace,const Json &request) {
         if(plots.empty()) throw std::invalid_argument("No retained curves to plot");
         for(const auto &run:plots) {
             const auto kind=run.at("kind").get<std::string>();
-            const std::string x=kind=="qe"?"wavelength_nm":kind=="cf"?"frequency_Hz":"voltage_V";
-            const std::string y=kind=="qe"?"EQE":kind=="cv" || kind=="cf"?"capacitance_F":"J_A_m2";
+            const std::string x=kind=="dlcp"?"x_m":kind=="qe"?"wavelength_nm":kind=="cf"?"frequency_Hz":"voltage_V";
+            const std::string y=kind=="dlcp"?"N_DL_m3":kind=="qe"?"EQE":kind=="cv" || kind=="cf"?"capacitance_F":"J_A_m2";
             sst::plotlab::GraphSnapshot graph;graph.spec.x.label=x;graph.spec.y.label=y;graph.widthMm=160;graph.heightMm=100;
             sst::plotlab::SnapshotSeries series;series.kind=sst::ui::plot::SeriesKind::Line;series.label=run.at("run_id");
             series.style.color={.12f,.45f,.8f,1.f};series.style.markerFill=series.style.color;series.style.markerOutline=series.style.color;series.style.lineWidthPt=1.5f;series.style.markerSizePt=3;series.style.errorCapPt=3;
             bool finite=false;graph.ranges={0,1,0,1};
-            for(const auto &p:run.at("result").at("points")) {
-                const bool valid=p.value("valid",false) && p.at(x).is_number() && p.at(y).is_number();
+            for(const auto &p:run.at("result").at(kind=="dlcp"?"dlcp_points":"points")) {
+                const bool valid=(kind=="dlcp"?p.at("status")=="converged":p.value("valid",false)) && p.at(x).is_number() && p.at(y).is_number();
                 const double a=p.at(x).is_number()?p.at(x).get<double>():NAN,b=valid?p.at(y).get<double>():NAN;
                 series.x.push_back(a);series.y.push_back(b);
                 if(std::isfinite(a) && std::isfinite(b)) {if(!finite)graph.ranges={a,a,b,b};finite=true;graph.ranges.minX=std::min(graph.ranges.minX,a);graph.ranges.maxX=std::max(graph.ranges.maxX,a);graph.ranges.minY=std::min(graph.ranges.minY,b);graph.ranges.maxY=std::max(graph.ranges.maxY,b);}
