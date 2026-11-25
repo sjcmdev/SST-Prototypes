@@ -47,19 +47,20 @@ namespace SST::Prototypes::WindowChromeLab
         ImGui::TextDisabled("Lab extension: %zu independent samples", m_Samples.size());
         if (ImGui::MenuItem("Reveal this sample view", nullptr, false, Capabilities().projectItem)) Request({WindowAction::Reveal});
     }
-    std::string LabWindow::SaveViewState() const
+    bool LabWindow::RestoreViewState(const std::any &state)
     {
-        return nlohmann::json{{"scale", m_Scale}}.dump();
+        const auto *scale = std::any_cast<float>(&state);
+        if (!scale || !std::isfinite(*scale) || *scale < .1f || *scale > 5) return false;
+        m_Scale = *scale; return true;
     }
-    bool LabWindow::LoadViewState(const std::string &text)
+    std::string LabWindow::EncodeViewState(const std::any &state) const
     {
-        try
-        {
-            const auto j = nlohmann::json::parse(text);
-            const auto scale = j.at("scale").get<float>();
-            if (!std::isfinite(scale) || scale < .1f || scale > 5) return false;
-            m_Scale = scale; return true;
-        }
-        catch (const std::exception &) { return false; }
+        return nlohmann::json{{"scale", std::any_cast<float>(state)}}.dump();
+    }
+    std::any LabWindow::DecodeViewState(const std::string &text) const
+    {
+        const auto scale = nlohmann::json::parse(text).at("scale").get<float>();
+        if (!std::isfinite(scale) || scale < .1f || scale > 5) throw std::invalid_argument("Invalid view scale");
+        return scale;
     }
 }

@@ -1,0 +1,771 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="70" failures="0" skipped="0" tests="360" time="12.965" timestamp="2026-11-24T02:28:46.476517+01:00" hostname="DESKTOP-URD7D0V"><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[lines-6-C-C_G]" time="0.007" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[lines-6-C-Cp_Rp]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[lines-6-C-ReZ_ImZ]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[lines-6-G/omega-C_G]" time="0.007" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[lines-6-G/omega-Cp_Rp]" time="0.007" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[lines-6-G/omega-ReZ_ImZ]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[surface-4-C-C_G]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[surface-4-C-Cp_Rp]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[surface-4-C-ReZ_ImZ]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[surface-4-G/omega-C_G]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[surface-4-G/omega-Cp_Rp]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[surface-4-G/omega-ReZ_ImZ]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[heatmap-7-C-C_G]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[heatmap-7-C-Cp_Rp]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[heatmap-7-C-ReZ_ImZ]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[heatmap-7-G/omega-C_G]" time="0.007" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[heatmap-7-G/omega-Cp_Rp]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_known_map_all_views_and_conversions[heatmap-7-G/omega-ReZ_ImZ]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_unequal_grids_remain_measured_3d_lines[surface]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_unequal_grids_remain_measured_3d_lines[heatmap]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_unequal_grids_remain_measured_3d_lines[lines]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_explicit_log_interpolation_no_extrapolation_and_no_missing_bridges" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_invalid_policy_is_typed_and_atomic[options0]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_invalid_policy_is_typed_and_atomic[options1]" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_invalid_policy_is_typed_and_atomic[options2]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_invalid_policy_is_typed_and_atomic[options3]" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_invalid_policy_is_typed_and_atomic[options4]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_invalid_policy_is_typed_and_atomic[options5]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_incompatible_temperature_series_is_rejected[temperature_K-None]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_incompatible_temperature_series_is_rejected[temperature_K-200]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_incompatible_temperature_series_is_rejected[bias_V-1]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[png-surface]" time="0.001"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[png-heatmap]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[png-lines]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[svg-surface]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[svg-heatmap]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[svg-lines]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[pdf-surface]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[pdf-heatmap]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_camera_colour_save_open_export_matches_view[pdf-lines]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_cancel_leaves_no_map" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_explicit_z_and_colour_limits_use_existing_view_command" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_sorted_frequency_view_and_duplicate_frequency_rejection" time="0.007" /><testcase classname="Prototypes.CapLab.python.tests.test_as_map" name="test_nonpositive_parallel_resistance_is_a_gap_in_conductance_map" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_readable_legend_and_source_colour" time="0.107"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_cv_direct_without_analysis[C-V]" time="0.019" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_cv_direct_without_analysis[Mott-Schottky]" time="0.019" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_imported_profile_direct[C-V]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_imported_profile_direct[Mott-Schottky]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_imported_profile_direct[N_CV(W)]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_imported_profile_direct[N_DLCP(W)]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_frequency_direct_and_cancel[C-f]" time="0.026" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_frequency_direct_and_cancel[G/omega-f]" time="0.026" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_frequency_direct_and_cancel[Nyquist]" time="0.026" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_frequency_direct_and_cancel[Bode magnitude]" time="0.027" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_frequency_direct_and_cancel[Bode phase]" time="0.027" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_every_saved_analysis_plot_can_be_compared" time="0.244" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_measurement_and_simulation_can_share_axes" time="0.065" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_invalid_ids_and_duplicate_sources_are_atomic" time="0.049" /><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_saved_views_batch_export_matches_snapshot[png]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_saved_views_batch_export_matches_snapshot[svg]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_saved_views_batch_export_matches_snapshot[pdf]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_compare_browser" name="test_view_rejects_foreign_visibility_and_invalid_log_ranges" time="0.037" /><testcase classname="Prototypes.CapLab.python.tests.test_import_sources" name="test_unicode_folder_preview_import_and_explicit_error_selection" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_import_sources" name="test_missing_source_cancel_and_multi_file_deduplication" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_cpe_warburg_fit_from_distant_starts[0.6-0-False]" time="0.093" /><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_cpe_warburg_fit_from_distant_starts[0.6-0-True]" time="0.176" /><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_cpe_warburg_fit_from_distant_starts[0.6-0.002-False]" time="0.643" /><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_cpe_warburg_fit_from_distant_starts[0.6-0.002-True]" time="1.199" /><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_cpe_warburg_fit_from_distant_starts[1.6-0-False]" time="0.133" /><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_cpe_warburg_fit_from_distant_starts[1.6-0-True]" time="0.247" /><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_cpe_warburg_fit_from_distant_starts[1.6-0.002-False]" time="0.597" /><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_cpe_warburg_fit_from_distant_starts[1.6-0.002-True]" time="1.049" /><testcase classname="Prototypes.CapLab.python.tests.test_is_fit_robustness" name="test_real_lab_cp_rp_fixture_has_finite_bounded_cpe_warburg_fit" time="0.010" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_no_measurement_save_open_and_staleness[grid0-expected0]" time="0.011" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_no_measurement_save_open_and_staleness[grid1-expected1]" time="0.011" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_same_sample_overlay_keeps_original_grid_and_conditions" time="0.007" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid0]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid1]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid2]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid3]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid4]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid5]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid6]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid7]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_invalid_grid_is_typed_and_atomic[grid8]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_fit_still_requires_a_measurement" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_is_model_only" name="test_create_circuit_and_sample_without_import" time="0.007" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_frozen_source_hashes" time="0.009" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_pfs_i1" time="0.446" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_pfs_i3" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_pfs_i4" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_pfs_i5" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_pfs_d1" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_scaps_cf_blocks_scaling_sign_hash_and_rows[3.7e-06]" time="0.036" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_scaps_cf_blocks_scaling_sign_hash_and_rows[5e-05]" time="0.051" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_scaps_cv_scaling_and_no_historical_napp_correction" time="0.012" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_missing_area_never_defaults" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_lab_cv_mapping_decimal_comma_units_extra_and_directions" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_is_r_g[lab_is_cp_rp-Ohm-200]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_is_r_g[lab_is_c_g-S-0.005]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_is_z_sign_sort_original_rows_and_extras" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_dlcp_groups_and_missing_conditions" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_duplicates_need_explicit_exclusion" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_bad_or_truncated_rows_are_not_dropped[]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_bad_or_truncated_rows_are_not_dropped[1 2]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_bad_or_truncated_rows_are_not_dropped[1 2 3\n2 3]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_bad_or_truncated_rows_are_not_dropped[1 2 3\nbroken]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_bad_or_truncated_rows_are_not_dropped[1 nan 3]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_bad_or_truncated_rows_are_not_dropped[0 1 2]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_invalid_settings[options0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_invalid_settings[options1]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_invalid_settings[options2]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_invalid_settings[options3]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_invalid_settings[options4]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_invalid_settings[options5]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_manifest_base_directories_unicode_and_duplicate_names" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_historical_project_data_references_results_and_no_guessed_constants" time="0.575" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_historical_scaps_explicit_profile_and_nonfinite_quality" time="0.071" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_missing_historical_inputs_and_nonfinite_results" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_cpp_boundary_rejects_invalid_bundle_and_columns" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_cancel_and_progress" time="0.010" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_conflicts_bom_and_negative_rp_are_visible" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_persisted_history_rejects_dangling_reference" time="0.553" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_scaps_bom_does_not_drop_first_batch" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_owner_cl02_uses_same_core_import_command_path" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_m2_importers" name="test_conversion_annotation_does_not_become_sample_name" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_analysis_blocks_missing_or_zero_area[CV-None]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_analysis_blocks_missing_or_zero_area[CV-0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_analysis_blocks_missing_or_zero_area[DLCP-None]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_analysis_blocks_missing_or_zero_area[DLCP-0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_pfs_c1_c5_and_saved_project[C1]" time="0.012" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_pfs_c1_c5_and_saved_project[C2]" time="0.013" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_pfs_c1_c5_and_saved_project[C3]" time="0.012" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_pfs_c1_c5_and_saved_project[C4]" time="0.012" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_pfs_c1_c5_and_saved_project[C5]" time="0.012" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_synthetic_cv" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_synthetic_dlcp" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_amplitude_conversions[RMS-1.4142135623730951]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_amplitude_conversions[peak-to-peak-0.5]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_zero_c1_and_nonpositive_c0" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_rank_deficient[CV]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_rank_deficient[DLCP]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_invalid_amplitude_unit" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_unknown_amplitude_and_conditional_measurement" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_missing_zero_bias_no_implicit_extrapolation[-2]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_missing_zero_bias_no_implicit_extrapolation[2]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_missing_zero_and_linear" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_missing_as_bias_and_exact_cv_width" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_masks_and_two_point_covariance" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_materials_and_cancellation" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_degree_one_and_no_dof" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_refresh_area_and_missing_input" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_dlcp_covariance_unavailable_without_degrees_of_freedom" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_nonphysical_cv_sign_remains_visible" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_imported_cv_normalization_uses_original_area" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m3_analysis" name="test_sourced_material_catalog_and_owner_preset" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_pfs_arrhenius_project_and_thesis[A1]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_pfs_arrhenius_project_and_thesis[A2]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_pfs_arrhenius_project_and_thesis[A3]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_pfs_arrhenius_project_and_thesis[A4]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_pfs_arrhenius_project_and_thesis[A7]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_a5_full_gradient_arrays[#132]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_a5_full_gradient_arrays[#133]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_a5_full_gradient_arrays[#138]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_a5_full_gradient_arrays[#139]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_a5_full_gradient_arrays[#143]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_pcf_log_grid_and_unequal_grid_edges" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_synthetic_and_f_to_omega_prefactor" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_two_points_masks_models_gamma" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_sorting_mapping_candidates_and_smoothing" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_invalid_frequency_data[f-value0]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_invalid_frequency_data[f-value1]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_invalid_frequency_data[C-value2]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m4_admittance" name="test_conductance_units_and_invalid_rp" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m5_impedance" name="test_analytic_headless_command_job_roundtrip[R0]" time="0.014" /><testcase classname="Prototypes.CapLab.python.tests.test_m5_impedance" name="test_analytic_headless_command_job_roundtrip[C0]" time="0.015" /><testcase classname="Prototypes.CapLab.python.tests.test_m5_impedance" name="test_analytic_headless_command_job_roundtrip[R0-C0]" time="0.014" /><testcase classname="Prototypes.CapLab.python.tests.test_m5_impedance" name="test_analytic_headless_command_job_roundtrip[R0-p(R1,C1)]" time="0.016" /><testcase classname="Prototypes.CapLab.python.tests.test_m5_impedance" name="test_errors_are_typed_and_bad_edits_do_not_change_input" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_m5_impedance" name="test_circuit_edits_and_deletion_invalidate_without_rebinding" time="0.022" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_fit_is_draft_until_explicit_acceptance[False]" time="0.048" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_fit_is_draft_until_explicit_acceptance[True]" time="0.141" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_invalid_fit_and_cancel_leave_accepted_parameters[fixed]" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_invalid_fit_and_cancel_leave_accepted_parameters[bounds]" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_invalid_fit_and_cancel_leave_accepted_parameters[unit]" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_invalid_fit_and_cancel_leave_accepted_parameters[floor]" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_invalid_fit_and_cancel_leave_accepted_parameters[cancel]" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_another_python_thread_stops_running_core_fit" time="0.019" /><testcase classname="Prototypes.CapLab.python.tests.test_m6_fit" name="test_non_cancel_operation_on_wrong_thread_has_typed_error" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_independent_point_factors_units_T2_2pi[False]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_independent_point_factors_units_T2_2pi[True]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_pcf_B_gradient_and_synthetic_log_capacitance" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_gradient_after_frequency_and_row_mask" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_both_quadratures_and_reversed_order[False]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_both_quadratures_and_reversed_order[True]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_domain_and_gaps_never_bridge" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_inputs[V_b_V-0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_inputs[zeta_s_1_K_2-0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_inputs[E_F_eV-None]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_inputs[xd_manual_m-0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_inputs[frequency_range_Hz-value4]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_inputs[integration_range_eV-value5]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_inputs[excluded_row_ids-value6]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_inputs[model-unknown]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_headless_core_job_roundtrip_cancel_stale_and_bad_request" time="0.012" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_pfs_frozen_saved_integrals_via_Core[W1-samples_Cd_diffusion.json-#132-475105311000000.0]" time="1.119" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_pfs_frozen_saved_integrals_via_Core[W2-samples_Cd_diffusion.json-#139-610460254600000.0]" time="0.936" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_pfs_frozen_saved_integrals_via_Core[W3-scaps_ref.json-CIGS_scaps_ref-4138087352000000.0]" time="0.153" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_w1_w3_full_reconstruction_explicitly_unsupported_owner_8" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_width_sources_policies_same_sample_and_provenance[block-CV]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_width_sources_policies_same_sample_and_provenance[block-DLCP]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_width_sources_policies_same_sample_and_provenance[linear-CV]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_width_sources_policies_same_sample_and_provenance[linear-DLCP]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_width_sources_policies_same_sample_and_provenance[nearest-CV]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_width_sources_policies_same_sample_and_provenance[nearest-DLCP]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_multiple_temperature_overlay_filters_and_measurement_selection" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_cv_arrhenius_sources_and_stale_missing_dependency" time="0.010" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_compat_B_never_inferred_from_arrhenius" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_frozen_slice_hashes[W1]" time="0.010" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_frozen_slice_hashes[W2]" time="0.009" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_frozen_slice_hashes[W3]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_selected_cv_fit_supplies_parameters_default_width_source_and_material" time="0.010" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_raw_dlcp_fit_width_reuses_existing_fit_groups" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_measurement_metadata[area_m2-0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_measurement_metadata[temperature_K-0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_invalid_measurement_metadata[bias_V-1]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_zero_denominator_is_null_not_a_number[False]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m7_walter" name="test_zero_denominator_is_null_not_a_number[True]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_p1_complete_pipeline_save_open_and_exports" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_p2_deletion_area_point_undo_redo_and_no_rebinding" time="0.150" /><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_is_fit_accept_save_open" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_export_failure_and_cancel_are_atomic[csv]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_export_failure_and_cancel_are_atomic[xlsx]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_export_dependency_and_save_errors_are_explicit" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_frozen_m8_manifest" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_png_snapshot_parity_every_module_and_missing_dependency" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_m8_workflow" name="test_historical_measurement_deletion_preserves_original_references" time="1.228" /><testcase classname="Prototypes.CapLab.python.tests.test_owner_workflow" name="test_two_projects_folder_science_maps_and_circuit_acceptance" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_plot_export" name="test_selected_graph_and_batch_all_formats" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_plot_export" name="test_batch_render_and_commit_failure_restore_all_files" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_plot_export" name="test_batch_validates_graphs_ranges_and_dpi" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_plot_export" name="test_lab_result_tables_preserve_units_status_and_ids" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_plot_export" name="test_csv_result_sidecar_failure_is_atomic" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_plot_export" name="test_rollback_continues_and_retains_original_if_restore_fails" time="0.001"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_project_tree" name="test_tree_sample_metadata_move_merge_delete_and_selection" time="0.015" /><testcase classname="Prototypes.CapLab.python.tests.test_project_tree" name="test_duplicate_full_analysis_pipeline_remaps_all_ids_and_snapshots" time="0.197" /><testcase classname="Prototypes.CapLab.python.tests.test_project_tree" name="test_import_into_existing_sample_keeps_explicit_temperature" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_project_tree" name="test_unknown_ids_and_invalid_metadata_are_typed_failures" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_project_tree" name="test_edited_project_roundtrip" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_project_tree" name="test_analysis_preview_requires_explicit_acceptance" time="0.013" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_pfs_i2_real_import_and_cpp_roundtrip" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_dialects[# T=100 K\nf Cp Rp\n100 1e-9 200-.]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_dialects[100,1e-9,200-.]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_dialects[100;1,0e-9;200-,]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_dialects[100\t1e-9\t200-.]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_six_columns_and_source_rows_are_kept" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[100 1e-9]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[0 1e-9 200]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[100 nan 200]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[100 1e-9 0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[100 1e-9 200\n200 2e-9 300 4]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[100 1e-9 200\ninvalid row]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[nan 1e-9 200]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[# T=100 K\n# T=200 K\n100 1e-9 200]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[# T=0 K\n100 1e-9 200]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_bad_input_is_reported_without_dropping_rows[# T=-100 K\n100 1e-9 200]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_header_has_precedence_and_conflict_stays_visible" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_cpp_rejects_invalid_metadata" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_roundtrip" name="test_cooperative_cancel_and_progress" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_fixture_sha256" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_as_arrhenius[phase3-None]" time="0.008" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_as_arrhenius[single-0.35]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_as_arrhenius[gaussian-0.35]" time="0.004" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_as_arrhenius[double-0.28]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_as_arrhenius[double-0.43]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_default_as_arrhenius[phase3-None]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_default_as_arrhenius[single-0.35]" time="0.005" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_default_as_arrhenius[gaussian-0.35]" time="0.006" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_default_as_arrhenius[double-0.28]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_default_as_arrhenius[double-0.43]" time="0.003" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_baseline_has_no_resolved_trap_step" time="0.009" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_uniform_mott_schottky[uniform-T200-f1000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_uniform_mott_schottky[uniform-T200-f100000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_uniform_mott_schottky[uniform-T200-f1000000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_uniform_mott_schottky[uniform-T300-f1000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_uniform_mott_schottky[uniform-T300-f100000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_uniform_mott_schottky[uniform-T300-f1000000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_step_position[step-T200-f1000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_step_position[step-T200-f100000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_step_position[step-T200-f1000000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_step_position[step-T300-f1000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_step_position[step-T300-f100000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_step_position[step-T300-f1000000]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_scaps_gold1" name="test_walter_gaussian_peak" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_real_lab_cv_derived_errors[C1]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_real_lab_cv_derived_errors[C2]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_real_lab_cv_derived_errors[C3]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_real_lab_cv_derived_errors[C4]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_real_lab_cv_derived_errors[C5]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_arrhenius_standard_errors_are_not_capture_cross_section[0]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_arrhenius_standard_errors_are_not_capture_cross_section[1]" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_noisy_dlcp_covariance_cross_term_and_width_interpolation" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_cv_no_dof_and_no_fit_width_extrapolation" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_cv_optional_fit_bias_and_invalid_bias" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_dlcp_width_errors_follow_selected_bias_and_missing_covariance[1]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_dlcp_width_errors_follow_selected_bias_and_missing_covariance[2]" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_a7_source_sets_are_frozen_without_tuning" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_science_acceptance" name="test_headless_command_job_pipeline_keeps_uncertainty_and_apparent_dos" time="0.127" /><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_named_profile_persistence_units_sign_and_existing_sample" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_filename_folder_candidates_header_wins_conflict_requires_confirmation" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_reimport_diff_invalidation_stale_accept_and_unicode_relink" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_changed_grid_disables_approved_defect_points" time="0.001"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_raw_dlcp_preview_groups_row_metadata" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_legacy_reimport_retains_auxiliary_columns" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_relink_never_reinterprets_filename_rules_or_extension" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_batch_creates_one_named_target_sample" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_headless_reimport_without_source_is_a_typed_error" time="0.002" /><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_reimport_conflicts_require_confirmation_at_acceptance" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_metadata_rule_validation[options0]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_metadata_rule_validation[options1]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_metadata_rule_validation[options2]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_metadata_rule_validation[options3]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_source_operations" name="test_metadata_rule_validation[options4]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_logarithmic_3d_export_projects_coordinates_without_changing_units" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-png-4]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-png-5]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-png-6]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-png-7]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-svg-4]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-svg-5]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-svg-6]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-svg-7]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-pdf-4]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-pdf-5]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-pdf-6]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[False-pdf-7]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-png-4]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-png-5]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-png-6]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-png-7]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-svg-4]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-svg-5]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-svg-6]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-svg-7]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-pdf-4]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-pdf-5]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-pdf-6]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_exports_spatial_kinds[True-pdf-7]" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_spatial_plot" name="test_execute_save_open_preserves_camera_and_rejects_nonuniform" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_walter_bulk" name="test_bulk_matches_scalar_bits_and_quality_on_fixture_grids[0.0-False]" time="0.027" /><testcase classname="Prototypes.CapLab.python.tests.test_walter_bulk" name="test_bulk_matches_scalar_bits_and_quality_on_fixture_grids[0.0-True]" time="0.020" /><testcase classname="Prototypes.CapLab.python.tests.test_walter_bulk" name="test_bulk_matches_scalar_bits_and_quality_on_fixture_grids[2.0-False]" time="0.029" /><testcase classname="Prototypes.CapLab.python.tests.test_walter_bulk" name="test_bulk_matches_scalar_bits_and_quality_on_fixture_grids[2.0-True]" time="0.039" /><testcase classname="Prototypes.CapLab.python.tests.test_walter_bulk" name="test_analysis_uses_one_spectrum_call_and_no_scalar_or_json_integral" time="0.001" /><testcase classname="Prototypes.CapLab.python.tests.test_walter_bulk" name="test_measurement_bulk_preserves_selected_indices_and_integral_bits[False]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_walter_bulk" name="test_measurement_bulk_preserves_selected_indices_and_integral_bits[True]" time="0.000" /><testcase classname="Prototypes.CapLab.python.tests.test_workspace" name="test_workspace_commands_preserve_projects_and_cancel_close" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase><testcase classname="Prototypes.CapLab.python.tests.test_workspace" name="test_open_dirty_project_adds_document_and_deduplicates_path" time="0.000"><error message="failed on setup with &quot;FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'&quot;">self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/integ/SST-Prototypes/SJCM01_SemiconductorStudiotoolsagentsrunsnight1/test-tmp/CapLab-pytest')
+mode = 448, parents = False, exist_ok = False
+
+    def mkdir(self, mode=0o777, parents=False, exist_ok=False):
+        """
+        Create a new directory at this given path.
+        """
+        try:
+&gt;           os.mkdir(self, mode)
+E           FileNotFoundError: [WinError 3] System nie może odnaleźć określonej ścieżki: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\integ\\SST-Prototypes\\SJCM01_SemiconductorStudiotoolsagentsrunsnight1\\test-tmp\\CapLab-pytest'
+
+C:\Users\Franek\AppData\Roaming\uv\python\cpython-3.13.2-windows-x86_64-none\Lib\pathlib\_local.py:722: FileNotFoundError</error></testcase></testsuite></testsuites>

@@ -15,15 +15,6 @@ namespace SST
 #if DS_PYTHON_CAPI_AVAILABLE
 	PyThreadState *g_PythonRuntimeThreadState = nullptr;
 
-	static void configureEmbeddedPythonHome()
-	{
-		const Path pythonHome = Platform::ResolveEmbeddedPythonHome();
-		if (pythonHome.Empty())
-			return;
-
-		Platform::SetPythonHomeEnvironment(pythonHome);
-		DS_LOG_INFO("PythonInterpreter using app-local runtime at {}", pythonHome.Utf8());
-	}
 #endif
 
 	PythonInterpreter::~PythonInterpreter()
@@ -41,11 +32,29 @@ namespace SST
 		{
 			ApplicationDetail::RegisterApplicationPythonModule();
 			RegisterViewPythonModule();
-			configureEmbeddedPythonHome();
 		}
 
-		if (!Py_IsInitialized())
-			Py_InitializeEx(0);
+        if (!Py_IsInitialized())
+        {
+            const Path executable = Platform::ResolvePreferredPythonExecutable();
+            if (executable == Path("python"))
+                return MakePythonUnavailableError("Project Python runtime was not found.",
+                    "No project .venv or bundled interpreter exists.", "Run uv sync --locked in the project.", "python.embed.runtime_missing");
+            PyConfig config;
+            PyConfig_InitPythonConfig(&config);
+            config.use_environment = 0;
+            config.install_signal_handlers = 0;
+            const auto path = executable.wstring();
+            auto status = PyConfig_SetString(&config, &config.program_name, path.c_str());
+            if (!PyStatus_Exception(status)) status = PyConfig_SetString(&config, &config.executable, path.c_str());
+            if (!PyStatus_Exception(status)) status = Py_InitializeFromConfig(&config);
+            const std::string error = PyStatus_Exception(status) && status.err_msg ? status.err_msg : "";
+            PyConfig_Clear(&config);
+            if (PyStatus_Exception(status))
+                return MakePythonUnavailableError("Python interpreter could not be initialized.", error,
+                    "Run uv sync --locked in the project.", "python.embed.initialize_failed");
+            DS_LOG_INFO("PythonInterpreter using project runtime at {}", executable.Utf8());
+        }
 
 		if (!Py_IsInitialized())
 		{

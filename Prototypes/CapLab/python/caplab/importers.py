@@ -306,6 +306,12 @@ def import_preview(text, source, decimal='.', options=None, cancelled=lambda: Fa
 
 def import_manifest(data, text, source, decimal, options, cancelled, progress):
     base = Path(options.get('base_dir') or Path(source).resolve().parent).resolve()
+    directories = [Path(s[key]) for s in data['textdata']['samples']
+                   for key in ('as_data_dir', 'dl_data_dir') if s.get(key)]
+    # Legacy manifests inside data_Cd retain paths relative to its parent.
+    if not options.get('base_dir') and directories and any(not (base / p).is_dir() for p in directories):
+        if all(p.is_absolute() or (p.parts and p.parts[0] == base.name) for p in directories) and all((base.parent / p).is_dir() for p in directories):
+            base = base.parent
     samples, jobs = [], []
     for s in data['textdata']['samples']:
         if cancelled():

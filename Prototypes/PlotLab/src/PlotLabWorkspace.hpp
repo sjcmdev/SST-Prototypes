@@ -81,6 +81,9 @@ namespace SST::Prototypes::PlotLab
         void ResetLayout() { SetVisible(true); layoutReady = false; resetLayoutRequested = true; }
         void RegisterCommands(Ref<KeymapResolver> keymap = {});
         void RenderMenus(bool helpOnly = false);
+        void PythonWindows(bool hosted=false);
+        void PythonFormulaEditor(pl::Id);
+        void PythonTrustBanner();
 
       private:
         friend struct WorkspaceTestAccess;
@@ -110,6 +113,29 @@ namespace SST::Prototypes::PlotLab
         std::string name, units, longName, formula, comments, parameterName, cellText;
         int displayMode = 0, displayDigits = 6;
         int rowFrom = 1, rowTo = 0, recalculate = 1;
+        int formulaMode = 0;
+        struct CodeState {
+            int cursor=0, first=0, last=0, jumpLine=0, moveCursor=-1;
+            bool refocus=false;
+            JobId completionJob=0;
+            std::string completionSource;
+            std::vector<PythonCompletion> completions;
+        };
+        CodeState formulaCode, scriptCode, consoleCode;
+        std::map<pl::Id,std::string> headerDrafts;
+        std::map<pl::Id,CodeState> headerCodes;
+        bool PythonHeader(pl::Id);
+        bool CodeEditor(const char*,std::string&,CodeState&,pl::Id,float editorHeight);
+        void OpenScript(pl::Id id=0, const std::string& source={});
+        void StartPythonFormula(pl::Id, const std::string&, bool preview);
+        bool scriptWindow=false, consoleWindow=false, historyWindow=false;
+        pl::Id scriptId=0;
+        std::string scriptSource, scriptName="Script1", consoleSource, pythonOutput, lastPreviewSource;
+        std::vector<ScriptParameter> scriptParameters;
+        JobId pythonRun=0, previewJob=0, parameterJob=0;
+        PythonResult formulaPreview;
+        pl::Id headerPreviewColumn=0;
+        double previewDue=0;
         std::string beforeScript;
         int role = 0, format = 0;
         bool graphDialog = false, importDialog = false;

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "Presentation/Panels/WindowWorkspace.hpp"
+#include "Presentation/Panels/HostedEditorWindow.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Vendor/ImGui/imgui.h"
 #include "Vendor/ImGui/imgui_internal.h"
@@ -19,7 +20,12 @@ namespace SST
     public:
         ChromeWindow() : EditorWindow("chrome", "Chrome", true, {.duplicable = true}) {}
         WindowDuplicate Duplicate() const override { return {CreateRef<ChromeWindow>(*this), {}}; }
+        Ref<HostedEditorWindow> owned;
+        int ownedRenders = 0;
+        void RenderOwned() { if (owned) owned->Render([&] { ++ownedRenders; ImGui::TextUnformatted("Hosted plot"); }); }
+        void OnContentSkipped() override { RenderOwned(); }
         void RenderContent() override {
+            RenderOwned();
             if (ImGui::BeginChild("##content", {0, 0})) ImGui::TextUnformatted("Content");
             ImGui::EndChild();
         }
@@ -41,6 +47,7 @@ namespace SST
         WindowId a = 0, b = 0;
         bool restoreDefaultsEachFrame = false;
         int defaultLayoutCalls = 0;
+        bool blockingModal = false;
         void SetUp() override
         {
             ImGui::CreateContext();
@@ -58,6 +65,13 @@ namespace SST
             ImGui::GetIO().DeltaTime = 1.0f / 60;
             ImGui::NewFrame();
             ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);
+            if (blockingModal) {
+                ImGui::OpenPopup("Block dock input");
+                ImGui::SetNextWindowPos({0, 0}); ImGui::SetNextWindowSize({400, 150});
+                if (ImGui::BeginPopupModal("Block dock input", nullptr, ImGuiWindowFlags_NoSavedSettings)) {
+                    ImGui::TextUnformatted("Modal blocks tabs underneath"); ImGui::EndPopup();
+                }
+            }
             if (restoreDefaultsEachFrame) workspace->RestoreDefaultLayoutIfNeeded();
             const auto entries = panels.Entries();
             for (const auto &entry : entries) entry.panel->Render();
@@ -122,6 +136,53 @@ namespace SST
             }
         }
         EXPECT_EQ(defaultLayoutCalls, 1);
+    }
+
+    TEST_F(WindowChromeTest, HostedPlotDockContentSurvivesInactiveOwner)
+    {
+        auto owner = std::static_pointer_cast<ChromeWindow>(workspace->Find(a));
+        owner->owned = CreateRef<HostedEditorWindow>("Raw Plot 1###jfm-test-plot");
+        const auto child = panels.AddExisting(owner->owned);
+        defaultTabs();
+        for (int i = 0; i < 5; ++i) frame();
+        for (auto id : {a, child, b, child, a}) {
+            const auto pos = gui(id)->DC.DockTabItemRect.GetCenter();
+            ImGui::GetIO().AddMousePosEvent(pos.x, pos.y); frame();
+            ImGui::GetIO().AddMouseButtonEvent(0, true); frame();
+            ImGui::GetIO().AddMouseButtonEvent(0, false); frame();
+            const auto before = owner->ownedRenders;
+            for (int i = 0; i < 30; ++i) {
+                frame(); EXPECT_TRUE(gui(id)->DockTabIsVisible);
+            }
+            if (id == child) EXPECT_EQ(owner->ownedRenders - before, 30);
+        }
+    }
+
+    TEST_F(WindowChromeTest, DockTabsAcceptPressAndReleaseQueuedInOneFrame)
+    {
+        const auto c = panels.Add<ChromeWindow>(), d = panels.Add<ChromeWindow>();
+        defaultTabs(); for (int i = 0; i < 5; ++i) frame();
+        for (int repeat = 0; repeat < 5; ++repeat) for (auto id : {a, b, c, d}) {
+            const auto pos = gui(id)->DC.DockTabItemRect.GetCenter();
+            auto &io = ImGui::GetIO();
+            io.AddMousePosEvent(pos.x, pos.y);
+            io.AddMouseButtonEvent(0, true); io.AddMouseButtonEvent(0, false);
+            for (int i = 0; i < 4; ++i) frame();
+            EXPECT_TRUE(gui(id)->DockTabIsVisible) << id;
+        }
+    }
+
+    TEST_F(WindowChromeTest, RapidTabClickDoesNotPassThroughAModal)
+    {
+        defaultTabs(); for (int i = 0; i < 5; ++i) frame();
+        const auto selected = gui(a)->DockNode->SelectedTabId;
+        const auto target = gui(a)->DockTabIsVisible ? b : a;
+        blockingModal = true; frame(); frame();
+        const auto pos = gui(target)->DC.DockTabItemRect.GetCenter();
+        auto &io = ImGui::GetIO(); io.AddMousePosEvent(pos.x, pos.y);
+        io.AddMouseButtonEvent(0, true); io.AddMouseButtonEvent(0, false);
+        for (int i = 0; i < 4; ++i) frame();
+        EXPECT_EQ(gui(a)->DockNode->SelectedTabId, selected);
     }
 
     TEST_F(WindowChromeTest, RestoreButtonAfterMaximize)

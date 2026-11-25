@@ -727,115 +727,17 @@ namespace SST::Prototypes::JFM
 				}),
 				area.groups.end());
 
+			area.hoveredCharacteristicId = InvalidCharacteristicId;
+			const auto areaSelection = m_Store->CaptureProjectState(area.project);
+			const std::vector<CharacteristicId> areaSelectedIds = areaSelection ? areaSelection->selectedCharacteristicIds : std::vector<CharacteristicId>{};
+			const CharacteristicId areaActiveId = areaSelection ? areaSelection->selectedCharacteristicId : InvalidCharacteristicId;
 			bool plotVisible = true;
 			const auto *viewport = ImGui::GetMainViewport();
 			const float gap = ImGui::GetStyle().ItemSpacing.x;
 			const float listWidth = viewport->WorkSize.x * 0.28f;
 			const float top = viewport->WorkPos.y + ImGui::GetFrameHeightWithSpacing();
 			const float height = viewport->WorkSize.y - 2.0f * ImGui::GetFrameHeightWithSpacing();
-			ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + listWidth + gap, top), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x - listWidth - gap, height), ImGuiCond_FirstUseEver);
-			const std::string windowTitle = area.title + "###jfm_raw_plot_window_" + std::to_string(area.id);
-			const bool rendered = m_Windows.Render(windowTitle, plotVisible, 0, [&] {
-
-			ImGui::PushID(static_cast<int>(area.id));
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
-				(void)HandleUndoShortcuts();
-			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && area.document->editor.selected.empty() && ImGui::IsKeyPressed(ImGuiKey_F2))
-			{
-				area.renaming = true;
-				std::snprintf(area.renameBuffer.data(), area.renameBuffer.size(), "%s", area.title.c_str());
-			}
-			if (area.renaming)
-			{
-				ImGui::SetNextItemWidth(260.0f);
-				const bool accepted = ImGui::InputText("##plot_rename", area.renameBuffer.data(), area.renameBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue);
-				ImGui::SameLine();
-				if (accepted || ImGui::Button("OK"))
-				{
-					if (area.renameBuffer[0] != '\0')
-						area.title = area.renameBuffer.data();
-					area.renaming = false;
-				}
-			}
-
-			if (ImGui::Button("Use Selection") && area.project == m_Store->GetActiveProjectHandle())
-			{
-				auto group = std::find_if(area.groups.begin(), area.groups.end(), [](const PlotCurveGroup &candidate) {
-					return candidate.key == "selection";
-				});
-				if (group == area.groups.end())
-				{
-					area.groups.emplace_back(CreateCurveGroup({"selection", "Selection", {}, {}, {}}));
-					group = std::prev(area.groups.end());
-				}
-				appendUnique(group->characteristicIds, m_Store->GetSelectedCharacteristicIds());
-				ApplyColorRange(*group);
-			}
-			ImGui::SameLine();
-			if (ImGui::Button("Clear"))
-			{
-				std::vector<PlotArea> before = m_PlotAreas;
-				area.groups.clear();
-				PushPlotUndo(std::move(before), "Clear raw plot");
-			}
-			ImGui::SameLine();
-			if (m_PlotAreas.size() > 1 && ImGui::Button("Close Plot"))
-			{
-				ImGui::PopID();
-				plotVisible = false;
-				return;
-			}
-
-			int scale = static_cast<int>(area.scale);
-			ImGui::SameLine();
-			ImGui::RadioButton("Linear", &scale, static_cast<int>(PlotScale::Linear));
-			ImGui::SameLine();
-			ImGui::RadioButton("Semi-log", &scale, static_cast<int>(PlotScale::SemiLog));
-			area.scale = static_cast<PlotScale>(scale);
-			ImGui::SameLine();
-			ImGui::Checkbox("Auto fit", &area.autoFit);
-			ImGui::SameLine();
-			ImGui::SetNextItemWidth(140.0f);
-			ImGui::SliderFloat("Scroll out", &area.fitPadding, 0.0f, 0.5f, "%.2f");
-			ImGui::SameLine();
-			ImGui::Checkbox("Legend", &area.showLegend);
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Expand all"))
-				area.groupTreeOpenRequest = 1;
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Collapse all"))
-				area.groupTreeOpenRequest = -1;
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Hide all"))
-			{
-				std::vector<PlotArea> before = m_PlotAreas;
-				for (PlotCurveGroup &group : area.groups)
-					SetGroupVisible(group, false);
-				PushPlotUndo(std::move(before), "Hide raw plot curves");
-			}
-			ImGui::SameLine();
-			if (ImGui::SmallButton("Unhide all"))
-			{
-				std::vector<PlotArea> before = m_PlotAreas;
-				for (PlotCurveGroup &group : area.groups)
-					SetGroupVisible(group, true);
-				PushPlotUndo(std::move(before), "Unhide raw plot curves");
-			}
-			ImGui::SameLine();
-			ImGui::Checkbox("Curves", &area.curvesWindowVisible);
-
-			area.hoveredCharacteristicId = InvalidCharacteristicId;
-			const auto areaSelection = m_Store->CaptureProjectState(area.project);
-			const std::vector<CharacteristicId> areaSelectedIds = areaSelection ? areaSelection->selectedCharacteristicIds : std::vector<CharacteristicId>{};
-			const CharacteristicId areaActiveId = areaSelection ? areaSelection->selectedCharacteristicId : InvalidCharacteristicId;
-			if (area.showOnlyActive && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive())
-			{
-				if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false))
-					SelectAdjacentCurveInWorkspace(area, areaActiveId, 1);
-				else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false))
-					SelectAdjacentCurveInWorkspace(area, areaActiveId, -1);
-			}
+            // Sibling windows must be submitted even while the plot tab is inactive.
 			const std::string curvesTitle = area.title + " Curves###jfm_raw_plot_curves_" + std::to_string(area.id);
 			if (area.curvesWindowVisible)
 			{
@@ -1017,6 +919,108 @@ namespace SST::Prototypes::JFM
 				});
 			}
 			area.groupTreeOpenRequest = 0;
+
+			ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + listWidth + gap, top), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x - listWidth - gap, height), ImGuiCond_FirstUseEver);
+			const std::string windowTitle = area.title + "###jfm_raw_plot_window_" + std::to_string(area.id);
+			const bool rendered = m_Windows.Render(windowTitle, plotVisible, 0, [&] {
+
+			ImGui::PushID(static_cast<int>(area.id));
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
+				(void)HandleUndoShortcuts();
+			if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && area.document->editor.selected.empty() && ImGui::IsKeyPressed(ImGuiKey_F2))
+			{
+				area.renaming = true;
+				std::snprintf(area.renameBuffer.data(), area.renameBuffer.size(), "%s", area.title.c_str());
+			}
+			if (area.renaming)
+			{
+				ImGui::SetNextItemWidth(260.0f);
+				const bool accepted = ImGui::InputText("##plot_rename", area.renameBuffer.data(), area.renameBuffer.size(), ImGuiInputTextFlags_EnterReturnsTrue);
+				ImGui::SameLine();
+				if (accepted || ImGui::Button("OK"))
+				{
+					if (area.renameBuffer[0] != '\0')
+						area.title = area.renameBuffer.data();
+					area.renaming = false;
+				}
+			}
+
+			if (ImGui::Button("Use Selection") && area.project == m_Store->GetActiveProjectHandle())
+			{
+				auto group = std::find_if(area.groups.begin(), area.groups.end(), [](const PlotCurveGroup &candidate) {
+					return candidate.key == "selection";
+				});
+				if (group == area.groups.end())
+				{
+					area.groups.emplace_back(CreateCurveGroup({"selection", "Selection", {}, {}, {}}));
+					group = std::prev(area.groups.end());
+				}
+				appendUnique(group->characteristicIds, m_Store->GetSelectedCharacteristicIds());
+				ApplyColorRange(*group);
+			}
+			ImGui::SameLine();
+			if (ImGui::Button("Clear"))
+			{
+				std::vector<PlotArea> before = m_PlotAreas;
+				area.groups.clear();
+				PushPlotUndo(std::move(before), "Clear raw plot");
+			}
+			ImGui::SameLine();
+			if (m_PlotAreas.size() > 1 && ImGui::Button("Close Plot"))
+			{
+				ImGui::PopID();
+				plotVisible = false;
+				return;
+			}
+
+			int scale = static_cast<int>(area.scale);
+			ImGui::SameLine();
+			ImGui::RadioButton("Linear", &scale, static_cast<int>(PlotScale::Linear));
+			ImGui::SameLine();
+			ImGui::RadioButton("Semi-log", &scale, static_cast<int>(PlotScale::SemiLog));
+			area.scale = static_cast<PlotScale>(scale);
+			ImGui::SameLine();
+			ImGui::Checkbox("Auto fit", &area.autoFit);
+			ImGui::SameLine();
+			ImGui::SetNextItemWidth(140.0f);
+			ImGui::SliderFloat("Scroll out", &area.fitPadding, 0.0f, 0.5f, "%.2f");
+			ImGui::SameLine();
+			ImGui::Checkbox("Legend", &area.showLegend);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Expand all"))
+				area.groupTreeOpenRequest = 1;
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Collapse all"))
+				area.groupTreeOpenRequest = -1;
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Hide all"))
+			{
+				std::vector<PlotArea> before = m_PlotAreas;
+				for (PlotCurveGroup &group : area.groups)
+					SetGroupVisible(group, false);
+				PushPlotUndo(std::move(before), "Hide raw plot curves");
+			}
+			ImGui::SameLine();
+			if (ImGui::SmallButton("Unhide all"))
+			{
+				std::vector<PlotArea> before = m_PlotAreas;
+				for (PlotCurveGroup &group : area.groups)
+					SetGroupVisible(group, true);
+				PushPlotUndo(std::move(before), "Unhide raw plot curves");
+			}
+			ImGui::SameLine();
+			ImGui::Checkbox("Curves", &area.curvesWindowVisible);
+
+
+			if (area.showOnlyActive && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive())
+			{
+				if (ImGui::IsKeyPressed(ImGuiKey_DownArrow, false))
+					SelectAdjacentCurveInWorkspace(area, areaActiveId, 1);
+				else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow, false))
+					SelectAdjacentCurveInWorkspace(area, areaActiveId, -1);
+			}
+
 
 			const std::string plotId = "##jfm_raw_plot_" + std::to_string(area.id);
 

@@ -1,4 +1,4 @@
-﻿#include "PlotLabExport.hpp"
+#include "PlotLabExport.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include <nlohmann/json.hpp>
@@ -36,18 +36,7 @@ namespace SST::Prototypes::PlotLab
             };
             append(pythonRoot);
             append(std::filesystem::path(SST_PLOTLAB_PYTHON_ROOT).parent_path().parent_path().parent_path() / "Core/ScientificRuntime/Python");
-            // Use the repository environment during development; app-local runtime remains Core-owned.
-            auto parent = pythonRoot;
-            for (int depth = 0; depth < 8 && parent.has_parent_path(); ++depth)
-            {
-                auto site = parent / ".venv" / "Lib" / "site-packages";
-                if (std::filesystem::is_directory(site))
-                    append(site);
-                auto next = parent.parent_path();
-                if (next == parent)
-                    break;
-                parent = next;
-            }
+
     }
 #endif
     std::pair<std::string, std::string> ResolveFont(const std::string &family, const std::string &file,

@@ -215,8 +215,19 @@ namespace SST
             m_State.dockId = window->DockId;
         }
         const ImRect title = window->DockNode ? window->DC.DockTabItemRect : window->TitleBarRect();
+        const bool dockTabHovered = window->DockNode && window->DockNode->HostWindow &&
+            GImGui->HoveredWindow == window->DockNode->HostWindow &&
+            ImGui::IsWindowContentHoverable(window->DockNode->HostWindow) &&
+            (GImGui->ActiveId == 0 || GImGui->ActiveId == window->TabId);
         const bool titleHovered = title.Contains(ImGui::GetMousePos()) &&
-            (ImGui::GetHoveredID() == window->TabId || ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows));
+            (dockTabHovered || ImGui::GetHoveredID() == window->TabId || ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows));
+        // Overlapping tabs otherwise require a hover frame before a fast move-and-click.
+        if (dockTabHovered && titleHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+            if (auto *bar = window->DockNode->TabBar)
+                if (auto *tab = ImGui::TabBarFindTabByID(bar, window->TabId)) {
+                    ImGui::TabBarQueueFocus(bar, tab);
+                    ImGui::FocusWindow(window);
+                }
         // Action buttons must not also trigger the title bar's double-click gesture.
         const bool titleGestureHovered = titleHovered && (window->DockNode ||
             ImGui::GetMousePos().x < title.Max.x - 4 * title.GetHeight());

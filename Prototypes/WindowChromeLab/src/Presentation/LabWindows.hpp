@@ -16,8 +16,10 @@ namespace SST::Prototypes::WindowChromeLab
         void RenderContent() override;
         void RenderContextMenu() override;
         void RevealInProject() override { m_Selection->selected = GetId(); }
-        std::string SaveViewState() const override;
-        bool LoadViewState(const std::string &text) override;
+        std::any CaptureViewState() const override { return m_Scale; }
+        bool RestoreViewState(const std::any &state) override;
+        std::string EncodeViewState(const std::any &state) const override;
+        std::any DecodeViewState(const std::string &text) const override;
     private:
         Kind m_Kind;
         Ref<LabSelection> m_Selection;

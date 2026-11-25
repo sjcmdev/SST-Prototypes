@@ -60,6 +60,30 @@ namespace SST::Prototypes::PlotLab
         std::optional<WorksheetError> error;
         std::string message;
     };
+    enum class PythonAction { Script, Console, Formula, Preview, Completion, Parameters };
+    enum class PythonErrorCode { None, Execution, Cancelled, Timeout, Conflict };
+    struct PythonRequest {
+        PythonAction action = PythonAction::Script;
+        std::string source;
+        pl::Id worksheet = 0, column = 0;
+        pl::Formula formula;
+        double timeoutSeconds = 5;
+        std::map<std::string,double> parameters;
+        std::uint64_t consoleSession=0;
+    };
+    struct PythonCompletion { std::string insert, signature, documentation; };
+    struct ScriptParameter { std::string name; double value=0, minimum=0, maximum=0; bool slider=false; };
+    struct PythonResult {
+        bool running = true, ok = false;
+        std::string output, error;
+        int line = 0;
+        int row = 0;
+        PythonErrorCode errorCode=PythonErrorCode::None;
+        std::vector<double> preview;
+        std::vector<PythonCompletion> completions;
+        std::vector<ScriptParameter> parameters;
+    };
+    class PythonWork;
     class Document final : public pl::Observer
     {
       public:
@@ -71,6 +95,25 @@ namespace SST::Prototypes::PlotLab
         DataResult WorksheetCommand(pl::DataRequest, bool wait = true);
         DataResult DataStatus();
         void SetColumnValues(pl::Id column, pl::Formula);
+        JobId SubmitPython(PythonRequest);
+        const PythonResult& PollPython(JobId);
+        PythonResult WaitPython(JobId);
+        void CancelPython(JobId);
+        void PollPythonJobs();
+        bool PythonTrusted() const { return pythonTrusted; }
+        void TrustPython();
+        bool HasPython() const;
+        pl::Id activeSheet = 0;
+        std::vector<std::string> pythonHistory;
+        std::map<pl::Id,std::string> scriptDrafts;
+        std::map<pl::Id,std::map<std::string,double>> scriptParameterDrafts;
+        void RecordPython(std::string);
+        void GrowRows(pl::Id, std::size_t);
+        void SetValues(pl::Id, pl::Values);
+        void SetMasks(pl::Id, const std::vector<bool>&);
+        pl::Id SaveScript(std::string name, std::string source, pl::Id id=0);
+        void BeginPythonGroup(std::string);
+        void EndPythonGroup(bool commit);
         void PollDataOperation();
         void New();
         void Open(const std::filesystem::path &);
@@ -78,7 +121,7 @@ namespace SST::Prototypes::PlotLab
         void Save(const std::filesystem::path &);
         bool Dirty() const
         {
-            return !undo->IsClean();
+            return !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty();
         }
         pl::Id Create(pl::Id parent, int type, std::string name);
         void Rename(pl::Id, std::string);
@@ -99,6 +142,7 @@ namespace SST::Prototypes::PlotLab
         std::filesystem::path path;
 
       private:
+        friend class PythonWork;
         Ref<EventBus> bus;
         pl::Id correlation = 0;
         void Replace(Ref<pl::Project>);
@@ -107,6 +151,13 @@ namespace SST::Prototypes::PlotLab
         Ref<IJob> dataWork;
         JobId dataJob = 0;
         DataResult dataResult;
+        bool pythonTrusted = true;
+        std::uint64_t pythonSession=0;
+        std::map<JobId,Ref<PythonWork>> pythonWork;
+        std::vector<pl::Operation>* recordedOperations = nullptr;
+        std::vector<std::size_t> recordingGroups;
+        void InstallPythonEvaluator();
+        void ResetPython();
     };
     void InstallWorksheetPython(Document* active = nullptr, const std::filesystem::path& pythonRoot = {});
 } // namespace SST::Prototypes::PlotLab

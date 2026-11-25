@@ -1,4 +1,5 @@
 #include "PlotLabWorkspace.hpp"
+#include "WorksheetPython.hpp"
 #include "Core/PlotExport/PlotEditing.hpp"
 #include "Core/App/Application.hpp"
 #include "Core/IO/TextFileIO.hpp"
@@ -35,6 +36,7 @@ namespace SST::Prototypes::PlotLab
             {"undo", "Undo", "Edit", "Ctrl+Z"}, {"redo", "Redo", "Edit", "Ctrl+Y"},
             {"copy", "Copy", "Edit", "Ctrl+C"}, {"paste", "Paste", "Edit", "Ctrl+V"}, {"clear", "Delete", "Edit", "Delete"},
             {"explorer", "Project Explorer", "View"},
+            {"python_console", "Python Console", "View"}, {"python_script", "Python Script", "View"}, {"python_history", "History as Python", "View"},
             {"line", "Line", "Plot"}, {"scatter", "Scatter", "Plot"}, {"line_symbol", "Line + Symbol", "Plot"}, {"column", "Column", "Plot"},
             {"set_none", "None", "Column/Set As..."}, {"set_x", "X", "Column/Set As..."}, {"set_y", "Y", "Column/Set As..."}, {"set_z", "Z", "Column/Set As..."},
             {"set_yerr", "yErr", "Column/Set As..."}, {"set_xerr", "xErr", "Column/Set As..."}, {"set_label", "Label", "Column/Set As..."}, {"set_disregard", "Disregard", "Column/Set As..."},
@@ -158,6 +160,7 @@ namespace SST::Prototypes::PlotLab
             if (!children.empty()) sheets.insert(children.front());
         }
         selected = id;
+        if(std::holds_alternative<pl::Worksheet>(o.data))document->activeSheet=id;
         activate = id;
     }
     void Session::RefreshWindows()
@@ -286,6 +289,11 @@ namespace SST::Prototypes::PlotLab
         const auto type = o.data.index();
         if (type == 3 || type == 5 || type == 6)
             return;
+        if(type==7) {
+            if(ImGui::Selectable(("Script: "+o.name+"##"+std::to_string(id)).c_str(),scriptId==id && scriptWindow))Attempt([&]{OpenScript(id);});
+            if(ImGui::BeginPopupContextItem()){if(ImGui::MenuItem("Delete script"))Attempt([&]{state->document->Delete(id);});ImGui::EndPopup();}
+            return;
+        }
         const char *tags[] = {"Folder", "Workbook", "Worksheet", "Column", "Graph"};
         const auto label = std::string(tags[type]) + ": " + o.name + "##" + std::to_string(id);
         auto flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
@@ -310,7 +318,11 @@ namespace SST::Prototypes::PlotLab
         if (open)
         {
             for (auto child : p.children(id))
-                Tree(child);
+                if(p.object(child).data.index()!=7)Tree(child);
+            if(id==p.root()) {
+                std::vector<pl::Id> scripts;for(auto child:p.children(id))if(std::holds_alternative<pl::Script>(p.object(child).data))scripts.push_back(child);
+                if(!scripts.empty() && ImGui::TreeNodeEx("Scripts",ImGuiTreeNodeFlags_DefaultOpen)){for(auto script:scripts)Tree(script);ImGui::TreePop();}
+            }
             ImGui::TreePop();
         }
     }
@@ -358,6 +370,8 @@ namespace SST::Prototypes::PlotLab
         beforeScript=col.formula?col.formula->beforeScript:"";
         excludeFiltered=col.formula && col.formula->excludeFiltered;
         recalculate=col.formula?static_cast<int>(col.formula->recalculate):1;
+        formulaMode=col.formula && col.formula->language==pl::FormulaLanguage::Python?1:0;
+        lastPreviewSource.clear();previewDue=ImGui::GetTime()+.15;formulaCode={};formulaPreview={};
     }
     void WorkspacePanel::SyncProject()
     {
@@ -370,6 +384,8 @@ namespace SST::Prototypes::PlotLab
         sheetViews.clear(); activeSheets.clear(); renderedSheets.clear(); maskPreviews.clear(); graphSources.clear();
         availableColumns.clear(); plottedSeries.clear();
         nestedKeys.clear(); operationColumns.clear(); joinSheet = 0; preview.reset(); importText.clear();
+        pythonRun=previewJob=parameterJob=0;scriptId=0;scriptWindow=false;lastPreviewSource.clear();formulaCode={};scriptCode={};consoleCode={};
+        headerDrafts.clear();headerCodes.clear();
         if (replaced) {
             state->plotEditors.clear(); state->RefreshWindows();
             if (GImGui->OpenPopupStack.Size) ImGui::ClosePopupToLevel(0, true);
@@ -401,6 +417,7 @@ namespace SST::Prototypes::PlotLab
             ImGui::TextWrapped("%s",
                                state->document->path.empty() ? "Untitled" : Path(state->document->path).Utf8().c_str());
             ImGui::Separator();
+            PythonTrustBanner();
             Tree(p.root());
             if (ImGui::BeginPopupContextWindow("Explorer actions", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
                 for (const auto& item : menuCommands) if (std::string_view(item.category) == "Project" && std::string_view(item.action).starts_with("new_"))
@@ -431,6 +448,7 @@ namespace SST::Prototypes::PlotLab
                 Graph(id);
         }
         Dialogs();
+        PythonWindows(true);
         windows.EndFrame();
         if (state->activate) { Activate(state->activate); state->activate = 0; }
         auto& editor = Application::Get().GetEditorLayer();
@@ -447,9 +465,11 @@ namespace SST::Prototypes::PlotLab
         auto* node = ImGui::DockBuilderGetNode(viewport->ID);
         if (layoutReady) return;
         layoutReady = true;
-        if (!resetLayoutRequested && node && node->IsSplitNode()) {
+        // A stale imgui.ini can hold a split dockspace without a central node: rebuild instead of dereferencing null.
+        auto* central = node && node->IsSplitNode() ? ImGui::DockBuilderGetCentralNode(viewport->ID) : nullptr;
+        if (!resetLayoutRequested && central && node->ChildNodes[0]) {
             explorerDock = node->ChildNodes[0]->ID;
-            contentDock = ImGui::DockBuilderGetCentralNode(viewport->ID)->ID;
+            contentDock = central->ID;
             return;
         }
         SetVisible(true);
@@ -557,6 +577,9 @@ namespace SST::Prototypes::PlotLab
             const auto result = action == "undo" ? doc.undo->Undo() : doc.undo->Redo();
             if (!result) throw std::runtime_error(result.Error().technicalDetails);
         } else if (action == "explorer") SetVisible(!IsVisible());
+        else if (action == "python_console") consoleWindow=!consoleWindow;
+        else if (action == "python_script") OpenScript();
+        else if (action == "python_history") historyWindow=!historyWindow;
         else if (action == "copy") CopySelection(sheet);
         else if (action == "paste") PasteSelection(sheet, ImGui::GetClipboardText());
         else if (action == "clear") {
@@ -746,7 +769,11 @@ namespace SST::Prototypes::PlotLab
             }
         }
         for (auto& [column, o] : changes) updates.push_back(std::move(o));
-        if (!updates.empty()) doc.Execute(p.change(masked ? "Mask selection" : "Unmask selection", std::move(updates)));
+        if (!updates.empty()) {
+            doc.Execute(p.change(masked ? "Mask selection" : "Unmask selection", std::move(updates)));
+            std::string indices="[";for(std::size_t r=0;r<rows.size();++r)if(selectedRow(rows[r])){if(indices.size()>1)indices+=",";indices+=std::to_string(r);}indices+="]";
+            for(auto column:v.columns)doc.RecordPython("project.by_id("+std::to_string(column)+").mask["+indices+"] = "+(masked?"True":"False"));
+        }
     }
     void WorkspacePanel::MoveColumn(pl::Id column, int destination)
     {
@@ -1008,6 +1035,7 @@ namespace SST::Prototypes::PlotLab
     {
         SyncProject();
         auto& doc = *state->document; auto& p = *doc.project; auto& v = sheetViews[id];
+        doc.activeSheet=id;
         const auto selectionColor = ImGui::GetColorU32(ImGuiCol_CheckMark, .35f);
         const auto selectable = [](const char* label, bool selected, ImGuiSelectableFlags flags) {
             if (selected) { ImGui::PushStyleColor(ImGuiCol_HeaderHovered, {0,0,0,0}); ImGui::PushStyleColor(ImGuiCol_HeaderActive, {0,0,0,0}); }
@@ -1137,13 +1165,18 @@ namespace SST::Prototypes::PlotLab
                         std::string text = parameter ? (col.parameters.contains(parameter) ? col.parameters.at(parameter) : "") : label == "Long Name" ? col.longName : label == "Units" ? col.units : label == "F(x)" ? (col.formula ? col.formula->expression : "") : col.comments;
                         ImGui::SetNextItemWidth(-1);
                         const bool formulaHeader = label == "F(x)" && !parameter;
-                        if (ImGui::InputText("##header", &text, ImGuiInputTextFlags_EnterReturnsTrue)) Attempt([&] {
+                        const bool pythonHeader=formulaHeader && col.formula && col.formula->language==pl::FormulaLanguage::Python;
+                        if(pythonHeader)PythonHeader(column);
+                        else if (ImGui::InputText("##header", &text, ImGuiInputTextFlags_EnterReturnsTrue)) Attempt([&] {
                             if (formulaHeader) {
                                 if (text.empty()) { if (col.formula) doc.Execute(p.detach(column)); }
                                 else {
                                     auto definition = col.formula.value_or(pl::Formula{}); definition.expression = text;
+                                    if(text.starts_with("py:")){definition.language=pl::FormulaLanguage::Python;definition.expression=text.substr(3);}
+                                    else if(text.find("np.")!=std::string::npos || text.starts_with("result =") || text.starts_with("return "))definition.language=pl::FormulaLanguage::Python;
                                     definition.bindings.clear(); definition.parameterBindings.clear(); definition.bindingDiagnostic.clear(); definition.excludeMasked = true;
-                                    doc.SetColumnValues(column, std::move(definition));
+                                    if(definition.language==pl::FormulaLanguage::Python){PythonRequest request;request.action=PythonAction::Formula;request.column=column;request.worksheet=id;request.source=definition.expression;request.formula=std::move(definition);pythonRun=doc.SubmitPython(std::move(request));}
+                                    else doc.SetColumnValues(column, std::move(definition));
                                 }
                                 return;
                             }
@@ -1575,7 +1608,9 @@ namespace SST::Prototypes::PlotLab
                 const char* states[] = {"Clean", "Dirty", "Running", "Failed", "Blocked"};
                 ImGui::Text("Result: %s%s", states[static_cast<int>(info.state)], info.stale ? " (previous values retained)" : "");
                 if (!info.diagnostic.empty()) ImGui::TextWrapped("%s", info.diagnostic.c_str());
-                sst::ui::widgets::MultilineText("Column formula", &formula, {-1, 100});
+                sst::ui::widgets::Combo("Language",&formulaMode,"Origin col(A)\0Python\0");
+                if(formulaMode)PythonFormulaEditor(metadata);
+                else sst::ui::widgets::MultilineText("Column formula", &formula, {-1, 100});
                 if (sst::ui::widgets::BeginCombo("Functions", "Insert function / reference")) {
                     for (const auto* function : {"abs()", "sqrt()", "exp()", "ln()", "log10()", "sin()", "cos()", "min()", "max()", "mean()", "sum()", "std()", "diff()", "integ()", "smooth()", "interp()", "ifelse()", "i", "nrows"})
                         if (ImGui::Selectable(function)) formula += function;
@@ -1590,8 +1625,10 @@ namespace SST::Prototypes::PlotLab
                 sst::ui::widgets::Int("Row (i) To (0 = last)", &rowTo, 1, 0, 1000000000);
                 sst::ui::widgets::Combo("Recalculate", &recalculate, "None\0Auto\0Manual\0");
                 sst::ui::widgets::Checkbox("Exclude filtered rows", &excludeFiltered);
-                sst::ui::widgets::MultilineText("Before Formula Scripts (Python)", &beforeScript, {-1, 80});
-                ImGui::TextDisabled("Scalar assignments; col(stable_id), mean/sum/min/max. No imports or I/O.");
+                if(!formulaMode) {
+                    sst::ui::widgets::MultilineText("Before Formula Scripts (Python)", &beforeScript, {-1, 80});
+                    ImGui::TextDisabled("Scalar assignments; col(stable_id), mean/sum/min/max. No imports or I/O.");
+                }
                 if (previewLibrary) { ImGui::SetNextItemOpen(true); previewLibrary = false; }
                 if (ImGui::TreeNode("Function library / references")) {
                     ImGui::TextWrapped("col(A), col(\"Long Name\"), [Book]Sheet!col(A), col(B)[T], wcol(1). i starts at 1.\n+ - * / ^ > >= < <= == !=; ifelse(condition,a,b). diff(y[,0 forward / 1 central]); integ(y); smooth(y[,0 average / 1 SG quadratic]).");
@@ -1600,6 +1637,7 @@ namespace SST::Prototypes::PlotLab
                 }
                 const auto apply = [&] {
                     if (rowFrom < 1 || rowTo < 0 || (rowTo && rowTo < rowFrom)) throw std::invalid_argument("Row range must start at 1 or later and end at or after From.");
+                    if(formulaMode){StartPythonFormula(metadata,formula,false);return;}
                     pl::Formula definition; definition.expression = formula; definition.rowFrom = rowFrom; definition.rowTo = rowTo;
                     definition.beforeScript = beforeScript; definition.excludeFiltered = excludeFiltered;
                     definition.excludeMasked = true; definition.recalculate = static_cast<pl::RecalculateMode>(recalculate);

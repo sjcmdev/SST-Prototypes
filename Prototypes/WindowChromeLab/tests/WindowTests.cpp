@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "Presentation/LabWindows.hpp"
 #include "Presentation/Panels/WindowWorkspace.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include "Core/Input/ContextManager.hpp"
@@ -40,6 +41,21 @@ namespace SST
         Ref<EditorWindow> get(WindowId id) { return workspace->Find(id); }
         Result<void> act(WindowAction action, WindowId id = 0) { return workspace->Execute({action, id}); }
     };
+    TEST_F(WindowStateTest, LabViewScaleUsesTypedSnapshotsAndValidatedFileState)
+    {
+        using namespace Prototypes::WindowChromeLab;
+        const auto id = panels.Add<LabWindow>(LabWindow::Kind::Plot, CreateRef<LabSelection>());
+        auto layout = workspace->CaptureLayout();
+        for (auto &item : layout.items) if (item.entry.id == id) item.view = 2.5f;
+        ASSERT_TRUE(workspace->LoadLayout(layout));
+        const auto captured = workspace->CaptureLayout();
+        for (const auto &item : captured.items) if (item.entry.id == id) EXPECT_EQ(std::any_cast<float>(item.view), 2.5f);
+        const auto saved = workspace->Save();
+        ASSERT_TRUE(workspace->Load(saved)); EXPECT_EQ(workspace->Save(), saved);
+        auto invalid = nlohmann::json::parse(saved);
+        for (auto &item : invalid["windows"]) if (item["id"] == id) item["view"] = "{\"scale\":0}";
+        EXPECT_FALSE(workspace->Load(invalid.dump())); EXPECT_EQ(workspace->Save(), saved);
+    }
     TEST_F(WindowStateTest, AuxiliaryWindowsStartHiddenAndAreNotPersisted)
     {
         const auto id = panels.Add<TestWindow>("auxiliary.import", WindowCapabilities{.auxiliary = true});
