@@ -54,7 +54,6 @@ def _spatial_coordinate(values, config):
 
 def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     kind = series["kind"]
-    if kind == 7 and snapshot["z_axis"]["log"]: raise ValueError("Heatmap logarithmic colour scale is unsupported")
     if (kind != 7) != three:
         raise ValueError("Separate heatmap and 3D plots")
     z = np.asarray(series["z"], dtype=float)
@@ -63,6 +62,13 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         raise ValueError("Invalid Z/mask dimensions or infinite Z")
     valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
     if mask.size: valid &= ~mask
+    log_color = snapshot["z_axis"]["log"] or snapshot["z_axis"].get("spec", {}).get("scale") in (1, 2, 3)
+    policy = snapshot.get("nonpositive_color", 0)
+    if policy not in (0, 1): raise ValueError("Invalid nonpositive colour policy")
+    if log_color:
+        if policy == 1 and np.any(valid & (z <= 0)):
+            raise ValueError("Log colour scale requires positive Z; select Mask to omit nonpositive cells")
+        valid &= z > 0
     for values, key in ((x, "x_axis"), (y, "y_axis"), (z, "z_axis")):
         if snapshot[key]["log"] and (key != "z_axis" or three): valid &= values > 0
     if kind in (5, 6):
@@ -85,7 +91,8 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     rows = len(x)//cols
     xx, yy = x.reshape(rows, cols), y.reshape(rows, cols)
     if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y)) and
-            np.all(np.diff(xx[0]) > 0) and np.all(np.diff(yy[:, 0]) > 0) and
+            (np.all(np.diff(xx[0]) > 0) or np.all(np.diff(xx[0]) < 0)) and
+            (np.all(np.diff(yy[:, 0]) > 0) or np.all(np.diff(yy[:, 0]) < 0)) and
             np.allclose(xx, xx[0], rtol=1e-12, atol=0) and np.allclose(yy, yy[:, :1], rtol=1e-12, atol=0)):
         raise ValueError("Non-uniform rows or unordered coordinates: expected a rectilinear grid")
     zz = np.where(valid, z, np.nan).reshape(rows, cols)
@@ -93,22 +100,25 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     if color_range is None:
         color_valid = np.isfinite(z)
         if mask.size: color_valid &= ~mask
-        if snapshot["z_axis"]["log"]: color_valid &= z > 0
+        if log_color: color_valid &= z > 0
         values = z[color_valid]
-        lo, hi = (float(values.min()), float(values.max())) if values.size else (0, 1)
+        lo, hi = (float(values.min()), float(values.max())) if values.size else ((1, 10) if log_color else (0, 1))
         if lo == hi:
-            padding = (abs(lo) if lo else 1)*.05
-            lo, hi = lo-padding, hi+padding
+            if log_color: lo, hi = lo/math.sqrt(10), hi*math.sqrt(10)
+            else:
+                padding = (abs(lo) if lo else 1)*.05
+                lo, hi = lo-padding, hi+padding
     else:
         if len(color_range) != 2 or not all(math.isfinite(v) for v in color_range) or color_range[0] >= color_range[1]:
             raise ValueError("Invalid color range")
         lo, hi = color_range
+    if log_color and lo <= 0: raise ValueError("Log colour limits must be positive")
     name = snapshot.get("colormap", "Viridis")
     if name not in COLORS: raise ValueError("Unknown colormap")
     keys = np.array([[(v >> shift) & 255 for shift in (0, 8, 16, 24)] for v in COLORS[name]])/255
     cmap = (mpl.colors.ListedColormap(keys, name) if name in ("Deep", "Dark", "Pastel", "Paired")
             else mpl.colors.LinearSegmentedColormap.from_list(name, keys, N=256))
-    norm = mpl.colors.Normalize(lo, hi)
+    norm = mpl.colors.LogNorm(lo, hi) if kind == 7 and log_color else mpl.colors.Normalize(lo, hi)
     if kind == 4:
         # Drop the whole quad when any corner is missing, matching ImPlot3D.
         cells = valid.reshape(rows, cols)
@@ -130,6 +140,27 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         xe = edges(xx[0], snapshot["x_axis"]["log"])
         ye = edges(yy[:, 0], snapshot["y_axis"]["log"])
         artist = ax.pcolormesh(xe, ye, np.ma.masked_invalid(zz), cmap=cmap, norm=norm, shading="flat")
+        contour = snapshot.get("contour_style", {})
+        lines = series.get("contours", [])
+        if contour.get("levels") and "contours" not in series:
+            raise ValueError("Contours require the shared typed contour geometry")
+        from matplotlib.collections import LineCollection
+        segments, labelled = [], set()
+        for line in lines:
+            points = np.asarray([line["a"], line["b"]], dtype=float)
+            level = line["level"]
+            if points.shape != (2, 2) or not np.all(np.isfinite(points)) or not math.isfinite(level):
+                raise ValueError("Invalid contour geometry")
+            segments.append(points)
+            midpoint = points.mean(axis=0)
+            limits = snapshot["ranges"]
+            if (contour.get("labels", True) and level not in labelled and
+                    limits[0] <= midpoint[0] <= limits[1] and limits[2] <= midpoint[1] <= limits[3]):
+                ax.text(*midpoint, f"{level:.6g}", color=contour.get("color", "black"), fontproperties=font, clip_on=True)
+                labelled.add(level)
+        if segments:
+            ax.add_collection(LineCollection(segments, colors=[contour.get("color", "black")],
+                                            linewidths=contour.get("line_pt", 1), clip_on=True))
     if snapshot.get("color_scale", True):
         bar = fig.colorbar(artist, ax=ax, pad=.14 if three else .04, fraction=.05)
         z_axis = snapshot["z_axis"]
@@ -425,17 +456,22 @@ def build_figure(snapshot, dpi=300):
     return fig
 
 
-def export_graph(snapshot, destination, format, dpi=300):
+def export_graph(snapshot, destination, format, dpi=300, background=None):
     """Return the rendered limits, useful to verify the embedded C++ boundary."""
     format = format.lower()
-    if format not in ("svg", "pdf", "png"):
-        raise ValueError("Supported export formats: SVG, PDF, PNG")
+    if format == "jpg": format = "jpeg"
+    if format not in ("svg", "pdf", "png", "jpeg"):
+        raise ValueError("Supported export formats: SVG, PDF, PNG, JPEG")
+    if format == "jpeg":
+        if background is None or not mpl.colors.is_color_like(background):
+            raise ValueError("JPEG requires an explicit opaque background")
+        if mpl.colors.to_rgba(background)[3] != 1: raise ValueError("JPEG background must be opaque")
     destination = Path(destination)
     # Context isolates publication settings from any earlier embedded script.
     with _export_lock, mpl.rc_context({"svg.fonttype": "path", "pdf.fonttype": 42, "text.usetex": False,
                          "savefig.bbox": None, "path.simplify": False}):
         fig = build_figure(snapshot, dpi)
-        if format == "png":
+        if format in ("png", "jpeg"):
             # Agg truncates fractional pixels. Round the requested physical size.
             pixels = [math.floor(v*dpi/25.4 + 0.5) for v in (snapshot["width_mm"], snapshot["height_mm"])]
             fig.set_size_inches([(v + 1e-7)/dpi for v in pixels])
@@ -444,7 +480,8 @@ def export_graph(snapshot, destination, format, dpi=300):
             with tempfile.NamedTemporaryFile(prefix=f".{destination.name}.", suffix=f".{format}",
                                              dir=destination.parent, delete=False) as stream:
                 temporary = Path(stream.name)
-                fig.savefig(stream, format=format, dpi=dpi, bbox_inches=None)
+                fig.savefig(stream, format=format, dpi=dpi, bbox_inches=None,
+                            **({"facecolor": background, "transparent": False} if format == "jpeg" else {}))
                 stream.flush(); os.fsync(stream.fileno())
             os.replace(temporary, destination)
             limits = tuple(snapshot["ranges"]) if fig.axes[0].name == "3d" else (*fig.axes[0].get_xlim(), *fig.axes[0].get_ylim())
@@ -469,7 +506,7 @@ def export_plots(exports, cancelled=lambda: False):
                 fd, name = tempfile.mkstemp(prefix=".sst-plot-", dir=path.parent)
                 os.close(fd)
                 staged.append(Path(name))
-                export_graph(item["snapshot"], name, item["format"], item["dpi"])
+                export_graph(item["snapshot"], name, item["format"], item["dpi"], item.get("background"))
             commit_files(list(zip(staged, destinations)), cancelled)
     finally:
         for temporary in staged:

@@ -58,7 +58,8 @@ namespace SST::Prototypes::PlotLab
 
     std::string SnapshotJson(const sst::plotlab::GraphSnapshot &snapshot) { return sst::plotlab::snapshotJson(snapshot); }
     void ExportGraph(const sst::plotlab::GraphSnapshot &snapshot, const std::filesystem::path &destination,
-                     const std::string &format, double dpi, const std::filesystem::path &pythonRoot)
+                     const std::string &format, double dpi, const std::filesystem::path &pythonRoot,
+                     const std::array<double,3>& backgroundRgb)
     {
 #if DS_PYTHON_CAPI_AVAILABLE
         if (!PythonInterpreter::IsRuntimeInitialized())
@@ -72,9 +73,10 @@ namespace SST::Prototypes::PlotLab
             const auto raw = destination.u8string();
             const auto text = SnapshotJson(snapshot);
             auto data = nb::module_::import_("json").attr("loads")(nb::str(text.c_str()));
+            auto background = nb::make_tuple(backgroundRgb[0], backgroundRgb[1], backgroundRgb[2]);
             nb::module_::import_("sst_plotlab.exporter")
                 .attr("export_graph")(data, nb::str(reinterpret_cast<const char *>(raw.c_str())),
-                                      nb::str(format.c_str()), dpi);
+                                      nb::str(format.c_str()), dpi, background);
         }
         catch (const nb::python_error &e)
         {
@@ -86,7 +88,40 @@ namespace SST::Prototypes::PlotLab
         (void)format;
         (void)dpi;
         (void)pythonRoot;
+        (void)backgroundRgb;
         throw std::runtime_error("Rebuild with embedded Python to export graphs");
+#endif
+    }
+    void ExportData(const sst::plotlab::DataExportSnapshot& snapshot,const std::filesystem::path& destination,
+                    const std::string& format,const std::filesystem::path& pythonRoot,const std::function<bool()>& cancelled)
+    {
+#if DS_PYTHON_CAPI_AVAILABLE
+        if(!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error("Embedded Python is unavailable");
+        nb::gil_scoped_acquire gil;
+        try {
+            PreparePython(pythonRoot);
+            const auto& sheet=std::get<sst::plotlab::Worksheet>(snapshot.worksheet->data);
+            nb::dict data;nb::list columns,rows,sources;
+            for(std::size_t row=0;row<snapshot.rows.size();++row) rows.append(row);
+            for(const auto& [key,value]:sheet.source) if(key=="path" || key=="file" || key=="filename") sources.append(nb::str(value.c_str()));
+            for(const auto& object:snapshot.columns) {
+                const auto& c=std::get<sst::plotlab::Column>(object->data);nb::dict column;nb::list values,masks;
+                column["id"]=object->id;column["name"]=nb::str(object->name.c_str());column["unit"]=nb::str(c.units.c_str());
+                std::visit([&](const auto& v){for(auto row:snapshot.rows) values.append(v.at(row));},c.values);
+                for(auto index:snapshot.rows) {const auto row=sheet.rows.at(index);masks.append(sheet.masks.contains(row)||c.masks.contains(row));}
+                column["values"]=values;column["mask"]=masks;columns.append(column);
+            }
+            using namespace sst::plotlab;
+            data["columns"]=columns;data["rows"]=rows;data["source_paths"]=sources;
+            data["mask_policy"]=snapshot.masks==DataMaskPolicy::Preserve?"preserve":snapshot.masks==DataMaskPolicy::Missing?"missing":"omit_rows";
+            data["missing_policy"]=snapshot.missing==DataMissingPolicy::Empty?"empty":"nan";
+            const auto raw=destination.u8string();
+            auto stop=nb::cpp_function([&]{return cancelled && cancelled();});
+            nb::module_::import_("sst_plotlab.exporter").attr("export_data")(data,nb::str(reinterpret_cast<const char*>(raw.c_str())),format.c_str(),stop);
+        } catch(const nb::python_error& e) {throw std::runtime_error(e.what());}
+#else
+        (void)snapshot;(void)destination;(void)format;(void)pythonRoot;(void)cancelled;
+        throw std::runtime_error("Rebuild with embedded Python to export data");
 #endif
     }
 } // namespace SST::Prototypes::PlotLab
