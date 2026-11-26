@@ -60,6 +60,7 @@ project "JFM"
     end
 
     sst_link_libraries()
+    sst_link_hdf5()
 
     links {
         "Core",
@@ -173,6 +174,7 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectYamlSerializer.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMMonteCarloStorage.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMProjectJobs.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMIORegistration.cpp",
@@ -231,6 +233,7 @@ project "JFMTests"
     defines { "JFM_CUDA_AVAILABLE=0" }
 
     sst_link_libraries()
+    sst_link_hdf5()
 
     links {
         "Core",

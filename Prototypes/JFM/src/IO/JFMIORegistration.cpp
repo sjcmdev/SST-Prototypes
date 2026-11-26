@@ -398,6 +398,17 @@ namespace SST::Prototypes::JFM
 		ioLayer.RegisterHandler<FitFailed>(std::bind_front(&HandleFitFailed, state));
 		ioLayer.RegisterHandler<MonteCarloRequested>(std::bind_front(&HandleMonteCarloRequested, state));
 		ioLayer.RegisterHandler<MonteCarloCompleted>(std::bind_front(&HandleMonteCarloCompleted, state));
+        ioLayer.RegisterHandler<ExportMonteCarloTsvRequested>([state](const auto& event) {
+            const auto result=state->store->GetMonteCarloResult(event.ref);
+            const auto mc=state->store->GetMonteCarloState(event.ref);
+            if (result) state->eventBus->Queue(JobSubmitRequested{
+                CreateRef<JFMMonteCarloSaveJob>(state->eventBus,event.ref,0,event.directory,result,true,mc ? mc->noisePercent : 0.),
+                JobPriority::Low,"jfm.mc.export"});
+        });
+        ioLayer.RegisterHandler<MonteCarloSamplesSaved>([state](const auto& event) {
+            if (state->store) (void)state->store->FinishMonteCarloSave(event.ref,event.generation,event.path,event.status,event.error);
+            if (!event.error.empty()) NotifyFailure(state, NotificationCategory::Export, "MC samples not saved", event.error);
+        });
 		ioLayer.RegisterHandler<MonteCarloFailed>(std::bind_front(&HandleMonteCarloFailed, state));
 	}
 
@@ -507,7 +518,7 @@ namespace SST::Prototypes::JFM
 		if (state->store != nullptr)
 			state->store->SetStatusMessage(project, "Saving project: " + event.path.Utf8());
 
-		auto job = CreateRef<SaveProjectJob>(state->eventBus, event.path, event.snapshot, project, operation, event.revision);
+		auto job = CreateRef<SaveProjectJob>(state->eventBus, event.path, event.snapshot, project, operation, event.revision, event.monteCarloResults);
 		state->eventBus->Queue(JobSubmitRequested{job, JobPriority::High, JFMIOJobSource});
 	}
 
@@ -611,7 +622,11 @@ namespace SST::Prototypes::JFM
 		ProjectHandle project = InvalidProjectHandle;
 		if (state->store != nullptr)
 		{
-			project = state->store->AttachProject(event.project, event.path);
+			            if (event.monteCarloResults.empty()) project=state->store->AttachProject(event.project,event.path);
+            else {
+                JFMProjectBundleSnapshot snapshot; snapshot.project=event.project; snapshot.monteCarloResults=event.monteCarloResults;
+                project=state->store->AttachProjectBundle(std::move(snapshot),event.path);
+            }
 			if (state->settings != nullptr)
 				state->store->EnsureDefaultScripts(state->settings->GetDefaultScriptsDirectory());
 			state->store->SetStatusMessage(project, "Project loaded; raw data materialization queued.");

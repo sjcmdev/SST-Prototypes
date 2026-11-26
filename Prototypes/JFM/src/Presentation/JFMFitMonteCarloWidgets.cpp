@@ -91,6 +91,10 @@ namespace SST::Prototypes::JFM
 			sst::ui::widgets::EndCombo();
 		}
 
+        if (settings.preferGpu)
+            changed |= sst::ui::widgets::Checkbox("CPU + GPU", &settings.useCpuWithGpu,
+                "Share sample index ranges between CPU and CUDA using measured throughput. Each sample keeps its seed.");
+
 		if (showParameterBounds) ImGui::TextWrapped("Bounds retain the fitted voltage/current (or current-density) column units.");
 		const auto &names = JFMModelParameterNames(modelId);
 		if (showParameterBounds && ImGui::BeginTable("##parameters", 4, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings, ImVec2(0.0f, (names.size()+2)*(ImGui::GetFrameHeightWithSpacing()+ImGui::GetTextLineHeightWithSpacing())+ImGui::GetStyle().ScrollbarSize+8.0f)))

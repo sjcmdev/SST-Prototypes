@@ -24,7 +24,7 @@ WeakRef<CommandRegistry> fitCommands;
 WeakRef<JobSystem> fitJobs;
 Ref<JobSystem> FitJobs() {
     if (auto jobs=fitJobs.lock()) return jobs;
-    static auto headless=CreateRef<JobSystem>(Ref<EventBus>{},1);
+    static auto headless=CreateRef<JobSystem>(Ref<EventBus>{},std::max(2u,std::thread::hardware_concurrency())-1);
     return headless;
 }
 Ref<CommandRegistry> FitCommands() {
@@ -85,6 +85,7 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
         settings.fitMethod = method; settings.preferGpu = request.value("backend", "cpu") == "cuda";
         if (request.value("backend", "cpu") != "cpu" && request.value("backend", "cpu") != "cuda")
             throw std::invalid_argument("backend must be cpu or cuda");
+        settings.useCpuWithGpu = request.value("use_cpu_with_gpu", true);
         settings.fitMaxIterations = settings.monteCarloMaxIterations = request.value("max_iterations", 2500);
         if (settings.fitMaxIterations < 1) throw std::invalid_argument("max_iterations must be positive");
         settings.monteCarloSamples = request.value("samples", 0);
@@ -98,7 +99,12 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
         if (!std::isfinite(settings.monteCarloNoisePercent) || settings.monteCarloNoisePercent < 0 || settings.monteCarloNoisePercent > 100
             || !std::isfinite(settings.monteCarloStartPerturbationPercent) || settings.monteCarloStartPerturbationPercent < 0 || settings.monteCarloStartPerturbationPercent > 1000)
             throw std::invalid_argument("noise_percent must be in [0, 100] and start_perturbation_percent in [0, 1000]");
-        settings.autoCalibrateGpuSimplexIterations = false; settings.saveSamples = false;
+        settings.autoCalibrateGpuSimplexIterations = false; settings.saveSamples = request.value("save_samples",false);
+        const auto exportDirectory=request.value("export_samples_tsv_directory",std::string{});
+        if (settings.monteCarloSamples==0 && (settings.saveSamples || !exportDirectory.empty()))
+            throw std::invalid_argument("MC sample persistence and export require samples > 0");
+        if (settings.saveSamples && request.value("output_directory",std::string{}).empty())
+            throw std::invalid_argument("save_samples requires output_directory");
         for (const auto &[name, bound] : request.value("bounds", Json::object()).items()) {
             if (std::find(names.begin(), names.end(), name) == names.end()) throw std::invalid_argument("Unknown bound parameter: "+name);
             const double lo = bound.at(0), hi = bound.at(1);
@@ -134,7 +140,9 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
                 {"lm_status", event.state.lmStatus}, {"backend", event.state.backend}, {"objective", objectiveJson(event.state.objective)}};
         });
         auto fitFailed = bus->Subscribe<FitFailed>(failed);
+        Ref<const JFMMonteCarloResult> completedSamples;
         auto mcDone = bus->Subscribe<MonteCarloCompleted>([&](const MonteCarloCompleted &event) {
+            completedSamples=event.result;
             const auto &mc=*event.result;
             Json samples = Json::array();
             for (std::size_t i = 0; i < mc.samples.size(); ++i) {
@@ -142,7 +150,7 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
                 samples.push_back({{"sample_id", i}, {"parameters", s.parameters}, {"chi_squared", s.chiSquared},
                     {"objective_chi_squared", s.objectiveChiSquared}, {"linear_points",s.linearPoints}, {"log_points",s.logPoints}, {"reduced_chi_squared", s.reducedChiSquared}, {"accepted", s.accepted}, {"converged", s.solverConverged},
                     {"solver_converged", s.solverConverged}, {"stop_reason", s.stopReason}, {"fit_method", s.fitMethod},
-                    {"lm_status", s.lmStatus}, {"flat_directions", s.flatDirections}, {"iterations", s.iterations}});
+                    {"lm_status", s.lmStatus}, {"flat_directions", s.flatDirections}, {"iterations", s.iterations}, {"sample_backend",s.usedGpu ? "cuda" : "cpu"}});
             }
             // Explicit Python output materializes curves only at the binding edge.
             Json noisy=Json::array();
@@ -154,7 +162,14 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
                 {"accepted_count", event.state.acceptedCount}, {"converged_count", event.state.convergedCount},
                 {"backend", event.state.backend}, {"warnings", event.state.warnings}, {"objective", objectiveJson(event.state.objective)},
                 {"sigma_current_A", mc.currentSigma}, {"free_parameter_count", mc.freeParameterCount},
-                {"fit_dof", static_cast<int>(mc.voltage.size())-mc.freeParameterCount}};
+                {"fit_dof", static_cast<int>(mc.voltage.size())-mc.freeParameterCount},
+                {"sample_save_status",event.state.sampleSaveStatus},{"sample_directory",event.state.outputPath.Utf8()}};
+        });
+        bool saveFinished=!settings.saveSamples;
+        auto saved=bus->Subscribe<MonteCarloSamplesSaved>([&](const auto& event) {
+            saveFinished=true; result["sample_save_status"]=event.status;
+            if (!event.error.empty()) result["sample_save_error"]=SST::PythonBoundary::Failure(
+                SST::MakeOperationError(event.status=="cancelled" ? ErrorCategory::Cancelled : ErrorCategory::IO,event.error,"JFM","jfm.mc.save"))["error"];
         });
         auto mcFailed = bus->Subscribe<MonteCarloFailed>(failed);
         Ref<IJob> job;
@@ -166,7 +181,7 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
             JFMFitState fit; fit.modelId = pre.modelId; fit.status = "completed"; fit.parameters = pre.parameters;
             if (!store->ApplyFitResult(ref, store->BeginFit(ref), fit, {})) throw std::runtime_error("Cannot initialize Monte Carlo fit");
             auto queue = CreateRef<JFMMonteCarloWorkQueue>();
-            const auto output = Path::FromResolved(std::filesystem::temp_directory_path()/"sst-jfm-headless");
+            const auto output = Path::FromResolved(std::filesystem::u8path(request.value("output_directory",(std::filesystem::temp_directory_path()/"sst-jfm-headless").string())));
             (void)queue->Enqueue({{ref, store->BeginMonteCarlo(ref), record, *record.info.prefit, fit, settings, output}});
             job = CreateRef<JFMMonteCarloJob>(bus, store, queue);
         }
@@ -202,6 +217,29 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         bus->ProcessQueue();
+        while (!saveFinished && settings.monteCarloSamples>0 && result.value("ok",false)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1)); bus->ProcessQueue();
+        }
+        if (!exportDirectory.empty() && completedSamples) {
+            auto exportId=CreateRef<JobId>(0);
+            CommandContext exportContext; exportContext.Set("jobs",jobs.get()); exportContext.Set("job_id",exportId);
+            Ref<IJob> exportJob=CreateRef<JFMMonteCarloSaveJob>(bus,ref,0,Path::FromResolved(std::filesystem::u8path(exportDirectory)),completedSamples,true,settings.monteCarloNoisePercent);
+            exportContext.Set("job",exportJob);
+            if (!commands->Execute(command,std::move(exportContext)) || !*exportId) throw std::runtime_error("MC export submission failed");
+            result["export_ok"]=true;
+            while (true) {
+                const auto status=jobs->GetJob(*exportId);
+                if (!status) throw std::runtime_error("MC export job disappeared");
+                if (status->status==JobStatus::Completed) break;
+                if (status->status==JobStatus::Failed || status->status==JobStatus::Cancelled) {
+                    auto error=SST::JobError(*status); error.code="jfm.mc.export";
+                    result["export_ok"]=false; result["sample_export_error"]=SST::PythonBoundary::Failure(error)["error"];
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            result["export_job_id"]=*exportId;
+        }
         if (result.is_null()) throw std::runtime_error("Fit job produced no result");
         result["project_id"] = project; result["characteristic_id"] = ref.characteristic; result["job_id"] = *id;
         return result;

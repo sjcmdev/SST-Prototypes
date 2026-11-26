@@ -78,6 +78,25 @@ namespace SST::Prototypes::JFM
 		bool m_JobScheduled = false;
 	};
 
+    class JFMMonteCarloSaveJob final : public IJob {
+    public:
+        JFMMonteCarloSaveJob(Ref<EventBus> bus, JFMCharacteristicRef ref, std::uint64_t generation,
+            Path directory, Ref<const JFMMonteCarloResult> result, bool tsv = false, double noisePercent = 0.0);
+        ~JFMMonteCarloSaveJob() override;
+        std::string GetName() const override { return m_Tsv ? "Export MC samples TSV" : "Save MC samples HDF5"; }
+        std::string GetType() const override { return m_Tsv ? "jfm.mc.export" : "jfm.mc.save"; }
+        void Execute(JobContext& context) override;
+    private:
+        void Finish(std::string status, std::string error = {});
+        Ref<EventBus> m_Bus;
+        JFMCharacteristicRef m_Ref;
+        std::uint64_t m_Generation;
+        Path m_Directory;
+        Ref<const JFMMonteCarloResult> m_Result;
+        bool m_Tsv, m_Finished = false;
+        double m_NoisePercent;
+    };
+
 	class JFMMonteCarloJob final : public IJob
 	{
 	public:

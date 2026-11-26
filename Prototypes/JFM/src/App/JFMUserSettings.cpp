@@ -205,7 +205,8 @@ namespace SST::Prototypes::JFM
 				candidate.fitMonteCarlo.monteCarloStartPerturbationPercent = RequireRange(ReadOr<double>(fit, "mc_start_perturbation_percent", candidate.fitMonteCarlo.monteCarloStartPerturbationPercent), 0.0, 1000.0);
 				candidate.fitMonteCarlo.monteCarloSeed = ReadOr<std::uint32_t>(fit, "mc_seed", candidate.fitMonteCarlo.monteCarloSeed);
 				candidate.fitMonteCarlo.preferGpu = ReadOr<bool>(fit, "prefer_gpu", candidate.fitMonteCarlo.preferGpu);
-				candidate.fitMonteCarlo.saveSamples = ReadOr<bool>(fit, "save_samples", candidate.fitMonteCarlo.saveSamples);
+				candidate.fitMonteCarlo.useCpuWithGpu = ReadOr<bool>(fit, "use_cpu_with_gpu", candidate.fitMonteCarlo.useCpuWithGpu);
+                candidate.fitMonteCarlo.saveSamples = ReadOr<bool>(fit, "save_samples", candidate.fitMonteCarlo.saveSamples);
 				candidate.fitMonteCarlo.savedSampleLimit = RequireMinimum(0, ReadOr<int>(fit, "saved_sample_limit", candidate.fitMonteCarlo.savedSampleLimit));
 				candidate.fitMonteCarlo.scatterZoomOut = RequireRange(ReadOr<float>(fit, "scatter_zoom_out", candidate.fitMonteCarlo.scatterZoomOut), 0.0f, 1.0f);
 				candidate.fitMonteCarlo.showSigmaClasses = ReadFlags(fit["show_sigma_classes"], candidate.fitMonteCarlo.showSigmaClasses);
@@ -340,7 +341,8 @@ namespace SST::Prototypes::JFM
 		out << YAML::Key << "mc_start_perturbation_percent" << YAML::Value << snapshot.fitMonteCarlo.monteCarloStartPerturbationPercent;
 		out << YAML::Key << "mc_seed" << YAML::Value << snapshot.fitMonteCarlo.monteCarloSeed;
 		out << YAML::Key << "prefer_gpu" << YAML::Value << snapshot.fitMonteCarlo.preferGpu;
-		out << YAML::Key << "save_samples" << YAML::Value << snapshot.fitMonteCarlo.saveSamples;
+		out << YAML::Key << "use_cpu_with_gpu" << YAML::Value << snapshot.fitMonteCarlo.useCpuWithGpu;
+        out << YAML::Key << "save_samples" << YAML::Value << snapshot.fitMonteCarlo.saveSamples;
 		out << YAML::Key << "saved_sample_limit" << YAML::Value << snapshot.fitMonteCarlo.savedSampleLimit;
 		out << YAML::Key << "scatter_zoom_out" << YAML::Value << snapshot.fitMonteCarlo.scatterZoomOut;
 		out << YAML::Key << "show_sigma_classes" << YAML::Value;

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <yaml-cpp/yaml.h>
 #include "JFMRealData.hpp"
 #include <sst/physics/constants.hpp>
 
@@ -19,6 +20,7 @@
 #include "Core/IO/TextFileIO.hpp"
 #include <sstream>
 #include "Core/JobSystem/JobContext.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Events/JFMEvents.hpp"
 #include "IO/JFMExportRawTsvJob.hpp"
@@ -47,6 +49,7 @@
 #include "Core/Platform/PlatformFontDiscovery.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "IO/JFMProjectBundleSerializer.hpp"
+#include "IO/JFMMonteCarloStorage.hpp"
 #include "IO/JFMPythonRuntime.hpp"
 #include "Vendor/ImGui/imgui.h"
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -179,11 +182,27 @@ namespace SST::Prototypes::JFM
         const auto mcGeneration = store->BeginMonteCarlo(ref);
         ASSERT_TRUE(mcQueue->Enqueue({{ref, mcGeneration, *store->FindCharacteristicRecord(ref), prefit, *store->GetFitState(ref), settings, root}}));
         JFMMonteCarloJob mcJob(bus, store, mcQueue);
+        Ref<IJob> pendingSave;
+        auto saveRequested=bus->Subscribe<JobSubmitRequested>([&](const auto& event) { pendingSave=event.job; });
         mcJob.Execute(context); bus->ProcessQueue();
+        ASSERT_TRUE(pendingSave);
+        ASSERT_EQ(store->GetMonteCarloState(ref)->sampleSaveStatus,"pending");
+        ASSERT_TRUE(store->GetMonteCarloResult(ref));
+        pendingSave->Execute(context); bus->ProcessQueue();
+        EXPECT_EQ(store->GetMonteCarloState(ref)->sampleSaveStatus,"saved");
         const auto mc = store->GetMonteCarloResult(ref);
         ASSERT_TRUE(mc);
+        auto binary=ReadJFMMonteCarloHdf5(store->GetMonteCarloState(ref)->outputPath/Path("samples.h5"));
+        ASSERT_TRUE(binary) << binary.Error().technicalDetails;
+        EXPECT_EQ(binary->samples.size(),mc->samples.size());
+        for (std::size_t i=0;i<mc->samples.size();++i) {
+            EXPECT_EQ(binary->samples[i].parameters,mc->samples[i].parameters);
+            EXPECT_EQ(JFMMonteCarloNoisyCurve(*binary,i),JFMMonteCarloNoisyCurve(*mc,i));
+        }
+        EXPECT_FALSE(FileSystem::Exists((store->GetMonteCarloState(ref)->outputPath/Path("noise.tsv")).Native()));
+        ASSERT_TRUE(ExportJFMMonteCarloTsv(root/Path("export"),*mc,settings.monteCarloNoisePercent));
         std::string savedNoise, readError;
-        ASSERT_TRUE(TextFileIO::Load(store->GetMonteCarloState(ref)->outputPath / Path("noise.tsv"), savedNoise, readError)) << readError;
+        ASSERT_TRUE(TextFileIO::Load(root / Path("export/noise.tsv"), savedNoise, readError)) << readError;
         std::istringstream rows(savedNoise);
         std::string header;
         std::getline(rows, header);
@@ -891,6 +910,7 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     const auto bundle = root / "bundle.jfm";
     auto saved = JFMProjectBundleSerializer::Save(bundle, snapshot);
     ASSERT_TRUE(saved) << saved.Error().technicalDetails;
+    ASSERT_TRUE(ExportJFMMonteCarloTsv(bundle/Path("mc/1"),mc,0.));
     std::string exported, exportError;
     ASSERT_TRUE(TextFileIO::Load(bundle / Path("mc/1/parameters.tsv"), exported, exportError)) << exportError;
     EXPECT_NE(exported.find("\t0\t1\t0\tmax_iter\t"), std::string::npos);
@@ -908,6 +928,20 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     EXPECT_EQ(roundtrip.samples.front().stopReason,"max_iter");
     EXPECT_EQ(roundtrip.samples.front().fitMethod,"LM→NM"); EXPECT_EQ(roundtrip.samples.front().lmStatus,0);
     EXPECT_TRUE(roundtrip.samples.front().flatDirections); EXPECT_DOUBLE_EQ(roundtrip.samples.front().objectiveChiSquared,.125);
+    EXPECT_EQ(roundtrip.noisyCurrent,mc.noisyCurrent);
+    std::string fitting;
+    ASSERT_TRUE(TextFileIO::Load(bundle/Path("analysis/fitting.yaml"),fitting,exportError));
+    auto legacy=YAML::Load(fitting);
+    auto files=legacy["characteristics"][0]["monte_carlo_files"];
+    files.remove("hdf5"); files["parameters"]="mc/1/parameters.tsv"; files["noise"]="mc/1/noise.tsv";
+    std::ostringstream yaml; yaml << legacy;
+    ASSERT_TRUE(TextFileIO::Save(bundle/Path("analysis/fitting.yaml"),yaml.str(),exportError));
+    auto migrated=JFMProjectBundleSerializer::Load(bundle); ASSERT_TRUE(migrated);
+    ASSERT_EQ(migrated->snapshot.monteCarloResults.size(),1);
+    EXPECT_EQ(migrated->snapshot.monteCarloResults[0].result->samples[0].parameters,mc.samples[0].parameters);
+    ASSERT_TRUE(JFMProjectBundleSerializer::Save(bundle,migrated->snapshot));
+    auto reopened=JFMProjectBundleSerializer::Load(bundle); ASSERT_TRUE(reopened);
+    EXPECT_EQ(reopened->snapshot.monteCarloResults[0].result->noisyCurrent,mc.noisyCurrent);
 }
 TEST_F(UnicodePaths, EmbeddedPythonPathAndImport) {
 #if DS_PYTHON_CAPI_AVAILABLE
@@ -973,6 +1007,21 @@ for mode in ("signed_sigma","isc_shift"):
     assert r["objective"]["mode"]==mode and r["objective"]["sigma_abs_A"]==1e-5, r
     json.dumps(r,allow_nan=False)
 json.dumps(mc,allow_nan=False)
+import pathlib, tempfile
+with tempfile.TemporaryDirectory(prefix="jfm-speed1-") as folder:
+    stored=sst_jfm.fit(dict(q,samples=2,save_samples=True,output_directory=folder,
+        export_samples_tsv_directory=str(pathlib.Path(folder)/"export")))
+    assert stored["ok"] and stored["sample_save_status"]=="saved", stored
+    assert (pathlib.Path(stored["sample_directory"])/"samples.h5").is_file(), stored
+    assert (pathlib.Path(folder)/"export/parameters.tsv").is_file()
+    assert (pathlib.Path(folder)/"export/noise.tsv").is_file()
+    json.dumps(stored,allow_nan=False)
+    assert stored["export_ok"], stored
+    assert sst_jfm.fit(dict(q,export_samples_tsv_directory=folder))["error"]["code"]=="jfm.fit.validation"
+    bad=pathlib.Path(folder)/"file"; bad.write_text("keep")
+    failed_export=sst_jfm.fit(dict(q,samples=2,export_samples_tsv_directory=str(bad)))
+    assert failed_export["ok"] and not failed_export["export_ok"], failed_export
+    assert len(failed_export["samples"])==2 and failed_export["sample_export_error"]["code"]=="jfm.mc.export", failed_export
 density_q=dict(q,parameters=dict(I0_A_per_cm2=1e-10,ideality_factor=1.5))
 density_q["current_density_A_per_cm2"]=density_q.pop("current_A")
 wrong_units=sst_jfm.fit(dict(density_q,sigma_abs_A=1e-6))

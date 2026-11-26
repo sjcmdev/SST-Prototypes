@@ -25,6 +25,7 @@ namespace SST::Prototypes::JFM
 
 		Path path;
 		JFMProject snapshot;
+        std::vector<JFMMonteCarloBundleRecord> monteCarloResults;
 		ProjectHandle project = InvalidProjectHandle;
 		JFMOperationId operation = InvalidJFMOperationId;
 		std::uint64_t revision = 0;
@@ -154,6 +155,7 @@ namespace SST::Prototypes::JFM
 
 		Path path;
 		JFMProject project;
+        std::vector<JFMMonteCarloBundleRecord> monteCarloResults;
 		JFMOperationId operation = InvalidJFMOperationId;
 	};
 
@@ -512,6 +514,18 @@ namespace SST::Prototypes::JFM
 		JFMMonteCarloState state;
 		Ref<const JFMMonteCarloResult> result;
 	};
+
+    struct ExportMonteCarloTsvRequested final : public BusEvent {
+        JFMCharacteristicRef ref;
+        Path directory;
+    };
+
+    struct MonteCarloSamplesSaved final : public BusEvent {
+        JFMCharacteristicRef ref;
+        std::uint64_t generation = 0;
+        Path path;
+        std::string status, error;
+    };
 
 	struct MonteCarloFailed final : public BusEvent
 	{

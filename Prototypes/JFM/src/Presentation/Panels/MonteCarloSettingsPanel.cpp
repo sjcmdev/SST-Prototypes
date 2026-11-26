@@ -4,6 +4,7 @@
 
 #include "Analysis/JFMFitEngine.hpp"
 #include "App/JFMCommands.hpp"
+#include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Domain/JFMPrefitModels.hpp"
 #include "Events/JFMEvents.hpp"
@@ -300,6 +301,21 @@ namespace SST::Prototypes::JFM
 						ImGui::Text("Prefit: %s", info.prefit->status.c_str());
 					if (info.fit)
 						ImGui::Text("Fit: %s", info.fit->status.c_str());
+                    if (info.monteCarlo) {
+                        ImGui::Text("Samples: %s",info.monteCarlo->sampleSaveStatus.c_str());
+                        if (!info.monteCarlo->sampleSaveError.empty()) ImGui::TextWrapped("%s",info.monteCarlo->sampleSaveError.c_str());
+                    }
+                    if (m_Store->GetMonteCarloResult({project,info.id})) {
+                        ImGui::PushID(static_cast<int>(info.id));
+                        if (ImGui::Button("Export samples TSV")) {
+                            const auto folders=PickFoldersDialog(false);
+                            if (!folders.empty()) {
+                                CommandContext context; context.Set("project",project); context.Set("characteristic_id",info.id);
+                                context.Set("directory",folders.front()); Execute(JFMExportMonteCarloTsvCommandId,std::move(context));
+                            }
+                        }
+                        ImGui::PopID();
+                    }
 					if (!m_BulkMode && selected)
 						(void)RenderJFMFitMonteCarloSettings(m_Draft, itemModel, ("mc_list_settings_" + std::to_string(info.id)).c_str(), true, &info);
 				}

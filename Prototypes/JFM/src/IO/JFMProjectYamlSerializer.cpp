@@ -329,6 +329,9 @@ namespace SST::Prototypes::JFM
 		node["objective_linear_points"] = state.objective.linearPoints;
 		node["objective_log_points"] = state.objective.logPoints;
 		node["output_path"] = state.outputPath.Utf8();
+        node["sample_save_status"] = state.sampleSaveStatus;
+        node["sample_save_error"] = state.sampleSaveError;
+        node["sample_storage_id"] = state.sampleStorageId;
 		node["total_milliseconds"] = state.totalMilliseconds;
 		node["warnings"] = state.warnings;
 		return node;
@@ -357,6 +360,9 @@ namespace SST::Prototypes::JFM
         state.objective.linearPoints = readOr<int>(node, "objective_linear_points", 0);
         state.objective.logPoints = readOr<int>(node, "objective_log_points", 0);
 		state.outputPath = Path::FromResolved(std::filesystem::u8path(readOr<std::string>(node, "output_path", {})));
+        state.sampleSaveStatus = readOr<std::string>(node,"sample_save_status","not_requested");
+        state.sampleSaveError = readOr<std::string>(node,"sample_save_error",{});
+        state.sampleStorageId = readOr<std::string>(node,"sample_storage_id",{});
 		state.totalMilliseconds = readOr<double>(node, "total_milliseconds", 0.0);
 		if (node["warnings"])
 			state.warnings = node["warnings"].as<std::vector<std::string>>();

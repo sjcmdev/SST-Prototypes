@@ -188,6 +188,9 @@ namespace SST::Prototypes::JFM
 		std::uint32_t seed = 42;
 		std::string backend;
 		Path outputPath;
+        std::string sampleSaveStatus = "not_requested";
+        std::string sampleSaveError;
+        std::string sampleStorageId;
 		double totalMilliseconds = 0.0;
 		std::vector<std::string> warnings;
 	};
@@ -204,6 +207,7 @@ namespace SST::Prototypes::JFM
         std::string stopReason = "unknown";
         std::string fitMethod = "NM";
         bool flatDirections = false;
+        bool usedGpu = false;
         int lmStatus = -1;
         double objectiveChiSquared = 0.0;
         int linearPoints = 0;
@@ -221,7 +225,7 @@ namespace SST::Prototypes::JFM
         std::vector<double> currentSigma;
 		// Live noisy data: at most 16 MiB, and no more than the requested saved-sample prefix.
 		std::vector<double> noisyCurrent;
-		// Transient recipe; file adapters still store the original TSV rows.
+		// Persisted recipe reproduces all sample IDs without storing repeated noisy curves.
 		std::optional<std::uint64_t> noiseSeed;
 		std::vector<double> noiseAmplitude;
 	};

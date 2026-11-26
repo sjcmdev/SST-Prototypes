@@ -131,6 +131,11 @@ namespace SST::Prototypes::JFM
             const auto converged = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.solverConverged; });
             const bool previous = record->info.monteCarlo && record->info.monteCarlo->status == "running";
             ImGui::TextDisabled("%s", previous ? "MC running - showing previous result" : "MC result");
+            if (record->info.monteCarlo) {
+                const auto& state=*record->info.monteCarlo;
+                ImGui::Text("Samples: %s", state.sampleSaveStatus.c_str());
+                if (!state.sampleSaveError.empty()) ImGui::TextWrapped("%s", state.sampleSaveError.c_str());
+            }
             ImGui::Text("%s: %d/%d accepted, %d converged", record->info.name.c_str(), static_cast<int>(accepted), static_cast<int>(result->samples.size()), static_cast<int>(converged));
 			std::map<std::string, int> reasons;
             int fallback = 0, flat = 0;

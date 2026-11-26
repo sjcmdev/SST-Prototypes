@@ -4,6 +4,9 @@
 
 #include "Analysis/JFMArrheniusAnalysis.hpp"
 #include "Analysis/JFMFitEngine.hpp"
+#include "IO/JFMMonteCarloStorage.hpp"
+#include "IO/JFMProjectBundleSerializer.hpp"
+#include "IO/JFMProjectJobs.hpp"
 #include <sst/math/lambert_w.hpp>
 #include "solver/diode_model.hpp"
 #include "solver/objective.hpp"
@@ -11,6 +14,8 @@
 #include "IO/JFMFitJobs.hpp"
 #include "IO/JFMPythonBindings.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
+#include "Core/JobSystem/JobContext.hpp"
+#include "Core/Diagnostics/OperationOutcome.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/IO/IOLayer.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
@@ -78,7 +83,7 @@ namespace SST::Prototypes::JFM
 
     TEST(JFMFitEngineTests, MonteCarloJobsReportFailuresAndRetainCurvesOnCancel)
     {
-        for (int outcome=0; outcome<5; ++outcome) {
+        for (int outcome=0; outcome<4; ++outcome) {
             SCOPED_TRACE(outcome);
             auto bus=CreateRef<EventBus>(); auto store=CreateRef<JFMWorkspaceStore>();
             IOLayer io(bus); RegisterJFMIOHandlers(io,{bus,store}); ProgressTracker tracker(bus);
@@ -157,6 +162,83 @@ namespace SST::Prototypes::JFM
             EXPECT_TRUE(queue->Enqueue({{ref,store->BeginMonteCarlo(ref),record,*record.info.prefit,fit,settings,{}}}));
             queue->Reset();
         }
+    }
+
+    TEST(JFMFitEngineTests, PublishedSamplesSurvivePendingSaveRerunFailureAndCancellation) {
+        auto bus=CreateRef<EventBus>(); auto store=CreateRef<JFMWorkspaceStore>();
+        IOLayer io(bus); RegisterJFMIOHandlers(io,{bus,store});
+        auto record=MakeRecord("SD-0");
+        JFMFitState fit; fit.modelId="SD-0"; fit.status="completed"; fit.parameters=record.info.prefit->parameters;
+        record.info.fit=fit;
+        const JFMCharacteristicRef ref{store->GetActiveProjectHandle(),store->AddCharacteristicRecords(store->GetActiveProjectHandle(),{record}).front()};
+        const auto root=Path::FromResolved(std::filesystem::temp_directory_path()/"jfm-speed1-save");
+        auto context=JobContext({}, {}, {}, {}, {});
+        JFMFitMonteCarloSettings settings; settings.preferGpu=false; settings.saveSamples=true;
+        settings.monteCarloSamples=19; settings.monteCarloMaxIterations=10;
+        std::vector<Ref<IJob>> saves;
+        auto sub=bus->Subscribe<JobSubmitRequested>([&](const auto& event) { if (event.job->GetType()=="jfm.mc.save") saves.push_back(event.job); });
+        const auto run=[&] {
+            auto queue=CreateRef<JFMMonteCarloWorkQueue>();
+            EXPECT_TRUE(queue->Enqueue({{ref,store->BeginMonteCarlo(ref),record,*record.info.prefit,fit,settings,root}}));
+            JFMMonteCarloJob job(bus,store,queue); job.Execute(context); bus->ProcessQueue();
+        };
+        run(); ASSERT_EQ(saves.size(),1);
+        auto first=store->GetMonteCarloResult(ref); ASSERT_TRUE(first);
+        const auto firstPath=store->GetMonteCarloState(ref)->outputPath;
+        EXPECT_EQ(store->GetMonteCarloState(ref)->sampleSaveStatus,"pending");
+        EXPECT_FALSE(FileSystem::Exists((firstPath/Path("samples.h5")).Native()));
+        const auto snapshot=store->CaptureProjectBundle(ref.project); ASSERT_TRUE(snapshot);
+        ASSERT_TRUE(JFMProjectBundleSerializer::Save(root/Path("pending.jfm"),*snapshot));
+        auto reopened=JFMProjectBundleSerializer::Load(root/Path("pending.jfm")); ASSERT_TRUE(reopened);
+        ASSERT_EQ(reopened->snapshot.monteCarloResults.size(),1);
+        EXPECT_EQ(reopened->snapshot.monteCarloResults[0].result->samples[18].parameters,first->samples[18].parameters);
+        const auto yamlPath=root/Path("pending.jfm.yaml");
+        SaveProjectJob yamlSave(bus,yamlPath,snapshot->project,ref.project,0,snapshot->revision,snapshot->monteCarloResults);
+        yamlSave.Execute(context);
+        const auto sidecar=root/Path("pending.jfm.yaml.data")/Path(store->GetMonteCarloState(ref)->sampleStorageId)/Path(std::to_string(ref.characteristic))/Path("samples.h5");
+        const auto written=std::filesystem::last_write_time(sidecar.Native());
+        SaveProjectJob repeatedSave(bus,yamlPath,snapshot->project,ref.project,0,snapshot->revision,snapshot->monteCarloResults);
+        repeatedSave.Execute(context);
+        EXPECT_EQ(std::filesystem::last_write_time(sidecar.Native()),written);
+        auto invalid=*snapshot;
+        invalid.project.characteristics.front().monteCarlo->sampleStorageId="../outside";
+        SaveProjectJob invalidSave(nullptr,yamlPath,invalid.project,ref.project,0,invalid.revision,invalid.monteCarloResults);
+        EXPECT_THROW(invalidSave.Execute(context),std::invalid_argument);
+        std::vector<JFMMonteCarloBundleRecord> yamlSamples;
+        auto loadedSub=bus->Subscribe<ProjectLoadCompleted>([&](const auto& event) { yamlSamples=event.monteCarloResults; });
+        LoadProjectJob yamlLoad(bus,yamlPath); yamlLoad.Execute(context); bus->ProcessQueue();
+        ASSERT_EQ(yamlSamples.size(),1);
+        EXPECT_EQ(yamlSamples[0].result->samples[18].parameters,first->samples[18].parameters);
+        ++settings.monteCarloSeed; run(); ASSERT_EQ(saves.size(),2);
+        auto second=store->GetMonteCarloResult(ref); ASSERT_NE(first,second);
+        const auto secondPath=store->GetMonteCarloState(ref)->outputPath; EXPECT_NE(firstPath,secondPath);
+        saves[0]->Execute(context); bus->ProcessQueue();
+        EXPECT_EQ(store->GetMonteCarloResult(ref),second);
+        EXPECT_EQ(store->GetMonteCarloState(ref)->sampleSaveStatus,"pending");
+        auto oldDisk=ReadJFMMonteCarloHdf5(firstPath/Path("samples.h5")); ASSERT_TRUE(oldDisk);
+        EXPECT_EQ(oldDisk->samples[18].parameters,first->samples[18].parameters);
+        saves[1]->Execute(context); bus->ProcessQueue();
+        EXPECT_EQ(store->GetMonteCarloState(ref)->sampleSaveStatus,"saved");
+        const auto generation=store->BeginMonteCarlo(ref);
+        JFMMonteCarloState state; state.modelId="SD-0"; state.sampleSaveStatus="pending";
+        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,generation,state,second));
+        const auto bad=root/Path("not-directory"); { std::ofstream file(bad.Native()); file << "keep"; }
+        JFMMonteCarloSaveJob failure(bus,ref,generation,bad,second);
+        EXPECT_THROW(failure.Execute(context),OperationException); bus->ProcessQueue();
+        EXPECT_EQ(store->GetMonteCarloResult(ref),second);
+        EXPECT_EQ(store->GetMonteCarloState(ref)->sampleSaveStatus,"failed");
+        EXPECT_FALSE(store->GetMonteCarloState(ref)->sampleSaveError.empty());
+        int cancelChecks=0;
+        JobContext cancelExport({}, {}, {}, {}, [&] { return ++cancelChecks>=3; });
+        JFMMonteCarloSaveJob cancelledExport(nullptr,ref,generation,root/Path("cancelled-export"),second,true,1.);
+        EXPECT_THROW(cancelledExport.Execute(cancelExport),JobCancelledException);
+        EXPECT_FALSE(FileSystem::Exists((root/Path("cancelled-export/parameters.tsv")).Native()));
+        int checkpoints=0;
+        EXPECT_THROW(SaveJFMMonteCarloHdf5(secondPath/Path("samples.h5"),*first,[&] {
+            if (++checkpoints==3) throw JobCancelledException();
+        }),JobCancelledException);
+        auto preserved=ReadJFMMonteCarloHdf5(secondPath/Path("samples.h5")); ASSERT_TRUE(preserved);
+        EXPECT_EQ(preserved->samples[18].parameters,second->samples[18].parameters);
     }
 
     TEST(JFMFitEngineTests, MonteCarloMemoryLimitMatchesRetainedSampleBudget)

@@ -3,9 +3,13 @@
 #include "Core/JobSystem/JobContext.hpp"
 #include "gpu/gpu_backend.hpp"
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 #include <utility>
+#include <future>
+#include <map>
+#include <mutex>
 
 namespace SST::Prototypes::JFM {
 namespace {
@@ -221,6 +225,50 @@ TEST(JFMGpuBatch, CancelAtChunkBoundaryNeverPublishesPartialResult) {
         EXPECT_EQ(progress,1);
         const auto repeated=RunJFMMonteCarlo(r,*r.info.prefit,f,s); ASSERT_TRUE(repeated);
         ASSERT_EQ(repeated->state.backend,"cuda"); ExpectSame(*expected,*repeated);
+    }
+}
+TEST(JFMGpuBatch, SplitPreservesEverySampleAndBackendIdentity) {
+    if (!JFMGpuAvailable()) GTEST_SKIP() << "CUDA unavailable";
+    const auto r=GpuRecord(); const auto fit=FitFor(r);
+    JFMFitMonteCarloSettings settings; settings.monteCarloSamples=521; settings.monteCarloMaxIterations=50;
+    settings.autoCalibrateGpuSimplexIterations=false; settings.saveSamples=true;
+    for (double noise:{.5,1.,3.,5.}) {
+        settings.monteCarloNoisePercent=noise; settings.preferGpu=false;
+        const auto cpu=RunJFMMonteCarlo(r,*r.info.prefit,fit,settings); ASSERT_TRUE(cpu);
+        settings.preferGpu=true; settings.useCpuWithGpu=false;
+        const auto gpu=RunJFMMonteCarlo(r,*r.info.prefit,fit,settings); ASSERT_TRUE(gpu);
+        settings.useCpuWithGpu=true;
+        for (const auto workers:{2u,7u}) {
+            std::map<JobId,std::future<void>> futures; JobId next=0;
+            std::atomic_bool cancel=false, cancelOnProgress=false;
+            std::vector<float> progress; std::mutex progressMutex;
+            JobContext context([&](float done,float total) {
+                std::lock_guard lock(progressMutex); progress.push_back(done/total);
+                if (cancelOnProgress) cancel=true;
+            }, {}, {}, {}, [&] { return cancel.load(); }, [&](const Ref<IJob>& job,JobPriority) {
+                const auto id=++next;
+                futures.emplace(id,std::async(std::launch::async,[job] { JobContext helper({}, {}, {}, {}, {}); job->Execute(helper); }));
+                return id;
+            }, [&](JobId id) { futures.at(id).get(); return true; },workers);
+            const auto split=RunJFMMonteCarlo(r,*r.info.prefit,fit,settings,&context); ASSERT_TRUE(split);
+            ASSERT_EQ(split->state.backend,"cpu+cuda");
+            ASSERT_EQ(split->result.samples.size(),cpu->result.samples.size());
+            std::size_t cudaSamples=0;
+            for (std::size_t id=0;id<split->result.samples.size();++id) {
+                const auto& sample=split->result.samples[id]; cudaSamples+=sample.usedGpu;
+                const auto& expected=(sample.usedGpu ? gpu : cpu)->result.samples[id];
+                EXPECT_EQ(sample.parameters,expected.parameters) << "sample=" << id;
+                EXPECT_EQ(sample.objectiveChiSquared,expected.objectiveChiSquared);
+                EXPECT_EQ(sample.chiSquared,expected.chiSquared); EXPECT_EQ(sample.iterations,expected.iterations);
+                EXPECT_EQ(sample.solverConverged,expected.solverConverged); EXPECT_EQ(sample.stopReason,expected.stopReason);
+                EXPECT_EQ(JFMMonteCarloNoisyCurve(split->result,id),JFMMonteCarloNoisyCurve(cpu->result,id));
+            }
+            EXPECT_GT(cudaSamples,0); EXPECT_LT(cudaSamples,split->result.samples.size());
+            ASSERT_FALSE(progress.empty()); EXPECT_EQ(progress.back(),1.f);
+            EXPECT_TRUE(std::is_sorted(progress.begin(),progress.end()));
+            cancelOnProgress=true;
+            EXPECT_THROW((void)RunJFMMonteCarlo(r,*r.info.prefit,fit,settings,&context),JobCancelledException);
+        }
     }
 }
 } // namespace SST::Prototypes::JFM

@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "IO/JFMMonteCarloStorage.hpp"
 
 #include "IO/JFMProjectBundleSerializer.hpp"
 #include "Analysis/JFMFitEngine.hpp"
@@ -316,6 +317,9 @@ namespace SST::Prototypes::JFM
             node["objective_linear_points"] = state.objective.linearPoints;
             node["objective_log_points"] = state.objective.logPoints;
 			node["output_path"] = state.outputPath.Utf8();
+        node["sample_save_status"] = state.sampleSaveStatus;
+        node["sample_save_error"] = state.sampleSaveError;
+        node["sample_storage_id"] = state.sampleStorageId;
 			node["total_milliseconds"] = state.totalMilliseconds;
 			node["warnings"] = state.warnings;
 			return node;
@@ -344,6 +348,9 @@ namespace SST::Prototypes::JFM
             state.objective.linearPoints = ReadOr<int>(node, "objective_linear_points", 0);
             state.objective.logPoints = ReadOr<int>(node, "objective_log_points", 0);
 			state.outputPath = Path::FromResolved(std::filesystem::u8path(ReadOr<std::string>(node, "output_path", {})));
+        state.sampleSaveStatus = ReadOr<std::string>(node,"sample_save_status","not_requested");
+        state.sampleSaveError = ReadOr<std::string>(node,"sample_save_error",{});
+        state.sampleStorageId = ReadOr<std::string>(node,"sample_storage_id",{});
 			state.totalMilliseconds = ReadOr<double>(node, "total_milliseconds", 0.0);
 			if (node["warnings"])
 				state.warnings = node["warnings"].as<std::vector<std::string>>();
@@ -443,56 +450,6 @@ namespace SST::Prototypes::JFM
 			return Ref<const JFMCharacteristicData>{data};
 		}
 
-		Result<void> SaveMonteCarloTsv(const Path &parameterPath, const Path &noisePath, const JFMMonteCarloResult &result, double noisePercent)
-		{
-            std::string error;
-            auto flush=[](FILE *stream,std::ostringstream &buffer) {
-                const auto text=buffer.str(); buffer.str({});
-                return std::fwrite(text.data(),1,text.size(),stream)==text.size();
-            };
-            if (!TextFileIO::Save(parameterPath,[&](FILE *stream) {
-			std::ostringstream parameters;
-			parameters << std::setprecision(17) << "sample";
-			for (const std::string &name : result.parameterNames)
-				parameters << '\t' << name;
-			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\tfit_method\tflat_directions\tlm_status\tobjective_chi_squared\tlinear_points\tlog_points\n";
-			for (std::size_t index = 0; index < result.samples.size(); ++index)
-			{
-				const JFMMonteCarloSample &sample = result.samples[index];
-				parameters << index;
-				for (double value : sample.parameters)
-					parameters << '\t' << value;
-				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\t' << sample.linearPoints << '\t' << sample.logPoints << '\n';
-                if(parameters.tellp()>=64*1024 && !flush(stream,parameters))return false;
-			}
-            return flush(stream,parameters);
-            },error))
-				return BundleError("Monte Carlo parameters TSV could not be saved.", error);
-
-            if (!TextFileIO::Save(noisePath,[&](FILE *stream) {
-			std::ostringstream noise;
-			noise << std::setprecision(17) << "sample\tvoltage\tideal_current\tnoisy_current\tnoise\tsigma\n";
-			const std::size_t points = result.voltage.size();
-			const double factor = std::max(0.0, noisePercent) / 100.0;
-			for (std::size_t sample = 0; sample < result.samples.size(); ++sample)
-			{
-                const auto curve=JFMMonteCarloNoisyCurve(result,sample);
-				for (std::size_t point = 0; point < points; ++point)
-				{
-					if (point >= curve.size())
-						break;
-					const double ideal = point < result.idealCurrent.size() ? result.idealCurrent[point] : 0.0;
-					const double sigma = point < result.currentSigma.size() ? result.currentSigma[point] : std::abs(ideal * factor);
-					const double noisy = curve[point];
-					noise << sample << '\t' << result.voltage[point] << '\t' << ideal << '\t' << noisy << '\t' << noisy - ideal << '\t' << sigma << '\n';
-                    if(noise.tellp()>=64*1024 && !flush(stream,noise))return false;
-				}
-			}
-            return flush(stream,noise);
-            },error))
-				return BundleError("Monte Carlo noise TSV could not be saved.", error);
-			return {};
-		}
 
 		Result<JFMMonteCarloResult> ReadMonteCarloTsv(const Path &parameterPath, const Path &noisePath)
 		{
@@ -699,8 +656,7 @@ namespace SST::Prototypes::JFM
 					node["monte_carlo"] = MonteCarloStateNode(*info.monteCarlo);
 					if (mcById.contains(info.id))
 					{
-						node["monte_carlo_files"]["parameters"] = McParameterRelativePath(info.id);
-						node["monte_carlo_files"]["noise"] = McNoiseRelativePath(info.id);
+						node["monte_carlo_files"]["hdf5"] = "mc/" + SanitizedId(info.id) + "/samples.h5";
                         node["monte_carlo_files"]["free_parameter_count"] = mcById.at(info.id)->result->freeParameterCount;
                         node["monte_carlo_files"]["confidence_available"] = mcById.at(info.id)->result->confidenceAvailable;
 					}
@@ -733,18 +689,19 @@ namespace SST::Prototypes::JFM
 					continue;
 				const std::string parameterFile = ReadOr<std::string>(files, "parameters", {});
 				const std::string noiseFile = ReadOr<std::string>(files, "noise", {});
-				if (parameterFile.empty())
-					continue;
-				auto result = ReadMonteCarloTsv(bundleRoot / Path(parameterFile), noiseFile.empty() ? Path{} : bundleRoot / Path(noiseFile));
+                const auto binaryFile = ReadOr<std::string>(files, "hdf5", {});
+                if (parameterFile.empty() && binaryFile.empty()) continue;
+                auto result = !binaryFile.empty() ? ReadJFMMonteCarloHdf5(bundleRoot / Path(binaryFile))
+                    : ReadMonteCarloTsv(bundleRoot / Path(parameterFile), noiseFile.empty() ? Path{} : bundleRoot / Path(noiseFile));
                 if (result) {
                     result->freeParameterCount = ReadOr<int>(files, "free_parameter_count", result->freeParameterCount);
                     result->confidenceAvailable = ReadOr<bool>(files, "confidence_available", info.monteCarlo ? info.monteCarlo->noisePercent > 0.0 : result->confidenceAvailable);
                     snapshot.monteCarloResults.push_back(JFMMonteCarloBundleRecord{id, CreateRef<const JFMMonteCarloResult>(std::move(result).Value())});
                 }
 				else
-					warnings.push_back("MC TSV skipped for characteristic " + std::to_string(id) + ": " + result.Error().technicalDetails);
+					warnings.push_back("MC samples skipped for characteristic " + std::to_string(id) + ": " + result.Error().technicalDetails);
 				if (info.monteCarlo)
-					info.monteCarlo->outputPath = bundleRoot / Path("mc/" + SanitizedId(id));
+					{ info.monteCarlo->outputPath = bundleRoot / Path("mc/" + SanitizedId(id)); info.monteCarlo->sampleSaveStatus = result ? "saved" : "failed"; }
 			}
 		}
 	} // namespace
@@ -758,6 +715,11 @@ namespace SST::Prototypes::JFM
 			else for (const auto &item : node) SetBundleCollectionStyle(item);
 		}
 	}
+
+
+    Result<JFMMonteCarloResult> ReadJFMMonteCarloTsv(const Path& directory) {
+        return ReadMonteCarloTsv(directory/Path("parameters.tsv"),directory/Path("noise.tsv"));
+    }
 
 	Result<JFMProjectBundleSaveResult> JFMProjectBundleSerializer::Save(const Path &root, const JFMProjectBundleSnapshot &snapshot)
 	{
@@ -825,7 +787,7 @@ namespace SST::Prototypes::JFM
 			{
 				if (!record.result) return BundleError("Monte Carlo snapshot is missing.","Retain a valid immutable result before saving.");
 				const double noisePercent = mcStateById.contains(record.characteristic) ? mcStateById[record.characteristic].noisePercent : 0.0;
-				auto saved = SaveMonteCarloTsv(root / Path(McParameterRelativePath(record.characteristic)), root / Path(McNoiseRelativePath(record.characteristic)), *record.result, noisePercent);
+				auto saved = SaveJFMMonteCarloHdf5(root / Path("mc/" + SanitizedId(record.characteristic) + "/samples.h5"), *record.result);
 				if (!saved)
 					return saved.Error();
 			}

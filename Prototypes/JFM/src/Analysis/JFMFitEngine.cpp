@@ -554,6 +554,54 @@ namespace SST::Prototypes::JFM
         const auto retainedCurves=settings.saveSamples ? std::min(static_cast<std::size_t>(savedLimit),noisyBudget/sizeof(double)/output.result.voltage.size()) : 0;
         output.result.noisyCurrent.reserve(retainedCurves*output.result.voltage.size());
 
+        output.result.samples.resize(settings.monteCarloSamples);
+        output.result.noisyCurrent.resize(retainedCurves*output.result.voltage.size());
+        const auto runRange = [&](int begin, int end) {
+		FitData noisyData;
+		noisyData.voltage = output.result.voltage;
+		noisyData.sigma = output.result.currentSigma;
+        noisyData.objective = source.objective;
+		noisyData.current.resize(output.result.idealCurrent.size());
+		for (int run = begin; run < end; ++run)
+		{
+            if (context) context->ThrowIfCancellationRequested();
+			for (std::size_t point = 0; point < output.result.idealCurrent.size(); ++point)
+			{
+				const double noiseAmplitude = source.objective.objective == JfmObjective::LogLegacy ? output.result.idealCurrent[point]*factor : output.result.currentSigma[point];
+				noisyData.current[point] = output.result.idealCurrent[point] + lm::normal(settings.monteCarloSeed + static_cast<uint64_t>(run)*0xD1B54A32D192ED03ULL, static_cast<int>(point)) * noiseAmplitude;
+				if (static_cast<std::size_t>(run)<retainedCurves) output.result.noisyCurrent[static_cast<std::size_t>(run)*output.result.voltage.size()+point] = noisyData.current[point];
+			}
+			ParameterArray start = prefitValues;
+            const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations, settings.monteCarloSeed, run, settings.monteCarloStartPerturbationPercent);
+			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.result.voltage, output.result.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent, noisyData);
+			JFMMonteCarloSample sample;
+			for (std::string_view name : model->parameters)
+				sample.parameters.push_back(solved.parameters[IndexOf(name)]);
+			sample.chiSquared = finalChiSquared;
+			sample.reducedChiSquared = source.objective.objective == JfmObjective::LogLegacy ? finalChiSquared : finalChiSquared / std::max(1, output.result.freeParameterCount);
+			sample.iterations = solved.result.iterations;
+            sample.converged = sample.accepted = std::isfinite(finalChiSquared) && std::isfinite(solved.result.chi2_min);
+            sample.solverConverged = sample.accepted && solved.result.converged;
+            sample.flatDirections = solved.outcome.flat;
+            sample.fitMethod = settings.fitMethod == "nm" ? "NM" : solved.outcome.fallback ? "LM→NM" : "LM";
+            sample.lmStatus = solved.outcome.lm_status;
+            sample.objectiveChiSquared = solved.result.chi2_min;
+            const auto branches = ObjectiveSummary(noisyData, characteristic);
+            sample.linearPoints = branches.linearPoints; sample.logPoints = branches.logPoints;
+            sample.stopReason = !sample.accepted ? "non_finite" : solved.result.stop_reason;
+            output.result.samples[run] = std::move(sample);
+		}
+        };
+        const auto workStarted=std::chrono::steady_clock::now();
+        const auto finishSamples=[&] {
+            output.state.acceptedCount=0; output.state.convergedCount=0;
+            for (const auto& sample:output.result.samples) {
+                output.state.convergedCount+=sample.solverConverged ? 1 : 0;
+                output.state.acceptedCount+=sample.accepted ? 1 : 0;
+            }
+            output.state.status="completed";
+            attachCurvesToResult();
+        };
 		std::string gpuMessage;
 		if (settings.preferGpu && JFMGpuAvailable(&gpuMessage))
 		{
@@ -600,27 +648,16 @@ namespace SST::Prototypes::JFM
                 if(calibrated)request.nm_config.max_iter=std::max(1,maxIterations+settings.simplexCalibrationExtraIterations);
             }
 
-            // Seed offsets preserve the original global sample index at every chunk size.
-            output.result.samples.reserve(settings.monteCarloSamples);
-            for (int offset=0;!gpuFailed && offset<settings.monteCarloSamples;offset+=request.n_samples) {
-            if (context) context->ThrowIfCancellationRequested();
-            request.n_samples=std::min(chunkSize,settings.monteCarloSamples-offset);
-            request.noisy_samples=static_cast<int>(std::min(static_cast<std::size_t>(request.n_samples),
-                retainedCurves > static_cast<std::size_t>(offset) ? retainedCurves-offset : 0));
-            request.noise_seed=static_cast<std::uint64_t>(settings.monteCarloSeed)+static_cast<std::uint64_t>(offset)*0xD1B54A32D192ED03ULL;
-            GpuMonteCarloOutput gpu = gpuRunMonteCarlo(request);
-            if (context) context->ThrowIfCancellationRequested();
-			if (!gpu.success)
-				{ output.state.warnings.push_back(gpu.message + "; CPU fallback used."); gpuFailed=true; break; }
-			else
-			{
-				output.state.backend = "cuda";
-				output.state.totalMilliseconds += gpu.total_ms;
-				const auto keep=std::min(gpu.noisy_current.size(),retainedCurves*output.result.voltage.size()-output.result.noisyCurrent.size());
-                output.result.noisyCurrent.insert(output.result.noisyCurrent.end(),gpu.noisy_current.begin(),gpu.noisy_current.begin()+keep);
-				for (const GpuMcResult &gpuSample : gpu.results)
+            const auto writeGpu=[&](int offset,const GpuMonteCarloOutput& gpu) {
+                if (gpu.results.size()!=static_cast<std::size_t>(request.n_samples))
+                    throw std::runtime_error("CUDA returned an incomplete MC chunk.");
+                const auto keep=std::min(gpu.noisy_current.size(),
+                    retainedCurves>static_cast<std::size_t>(offset) ? (retainedCurves-offset)*output.result.voltage.size() : 0);
+                if (keep) std::copy_n(gpu.noisy_current.begin(),keep,output.result.noisyCurrent.begin()+offset*output.result.voltage.size());
+				for (std::size_t local=0;local<gpu.results.size();++local)
 				{
-					JFMMonteCarloSample sample;
+					const auto& gpuSample=gpu.results[local];
+                    JFMMonteCarloSample sample; sample.usedGpu=true;
 					int freeIndex = 0;
 					for (std::string_view name : model->parameters)
 					{
@@ -638,18 +675,91 @@ namespace SST::Prototypes::JFM
                     sample.objectiveChiSquared = gpuSample.objective_chi2;
                     sample.linearPoints = gpuSample.linear_points; sample.logPoints = gpuSample.log_points;
                     sample.stopReason = !sample.accepted ? "non_finite" : lm::stopReason(gpuSample.stop_status, sample.flatDirections);
-                    output.state.convergedCount += sample.solverConverged ? 1 : 0;
-					output.state.acceptedCount += sample.converged ? 1 : 0;
-					output.result.samples.push_back(std::move(sample));
+                    output.result.samples[offset+local]=std::move(sample);
 				}
-                if (context) context->SetProgress(static_cast<float>(calibrationSamples) + static_cast<float>(offset+request.n_samples), totalWork);
+            };
+            if (!gpuFailed && settings.useCpuWithGpu && context && context->GetWorkerCount()>1 && settings.monteCarloSamples>1) {
+                // Size the throughput probe for device occupancy, keeping work for the CPU.
+                const int pilot=std::min({128*std::max(1,gpuQueryDevice().multiprocessors),chunkSize,std::max(1,settings.monteCarloSamples/4)});
+                std::atomic_int next{pilot}, cpuDone{0}, gpuDone{0};
+                const auto splitStarted=std::chrono::steady_clock::now();
+                std::string failure;
+                const auto claim=[&](int count) {
+                    int begin=next.load();
+                    while (begin<settings.monteCarloSamples && !next.compare_exchange_weak(begin,std::min(settings.monteCarloSamples,begin+count))) {}
+                    return begin;
+                };
+                const auto work=[&](std::size_t worker) {
+                    if (worker==0) {
+                        int begin=0, count=pilot;
+                        double rate=0;
+                        while (begin<settings.monteCarloSamples) {
+                            context->ThrowIfCancellationRequested();
+                            request.n_samples=count; request.noisy_samples=static_cast<int>(std::min<std::size_t>(count,
+                                retainedCurves>static_cast<std::size_t>(begin) ? retainedCurves-begin : 0));
+                            request.noise_seed=static_cast<std::uint64_t>(settings.monteCarloSeed)+static_cast<std::uint64_t>(begin)*0xD1B54A32D192ED03ULL;
+                            const auto started=std::chrono::steady_clock::now();
+                            auto gpu=gpuRunMonteCarlo(request);
+                            context->ThrowIfCancellationRequested();
+                            if (gpu.success) { writeGpu(begin,gpu); gpuDone+=count; }
+                            else { failure=gpu.message; runRange(begin,begin+count); cpuDone+=count; break; }
+                            const auto seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-started).count();
+                            rate=count/std::max(seconds,1e-6);
+                            const auto elapsed=std::chrono::duration<double>(std::chrono::steady_clock::now()-splitStarted).count();
+                            const double cpuRate=cpuDone.load()/std::max(elapsed,1e-6);
+                            const auto remaining=std::max(0,settings.monteCarloSamples-next.load());
+                            const auto balanced=static_cast<int>(remaining*rate/std::max(1.,rate+cpuRate));
+                            if (balanced<std::max(1,pilot/2)) break;
+                            // Keep the device populated; cap the last claim by measured relative throughput.
+                            count=std::min({chunkSize,balanced,std::max(pilot,static_cast<int>(rate*.2))});
+                            begin=claim(count); count=std::min(count,settings.monteCarloSamples-begin);
+                        }
+                    }
+                    const int begin=claim(8);
+                    if (begin<settings.monteCarloSamples) {
+                        const auto end=std::min(settings.monteCarloSamples,begin+8);
+                        runRange(begin,end); cpuDone+=end-begin;
+                    }
+                };
+                JobContext workersContext(
+                    [&](float,float) { context->SetProgress(float(calibrationSamples+cpuDone.load()+gpuDone.load()),totalWork); },
+                    {}, {}, {}, [&] { return context->IsCancellationRequested(); },
+                    [&](const Ref<IJob>& job,JobPriority priority) { return context->SubmitJob(job,priority); },
+                    [&](JobId id) { return context->WaitForJob(id); },context->GetWorkerCount(),context->GetStopToken());
+                (void)ParallelFor(workersContext,1+(settings.monteCarloSamples+7)/8,work);
+                context->ThrowIfCancellationRequested();
+                if (!failure.empty()) output.state.warnings.push_back(failure+"; failed CUDA range retried on CPU.");
+                output.state.backend=gpuDone>0 ? "cpu+cuda" : "cpu";
+                output.state.totalMilliseconds=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-workStarted).count();
+                context->LogInfo("MC split CPU="+std::to_string(cpuDone.load())+" CUDA="+std::to_string(gpuDone.load()));
+                finishSamples(); return output;
             }
+
+            // Seed offsets preserve the original global sample index at every chunk size.
+
+            for (int offset=0;!gpuFailed && offset<settings.monteCarloSamples;offset+=request.n_samples) {
+            if (context) context->ThrowIfCancellationRequested();
+            request.n_samples=std::min(chunkSize,settings.monteCarloSamples-offset);
+            request.noisy_samples=static_cast<int>(std::min(static_cast<std::size_t>(request.n_samples),
+                retainedCurves > static_cast<std::size_t>(offset) ? retainedCurves-offset : 0));
+            request.noise_seed=static_cast<std::uint64_t>(settings.monteCarloSeed)+static_cast<std::uint64_t>(offset)*0xD1B54A32D192ED03ULL;
+            GpuMonteCarloOutput gpu = gpuRunMonteCarlo(request);
+            if (context) context->ThrowIfCancellationRequested();
+			if (!gpu.success)
+				{ output.state.warnings.push_back(gpu.message + "; CPU fallback used."); gpuFailed=true; break; }
+			else
+			{
+				output.state.backend = "cuda";
+				output.state.totalMilliseconds += gpu.total_ms;
+                writeGpu(offset,gpu);
+            }
+                if (context) context->SetProgress(static_cast<float>(calibrationSamples) + static_cast<float>(offset+request.n_samples), totalWork);
             }
             if (!gpuFailed) {
                 if (context) context->ThrowIfCancellationRequested();
-                output.state.status="completed"; attachCurvesToResult(); return output;
+                finishSamples(); return output;
             }
-            output.result.samples.clear(); output.result.noisyCurrent.clear();
+            output.result.samples.assign(settings.monteCarloSamples,{}); output.result.noisyCurrent.assign(retainedCurves*output.result.voltage.size(),0.);
             output.state.acceptedCount=0; output.state.convergedCount=0;
 		}
 		else if (settings.preferGpu && !gpuMessage.empty())
@@ -657,61 +767,16 @@ namespace SST::Prototypes::JFM
 			output.state.warnings.push_back(gpuMessage + "; CPU fallback used.");
 		}
 
-		output.state.backend = "cpu";
-		const auto started = std::chrono::steady_clock::now();
-		
-
-		output.result.samples.resize(settings.monteCarloSamples);
-        output.result.noisyCurrent.resize(retainedCurves*output.result.voltage.size());
-        constexpr std::size_t chunkSize = 8;
-        const auto chunks = (static_cast<std::size_t>(settings.monteCarloSamples) + chunkSize - 1) / chunkSize;
-        const auto runChunk = [&](std::size_t chunk) {
-		FitData noisyData;
-		noisyData.voltage = output.result.voltage;
-		noisyData.sigma = output.result.currentSigma;
-        noisyData.objective = source.objective;
-		noisyData.current.resize(output.result.idealCurrent.size());
-		for (int run = static_cast<int>(chunk*chunkSize); run < std::min(settings.monteCarloSamples, static_cast<int>((chunk+1)*chunkSize)); ++run)
-		{
-            if (context) context->ThrowIfCancellationRequested();
-			for (std::size_t point = 0; point < output.result.idealCurrent.size(); ++point)
-			{
-				const double noiseAmplitude = source.objective.objective == JfmObjective::LogLegacy ? output.result.idealCurrent[point]*factor : output.result.currentSigma[point];
-				noisyData.current[point] = output.result.idealCurrent[point] + lm::normal(settings.monteCarloSeed + static_cast<uint64_t>(run)*0xD1B54A32D192ED03ULL, static_cast<int>(point)) * noiseAmplitude;
-				if (static_cast<std::size_t>(run)<retainedCurves) output.result.noisyCurrent[static_cast<std::size_t>(run)*output.result.voltage.size()+point] = noisyData.current[point];
-			}
-			ParameterArray start = prefitValues;
-            const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations, settings.monteCarloSeed, run, settings.monteCarloStartPerturbationPercent);
-			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.result.voltage, output.result.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent, noisyData);
-			JFMMonteCarloSample sample;
-			for (std::string_view name : model->parameters)
-				sample.parameters.push_back(solved.parameters[IndexOf(name)]);
-			sample.chiSquared = finalChiSquared;
-			sample.reducedChiSquared = source.objective.objective == JfmObjective::LogLegacy ? finalChiSquared : finalChiSquared / std::max(1, output.result.freeParameterCount);
-			sample.iterations = solved.result.iterations;
-            sample.converged = sample.accepted = std::isfinite(finalChiSquared) && std::isfinite(solved.result.chi2_min);
-            sample.solverConverged = sample.accepted && solved.result.converged;
-            sample.flatDirections = solved.outcome.flat;
-            sample.fitMethod = settings.fitMethod == "nm" ? "NM" : solved.outcome.fallback ? "LM→NM" : "LM";
-            sample.lmStatus = solved.outcome.lm_status;
-            sample.objectiveChiSquared = solved.result.chi2_min;
-            const auto branches = ObjectiveSummary(noisyData, characteristic);
-            sample.linearPoints = branches.linearPoints; sample.logPoints = branches.logPoints;
-            sample.stopReason = !sample.accepted ? "non_finite" : solved.result.stop_reason;
-            output.result.samples[run] = std::move(sample);
-		}
-        };
+        output.state.backend="cpu";
+        constexpr int chunkSize=8;
+        const auto chunks=(settings.monteCarloSamples+chunkSize-1)/chunkSize;
+        const auto runChunk=[&](std::size_t chunk) { runRange(static_cast<int>(chunk)*chunkSize,std::min(settings.monteCarloSamples,static_cast<int>(chunk+1)*chunkSize)); };
         if (context) {
-            (void)ParallelFor(*context, chunks, runChunk);
+            (void)ParallelFor(*context,chunks,runChunk);
             context->ThrowIfCancellationRequested();
-        } else for (std::size_t chunk = 0; chunk < chunks; ++chunk) runChunk(chunk);
-        for (const auto& sample : output.result.samples) {
-            output.state.convergedCount += sample.solverConverged ? 1 : 0;
-            output.state.acceptedCount += sample.converged ? 1 : 0;
-        }
-		output.state.totalMilliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started).count();
-		output.state.status = "completed";
-		attachCurvesToResult();
+        } else for (int chunk=0;chunk<chunks;++chunk) runChunk(chunk);
+        output.state.totalMilliseconds=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-workStarted).count();
+        finishSamples();
 		return output;
 	}
 } // namespace SST::Prototypes::JFM

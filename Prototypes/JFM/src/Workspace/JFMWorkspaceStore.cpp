@@ -1512,6 +1512,20 @@ namespace SST::Prototypes::JFM
 		return true;
 	}
 
+    bool JFMWorkspaceStore::FinishMonteCarloSave(JFMCharacteristicRef ref, std::uint64_t generation, Path path, std::string status, std::string error) {
+        std::scoped_lock lock(m_Mutex);
+        auto document=findDocumentLocked(ref.project);
+        if (!document || document->get().monteCarloGenerations[ref.characteristic]!=generation) return false;
+        auto info=findInfoLocked(document->get(),ref.characteristic);
+        if (!info || !info->get().monteCarlo) return false;
+        auto& state=*info->get().monteCarlo;
+        state.sampleSaveStatus=std::move(status); state.sampleSaveError=std::move(error);
+        if (state.sampleSaveStatus=="saved") state.outputPath=std::move(path);
+        document->get().status="MC samples " + state.sampleSaveStatus + (state.sampleSaveError.empty() ? "" : ": " + state.sampleSaveError);
+        bumpRevisionLocked(document->get());
+        return true;
+    }
+
 	bool JFMWorkspaceStore::ClearMonteCarloResults(ProjectHandle handle, const std::vector<CharacteristicId> &ids)
 	{
 		std::scoped_lock lock(m_Mutex);
