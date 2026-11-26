@@ -1,5 +1,6 @@
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "PlotLabDocument.hpp"
+#include "Core/IO/TextFileIO.hpp"
 #include "WorksheetPython.hpp"
 #include <sst/plotlab/edges/CommandJson.hpp>
 #include "Core/JobSystem/JobContext.hpp"
@@ -14,7 +15,7 @@
 
 using namespace SST;
 using namespace SST::Prototypes::PlotLab;
-static PythonInterpreter& TestPython() { static PythonInterpreter interpreter; return interpreter; }
+PythonInterpreter& TestPython() { static PythonInterpreter interpreter; return interpreter; }
 class PlotLabApp : public testing::Test
 {
   protected:
@@ -166,6 +167,10 @@ TEST_F(PlotLabApp, FileRoundtripAndFailedOpenPreserveDocument)
     EXPECT_ANY_THROW(doc.Open(broken));
     EXPECT_EQ(doc.project->id(), projectId);
     EXPECT_EQ(doc.path, file);
+    doc.Rename(y,"Unsaved edit");
+    EXPECT_ANY_THROW(doc.Save(broken));
+    EXPECT_TRUE(doc.Dirty());EXPECT_EQ(doc.path,file);
+    std::string preserved,error;ASSERT_TRUE(TextFileIO::Load(Path(broken),preserved,error));EXPECT_EQ(preserved,"broken");
     std::filesystem::remove(file);
     std::filesystem::remove(broken);
 }
@@ -297,7 +302,6 @@ TEST(PlotLabFonts, CoreDefaultUsesSystemSegoe)
 
 
 
-#include "Core/IO/TextFileIO.hpp"
 TEST_F(PlotLabApp, UnicodePathCsvAndProjectRoundtrip)
 {
     const auto name = std::filesystem::u8path(u8"Za\u017c\u00f3\u0142\u0107_\u65e5\u672c_\U0001f600");

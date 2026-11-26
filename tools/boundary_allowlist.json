@@ -4233,8 +4233,8 @@
       "line": 46,
       "code": "nb::gil_scoped_acquire gil;",
       "sha256": "feedf923911cc3f7a3cf74760880942d7a14e0a0c9c8fb05dd36a0ca03ea90c5",
-      "count": 2,
-      "reason": "Export-to-disk/Python plotting adapter."
+      "count": 3,
+      "reason": "Python publication/file edge: acquire the GIL to pass the typed graph snapshot to the existing Python exporter."
     },
     {
       "file": "Prototypes/PlotLab/src/PlotLabExport.cpp",
@@ -4674,8 +4674,8 @@
       "line": 50,
       "code": "std::optional<nanobind::gil_scoped_release> release;",
       "sha256": "8fd9a2458d6e60583e89bb3a9161874cab530b07b7ffbc5461931728b625f1db",
-      "count": 2,
-      "reason": "Python protocol/before-formula binding edge; native Document, jobs and Engine exchange typed commands/results."
+      "count": 3,
+      "reason": "Python runtime synchronization only: release the GIL while typed Core work waits/stops. No serialization or transport."
     },
     {
       "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
@@ -5538,17 +5538,8 @@
       "line": 10,
       "code": "void BindWorksheetRuntime(nanobind::module_&, nanobind::class_<Document>&);",
       "sha256": "afc4ae23913c38bc8bb3a2792d9081d92dcf9af779b6bac7bf853f847ec63003",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetPython.hpp",
-      "rule": "python",
-      "line": 10,
-      "code": "void BindWorksheetRuntime(nanobind::module_&, nanobind::class_<Document>&);",
-      "sha256": "afc4ae23913c38bc8bb3a2792d9081d92dcf9af779b6bac7bf853f847ec63003",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Nanobind edge registration declaration; no data conversion here."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetPython.hpp",
@@ -5619,8 +5610,8 @@
       "line": 198,
       "code": "ImGui::BeginDisabled(pythonRun || !doc.PythonTrusted());",
       "sha256": "b7804d27c53bbddae7da833d2b0d7682c7afb55e53cd378119ddaca5e5b1909e",
-      "count": 1,
-      "reason": "Native typed Python host/UI declaration or history-code formatting: Py-name regex match, no Python C API, no serialization or text transport between C++ modules."
+      "count": 2,
+      "reason": "Lexical false positive: typed PythonTrusted() boolean disables the native UI. No Python object or serialization."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetPythonUi.cpp",
@@ -5628,15 +5619,6 @@
       "line": 200,
       "code": "if(!doc.PythonTrusted() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip(\"Trust this project in Project Explorer to enable Python.\");",
       "sha256": "e932b56705579bd4049d50e1e38949b9133af14e5d7c882160d5650a4939a5ac",
-      "count": 1,
-      "reason": "Native typed Python host/UI declaration or history-code formatting: Py-name regex match, no Python C API, no serialization or text transport between C++ modules."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetPythonUi.cpp",
-      "rule": "python",
-      "line": 212,
-      "code": "ImGui::BeginDisabled(pythonRun || !doc.PythonTrusted());",
-      "sha256": "b7804d27c53bbddae7da833d2b0d7682c7afb55e53cd378119ddaca5e5b1909e",
       "count": 1,
       "reason": "Native typed Python host/UI declaration or history-code formatting: Py-name regex match, no Python C API, no serialization or text transport between C++ modules."
     },
@@ -5709,26 +5691,8 @@
       "line": 52,
       "code": "return nb::cast(nb::ndarray<nb::numpy,const double>(numbers->data(),{numbers->size()},capsule));",
       "sha256": "88ba866841bebacd5c757cb92845b8e0003eb0ab2ef5fa30f212b03803a9c66c",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 52,
-      "code": "return nb::cast(nb::ndarray<nb::numpy,const double>(numbers->data(),{numbers->size()},capsule));",
-      "sha256": "88ba866841bebacd5c757cb92845b8e0003eb0ab2ef5fa30f212b03803a9c66c",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 52,
-      "code": "return nb::cast(nb::ndarray<nb::numpy,const double>(numbers->data(),{numbers->size()},capsule));",
-      "sha256": "88ba866841bebacd5c757cb92845b8e0003eb0ab2ef5fa30f212b03803a9c66c",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5745,8 +5709,8 @@
       "line": 86,
       "code": "if(!PythonInterpreter::IsRuntimeInitialized())throw std::runtime_error(\"Embedded Python is unavailable\");",
       "sha256": "8ffe4e83f8808c7b64618169beb867a2071470841bb05c47c8e7ced1891bdb7f",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5763,26 +5727,8 @@
       "line": 94,
       "code": "result.output=nb::cast<std::string>(runtime.attr(\"execute\")(nb::cast(&worker,nb::rv_policy::reference),request.source,request.worksheet,request.timeoutSeconds,cancelled,request.parameters,request.consoleSession));",
       "sha256": "c797463bf3b0872f75b099a99df05839cae09ccaece155127ca5e3a5461a5057",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 94,
-      "code": "result.output=nb::cast<std::string>(runtime.attr(\"execute\")(nb::cast(&worker,nb::rv_policy::reference),request.source,request.worksheet,request.timeoutSeconds,cancelled,request.parameters,request.consoleSession));",
-      "sha256": "c797463bf3b0872f75b099a99df05839cae09ccaece155127ca5e3a5461a5057",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 94,
-      "code": "result.output=nb::cast<std::string>(runtime.attr(\"execute\")(nb::cast(&worker,nb::rv_policy::reference),request.source,request.worksheet,request.timeoutSeconds,cancelled,request.parameters,request.consoleSession));",
-      "sha256": "c797463bf3b0872f75b099a99df05839cae09ccaece155127ca5e3a5461a5057",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5790,26 +5736,8 @@
       "line": 97,
       "code": "const auto entries=nb::cast<std::vector<std::tuple<std::string,std::string,std::string>>>(runtime.attr(\"complete\")(nb::cast(&view,nb::rv_policy::reference),request.source,request.worksheet,request.consoleSession));",
       "sha256": "69c52a432b1c8ed74adad1e71c1c82a92cc46be68ea4b2bc252eed7011435b72",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 97,
-      "code": "const auto entries=nb::cast<std::vector<std::tuple<std::string,std::string,std::string>>>(runtime.attr(\"complete\")(nb::cast(&view,nb::rv_policy::reference),request.source,request.worksheet,request.consoleSession));",
-      "sha256": "69c52a432b1c8ed74adad1e71c1c82a92cc46be68ea4b2bc252eed7011435b72",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 97,
-      "code": "const auto entries=nb::cast<std::vector<std::tuple<std::string,std::string,std::string>>>(runtime.attr(\"complete\")(nb::cast(&view,nb::rv_policy::reference),request.source,request.worksheet,request.consoleSession));",
-      "sha256": "69c52a432b1c8ed74adad1e71c1c82a92cc46be68ea4b2bc252eed7011435b72",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5835,17 +5763,8 @@
       "line": 118,
       "code": "auto value=error.value();if(nb::hasattr(value,\"lineno\") && !value.attr(\"lineno\").is_none())result.line=nb::cast<int>(value.attr(\"lineno\"));",
       "sha256": "9e9e9b3c2e4e6e35de03c6f45ff2403c9d1e13075eef84d80beeb8e9c156c0a4",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 118,
-      "code": "auto value=error.value();if(nb::hasattr(value,\"lineno\") && !value.attr(\"lineno\").is_none())result.line=nb::cast<int>(value.attr(\"lineno\"));",
-      "sha256": "9e9e9b3c2e4e6e35de03c6f45ff2403c9d1e13075eef84d80beeb8e9c156c0a4",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5853,17 +5772,8 @@
       "line": 119,
       "code": "if(nb::hasattr(value,\"row\"))result.row=nb::cast<int>(value.attr(\"row\"));",
       "sha256": "e0a03be815463112baf5a42ff6af9464e9f92aa704f90fd928eb3ea50db3bc4c",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 119,
-      "code": "if(nb::hasattr(value,\"row\"))result.row=nb::cast<int>(value.attr(\"row\"));",
-      "sha256": "e0a03be815463112baf5a42ff6af9464e9f92aa704f90fd928eb3ea50db3bc4c",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5871,17 +5781,8 @@
       "line": 120,
       "code": "if(nb::hasattr(value,\"line\"))result.line=nb::cast<int>(value.attr(\"line\"));",
       "sha256": "0f3dea1a777f18211fce56205375216d450a4270c84ad4ff6eefe472c0d55f00",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 120,
-      "code": "if(nb::hasattr(value,\"line\"))result.line=nb::cast<int>(value.attr(\"line\"));",
-      "sha256": "0f3dea1a777f18211fce56205375216d450a4270c84ad4ff6eefe472c0d55f00",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5889,17 +5790,8 @@
       "line": 121,
       "code": "if(nb::hasattr(value,\"plotlab_output\"))result.output=nb::cast<std::string>(value.attr(\"plotlab_output\"));",
       "sha256": "29f97e179d190ad3ae9125e2e6b5a8f3d378c6dc4eebfe696eddd15320513c92",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 121,
-      "code": "if(nb::hasattr(value,\"plotlab_output\"))result.output=nb::cast<std::string>(value.attr(\"plotlab_output\"));",
-      "sha256": "29f97e179d190ad3ae9125e2e6b5a8f3d378c6dc4eebfe696eddd15320513c92",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5907,26 +5799,8 @@
       "line": 123,
       "code": "if(nb::cast<std::string>(tb.attr(\"tb_frame\").attr(\"f_code\").attr(\"co_filename\"))==\"<PlotLab script>\")result.line=nb::cast<int>(tb.attr(\"tb_lineno\"));",
       "sha256": "99c219f5461a0ea3b60424c22670d785eb335a605d17a08292c0f24ff5fd9506",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 123,
-      "code": "if(nb::cast<std::string>(tb.attr(\"tb_frame\").attr(\"f_code\").attr(\"co_filename\"))==\"<PlotLab script>\")result.line=nb::cast<int>(tb.attr(\"tb_lineno\"));",
-      "sha256": "99c219f5461a0ea3b60424c22670d785eb335a605d17a08292c0f24ff5fd9506",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 156,
-      "code": "if(!PythonInterpreter::IsRuntimeInitialized())throw std::runtime_error(\"Embedded Python is unavailable\");",
-      "sha256": "8ffe4e83f8808c7b64618169beb867a2071470841bb05c47c8e7ced1891bdb7f",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5940,29 +5814,11 @@
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
       "rule": "python",
-      "line": 198,
+      "line": 423,
       "code": "std::optional<nb::gil_scoped_release> release;if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();",
       "sha256": "2af619f4a85ec4cde327a2b81909abe87d5126248b7979322b2b5755ad57e61b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 198,
-      "code": "std::optional<nb::gil_scoped_release> release;if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();",
-      "sha256": "2af619f4a85ec4cde327a2b81909abe87d5126248b7979322b2b5755ad57e61b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 198,
-      "code": "std::optional<nb::gil_scoped_release> release;if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();",
-      "sha256": "2af619f4a85ec4cde327a2b81909abe87d5126248b7979322b2b5755ad57e61b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 9,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -5970,26 +5826,8 @@
       "line": 258,
       "code": "bool TrustedFile(const std::filesystem::path& path) {if(!PythonInterpreter::IsRuntimeInitialized())return false;nb::gil_scoped_acquire gil;return nb::cast<bool>(Runtime().attr(\"is_trusted\")(PathString(path)));}",
       "sha256": "60e65dbeb0c10e5c6cf0a42e952f5c39e49f70962b9161de168297e208b7f861",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 258,
-      "code": "bool TrustedFile(const std::filesystem::path& path) {if(!PythonInterpreter::IsRuntimeInitialized())return false;nb::gil_scoped_acquire gil;return nb::cast<bool>(Runtime().attr(\"is_trusted\")(PathString(path)));}",
-      "sha256": "60e65dbeb0c10e5c6cf0a42e952f5c39e49f70962b9161de168297e208b7f861",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 258,
-      "code": "bool TrustedFile(const std::filesystem::path& path) {if(!PythonInterpreter::IsRuntimeInitialized())return false;nb::gil_scoped_acquire gil;return nb::cast<bool>(Runtime().attr(\"is_trusted\")(PathString(path)));}",
-      "sha256": "60e65dbeb0c10e5c6cf0a42e952f5c39e49f70962b9161de168297e208b7f861",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -6006,17 +5844,8 @@
       "line": 260,
       "code": "void BindWorksheetRuntime(nb::module_& module,nb::class_<Document>& cls) {",
       "sha256": "f129fd75bca67ad60375c329f4139487594f4e5c8dbb0dfb64771ffdaf5e3cf1",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 260,
-      "code": "void BindWorksheetRuntime(nb::module_& module,nb::class_<Document>& cls) {",
-      "sha256": "f129fd75bca67ad60375c329f4139487594f4e5c8dbb0dfb64771ffdaf5e3cf1",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -6051,26 +5880,8 @@
       "line": 273,
       "code": "return nb::cast(nb::ndarray<nb::numpy,const double>(values->data(),{values->size()},owner));",
       "sha256": "8307ceb679872787bd2ca8a53ed8f482cde696048338cfeeb4feeacbe36c60b6",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 273,
-      "code": "return nb::cast(nb::ndarray<nb::numpy,const double>(values->data(),{values->size()},owner));",
-      "sha256": "8307ceb679872787bd2ca8a53ed8f482cde696048338cfeeb4feeacbe36c60b6",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 273,
-      "code": "return nb::cast(nb::ndarray<nb::numpy,const double>(values->data(),{values->size()},owner));",
-      "sha256": "8307ceb679872787bd2ca8a53ed8f482cde696048338cfeeb4feeacbe36c60b6",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -6123,26 +5934,8 @@
       "line": 317,
       "code": ".def(\"save_script\",&Document::SaveScript,nb::arg(\"name\"),nb::arg(\"source\"),nb::arg(\"id\")=0)",
       "sha256": "b8a4fdce23582725a3d43094f5293d0b64765d67af35b1a199ed3799cf20f49d",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 317,
-      "code": ".def(\"save_script\",&Document::SaveScript,nb::arg(\"name\"),nb::arg(\"source\"),nb::arg(\"id\")=0)",
-      "sha256": "b8a4fdce23582725a3d43094f5293d0b64765d67af35b1a199ed3799cf20f49d",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 317,
-      "code": ".def(\"save_script\",&Document::SaveScript,nb::arg(\"name\"),nb::arg(\"source\"),nb::arg(\"id\")=0)",
-      "sha256": "b8a4fdce23582725a3d43094f5293d0b64765d67af35b1a199ed3799cf20f49d",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetPythonUi.cpp",
@@ -6159,53 +5952,8 @@
       "line": 66,
       "code": "return nb::cast<FormulaOutput>(runtime.attr(\"formula\")(nb::cast(&view,nb::rv_policy::reference),f.expression,worksheet,rows,f.parameterBindings,cancelled,timeout,limit));",
       "sha256": "c1d0869cedca1f251d6c9bdf59db5f3c5144da0ecb915950ecd3e006a2c12f9b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 66,
-      "code": "return nb::cast<FormulaOutput>(runtime.attr(\"formula\")(nb::cast(&view,nb::rv_policy::reference),f.expression,worksheet,rows,f.parameterBindings,cancelled,timeout,limit));",
-      "sha256": "c1d0869cedca1f251d6c9bdf59db5f3c5144da0ecb915950ecd3e006a2c12f9b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 66,
-      "code": "return nb::cast<FormulaOutput>(runtime.attr(\"formula\")(nb::cast(&view,nb::rv_policy::reference),f.expression,worksheet,rows,f.parameterBindings,cancelled,timeout,limit));",
-      "sha256": "c1d0869cedca1f251d6c9bdf59db5f3c5144da0ecb915950ecd3e006a2c12f9b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 204,
-      "code": "std::optional<nb::gil_scoped_release> release;if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();",
-      "sha256": "2af619f4a85ec4cde327a2b81909abe87d5126248b7979322b2b5755ad57e61b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 204,
-      "code": "std::optional<nb::gil_scoped_release> release;if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();",
-      "sha256": "2af619f4a85ec4cde327a2b81909abe87d5126248b7979322b2b5755ad57e61b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 204,
-      "code": "std::optional<nb::gil_scoped_release> release;if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();",
-      "sha256": "2af619f4a85ec4cde327a2b81909abe87d5126248b7979322b2b5755ad57e61b",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -6213,35 +5961,8 @@
       "line": 314,
       "code": ".def(\"run_python\",[](Document& d,const std::string& source,pl::Id sheet,double timeout,const std::map<std::string,double>& parameters){PythonRequest r;r.source=source;r.worksheet=sheet;r.timeoutSeconds=timeout;r.parameters=parameters;return d.WaitPython(d.SubmitPython(std::move(r)));},nb::arg(\"source\"),nb::arg(\"worksheet_id\"),nb::arg(\"timeout_s\")=5,nb::arg(\"parameters\")=std::map<std::string,double>{})",
       "sha256": "7a8cf5455fe0074b950713d5192c247bc01defca8ec704bd9e97800e48317204",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 314,
-      "code": ".def(\"run_python\",[](Document& d,const std::string& source,pl::Id sheet,double timeout,const std::map<std::string,double>& parameters){PythonRequest r;r.source=source;r.worksheet=sheet;r.timeoutSeconds=timeout;r.parameters=parameters;return d.WaitPython(d.SubmitPython(std::move(r)));},nb::arg(\"source\"),nb::arg(\"worksheet_id\"),nb::arg(\"timeout_s\")=5,nb::arg(\"parameters\")=std::map<std::string,double>{})",
-      "sha256": "7a8cf5455fe0074b950713d5192c247bc01defca8ec704bd9e97800e48317204",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 314,
-      "code": ".def(\"run_python\",[](Document& d,const std::string& source,pl::Id sheet,double timeout,const std::map<std::string,double>& parameters){PythonRequest r;r.source=source;r.worksheet=sheet;r.timeoutSeconds=timeout;r.parameters=parameters;return d.WaitPython(d.SubmitPython(std::move(r)));},nb::arg(\"source\"),nb::arg(\"worksheet_id\"),nb::arg(\"timeout_s\")=5,nb::arg(\"parameters\")=std::map<std::string,double>{})",
-      "sha256": "7a8cf5455fe0074b950713d5192c247bc01defca8ec704bd9e97800e48317204",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 314,
-      "code": ".def(\"run_python\",[](Document& d,const std::string& source,pl::Id sheet,double timeout,const std::map<std::string,double>& parameters){PythonRequest r;r.source=source;r.worksheet=sheet;r.timeoutSeconds=timeout;r.parameters=parameters;return d.WaitPython(d.SubmitPython(std::move(r)));},nb::arg(\"source\"),nb::arg(\"worksheet_id\"),nb::arg(\"timeout_s\")=5,nb::arg(\"parameters\")=std::map<std::string,double>{})",
-      "sha256": "7a8cf5455fe0074b950713d5192c247bc01defca8ec704bd9e97800e48317204",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 4,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -6249,26 +5970,8 @@
       "line": 322,
       "code": ".def(\"complete\",[](Document& d,const std::string& source,pl::Id sheet,bool console){PythonRequest r;r.action=PythonAction::Completion;r.source=source;r.worksheet=sheet;r.consoleSession=console?1:0;auto result=d.WaitPython(d.SubmitPython(std::move(r)));std::vector<std::tuple<std::string,std::string,std::string>> out;for(auto& c:result.completions)out.emplace_back(c.insert,c.signature,c.documentation);return out;},nb::arg(\"source\"),nb::arg(\"worksheet_id\"),nb::arg(\"console\")=false)",
       "sha256": "6fb69cd6944fd6b56fca706645d3db211edaca1acc6de4123726e513fc7b067e",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 322,
-      "code": ".def(\"complete\",[](Document& d,const std::string& source,pl::Id sheet,bool console){PythonRequest r;r.action=PythonAction::Completion;r.source=source;r.worksheet=sheet;r.consoleSession=console?1:0;auto result=d.WaitPython(d.SubmitPython(std::move(r)));std::vector<std::tuple<std::string,std::string,std::string>> out;for(auto& c:result.completions)out.emplace_back(c.insert,c.signature,c.documentation);return out;},nb::arg(\"source\"),nb::arg(\"worksheet_id\"),nb::arg(\"console\")=false)",
-      "sha256": "6fb69cd6944fd6b56fca706645d3db211edaca1acc6de4123726e513fc7b067e",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 322,
-      "code": ".def(\"complete\",[](Document& d,const std::string& source,pl::Id sheet,bool console){PythonRequest r;r.action=PythonAction::Completion;r.source=source;r.worksheet=sheet;r.consoleSession=console?1:0;auto result=d.WaitPython(d.SubmitPython(std::move(r)));std::vector<std::tuple<std::string,std::string,std::string>> out;for(auto& c:result.completions)out.emplace_back(c.insert,c.signature,c.documentation);return out;},nb::arg(\"source\"),nb::arg(\"worksheet_id\"),nb::arg(\"console\")=false)",
-      "sha256": "6fb69cd6944fd6b56fca706645d3db211edaca1acc6de4123726e513fc7b067e",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -6357,17 +6060,8 @@
       "line": 297,
       "code": "if(d.PythonTrusted() && std::get<pl::Column>(d.project->object(id).data).formula){nb::gil_scoped_release release;d.project->recompute().wait();}",
       "sha256": "d9cd9ace6cfebf60880dc3c8e0d0beb5a04ed6776dcdbace1b09bba688900dfb",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 297,
-      "code": "if(d.PythonTrusted() && std::get<pl::Column>(d.project->object(id).data).formula){nb::gil_scoped_release release;d.project->recompute().wait();}",
-      "sha256": "d9cd9ace6cfebf60880dc3c8e0d0beb5a04ed6776dcdbace1b09bba688900dfb",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 2,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
@@ -6375,26 +6069,8 @@
       "line": 219,
       "code": "if(pythonSession && PythonInterpreter::IsRuntimeInitialized()) {nb::gil_scoped_acquire gil;Runtime().attr(\"_consoles\").attr(\"pop\")(pythonSession,nb::none());}",
       "sha256": "4b6960d09ccda8bf6a74a7ecc3cd9cbaf570f004ea2119ec39245b1c328ea1ba",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 219,
-      "code": "if(pythonSession && PythonInterpreter::IsRuntimeInitialized()) {nb::gil_scoped_acquire gil;Runtime().attr(\"_consoles\").attr(\"pop\")(pythonSession,nb::none());}",
-      "sha256": "4b6960d09ccda8bf6a74a7ecc3cd9cbaf570f004ea2119ec39245b1c328ea1ba",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
-      "line": 219,
-      "code": "if(pythonSession && PythonInterpreter::IsRuntimeInitialized()) {nb::gil_scoped_acquire gil;Runtime().attr(\"_consoles\").attr(\"pop\")(pythonSession,nb::none());}",
-      "sha256": "4b6960d09ccda8bf6a74a7ecc3cd9cbaf570f004ea2119ec39245b1c328ea1ba",
-      "count": 1,
-      "reason": "Python binding/runtime boundary: nanobind converts typed worksheet objects and results directly at the embedded Python edge; C++ command/job transport stays typed."
+      "count": 3,
+      "reason": "Existing nanobind runtime adapter: numeric ndarray lifetime, typed formula/script inputs and outputs, Python error metadata, cancellation/GIL, trust-file edge and public binding registration. No JSON round trip."
     },
     {
       "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
@@ -6555,15 +6231,6 @@
       "line": 117,
       "code": "if(!PythonInterpreter::IsRuntimeInitialized()) throw std::runtime_error(\"Embedded Python is unavailable\");",
       "sha256": "52505f46c0c0888984ec7c06548cafe91a30711d301f676f2a98a468a0ac95f5",
-      "count": 1,
-      "reason": "Image input or graph/data/font output Python/file edge. Numeric objects go directly between typed C++ and Python; no C++ module uses serialized transport."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabExport.cpp",
-      "rule": "python",
-      "line": 118,
-      "code": "nb::gil_scoped_acquire gil;",
-      "sha256": "feedf923911cc3f7a3cf74760880942d7a14e0a0c9c8fb05dd36a0ca03ea90c5",
       "count": 1,
       "reason": "Image input or graph/data/font output Python/file edge. Numeric objects go directly between typed C++ and Python; no C++ module uses serialized transport."
     },
@@ -6798,8 +6465,8 @@
       "line": 62,
       "code": "nb::gil_scoped_acquire gil;",
       "sha256": "feedf923911cc3f7a3cf74760880942d7a14e0a0c9c8fb05dd36a0ca03ea90c5",
-      "count": 1,
-      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
+      "count": 2,
+      "reason": "Nanobind edge: Python model loading/evaluation and translation of Python errors to typed analysis failures."
     },
     {
       "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
@@ -6852,8 +6519,8 @@
       "line": 73,
       "code": "}catch(const nb::python_error& e){throw std::runtime_error(e.what());}",
       "sha256": "e3e6f56d6c56b13803b74b36e760d6c491ef5f28cf7e251752b584ed771423e2",
-      "count": 1,
-      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
+      "count": 2,
+      "reason": "Nanobind edge: Python model loading/evaluation and translation of Python errors to typed analysis failures."
     },
     {
       "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
@@ -7677,15 +7344,6 @@
     {
       "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
       "rule": "python",
-      "line": 423,
-      "code": "std::optional<nb::gil_scoped_release> release;if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();",
-      "sha256": "2af619f4a85ec4cde327a2b81909abe87d5126248b7979322b2b5755ad57e61b",
-      "count": 3,
-      "reason": "Nanobind import/runtime or import-preset file edge: typed arrays, metadata and recipes are converted directly at the Python call boundary."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/WorksheetRuntime.cpp",
-      "rule": "python",
       "line": 497,
       "code": "cls.def_prop_ro(\"import_recipes\",[](Document& d){nb::dict result;for(const auto& [fingerprint,recipe]:d.ImportRecipeHistory())result[nb::str(fingerprint.c_str())]=ImportRecipeDict(*recipe);return result;});",
       "sha256": "62bfe985b63259371ba7608d20a435f69bdc2fd81561ff22bbc88c707967f713",
@@ -7771,15 +7429,6 @@
       "code": "if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();",
       "sha256": "de071d0c1b24d52ed0300e8bddc7318ecdd4a6954c8c75e9b42c2789a19ddc27",
       "count": 2,
-      "reason": "Embedded Python lifetime edge: release the GIL while joining the document-owned Core pool so a cancelled Python callback can finish without deadlock."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",
-      "rule": "python",
-      "line": 624,
-      "code": "std::optional<nanobind::gil_scoped_release> release;",
-      "sha256": "8fd9a2458d6e60583e89bb3a9161874cab530b07b7ffbc5461931728b625f1db",
-      "count": 1,
       "reason": "Embedded Python lifetime edge: release the GIL while joining the document-owned Core pool so a cancelled Python callback can finish without deadlock."
     },
     {
@@ -8001,15 +7650,6 @@
     {
       "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
       "rule": "python",
-      "line": 111,
-      "code": "nb::gil_scoped_acquire gil;",
-      "sha256": "feedf923911cc3f7a3cf74760880942d7a14e0a0c9c8fb05dd36a0ca03ea90c5",
-      "count": 1,
-      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
-      "rule": "python",
       "line": 113,
       "code": "const auto loaded=nb::cast<nb::tuple>(nb::module_::import_(\"sst_plotlab.analysis\").attr(\"_load_model_file\")(Path(path).Utf8()));",
       "sha256": "8a99563e32561afa6288d616d20e68b0c278b1a08491b18f89399d935d27d6d9",
@@ -8032,15 +7672,6 @@
       "code": "auto parameters=Recipe(request).settings.parameters;auto model=UserModel(request,nb::borrow<nb::object>(loaded[1]),doc);",
       "sha256": "52907f88ce5f12c62bd49169dc412c2a4816bc2450f3db40ce636628d52636da",
       "count": 2,
-      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
-    },
-    {
-      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
-      "rule": "python",
-      "line": 120,
-      "code": "}catch(const nb::python_error& e){throw std::runtime_error(e.what());}",
-      "sha256": "e3e6f56d6c56b13803b74b36e760d6c491ef5f28cf7e251752b584ed771423e2",
-      "count": 1,
       "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
     },
     {
@@ -8096,6 +7727,195 @@
       "sha256": "1f1c382faa4cfb98100ea3ace27a141ecf273deb2a5c11a52c3c5ff198f96c51",
       "count": 6,
       "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 25,
+      "code": "std::vector<pl::AnalysisParameter> Parameters(const nb::list& values) {",
+      "sha256": "3169040e1600763ea21de1df0f5d3bcf00e44f49fa287981faa5633b3730d00c",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 27,
+      "code": "for(auto p:values) {auto a=nb::cast<nb::dict>(p);Keys(a,{\"name\",\"units\",\"start_parameter_units\",\"lower_parameter_units\",\"upper_parameter_units\",\"fixed\",\"shared\"});",
+      "sha256": "3a71e52508c61886ad48261b1649d593332dadd57e64a8072871a1d1fb8af86d",
+      "count": 2,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 28,
+      "code": "out.push_back({nb::cast<std::string>(a[\"name\"]),Field<std::string>(a,\"units\",\"\"),Field<double>(a,\"start_parameter_units\",0),Field<double>(a,\"lower_parameter_units\",-1e100),Field<double>(a,\"upper_parameter_units\",1e100),Field<bool>(a,\"fixed\",false),Field<bool>(a,\"shared\",false)});",
+      "sha256": "9cb1d9a0545279efcf5fd95e70491a03b5738e3ca2bfe5d826358e0188bf0a83",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 32,
+      "code": "nb::list ParameterDicts(const std::vector<pl::AnalysisParameter>& values) {",
+      "sha256": "079d3881ef3a3b6476f27ce56e55f7e433995308b688f1dd3276d12123f8baa9",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 33,
+      "code": "nb::list out;for(const auto& p:values){nb::dict a;a[\"name\"]=p.name;a[\"units\"]=p.units;a[\"start_parameter_units\"]=p.start;a[\"lower_parameter_units\"]=p.lower;a[\"upper_parameter_units\"]=p.upper;a[\"fixed\"]=p.fixed;a[\"shared\"]=p.shared;out.append(a);}return out;",
+      "sha256": "75d60bd5b1e7bc8081bac2842bc5f958538824458d1033499b5bd341f8bcedd0",
+      "count": 2,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 40,
+      "code": "if(d.contains(\"global_inputs\"))for(auto item:nb::cast<nb::list>(d[\"global_inputs\"])) {",
+      "sha256": "00ba7c1792368184a44e199af23e539cb9d85dfb19b6f7f16b39abe81aad36ec",
+      "count": 2,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 41,
+      "code": "auto a=nb::cast<nb::dict>(item);Keys(a,{\"id\",\"worksheet_id\",\"x_column_id\",\"y_column_id\",\"sigma_column_id\",\"parameters\"});",
+      "sha256": "4920a5a7c271b51f72304edf39aa279b2a3e756538c944556595929cd6820a09",
+      "count": 2,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 42,
+      "code": "pl::AnalysisDataset input;input.id=nb::cast<std::string>(a[\"id\"]);input.worksheet=nb::cast<pl::Id>(a[\"worksheet_id\"]);input.xColumn=nb::cast<pl::Id>(a[\"x_column_id\"]);input.yColumn=nb::cast<pl::Id>(a[\"y_column_id\"]);input.sigmaColumn=Field<pl::Id>(a,\"sigma_column_id\",0);",
+      "sha256": "734368816c0e213c577611339340469e6db1186492f0beaae3067f3440e54cc7",
+      "count": 4,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 43,
+      "code": "if(a.contains(\"parameters\"))input.parameters=Parameters(nb::cast<nb::list>(a[\"parameters\"]));r.globalInputs.push_back(std::move(input));",
+      "sha256": "c3bd9d4ac69b4e9354715d745f73366e2adbfe51de6b1c48863cda73103a4a7d",
+      "count": 2,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 53,
+      "code": "if(v.contains(\"parameters\"))s.parameters=Parameters(nb::cast<nb::list>(v[\"parameters\"]));",
+      "sha256": "55587e024817ee9e887ad88474c2c78971e4c601418407ba8ea736b96b313105",
+      "count": 2,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 57,
+      "code": "if(v.contains(\"output_from_x_units\") && !v[\"output_from_x_units\"].is_none())s.outputFrom=nb::cast<double>(v[\"output_from_x_units\"]);",
+      "sha256": "83f23c49beffc72b8ca0784035f5bf4224f4b04d58780048de2361c507fc19e6",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 58,
+      "code": "if(v.contains(\"output_to_x_units\") && !v[\"output_to_x_units\"].is_none())s.outputTo=nb::cast<double>(v[\"output_to_x_units\"]);",
+      "sha256": "b95abd2f2a4bdb0dcc2dcd223acf91a484342e0ab27896e0c2481b3521e7e15a",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 60,
+      "code": "if(v.contains(\"peaks\"))for(auto item:nb::cast<nb::list>(v[\"peaks\"])) {",
+      "sha256": "08c61107c7d4dd2a34705df3e10301218946892284b131b56d2883244c90b6a4",
+      "count": 2,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 61,
+      "code": "auto a=nb::cast<nb::dict>(item);Keys(a,{\"id\",\"shape\"});auto shape=nb::cast<std::string>(a[\"shape\"]);",
+      "sha256": "9192c891ba023167d47539f2eef2f16c9328c47b23289205f762a37e23dca43f",
+      "count": 3,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 63,
+      "code": "if(it==std::end(pl::peakShapeIds))throw std::invalid_argument(\"Unknown peak shape\");s.peaks.push_back({nb::cast<std::string>(a[\"id\"]),static_cast<pl::PeakShape>(it-std::begin(pl::peakShapeIds))});",
+      "sha256": "b7f0080381f19f4e50a4ff3b03d58e6ed26c67990945dbb003c882e1a427b86b",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 75,
+      "code": "auto parameters=ParameterDicts(settings.parameters);nb::list anchors;",
+      "sha256": "7cced9e2f435a71ad3a396ae934401bace132ca6a3c59d5be630b7e1b45b3729",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 78,
+      "code": "s[\"output_from_x_units\"]=settings.outputFrom?nb::cast(*settings.outputFrom):nb::none();s[\"output_to_x_units\"]=settings.outputTo?nb::cast(*settings.outputTo):nb::none();s[\"acknowledge_extrapolation\"]=settings.acknowledgeExtrapolation;",
+      "sha256": "10ca9fe7b4f4daa5660ef98cc3d69afc1676cd0108eb6af6c2b7c915ca3569c4",
+      "count": 4,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 79,
+      "code": "nb::list peaks,inputs;for(const auto& peak:settings.peaks){nb::dict a;a[\"id\"]=peak.id;a[\"shape\"]=pl::peakShapeIds[static_cast<unsigned>(peak.shape)];peaks.append(a);}s[\"peaks\"]=peaks;",
+      "sha256": "42393594d1ae19e9a5bbb498f7ec3b1a51a94c02ad21c00d719746a878f550f7",
+      "count": 2,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 80,
+      "code": "for(const auto& input:r.globalInputs){nb::dict a;a[\"id\"]=input.id;a[\"worksheet_id\"]=input.worksheet;a[\"x_column_id\"]=input.xColumn;a[\"y_column_id\"]=input.yColumn;a[\"sigma_column_id\"]=input.sigmaColumn;a[\"parameters\"]=ParameterDicts(input.parameters);inputs.append(a);}d[\"global_inputs\"]=inputs;",
+      "sha256": "18476148b375f2a40f38372f04e5546dc1b3ba07b3ddb2b7fed19301e87b4c06",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 95,
+      "code": "nb::list components;for(const auto& c:r.components)components.append(Numbers(c));v[\"component_y_units\"]=components;",
+      "sha256": "8933b6bf1ec68cf8f2e9e4ad946e50dcb6bedf95393df024f451f9926b081980",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 99,
+      "code": "for(const auto& p:r.parameterDefinitions){nb::dict a;a[\"name\"]=p.name;a[\"units\"]=p.units;a[\"shared\"]=p.shared;definitions.append(a);}v[\"parameters\"]=definitions;",
+      "sha256": "ab882907f69e784106cb022cda344837ed1794ec998957f74a7be6bc98ca2e45",
+      "count": 1,
+      "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
     }
   ],
   "known-debt": [

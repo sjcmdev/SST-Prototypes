@@ -393,7 +393,7 @@ def build_figure(snapshot, dpi=300, _figure=None):
             formatter(FixedFormatter([t["label"] for t in ticks]))
         if not three: axis.grid(config["grid"])
         axis.label.set_fontproperties(font)
-        if snapshot.get("axis_geometry") is None:
+        if three or snapshot.get("axis_geometry") is None:
             for tick in axis.get_ticklabels(minor=False) + axis.get_ticklabels(minor=True):
                 tick.set_fontproperties(font)
     ax.set_xlabel(axis_label(snapshot["x_axis"]), fontproperties=font)

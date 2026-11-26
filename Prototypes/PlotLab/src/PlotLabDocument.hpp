@@ -8,6 +8,7 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Utils/Path.hpp"
 #include "PlotWorkflowState.hpp"
+#include "ProjectFiles.hpp"
 
 namespace SST::Prototypes::PlotLab
 {
@@ -23,6 +24,7 @@ namespace SST::Prototypes::PlotLab
         Path path;
         Ref<pl::Project> project;
         std::optional<pl::Table> table;
+        std::optional<ProjectSidecars> sidecars;
     };
     double ParseNumericCell(const std::string &);
     std::vector<double> ParseNumericList(const std::string&);
@@ -137,7 +139,7 @@ namespace SST::Prototypes::PlotLab
         void PollDataOperation();
         void New();
         void Open(const std::filesystem::path &);
-        void Open(Ref<pl::Project>, const std::filesystem::path &);
+        void Open(Ref<pl::Project>, const std::filesystem::path &, std::optional<ProjectSidecars> = {});
         void Save(const std::filesystem::path &);
         bool Dirty() const
         {

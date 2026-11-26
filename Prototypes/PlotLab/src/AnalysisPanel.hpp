@@ -11,6 +11,9 @@ public:
     void SetRecipe(pl::AnalysisRecipe value) {recipe=std::move(value);exactPending=false;++stateRevision;}
     std::uint64_t StateRevision() const {return stateRevision;}
     void OpenBatch() {batchOpen=true;}
+    void OpenGlobal() {
+        globalMode=true;batchOpen=true;batchChecked=false;
+    }
     const pl::AnalysisRecipe& Recipe() const {return recipe;}
     // Supplied by the trusted runtime adapter, never reconstructed from project source here.
     pl::UserAnalysisModel userModel;
@@ -23,12 +26,13 @@ private:
     std::string message;
     bool exactPending=false;
     std::uint64_t stateRevision=0;
-    bool batchOpen=false,batchCurves=false,batchChecked=false;
+    bool batchOpen=false,batchCurves=false,batchChecked=false,globalMode=false;
     std::uint64_t checkedProjectRevision=0,checkedSettingsRevision=0;
     std::map<pl::Id,std::array<pl::Id,3>> batchInputs;
     std::weak_ptr<const AnalysisJobResult> drawnPreview;
     void Run(bool preview);
-    void DrawPreview();
+    bool DrawPreview();
     void DrawBatch();
+    void DrawGlobal();
 };
 }

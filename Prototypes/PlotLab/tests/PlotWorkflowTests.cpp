@@ -6,8 +6,26 @@
 #include <thread>
 #include <imgui_internal.h>
 #include <implot.h>
+#include <implot_internal.h>
+#include <nlohmann/json.hpp>
 using namespace SST;
 using namespace SST::Prototypes::PlotLab;
+TEST(PlotShouldPersistence, NewSettingsRoundtripAndVersionOneMigration) {
+    const auto file=std::filesystem::temp_directory_path()/"plotshould2-migration.plotlab";
+    WorkflowState state;auto& r=state.recipe;r.id="shared-peaks";r.worksheet=12;r.xColumn=13;r.yColumn=14;
+    auto& s=r.settings;s.operation=pl::ScientificOperation::MultiPeakFit;s.peaks={{"a",pl::PeakShape::Voigt},{"b",pl::PeakShape::SplitGaussian}};s.anchors={{0,1},{10,2}};
+    s.parameters=pl::defaultAnalysisParameters(s,"ns","counts");s.parameters[2].shared=true;
+    s.outputFrom=-2;s.outputTo=15;s.acknowledgeExtrapolation=true;s.targetX={-2,15};r.globalInputs={{"330K",22,23,24,0,s.parameters}};
+    state.acceptedRecipes.emplace(80,std::make_shared<const pl::AnalysisRecipe>(r));SaveWorkflowState(file,state);
+    auto loaded=LoadWorkflowState(file);EXPECT_EQ(loaded.recipe,r);ASSERT_EQ(loaded.acceptedRecipes.size(),1);EXPECT_EQ(*loaded.acceptedRecipes.at(80),r);
+    auto sidecar=file;sidecar+=".analysis.json";nlohmann::json j;{std::ifstream in(sidecar);in>>j;}j["version"]=1;j["accepted_recipes"]=nlohmann::json::array();
+    auto& old=j["recipe"];old.erase("global_inputs");auto& settings=old["settings"];settings["operation"]=0;
+    for(auto key:{"output_from","output_to","acknowledge_extrapolation","peaks"})settings.erase(key);
+    for(auto& p:settings["parameters"])p.erase("shared");{std::ofstream out(sidecar);out<<j;}
+    loaded=LoadWorkflowState(file);EXPECT_TRUE(loaded.recipe.globalInputs.empty());EXPECT_FALSE(loaded.recipe.settings.outputFrom);EXPECT_FALSE(loaded.recipe.settings.outputTo);EXPECT_FALSE(loaded.recipe.settings.acknowledgeExtrapolation);EXPECT_TRUE(loaded.recipe.settings.peaks.empty());
+    for(const auto& p:loaded.recipe.settings.parameters)EXPECT_FALSE(p.shared);EXPECT_EQ(loaded.recipe.settings.operation,pl::ScientificOperation::LinearFit);
+    j["version"]=3;{std::ofstream out(sidecar);out<<j;}EXPECT_THROW(LoadWorkflowState(file),std::invalid_argument);std::filesystem::remove(sidecar);
+}
 
 TEST(PlotWorkflow, SharedCommandsAnalysisMapTemplateAndPersistenceMigration) {
     auto bus=CreateRef<EventBus>();auto jobs=CreateRef<JobSystem>(bus,2);
@@ -83,5 +101,24 @@ TEST(PlotWorkflow, AnalysisPreviewRefitsWhenOutputUnitsChange) {
     r.settings.operation=pl::ScientificOperation::Differentiate;w.panel.SetRecipe(r);w.analysis.Submit(r);ASSERT_EQ(w.analysis.Wait().stage,AnalysisStage::PreviewReady);draw(300);draw();
     EXPECT_EQ(w.analysis.Status().preview->items.front().result->outputUnits,"(A)/(s)");
     ASSERT_TRUE(w.panel.previewView.viewport);EXPECT_GT(w.panel.previewView.viewport->minY,1);EXPECT_LT(w.panel.previewView.viewport->maxY,3);
+    jobs->Shutdown(true);ImPlot::DestroyContext();ImGui::DestroyContext();
+}
+TEST(PlotWorkflow, PeakMarkerDragEditsTypedParametersAndKeepsSourcesAndIds) {
+    ImGui::CreateContext();ImPlot::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1600,1000};io.DeltaTime=.05f;io.BackendFlags|=ImGuiBackendFlags_RendererHasTextures;io.ConfigDebugHighlightIdConflicts=true;
+    auto bus=CreateRef<EventBus>();auto jobs=CreateRef<JobSystem>(bus,1);Document doc(CreateRef<CommandRegistry>(),CreateRef<UndoStack>(),bus,jobs);
+    doc.Execute(pl::importTable(*doc.project,doc.project->root(),"Peak",pl::CsvImporter{}.read("X,Y\n-2,0.1353352832\n-1,0.6065306597\n0,1\n1,0.6065306597\n2,0.1353352832\n")));
+    const auto sheet=doc.project->children(doc.project->children(doc.project->root()).front()).front();const auto c=doc.project->children(sheet);const auto revision=doc.project->revision();
+    auto& w=doc.Workflow();w.panel.open=true;pl::AnalysisRecipe r;r.id="drag";r.worksheet=sheet;r.xColumn=c[0];r.yColumn=c[1];r.autoPreview=false;r.showResiduals=false;
+    r.settings.operation=pl::ScientificOperation::MultiPeakFit;r.settings.peaks={{"p",pl::PeakShape::Gaussian}};r.settings.anchors={{0,0}};
+    r.settings.parameters=pl::defaultAnalysisParameters(r.settings,"","");for(auto& p:r.settings.parameters){p.fixed=true;p.start=p.name=="p_center"?0:1;}
+    w.panel.SetRecipe(r);w.analysis.Submit(r);ASSERT_EQ(w.analysis.Wait().stage,AnalysisStage::PreviewReady);
+    auto frame=[&]{ImGui::NewFrame();ImGui::SetNextWindowPos({20,20},ImGuiCond_Always);w.panel.Draw();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);};
+    for(int i=0;i<3;++i)frame();
+    ImPlotPlot* plot=nullptr;auto* context=ImPlot::GetCurrentContext();
+    for(int i=0;i<context->Plots.GetBufSize();++i){auto* candidate=context->Plots.GetByIndex(i);if(candidate->TitleOffset>=0 && std::string(candidate->GetTitle())=="analysis-preview")plot=candidate;}
+    ASSERT_NE(plot,nullptr);const float x=plot->Axes[ImAxis_X1].PlotToPixels(0),y=plot->Axes[ImAxis_Y1].PlotToPixels(1);
+    io.AddMousePosEvent(x,y);frame();io.AddMouseButtonEvent(0,true);frame();io.AddMousePosEvent(x+30,y+10);frame();io.AddMouseButtonEvent(0,false);frame();
+    const auto& changed=w.panel.Recipe();EXPECT_NE(changed.settings.parameters[1].start,r.settings.parameters[1].start);EXPECT_EQ(changed.settings.peaks,r.settings.peaks);EXPECT_EQ(doc.project->revision(),revision);
+    w.analysis.Submit(changed);EXPECT_EQ(w.analysis.Wait().stage,AnalysisStage::PreviewReady);EXPECT_TRUE(w.analysis.Status().exact);
     jobs->Shutdown(true);ImPlot::DestroyContext();ImGui::DestroyContext();
 }

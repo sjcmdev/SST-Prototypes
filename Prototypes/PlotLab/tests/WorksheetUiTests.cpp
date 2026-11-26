@@ -673,6 +673,7 @@ TEST_F(WorksheetUi, LayerAndErrorPopupsSurviveRenderingInsetChildren) {
     for(const char* popup:{"Layers / inset","Series / errors"})for(int frame=0;frame<3;++frame){
         ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({1300,800});ImGui::Begin("Graph popup test");
         if(frame==0)ImGui::OpenPopup(popup);panel.GraphContents(graph);EXPECT_TRUE(ImGui::IsPopupOpen(popup));
+        if(frame>0){const auto* visible=GImGui->OpenPopupStack.back().Window;ASSERT_NE(visible,nullptr);EXPECT_GE(visible->Size.x,500);EXPECT_LT(visible->Size.y,ImGui::GetIO().DisplaySize.y);}
         ImGui::End();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);
     }
 }

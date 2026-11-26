@@ -183,6 +183,18 @@ def test_spatial_exports_preserve_camera_grid_holes_and_units(spatial, tmp_path,
     fig.clear()
 
 
+def test_three_d_tick_fonts_follow_publication_size_with_native_axis_geometry(spatial):
+    spatial['series'][0]['kind'] = 4
+    spatial['axis_geometry'] = {'strokes': [], 'captions': []}
+    figure = build_figure(spatial)
+    figure.canvas.draw()
+    axes = figure.axes[0]
+    for axis in (axes.xaxis, axes.yaxis, axes.zaxis):
+        assert axis.get_ticklabels()
+        assert all(tick.get_fontsize() == spatial['font_pt'] for tick in axis.get_ticklabels())
+    figure.clear()
+
+
 @pytest.mark.parametrize("invalid", ["nonuniform", "unordered", "z_length", "mask_length", "infinity", "camera", "colors"])
 def test_invalid_spatial_data_does_not_replace_destination(spatial, tmp_path, invalid):
     series=spatial["series"][0]

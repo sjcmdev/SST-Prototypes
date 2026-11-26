@@ -23,23 +23,46 @@ nb::dict Failure(const std::exception& e) {nb::dict d,error;const auto* analysis
 template<class F>nb::dict Respond(F&& f) {try{return Success(f());}catch(const std::exception& e){return Failure(e);}}
 nb::object Number(double value) {return std::isfinite(value)?nb::cast(value):nb::none();}
 nb::list Numbers(const std::vector<double>& values) {nb::list out;for(auto v:values)out.append(Number(v));return out;}
+std::vector<pl::AnalysisParameter> Parameters(const nb::list& values) {
+    std::vector<pl::AnalysisParameter> out;
+    for(auto p:values) {auto a=nb::cast<nb::dict>(p);Keys(a,{"name","units","start_parameter_units","lower_parameter_units","upper_parameter_units","fixed","shared"});
+        out.push_back({nb::cast<std::string>(a["name"]),Field<std::string>(a,"units",""),Field<double>(a,"start_parameter_units",0),Field<double>(a,"lower_parameter_units",-1e100),Field<double>(a,"upper_parameter_units",1e100),Field<bool>(a,"fixed",false),Field<bool>(a,"shared",false)});
+        const auto& d=out.back();if(!std::isfinite(d.start) || !std::isfinite(d.lower) || !std::isfinite(d.upper) || d.lower>d.upper)throw std::invalid_argument("Invalid parameter values/bounds");
+    }return out;
+}
+nb::list ParameterDicts(const std::vector<pl::AnalysisParameter>& values) {
+    nb::list out;for(const auto& p:values){nb::dict a;a["name"]=p.name;a["units"]=p.units;a["start_parameter_units"]=p.start;a["lower_parameter_units"]=p.lower;a["upper_parameter_units"]=p.upper;a["fixed"]=p.fixed;a["shared"]=p.shared;out.append(a);}return out;
+}
 pl::AnalysisRecipe Recipe(const nb::dict& d) {
-    Keys(d,{"id","name","version","worksheet_id","x_column_id","y_column_id","sigma_column_id","exclude_filtered","settings","view","user_model"});
+    Keys(d,{"id","name","version","worksheet_id","x_column_id","y_column_id","sigma_column_id","exclude_filtered","settings","view","user_model","global_inputs"});
     pl::AnalysisRecipe r;r.id=Field<std::string>(d,"id","");r.name=Field<std::string>(d,"name",r.id);r.version=Field<unsigned>(d,"version",1);
     r.worksheet=nb::cast<pl::Id>(d["worksheet_id"]);r.xColumn=nb::cast<pl::Id>(d["x_column_id"]);r.yColumn=nb::cast<pl::Id>(d["y_column_id"]);r.sigmaColumn=Field<pl::Id>(d,"sigma_column_id",0);
     r.excludeFiltered=Field<bool>(d,"exclude_filtered",false);
+    if(d.contains("global_inputs"))for(auto item:nb::cast<nb::list>(d["global_inputs"])) {
+        auto a=nb::cast<nb::dict>(item);Keys(a,{"id","worksheet_id","x_column_id","y_column_id","sigma_column_id","parameters"});
+        pl::AnalysisDataset input;input.id=nb::cast<std::string>(a["id"]);input.worksheet=nb::cast<pl::Id>(a["worksheet_id"]);input.xColumn=nb::cast<pl::Id>(a["x_column_id"]);input.yColumn=nb::cast<pl::Id>(a["y_column_id"]);input.sigmaColumn=Field<pl::Id>(a,"sigma_column_id",0);
+        if(a.contains("parameters"))input.parameters=Parameters(nb::cast<nb::list>(a["parameters"]));r.globalInputs.push_back(std::move(input));
+    }
     if(d.contains("view")){auto v=nb::cast<nb::dict>(d["view"]);Keys(v,{"show_residuals","auto_preview"});r.showResiduals=Field<bool>(v,"show_residuals",true);r.autoPreview=Field<bool>(v,"auto_preview",true);}
     if(!d.contains("settings"))return r;auto v=nb::cast<nb::dict>(d["settings"]);auto& s=r.settings;
-    Keys(v,{"operation","model_version","user_model_id","weights","parameters","x_from_x_units","x_to_x_units","target_x_units","anchors","max_iterations","tolerance","include_curves"});
+    Keys(v,{"operation","model_version","user_model_id","weights","parameters","x_from_x_units","x_to_x_units","target_x_units","anchors","max_iterations","tolerance","include_curves","output_from_x_units","output_to_x_units","acknowledge_extrapolation","peaks"});
     auto op=Field<std::string>(v,"operation","linear");auto it=std::find_if(std::begin(pl::scientificOperationIds),std::end(pl::scientificOperationIds),[&](const char* id){return op==id;});
     if(it==std::end(pl::scientificOperationIds))throw std::invalid_argument("Unknown scientific operation: "+op);s.operation=static_cast<pl::ScientificOperation>(it-std::begin(pl::scientificOperationIds));
     s.modelVersion=Field<unsigned>(v,"model_version",1);s.userModelId=Field<std::string>(v,"user_model_id","");
     const auto weights=Field<std::string>(v,"weights","unweighted");
     if(weights=="absolute_sigma")s.weights=pl::WeightSemantics::AbsoluteSigma;else if(weights=="relative_sigma")s.weights=pl::WeightSemantics::RelativeSigma;else if(weights!="unweighted")throw std::invalid_argument("Unknown weight semantics");
-    if(v.contains("parameters"))for(auto p:nb::cast<nb::list>(v["parameters"])) {auto a=nb::cast<nb::dict>(p);Keys(a,{"name","units","start_parameter_units","lower_parameter_units","upper_parameter_units","fixed"});s.parameters.push_back({nb::cast<std::string>(a["name"]),Field<std::string>(a,"units",""),Field<double>(a,"start_parameter_units",0),Field<double>(a,"lower_parameter_units",-1e100),Field<double>(a,"upper_parameter_units",1e100),Field<bool>(a,"fixed",false)});}
+    if(v.contains("parameters"))s.parameters=Parameters(nb::cast<nb::list>(v["parameters"]));
     if(v.contains("x_from_x_units") && !v["x_from_x_units"].is_none())s.xFrom=nb::cast<double>(v["x_from_x_units"]);
     if(v.contains("x_to_x_units") && !v["x_to_x_units"].is_none())s.xTo=nb::cast<double>(v["x_to_x_units"]);
     s.targetX=Field<std::vector<double>>(v,"target_x_units",{});
+    if(v.contains("output_from_x_units") && !v["output_from_x_units"].is_none())s.outputFrom=nb::cast<double>(v["output_from_x_units"]);
+    if(v.contains("output_to_x_units") && !v["output_to_x_units"].is_none())s.outputTo=nb::cast<double>(v["output_to_x_units"]);
+    s.acknowledgeExtrapolation=Field<bool>(v,"acknowledge_extrapolation",false);
+    if(v.contains("peaks"))for(auto item:nb::cast<nb::list>(v["peaks"])) {
+        auto a=nb::cast<nb::dict>(item);Keys(a,{"id","shape"});auto shape=nb::cast<std::string>(a["shape"]);
+        auto it=std::find_if(std::begin(pl::peakShapeIds),std::end(pl::peakShapeIds),[&](const char* id){return shape==id;});
+        if(it==std::end(pl::peakShapeIds))throw std::invalid_argument("Unknown peak shape");s.peaks.push_back({nb::cast<std::string>(a["id"]),static_cast<pl::PeakShape>(it-std::begin(pl::peakShapeIds))});
+    }
     if(v.contains("anchors"))for(auto a:nb::cast<nb::list>(v["anchors"])) {auto anchor=nb::cast<nb::dict>(a);Keys(anchor,{"x_x_units","y_y_units"});s.anchors.emplace_back(nb::cast<double>(anchor["x_x_units"]),nb::cast<double>(anchor["y_y_units"]));}
     s.maxIterations=Field<int>(v,"max_iterations",4000);s.tolerance=Field<double>(v,"tolerance",1e-8);s.includeCurves=Field<bool>(v,"include_curves",true);
     for(const auto& p:s.parameters)if(!std::isfinite(p.start) || !std::isfinite(p.lower) || !std::isfinite(p.upper) || p.lower>p.upper)throw std::invalid_argument("Expected finite parameter values and ordered bounds");
@@ -50,9 +73,12 @@ nb::dict RecipeDict(const pl::AnalysisRecipe& r) {
     nb::dict d,s,view;d["id"]=r.id;d["name"]=r.name;d["version"]=r.version;d["worksheet_id"]=r.worksheet;d["x_column_id"]=r.xColumn;d["y_column_id"]=r.yColumn;d["sigma_column_id"]=r.sigmaColumn;d["exclude_filtered"]=r.excludeFiltered;
     const auto& settings=r.settings;s["operation"]=pl::scientificOperationIds[static_cast<unsigned>(settings.operation)];s["model_version"]=settings.modelVersion;s["user_model_id"]=settings.userModelId;
     s["weights"]=settings.weights==pl::WeightSemantics::Unweighted?"unweighted":settings.weights==pl::WeightSemantics::AbsoluteSigma?"absolute_sigma":"relative_sigma";
-    nb::list parameters,anchors;for(const auto& p:settings.parameters){nb::dict a;a["name"]=p.name;a["units"]=p.units;a["start_parameter_units"]=p.start;a["lower_parameter_units"]=p.lower;a["upper_parameter_units"]=p.upper;a["fixed"]=p.fixed;parameters.append(a);}
+    auto parameters=ParameterDicts(settings.parameters);nb::list anchors;
     for(const auto& [x,y]:settings.anchors){nb::dict a;a["x_x_units"]=x;a["y_y_units"]=y;anchors.append(a);}s["parameters"]=parameters;s["anchors"]=anchors;
     s["x_from_x_units"]=settings.xFrom?nb::cast(*settings.xFrom):nb::none();s["x_to_x_units"]=settings.xTo?nb::cast(*settings.xTo):nb::none();s["target_x_units"]=nb::cast(settings.targetX);s["max_iterations"]=settings.maxIterations;s["tolerance"]=settings.tolerance;s["include_curves"]=settings.includeCurves;
+    s["output_from_x_units"]=settings.outputFrom?nb::cast(*settings.outputFrom):nb::none();s["output_to_x_units"]=settings.outputTo?nb::cast(*settings.outputTo):nb::none();s["acknowledge_extrapolation"]=settings.acknowledgeExtrapolation;
+    nb::list peaks,inputs;for(const auto& peak:settings.peaks){nb::dict a;a["id"]=peak.id;a["shape"]=pl::peakShapeIds[static_cast<unsigned>(peak.shape)];peaks.append(a);}s["peaks"]=peaks;
+    for(const auto& input:r.globalInputs){nb::dict a;a["id"]=input.id;a["worksheet_id"]=input.worksheet;a["x_column_id"]=input.xColumn;a["y_column_id"]=input.yColumn;a["sigma_column_id"]=input.sigmaColumn;a["parameters"]=ParameterDicts(input.parameters);inputs.append(a);}d["global_inputs"]=inputs;
     view["show_residuals"]=r.showResiduals;view["auto_preview"]=r.autoPreview;d["settings"]=s;d["view"]=view;return d;
 }
 const char* Error(pl::AnalysisError e) {static const char* names[]={"none","invalid_input","units","insufficient_points","rank_deficient","nonconvergence","cancelled","model","trust","stale"};return names[static_cast<int>(e)];}
@@ -61,16 +87,19 @@ nb::dict AnalysisStatusDict(const AnalysisStatus& s,bool includeArrays=true) {
     nb::dict d;d["job_id"]=s.job;d["stage"]=stages[static_cast<int>(s.stage)];d["exact"]=s.exact;d["error"]=Error(s.error);d["message"]=s.message;d["previous_preview"]=s.preview && s.stage!=AnalysisStage::PreviewReady && s.stage!=AnalysisStage::Accepted;nb::list items;
     if(s.preview)for(const auto& item:s.preview->items) {const auto& r=*item.result;nb::dict v;
         v["id"]=item.id;v["recipe_id"]=item.recipeId;v["ok"]=r.ok();v["error"]=Error(r.error);v["message"]=r.message;v["model_id"]=r.modelId;v["model_version"]=r.modelVersion;
+        v["global_fit"]=r.globalFit;
         v["project_id"]=r.project;v["worksheet_id"]=r.worksheet;v["x_column_id"]=r.xColumn;v["y_column_id"]=r.yColumn;v["revision"]=r.revision;v["x_units"]=r.xUnits;v["y_units"]=r.yUnits;v["output_units"]=r.outputUnits;
         v["point_count"]=r.x.size();v["peak_count"]=r.peakX.size();v["arrays_included"]=includeArrays;
         if(includeArrays) {
             v["x_x_units"]=Numbers(r.x);v["fitted_y_units"]=Numbers(r.values);v["observed_y_units"]=Numbers(r.observed);v["residual_y_units"]=Numbers(r.residuals);v["normalized_residual"]=Numbers(r.normalizedResiduals);v["baseline_y_units"]=Numbers(r.baseline);
+            v["observed_x_units"]=Numbers(r.observedX.empty()?r.x:r.observedX);
             v["covariance_parameter_units_squared"]=Numbers(r.covariance);v["row_ids"]=nb::cast(r.rowIds);
             v["peak_x_x_units"]=Numbers(r.peakX);v["peak_y_y_units"]=Numbers(r.peakY);v["peak_height_y_units"]=Numbers(r.peakHeight);v["peak_fwhm_x_units"]=Numbers(r.peakFwhm);v["peak_row_ids"]=nb::cast(r.peakRowIds);
+            nb::list components;for(const auto& c:r.components)components.append(Numbers(c));v["component_y_units"]=components;
         }
         v["parameter_values_parameter_units"]=Numbers(r.parameters);v["standard_errors_parameter_units"]=Numbers(r.standardErrors);nb::list definitions;
         static constexpr const char* estimates[]={"available","fixed","active_bound","rank_deficient","insufficient_degrees_of_freedom","unavailable"};v["error_estimate"]=estimates[static_cast<int>(r.errorEstimate)];
-        for(const auto& p:r.parameterDefinitions){nb::dict a;a["name"]=p.name;a["units"]=p.units;definitions.append(a);}v["parameters"]=definitions;
+        for(const auto& p:r.parameterDefinitions){nb::dict a;a["name"]=p.name;a["units"]=p.units;a["shared"]=p.shared;definitions.append(a);}v["parameters"]=definitions;
         v["used_points"]=r.usedPoints;v["excluded_points"]=r.excludedPoints;v["objective"]=Number(r.objective);v["degrees_of_freedom"]=r.degreesOfFreedom;items.append(v);
     }
     d["items"]=items;d["worksheet_ids"]=nb::cast(s.outputWorksheets);return d;
@@ -81,13 +110,13 @@ pl::UserAnalysisModel UserModel(const nb::dict& d,nb::object callback,Document& 
     if(!doc.PythonTrusted())throw pl::AnalysisException(pl::AnalysisError::Trust,"Trust this project before executing a user model");
     auto v=nb::cast<nb::dict>(d["user_model"]);m.id=nb::cast<std::string>(v["id"]);m.version=nb::cast<unsigned>(v["version"]);m.xUnits=nb::cast<std::string>(v["x_units"]);m.yUnits=nb::cast<std::string>(v["y_units"]);m.parameterNames=nb::cast<std::vector<std::string>>(v["parameter_names"]);
     auto owner=std::shared_ptr<nb::object>(new nb::object(std::move(callback)),[](nb::object* p){nb::gil_scoped_acquire gil;delete p;});
-    auto cached=std::make_shared<std::shared_ptr<const std::vector<double>>>();
-    m.evaluate=[owner,cached](std::span<const double> x,std::span<const double> parameters,std::span<double> output) {
+    m.evaluate=[owner,grids=std::vector<std::shared_ptr<const std::vector<double>>>{}](std::span<const double> x,std::span<const double> parameters,std::span<double> output) mutable {
         nb::gil_scoped_acquire gil;
         try {
-            // The Python function may retain X. Its capsule owns one immutable copy per input grid.
-            if(!*cached || (*cached)->size()!=x.size() || !std::equal(x.begin(),x.end(),(*cached)->begin()))*cached=std::make_shared<const std::vector<double>>(x.begin(),x.end());
-            auto values=*cached;
+            // A job owns its callable copy; retained Python arrays share one immutable copy per input grid.
+            auto found=std::find_if(grids.begin(),grids.end(),[&](const auto& grid){return grid->size()==x.size() && std::equal(x.begin(),x.end(),grid->begin());});
+            auto values=found==grids.end()?std::make_shared<const std::vector<double>>(x.begin(),x.end()):*found;
+            if(found==grids.end())grids.push_back(values);
             auto capsule=nb::capsule(new std::shared_ptr<const std::vector<double>>(values),[](void* p) noexcept{delete static_cast<std::shared_ptr<const std::vector<double>>*>(p);});
             auto xx=nb::cast(nb::ndarray<nb::numpy,const double>(values->data(),{values->size()},capsule));
             auto args=nb::cast(std::vector<double>(parameters.begin(),parameters.end()));

@@ -1,6 +1,7 @@
 #include "PlotLabDocument.hpp"
 #include "WorksheetPython.hpp"
 #include "PlotWorkflow.hpp"
+#include "ProjectFiles.hpp"
 #include <sst/plotlab/edges/CommandJson.hpp>
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -72,7 +73,11 @@ namespace SST::Prototypes::PlotLab
         context.ThrowIfCancellationRequested();
         auto extension = path.Native().extension().string();
         std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return std::tolower(c); });
-        if (extension == ".plotlab") project = CreateRef<pl::Project>(pl::Project::load(path.Native()));
+        if (extension == ".plotlab") {
+            ProjectFilesLock lock(path.Native());
+            project=CreateRef<pl::Project>(pl::Project::load(path.Native()));
+            sidecars=LoadProjectSidecars(path.Native());
+        }
         else if (extension == ".csv" || extension == ".txt" || extension == ".dat") {
             std::string text, error;
             if (!TextFileIO::Load(path, text, error)) throw std::runtime_error(error);
@@ -226,20 +231,20 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Open(const std::filesystem::path &source)
     {
-        auto next = CreateRef<pl::Project>(pl::Project::load(source));
-        Open(std::move(next), source);
+        Open({},source);
     }
-    void Document::Open(Ref<pl::Project> next, const std::filesystem::path &source)
+    void Document::Open(Ref<pl::Project> next, const std::filesystem::path &source, std::optional<ProjectSidecars> sidecars)
     {
-        auto editor=LoadWorkflowState(source);
-        std::map<std::string,pl::ImportRecipe> presets;
-        ImportRecipes recipes;
-        ImportUiState ui;auto presetFile=source;presetFile+=".imports.json";
-        if(!source.empty() && std::filesystem::exists(presetFile))presets=LoadImportPresets(presetFile,&ui,&recipes);
+        std::unique_ptr<ProjectFilesLock> lock;
+        if(!sidecars) {
+            lock=std::make_unique<ProjectFilesLock>(source);
+            if(!next || lock->Recovered())next=CreateRef<pl::Project>(pl::Project::load(source));
+            sidecars=LoadProjectSidecars(source);
+        }
         Replace(std::move(next));
-        workflowState=std::move(editor);
+        workflowState=std::move(sidecars->workflow);
         path = source;
-        importPresets=std::move(presets);importRecipes=std::move(recipes);importUi=std::move(ui);
+        importPresets=std::move(sidecars->presets);importRecipes=std::move(sidecars->recipes);importUi=std::move(sidecars->ui);
         pythonTrusted=!HasPython();
 #if DS_PYTHON_CAPI_AVAILABLE
         if(HasPython() && !source.empty()) {
@@ -267,11 +272,15 @@ namespace SST::Prototypes::PlotLab
         auto root=project->object(project->root());auto& history=std::get<pl::Folder>(root.data).pythonHistory;
         if(history!=pythonHistory){history=pythonHistory;updates.push_back(std::move(root));}
         if(!updates.empty())Execute(project->change("Save Python workspace",std::move(updates)));
-        project->save(destination);
-        SaveWorkflowState(destination,workflowState);
-        workflowDirty=false;
         auto presets=destination;presets+=".imports.json";
-        if(!importPresets.empty() || !importRecipes.empty() || importUi.open || std::filesystem::exists(presets))SaveImportPresets(presets,importPresets,&importUi,&importRecipes);
+        const bool saveImports=!importPresets.empty() || !importRecipes.empty() || importUi.open || std::filesystem::exists(presets);
+        SaveProjectFiles(destination,[&](const auto& staged) {
+            project->stageSave(destination,staged);
+            SaveWorkflowState(staged,workflowState);
+            if(saveImports){auto imports=staged;imports+=".imports.json";SaveImportPresets(imports,importPresets,&importUi,&importRecipes);}
+            return saveImports;
+        });
+        workflowDirty=false;
         importPresetsDirty=false;
         path = destination;
         undo->MarkClean();
