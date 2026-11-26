@@ -516,14 +516,15 @@ namespace SST::Prototypes::JFM
 	struct MonteCarloFailed final : public BusEvent
 	{
 		MonteCarloFailed() = default;
-		MonteCarloFailed(JFMCharacteristicRef failedRef, std::uint64_t failedGeneration, std::string failure)
-			: ref(failedRef), generation(failedGeneration), error(std::move(failure))
+		MonteCarloFailed(JFMCharacteristicRef failedRef, std::uint64_t failedGeneration, std::string failure, bool wasCancelled = false)
+			: ref(failedRef), generation(failedGeneration), error(std::move(failure)), cancelled(wasCancelled)
 		{
 		}
 
 		JFMCharacteristicRef ref;
 		std::uint64_t generation = 0;
 		std::string error;
+		bool cancelled = false;
 	};
 
 	struct ExportRawTsvRequested final : public BusEvent

@@ -478,6 +478,14 @@ namespace SST::Prototypes::JFM
 		return curve;
 	}
 
+	int JFMMonteCarloSampleLimit(std::string_view modelId)
+	{
+		const auto &parameters = JFMModelParameterNames(modelId);
+		// Scatter plots and the Python API consume full parameter samples, capped at 64 MiB.
+		return parameters.empty() ? 0 : static_cast<int>((64 * 1024 * 1024) /
+			(sizeof(JFMMonteCarloSample) + parameters.size() * sizeof(double) + 128));
+	}
+
 	Result<JFMMonteCarloComputation> RunJFMMonteCarlo(
 		const JFMCharacteristicRecord &characteristic,
 		const JFMPrefitState &prefit,
@@ -522,10 +530,9 @@ namespace SST::Prototypes::JFM
             return MakeError("Invalid Monte Carlo sample count or noise percent.");
         // Full parameter samples are consumed by scatter plots and the Python API.
         // Bound them at 64 MiB; counters aggregate during fitting, with no S x N scratch.
-        constexpr std::size_t sampleBudget=64*1024*1024;
-        const auto sampleBytes=sizeof(JFMMonteCarloSample)+model->parameters.size()*sizeof(double)+128;
-        if (static_cast<std::size_t>(settings.monteCarloSamples)>sampleBudget/sampleBytes)
-            return MakeError("Monte Carlo parameter results exceed the 64 MiB memory budget; reduce the sample count.");
+        const int sampleLimit = JFMMonteCarloSampleLimit(fit.modelId);
+        if (settings.monteCarloSamples > sampleLimit)
+            return MakeError("Monte Carlo parameter results exceed the 64 MiB memory budget; reduce the sample count to at most " + std::to_string(sampleLimit) + ".");
         output.state.objective = ObjectiveSummary(source, characteristic);
         output.result.confidenceAvailable = settings.monteCarloNoisePercent > 0.0 || source.objective.sigma_abs > 0;
         output.result.voltage = source.voltage;

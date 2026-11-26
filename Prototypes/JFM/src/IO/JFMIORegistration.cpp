@@ -3,6 +3,7 @@
 #include "IO/JFMIORegistration.hpp"
 
 #include "App/JFMCommands.hpp"
+#include "Analysis/JFMFitEngine.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/Logging/Logger.hpp"
@@ -327,6 +328,19 @@ namespace SST::Prototypes::JFM
 		const JFMFitMonteCarloSettings settings = state->settings != nullptr
 			? state->settings->GetSnapshot().fitMonteCarlo
 			: JFMFitMonteCarloSettings{};
+		for (CharacteristicId id : ids)
+		{
+			const auto prefit = state->store->GetPrefitState({event.project, id});
+			const auto fit = state->store->GetFitState({event.project, id});
+			const int limit = JFMMonteCarloSampleLimit(fit ? fit->modelId : prefit ? prefit->modelId : "SD-RsRsh");
+			if (settings.monteCarloSamples < 1 || settings.monteCarloSamples > limit)
+			{
+				const std::string message = "Monte Carlo not started: sample count must be 1 to " + std::to_string(limit) + " (64 MiB memory budget).";
+				state->store->SetStatusMessage(event.project, message);
+				NotifyFailure(state, NotificationCategory::Import, "Monte Carlo rejected", message);
+				return;
+			}
+		}
 		Path outputRoot = state->settings != nullptr ? state->settings->GetDefaultProjectsDirectory() : Path{};
 		if (outputRoot.Empty())
 			outputRoot = Path{FileSystem::CurrentPath()};
@@ -364,8 +378,8 @@ namespace SST::Prototypes::JFM
 
 	void HandleMonteCarloFailed(const Ref<JFMIOState> &state, const MonteCarloFailed &event)
 	{
-		if (state->store != nullptr && state->store->FailMonteCarlo(event.ref, event.generation, event.error))
-			DS_LOG_WARN("JFM Monte Carlo failed [{}:{}]: {}", event.ref.project, event.ref.characteristic, event.error);
+		if (state->store != nullptr && state->store->FailMonteCarlo(event.ref, event.generation, event.error, event.cancelled))
+			DS_LOG_WARN("JFM Monte Carlo {} [{}:{}]: {}", event.cancelled ? "cancelled" : "failed", event.ref.project, event.ref.characteristic, event.error);
 	}
 
 	void HandlePrefitFailed(const Ref<JFMIOState> &state, const PrefitFailed &event)

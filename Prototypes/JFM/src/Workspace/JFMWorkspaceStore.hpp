@@ -140,7 +140,7 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::uint64_t BeginMonteCarlo(JFMCharacteristicRef ref);
 		[[nodiscard]] bool IsMonteCarloGenerationCurrent(JFMCharacteristicRef ref, std::uint64_t generation) const;
 		bool ApplyMonteCarloResult(JFMCharacteristicRef ref, std::uint64_t generation, JFMMonteCarloState state, Ref<const JFMMonteCarloResult> result);
-		bool FailMonteCarlo(JFMCharacteristicRef ref, std::uint64_t generation, std::string error);
+		bool FailMonteCarlo(JFMCharacteristicRef ref, std::uint64_t generation, std::string error, bool cancelled = false);
 		bool ClearMonteCarloResults(ProjectHandle handle, const std::vector<CharacteristicId> &ids);
 
 		JFMGroupingDefinition AddGrouping(ProjectHandle handle, JFMGroupingDefinition grouping);

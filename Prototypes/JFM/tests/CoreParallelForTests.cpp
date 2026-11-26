@@ -2,6 +2,8 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/ParallelFor.hpp"
 #include "ScientificRuntime/Python/PythonScriptJob.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 
 namespace SST {
 namespace {
@@ -45,6 +47,25 @@ TEST(CorePool, FailureAndCancellationDrainCapturedReferences) {
 }
 TEST(CorePool, SubprocessDoesNotAcquireEmbeddedPythonGuard) {
     PythonScriptJob script("subprocess",Path("unused.py"));EXPECT_FALSE(script.UsesPythonRuntime());
+}
+TEST(CorePool, TerminalStatusAndReadableFailureReachProgressTracker) {
+    for (int outcome=0; outcome<4; ++outcome) {
+        auto bus=CreateRef<EventBus>(); ProgressTracker tracker(bus); JobSystem jobs(bus,1);
+        auto job=CreateRef<PoolJob>([outcome](JobContext& context) {
+            context.SetProgress(1,4);
+            if(outcome==1)throw std::runtime_error("Solver failed");
+            if(outcome==2)throw JobCancelledException("Cancelled by user");
+            if(outcome==3)throw std::invalid_argument("Rejected: memory budget");
+        });
+        const auto id=jobs.Submit(job); (void)PoolWait(jobs,id); jobs.Shutdown(); bus->ProcessQueue();
+        const JobStatus expected=outcome==0?JobStatus::Completed:outcome==2?JobStatus::Cancelled:JobStatus::Failed;
+        const auto status=jobs.GetJob(id); ASSERT_TRUE(status); EXPECT_EQ(status->status,expected);
+        const auto progress=tracker.GetSnapshot(id); ASSERT_TRUE(progress); EXPECT_EQ(progress->status,expected); EXPECT_TRUE(progress->finished);
+        if(outcome==1 || outcome==3) {
+            EXPECT_FALSE(status->errorMessage.empty()); EXPECT_EQ(progress->errorSummary,status->errorMessage);
+            EXPECT_LT(progress->completedWork,progress->totalWork);
+        }
+    }
 }
 } // namespace SST
 

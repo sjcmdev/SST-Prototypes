@@ -1,0 +1,409 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="12" skipped="0" tests="16" time="14.769" timestamp="2026-11-26T06:05:47.386830+01:00" hostname="DESKTOP-URD7D0V"><testcase classname="Prototypes.JFM.python.tests.test_jfm_auto_prefit" name="test_smooth_local_diode_fit_is_valid" time="0.002" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_auto_prefit" name="test_scaps_light_keeps_wide_five_parameter_fit" time="12.034" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_auto_prefit" name="test_scaps_dark_search_continues_past_short_diode_patch[1]" time="0.668" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_auto_prefit" name="test_scaps_dark_search_continues_past_short_diode_patch[10]" time="0.703" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T181_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T181_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T181_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T181_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T191_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T191_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T191_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T191_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T201_L0]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T201_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T201_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T201_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T209_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T209_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T209_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T209_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T217_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T217_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T217_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T217_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T227_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T227_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T227_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T227_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T237_L0]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T237_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T237_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T237_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T247_L0]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T247_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T247_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T247_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T257_L0]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T257_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T257_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T257_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T267_L0]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T267_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T267_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T267_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T277_L0]" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T277_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T277_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T277_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_range_detection_matches_curated_project[ivd_HZB25_T286_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T286_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize("characteristic", _params())
+    def test_range_detection_matches_curated_project(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T286_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T286_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase></testsuite></testsuites>

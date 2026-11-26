@@ -185,17 +185,31 @@ namespace SST::Prototypes::JFM
 	std::string JFMMonteCarloJob::GetName() const { return "Monte Carlo JFM Fits"; }
 	std::string JFMMonteCarloJob::GetType() const { return "jfm.monte_carlo"; }
 
+	JFMMonteCarloJob::~JFMMonteCarloJob()
+	{
+		// Core can cancel before Execute; release that queue and its running workspace state too.
+		if (!m_Executed && m_Queue != nullptr)
+			while (auto items = m_Queue->TakeNext())
+				for (const auto &item : *items)
+					if (m_Store != nullptr)
+						(void)m_Store->FailMonteCarlo(item.ref, item.generation, "Cancelled before Monte Carlo started.", true);
+	}
+
 	void JFMMonteCarloJob::Execute(JobContext &context)
 	{
+		m_Executed = true;
 		context.SetStage("JFM Monte Carlo");
+		std::string firstError;
+		std::optional<std::vector<JFMMonteCarloWorkItem>> items;
+		std::size_t index = 0;
 		try
 		{
 			while (m_Queue != nullptr)
 			{
-				auto items = m_Queue->TakeNext();
+				items = m_Queue->TakeNext();
 				if (!items)
 					break;
-				for (std::size_t index = 0; index < items->size(); ++index)
+				for (index = 0; index < items->size(); ++index)
 				{
 					context.ThrowIfCancellationRequested();
 					const JFMMonteCarloWorkItem &item = (*items)[index];
@@ -221,15 +235,19 @@ namespace SST::Prototypes::JFM
 					auto result = RunJFMMonteCarlo(item.characteristic, item.prefit, item.fit, item.settings, &sampleContext);
                     if (!result || result->state.acceptedCount == 0)
                     {
+						const std::string error = !result ? result.Error().technicalDetails : "No accepted Monte Carlo samples: non-finite objective or model domain.";
+						if (firstError.empty()) firstError = error;
                         if (m_EventBus != nullptr)
-                            m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, !result ? result.Error().technicalDetails : "No accepted Monte Carlo samples: non-finite objective or model domain."});
+                            m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, error});
 						continue;
 					}
 					auto outputPath = PersistMonteCarlo(item, *result);
 					if (!outputPath)
 					{
+						const std::string error = outputPath.Error().userMessage + " " + outputPath.Error().technicalDetails;
+						if (firstError.empty()) firstError = error;
 						if (m_EventBus != nullptr)
-							m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, outputPath.Error().technicalDetails});
+							m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, error});
 						continue;
 					}
 					result->state.outputPath = std::move(*outputPath);
@@ -239,11 +257,29 @@ namespace SST::Prototypes::JFM
 				context.SetProgress(static_cast<float>(items->size()), static_cast<float>(items->size()));
 			}
 		}
+		catch (const std::exception &error)
+		{
+			const bool cancelled = context.IsCancellationRequested();
+			context.SetMessage(error.what());
+			do
+			{
+				if (items && m_EventBus != nullptr)
+					for (; index < items->size(); ++index)
+						m_EventBus->Queue(MonteCarloFailed{(*items)[index].ref, (*items)[index].generation, error.what(), cancelled});
+				index = 0;
+				items = m_Queue != nullptr ? m_Queue->TakeNext() : std::nullopt;
+			} while (items);
+			throw;
+		}
 		catch (...)
 		{
-			if (m_Queue != nullptr)
-				m_Queue->Reset();
+			if (m_Queue != nullptr) m_Queue->Reset();
 			throw;
+		}
+		if (!firstError.empty())
+		{
+			context.SetMessage(firstError);
+			throw std::runtime_error(firstError);
 		}
 	}
 } // namespace SST::Prototypes::JFM
