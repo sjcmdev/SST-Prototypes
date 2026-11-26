@@ -203,6 +203,8 @@ project "JFMTests"
 		jfmSolverRoot .. "/solver/diode_model.hpp",
 		jfmSolverRoot .. "/solver/diode_objective.hpp",
 		jfmSolverRoot .. "/solver/diode_objective.cpp",
+        jfmSolverRoot .. "/solver/cpu_kernel.cpp",
+        jfmSolverRoot .. "/solver/cpu_kernel_avx2.cpp",
         jfmSolverRoot .. "/gpu/gpu_types.hpp",
         jfmSolverRoot .. "/gpu/gpu_backend.hpp",
         jfmSolverRoot .. "/gpu/gpu_backend_stub.cpp",
@@ -301,5 +303,7 @@ for _, target in ipairs { "JFM", "JFMTests" } do
     project(target)
     filter { "system:windows" }
         floatingpoint "Strict"
+    filter { "system:windows", "files:**/cpu_kernel_avx2.cpp" }
+        vectorextensions "AVX2"
     filter {}
 end

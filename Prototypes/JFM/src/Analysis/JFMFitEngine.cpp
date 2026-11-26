@@ -331,8 +331,8 @@ namespace SST::Prototypes::JFM
 		std::vector<double> EvaluateCurve(const ModelSpec &model, const std::vector<double> &voltage, double temperature, const ParameterArray &parameters)
 		{
 			std::vector<double> current(voltage.size());
-			for (std::size_t index = 0; index < voltage.size(); ++index)
-				current[index] = Evaluate(model, voltage[index], temperature, parameters);
+			lm::cpu::currents(model.gpuType, voltage.data(), voltage.size(), parameters.data(), temperature, current.data());
+			for (double& value : current) if (!std::isfinite(value)) value = std::numeric_limits<double>::quiet_NaN();
 			return current;
 		}
 

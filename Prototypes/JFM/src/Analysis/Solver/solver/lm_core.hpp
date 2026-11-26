@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <limits>
 #include "gpu/gpu_types.hpp"
+#include "cpu_kernel.hpp"
 #ifdef __CUDACC__
 #define JFM_HD __host__ __device__
 #else
@@ -67,36 +68,59 @@ JFM_HD inline double sum4(const double* x,int count) {
   }
  } return hi;
 }
-// Drobiazg (31)-(32): no -I0; shunts follow the Lambert-W diode.
-JFM_HD inline double current(GpuModelType model,double v,const double* p,double T,double* jac=nullptr,bool shared=false) {
+struct ScalarMath {
+ using Value=double;
+ bool shared;
+ JFM_HD bool any(bool value) const {return value;}
+ JFM_HD double choose(bool condition,double a,double b) const {return condition?a:b;}
+ JFM_HD double abs(double x) const {return fabs(x);}
+ JFM_HD double exp(double x) const {return mexp(x,shared);}
+ JFM_HD double expm1(double x) const {return mexpm1(x,shared);}
+ JFM_HD double log(double x) const {return mlog(x,shared);}
+ JFM_HD double pow(double x,double y) const {return mpow(x,y,shared);}
+ JFM_HD double wlog(double x) const {return lm::wlog(x,shared);}
+ JFM_HD double fma(double a,double b,double x) const {return ::fma(a,b,x);}
+ JFM_HD double sum(const double* terms) const {return sum4(terms,4);}
+};
+// Drobiazg (31)-(32): one typed model/Jacobian kernel for scalar, AVX2 and CUDA.
+template<class Math> JFM_HD inline typename Math::Value currentKernel(Math m,GpuModelType model,
+ typename Math::Value v,const double* p,double T,typename Math::Value* jac) {
+ using Value=typename Math::Value;
  bool series=model==GpuModelType::SDRs||model==GpuModelType::SDRsIph||model==GpuModelType::SDRsRsh||model==GpuModelType::SDRsRshIph||int(model)>=8;
  bool shunt=model==GpuModelType::SDRsh||model==GpuModelType::SDRshIph||model==GpuModelType::SDRsRsh||model==GpuModelType::SDRsRshIph||int(model)>=8;
  bool nonlinear=model==GpuModelType::SDRsRshAlphaRsh2||model==GpuModelType::SDRsRshAlphaRsh2Iph;
  double i0=p[0],n=p[1],rs=series?p[2]:0,rsh=shunt?p[3]:inf,alpha=nonlinear?p[4]:2,rsh2=nonlinear?p[5]:inf;
  if(!(i0>0&&n>0&&T>0&&rs>=0&&rsh>0))return NAN;
  bool light=(int(model)>=4&&int(model)<=7)||model==GpuModelType::SDRsRshAlphaRsh2Iph;
- double a=n*K*T,w=0,d,u;
- if(rs>0) { double c=mlog(i0,shared)+mlog(rs,shared)-mlog(a,shared);w=wlog(c+v/a,shared); d=a/rs*w;u=w>0?a*(mlog(w,shared)-c):v-rs*d; }
- else { d=i0*mexp(v/a,shared);u=v; }
+ double a=n*K*T;
+ Value w=0,d=0,u=0;
+ if(rs>0) { double c=mlog(i0,m.shared)+mlog(rs,m.shared)-mlog(a,m.shared);w=m.wlog(c+v/a); d=a/rs*w;u=m.choose(w>0,a*(m.log(m.choose(w>0,w,1))-c),v-rs*d); }
+ else { d=i0*m.exp(v/a);u=v; }
  // Near u=0, log(w)-c cancels; solve u+b*expm1(u/a)=v-b instead.
- if(rs>0 && fabs(u)<.1*a && isfinite(rs*i0)) {
-  double b=rs*i0, rhs=fma(-rs,i0,v);u=rhs/(1+b/a);
-  for(int k=0;k<4;++k)u-=(u+b*mexpm1(u/a,shared)-rhs)/(1+b/a*mexp(u/a,shared));
-  d=i0*mexp(u/a,shared);w=rs*d/a;
+ if(rs>0 && m.any(m.abs(u)<.1*a) && isfinite(rs*i0)) {
+  auto nearZero=m.abs(u)<.1*a;
+  double b=rs*i0;
+  Value rhs=m.choose(nearZero,m.fma(-rs,i0,v),0),refined=rhs/(1+b/a);
+  for(int k=0;k<4;++k)refined-=(refined+b*m.expm1(refined/a)-rhs)/(1+b/a*m.exp(refined/a));
+  u=m.choose(nearZero,refined,u);
+  d=m.choose(nearZero,i0*m.exp(m.choose(nearZero,u/a,0)),d);w=m.choose(nearZero,rs*m.choose(nearZero,d,0)/a,w);
  }
- if(nonlinear&&(!(alpha>0&&rsh2>0)||(u<0&&alpha!=floor(alpha))))return NAN;
- double s2=nonlinear?mpow(u,alpha,shared)/rsh2:0;
- double terms[4]={d,u/rsh,s2,light?-p[6]:0},val=sum4(terms,4);
+ if(nonlinear&&(!(alpha>0&&rsh2>0)||(m.any(u<0)&&alpha!=floor(alpha))))return NAN;
+ Value s2=nonlinear?m.pow(u,alpha)/rsh2:Value(0);
+ Value terms[4]={d,u/rsh,s2,light?-p[6]:0},val=m.sum(terms);
  if(jac) {
-  double slope=1/rsh+(nonlinear?alpha*mpow(u,alpha-1,shared)/rsh2:0);
-  double dd[3]={d/i0/(1+w),-d*u/(a*n*(1+w)),-d*d/(a*(1+w))};
-  double du[3]={-rs*dd[0],-rs*dd[1],-d/(1+w)};
+  Value slope=1/rsh+(nonlinear?alpha*m.pow(u,alpha-1)/rsh2:Value(0));
+  Value dd[3]={d/i0/(1+w),-d*u/(a*n*(1+w)),-d*d/(a*(1+w))};
+  Value du[3]={-rs*dd[0],-rs*dd[1],-d/(1+w)};
   for(int j=0;j<3;++j)jac[j]=dd[j]+slope*du[j];
   if(!series)jac[2]=0;
-  jac[3]=shunt?-u/(rsh*rsh):0;jac[4]=nonlinear?(u==0?0:s2*mlog(fabs(u),shared)):0;
-  jac[5]=nonlinear?-s2/rsh2:0;jac[6]=light?-1:0;
+  jac[3]=shunt?-u/(rsh*rsh):Value(0);jac[4]=nonlinear?s2*m.log(m.choose(u==0,1,m.abs(u))):Value(0);
+  jac[5]=nonlinear?-s2/rsh2:Value(0);jac[6]=light?-1:0;
  }
  return val;
+}
+JFM_HD inline double current(GpuModelType model,double v,const double* p,double T,double* jac=nullptr,bool shared=false) {
+ return currentKernel(ScalarMath{shared},model,v,p,T,jac);
 }
 JFM_HD inline void full(const GpuParamLayout& l,const double* p,double* out) {
  for(int j=0;j<l.n_total;++j)out[j]=l.fixed_values[j];
@@ -140,11 +164,17 @@ JFM_HD inline double iscShift(const double* v,const double* y,int count) {
   return -(y[i-1]+(y[i]-y[i-1])*(-v[i-1])/(v[i]-v[i-1]));
  return NAN;
 }
-JFM_HD inline double objective(GpuModelType model,const GpuParamLayout& l,const double* p,const double* v,const double* y,int count,double* h=nullptr,double* g=nullptr,bool precise=false,bool shared=false) {
+struct ScalarCurrentEvaluator {
+ bool shared;
+ JFM_HD double operator()(int,double v,GpuModelType model,const double* p,double T,double* jac) {
+  return current(model,v,p,T,jac,shared);
+ }
+};
+template<class Evaluator> JFM_HD inline double objectiveKernel(GpuModelType model,const GpuParamLayout& l,const double* p,const double* v,const double* y,int count,double* h,double* g,bool precise,bool shared,Evaluator evaluate) {
  double params[8];full(l,p,params);double chi=0;
  if(g)for(int j=0;j<l.n_free;++j){g[j]=0;for(int k=0;k<l.n_free;++k)h[j*8+k]=0;}
  for(int i=0;i<count;++i) {
-  double dj[8],I=current(model,v[i],params,l.T,g?dj:nullptr,shared);
+  double dj[8],I=evaluate(i,v[i],model,params,l.T,g?dj:nullptr);
   double r;
   if(l.objective==JfmObjective::LogLegacy) {
    if(!(y[i]>0&&I>0)||!isfinite(I)||y[i]==1)return inf;
@@ -163,6 +193,15 @@ JFM_HD inline double objective(GpuModelType model,const GpuParamLayout& l,const 
  }
  if(g)for(int j=0;j<l.n_free;++j)for(int k=0;k<j;++k)h[k*8+j]=h[j*8+k];
  return chi;
+}
+JFM_HD inline double objectiveScalar(GpuModelType model,const GpuParamLayout& l,const double* p,const double* v,const double* y,int count,double* h=nullptr,double* g=nullptr,bool precise=false,bool shared=false) {
+ return objectiveKernel(model,l,p,v,y,count,h,g,precise,shared,ScalarCurrentEvaluator{shared});
+}
+JFM_HD inline double objective(GpuModelType model,const GpuParamLayout& l,const double* p,const double* v,const double* y,int count,double* h=nullptr,double* g=nullptr,bool precise=false,bool shared=false) {
+#if defined(_MSC_VER) && defined(_M_X64) && !defined(__CUDACC__)
+ if(shared)return cpu::objective(model,l,p,v,y,count,h,g,precise);
+#endif
+ return objectiveScalar(model,l,p,v,y,count,h,g,precise,shared);
 }
 JFM_HD inline bool active(const GpuParamLayout& l,const double* p,const double* g,int j) {
  return (p[j]<=l.min_bounds[j]&&g[j]>0)||(p[j]>=l.max_bounds[j]&&g[j]<0);
