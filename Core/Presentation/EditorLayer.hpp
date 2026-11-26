@@ -74,6 +74,7 @@ namespace SST
 		[[nodiscard]] WeakRef<const IPanel> FindPanel(PanelId panelId) const;
 		void RenderCorePanelMenuItems();
 		void RegisterMenuRenderer(std::string id, EditorMenuRenderer renderer);
+		void ShowAbout() { m_ShowAbout = true; }
 		void RegisterSettingsTab(SettingsTabExtension extension);
 		[[nodiscard]] Ref<WindowWorkspace> GetWindows() const { return m_Windows; }
 		[[nodiscard]] Ref<ViewHost> GetViews() const { return m_Views; }
@@ -95,6 +96,7 @@ namespace SST
 		void bindEvents();
 		void handleFontShortcuts(Event &event);
 		void renderMenuBar();
+		void renderSupportDialogs();
 		void renderCommandPalettePopup();
 		void executeCommandFromPalette(const CommandID &id);
 		void onConfigApplied(const AppEvents::Config::Applied &event);
@@ -126,6 +128,12 @@ namespace SST
 		PanelId m_LoggingPanelId = 0;
 		PanelId m_SettingsPanelId = 0;
 		bool m_PanelsInitialized = false;
+		bool m_ShowAbout = false;
+		bool m_ShowDiagnostics = false;
+		bool m_RecoveryChecked = false;
+		std::vector<Path> m_InterruptedSessions;
+		std::string m_DiagnosticPreview;
+		std::string m_SupportError;
 		bool m_CommandPaletteOpenRequested = false;
 		int m_CommandPaletteSelection = 0;
 		std::array<char, 128> m_CommandPaletteSearchBuffer = {};

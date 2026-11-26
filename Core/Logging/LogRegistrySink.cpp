@@ -92,6 +92,8 @@ namespace SST
 		}
 	}
 
+	LogCategory LogCategoryFromSource(std::string_view file) { return categoryFromSource(file); }
+
 	LogRegistrySink::LogRegistrySink(Ref<LogRegistry> registry)
 		: m_Registry(CreateWeakRef(registry))
 	{
@@ -105,9 +107,12 @@ namespace SST
 
 		LogEntry entry;
 		entry.level = toLogLevel(msg.level);
-		entry.category = categoryFromSource(sourceStem(msg.source));
+		entry.category = LogCategoryFromSource(sourceStem(msg.source));
 		entry.timestamp = Time::Now();
 		entry.threadId = std::this_thread::get_id();
+		entry.context = Logger::Context();
+		entry.sessionId = Logger::SessionId();
+		entry.elapsedMs = Logger::ElapsedMs();
 		entry.message.assign(msg.payload.begin(), msg.payload.end());
 		entry.loggerName.assign(msg.logger_name.begin(), msg.logger_name.end());
 

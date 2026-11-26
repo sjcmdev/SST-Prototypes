@@ -6,6 +6,7 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
+#include "Core/Logging/Logger.hpp"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 
@@ -28,6 +29,7 @@ namespace SST
 	{
 		thread_local const JobSystem *g_CurrentJobSystem = nullptr;
 		thread_local JobId g_CurrentJobId = 0;
+		std::atomic<std::uint64_t> g_NextRunId{1};
 
 		struct WorkerContextGuard
 		{
@@ -458,6 +460,20 @@ namespace SST
 		record.snapshot.priority = priority;
 		record.snapshot.createdAt = now;
 		record.job = job;
+		record.logContext = job->GetLogContext();
+		if(record.logContext.runId.empty()) {
+			if(parentId != 0) {
+				const auto& parent=m_Records.at(parentId).logContext;
+				record.logContext.runId=parent.runId;
+				if(record.logContext.outputDirectory.Empty()) record.logContext.outputDirectory=parent.outputDirectory;
+			}
+			else record.logContext.runId = Logger::SessionId() + "-" + std::to_string(g_NextRunId.fetch_add(1));
+		}
+		record.logContext.jobId = id;
+		record.logContext.attempt = 0;
+		if(record.logContext.operation.empty()) record.logContext.operation = job->GetType();
+		if(record.logContext.engine.empty()) record.logContext.engine = job->GetType();
+		if(record.logContext.code.empty()) record.logContext.code = "job.lifecycle";
 		record.logs.push_back(JobLogEntry{JobLogLevel::Info, "Queued", now});
 		m_Records.emplace(id, std::move(record));
 	}
@@ -465,6 +481,11 @@ namespace SST
 	void JobSystem::runJob(JobId id, Ref<IJob> job)
 	{
 		ZoneScoped;
+		(void)Logger::Get();
+		LogContext logContext;
+		{ std::lock_guard lock(m_RecordsMutex); auto& stored=m_Records.at(id).logContext; ++stored.attempt; logContext=stored; }
+		ScopedLogContext logging(std::move(logContext));
+		DS_LOG_INFO("Job started");
 		const auto startedAt = Time::Now();
 		markRunning(id, startedAt);
 		publishStartedEvent(id, *job, startedAt);
@@ -546,6 +567,8 @@ namespace SST
 		}
 
 		const auto finishedAt = Time::Now();
+		if(finalStatus == JobStatus::Failed) DS_LOG_ERROR("Job failed: {}. Review the task details and retry after correcting the input.", errorMessage);
+		else DS_LOG_INFO("Job finished status={}", static_cast<int>(finalStatus));
 		markFinished(id, finalStatus, errorMessage, finishedAt);
 		publishFinishedEvent(id, *job, finalStatus, errorMessage, finishedAt);
 	}
@@ -660,6 +683,14 @@ namespace SST
 
 	void JobSystem::appendLog(JobId id, JobLogLevel level, const std::string &message)
 	{
+		std::optional<ScopedLogContext> logging;
+		if(Logger::Context().jobId != id || Logger::Context().runId.empty()) {
+			LogContext context;
+			{ std::lock_guard lock(m_RecordsMutex); const auto it=m_Records.find(id); if(it==m_Records.end()) return; context=it->second.logContext; }
+			logging.emplace(std::move(context));
+		}
+		const auto severity = level == JobLogLevel::Error ? spdlog::level::err : level == JobLogLevel::Warning ? spdlog::level::warn : level == JobLogLevel::Debug ? spdlog::level::debug : spdlog::level::info;
+		Logger::Get()->log(spdlog::source_loc{__FILE__, __LINE__, SPDLOG_FUNCTION}, severity, "{}", JobHistoryText(message));
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
 		auto it = m_Records.find(id);
 		if (it == m_Records.end()) return;

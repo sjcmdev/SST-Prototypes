@@ -2,6 +2,7 @@
 #include "WorksheetPython.hpp"
 #include "Core/PlotExport/PlotEditing.hpp"
 #include "Core/App/Application.hpp"
+#include "Core/Presentation/EditorLayer.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/IO/RecentFiles.hpp"
 #include "Core/Input/KeyBinding.hpp"
@@ -607,7 +608,8 @@ namespace SST::Prototypes::PlotLab
         else if (action == "rename") { rename = state->selected; name = p.object(rename).name; }
         else if (action == "delete_object") remove = state->selected;
         else if (action == "activate") state->Show(state->selected);
-        else if (action == "help" || action == "about") helpDialog = true;
+        else if (action == "help") helpDialog = true;
+        else if (action == "about") Application::Get().GetEditorLayer().ShowAbout();
         else if (graph) {
             auto& editor = state->plotEditors[graph];
             if (action == "details") { const auto plots = p.children(p.children(graph).front()); if (editor.selected.empty() && !plots.empty()) editor.Select(std::to_string(plots.front()), false); editor.details = true; }

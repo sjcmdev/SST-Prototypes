@@ -1,5 +1,7 @@
 ﻿#include "Core/App/Application.hpp"
 #include "Core/Commands/SystemCommandEvents.hpp"
+#include "Core/App/ApplicationInternals.hpp"
+#include "Core/Diagnostics/LocalDiagnostics.hpp"
 #include "Core/IO/IOLayer.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Presentation/EditorLayer.hpp"
@@ -144,15 +146,37 @@ namespace SST
 } // namespace SST
 int main(int argc, char **argv)
 {
-    for (int i = 1; i + 1 < argc; ++i) {
-        if(std::string_view(argv[i])=="--worksheet-script") {
+    std::vector<char*> arguments{argv[0]};
+    const char* worksheetScript=nullptr;
+    for(int i=1;i<argc;++i) {
+        const std::string_view arg=argv[i];
+        if(arg=="--worksheet-script") {
+            if(worksheetScript || i+1>=argc || !*argv[i+1] || argv[i+1][0]=='-') {
+                std::cerr<<"--worksheet-script requires one script path. Use --help.\n"; return 2;
+            }
+            worksheetScript=argv[++i];
+        }
+        else if(arg=="--smoke-test") SST::smokeTest=true;
+        else if(arg=="--data-filter-preview") SST::dataFilterPreview=true;
+        else if(arg=="--column-values-preview") SST::columnValuesPreview=true;
+        else arguments.push_back(argv[i]);
+    }
+    arguments.push_back(nullptr);
+    if(worksheetScript && arguments.size()!=2) { std::cerr<<"--worksheet-script cannot be combined with other options.\n"; return 2; }
+    const int sharedArgc=static_cast<int>(arguments.size()-1);
+    if(const auto early=SST::HandleEarlyApplicationArguments(sharedArgc,arguments.data())) return *early;
+    if(worksheetScript) {
+        try { SST::InitializeLocalDiagnostics(); }
+        catch(const std::exception& error) { std::cerr<<"Local crash diagnostics unavailable: "<<error.what()<<'\n'; }
+        struct DiagnosticsCleanup { ~DiagnosticsCleanup() { SST::FinishLocalDiagnostics(); } } diagnosticsCleanup;
+        SST::ApplicationDetail::InstallCrashFallbackHandlers();
 #if DS_PYTHON_CAPI_AVAILABLE
             SST::PythonInterpreter interpreter;
             if(!interpreter.Start()) return 1;
             auto pythonRoot=std::filesystem::absolute(argv[0]).parent_path()/"python";
             if(!std::filesystem::is_directory(pythonRoot)) pythonRoot=SST_PLOTLAB_PYTHON_ROOT;
             SST::Prototypes::PlotLab::InstallWorksheetPython(nullptr,pythonRoot);
-            std::ifstream in(argv[i+1]); if(!in) return 1;
+            std::ifstream in(worksheetScript); if(!in) { std::cerr<<"Cannot read worksheet script. Check the path and permissions.\n"; return 1; }
             const std::string code(std::istreambuf_iterator<char>(in),{});
             auto gil=SST::PythonInterpreter::AcquireRuntimeGil();
             const int result=PyRun_SimpleString(code.c_str());
@@ -161,15 +185,6 @@ int main(int argc, char **argv)
 #else
             return 1;
 #endif
-        }
     }
-    for (int i = 1; i < argc; ++i)
-        if (std::string_view(argv[i]) == "--smoke-test")
-            SST::smokeTest = true;
-        else if (std::string_view(argv[i]) == "--data-filter-preview")
-            SST::dataFilterPreview = true;
-        else if (std::string_view(argv[i]) == "--column-values-preview")
-            SST::columnValuesPreview = true;
-    auto app = SST::Application::Create(argc, argv, SST::SetupApplication);
-    return app.Run();
+    return SST::RunApplication(sharedArgc, arguments.data(), SST::SetupApplication);
 }

@@ -10,6 +10,7 @@
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Utils/Time.hpp"
+#include "Core/Logging/LogContext.hpp"
 
 #include <spdlog/common.h>
 
@@ -57,6 +58,9 @@ namespace SST
 		std::thread::id threadId{};
 		std::string threadLabel;
 		Time::TimePoint timestamp{};
+		LogContext context;
+		std::string sessionId;
+		double elapsedMs = 0;
 
 		[[nodiscard]] std::string Origin() const;
 		[[nodiscard]] std::string TimestampString() const;
@@ -69,10 +73,14 @@ namespace SST
 		bool logToFile = false;
 		Path logFilePath;
 		Ref<LogRegistry> logRegistry;
+		std::size_t maxFileBytes = 4 * 1024 * 1024;
+		std::size_t rotatedFiles = 2;
+		std::size_t retainedSessions = 20;
 	};
 
 	const char *ToString(LogLevel level);
 	const char *ToString(LogCategory category);
+	LogCategory LogCategoryFromSource(std::string_view file);
 
 	class Logger
 	{
@@ -80,7 +88,23 @@ namespace SST
 		static void Initialize(const LoggerOptions &options);
 		static void Shutdown();
 		static void Flush();
-		static Ref<spdlog::logger> &Get();
+		static Ref<spdlog::logger> Get();
+		[[nodiscard]] static const std::string &SessionId();
+		[[nodiscard]] static Path SessionDirectory();
+		[[nodiscard]] static const LogContext &Context();
+		[[nodiscard]] static double ElapsedMs();
+		[[nodiscard]] static LoggerOptions EffectiveOptions();
+	};
+
+	class ScopedLogContext final {
+	public:
+		explicit ScopedLogContext(LogContext context);
+		~ScopedLogContext();
+		ScopedLogContext(const ScopedLogContext&) = delete;
+		ScopedLogContext& operator=(const ScopedLogContext&) = delete;
+	private:
+		LogContext m_Previous;
+		spdlog::sink_ptr m_PreviousSink;
 	};
 } // namespace SST
 

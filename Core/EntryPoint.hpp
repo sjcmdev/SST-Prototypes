@@ -9,6 +9,5 @@ namespace SST
 
 int main(int argc, char **argv)
 {
-	auto app = SST::Application::Create(argc, argv, SST::SetupApplication);
-	return app.Run();
+	return SST::RunApplication(argc, argv, SST::SetupApplication);
 }

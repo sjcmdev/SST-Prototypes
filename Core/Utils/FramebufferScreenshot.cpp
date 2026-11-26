@@ -2,6 +2,9 @@
 #include "Core/Utils/FramebufferScreenshot.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
+#include "Core/BuildInfo.hpp"
+#include "Core/Diagnostics/LocalDiagnostics.hpp"
+#include "Core/Diagnostics/DiagnosticsCommand.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
@@ -21,6 +24,7 @@
 #define NB_STATIC
 #endif
 #include "Vendor/nanobind/include/nanobind/nanobind.h"
+#include "Vendor/nanobind/include/nanobind/stl/string.h"
 #endif
 
 namespace SST::ApplicationDetail
@@ -138,6 +142,7 @@ namespace SST::ApplicationDetail
 
     void RegisterScreenshotCommand(const Ref<CommandRegistry> &commands, const Ref<JobSystem> &jobs)
     {
+        RegisterDiagnosticsCommand(commands,jobs);
         auto result = commands->Register({CommandID{"app.screenshot"}, "Screenshot", "Application", "Capture the main framebuffer to PNG.", {},
                                          CommandFlags::HiddenFromPalette},
                                         [jobs](CommandContext &) { return CreateUnique<ScreenshotCommand>(jobs); });
@@ -207,6 +212,35 @@ static std::string ExecuteApplicationRequest(const char *requestJson)
 }
 NB_MODULE(sst_application, module)
 {
+    module.def("version_info", [] {
+        const auto& b=SST::GetBuildInfo(); nanobind::dict info;
+        info["version"]=nanobind::str(b.version.data(),b.version.size());
+        info["commit"]=nanobind::str(b.revision.data(),b.revision.size());
+        info["build_utc"]=nanobind::str(b.builtUtc.data(),b.builtUtc.size());
+        info["source_sha256"]=nanobind::str(b.sourceSha256.data(),b.sourceSha256.size());
+        info["dependency_sha256"]=nanobind::str(b.dependencySha256.data(),b.dependencySha256.size());
+        info["toolchain"]=nanobind::str(b.toolchain.data(),b.toolchain.size());
+        info["configuration"]=nanobind::str(b.configuration.data(),b.configuration.size());
+        info["python_available"]=b.pythonAvailable;
+        return info;
+    });
+    module.def("export_diagnostics", [](const std::string& destination) {
+        SST::DiagnosticExport request{SST::Path::FromResolved(std::filesystem::u8path(destination)),SST::DiagnosticPreview({})};
+        auto commands=SST::ApplicationDetail::pythonCommands.lock();
+        if(commands && !SST::Threading::IsMainThread()) {
+            nanobind::dict error;error["code"]="diagnostics.main_thread_required";error["message"]="Export from the application's main thread or a headless host.";
+            nanobind::dict response;response["ok"]=false;response["error"]=error;return response;
+        }
+        auto result=commands ? SST::ExecuteDiagnosticsExport(*commands,std::move(request)) : SST::ExportDiagnosticsHeadless(std::move(request));
+        nanobind::dict response; response["ok"]=result.HasValue();
+        if(!result) {
+            nanobind::dict error;
+            error["code"]=nanobind::str(result.Error().code.c_str());
+            error["message"]=nanobind::str(result.Error().userMessage.c_str());
+            response["error"]=error;
+        }
+        return response;
+    },nanobind::arg("destination_path"));
     module.def("execute", [](const char *requestJson) {
         return nanobind::str(ExecuteApplicationRequest(requestJson).c_str());
     }, nanobind::arg("request_json"));

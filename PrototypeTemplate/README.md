@@ -38,3 +38,7 @@ install/app/config/                 neutral shipped defaults
 Build output stays in the root `build/` directory. The executable has adjacent `install/`
 and `python/` directories; CPython runtime preparation and portable environment path
 resolution remain shared tooling concerns (A1 steps 5?7). No JFM data types are used.
+
+## Diagnostics, CLI and build identity
+
+Use **Support ? About Semiconductor Studio** for build identity and **Support ? Export diagnostics?** to preview a redacted local report. `--version` and `--export-diagnostics report.txt` work without opening a window; invalid CLI syntax returns 2. Session/run logs rotate; native crash evidence stays local. See [shared runtime documentation](../docs/PROFESSIONAL_RUNTIME.md) for retention, crash probes, recovery notices, Python metadata and EXE/PDB manifests.

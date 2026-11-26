@@ -14,6 +14,7 @@
 #include <windows.h>
 
 #include "Core/Logging/Logger.hpp"
+#include "Core/Diagnostics/LocalDiagnostics.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Platform/PlatformPaths.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
@@ -163,63 +164,20 @@ namespace
 
 	LONG WINAPI WindowsUnhandledExceptionFilter(EXCEPTION_POINTERS *exceptionPointers)
 	{
-		const unsigned long code = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
-			? exceptionPointers->ExceptionRecord->ExceptionCode
-			: 0UL;
-		const unsigned long flags = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
-			? exceptionPointers->ExceptionRecord->ExceptionFlags
-			: 0UL;
-		void *address = exceptionPointers != nullptr && exceptionPointers->ExceptionRecord != nullptr
-			? exceptionPointers->ExceptionRecord->ExceptionAddress
-			: nullptr;
-
-		SST::Logger::Flush();
-		char buffer[256] = {};
-		std::snprintf(buffer,
-		              sizeof(buffer),
-		              "[CRASH] unhandled SEH exception code=0x%08lX flags=0x%08lX address=%p",
-		              code,
-		              flags,
-		              address);
-		if (s_NativeCrashCallback != nullptr)
-			s_NativeCrashCallback(buffer);
+		SST::CaptureLocalCrash(exceptionPointers);
 		return EXCEPTION_EXECUTE_HANDLER;
 	}
 
-	void WindowsInvalidParameterHandler(
-		const wchar_t *expression,
-		const wchar_t *functionName,
-		const wchar_t *fileName,
-		unsigned int lineNumber,
-		uintptr_t reserved)
+	void WindowsInvalidParameterHandler(const wchar_t *, const wchar_t *, const wchar_t *, unsigned int, uintptr_t)
 	{
-		(void)reserved;
-		SST::Logger::Flush();
-		const std::string expressionUtf8 = NarrowWideString(expression);
-		const std::string functionUtf8 = NarrowWideString(functionName);
-		const std::string fileUtf8 = NarrowWideString(fileName);
-
-		char buffer[512] = {};
-		std::snprintf(
-			buffer,
-			sizeof(buffer),
-			"[CRASH] invalid parameter expression='%s' function='%s' file='%s' line=%u",
-			expressionUtf8.c_str(),
-			functionUtf8.c_str(),
-			fileUtf8.c_str(),
-			lineNumber);
-		if (s_NativeCrashCallback != nullptr)
-			s_NativeCrashCallback(buffer);
-
-		std::abort();
+		SST::CaptureLocalCrash();
+		std::_Exit(EXIT_FAILURE);
 	}
 
 	void WindowsPurecallHandler()
 	{
-		SST::Logger::Flush();
-		if (s_NativeCrashCallback != nullptr)
-			s_NativeCrashCallback("[CRASH] pure virtual function call");
-		std::abort();
+		SST::CaptureLocalCrash();
+		std::_Exit(EXIT_FAILURE);
 	}
 
 	int WindowsCrtReportHook(int reportType, wchar_t *message, int *returnValue)

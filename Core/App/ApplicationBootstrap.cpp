@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <chrono>
-#include <charconv>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -29,6 +28,7 @@
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/CoreLayer.hpp"
 #include "Core/Diagnostics/StructuredError.hpp"
+#include "Core/Diagnostics/LocalDiagnostics.hpp"
 #include "Core/Input/KeyBindingEvents.hpp"
 #include "IO/IOLayer.hpp"
 #include "IO/TextFileIO.hpp"
@@ -51,51 +51,16 @@ namespace SST
 		{
 			std::atomic<bool> g_CrashHandlersInstalled = false;
 			std::atomic<const char *> g_CrashStage = "startup";
-			std::atomic<bool> g_TerminateHandlerInvoked = false;
-
-			void appendLineToFile(const char *path, const char *message)
-			{
-				std::ofstream stream(path, std::ios::app);
-				if (!stream)
-					return;
-				stream << message << '\n';
-				stream.flush();
-			}
 
 			void terminateHandler()
 			{
-				g_TerminateHandlerInvoked.store(true, std::memory_order_relaxed);
-				std::string reason = "unknown";
-				if (const std::exception_ptr current = std::current_exception(); current != nullptr)
-				{
-					try
-					{
-						std::rethrow_exception(current);
-					}
-					catch (const std::exception &exception)
-					{
-						reason = exception.what();
-					}
-					catch (...)
-					{
-						reason = "non-standard exception";
-					}
-				}
-
-				Logger::Flush();
-				Platform::AppendNativeCrashStackTrace(AppendCrashMarker, 1);
-				const std::string message = "[CRASH] std::terminate invoked reason=" + reason;
-				AppendCrashMarker(message.c_str());
+				CaptureLocalCrash();
 				std::_Exit(EXIT_FAILURE);
 			}
 
-			void signalHandler(int signalCode)
+			void signalHandler(int)
 			{
-				Platform::AppendNativeCrashStackTrace(AppendCrashMarker, 1);
-				char buffer[128] = {};
-				const int terminateInvoked = g_TerminateHandlerInvoked.load(std::memory_order_relaxed) ? 1 : 0;
-				std::snprintf(buffer, sizeof(buffer), "[CRASH] signal=%d terminate=%d", signalCode, terminateInvoked);
-				AppendCrashMarker(buffer);
+				CaptureLocalCrash();
 				std::_Exit(EXIT_FAILURE);
 			}
 
@@ -156,37 +121,6 @@ namespace SST
 				return Path::FromResolved(FileSystem::CurrentPath() / "install" / "app" / "config");
 			}
 
-			ApplicationSpecification defaultApplicationSpecification()
-			{
-				ApplicationSpecification specification;
-
-#if defined(DS_DEBUG)
-				specification.logLevel = SST::LogLevel::Trace;
-#else
-				specification.logLevel = SST::LogLevel::Info;
-#endif
-
-				specification.logToFile = true;
-				specification.logFilePath = Path::FromResolved(RuntimeDefaults::LogFilePath);
-				return specification;
-			}
-
-			std::optional<LogLevel> ParseLogLevelArgument(std::string_view value)
-			{
-				if (value == "trace")
-					return LogLevel::Trace;
-				if (value == "debug")
-					return LogLevel::Debug;
-				if (value == "info")
-					return LogLevel::Info;
-				if (value == "warn" || value == "warning")
-					return LogLevel::Warn;
-				if (value == "error")
-					return LogLevel::Error;
-				if (value == "critical")
-					return LogLevel::Critical;
-				return std::nullopt;
-			}
 
 		}
 
@@ -197,7 +131,6 @@ namespace SST
 
 		void AppendCrashMarker(const char *message)
 		{
-			FileSystem::CreateDirectories("logs");
 			char line[512] = {};
 			std::snprintf(line,
 			              sizeof(line),
@@ -206,8 +139,9 @@ namespace SST
 			              message,
 			              g_CrashStage.load(std::memory_order_relaxed));
 
-			appendLineToFile("logs/SST-crash.log", line);
-			appendLineToFile(RuntimeDefaults::LogFilePath, line);
+			const auto path=DiagnosticsDirectory()/"crashes"/("session-"+Logger::SessionId())/"crash.log";
+			std::ofstream stream(path.Native(), std::ios::app);
+			stream<<line<<'\n';
 		}
 
 		void InstallCrashFallbackHandlers()
@@ -242,97 +176,6 @@ namespace SST
 			DS_LOG_INFO("Startup step end: {} success={} elapsed_ms={:.3f}", m_Name, success, elapsedMs);
 			m_Finished = true;
 			return success;
-		}
-
-		ApplicationSpecification ParseApplicationArguments(int argc, char **argv)
-		{
-			ApplicationSpecification specification = defaultApplicationSpecification();
-
-			if (argv == nullptr)
-				return specification;
-
-			for (int index = 1; index < argc; ++index)
-			{
-				const std::string_view argument = argv[index];
-				if (argument == "--help" || argument == "-h")
-				{
-					std::cout << "Usage: SSTPrototype [--reset-layout] [--trace-events] [--log-level=trace|debug|info|warn|error] [--log-file[=path]]\n"
-					          << "  --screenshot <path.png> --screenshot-after-frames <N> (default 30)\n"
-					          << "  --exit-after-screenshot --open <project-or-data-path>\n"
-					          << "Screenshots capture only the main framebuffer; detached ImGui viewports are excluded.\n";
-					std::exit(0);
-				}
-
-				if (argument == "--reset-layout")
-					specification.resetLayout = true;
-
-				if (argument == "--exit-after-screenshot")
-					specification.exitAfterScreenshot = true;
-				if (argument == "--screenshot" || argument == "--screenshot-after-frames" || argument == "--open")
-				{
-					if (++index >= argc || argv[index] == nullptr || std::string_view(argv[index]).starts_with("--") || argv[index][0] == '\0')
-						throw std::invalid_argument(std::string(argument) + " requires a value");
-					const std::string_view value = argv[index];
-					if (argument == "--screenshot-after-frames")
-					{
-						unsigned int frames = 0;
-						const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), frames);
-						if (error != std::errc{} || end != value.data() + value.size() || frames == 0)
-							throw std::invalid_argument("--screenshot-after-frames requires a positive integer");
-						specification.screenshotAfterFrames = frames;
-					}
-					else
-					{
-						const auto path = Path::FromResolved(std::filesystem::u8path(value));
-						if (argument == "--open")
-							specification.openPath = path;
-						else
-						{
-							if (path.Native().extension() != ".png")
-								throw std::invalid_argument("--screenshot requires a .png path");
-							specification.screenshotPath = path;
-						}
-					}
-				}
-
-				if (argument == "--trace-events")
-				{
-					specification.traceEvents = true;
-					specification.traceEventsOverride = true;
-				}
-
-				if (argument == "--log-file")
-				{
-					specification.logToFile = true;
-					specification.logToFileOverride = true;
-				}
-
-				constexpr std::string_view logLevelPrefix = "--log-level=";
-				if (argument.starts_with(logLevelPrefix))
-				{
-					const std::string_view levelText = argument.substr(logLevelPrefix.size());
-					if (const std::optional<LogLevel> parsedLevel = ParseLogLevelArgument(levelText))
-					{
-						specification.logLevel = parsedLevel.value();
-						specification.logLevelOverride = parsedLevel.value();
-					}
-				}
-
-				constexpr std::string_view logFilePrefix = "--log-file=";
-				if (argument.starts_with(logFilePrefix))
-				{
-					const std::string_view logFileText = argument.substr(logFilePrefix.size());
-					specification.logToFile = true;
-					specification.logToFileOverride = true;
-					if (!logFileText.empty())
-					{
-						specification.logFilePath = Path::FromResolved(std::filesystem::u8path(logFileText));
-						specification.logFilePathOverride = specification.logFilePath;
-					}
-				}
-			}
-
-			return specification;
 		}
 
 		void ApplySpecificationOverrides(ApplicationSpecification &specification)

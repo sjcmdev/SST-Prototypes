@@ -10,6 +10,7 @@
 #include "App/Window.hpp"
 #include "Core/JobSystem/JobSystemConfig.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Diagnostics/LocalDiagnostics.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Path.hpp"
 #include "App/UiConfig.hpp"
@@ -27,6 +28,10 @@ namespace SST
 		unsigned int screenshotAfterFrames = 30;
 		bool exitAfterScreenshot = false;
 		Path openPath;
+		bool showHelp = false;
+		bool showVersion = false;
+		std::optional<CrashProbeMode> crashProbe;
+		Path diagnosticExportPath;
 		std::optional<LogLevel> logLevelOverride;
 		std::optional<bool> logToFileOverride;
 		std::optional<Path> logFilePathOverride;

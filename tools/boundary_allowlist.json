@@ -6458,6 +6458,141 @@
       "sha256": "82c6ca6665b982890db6acaf5810a50d51952c5de7b9a2f8430a022b0b4d20d5",
       "count": 1,
       "reason": "CPython interpreter lifecycle and startup configuration for the project .venv or bundled runtime; Python embedding edge."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 215,
+      "code": "const auto& b=SST::GetBuildInfo(); nanobind::dict info;",
+      "sha256": "2eeee64ecc7c51ad6feeb70c9e20eae5f6f76bcd8d446240f55b61e9dded8d14",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 216,
+      "code": "info[\"version\"]=nanobind::str(b.version.data(),b.version.size());",
+      "sha256": "0d18ac6be828a1f906624a6847e7d04d652d2c286d7ee608ca6b3164e941dcb9",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 217,
+      "code": "info[\"commit\"]=nanobind::str(b.revision.data(),b.revision.size());",
+      "sha256": "ef9630268998d322130f23e6f6785f74a025d8a43bcf094187baf2aac87cb927",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 218,
+      "code": "info[\"build_utc\"]=nanobind::str(b.builtUtc.data(),b.builtUtc.size());",
+      "sha256": "d0bf37462ef72182bd84f16156e2bc0bfed5c439e6312164b4930be7f3154de9",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 219,
+      "code": "info[\"source_sha256\"]=nanobind::str(b.sourceSha256.data(),b.sourceSha256.size());",
+      "sha256": "834dfb68a05414c1f0d80f8b9173449c8b0b8164834bcccc5937b23c1a171e1a",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 220,
+      "code": "info[\"dependency_sha256\"]=nanobind::str(b.dependencySha256.data(),b.dependencySha256.size());",
+      "sha256": "c9ffdfb61200f69f70caa601e1fc1f840b1fb6ceeb7164e0cf258e66f393782b",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 221,
+      "code": "info[\"toolchain\"]=nanobind::str(b.toolchain.data(),b.toolchain.size());",
+      "sha256": "075aa86fd4e00b3267cc4959e348bc4ffd1972991ffe62585ffe08ab513f3645",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 222,
+      "code": "info[\"configuration\"]=nanobind::str(b.configuration.data(),b.configuration.size());",
+      "sha256": "f0754b9dbe739541fda1d6c2aca31fab6b682d746ce5e431fef89e6255fef660",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 230,
+      "code": "nanobind::dict error;error[\"code\"]=\"diagnostics.main_thread_required\";error[\"message\"]=\"Export from the application's main thread or a headless host.\";",
+      "sha256": "6f3826262f6e98f9ec323aa3a48d318de8544d2c3df4f33473342b64d9d42d40",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 231,
+      "code": "nanobind::dict response;response[\"ok\"]=false;response[\"error\"]=error;return response;",
+      "sha256": "0f2b5596180b336951affe564c890f92b1479bd86c88c15bf3aa12d9cf70ac93",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 234,
+      "code": "nanobind::dict response; response[\"ok\"]=result.HasValue();",
+      "sha256": "435c2313d7bac7fdd73c8707ae99fe1604a750bfe009f90798a3aa554e68ba9b",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 236,
+      "code": "nanobind::dict error;",
+      "sha256": "079ab1da3c7f3e872b10d82670daa287a7567ac7de83421afcb598c6651cfacc",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 237,
+      "code": "error[\"code\"]=nanobind::str(result.Error().code.c_str());",
+      "sha256": "11e84c04d233f24a1084be05fe70afe09ec74f4185a22f393dbd57cd5470540c",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 238,
+      "code": "error[\"message\"]=nanobind::str(result.Error().userMessage.c_str());",
+      "sha256": "222f567d4e7342cf6e8dddfa013a9c96397f39cdaa356c484a947bee448820d5",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
+    },
+    {
+      "file": "Core/Utils/FramebufferScreenshot.cpp",
+      "rule": "python",
+      "line": 242,
+      "code": "},nanobind::arg(\"destination_path\"));",
+      "sha256": "3ddb79ef5eee2a53b7fa72b96d364fbfe0c287517a850de7fad9e5db544f1154",
+      "count": 1,
+      "reason": "F12/F22 nanobind edge: typed Core build identity and diagnostic command result converted to Python dict; no C++ serialization transport."
     }
   ],
   "known-debt": [

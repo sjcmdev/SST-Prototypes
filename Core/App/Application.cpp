@@ -15,6 +15,7 @@
 #include "IO/IOLayer.hpp"
 #include "Core/Logging/LogRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/Diagnostics/LocalDiagnostics.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/RuntimeTuning.hpp"
@@ -278,6 +279,9 @@ namespace SST
 	Application::Application(int argc, char **argv, ApplicationSetup setup)
 		: m_ProjectSetup(std::move(setup))
 	{
+		const auto spec = ApplicationDetail::ParseApplicationArguments(argc, argv);
+		try { InitializeLocalDiagnostics(); }
+		catch(const std::exception& error) { std::cerr<<"Local crash diagnostics unavailable: "<<error.what()<<'\n'; }
 		ApplicationDetail::InstallCrashFallbackHandlers();
 		Threading::SetMainThread();
 		ApplicationDetail::SetCrashStage("construct application");
@@ -287,7 +291,6 @@ namespace SST
 		m_Runtime.argc = argc;
 		m_Runtime.argv = argv;
 
-		ApplicationSpecification spec = ApplicationDetail::ParseApplicationArguments(m_Runtime.argc,m_Runtime.argv);
 		bool created = createFromSpecification(spec);
 		if (!created)
 			DS_LOG_ERROR("Application creation failed");
@@ -297,6 +300,7 @@ namespace SST
 	Application::~Application()
 	{
 		shutdownInternal();
+		FinishLocalDiagnostics();
 		if (s_Instance.has_value() && &s_Instance->get() == this)
 			s_Instance.reset();
 	}

@@ -18,6 +18,10 @@
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Logging/LogRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
+#include "Core/BuildInfo.hpp"
+#include "Core/Diagnostics/LocalDiagnostics.hpp"
+#include "Core/Diagnostics/DiagnosticsCommand.hpp"
+#include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/Utils/Input.hpp"
 #include "Core/Utils/KeyCodes.hpp"
 #include "Core/Utils/Path.hpp"
@@ -224,6 +228,7 @@ namespace SST
 		initializePanelsIfNeeded();
 		m_Windows->InstallSettingsHandler();
 		renderMenuBar();
+		renderSupportDialogs();
 		renderCommandPalettePopup();
 
 		const auto panels = m_Panels.Entries(); // A chrome command can duplicate during rendering.
@@ -349,6 +354,14 @@ namespace SST
 		}
 
 		m_Windows->RenderMenu();
+        if(ImGui::BeginMenu("Support")) {
+            if(ImGui::MenuItem("About Semiconductor Studio")) m_ShowAbout=true;
+            if(ImGui::MenuItem("Export diagnostics...")) {
+                m_DiagnosticPreview=DiagnosticPreview(m_LogRegistry ? m_LogRegistry->Snapshot() : std::vector<LogEntry>{});
+                m_SupportError.clear(); m_ShowDiagnostics=true;
+            }
+            ImGui::EndMenu();
+        }
         for (auto& entry : m_MenuRenderers) if (entry.id == "help" && entry.renderer) entry.renderer(services);
         const float menuBottom = ImGui::GetWindowPos().y + ImGui::GetWindowSize().y;
         ImGui::EndMainMenuBar();
@@ -357,6 +370,85 @@ namespace SST
         const float reserved = std::max(0.0f, menuBottom - viewport->WorkPos.y);
         viewport->WorkPos.y += reserved;
         viewport->WorkSize.y = std::max(1.0f, viewport->WorkSize.y - reserved);
+	}
+
+	void EditorLayer::renderSupportDialogs()
+	{
+        const auto onMainViewport=[] {
+            const auto* viewport=ImGui::GetMainViewport();
+            ImGui::SetNextWindowViewport(viewport->ID);
+            ImGui::SetNextWindowPos(viewport->GetWorkCenter(),ImGuiCond_Appearing,ImVec2(.5f,.5f));
+        };
+        if(!m_RecoveryChecked) {
+            m_RecoveryChecked=true;
+            try { m_InterruptedSessions=PreviousInterruptedSessions(); }
+            catch(const std::exception& error) { m_SupportError=error.what(); }
+        }
+        if(!m_InterruptedSessions.empty() && !m_ShowDiagnostics && !ImGui::IsPopupOpen("Previous session interrupted")) ImGui::OpenPopup("Previous session interrupted");
+        onMainViewport();
+        if(ImGui::BeginPopupModal("Previous session interrupted", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::TextWrapped("A previous session ended unexpectedly. Local crash diagnostics are available if capture succeeded.");
+            ImGui::TextWrapped("Check your project and saved results before continuing. This notice does not restore documents.");
+            ImGui::Text("Interrupted sessions: %zu",m_InterruptedSessions.size());
+            if(ImGui::Button("Review diagnostics")) {
+                m_DiagnosticPreview=DiagnosticPreview(m_LogRegistry ? m_LogRegistry->Snapshot() : std::vector<LogEntry>{});
+                m_ShowDiagnostics=true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if(ImGui::Button("Dismiss notice")) {
+                bool ok=true;
+                for(const auto& path:m_InterruptedSessions) if(!AcknowledgeInterruptedSession(path,m_SupportError)) ok=false;
+                if(ok) { m_InterruptedSessions.clear(); ImGui::CloseCurrentPopup(); }
+            }
+            if(!m_SupportError.empty()) ImGui::TextWrapped("%s",m_SupportError.c_str());
+            ImGui::EndPopup();
+        }
+        if(m_ShowAbout && !ImGui::IsPopupOpen("About Semiconductor Studio")) ImGui::OpenPopup("About Semiconductor Studio");
+        onMainViewport();
+        if(ImGui::BeginPopupModal("About Semiconductor Studio", &m_ShowAbout, ImGuiWindowFlags_AlwaysAutoResize)) {
+            const auto& build=GetBuildInfo();
+            if(ImGui::BeginTable("##build-info",2)) {
+                auto row=[](const char* label,std::string_view value){ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextUnformatted(label);ImGui::TableNextColumn();ImGui::TextUnformatted(value.data(),value.data()+value.size());};
+                row("Version",build.version); row("Commit",build.revision); row("Build UTC",build.builtUtc); row("Source SHA256",build.sourceSha256);
+                row("Toolchain",build.toolchain); row("Configuration",build.configuration);
+                ImGui::EndTable();
+            }
+            ImGui::TextUnformatted("Dependency SHA256");
+            ImGui::BeginChild("##deps",ImVec2(720,180),true,ImGuiWindowFlags_HorizontalScrollbar);
+            ImGui::TextUnformatted(build.dependencySha256.data(),build.dependencySha256.data()+build.dependencySha256.size());
+            ImGui::EndChild();
+            if(build.revision=="unknown") ImGui::TextWrapped("Development build: source commit was not supplied by the release owner.");
+            if(ImGui::Button("Copy build identity")) ImGui::SetClipboardText(BuildDescription().c_str());
+            ImGui::SameLine(); if(ImGui::Button("Close") || ImGui::IsKeyPressed(ImGuiKey_Escape)) {m_ShowAbout=false;ImGui::CloseCurrentPopup();}
+            ImGui::EndPopup();
+        }
+        if(m_ShowDiagnostics) {
+            onMainViewport();
+            ImGui::SetNextWindowSize(ImVec2(760,460),ImGuiCond_FirstUseEver);
+            if(ImGui::Begin("Export diagnostics",&m_ShowDiagnostics)) {
+                ImGui::TextWrapped("Preview the exact contents before saving. Nothing is uploaded. Dumps remain local and are excluded.");
+                ImGui::BeginChild("##diagnostics-preview",ImVec2(0,-115),true,ImGuiWindowFlags_HorizontalScrollbar);
+                ImGui::TextUnformatted(m_DiagnosticPreview.c_str()); ImGui::EndChild();
+                if(ImGui::Button("Save diagnostic report...")) {
+                    try {
+                        if(const auto path=SaveFileDialog({"Diagnostic report","txt"},"sst-diagnostics.txt")) {
+                            if(auto commands=m_CommandRegistry.lock()) {
+                                const auto result=ExecuteDiagnosticsExport(*commands,{*path,m_DiagnosticPreview});
+                                m_SupportError=result ? "Diagnostic report saved. Review it before sharing." : result.Error().userMessage+" "+result.Error().technicalDetails+" Check destination permissions and free disk space.";
+                            } else m_SupportError="Diagnostic command is unavailable. Restart the application and retry.";
+                        }
+                    } catch(const std::exception& error) { m_SupportError="Cannot export diagnostics: "+std::string(error.what())+". Check destination permissions and retry."; }
+                }
+                ImGui::TextWrapped("%s",m_SupportError.c_str());
+                if(!m_InterruptedSessions.empty() && ImGui::Button("Dismiss recovery notice")) {
+                    bool ok=true;
+                    for(const auto& path:m_InterruptedSessions) if(!AcknowledgeInterruptedSession(path,m_SupportError)) ok=false;
+                    if(ok) m_InterruptedSessions.clear();
+                }
+            }
+            ImGui::End();
+        }
 	}
 
 	void EditorLayer::renderCommandPalettePopup()

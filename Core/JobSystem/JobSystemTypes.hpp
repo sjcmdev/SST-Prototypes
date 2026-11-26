@@ -9,6 +9,8 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "Core/Utils/Time.hpp"
+#include "Core/Logging/LogContext.hpp"
+#include "Core/Utils/BoundedText.hpp"
 
 namespace SST
 {
@@ -94,10 +96,7 @@ namespace SST
 	inline constexpr std::size_t JobTextLimit = 4096;
 	inline std::string JobHistoryText(const std::string &text)
 	{
-		if (text.size() <= JobTextLimit) return text;
-		auto begin=text.size()-JobTextLimit+12;
-		while(begin<text.size() && (static_cast<unsigned char>(text[begin])&0xC0)==0x80)++begin;
-		return "[truncated] " + text.substr(begin);
+        return BoundedText(text,JobTextLimit);
 	}
 
 	struct JobRecord
@@ -107,6 +106,7 @@ namespace SST
 		Ref<std::stop_source> cancellationRequested = CreateRef<std::stop_source>();
         Ref<std::atomic_bool> executionClaimed;
 		WeakRef<IJob> job; // Retry/Resume require a live consumer-owned request.
+		LogContext logContext;
 	};
 
 	class JobCancelledException final : public std::runtime_error
@@ -130,6 +130,7 @@ namespace SST
 		[[nodiscard]] virtual std::string GetName() const = 0;
 		[[nodiscard]] virtual std::string GetType() const = 0;
 		[[nodiscard]] virtual bool UsesPythonRuntime() const { return false; }
+		[[nodiscard]] virtual LogContext GetLogContext() const { return {}; }
 		virtual void Execute(JobContext &context) = 0;
 	};
 } // namespace SST

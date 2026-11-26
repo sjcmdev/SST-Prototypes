@@ -35,6 +35,13 @@ end
 _SST_ROOT = path.getabsolute(".")
 _DS_ROOT = _SST_ROOT
 
+workspace "SSTPrototypes"
+    filter "system:windows"
+        symbols "On"
+    filter { "system:windows", "kind:WindowedApp or ConsoleApp", "configurations:Release or Dist" }
+        linkoptions { "/DEBUG:FULL" }
+    filter {}
+
 local function trim(value)
     return (value or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
@@ -47,7 +54,7 @@ local function pythonConfig(command)
     return trim(os.outputof(executable .. " -c \"" .. command .. "\"") or "")
 end
 
-_SST_PYTHON_CONFIG_EXE = "python"
+_SST_PYTHON_CONFIG_EXE = os.getenv("SST_PYTHON_CONFIG_EXE") or "python"
 if os.isfile(".venv/Scripts/python.exe") then
     _SST_PYTHON_CONFIG_EXE = path.getabsolute(".venv/Scripts/python.exe")
 elseif os.isfile(".venv/bin/python") then
@@ -189,6 +196,8 @@ project "Core"
         "Core/dspch.cpp",
         "Core/CoreLayer.hpp",
         "Core/CoreLayer.cpp",
+        "Core/BuildInfo.hpp",
+        "Core/BuildInfo.cpp",
         "Core/EntryPoint.hpp",
         "Core/Layer.hpp",
         "Core/Layer.cpp",
@@ -196,6 +205,7 @@ project "Core"
         "Core/LayerStack.cpp",
         "Core/App/Application.hpp",
         "Core/App/Application.cpp",
+        "Core/App/ApplicationArguments.cpp",
         "Core/App/ApplicationBootstrap.cpp",
         "Core/App/ApplicationInternals.hpp",
         "Core/App/ApplicationLifecycle.hpp",
@@ -303,6 +313,8 @@ project "Core"
     }
 
     defines { 'SST_PLOT_EXPORT_PYTHON_ROOT="' .. _SST_ROOT .. '/Core/ScientificRuntime/Python"' }
+    includedirs { _SST_ROOT .. "/build/generated/build-info" }
+    prebuildcommands { '"' .. _SST_PYTHON_CONFIG_EXE .. '" "' .. _SST_ROOT .. '/scripts/generate_build_info.py" --output "' .. _SST_ROOT .. '/build/generated/build-info/BuildInfo.generated.hpp"' }
     if _SST_PYTHON_EMBED_AVAILABLE == true then
         includedirs { _SST_PYTHON_INCLUDE_DIR, "Vendor/nanobind/include" }
         defines { "DS_PYTHON_CAPI_AVAILABLE=1", "Py_NO_LINK_LIB", "NB_STATIC" }
@@ -394,10 +406,35 @@ for _, projectScript in ipairs(os.matchfiles("Prototypes/*/premake5.lua")) do
         include(projectScript)
     end
 end
+
+project "CoreProfessionalTests"
+    location (_SST_ROOT .. "/build/generated/%{_ACTION}/%{prj.name}")
+    kind "ConsoleApp"
+    language "C++"
+    cppdialect "C++latest"
+    staticruntime "off"
+    targetdir (_SST_ROOT .. "/build/bin/" .. outputdir .. "/%{prj.name}")
+    objdir (_SST_ROOT .. "/build/bin-int/" .. outputdir .. "/%{prj.name}")
+    files { _SST_ROOT .. "/Core/tests/ProfessionalTests.cpp" }
+    includedirs { _SST_ROOT, _SST_ROOT .. "/Core", _SST_ROOT .. "/Vendor/GoogleTest/googletest/include", _SST_ROOT .. "/Vendor/spdlog/include", _SST_ROOT .. "/Vendor/thread-pool/include", _SST_ROOT .. "/Vendor/json/include", _SST_ROOT .. "/Vendor/yaml-cpp/include" }
+    links { "Core", "GoogleTest", "GoogleTestMain" }
+    sst_link_libraries()
+    filter "system:windows"
+        defines { "DS_PLATFORM_WINDOWS" }
+        buildoptions { "/utf-8" }
+    filter "configurations:Debug"
+        runtime "Debug"
+    filter "configurations:Release or Dist"
+        runtime "Release"
+        optimize "On"
+    filter {}
 group ""
 
 -- Core's HDF5 adapter needs the runtime beside each host executable.
 workspace "SSTPrototypes"
+    filter { "system:windows", "kind:ConsoleApp or WindowedApp" }
+        files { _SST_ROOT .. "/build/generated/build-info/BuildInfo.generated.rc" }
+        postbuildcommands { '"' .. _SST_PYTHON_CONFIG_EXE .. '" "' .. _SST_ROOT .. '/scripts/write_artifact_manifest.py" --artifact "%{cfg.buildtarget.abspath}" --pdb "%{cfg.targetdir}/%{prj.name}.pdb" --identity "' .. _SST_ROOT .. '/build/generated/build-info/BuildInfo.generated.json"' }
     filter "kind:ConsoleApp or WindowedApp"
         sst_link_hdf5()
         if _SST_PYTHON_EMBED_AVAILABLE then

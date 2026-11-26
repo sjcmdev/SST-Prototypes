@@ -200,6 +200,5 @@ int main(int argc, char** argv) {
     std::vector<char*> arguments(argv,argv+argc+1);
     char open[]="--open";
     if (argc>1 && argv[1][0]!='-') arguments.insert(arguments.begin()+1,open);
-    auto app=SST::Application::Create(static_cast<int>(arguments.size()-1),arguments.data(),SST::SetupApplication);
-    return app.Run();
+    return SST::RunApplication(static_cast<int>(arguments.size()-1),arguments.data(),SST::SetupApplication);
 }

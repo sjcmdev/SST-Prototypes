@@ -806,9 +806,11 @@ TEST_F(UnicodePaths, CoreFontFileAndLogFile) {
     Logger::Initialize(options);
     DS_LOG_INFO("au2-unicode-log-marker");
     Logger::Flush();
+    const auto sessionLog = Logger::SessionDirectory() / "application.log";
+    EXPECT_EQ(sessionLog.parent_path().parent_path().parent_path(), root);
     Logger::Shutdown();
     std::string text, error;
-    ASSERT_TRUE(TextFileIO::Load(options.logFilePath, text, error)) << error;
+    ASSERT_TRUE(TextFileIO::Load(sessionLog, text, error)) << error;
     EXPECT_NE(text.find("au2-unicode-log-marker"), std::string::npos);
 }
 TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {

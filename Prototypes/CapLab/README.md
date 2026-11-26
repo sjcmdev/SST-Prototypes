@@ -757,3 +757,7 @@ For Python suites, use the embedded GTest host with `SST_REQUIRE_EMBEDDING=1`,
 `PYTEST_ADDOPTS=--basetemp=build/<unique-suite-directory>` (forward slashes).
 Set `SST_CAPLAB_ACCEPTANCE_OUTPUT` to retain the workflow projects and figures.
 Current counts and evidence are in VALIDATION.md.
+
+## Diagnostics, CLI and build identity
+
+Use **Support ? About Semiconductor Studio** for build identity and **Support ? Export diagnostics?** to preview a redacted local report. `--version` and `--export-diagnostics report.txt` work without opening a window; invalid CLI syntax returns 2. Session/run logs rotate; native crash evidence stays local. See [shared runtime documentation](../../docs/PROFESSIONAL_RUNTIME.md) for retention, crash probes, recovery notices, Python metadata and EXE/PDB manifests.

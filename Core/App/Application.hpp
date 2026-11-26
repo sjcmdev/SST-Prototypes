@@ -178,4 +178,6 @@ namespace SST
 		// Singleton ownership
 		static std::optional<std::reference_wrapper<Application>> s_Instance;
 	};
+	[[nodiscard]] std::optional<int> HandleEarlyApplicationArguments(int argc, char** argv);
+	int RunApplication(int argc, char** argv, Application::ApplicationSetup setup);
 } // namespace SST
