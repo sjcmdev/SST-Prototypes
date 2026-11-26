@@ -1,0 +1,458 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="10" skipped="0" tests="16" time="1.069" timestamp="2026-11-26T06:06:13.610595+01:00" hostname="DESKTOP-URD7D0V"><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_auto_prefit_selects_curated_model[ivd_HZB25_T296_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T296_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize(
+        "characteristic",
+        _params({name: pytest.mark.xfail(reason=f"auto model selection gap, see module docstring", strict=True) for name in _KNOWN_MODEL_SELECTION_MISMATCHES}),
+    )
+    def test_auto_prefit_selects_curated_model(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T296_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T296_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_auto_prefit_selects_curated_model[ivd_HZB25_T306_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T306_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize(
+        "characteristic",
+        _params({name: pytest.mark.xfail(reason=f"auto model selection gap, see module docstring", strict=True) for name in _KNOWN_MODEL_SELECTION_MISMATCHES}),
+    )
+    def test_auto_prefit_selects_curated_model(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T306_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T306_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_auto_prefit_selects_curated_model[ivd_HZB25_T321_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T321_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize(
+        "characteristic",
+        _params({name: pytest.mark.xfail(reason=f"auto model selection gap, see module docstring", strict=True) for name in _KNOWN_MODEL_SELECTION_MISMATCHES}),
+    )
+    def test_auto_prefit_selects_curated_model(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T321_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T321_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_hzb_ground_truth" name="test_auto_prefit_selects_curated_model[ivd_HZB25_T330_L0]" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T330_L0.dat'">characteristic = {'columns': [{'name': 'col_0', 'role': 'voltage', 'unit': ''}, {'name': 'col_1', 'role': 'value', 'unit': ''}, {'name'...'import': {'custom_script_path': '', 'decimal_separator': 'auto', 'delimiter': '', 'name_pattern': '{stem}', ...}, ...}
+
+    @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
+    @pytest.mark.parametrize(
+        "characteristic",
+        _params({name: pytest.mark.xfail(reason=f"auto model selection gap, see module docstring", strict=True) for name in _KNOWN_MODEL_SELECTION_MISMATCHES}),
+    )
+    def test_auto_prefit_selects_curated_model(characteristic: dict) -&gt; None:
+&gt;       sample = _load_sample(characteristic)
+
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:189: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\tests\test_jfm_hzb_ground_truth.py:93: in _load_sample
+    result = parse_dat(DATA_DIR / f"{name}.dat")
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/dat/ivd_HZB25_T330_L0.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\dat\\ivd_HZB25_T330_L0.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_dat_parser_returns_unified_shape" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\C002\\IVT C002_Z015_6\\IV_C002_Z015_6_300,0K.dat'">def test_dat_parser_returns_unified_shape() -&gt; None:
+&gt;       result = parse_dat(DAT_FILE)
+
+Prototypes\JFM\python\tests\test_jfm_import_smoke.py:21: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\C002\\IVT C002_Z015_6\\IV_C002_Z015_6_300,0K.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_scaps_parser_returns_curves" time="0.028" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_cpp_adapter_returns_bound_shape" time="0.001"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\C002\\IVT C002_Z015_6\\IV_C002_Z015_6_300,0K.dat'">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000288C4807CE0&gt;
+
+    def test_cpp_adapter_returns_bound_shape(monkeypatch) -&gt; None:
+        class JFMColumn:
+            pass
+    
+        class JFMSweepInfo:
+            pass
+    
+        class JFMQualityControl:
+            pass
+    
+        class JFMCharacteristic:
+            pass
+    
+        monkeypatch.setitem(
+            sys.modules,
+            "sst_jfm",
+            SimpleNamespace(
+                JFMColumn=JFMColumn,
+                JFMSweepInfo=JFMSweepInfo,
+                JFMQualityControl=JFMQualityControl,
+                JFMCharacteristic=JFMCharacteristic,
+                JFMCharacteristicInfo=SimpleNamespace,
+                JFMCharacteristicData=SimpleNamespace,
+            ),
+        )
+    
+        from jfm_import.cpp_adapter import import_file
+    
+&gt;       result = import_file(DAT_FILE)
+
+Prototypes\JFM\python\tests\test_jfm_import_smoke.py:73: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\jfm_import\cpp_adapter.py:20: in import_file
+    result = parser(source, _parse_options(options))
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\C002\\IVT C002_Z015_6\\IV_C002_Z015_6_300,0K.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_cpp_adapter_applies_parse_options" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\C002\\IVT C002_Z015_6\\IV_C002_Z015_6_300,0K.dat'">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000288C4807A80&gt;
+
+    def test_cpp_adapter_applies_parse_options(monkeypatch) -&gt; None:
+        class JFMColumn:
+            pass
+    
+        class JFMSweepInfo:
+            pass
+    
+        class JFMQualityControl:
+            pass
+    
+        class JFMCharacteristic:
+            pass
+    
+        monkeypatch.setitem(
+            sys.modules,
+            "sst_jfm",
+            SimpleNamespace(
+                JFMColumn=JFMColumn,
+                JFMSweepInfo=JFMSweepInfo,
+                JFMQualityControl=JFMQualityControl,
+                JFMCharacteristic=JFMCharacteristic,
+                JFMCharacteristicInfo=SimpleNamespace,
+                JFMCharacteristicData=SimpleNamespace,
+            ),
+        )
+    
+        from jfm_import.cpp_adapter import import_file
+    
+&gt;       result = import_file(
+            DAT_FILE,
+            {
+                "parser": "dat",
+                "name_pattern": "curve_{stem}",
+                "short_name_pattern": "{sample}_{T}",
+                "variable_delimiter": "_",
+                "custom_variables": [
+                    {
+                        "name": "sample",
+                        "source": "stem",
+                        "token_index": 1,
+                        "substring_start": 0,
+                        "substring_length": -1,
+                    }
+                ],
+                "decimal_separator": "auto",
+            },
+        )
+
+Prototypes\JFM\python\tests\test_jfm_import_smoke.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\jfm_import\cpp_adapter.py:20: in import_file
+    result = parser(source, _parse_options(options))
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\C002\\IVT C002_Z015_6\\IV_C002_Z015_6_300,0K.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_import_variables_include_paths_and_allow_overrides" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\C002\\IVT C002_Z015_6\\IV_C002_Z015_6_300,0K.dat'">monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x00000288C5A731D0&gt;
+
+    def test_import_variables_include_paths_and_allow_overrides(monkeypatch) -&gt; None:
+        class JFMColumn:
+            pass
+    
+        class JFMSweepInfo:
+            pass
+    
+        class JFMQualityControl:
+            pass
+    
+        class JFMCharacteristic:
+            pass
+    
+        monkeypatch.setitem(
+            sys.modules,
+            "sst_jfm",
+            SimpleNamespace(
+                JFMColumn=JFMColumn,
+                JFMSweepInfo=JFMSweepInfo,
+                JFMQualityControl=JFMQualityControl,
+                JFMCharacteristic=JFMCharacteristic,
+                JFMCharacteristicInfo=SimpleNamespace,
+                JFMCharacteristicData=SimpleNamespace,
+            ),
+        )
+    
+        from jfm_import.cpp_adapter import import_file
+    
+&gt;       result = import_file(
+            DAT_FILE,
+            {
+                "parser": "dat",
+                "short_name_pattern": "{T}_{parent_folder_1}_{file_name}",
+                "variable_delimiter": "_",
+                "custom_variables": [
+                    {
+                        "name": "T",
+                        "source": "parent_folder_1",
+                        "token_index": -1,
+                        "substring_start": 0,
+                        "substring_length": -1,
+                    }
+                ],
+            },
+        )
+
+Prototypes\JFM\python\tests\test_jfm_import_smoke.py:165: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\jfm_import\cpp_adapter.py:20: in import_file
+    result = parser(source, _parse_options(options))
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\real-measurement\\C002\\IVT C002_Z015_6\\IV_C002_Z015_6_300,0K.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_synthetic_single_diode_import_gets_temperature_from_path" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\syntetic-data\\single-diode\\canonical\\SD-0\\T-300K\\I0-1e-10__A-1p5\\clean.dat'">def test_synthetic_single_diode_import_gets_temperature_from_path() -&gt; None:
+&gt;       result = parse_dat(SYNTHETIC_FILE)
+
+Prototypes\JFM\python\tests\test_jfm_import_smoke.py:192: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/syntetic-data/single-diode/canonical/SD-0/T-300K/I0-1e-10__A-1p5/clean.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\syntetic-data\\single-diode\\canonical\\SD-0\\T-300K\\I0-1e-10__A-1p5\\clean.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_custom_variable_override_tolerates_partial_numeric_fields" time="0.000"><failure message="FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\syntetic-data\\single-diode\\canonical\\SD-0\\T-300K\\I0-1e-10__A-1p5\\clean.dat'">def test_custom_variable_override_tolerates_partial_numeric_fields() -&gt; None:
+&gt;       result = parse_dat(
+            SYNTHETIC_FILE,
+            {
+                "short_name_pattern": "{T}_{stem}",
+                "custom_variables": [
+                    {
+                        "name": "T",
+                        "source": "parent_folder_1",
+                        "token_index": "",
+                        "substring_start": "",
+                        "substring_length": "",
+                    }
+                ],
+            },
+        )
+
+Prototypes\JFM\python\tests\test_jfm_import_smoke.py:201: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+Prototypes\JFM\python\jfm_import\dat_parser.py:22: in parse_dat
+    text = source.read_text(encoding=parse_options.encoding, errors="replace")
+D:\Programming\Python\globall\Lib\pathlib\_local.py:546: in read_text
+    return PathBase.read_text(self, encoding, errors, newline)
+D:\Programming\Python\globall\Lib\pathlib\_abc.py:632: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = WindowsPath('D:/SJCM/01_SemiconductorStudio/wt-cl/jfmfix1/SST-Prototypes/Prototypes/JFM/example-data/syntetic-data/single-diode/canonical/SD-0/T-300K/I0-1e-10__A-1p5/clean.dat')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = 'replace'
+newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+&gt;       return io.open(self, mode, buffering, encoding, errors, newline)
+E       FileNotFoundError: [Errno 2] No such file or directory: 'D:\\SJCM\\01_SemiconductorStudio\\wt-cl\\jfmfix1\\SST-Prototypes\\Prototypes\\JFM\\example-data\\syntetic-data\\single-diode\\canonical\\SD-0\\T-300K\\I0-1e-10__A-1p5\\clean.dat'
+
+D:\Programming\Python\globall\Lib\pathlib\_local.py:537: FileNotFoundError</failure></testcase><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_incomplete_name_pattern_keeps_preview_metadata_alive" time="0.000" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_import_smoke" name="test_cpp_adapter_custom_script" time="0.006" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_objective" name="test_phase4_final_fit_accepts_signed_light_data[phase-4-light-rs0-rsh100-isc_shift]" time="0.017" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_objective" name="test_phase4_final_fit_accepts_signed_light_data[phase-4-light-rs0-rsh100-signed_sigma]" time="0.028" /><testcase classname="Prototypes.JFM.python.tests.test_jfm_objective" name="test_phase4_final_fit_accepts_signed_light_data[phase-4-light-rs0-rsh10000-isc_shift]" time="0.024" /></testsuite></testsuites>

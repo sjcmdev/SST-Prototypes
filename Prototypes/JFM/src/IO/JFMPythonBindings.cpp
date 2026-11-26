@@ -189,7 +189,11 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
             if (!status) throw std::runtime_error("Fit job disappeared");
             if (status->status == JobStatus::Completed) break;
             if (status->status == JobStatus::Failed || status->status == JobStatus::Cancelled)
-                throw std::runtime_error(status->errorMessage);
+            {
+                bus->ProcessQueue();
+                if (result.is_null()) throw std::runtime_error(status->errorMessage);
+                break;
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
         bus->ProcessQueue();

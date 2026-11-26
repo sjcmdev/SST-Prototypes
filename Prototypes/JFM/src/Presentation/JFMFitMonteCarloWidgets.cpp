@@ -63,7 +63,11 @@ namespace SST::Prototypes::JFM
 			changed = true;
 		}
 		ImGui::SeparatorText("Monte Carlo");
-		changed |= sst::ui::widgets::Int("N", &settings.monteCarloSamples);
+		const int sampleLimit = JFMMonteCarloSampleLimit(modelId);
+		changed |= sst::ui::widgets::SliderInt("N", &settings.monteCarloSamples, 1, std::max(1, sampleLimit), "%d", 0,
+			"Samples per characteristic; limited to 64 MiB of parameter results. Ctrl+click to type an exact count.");
+		if (settings.monteCarloSamples < 1 || settings.monteCarloSamples > sampleLimit)
+			ImGui::TextWrapped("MC disabled: choose 1 to %d samples (64 MiB memory budget).", sampleLimit);
 		changed |= sst::ui::widgets::Checkbox("Save samples", &settings.saveSamples);
 		int seed = static_cast<int>(settings.monteCarloSeed);
 		if (sst::ui::widgets::Int("Seed", &seed))

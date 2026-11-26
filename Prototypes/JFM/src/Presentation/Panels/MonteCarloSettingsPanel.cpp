@@ -14,6 +14,7 @@
 #include <sst/ui/Widgets/LabelledControls.hpp>
 #include <cmath>
 #include <optional>
+#include <limits>
 #include <random>
 
 namespace SST::Prototypes::JFM
@@ -174,11 +175,21 @@ namespace SST::Prototypes::JFM
 			allIds.push_back(info.id);
 		std::vector<CharacteristicId> selectedIds = m_Store->GetSelectedCharacteristicIds();
 		const ImVec2 buttonSize{std::max(150.0f, ImGui::CalcTextSize("Perform MC selected").x + 2 * ImGui::GetStyle().FramePadding.x), 0.0f};
-		if (ImGui::Button("Perform MC selected", buttonSize))
-			RunMonteCarlo(project, selectedIds);
+		const auto runButton = [&](const char *label, const std::vector<CharacteristicId> &ids) {
+			int limit = std::numeric_limits<int>::max();
+			for (const auto &info : snapshot.characteristics)
+				if (std::find(ids.begin(), ids.end(), info.id) != ids.end())
+					limit = std::min(limit, JFMMonteCarloSampleLimit(info.fit ? info.fit->modelId : info.prefit ? info.prefit->modelId : "SD-RsRsh"));
+			const bool invalid = m_Draft.monteCarloSamples < 1 || m_Draft.monteCarloSamples > limit;
+			ImGui::BeginDisabled(ids.empty() || invalid);
+			if (ImGui::Button(label, buttonSize)) RunMonteCarlo(project, ids);
+			ImGui::EndDisabled();
+			if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+				ImGui::SetTooltip(ids.empty() ? "Select characteristics first." : "Sample count: 1 to %d per characteristic (64 MiB memory budget).", limit);
+		};
+		runButton("Perform MC selected", selectedIds);
 		sst::ui::widgets::SameLineIfFits(buttonSize.x);
-		if (ImGui::Button("Perform MC all", buttonSize))
-			RunMonteCarlo(project, allIds);
+		runButton("Perform MC all", allIds);
 		sst::ui::widgets::SameLineIfFits(buttonSize.x);
 		if (ImGui::Button("Save MC config", buttonSize))
 		{
@@ -296,5 +307,6 @@ namespace SST::Prototypes::JFM
 		}
 		if (!m_Status.empty())
 			ImGui::TextUnformatted(m_Status.c_str());
+		ImGui::TextWrapped("%s", m_Store->GetStatusMessage(project).c_str());
 	}
 } // namespace SST::Prototypes::JFM

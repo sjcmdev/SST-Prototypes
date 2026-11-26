@@ -23,6 +23,7 @@ namespace SST::Prototypes::JFM
 	};
 
 	[[nodiscard]] const std::vector<std::string_view> &JFMModelParameterNames(std::string_view modelId);
+	[[nodiscard]] int JFMMonteCarloSampleLimit(std::string_view modelId);
 	[[nodiscard]] double EvaluateJFMCurrent(
 		std::string_view modelId,
 		double voltage,

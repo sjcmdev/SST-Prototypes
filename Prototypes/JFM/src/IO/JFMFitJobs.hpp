@@ -82,6 +82,7 @@ namespace SST::Prototypes::JFM
 	{
 	public:
 		JFMMonteCarloJob(Ref<EventBus> eventBus, Ref<JFMWorkspaceStore> store, Ref<JFMMonteCarloWorkQueue> queue);
+		~JFMMonteCarloJob() override;
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -91,5 +92,6 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> m_EventBus;
 		Ref<JFMWorkspaceStore> m_Store;
 		Ref<JFMMonteCarloWorkQueue> m_Queue;
+		bool m_Executed = false;
 	};
 } // namespace SST::Prototypes::JFM

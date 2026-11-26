@@ -10,6 +10,13 @@
 #include "solver/fit_solver.hpp"
 #include "IO/JFMFitJobs.hpp"
 #include "IO/JFMPythonBindings.hpp"
+#include "Core/JobSystem/JobSystem.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
+#include "Core/IO/IOLayer.hpp"
+#include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
+#include "IO/JFMIORegistration.hpp"
+#include "IO/JFMProjectYamlSerializer.hpp"
+#include "Events/JFMEvents.hpp"
 
 #include <array>
 #include <algorithm>
@@ -20,6 +27,8 @@
 #include <cmath>
 #include <string>
 #include <unordered_map>
+#include <chrono>
+#include <thread>
 
 namespace SST::Prototypes::JFM
 {
@@ -65,6 +74,138 @@ namespace SST::Prototypes::JFM
 			EXPECT_TRUE(std::isfinite(EvaluateJFMCurrent(model, 0.55, 300.0, Parameters)));
 		}
 	}
+
+    TEST(JFMFitEngineTests, MonteCarloJobsReportFailuresAndRetainCurvesOnCancel)
+    {
+        for (int outcome=0; outcome<5; ++outcome) {
+            SCOPED_TRACE(outcome);
+            auto bus=CreateRef<EventBus>(); auto store=CreateRef<JFMWorkspaceStore>();
+            IOLayer io(bus); RegisterJFMIOHandlers(io,{bus,store}); ProgressTracker tracker(bus);
+            auto record=MakeRecord("SD-0");
+            JFMFitState fit; fit.modelId="SD-0"; fit.status="completed"; fit.parameters=record.info.prefit->parameters;
+            record.info.fit=fit;
+            const JFMCharacteristicRef ref{store->GetActiveProjectHandle(),store->AddCharacteristicRecords(store->GetActiveProjectHandle(),{record}).front()};
+            auto retained=CreateRef<JFMMonteCarloResult>(); retained->parameterNames={"I0","A"};
+            retained->voltage=record.data->voltage; retained->idealCurrent=record.data->current;
+            retained->noiseSeed=42; retained->noiseAmplitude.resize(retained->voltage.size(),0.0);
+            JFMMonteCarloSample sample; sample.parameters={1e-10,1.5}; sample.accepted=sample.converged=true;
+            retained->samples.resize(7,sample);
+            const Ref<const JFMMonteCarloResult> previous=std::move(retained);
+            JFMMonteCarloState state; state.modelId="SD-0"; state.sampleCount=7; state.acceptedCount=7;
+            ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,previous));
+            const auto generation=store->BeginMonteCarlo(ref);
+            EXPECT_EQ(store->GetMonteCarloResult(ref),previous);
+            EXPECT_EQ(store->GetMonteCarloState(ref)->acceptedCount,7);
+            JFMFitMonteCarloSettings settings; settings.preferGpu=false; settings.saveSamples=false;
+            settings.monteCarloSamples=outcome==1?JFMMonteCarloSampleLimit("SD-0")+1:outcome==3?100000:2;
+            settings.monteCarloMaxIterations=10;
+            if(outcome==2)record.data.reset();
+            auto queue=CreateRef<JFMMonteCarloWorkQueue>();
+            auto output=std::filesystem::temp_directory_path()/"jfmfix1-mc";
+            if(outcome==4) {
+                std::filesystem::create_directories(output); output/="output-file";
+                std::ofstream file(output); file<<"Not a directory";
+            }
+            ASSERT_TRUE(queue->Enqueue({{ref,generation,record,*record.info.prefit,fit,settings,Path::FromResolved(output)}}));
+            JFMCharacteristicRef validRef;
+            if(outcome==1) {
+                validRef={ref.project,store->AddCharacteristicRecords(ref.project,{record}).front()};
+                auto validSettings=settings; validSettings.monteCarloSamples=2;
+                EXPECT_FALSE(queue->Enqueue({{validRef,store->BeginMonteCarlo(validRef),record,*record.info.prefit,fit,validSettings,Path::FromResolved(std::filesystem::temp_directory_path()/"jfmfix1-mc")}}));
+            }
+            auto job=CreateRef<JFMMonteCarloJob>(bus,store,queue); JobSystem jobs(bus,1);
+            const auto id=jobs.Submit(job);
+            const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(10);
+            while(std::chrono::steady_clock::now()<deadline) {
+                const auto status=jobs.GetJob(id); ASSERT_TRUE(status);
+                if(outcome==3 && !status->currentStage.empty()) (void)jobs.RequestCancel(id);
+                if(status->status!=JobStatus::Queued && status->status!=JobStatus::Running) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            jobs.Shutdown(); bus->ProcessQueue();
+            const auto status=jobs.GetJob(id); ASSERT_TRUE(status);
+            const JobStatus expected=outcome==0?JobStatus::Completed:outcome==3?JobStatus::Cancelled:JobStatus::Failed;
+            EXPECT_EQ(status->status,expected);
+            const auto progress=tracker.GetSnapshot(id); ASSERT_TRUE(progress); EXPECT_EQ(progress->status,expected);
+            if(outcome==1) {
+                EXPECT_NE(store->GetMonteCarloResult(validRef),nullptr);
+                EXPECT_EQ(store->GetMonteCarloState(validRef)->status,"completed");
+            }
+            if(outcome==0) {EXPECT_NE(store->GetMonteCarloResult(ref),previous); EXPECT_EQ(store->GetMonteCarloState(ref)->status,"completed");}
+            else {
+                EXPECT_EQ(store->GetMonteCarloResult(ref),previous);
+                EXPECT_EQ(store->GetMonteCarloResult(ref)->idealCurrent,previous->idealCurrent);
+                EXPECT_EQ(JFMMonteCarloNoisyCurve(*store->GetMonteCarloResult(ref),0),previous->idealCurrent);
+                EXPECT_EQ(store->GetMonteCarloState(ref)->status,outcome==3?"cancelled":"failed");
+                EXPECT_FALSE(store->GetMonteCarloState(ref)->warnings.empty());
+                EXPECT_NE(store->GetStatusMessage().find(outcome==3?"cancelled":"failed"),std::string::npos);
+                if(outcome!=3) {
+                    EXPECT_EQ(progress->errorSummary,status->errorMessage);
+                    EXPECT_EQ(progress->currentMessage,status->errorMessage);
+                }
+                if(outcome==4) {
+                    EXPECT_NE(status->errorMessage.find("could not be saved"),std::string::npos);
+                    std::filesystem::remove(output);
+                }
+                const auto saved=JFMProjectYamlSerializer::Serialize(store->GetProjectSnapshot()); ASSERT_TRUE(saved);
+                const auto loaded=JFMProjectYamlSerializer::Deserialize(*saved); ASSERT_TRUE(loaded);
+                EXPECT_EQ(loaded->characteristics.front().monteCarlo->status,outcome==3?"cancelled":"failed");
+                EXPECT_EQ(loaded->characteristics.front().monteCarlo->acceptedCount,7);
+                EXPECT_FALSE(store->ApplyMonteCarloResult(ref,generation,state,previous));
+            }
+            EXPECT_TRUE(queue->Enqueue({{ref,store->BeginMonteCarlo(ref),record,*record.info.prefit,fit,settings,{}}}));
+            queue->Reset();
+        }
+    }
+
+    TEST(JFMFitEngineTests, MonteCarloMemoryLimitMatchesRetainedSampleBudget)
+    {
+        for(const char* model:{"SD-0","SD-RsRsh","SD-RsRsh-alpha-Rsh2-I_ph"}) {
+            const auto bytes=sizeof(JFMMonteCarloSample)+JFMModelParameterNames(model).size()*sizeof(double)+128;
+            const auto limit=JFMMonteCarloSampleLimit(model);
+            EXPECT_LE(limit*bytes,64u*1024*1024); EXPECT_GT((limit+1)*bytes,64u*1024*1024);
+        }
+        EXPECT_EQ(JFMMonteCarloSampleLimit("unknown"),0);
+    }
+
+    TEST(JFMFitEngineTests, MonteCarloRejectedBeforeSubmissionPreservesPreviousResult)
+    {
+        auto bus=CreateRef<EventBus>(); auto store=CreateRef<JFMWorkspaceStore>();
+        auto record=MakeRecord("SD-0"); record.info.fit=JFMFitState{};
+        record.info.fit->modelId="SD-0"; record.info.fit->status="completed";
+        const JFMCharacteristicRef ref{store->GetActiveProjectHandle(),store->AddCharacteristicRecords(store->GetActiveProjectHandle(),{record}).front()};
+        JFMMonteCarloState state; state.modelId="SD-0";
+        const auto previous=CreateRef<const JFMMonteCarloResult>();
+        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,previous));
+        auto settings=CreateRef<JFMUserSettingsStore>(Path::FromResolved(std::filesystem::temp_directory_path()/"jfmfix1-settings"));
+        auto options=settings->GetSnapshot().fitMonteCarlo; options.monteCarloSamples=1000000; settings->SetFitMonteCarloSettings(options);
+        int submissions=0; auto submitted=bus->Subscribe<JobSubmitRequested>([&](const auto&){++submissions;});
+        IOLayer io(bus); RegisterJFMIOHandlers(io,{bus,store,{},settings});
+        bus->PublishNew<MonteCarloRequested>(ref.project,std::vector<CharacteristicId>{ref.characteristic}); bus->ProcessQueue();
+        EXPECT_EQ(submissions,0); EXPECT_EQ(store->GetMonteCarloResult(ref),previous);
+        EXPECT_EQ(store->GetMonteCarloState(ref)->status,"completed");
+        EXPECT_NE(store->GetStatusMessage().find(std::to_string(JFMMonteCarloSampleLimit("SD-0"))),std::string::npos);
+    }
+
+    TEST(JFMFitEngineTests, MonteCarloCancelledBeforeExecuteReleasesQueueAndKeepsResult)
+    {
+        auto store=CreateRef<JFMWorkspaceStore>(); auto record=MakeRecord("SD-0");
+        record.info.fit=JFMFitState{}; record.info.fit->modelId="SD-0"; record.info.fit->status="completed";
+        const JFMCharacteristicRef ref{store->GetActiveProjectHandle(),store->AddCharacteristicRecords(store->GetActiveProjectHandle(),{record}).front()};
+        JFMMonteCarloState state; state.modelId="SD-0";
+        const auto previous=CreateRef<const JFMMonteCarloResult>();
+        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,previous));
+        auto queue=CreateRef<JFMMonteCarloWorkQueue>();
+        ASSERT_TRUE(queue->Enqueue({{ref,store->BeginMonteCarlo(ref)}}));
+        JobSystem jobs({},1);
+        const auto id=jobs.SubmitAfter(CreateRef<JFMMonteCarloJob>(nullptr,store,queue),Time::Milliseconds(60000));
+        ASSERT_TRUE(jobs.RequestCancel(id)); jobs.Shutdown(true);
+        ASSERT_TRUE(jobs.GetJob(id)); EXPECT_EQ(jobs.GetJob(id)->status,JobStatus::Cancelled);
+        EXPECT_EQ(store->GetMonteCarloResult(ref),previous);
+        EXPECT_EQ(store->GetMonteCarloState(ref)->status,"cancelled");
+        EXPECT_TRUE(queue->Enqueue({{ref,store->BeginMonteCarlo(ref)}}));
+        queue->Reset();
+    }
 
 	TEST(JFMFitEngineTests, CurrentModelsMatchCanonicalLambertWEquations)
 	{
@@ -500,6 +641,12 @@ namespace SST::Prototypes::JFM
         EXPECT_EQ(result.at("error").at("code"),"jfm.fit.validation");
         q["method"]="lm"; q["noise_percent"]=-1.; result=RunJFMFitRequest(q);
         EXPECT_FALSE(result.at("ok")); EXPECT_EQ(result.at("error").at("code"),"jfm.fit.validation");
+        q["noise_percent"]=0.5; q["samples"]=JFMMonteCarloSampleLimit("SD-0")+1;
+        result=RunJFMFitRequest(q);
+        EXPECT_FALSE(result.at("ok")); EXPECT_EQ(result.at("error").at("code"),"jfm.fit.failed");
+        EXPECT_NE(result.at("error").at("message").get<std::string>().find("64 MiB"),std::string::npos);
+        ASSERT_TRUE(result.contains("job_id")); EXPECT_GT(result.at("job_id").get<std::uint64_t>(),firstId);
+        EXPECT_TRUE(result.contains("project_id")); EXPECT_TRUE(result.contains("characteristic_id"));
     }
 
 } // namespace SST::Prototypes::JFM

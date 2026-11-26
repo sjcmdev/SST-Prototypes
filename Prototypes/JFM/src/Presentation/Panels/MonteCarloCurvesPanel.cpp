@@ -129,6 +129,8 @@ namespace SST::Prototypes::JFM
 				continue;
             const auto accepted = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.converged; });
             const auto converged = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.solverConverged; });
+            const bool previous = record->info.monteCarlo && record->info.monteCarlo->status == "running";
+            ImGui::TextDisabled("%s", previous ? "MC running - showing previous result" : "MC result");
             ImGui::Text("%s: %d/%d accepted, %d converged", record->info.name.c_str(), static_cast<int>(accepted), static_cast<int>(result->samples.size()), static_cast<int>(converged));
 			std::map<std::string, int> reasons;
             int fallback = 0, flat = 0;
@@ -164,6 +166,7 @@ namespace SST::Prototypes::JFM
 				{
 					ImPlotSpec spec;
 					spec.LineColor = ImVec4(1.0f, 0.88f, 0.05f, 1.0f);
+					if (previous) spec.LineColor.w *= 0.45f;
 					spec.LineWeight = 2.5f;
 					PlotCurrent("Ideal", result->voltage, result->idealCurrent.data(), pointCount, spec, m_SemiLog);
 				}
@@ -178,6 +181,7 @@ namespace SST::Prototypes::JFM
 					{
 						ImPlotSpec spec;
 						spec.LineColor = ImVec4(1.0, 0.0f, 0.0f, rejected ? 0.06f : m_SingleIteration ? 0.9f : 0.18f);
+						if (previous) spec.LineColor.w *= 0.45f;
 						spec.LineWeight = 2.0f;
 						spec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##mc_noisy_" + std::to_string(sampleIndex);
@@ -193,6 +197,7 @@ namespace SST::Prototypes::JFM
 						std::vector<double> fitted = FitCurveForSample(*result, result->samples[sampleIndex], record->info.monteCarlo ? record->info.monteCarlo->modelId : "SD-RsRsh", *record->info.temperatureK);
 						ImPlotSpec spec;
 						spec.LineColor = ImVec4(0.10f, 0.56f, 1.0f, rejected ? 0.08f : m_SingleIteration ? 1.0f : 0.28f);
+						if (previous) spec.LineColor.w *= 0.45f;
 						spec.LineWeight = 2.5;
 						spec.Flags = ImPlotItemFlags_NoLegend;
 						const std::string label = "##mc_fit_" + std::to_string(sampleIndex);

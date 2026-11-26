@@ -1452,10 +1452,7 @@ namespace SST::Prototypes::JFM
 		JFMMonteCarloState &state = info->get().monteCarlo.emplace(info->get().monteCarlo.value_or(JFMMonteCarloState{}));
 		state.modelId = info->get().fit->modelId;
 		state.status = "running";
-        state.acceptedCount = 0;
-        state.convergedCount = 0;
 		state.warnings.clear();
-		document->get().monteCarloResults.erase(ref.characteristic);
 		return ++document->get().monteCarloGenerations[ref.characteristic];
 	}
 
@@ -1495,7 +1492,7 @@ namespace SST::Prototypes::JFM
 		return true;
 	}
 
-	bool JFMWorkspaceStore::FailMonteCarlo(JFMCharacteristicRef ref, std::uint64_t generation, std::string error)
+	bool JFMWorkspaceStore::FailMonteCarlo(JFMCharacteristicRef ref, std::uint64_t generation, std::string error, bool cancelled)
 	{
 		std::scoped_lock lock(m_Mutex);
 		auto document = findDocumentLocked(ref.project);
@@ -1505,12 +1502,12 @@ namespace SST::Prototypes::JFM
 		if (current == document->get().monteCarloGenerations.end() || current->second != generation)
 			return false;
 		auto info = findInfoLocked(document->get(), ref.characteristic);
-		if (!info)
+		if (!info || !info->get().monteCarlo || info->get().monteCarlo->status != "running")
 			return false;
 		JFMMonteCarloState &state = info->get().monteCarlo.emplace(info->get().monteCarlo.value_or(JFMMonteCarloState{}));
-		state.status = "failed";
+		state.status = cancelled ? "cancelled" : "failed";
 		state.warnings = {std::move(error)};
-		document->get().monteCarloResults.erase(ref.characteristic);
+		document->get().status = "Monte Carlo " + state.status + ": " + state.warnings.front();
 		bumpRevisionLocked(document->get());
 		return true;
 	}
