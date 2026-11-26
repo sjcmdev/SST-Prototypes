@@ -146,6 +146,7 @@ namespace SST::Prototypes::PlotLab
     }
     Document::~Document()
     {
+        try{StopImport();}catch(...){}
         if(ownsDataJobs) dataJobs->Shutdown(true);
         else if(dataJob) (void)dataJobs->RequestCancel(dataJob);
         try {ResetPython();} catch(...) {}
@@ -167,6 +168,7 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Replace(Ref<pl::Project> next)
     {
+        StopImport();trustedImportRecipes.clear();importPresets.clear();importRecipes.clear();importPresetsDirty=false;importUi={};
         ResetPython();
         if (project)
         {
@@ -220,8 +222,13 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Open(Ref<pl::Project> next, const std::filesystem::path &source)
     {
+        std::map<std::string,pl::ImportRecipe> presets;
+        ImportRecipes recipes;
+        ImportUiState ui;auto presetFile=source;presetFile+=".imports.json";
+        if(!source.empty() && std::filesystem::exists(presetFile))presets=LoadImportPresets(presetFile,&ui,&recipes);
         Replace(std::move(next));
         path = source;
+        importPresets=std::move(presets);importRecipes=std::move(recipes);importUi=std::move(ui);
         pythonTrusted=!HasPython();
 #if DS_PYTHON_CAPI_AVAILABLE
         if(HasPython() && !source.empty()) {
@@ -242,6 +249,9 @@ namespace SST::Prototypes::PlotLab
         if(history!=pythonHistory){history=pythonHistory;updates.push_back(std::move(root));}
         if(!updates.empty())Execute(project->change("Save Python workspace",std::move(updates)));
         project->save(destination);
+        auto presets=destination;presets+=".imports.json";
+        if(!importPresets.empty() || !importRecipes.empty() || importUi.open || std::filesystem::exists(presets))SaveImportPresets(presets,importPresets,&importUi,&importRecipes);
+        importPresetsDirty=false;
         path = destination;
         undo->MarkClean();
         if(pythonTrusted && HasPython()) {
@@ -474,6 +484,7 @@ namespace SST::Prototypes::PlotLab
     }
 
     void Document::PollDataOperation() {
+        (void)PollImport();
         PollPythonJobs();
         if(!dataJob) return;
         const auto status=dataJobs->GetJob(dataJob);

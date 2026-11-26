@@ -67,6 +67,40 @@ class WorksheetSession:
         import json
         return json.loads(self._session.command_json(json.dumps(request, allow_nan=False)))
 
+    def import_preview(self, paths, recipe, *, wait=True):
+        """Plan every full input without publication; names/roles/units are explicit.
+
+        mapping: [{source, name, role (0..7), units, required, numeric}].
+        hooks: stage -> {source, reference, version, numbers, strings}; see
+        importing.STAGES. Hooks run only in preview, after explicit trust.
+        Import commits that immutable preview after checking its source hash.
+        """
+        return self._session.import_preview([str(p) for p in paths], recipe, wait)
+
+    def import_commit(self, *, wait=True):
+        return self._session.import_commit(wait)
+
+    def import_status(self):
+        return self._session.import_status()
+
+    def import_cancel(self):
+        self._session.import_cancel()
+
+    def trust_import_recipe(self, recipe):
+        """Explicitly grant this exact recipe the worksheet Python permissions."""
+        self._session.trust_import_recipe(recipe)
+
+    def save_import_presets(self, path, presets):
+        self._session.save_import_presets(str(path), presets)
+
+    def load_import_presets(self, path):
+        return self._session.load_import_presets(str(path))
+
+    @property
+    def import_recipes(self):
+        """Immutable accepted recipe versions, keyed by stable fingerprint."""
+        return self._session.import_recipes
+
     def plot_columns(self, worksheet_id, column_ids, kind=2, graph_id=0,
                      x_column_id=0, y_error_column_id=0):
         """Plot stable column IDs; kinds: 0 line, 1 scatter, 2 line+symbol, 8 column.
