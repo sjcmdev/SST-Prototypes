@@ -600,9 +600,11 @@ __global__ void sharedFitKernel(GpuModelType model, GpuParamLayout layout, GpuNm
 {
     const int run = blockIdx.x*blockDim.x+threadIdx.x;
     if (run >= sample_count) return;
+    auto &out = result[run];
+    // The whole result is copied to the host, including padding and unused fields.
+    memset(&out, 0, sizeof(out));
     const auto fit = lm::fitSample(model, layout, config, voltages, measured+size_t(run)*point_count,
         point_count, seed, run, perturb, use_lm);
-    auto &out = result[run];
     for (int j = 0; j < layout.n_free; ++j) out.best_free_params[j] = fit.result.p[j];
     double full[8]; lm::full(layout, fit.result.p, full);
     double chi = 0;
