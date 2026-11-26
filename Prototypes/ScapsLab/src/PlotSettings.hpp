@@ -26,6 +26,30 @@ inline PlotRange PadPlotRange(PlotRange r,double percent,bool log) {
     return r;
 }
 inline bool CompactBatchLegend(std::size_t count) {return count>12;}
+// UI-only limits: fit in axis coordinates, so logarithmic plots ease in decades.
+struct SmoothPlotAxis {
+    PlotRange current,from,target;
+    double elapsed=.2;
+    bool initialized=false,log=false;
+    void Set(PlotRange range,bool logarithmic) {
+        current=from=target=range;log=logarithmic;elapsed=.2;initialized=true;
+    }
+    void Fit(PlotRange range,bool logarithmic,bool hold,bool manual=false) {
+        if(manual || !range.Valid(logarithmic))return;
+        if(!initialized || log!=logarithmic){Set(range,logarithmic);return;}
+        if(hold)range={std::min({range.min,current.min,target.min}),std::max({range.max,current.max,target.max})};
+        if(range!=target){from=current;target=range;elapsed=0;}
+    }
+    PlotRange Step(double dt,bool hold,bool manual=false) {
+        if(!initialized || manual)return current;
+        if(hold){const PlotRange expanded{std::min(current.min,target.min),std::max(current.max,target.max)};if(expanded!=target){from=current;target=expanded;elapsed=0;}}
+        elapsed=std::min(.2,elapsed+std::max(0.,dt));
+        const double t=elapsed/.2,weight=t*t*(3-2*t);
+        const auto ease=[&](double a,double b){return log?std::pow(10.,std::lerp(std::log10(a),std::log10(b),weight)):std::lerp(a,b,weight);};
+        current=elapsed>=.2?target:PlotRange{ease(from.min,target.min),ease(from.max,target.max)};
+        return current;
+    }
+};
 struct PlotView {
     std::array<std::optional<bool>,6> log;
     std::array<std::optional<PlotRange>,6> ranges;
@@ -101,12 +125,14 @@ struct PlotRuntime {
     bool legendShown=true;
     int legendLocation=0;
     std::array<std::optional<PlotRange>,6> explicitFit;
+    std::array<SmoothPlotAxis,6> axes;
 };
 struct PlotSession {
     PlotSettings settings;
     std::map<std::string,PlotRuntime> runtime;
     unsigned epoch=~0u;
     std::uint64_t revision=0;
+    bool smoothFit=false,holdFit=false,liveData=false;
     void ResetRanges() {settings.ClearRanges();runtime.clear();++revision;}
 };
 }

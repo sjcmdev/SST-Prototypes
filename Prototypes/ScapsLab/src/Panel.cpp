@@ -223,7 +223,7 @@ bool SelectedOffLive(const DeviceState &device,const std::string &kind) {
 }
 // Live-curve line style: dimmed with the device colour while another run is selected.
 ImPlotSpec LiveStyle(const DeviceState &device,float weight) {
-    if(!SelectedOffLive(device,"iv"))return device.changeIv?ImPlotSpec{ImPlotProp_LineColor,ImVec4(1.f,.55f,.1f,1.f),ImPlotProp_LineWeight,weight}:ImPlotSpec{ImPlotProp_LineWeight,weight};
+    if(!SelectedOffLive(device,"iv"))return ImPlotSpec{ImPlotProp_LineColor,device.changeIv?LiveCurveColour:SingleShotColour,ImPlotProp_LineWeight,weight};
     const auto c=device.colour.get<std::vector<float>>();return {ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],.3f),ImPlotProp_LineWeight,weight};
 }
 bool ShowRun(const Json &run) {return run.value("pinned",false) || Is(run.at("kind"),"batch");}
@@ -411,45 +411,35 @@ void PlotBadge(const char *text,ImU32 fill,ImU32 ink,int slot) {
     auto *list=ImPlot::GetPlotDrawList();list->AddRectFilled(ImVec2(origin.x+8,top),ImVec2(origin.x+20+size.x,top+6+size.y),fill,4.f);list->AddText(ImVec2(origin.x+14,top+3),ink,text);
 }
 // Live curve of the document before the last edit: dimmed (RAII around its PlotLine) and tagged "outdated" until the new exact result replaces it.
-struct StaleDim {
-    bool on;
-    explicit StaleDim(const DeviceState &d):on(d.Stale()) {if(on)ImGui::PushStyleVar(ImGuiStyleVar_Alpha,ImGui::GetStyle().Alpha*.4f);}
-    ~StaleDim() {if(on)ImGui::PopStyleVar();}
-};
-// Live slider-drag preview (DeviceState::previewV/J, never stored) and the growing exact run (liveV/J): dashed / orange curves; status stays above the plot; call between BeginPlot/EndPlot.
-// Neither curve is a result: they are never saved, put in history, exported or read by a readout.
-void ReferenceLine(Workflow& w,const std::string& name,const std::vector<double>& x,const std::vector<double>& y,ImVec4 colour) {
-    if(w.liveChangeReference==3 || x.empty() || x.size()!=y.size())return;
-    if(w.liveChangeReference==0 || w.liveChangeReference==2)colour.w*=.3f;
+// The explicit single shot remains visible while the latest live curve is replaced.
+void ReferenceLine(const std::string& name,const std::vector<double>& x,const std::vector<double>& y) {
+    if(x.empty() || x.size()!=y.size())return;
     const auto label=name+" (before) reference##change-reference";
-    const bool dashed=w.liveChangeReference==1 || w.liveChangeReference==2;
-    if(!dashed)ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,2.f});
-    else {ImPlot::PlotLine(label.c_str(),x.data(),y.data(),0,{ImPlotProp_LineColor,colour});if(const auto item=ImPlot::GetItem(label.c_str());item && item->Show){if(ImPlot::FitThisFrame())for(std::size_t i=0;i<x.size();++i)if(std::isfinite(x[i]) && std::isfinite(y[i]))ImPlot::FitPoint({x[i],y[i]});ImPlot::PushPlotClipRect();DashedLine(x,y,colour);ImPlot::PopPlotClipRect();}}
+    ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,SingleShotColour,ImPlotProp_LineWeight,2.f});
 }
-bool IvIsReference(const Workflow& w,const DeviceState& d) {return w.liveChangeReference!=3 && d.changeIv && d.changeIv==d.result.typed() && (!d.previewV.empty() || d.liveRunning);}
+bool IvIsReference(const Workflow&,const DeviceState& d) {return d.changeIv && d.changeIv==d.result.typed();}
 void IvReference(Workflow& w,const DeviceState& d,bool absolute,double scale=1.) {
-    if(!d.changeIv)return;const auto& cols=IvCols(d.changeIv->points,absolute,scale);const auto c=d.colour.get<std::vector<float>>();ReferenceLine(w,d.name+" I-V",cols.a,cols.b,{c[0],c[1],c[2],c[3]});
+    if(!d.changeIv)return;const auto& cols=IvCols(d.changeIv->points,absolute,scale);ReferenceLine(d.name+" I-V",cols.a,cols.b);
 }
 void ProfileReference(Workflow& w,const char* key,double scale=1.) {
-    const auto& d=w.Current();const auto result=d.changeIv?d.changeIv:d.changeBand;if(!result || result->points.empty())return;
-    const auto& p=result->points[std::clamp(d.selectedBias,0,int(result->points.size())-1)];if(!p.valid)return;
-    ReferenceLine(w,key,Vec(p.x_m.get(),1e6),Vec(PointColumn(p,key).get(),scale),XColour(key));
+    const auto* point=w.Current().ChangePoint();if(!point || !point->valid)return;const auto& p=*point;
+    ReferenceLine(key,Vec(p.x_m.get(),1e6),Vec(PointColumn(p,key).get(),scale));
 }
 void IvStatus(const DeviceState& d) {
-    if(d.liveRunning && !d.liveV.empty())ImGui::TextColored(ImVec4(1.f,.55f,.1f,1.f),"RUNNING (%zu points so far, exact result follows)",d.liveV.size());
-    else if(!d.previewV.empty())ImGui::TextColored(ImVec4(1.f,.55f,.1f,1.f),"%s",d.previewCoarse?"PREVIEW (coarse, exact on release)":"PREVIEW (exact on release)");
+    if(d.liveRunning && !d.liveV.empty())ImGui::TextColored(LiveCurveColour,"RUNNING (%zu points so far, exact result follows)",d.liveV.size());
+    else if(!d.previewV.empty())ImGui::TextColored(LiveCurveColour,"%s",d.previewCoarse?"PREVIEW (coarse, exact on release)":"PREVIEW (exact on release)");
     if(d.Stale())ImGui::TextDisabled("outdated: model edited");
 }
 void PreviewOverlay(const DeviceState &d,bool absolute,double scale=1.) {
     auto J=[&](double j){return absolute?(j==0?double(NAN):std::abs(j)*scale):j*scale;};
     if(d.liveRunning && !d.liveV.empty()) {
         std::vector<double> y;y.reserve(d.liveJ.size());for(double j:d.liveJ) y.push_back(J(j));
-        ImPlot::PlotLine("live (running)##live",d.liveV.data(),y.data(),int(y.size()),{ImPlotProp_LineColor,ImVec4(1.f,.55f,.1f,1.f),ImPlotProp_LineWeight,2.f});
+        ImPlot::PlotLine("live (running)##live",d.liveV.data(),y.data(),int(y.size()),{ImPlotProp_LineColor,LiveCurveColour,ImPlotProp_LineWeight,2.f});
     } else if(!d.previewV.empty()) {
         std::vector<double> x,y;const std::size_t n=d.previewV.size();
         auto Ji=[&](std::size_t i){return J(d.previewJ[i]);};
         for(std::size_t i=0;i<n;++i){x.push_back(d.previewV[i]);y.push_back(Ji(i));}
-        ImPlot::PlotLine("live (preview)##live",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(1.f,.55f,.1f,1.f),ImPlotProp_LineWeight,2.f});
+        ImPlot::PlotLine("live (preview)##live",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,LiveCurveColour,ImPlotProp_LineWeight,2.f});
     }
 }
 const Cols &AcCols(const Json &points,int view) {
@@ -534,7 +524,13 @@ void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false
         if(dashed){ImPlot::PushPlotClipRect();DashedLine(l.x,l.y,l.colour);ImPlot::PopPlotClipRect();}
     }
 }
-bool BeginSavedPlot(Workflow &w,const char *title,ImVec2 size) {return BeginSavedPlot(w.plotSession,title,size);}
+bool BeginSavedPlot(Workflow &w,const char *title,ImVec2 size) {
+    const auto &d=w.Current();const bool automatic=w.autoRecalculate || w.autoRecalculateBand || std::any_of(d.runPlan->actions.begin(),d.runPlan->actions.end(),[](const auto& a){return a.onEdit;});
+    auto &s=w.plotSession;s.holdFit=w.dragging || w.dragSeen || w.Busy() || (automatic && (d.needsRecalculate || d.needsBand));
+    s.liveData=d.changeIv || d.changeBand || !d.changeAc.empty() || !d.previewV.empty() || d.liveRunning;
+    s.smoothFit|=s.holdFit || s.liveData;
+    return BeginSavedPlot(s,title,size);
+}
 void EndSavedPlot(Workflow &w,const char *title) {if(EndSavedPlot(w.plotSession,title)){w.projectDirty=true;w.RefreshDirty();}}
 
 }
@@ -1237,7 +1233,7 @@ bool Panel::Illumination(ProjectDraft &draft) {
                     if(jsc>0)FitSavedAxis(w->plotSession,"Light I-V",ImAxis_Y1,-1.2*jsc,jsc);
                     SetupSavedPlot(w->plotSession,"Light I-V");
                     HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",false,.1);
-                    if(!IvIsReference(*w,live)){StaleDim dim(live);ImPlot::PlotLine("Light I-V",x.data(),y.data(),int(x.size()),{ImPlotProp_LineWeight,2.5f});}
+                    if(!IvIsReference(*w,live)){ImPlot::PlotLine("Light I-V",x.data(),y.data(),int(x.size()),{ImPlotProp_LineWeight,2.5f,ImPlotProp_LineColor,live.changeIv?LiveCurveColour:SingleShotColour});}
                     IvReference(*w,live,false,.1);PreviewOverlay(live,false,.1);
                     if(estimating) { // markers of the estimate: hollow-style, labelled as such
                         const auto &e=live.pvEstimate;const double zero=0.,sc=-std::abs(e.Jsc_A_m2)*.1,mj=e.Jmpp_A_m2*.1;
@@ -1263,7 +1259,7 @@ bool Panel::Illumination(ProjectDraft &draft) {
             if(const auto result=w->Current().acResults.get("qe")) {const auto& q=result->meta.prim;const auto& points=result->points;
                 ImGui::TextWrapped("Effective: %s | T %.6g K | 0 V | %d samples",q.at("probe_mode").get<std::string>().c_str(),q.at("temperature_K").get<double>(),int(points.size()));
                 ImGui::TextWrapped("Integrated Jsc: %s A/m^2 | Light Jsc: %s A/m^2",q.at("integrated_Jsc_A_m2").dump().c_str(),q.at("light_Jsc_A_m2").dump().c_str());ImGui::TextWrapped("%s",q.at("integration_note").get<std::string>().c_str());
-                if(BeginSavedPlot(*w,"QE history",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","EQE [fraction]");SetupSavedPlot(w->plotSession,"QE history");HistoryLines(*w,w->Current(),"qe","wavelength_nm","EQE");const auto& data=Derived(points,620,[&](Cols& c){for(const auto& p:points){c.a.push_back(p.wavelength_nm);c.b.push_back(p.EQE);}});if(const auto it=w->Current().changeAc.find("qe");it!=w->Current().changeAc.end()){const auto& before=Derived(it->second->points,620,[&](Cols& c){for(const auto& p:it->second->points){c.a.push_back(p.wavelength_nm);c.b.push_back(p.valid?p.EQE:NAN);}});ReferenceLine(*w,"EQE",before.a,before.b,ImPlot::GetColormapColor(0));}if(w->liveChangeReference==3 || !w->Current().changeAc.contains("qe") || w->Current().changeAc.at("qe")!=result)ImPlot::PlotLine("EQE",data.a.data(),data.b.data(),int(data.a.size()),{ImPlotProp_LineColor,w->Current().changeAc.contains("qe")?ImVec4(1.f,.55f,.1f,1.f):ImPlot::GetColormapColor(0),ImPlotProp_LineWeight,2.5f});EndSavedPlot(*w,"QE history");}
+                if(BeginSavedPlot(*w,"QE history",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","EQE [fraction]");SetupSavedPlot(w->plotSession,"QE history");HistoryLines(*w,w->Current(),"qe","wavelength_nm","EQE");const auto& data=Derived(points,620,[&](Cols& c){for(const auto& p:points){c.a.push_back(p.wavelength_nm);c.b.push_back(p.EQE);}});if(const auto it=w->Current().changeAc.find("qe");it!=w->Current().changeAc.end()){const auto& before=Derived(it->second->points,620,[&](Cols& c){for(const auto& p:it->second->points){c.a.push_back(p.wavelength_nm);c.b.push_back(p.valid?p.EQE:NAN);}});ReferenceLine("EQE",before.a,before.b);}if(!w->Current().changeAc.contains("qe") || w->Current().changeAc.at("qe")!=result)ImPlot::PlotLine("EQE",data.a.data(),data.b.data(),int(data.a.size()),{ImPlotProp_LineColor,w->Current().changeAc.contains("qe")?LiveCurveColour:SingleShotColour,ImPlotProp_LineWeight,2.5f});EndSavedPlot(*w,"QE history");}
                 if(ImGui::BeginTable("QE sample voltages",3,ImGuiTableFlags_Borders|ImGuiTableFlags_RowBg|ImGuiTableFlags_ScrollY,ImVec2(0,120))) {
                     for(const auto *label:{"Wavelength [nm]","Terminal [V]","Internal [V]"}) ImGui::TableSetupColumn(label);ImGui::TableHeadersRow();
                     for(const auto &p:points) {ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::Text("%.6g",p.wavelength_nm);ImGui::TableNextColumn();ImGui::Text("%.6g",p.terminal_voltage_V);ImGui::TableNextColumn();if(std::isfinite(p.internal_voltage_V))ImGui::Text("%.9g",p.internal_voltage_V);else ImGui::TextUnformatted("unavailable");}
@@ -1606,7 +1602,7 @@ void Panel::Results() {
     const auto &p=*drawn;
     const bool preview=view==5 && !band.empty() && &p==&band.points[0];
     const auto before=w->Current().changeIv?w->Current().changeIv:w->Current().changeBand;
-    const bool profileIsReference=!selected && w->liveChangeReference!=3 && before && std::any_of(before->points.begin(),before->points.end(),[&](const auto& point){return &point==&p;});
+    const bool profileIsReference=!selected && w->Current().ChangePoint()==&p;
     const auto &metrics=(preview?band:result).meta.prim;
     w->Current().biasVoltage_V=points[bias].voltage_V; // the selected bias, even while the previous point is still drawn
     {   // one small grey status line
@@ -1625,7 +1621,7 @@ void Panel::Results() {
     if(BeginSavedPlot(*w,"I-V",ImVec2(-1,-1))) {
             ImPlot::SetupAxes("Voltage [V]",absoluteLog?"|J| [A/m^2]":"Signed J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
             if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
-            SetupSavedPlot(w->plotSession,"I-V");HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",absoluteLog);if(!Archived(w->Current(),result,"iv") && !IvIsReference(*w,w->Current())){StaleDim dim(w->Current());ImPlot::PlotLine("I-V",v.data(),j.data(),int(v.size()),LiveStyle(w->Current(),2.f));}
+            SetupSavedPlot(w->plotSession,"I-V");HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",absoluteLog);if(!Archived(w->Current(),result,"iv") && !IvIsReference(*w,w->Current())){ImPlot::PlotLine("I-V",v.data(),j.data(),int(v.size()),LiveStyle(w->Current(),2.f));}
             IvReference(*w,w->Current(),absoluteLog);PreviewOverlay(w->Current(),absoluteLog);ImPlot::PlotScatter("Selected bias",&v[bias],&j[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});
             double selectedVoltage=v[bias];
             if(ImPlot::DragLineX(1,&selectedVoltage,ImVec4(1,.7f,.3f,1))) {
@@ -1653,7 +1649,7 @@ void Panel::Results() {
         {double lo=1e300,hi=-1e300;for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) for(double v:Vec(PointColumn(p,key).get())) if(std::isfinite(v)){lo=std::min(lo,v);hi=std::max(hi,v);}
         if(hi>lo){const double m=.05*(hi-lo);FitSavedAxis(w->plotSession,"Bands / contacts",ImAxis_Y1,lo-m,hi+m);}}
         SetupSavedPlot(w->plotSession,"Bands / contacts");
-        for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(!selected)ProfileReference(*w,key);if(profileIsReference || Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(PointColumn(p,key).get());if(y.size()==x.size()){const auto c=before?ImVec4(1.f,.55f,.1f,1.f):XColour(key);const auto label=std::string(key)+(before?" live":"");ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,ImVec4(c.x,c.y,c.z,dashed?.6f:1.f),ImPlotProp_LineWeight,2.f});if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,c);ImPlot::PopPlotClipRect();}}}
+        for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(!selected)ProfileReference(*w,key);if(profileIsReference || Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(PointColumn(p,key).get());if(y.size()==x.size()){const auto c=before?LiveCurveColour:SingleShotColour;const auto label=std::string(key)+(before?" live":"");ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,c,ImPlotProp_LineWeight,2.f});if(dashed){ImPlot::PushPlotClipRect();DashedLine(x,y,c);ImPlot::PopPlotClipRect();}}}
         const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();
         ImPlot::PushPlotClipRect();
         for(int side=0;side<2;++side) {
@@ -1684,7 +1680,7 @@ void Panel::Results() {
 
 
         SetupSavedPlot(w->plotSession,"Carriers");
-        for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(!selected)ProfileReference(*w,key,1e-6);if(profileIsReference || Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(PointColumn(p,key).get(),1e-6);if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,before?ImVec4(1.f,.55f,.1f,1.f):XColour(key),ImPlotProp_LineWeight,2.f});}
+        for(const auto *key:{"n_m3","p_m3"}) {HistoryProfiles(*w,key,1e-6);if(!selected)ProfileReference(*w,key,1e-6);if(profileIsReference || Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(PointColumn(p,key).get(),1e-6);if(y.size()==x.size())ImPlot::PlotLine(key==std::string("n_m3")?"n":"p",x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,before?LiveCurveColour:SingleShotColour,ImPlotProp_LineWeight,2.f});}
         DrawLayerRegions(layers);bandBadge();EndSavedPlot(*w,"Carriers");
     }
 }
@@ -1897,12 +1893,12 @@ void Panel::AC() {
                 ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);HistoryLines(*w,*d,kind,cv?"voltage_V":"frequency_Hz",key);
                 if(view==6 || view==8){ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);HistoryLines(*w,*d,kind,cv?"voltage_V":"frequency_Hz","G_over_omega_F");}if(Archived(*d,*d->acResults.get(kind),kind))continue;
             }
-            if(const auto it=d->changeAc.find(kind);it!=d->changeAc.end()){const auto& before=AcCols(it->second->points,view);const auto colour=d->colour.get<std::vector<float>>();ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);ReferenceLine(*w,d->name,before.a,before.b,{colour[0],colour[1],colour[2],colour[3]});if(view==6 || view==8){ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ReferenceLine(*w,d->name+" G/omega",before.a,before.c,{colour[0],colour[1],colour[2],colour[3]});}}
-            if(w->liveChangeReference!=3 && d->changeAc.contains(kind) && d->changeAc.at(kind)==d->acResults.get(kind))continue;
+            if(const auto it=d->changeAc.find(kind);it!=d->changeAc.end()){const auto& before=AcCols(it->second->points,view);ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);ReferenceLine(d->name,before.a,before.b);if(view==6 || view==8){ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ReferenceLine(d->name+" G/omega",before.a,before.c);}}
+            if(d->changeAc.contains(kind) && d->changeAc.at(kind)==d->acResults.get(kind))continue;
             const auto &ac=AcCols(d->acResults.get(kind)->points,view);const auto &xx=ac.a,&yy=ac.b,&gg=ac.c;
-            const auto c=d->colour.get<std::vector<float>>();const auto label=d->name+"##"+d->id;
-            ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);ImPlot::PlotLine(label.c_str(),xx.data(),yy.data(),int(xx.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,2.5f});
-            if(view==6 || view==8) {ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlot::PlotLine((d->name+" G/omega##"+d->id).c_str(),xx.data(),gg.data(),int(xx.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],c[3]),ImPlotProp_LineWeight,2.5f});}
+            const auto label=d->name+"##"+d->id;
+            ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);ImPlot::PlotLine(label.c_str(),xx.data(),yy.data(),int(xx.size()),{ImPlotProp_LineColor,d->changeAc.contains(kind)?LiveCurveColour:SingleShotColour,ImPlotProp_LineWeight,2.f});
+            if(view==6 || view==8) {ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlot::PlotLine((d->name+" G/omega##"+d->id).c_str(),xx.data(),gg.data(),int(xx.size()),{ImPlotProp_LineColor,d->changeAc.contains(kind)?LiveCurveColour:SingleShotColour,ImPlotProp_LineWeight,2.f});}
         }
         EndSavedPlot(*w,names[view]);
     }
@@ -2195,7 +2191,7 @@ void Panel::Compare() {
             if(!d->history.empty())HistoryLines(*w,*d,"iv","voltage_V","J_A_m2",absoluteLog);
             const float c[4]={d->colour[0].get<float>(),d->colour[1].get<float>(),d->colour[2].get<float>(),d->colour[3].get<float>()};
             static std::string label;label=d->name;label+="##";label+=d->id; // reused buffer: no per-frame allocation
-            if(!d->result.empty() && !Archived(*d,*d->Iv(),"iv") && !IvIsReference(*w,*d)){const auto& live=IvCols(d->Iv()->points,absoluteLog);StaleDim dim(*d);ImPlot::PlotLine(label.c_str(),live.a.data(),live.b.data(),int(live.a.size()),{ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],SelectedOffLive(*d,"iv")?.3f:c[3]),ImPlotProp_LineWeight,2.5f});}
+            if(!d->result.empty() && !Archived(*d,*d->Iv(),"iv") && !IvIsReference(*w,*d)){const auto& live=IvCols(d->Iv()->points,absoluteLog);ImPlot::PlotLine(label.c_str(),live.a.data(),live.b.data(),int(live.a.size()),{ImPlotProp_LineColor,SelectedOffLive(*d,"iv")?ImVec4(c[0],c[1],c[2],.3f):d->changeIv?LiveCurveColour:SingleShotColour,ImPlotProp_LineWeight,2.f});}
             IvReference(*w,*d,absoluteLog);if(d->id==w->project.active_device) PreviewOverlay(*d,absoluteLog);
             if(d->id==w->project.active_device && !x.empty()) {
                 int bias=std::clamp(d->selectedBias,0,int(x.size())-1);double voltage=x[bias];
@@ -2566,7 +2562,7 @@ void Panel::GenerationRecombination() {
     const auto &point=*drawnGr;
     const auto &gr=point.details->generation_recombination;
     const auto before=device.changeIv?device.changeIv:device.changeBand;
-    const bool grIsReference=w->liveChangeReference!=3 && before && std::any_of(before->points.begin(),before->points.end(),[&](const auto& p){return &p==&point;});
+    const bool grIsReference=device.ChangePoint()==&point;
     if(ImGui::CollapsingHeader("Details")) {
     ImGui::TextWrapped("%s | terminal %.6g V | internal %.6g V | %.5g K | solver %s | profile validity %s",point.bias_id.c_str(),point.terminal_voltage_V,point.internal_voltage_V,snapshot.meta.prim.at("project_snapshot").at("temperature_K").get<double>(),point.status.c_str(),point.validity_status.c_str());
     ImGui::TextWrapped("%s | illumination %s | %s",device.id.c_str(),snapshot.meta.prim.at("project_snapshot").value("illumination",Json::object()).value("enabled",false)?"on":"off",w->status.c_str());
@@ -2616,10 +2612,10 @@ void Panel::GenerationRecombination() {
         FitSavedAxis(w->plotSession,"G(x), R(x)",ImAxis_X1,0,totalUm);
         if(sheetMax>0){ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);}
         SetupSavedPlot(w->plotSession,"G(x), R(x)");
-        auto plot=[&](const std::string &name,const Column &xx,const Column &yy,bool sheet,bool curveValid,int shade=0) {
+        auto plot=[&](const std::string &name,const Column &xx,const Column &yy,bool sheet,bool curveValid) {
             const auto &x=Vec(xx.get(),1e6),&y=Vec(yy.get(),1.,curveValid?2:3);if(x.size()!=y.size())return;
             if(sheet && sheetMax<=0)return;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
-            const auto mech=name.substr(0,name.find(' '));const auto colour=before?ImVec4(1.f,.55f,.1f,1.f):XColour(mech,shade);const ImPlotSpec style(ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,2.f,ImPlotProp_MarkerFillColor,colour,ImPlotProp_MarkerLineColor,colour);
+            const auto colour=before?LiveCurveColour:SingleShotColour;const ImPlotSpec style(ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,2.f,ImPlotProp_MarkerFillColor,colour,ImPlotProp_MarkerLineColor,colour);
             if(sheet)ImPlot::PlotScatter(name.c_str(),x.data(),y.data(),int(x.size()),style);else ImPlot::PlotLine(name.c_str(),x.data(),y.data(),int(x.size()),style);
         };
         if(showGeneration)HistoryProfiles(*w,"generation_m3_s",1.,true);
@@ -2640,16 +2636,15 @@ void Panel::GenerationRecombination() {
                 if(sheet)ImPlot::PlotScatter(label.c_str(),x.data(),y.data(),int(x.size()),style);else ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),style);
             }
         }
-        if(const auto before=device.changeIv?device.changeIv:device.changeBand;before && !before->points.empty()) {
-            const auto& p=before->points[std::clamp(device.selectedBias,0,int(before->points.size())-1)];
+        if(const auto* point=device.ChangePoint()) {
+            const auto& p=*point;
             if(p.details && p.valid){const auto& g=p.details->generation_recombination;
-                ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);if(showGeneration)ReferenceLine(*w,"G",Vec(g.x_m.get(),1e6),Vec(g.generation_m3_s.get(),1.,2),XColour("G"));std::map<std::string,int> shades;
-                for(const auto& c:g.channels)if(!grHidden.contains(c.mechanism) && c.valid){const bool sheet=!c.R_sheet_m2_s.empty();if(sheet && sheetMax<=0)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);ReferenceLine(*w,c.mechanism+" / "+c.id,Vec(c.x_m.get(),1e6),Vec((sheet?c.R_sheet_m2_s:c.R_m3_s).get(),1.,2),XColour(c.mechanism,shades[c.mechanism]++));}
+                ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);if(showGeneration)ReferenceLine("G",Vec(g.x_m.get(),1e6),Vec(g.generation_m3_s.get(),1.,2));
+                for(const auto& c:g.channels)if(!grHidden.contains(c.mechanism) && c.valid){const bool sheet=!c.R_sheet_m2_s.empty();if(sheet && sheetMax<=0)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);ReferenceLine(c.mechanism+" / "+c.id,Vec(c.x_m.get(),1e6),Vec((sheet?c.R_sheet_m2_s:c.R_m3_s).get(),1.,2));}
             }
         }
-        std::map<std::string,int> curShade;
         for(const auto &c:gr.channels) if(!grIsReference && !Archived(device,snapshot,grFollow?"iv":"band") && !grHidden.contains(c.mechanism)) {
-            const bool sheet=!c.R_sheet_m2_s.empty();plot(c.mechanism+" / "+c.id,c.x_m,(sheet?c.R_sheet_m2_s:c.R_m3_s),sheet,c.valid,curShade[c.mechanism]++);
+            const bool sheet=!c.R_sheet_m2_s.empty();plot(c.mechanism+" / "+c.id,c.x_m,(sheet?c.R_sheet_m2_s:c.R_m3_s),sheet,c.valid);
         }
         ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);DrawLayerRegions(snapshot.meta.prim.at("project_snapshot").at("layers"));
         EndSavedPlot(*w,"G(x), R(x)");
@@ -2677,10 +2672,10 @@ void Panel::GenerationRecombination() {
         ImPlot::SetupAxes("Mechanism index","J_R [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
         ImPlot::SetupLegend(ImPlotLocation_North,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
         SetupSavedPlot(w->plotSession,"Integrated loss breakdown");
-        const auto reference=device.changeIv?device.changeIv:device.changeBand;
-        const GenerationRecombinationResult* old=nullptr;if(reference && !reference->points.empty()){const auto& p=reference->points[std::clamp(device.selectedBias,0,int(reference->points.size())-1)];if(p.details && p.valid)old=&p.details->generation_recombination;}
+        const auto* reference=device.ChangePoint();
+        const GenerationRecombinationResult* old=reference && reference->details && reference->valid?&reference->details->generation_recombination:nullptr;
         int i=0;for(const auto& c:gr.channels){const double x=i,y=valid?c.integrated_current_A_m2:NAN;const auto colour=ImPlot::GetColormapColor(i++);if(!grHidden.contains(c.mechanism)){
-            if(old){const auto found=std::find_if(old->channels.begin(),old->channels.end(),[&](const auto& channel){return channel.mechanism==c.mechanism && channel.id==c.id;});if(found!=old->channels.end()){const auto& line=Derived(found->by_layer,730,[&](Cols& cols){cols.a={x-.35,x+.35};cols.b={found->integrated_current_A_m2,found->integrated_current_A_m2};},x);ReferenceLine(*w,c.mechanism+" / "+c.id,line.a,line.b,colour);}}
+            if(old){const auto found=std::find_if(old->channels.begin(),old->channels.end(),[&](const auto& channel){return channel.mechanism==c.mechanism && channel.id==c.id;});if(found!=old->channels.end()){const auto& line=Derived(found->by_layer,730,[&](Cols& cols){cols.a={x-.35,x+.35};cols.b={found->integrated_current_A_m2,found->integrated_current_A_m2};},x);ReferenceLine(c.mechanism+" / "+c.id,line.a,line.b);}}
             if(!grIsReference)ImPlot::PlotBars((c.mechanism+" / "+c.id).c_str(),&x,&y,1,.7,{ImPlotProp_FillColor,colour,ImPlotProp_LineColor,colour});
         }}
         EndSavedPlot(*w,"Integrated loss breakdown");

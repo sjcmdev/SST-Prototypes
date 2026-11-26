@@ -30,6 +30,9 @@ void SetupSavedPlot(PlotSession &s,const char *title,bool compact) {
         if(v.log[i])ImPlot::SetupAxisScale(i,*v.log[i]?ImPlotScale_Log10:ImPlotScale_Linear);
         if(a.Scale==ImPlotScale_Log10)ImPlot::SetupAxisLimitsConstraints(i,1e-200,std::numeric_limits<double>::max());
         if(v.manual && v.ranges[i] && !v.ranges[i]->Valid(a.Scale==ImPlotScale_Log10)){v.manual=false;v.ranges={};}
+        auto &smooth=r.axes[i];const bool log=a.Scale==ImPlotScale_Log10;
+        if(v.manual && v.ranges[i]){if(r.hasData)a.SetRange(v.ranges[i]->min,v.ranges[i]->max);smooth.Set(*v.ranges[i],log);}
+        else if(s.smoothFit && smooth.initialized && smooth.log==log){const auto range=smooth.Step(ImGui::GetIO().DeltaTime,s.holdFit);a.SetRange(range.min,range.max);}
         r.before[i]={a.Range.Min,a.Range.Max};r.logBefore[i]=a.Scale==ImPlotScale_Log10;
     }
     if(v.manual && std::none_of(v.ranges.begin(),v.ranges.end(),[](auto &r){return r.has_value();}))v.manual=false;
@@ -74,7 +77,8 @@ bool EndSavedPlot(PlotSession &s,const char *title) {
         const bool manualAxis=v.manual && v.ranges[i].has_value();
         if(manualAxis){a.FitThisFrame=false;if(data)a.SetRange(v.ranges[i]->min,v.ranges[i]->max);}
         if(!manualAxis && a.FitThisFrame) {
-            auto raw=r.explicitFit[i].value_or(PlotRange{a.FitExtents.Min,a.FitExtents.Max});
+            PlotRange raw{a.FitExtents.Min,a.FitExtents.Max};
+            if(r.explicitFit[i]){const auto extra=*r.explicitFit[i];raw=s.liveData && finiteExtent(a)?PlotRange{std::min(raw.min,extra.min),std::max(raw.max,extra.max)}:extra;}
             if(log && a.Vertical) {
                 if(!std::isnormal(raw.max) || raw.max<=0)raw={1e-12,1.};
                 else {
@@ -83,7 +87,14 @@ bool EndSavedPlot(PlotSession &s,const char *title) {
                 }
             }
             else if(log && raw.min>0 && raw.min==raw.max)raw={raw.min/std::sqrt(10.),raw.max*std::sqrt(10.)};
-            if(raw.Valid(log)){const auto padded=PadPlotRange(raw,s.settings.margin,log);a.SetRange(padded.min,padded.max);a.FitThisFrame=false;}
+            else if(!log && std::isfinite(raw.min) && raw.min==raw.max)raw={raw.min-.5,raw.max+.5}; // ImPlot's constant-series fallback
+            if(raw.Valid(log)){
+                const auto padded=PadPlotRange(raw,s.settings.margin,log);auto &smooth=r.axes[i];const bool ready=smooth.initialized && smooth.log==log;
+                if(s.smoothFit)smooth.Fit(padded,log,s.holdFit);else smooth.Set(padded,log);
+                if(!s.smoothFit || !ready)a.SetRange(smooth.current.min,smooth.current.max);
+            }
+            // Fit extents are collected every frame; applying them here would snap over the eased range.
+            a.FitThisFrame=false;
         }
         if(log!=r.logBefore[i]){v.log[i]=log;changed=true;}
     }

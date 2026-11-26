@@ -28,6 +28,50 @@ TEST(PlotSettings,LinearAndLogMargin) {
     const auto b=PadPlotRange({1e-6,1e-2},5,true);EXPECT_NEAR(std::log10(b.min),-6.2,1e-12);EXPECT_NEAR(std::log10(b.max),-1.8,1e-12);
     EXPECT_GE(PadPlotRange({1e-200,1},30,true).min,1e-200);EXPECT_EQ(PadPlotRange({10,20},0,false),(PlotRange{10,20}));
 }
+TEST(SmoothPlotAxis,UnionAndExpandOnlyDuringGestureAndPending) {
+    SmoothPlotAxis axis;axis.Set({0,10},false);
+    axis.Fit({-5,20},false,true);EXPECT_EQ(axis.target,(PlotRange{-5,20}));
+    axis.Step(.1,true);const auto drawn=axis.current;
+    axis.Fit({2,4},false,true);EXPECT_EQ(axis.target,(PlotRange{-5,20}));
+    axis.Step(.1,true);EXPECT_LE(axis.current.min,drawn.min);EXPECT_GE(axis.current.max,drawn.max);
+    // Pending uses the same hold after the gesture has ended.
+    axis.Fit({1,3},false,true);axis.Step(.2,true);EXPECT_EQ(axis.current,(PlotRange{-5,20}));
+}
+TEST(SmoothPlotAxis,InterpolationIsMonotoneAndFinishesIn200ms) {
+    for(bool log:{false,true}) {
+        SmoothPlotAxis axis;axis.Set({1,10},log);axis.Fit({.01,1000},log,true);
+        auto previous=axis.current;
+        for(int i=0;i<20;++i){const auto now=axis.Step(.01,true);EXPECT_LE(now.min,previous.min);EXPECT_GE(now.max,previous.max);EXPECT_TRUE(now.Valid(log));previous=now;}
+        EXPECT_EQ(axis.current,axis.target);
+        EXPECT_GT(axis.Step(0,true).min,0);
+    }
+}
+TEST(SmoothPlotAxis,ManualLockAndPostReleaseEase) {
+    SmoothPlotAxis axis;axis.Set({0,20},false);
+    axis.Fit({5,10},false,false,true);axis.Step(1,false,true);EXPECT_EQ(axis.current,(PlotRange{0,20}));
+    axis.Fit({5,10},false,false);const auto halfway=axis.Step(.1,false);
+    EXPECT_GT(halfway.min,0);EXPECT_LT(halfway.min,5);EXPECT_GT(halfway.max,10);EXPECT_LT(halfway.max,20);
+    axis.Step(.1,false);EXPECT_EQ(axis.current,(PlotRange{5,10}));
+    axis.Fit({7,8},false,false);axis.Step(.05,false);const auto release=axis.current;
+    axis.Step(.05,true);EXPECT_EQ(axis.current,release); // a new gesture cancels an in-progress shrink
+}
+TEST(SmoothPlotAxis,InvalidExtentAndScaleChange) {
+    SmoothPlotAxis axis;axis.Set({1,10},false);axis.Fit({NAN,2},false,true);EXPECT_EQ(axis.target,(PlotRange{1,10}));
+    axis.Fit({1e-9,1e-3},true,true);EXPECT_TRUE(axis.log);EXPECT_EQ(axis.current,(PlotRange{1e-9,1e-3}));
+}
+TEST_F(SavedPlots,LiveFitEasesUnionAndKeepsManualZoom) {
+    Frame();Frame();session.smoothFit=session.holdFit=true;
+    const auto initial=plot->Axes[0].Range;
+    const auto more=[] {const double x[]={-100,200},y[]={1,2};ImPlot::PlotLine("Live",x,y,2);};
+    Frame(2,false,more);EXPECT_DOUBLE_EQ(plot->Axes[0].Range.Min,initial.Min);
+    auto previous=plot->Axes[0].Range;
+    for(int i=0;i<15;++i){Frame(2,false,more);const auto now=plot->Axes[0].Range;EXPECT_LE(now.Min,previous.Min);EXPECT_GE(now.Max,previous.Max);previous=now;}
+    EXPECT_LT(previous.Min,-100);EXPECT_GT(previous.Max,200);
+    for(int i=0;i<3;++i){Frame();EXPECT_DOUBLE_EQ(plot->Axes[0].Range.Min,previous.Min);EXPECT_DOUBLE_EQ(plot->Axes[0].Range.Max,previous.Max);}
+    auto &v=session.settings.plots["Test"];v.manual=true;v.ranges[0]=PlotRange{11,12};Frame(2,false,more);EXPECT_EQ(plot->Axes[0].Range.Min,11);EXPECT_EQ(plot->Axes[0].Range.Max,12);
+    v.manual=false;v.ranges={};session.holdFit=false;Frame();
+    for(int i=0;i<15;++i)Frame();EXPECT_NEAR(plot->Axes[0].Range.Min,9.5,1e-6);
+}
 TEST(PlotSettings,InvalidRangesAndOptionalProjectOverrides) {
     PlotSettings global;global.margin=12;global.layout=GoodDock;global.panels["I-V"]=false;global.plots["Test"].log[3]=true;global.plots["Test"].manual=true;global.plots["Test"].ranges[3]=PlotRange{1e-8,1};
     global.plots["Test"].legendLocation=ImPlotLocation_Center;
@@ -66,6 +110,11 @@ TEST_F(SavedPlots,ExplicitFitsUseMarginAndAllowPanning) {
     Frame(2,true,[&]{FitSavedAxis(session,"Test",ImAxis_Y1,1e-8,1.);});EXPECT_NEAR(std::log10(plot->Axes[3].Range.Min),-8.4,1e-6);
     EXPECT_FALSE(plot->Axes[3].IsInputLocked());
 }
+TEST_F(SavedPlots,ConstantLinearSeriesAndExplicitFitStillIncludeAllData) {
+    Frame(0,false,[]{const double x[]={10,10},y[]={500,500};ImPlot::PlotLine("Constant",x,y,2);});
+    EXPECT_LT(plot->Axes[0].Range.Min,10);EXPECT_GT(plot->Axes[0].Range.Max,10);EXPECT_LT(plot->Axes[3].Range.Min,500);EXPECT_GT(plot->Axes[3].Range.Max,500);
+    session.liveData=true;Frame(2,false,[&]{FitSavedAxis(session,"Test",ImAxis_X1,12,15);});EXPECT_NEAR(plot->Axes[0].Range.Min,9.5,1e-6);EXPECT_NEAR(plot->Axes[0].Range.Max,20.5,1e-6);
+}
 TEST_F(SavedPlots,LargeBatchKeepsPositivePlotArea) {
     EXPECT_FALSE(CompactBatchLegend(12));EXPECT_TRUE(CompactBatchLegend(13));
     for(int count:{3,342,3})for(int frame=0;frame<3;++frame){
@@ -83,6 +132,19 @@ TEST_F(SavedPlots,PanelRenderingDoesNotDirtyOrChangeProjectUi) {
     for(int i=0;i<2;++i){ImGui::NewFrame();ImGui::SetNextWindowSize(ImVec2(900,700));ImGui::Begin("Compare");panel.RenderContent();ImGui::End();ImGui::Render();}
     bool found=false;for(int i=0;i<GImPlot->Plots.GetBufSize();++i){const auto *p=GImPlot->Plots.GetByIndex(i);if(p->HasTitle() && std::string(p->GetTitle())=="I-V compare"){found=true;EXPECT_LT(p->Axes[0].Range.Min,10);EXPECT_GT(p->Axes[0].Range.Max,20);EXPECT_LT(p->Axes[3].Range.Min,1e-6);}}
     EXPECT_TRUE(found);EXPECT_EQ(w.project.ui,ui);EXPECT_FALSE(w.dirty);
+}
+TEST_F(SavedPlots,SingleShotBlueAndRetainedLiveDarkerOrangeWhilePending) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.autoRecalculate=w.autoRecalculateBand=false;auto &d=w.Current();d.SetDocument(ReadProject(SCAPSLAB_PROJECT));
+    auto result=CreateRef<IvResult>();for(int i=0;i<2;++i){IvPoint p;p.voltage_V=i;p.J_A_m2=i+1;p.valid=true;result->points.push_back(p);}d.result.adopt(result);
+    Panel panel(&w,10);
+    ImPlotPlot *p=nullptr;
+    const auto frame=[&]{ImGui::NewFrame();ImGui::SetNextWindowSize({900,700});ImGui::Begin("Live style");panel.RenderContent();p=ImPlot::GetPlot("I-V compare");ImGui::End();ImGui::Render();};
+    frame();frame();ASSERT_NE(p,nullptr);ASSERT_GT(p->Items.GetLegendCount(),0);
+    EXPECT_EQ(p->Items.GetLegendItem(0)->Color,ImGui::ColorConvertFloat4ToU32(SingleShotColour));
+    w.dragging=true;frame();w.dragging=false;frame();EXPECT_TRUE(w.plotSession.smoothFit); // bias release must keep easing
+    d.changeIv=result;d.previewV={0,1};d.previewJ={2,3};d.needsRecalculate=true;w.dragging=true;
+    for(int i=0;i<6;++i){frame();int blue=0,orange=0;for(int j=0;j<p->Items.GetLegendCount();++j){const auto *item=p->Items.GetLegendItem(j);blue+=item->Color==ImGui::ColorConvertFloat4ToU32(SingleShotColour);orange+=item->Color==ImGui::ColorConvertFloat4ToU32(LiveCurveColour);}EXPECT_EQ(blue,1);EXPECT_EQ(orange,1);EXPECT_EQ(d.previewJ,(std::vector<double>{2,3}));}
+    EXPECT_EQ(SingleShotColour.w,1);EXPECT_EQ(LiveCurveColour.w,1);EXPECT_LT(LiveCurveColour.y,.55f);
 }
 TEST_F(SavedPlots,RealBatchPanelsKeepSpaceFor342Members) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));auto &d=w.Current();d.liveMemberTotal=342;

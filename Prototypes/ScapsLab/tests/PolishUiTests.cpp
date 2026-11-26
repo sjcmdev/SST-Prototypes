@@ -119,7 +119,7 @@ TEST_F(PolishUi,IvRunningAndPreviewStatusStaysAboveEveryLegendPosition) {
         for(int i=0;i<GImPlot->Plots.GetBufSize();++i){const auto* p=GImPlot->Plots.GetByIndex(i);if(p->HasTitle() && std::string(p->GetTitle())=="I-V compare")plot=p;}
         ASSERT_NE(plot,nullptr);ASSERT_GT(plot->Items.GetLegendCount(),0);
         int header=0;
-        const auto orange=ImGui::ColorConvertFloat4ToU32({1.f,.55f,.1f,1.f});
+        const auto orange=ImGui::ColorConvertFloat4ToU32(LiveCurveColour);
         for(const auto& v:window->DrawList->VtxBuffer) {
             if(v.col==orange && v.pos.y<plot->FrameRect.Min.y){++header;EXPECT_FALSE(plot->Items.Legend.Rect.Contains(v.pos));}
             EXPECT_NE(v.col,IM_COL32(255,140,25,230));

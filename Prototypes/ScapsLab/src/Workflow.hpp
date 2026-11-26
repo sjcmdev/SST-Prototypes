@@ -275,9 +275,11 @@ struct DeviceState {
     int selectedLayer = 0, selectedInterface = -1, selectedBias = 0;
     std::chrono::steady_clock::time_point changedAt;
     Ref<const IvResult> changeIv,changeBand; // last explicit reference, retained across automatic solves; never saved
+    int changeBias=0;
     Ref<const scaps_core::DeviceState> warmIv,warmBand;
     std::map<std::string,Ref<const AcResult>> changeAc;
-    void RememberChange() {if(!changeIv)changeIv=result.typed();if(!changeBand)changeBand=bandResult.empty()?result.typed():bandResult.typed();for(const auto& [kind,r]:acResults.all())changeAc.try_emplace(kind,r);}
+    void RememberChange() {if(!changeIv && !changeBand)changeBias=selectedBias;if(!changeIv)changeIv=result.typed();if(!changeBand)changeBand=bandResult.empty()?result.typed():bandResult.typed();for(const auto& [kind,r]:acResults.all())changeAc.try_emplace(kind,r);}
+    const IvPoint* ChangePoint() const {const auto& r=changeIv?changeIv:changeBand;return r && !r->points.empty()?&r->points[std::clamp(changeBias,0,int(r->points.size())-1)]:nullptr;}
     void ClearChange() {changeIv.reset();changeBand.reset();changeAc.clear();}
     std::vector<double> previewV, previewJ; // live slider-drag preview curve (J-V only): never saved, never in history/readouts/exports; cleared by the next exact run
     // Progressive exact run (never saved/stored/exported): partial I-V, photovoltaic estimate, finished batch members. Copied from the job's LiveFeed; cleared when the job ends.
@@ -364,7 +366,6 @@ public:
     std::uint64_t plotGen=0; // S3: bumped by RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/DeviceListChanged/ProjectLoaded; panel plot caches compare it (no per-frame hashing/conversion)
     PlotSession plotSession;
     bool plotPreferences=false;
-    int liveChangeReference=0; // per-user: Dimmed, Dashed, Dimmed + dashed, Off
     // S6: one lane per device (serial inside, parallel across devices). `lanes[""]`-style project lane is `projectLane`: project-level
     // requests (load while calculating) wait there until every device lane is idle; the save job has its own lane `saveLane`.
     struct Queued {Json request; std::string key;Ref<const ProjectDraft> draft;}; // key: a newer queued request with the same non-empty key replaces this one (latest wins)

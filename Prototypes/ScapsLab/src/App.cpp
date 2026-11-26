@@ -159,8 +159,6 @@ public:
                 double margin=w.plotSession.settings.margin;if(ScapsLab::DrawBoundValue("##auto_fit_margin",margin,"plot_margin_percent")){w.plotSession.settings.margin=float(margin);++w.plotSession.revision;w.projectDirty=true;w.RefreshDirty();}
                 auto &session=w.plotSession;
                 const auto row=[](const char *label){ImGui::TableNextRow();ImGui::TableSetColumnIndex(0);ImGui::AlignTextToFramePadding();ImGui::TextUnformatted(label);ImGui::TableSetColumnIndex(1);ImGui::SetNextItemWidth(-1);};
-                row("Live change reference");
-                if(ImGui::Combo("##live_reference",&w.liveChangeReference,"Dimmed\0Dashed\0Dimmed + dashed\0Off\0")){w.settings["live_change_reference"]=w.liveChangeReference;w.SaveSettings();}
                 row("Plot");if(ImGui::BeginCombo("##plot",settingsPlot.empty()?"Select a plot":settingsPlot.c_str())){for(const auto &[id,v]:session.settings.plots)if(ImGui::Selectable(id.c_str(),id==settingsPlot))settingsPlot=id;ImGui::EndCombo();}
                 if(!settingsPlot.empty()){
                     auto &v=session.settings.plots[settingsPlot];const auto &r=session.runtime[settingsPlot];bool changed=false;
@@ -267,7 +265,6 @@ void SetupApplication(Application &app) {
         if(Io::Load(startupSettings,text,error)) {try {w->settings=Json::parse(text);}catch(...) {}}
         if(!w->settings.is_object()) w->settings=Json::object();
         ExperimentalPanels()=w->settings.value("experimental_panels",false);
-        if(const auto it=w->settings.find("live_change_reference");it!=w->settings.end() && it->is_number_integer()){const auto value=it->get<std::int64_t>();if(value>=0 && value<=3)w->liveChangeReference=int(value);}
         if(w->settings.contains("session"))w->plotSession.settings.Read(w->settings["session"]);
     }
     w->Current().SetDocument(NewDeviceDocument()); w->Current().name=w->Current().Document().at("case_id");w->path="";

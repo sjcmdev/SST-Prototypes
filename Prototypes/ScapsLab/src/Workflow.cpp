@@ -1068,6 +1068,7 @@ void Workflow::HistoryOp(const Json &request) {
                 for(const auto *key:{"pinned","name","visible","colour"}) if(request.contains(key)) (*run)[key]=request.at(key);
                 if(request.contains("pinned") && run->at("pinned")==true) {
                     const auto result=d.RunResult(run->at("run_id"));const auto kind=run->at("kind").get<std::string>();
+                    if(kind=="iv" || kind=="band")d.changeBias=d.selectedBias;
                     if(kind=="iv")d.changeIv=std::dynamic_pointer_cast<const IvResult>(result);
                     else if(kind=="band")d.changeBand=std::dynamic_pointer_cast<const IvResult>(result);
                     else if(auto ac=std::dynamic_pointer_cast<const AcResult>(result))d.changeAc[kind]=std::move(ac);
@@ -1544,6 +1545,7 @@ void Workflow::SelectBias(int index) {
     auto& d=Current();auto source=std::dynamic_pointer_cast<const IvResult>(d.RunResult(d.selectedRun));
     if(!source)source=d.Iv();
     if(index<0 || index>=int(source->points.size()))throw std::invalid_argument("Bias index out of range");
+    if(index!=d.selectedBias && d.selectedRun.empty())d.RememberChange();
     d.selectedBias=index;d.biasVoltage_V=source->points[index].voltage_V;
     if(d.selectedRun.empty())d.needsBiasDetails=!source->points[index].details && !(d.BandFresh() && !d.Band()->points.empty() && d.Band()->points.front().voltage_V==d.biasVoltage_V);
     d.changedAt=std::chrono::steady_clock::now();Emit(SelectionChanged(d.id));
@@ -1766,7 +1768,11 @@ void Workflow::FinishOperation(Lane &L) {
     if(pending->warmOutput){if(op=="band")d.warmBand=pending->warmOutput;else if(op=="run" || op=="single_shot"){d.warmIv=pending->warmOutput;d.warmBand=pending->warmOutput;}}
     std::vector<Ref<const ResultBase>> held; // every result before the swap below: whoever replaces one, the last release (a multi-MB destructor) happens on a worker
     for(const auto &dev:project.devices) {held.push_back(dev->result.typed());held.push_back(dev->bandResult.typed());held.push_back(dev->batchResult.typed());for(const auto &[k,r]:dev->acResults.all()) held.push_back(r);for(const auto &[id,r]:*dev->runs) held.push_back(r);}
-    if(pending->feed) {d.liveDlcp.clear();d.liveDlts.clear();d.liveV.clear();d.liveJ.clear();d.pvEstimate=PvEstimate{};d.liveMembers.clear();d.liveMemberTotal=0;d.liveBatch.reset();d.liveRunning=false;} // partials never outlive their job; the exact result (if any) is adopted below
+    if(pending->feed) {
+        // Retain the last drawn curve even if this job is cancelled or superseded.
+        if(!d.liveV.empty()){d.previewV=std::move(d.liveV);d.previewJ=std::move(d.liveJ);}
+        d.liveDlcp.clear();d.liveDlts.clear();d.pvEstimate=PvEstimate{};d.liveMembers.clear();d.liveMemberTotal=0;d.liveBatch.reset();d.liveRunning=false;
+    }
     const bool outValid=pending->typedOut?pending->outputValid:pending->output.is_object() && pending->output.value("valid",false);
     if(!pending->completedActions.empty() && (!dropped || !pending->automatic)) {
         auto runs=CreateRef<RunMap>(*d.runs);
@@ -1824,7 +1830,7 @@ void Workflow::FinishOperation(Lane &L) {
         const bool isPreview=pending->request.value("preview",false);const int stride=std::max(1,pending->request.value("stride",1));
         const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-L.runStarted).count();
         if(snapshot->status==JobStatus::Completed) lastFullMs=isPreview?ms*stride:ms;
-        if(!isPreview) {d.previewV.clear();d.previewJ.clear();}
+        if(!isPreview) {if(snapshot->status==JobStatus::Completed && outValid && !dropped){d.previewV.clear();d.previewJ.clear();}}
         else { // preview: curve only, no result/history/save/events
             if(snapshot->status==JobStatus::Completed && outValid && !dropped) {
                 d.previewV.clear();d.previewJ.clear();d.previewCoarse=true;

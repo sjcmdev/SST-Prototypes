@@ -7,6 +7,7 @@
 #include <thread>
 #include <scaps_core/boundary_probe.hpp>
 #include "Panel.hpp"
+#include "PlotUi.hpp"
 #include <imgui_internal.h>
 #include <implot.h>
 #include <implot_internal.h>
@@ -399,13 +400,31 @@ TEST(OwnerUi, LiveReferenceKeepsThePreviousExactTypedResultsUntilRelease) {
     next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=320;ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));Wait(w);
     EXPECT_EQ(w.Current().changeIv,iv);EXPECT_EQ(w.Current().changeBand,band);EXPECT_EQ(w.Current().history.size(),history);
     ImGui::CreateContext();ImPlot::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1800,1400};io.DeltaTime=1.f/60;io.ConfigDebugHighlightIdConflicts=true;io.BackendFlags|=ImGuiBackendFlags_RendererHasVtxOffset;io.Fonts->AddFontDefault();io.Fonts->Build();
-    for(int style=0;style<4;++style){w.liveChangeReference=style;for(int view:{5,6,7,8,9,10,19,22}){Panel panel(&w,view);for(int frame=0;frame<2;++frame){ImGui::NewFrame();ImGui::SetNextWindowSize({1100,1000});ImGui::Begin("Live reference owner");panel.RenderContent();
-        if(view==10 || view==6 || view==8){const auto plot=ImPlot::GetPlot(view==10?"I-V compare":view==6?"C-V":"C-f");EXPECT_NE(plot,nullptr);if(plot){int references=0;for(int i=0;i<plot->Items.GetLegendCount();++i)if(std::string_view(plot->Items.GetLegendLabel(i)).find("(before)")!=std::string_view::npos){++references;const auto colour=plot->Items.GetLegendItem(i)->Color;const auto alpha=(colour>>IM_COL32_A_SHIFT)&255u;if(style==0 || style==2){EXPECT_GE(alpha,76u);EXPECT_LE(alpha,77u);}else EXPECT_EQ(alpha,255u);}EXPECT_EQ(references,style==3?0:view==10?1:2);}}
-        ImGui::End();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);}}}
+    for(int view:{5,6,7,8,9,10,19,22}){Panel panel(&w,view);for(int frame=0;frame<2;++frame){ImGui::NewFrame();ImGui::SetNextWindowSize({1100,1000});ImGui::Begin("Live reference owner");panel.RenderContent();
+        if(view==10 || view==6 || view==8){const auto plot=ImPlot::GetPlot(view==10?"I-V compare":view==6?"C-V":"C-f");EXPECT_NE(plot,nullptr);if(plot){int references=0;for(int i=0;i<plot->Items.GetLegendCount();++i)if(std::string_view(plot->Items.GetLegendLabel(i)).find("(before)")!=std::string_view::npos){++references;const auto colour=plot->Items.GetLegendItem(i)->Color;const auto alpha=(colour>>IM_COL32_A_SHIFT)&255u;EXPECT_EQ(alpha,255u);EXPECT_EQ(colour,ImGui::ColorConvertFloat4ToU32(SingleShotColour));}EXPECT_EQ(references,view==10?1:2);}}
+        ImGui::End();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);}}
     ImPlot::DestroyContext();ImGui::DestroyContext();
     EXPECT_EQ(w.Current().history.size(),history);w.dragging=false;
     ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make(plan)).value("ok",false));Wait(w);ASSERT_TRUE(w.response.value("ok",false));
     EXPECT_FALSE(w.Current().changeIv);EXPECT_FALSE(w.Current().changeBand);EXPECT_TRUE(w.Current().changeAc.empty());
+}
+TEST(OwnerUi, CancelledExactSolveKeepsLastLiveCurveUntilReplacement) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.autoRecalculate=w.autoRecalculateBand=false;w.Current().SetDraft(SmallDraft());
+    auto &d=w.Current();d.previewV={0,.01};d.previewJ={123,124};
+    ASSERT_TRUE(w.jobs->PauseAllJobs());ASSERT_TRUE(w.Dispatch({{"operation","run"}}).value("ok",false));
+    EXPECT_EQ(d.previewJ,(std::vector<double>{123,124}));
+    ASSERT_TRUE(w.Exec(Cmd::Cancel::With()).value("ok",false));ASSERT_TRUE(w.jobs->ResumeAllJobs());
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(5);
+    while(w.Pending() && std::chrono::steady_clock::now()<deadline){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_FALSE(w.Pending());EXPECT_EQ(d.previewJ,(std::vector<double>{123,124}));
+}
+TEST(OwnerUi, BiasNavigationAnchorsReferenceAndUsesStoredProfilesWithoutJobs) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.autoRecalculate=w.autoRecalculateBand=false;w.Current().SetDraft(SmallDraft());
+    auto plan=CreateRef<RunPlan>();plan->actions[1].range=SweepRange{SweepSampling::Points,false,0,.02,.01,3};
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make(plan)).value("ok",false));Wait(w);auto& d=w.Current();const auto shot=d.result.typed();ASSERT_EQ(shot->points.size(),3u);
+    ASSERT_TRUE(w.Exec(Cmd::SelectRun::Make(d.id,"")).value("ok",false));
+    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(1)).value("ok",false));EXPECT_FALSE(w.Busy());EXPECT_EQ(d.changeIv,shot);EXPECT_EQ(d.changeBias,0);EXPECT_EQ(d.ChangePoint(),&shot->points[0]);
+    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(2)).value("ok",false));EXPECT_FALSE(w.Busy());EXPECT_EQ(d.ChangePoint(),&shot->points[0]);EXPECT_EQ(d.ProfileSweep()->points[2].voltage_V,.02);EXPECT_TRUE(shot->points[2].details);EXPECT_EQ(d.history.size(),1u);
 }
 
 TEST(WorkspaceV4, ActionRangeUnknownFieldsAndDisabledMemberPauseSurviveRoundtrip) {
