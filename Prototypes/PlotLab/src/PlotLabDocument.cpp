@@ -1,5 +1,7 @@
 #include "PlotLabDocument.hpp"
 #include "WorksheetPython.hpp"
+#include "PlotWorkflow.hpp"
+#include "ProjectFiles.hpp"
 #include <sst/plotlab/edges/CommandJson.hpp>
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -71,7 +73,11 @@ namespace SST::Prototypes::PlotLab
         context.ThrowIfCancellationRequested();
         auto extension = path.Native().extension().string();
         std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c) { return std::tolower(c); });
-        if (extension == ".plotlab") project = CreateRef<pl::Project>(pl::Project::load(path.Native()));
+        if (extension == ".plotlab") {
+            ProjectFilesLock lock(path.Native());
+            project=CreateRef<pl::Project>(pl::Project::load(path.Native()));
+            sidecars=LoadProjectSidecars(path.Native());
+        }
         else if (extension == ".csv" || extension == ".txt" || extension == ".dat") {
             std::string text, error;
             if (!TextFileIO::Load(path, text, error)) throw std::runtime_error(error);
@@ -146,7 +152,15 @@ namespace SST::Prototypes::PlotLab
     }
     Document::~Document()
     {
-        if(ownsDataJobs) dataJobs->Shutdown(true);
+        workflow.reset();
+        try{StopImport();}catch(...){}
+        if(ownsDataJobs) {
+#if DS_PYTHON_CAPI_AVAILABLE
+            std::optional<nanobind::gil_scoped_release> release;
+            if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();
+#endif
+            dataJobs->Shutdown(true);
+        }
         else if(dataJob) (void)dataJobs->RequestCancel(dataJob);
         try {ResetPython();} catch(...) {}
         StopWorker(*project);
@@ -168,6 +182,8 @@ namespace SST::Prototypes::PlotLab
     void Document::Replace(Ref<pl::Project> next)
     {
         recovered=false;
+        workflow.reset();workflowState={};workflowDirty=false;graphViews.clear();
+        StopImport();trustedImportRecipes.clear();importPresets.clear();importRecipes.clear();importPresetsDirty=false;importUi={};
         ResetPython();
         if (project)
         {
@@ -216,13 +232,20 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Open(const std::filesystem::path &source)
     {
-        auto next = CreateRef<pl::Project>(pl::Project::load(source));
-        Open(std::move(next), source);
+        Open({},source);
     }
-    void Document::Open(Ref<pl::Project> next, const std::filesystem::path &source)
+    void Document::Open(Ref<pl::Project> next, const std::filesystem::path &source, std::optional<ProjectSidecars> sidecars)
     {
+        std::unique_ptr<ProjectFilesLock> lock;
+        if(!sidecars) {
+            lock=std::make_unique<ProjectFilesLock>(source);
+            if(!next || lock->Recovered())next=CreateRef<pl::Project>(pl::Project::load(source));
+            sidecars=LoadProjectSidecars(source);
+        }
         Replace(std::move(next));
+        workflowState=std::move(sidecars->workflow);
         path = source;
+        importPresets=std::move(sidecars->presets);importRecipes=std::move(sidecars->recipes);importUi=std::move(sidecars->ui);
         pythonTrusted=!HasPython();
 #if DS_PYTHON_CAPI_AVAILABLE
         if(HasPython() && !source.empty()) {
@@ -232,9 +255,20 @@ namespace SST::Prototypes::PlotLab
 #endif
         InstallPythonEvaluator();
     }
-    Ref<pl::Project> Document::RecoverySnapshot() const
+    namespace {
+    void StoreGraphViews(pl::Project& project,const std::map<pl::Id,plot::PlotViewState>& graphViews) {
+        std::vector<pl::Object> views;
+        for(const auto& [id,view]:graphViews)if(project.objects().contains(id)) {
+            pl::Id layerId=id;if(!std::holds_alternative<pl::Layer>(project.object(id).data)){const auto layers=project.children(id);if(layers.empty())continue;layerId=layers.front();}auto layer=project.object(layerId);
+            if(!plot::StoredViewEqual(std::get<pl::Layer>(layer.data).view,view)){std::get<pl::Layer>(layer.data).view=CapturePublicationView(view);views.push_back(std::move(layer));}
+        }
+        if(!views.empty())project.change("Graph view",std::move(views)).apply(project);
+    }
+    }
+    std::function<void(const Path&)> Document::RecoverySnapshot() const
     {
-        auto snapshot=project->operationSnapshot();
+        Ref<pl::Project> snapshot=project->operationSnapshot();
+        StoreGraphViews(*snapshot,graphViews);
         std::vector<pl::Object> updates;
         for (const auto& [id,source]:scriptDrafts) if(snapshot->objects().contains(id)) {
             auto object=snapshot->object(id); std::get<pl::Script>(object.data).source=source; updates.push_back(std::move(object));
@@ -246,10 +280,27 @@ namespace SST::Prototypes::PlotLab
         }
         auto root=snapshot->object(snapshot->root()); std::get<pl::Folder>(root.data).pythonHistory=pythonHistory; updates.push_back(std::move(root));
         snapshot->change("Recover Python workspace",std::move(updates)).apply(*snapshot);
-        return snapshot;
+        ProjectSidecars sidecars{workflowState,importPresets,importRecipes,importUi};
+        if(workflow) {
+            sidecars.workflow.recipe=workflow->panel.Recipe();sidecars.workflow.analysisOpen=workflow->panel.open;
+            sidecars.workflow.previewView=CapturePublicationView(workflow->panel.previewView);
+            sidecars.workflow.residualView=CapturePublicationView(workflow->panel.residualView);
+        }
+        std::erase_if(sidecars.workflow.acceptedRecipes,[&](const auto& item){return !snapshot->objects().contains(item.first);});
+        return [snapshot=std::move(snapshot),sidecars=std::move(sidecars)](const Path& target) {
+            SaveProjectFiles(target.Native(),[&](const auto& staged) {
+                snapshot->stageSave(target.Native(),staged);
+                SaveWorkflowState(staged,sidecars.workflow);
+                auto imports=staged;imports+=".imports.json";SaveImportPresets(imports,sidecars.presets,&sidecars.ui,&sidecars.recipes);
+                return true;
+            });
+        };
     }
     void Document::Save(const std::filesystem::path &destination)
     {
+        StoreGraphViews(*project,graphViews);
+        if(workflow)workflow->StoreState();
+        std::erase_if(workflowState.acceptedRecipes,[&](const auto& item){return !project->objects().contains(item.first);});
         for(const auto& [id,source]:scriptDrafts)if(project->objects().contains(id))SaveScript(project->object(id).name,source,id);
         scriptDrafts.clear();
         std::vector<pl::Object> updates;
@@ -258,7 +309,16 @@ namespace SST::Prototypes::PlotLab
         auto root=project->object(project->root());auto& history=std::get<pl::Folder>(root.data).pythonHistory;
         if(history!=pythonHistory){history=pythonHistory;updates.push_back(std::move(root));}
         if(!updates.empty())Execute(project->change("Save Python workspace",std::move(updates)));
-        project->save(destination);
+        auto presets=destination;presets+=".imports.json";
+        const bool saveImports=!importPresets.empty() || !importRecipes.empty() || importUi.open || std::filesystem::exists(presets);
+        SaveProjectFiles(destination,[&](const auto& staged) {
+            project->stageSave(destination,staged);
+            SaveWorkflowState(staged,workflowState);
+            if(saveImports){auto imports=staged;imports+=".imports.json";SaveImportPresets(imports,importPresets,&importUi,&importRecipes);}
+            return saveImports;
+        });
+        workflowDirty=false;
+        importPresetsDirty=false;
         path = destination;
         recovered=false;
         undo->MarkClean();
@@ -267,6 +327,14 @@ namespace SST::Prototypes::PlotLab
             PythonBinding::RememberTrustedFile(path);
 #endif
         }
+    }
+    PlotWorkflow& Document::Workflow() {
+        if(!dataJobs){dataJobs=CreateRef<JobSystem>(bus,1);ownsDataJobs=true;}
+        if(!workflow)workflow=std::make_unique<PlotWorkflow>(*this,dataJobs);
+        return *workflow;
+    }
+    std::shared_ptr<const pl::GraphSnapshot> Document::SnapshotGraph(pl::Id graph,std::optional<std::array<double,2>> sizeMm) const {
+        const auto found=graphViews.find(graph);return PublicationSnapshot(*project,graph,found==graphViews.end()?nullptr:&found->second,sizeMm,&graphViews);
     }
     pl::Id Document::Create(pl::Id parent, int type, std::string name)
     {
@@ -430,7 +498,7 @@ namespace SST::Prototypes::PlotLab
     }
     pl::Id Document::AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error)
     {
-        const auto layer = project->children(graph).at(0);
+        const auto layer = pl::activeLayer(*project,graph);
         pl::Plot p{sheet, x, y, 0, error};
         p.kind = plot::SeriesKind::LineScatter;
         const auto id = project->reserveId();
@@ -440,8 +508,8 @@ namespace SST::Prototypes::PlotLab
     pl::Id Document::PlotColumns(pl::Id sheet, const std::vector<pl::Id>& selected, plot::SeriesKind kind,
                                  pl::Id graph, pl::Id explicitX, pl::Id error)
     {
-        if (kind != plot::SeriesKind::Line && kind != plot::SeriesKind::Scatter && kind != plot::SeriesKind::LineScatter && kind != plot::SeriesKind::Column)
-            throw std::invalid_argument("Choose Line, Scatter, Line + Symbol or Column");
+        if (kind != plot::SeriesKind::Line && kind != plot::SeriesKind::Scatter && kind != plot::SeriesKind::LineScatter && kind != plot::SeriesKind::Column && !plot::IsChart(kind))
+            throw std::invalid_argument("Choose a 2D plot type; use the X/Y/Z gallery for spatial data");
         auto& p = *project; const auto columns = p.children(sheet);
         for (auto column : selected) if (std::find(columns.begin(), columns.end(), column) == columns.end()) throw std::invalid_argument("Selected column belongs to another worksheet");
         for (auto column : selected) if (std::get<pl::Column>(p.object(column).data).role == pl::Role::X) explicitX = column;
@@ -455,18 +523,27 @@ namespace SST::Prototypes::PlotLab
                 pl::Id addedSeries = 0;
                 if (!graph) graph = AddGraph(p.root(), sheet, x, column, error);
                 else addedSeries = AddSeries(graph, sheet, x, column, error);
-                const auto layer = p.children(graph).front();
+                const auto layer = addedSeries?p.object(addedSeries).parent:pl::activeLayer(p,graph);
                 auto o = p.object(addedSeries ? addedSeries : p.children(layer).front()); auto& series = std::get<pl::Plot>(o.data);
                 series.kind = kind; series.style.color = plot::ScientificColor(p.children(layer).size() - 1);
                 series.style.marker = kind == plot::SeriesKind::Line || kind == plot::SeriesKind::Column ? plot::Marker::None : plot::Marker::Circle;
                 series.style.markerAuto = false; series.group = "Worksheet selection";
+                if(kind==plot::SeriesKind::Box)series.style.offsetX=static_cast<double>(p.children(layer).size()-1);
+                if(kind==plot::SeriesKind::Waterfall) {const auto& values=std::get<std::vector<double>>(c.values);double lo=0,hi=0;for(double value:values)if(std::isfinite(value)){lo=std::min(lo,value);hi=std::max(hi,value);}series.style.offsetY=(hi>lo?hi-lo:1)*.2*(p.children(layer).size()-1);}
                 Execute(p.change("Plot type", {std::move(o)})); added = true;
+                auto settings=p.object(layer);auto& spec=std::get<pl::Layer>(settings.data).spec;
+                spec.x.unit=x?std::get<pl::Column>(p.object(x).data).units:"";spec.y.unit=c.units;
+                if(plot::IsHorizontalBar(kind)){spec.y.label=x?p.object(x).name:"Category";spec.x.label=p.object(column).name;std::swap(spec.x.unit,spec.y.unit);}
+                if(kind==plot::SeriesKind::PercentBar || kind==plot::SeriesKind::PercentColumn)(plot::IsHorizontalBar(kind)?spec.x:spec.y).unit="%";
+                if(kind==plot::SeriesKind::Histogram){spec.x.label=p.object(column).name;spec.x.unit=c.units;spec.y.label="Count";spec.y.unit="";}
+                if(kind==plot::SeriesKind::Box){spec.x.label="Series";spec.x.unit="";}
+                Execute(p.change("Plot axes",{std::move(settings)}));
             }
             if (!added) throw std::invalid_argument("Select at least one numeric Y column first.");
             const auto result = group.Commit(); if (!result) throw std::runtime_error(result.Error().technicalDetails);
             for(auto column:selected)if(std::get<pl::Column>(p.object(column).data).role!=pl::Role::X) {
                 const auto x=explicitX?explicitX:p.pairedX(column);
-                const char* name=kind==plot::SeriesKind::Line?"line":kind==plot::SeriesKind::Scatter?"scatter":kind==plot::SeriesKind::Column?"column":"line+symbol";
+                const char* names[]={"line","scatter","line+symbol","error","surface","scatter3d","line3d","heatmap","column","bar","stacked-column","percent-column","stacked-bar","percent-bar","histogram","box","area","waterfall","error-band"};const char* name=names[static_cast<int>(kind)];
                 if(x)RecordPython("plot(project.by_id("+std::to_string(x)+"), project.by_id("+std::to_string(column)+"), kind='"+name+"')");
             }
             return graph;
@@ -492,6 +569,7 @@ namespace SST::Prototypes::PlotLab
     }
 
     void Document::PollDataOperation() {
+        (void)PollImport();
         PollPythonJobs();
         if(!dataJob) return;
         const auto status=dataJobs->GetJob(dataJob);
@@ -661,6 +739,7 @@ NB_MODULE(_sst_plotlab, module)
     SST::PlotEditingPython::Bind<Document>(module);
     auto session=nanobind::class_<Document>(module, "WorksheetSession");
     PythonBinding::BindWorksheetRuntime(module,session);
+    PythonBinding::BindPlotWorkflow(session);
     session
         .def("__init__", [](Document* self) {
             new (self) Document(CreateRef<CommandRegistry>(), CreateRef<UndoStack>(), CreateRef<EventBus>());

@@ -1,4 +1,4 @@
-"""No pyplot/global GUI backend; caller supplies ranges and ticks, never auto-fit."""
+﻿"""No pyplot/global GUI backend; caller supplies ranges and ticks, never auto-fit."""
 from pathlib import Path
 import math
 import os
@@ -12,7 +12,7 @@ from matplotlib.font_manager import FontProperties, findfont
 from matplotlib.ft2font import FT2Font
 from matplotlib.ticker import FixedLocator, FixedFormatter, FuncFormatter
 from matplotlib.lines import Line2D
-from matplotlib.patches import Rectangle
+from matplotlib.patches import Rectangle, Polygon
 from matplotlib.transforms import Affine2D
 import re
 import numpy as np
@@ -54,7 +54,6 @@ def _spatial_coordinate(values, config):
 
 def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     kind = series["kind"]
-    if kind == 7 and snapshot["z_axis"]["log"]: raise ValueError("Heatmap logarithmic colour scale is unsupported")
     if (kind != 7) != three:
         raise ValueError("Separate heatmap and 3D plots")
     z = np.asarray(series["z"], dtype=float)
@@ -63,6 +62,13 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         raise ValueError("Invalid Z/mask dimensions or infinite Z")
     valid = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
     if mask.size: valid &= ~mask
+    log_color = snapshot["z_axis"]["log"] or snapshot["z_axis"].get("spec", {}).get("scale") in (1, 2, 3)
+    policy = snapshot.get("nonpositive_color", 0)
+    if policy not in (0, 1): raise ValueError("Invalid nonpositive colour policy")
+    if log_color:
+        if policy == 1 and np.any(valid & (z <= 0)):
+            raise ValueError("Log colour scale requires positive Z; select Mask to omit nonpositive cells")
+        valid &= z > 0
     for values, key in ((x, "x_axis"), (y, "y_axis"), (z, "z_axis")):
         if snapshot[key]["log"] and (key != "z_axis" or three): valid &= values > 0
     if kind in (5, 6):
@@ -85,7 +91,8 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     rows = len(x)//cols
     xx, yy = x.reshape(rows, cols), y.reshape(rows, cols)
     if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y)) and
-            np.all(np.diff(xx[0]) > 0) and np.all(np.diff(yy[:, 0]) > 0) and
+            (np.all(np.diff(xx[0]) > 0) or np.all(np.diff(xx[0]) < 0)) and
+            (np.all(np.diff(yy[:, 0]) > 0) or np.all(np.diff(yy[:, 0]) < 0)) and
             np.allclose(xx, xx[0], rtol=1e-12, atol=0) and np.allclose(yy, yy[:, :1], rtol=1e-12, atol=0)):
         raise ValueError("Non-uniform rows or unordered coordinates: expected a rectilinear grid")
     zz = np.where(valid, z, np.nan).reshape(rows, cols)
@@ -93,22 +100,25 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
     if color_range is None:
         color_valid = np.isfinite(z)
         if mask.size: color_valid &= ~mask
-        if snapshot["z_axis"]["log"]: color_valid &= z > 0
+        if log_color: color_valid &= z > 0
         values = z[color_valid]
-        lo, hi = (float(values.min()), float(values.max())) if values.size else (0, 1)
+        lo, hi = (float(values.min()), float(values.max())) if values.size else ((1, 10) if log_color else (0, 1))
         if lo == hi:
-            padding = (abs(lo) if lo else 1)*.05
-            lo, hi = lo-padding, hi+padding
+            if log_color: lo, hi = lo/math.sqrt(10), hi*math.sqrt(10)
+            else:
+                padding = (abs(lo) if lo else 1)*.05
+                lo, hi = lo-padding, hi+padding
     else:
         if len(color_range) != 2 or not all(math.isfinite(v) for v in color_range) or color_range[0] >= color_range[1]:
             raise ValueError("Invalid color range")
         lo, hi = color_range
+    if log_color and lo <= 0: raise ValueError("Log colour limits must be positive")
     name = snapshot.get("colormap", "Viridis")
     if name not in COLORS: raise ValueError("Unknown colormap")
     keys = np.array([[(v >> shift) & 255 for shift in (0, 8, 16, 24)] for v in COLORS[name]])/255
     cmap = (mpl.colors.ListedColormap(keys, name) if name in ("Deep", "Dark", "Pastel", "Paired")
             else mpl.colors.LinearSegmentedColormap.from_list(name, keys, N=256))
-    norm = mpl.colors.Normalize(lo, hi)
+    norm = mpl.colors.LogNorm(lo, hi) if kind == 7 and log_color else mpl.colors.Normalize(lo, hi)
     if kind == 4:
         # Drop the whole quad when any corner is missing, matching ImPlot3D.
         cells = valid.reshape(rows, cols)
@@ -130,6 +140,27 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
         xe = edges(xx[0], snapshot["x_axis"]["log"])
         ye = edges(yy[:, 0], snapshot["y_axis"]["log"])
         artist = ax.pcolormesh(xe, ye, np.ma.masked_invalid(zz), cmap=cmap, norm=norm, shading="flat")
+        contour = snapshot.get("contour_style", {})
+        lines = series.get("contours", [])
+        if contour.get("levels") and "contours" not in series:
+            raise ValueError("Contours require the shared typed contour geometry")
+        from matplotlib.collections import LineCollection
+        segments, labelled = [], set()
+        for line in lines:
+            points = np.asarray([line["a"], line["b"]], dtype=float)
+            level = line["level"]
+            if points.shape != (2, 2) or not np.all(np.isfinite(points)) or not math.isfinite(level):
+                raise ValueError("Invalid contour geometry")
+            segments.append(points)
+            midpoint = points.mean(axis=0)
+            limits = snapshot["ranges"]
+            if (contour.get("labels", True) and level not in labelled and
+                    limits[0] <= midpoint[0] <= limits[1] and limits[2] <= midpoint[1] <= limits[3]):
+                ax.text(*midpoint, f"{level:.6g}", color=contour.get("color", "black"), fontproperties=font, clip_on=True)
+                labelled.add(level)
+        if segments:
+            ax.add_collection(LineCollection(segments, colors=[contour.get("color", "black")],
+                                            linewidths=contour.get("line_pt", 1), clip_on=True))
     if snapshot.get("color_scale", True):
         bar = fig.colorbar(artist, ax=ax, pad=.14 if three else .04, fraction=.05)
         z_axis = snapshot["z_axis"]
@@ -145,6 +176,20 @@ def draw_spatial(fig, ax, snapshot, series, x, y, font, three):
 
 _LINE_STYLES = ("-", (0, (6, 3)), (0, (1, 3)), (0, (6, 1.5, 1, 1.5)))
 
+
+def _errors(series, minus_key, plus_key, values, config):
+    if not series.get(minus_key):
+        if series.get(plus_key): raise ValueError("Plus error requires minus error")
+        return None
+    minus = np.asarray(series[minus_key], dtype=float)
+    plus = np.asarray(series.get(plus_key) or series[minus_key], dtype=float)
+    if minus.shape != values.shape or plus.shape != values.shape or np.any(minus < 0) or np.any(plus < 0) or np.any(np.isinf(minus)) or np.any(np.isinf(plus)):
+        raise ValueError("Invalid yErr" if minus_key == "y_error" else "Invalid xErr")
+    scale = config.get("spec", {}).get("scale", 1 if config["log"] else 0)
+    valid = np.isfinite(minus) & np.isfinite(plus)
+    if scale in (1, 2, 3): valid &= values-minus > 0
+    if scale == 4: valid &= (values-minus)*(values+plus) > 0
+    return np.array([np.where(valid, minus, np.nan), np.where(valid, plus, np.nan)])
 
 def _scale_functions(config):
     scale = config.get("spec", {}).get("scale", 1 if config["log"] else 0)
@@ -255,7 +300,7 @@ def _draw_legend(fig, snapshot, font):
     for i, entry in enumerate(entries):
         xx, yy = x+gap+cell*(i % columns), y+gap+row*(i//columns)
         alpha = 1 if entry["visible"] else .35
-        if entry.get("kind") == 8:
+        if entry.get("kind") in (8, 9, 10, 11, 12, 13, 14, 15, 16, 18):
             line = Rectangle(((xx+size*.5)/width, 1-(yy+size)/height), size/width, size/height,
                              transform=fig.transFigure, facecolor=entry["color"], alpha=alpha, zorder=11)
         else:
@@ -277,7 +322,7 @@ def _draw_legend(fig, snapshot, font):
 
 
 @mpl.rc_context({"lines.scale_dashes": False})
-def build_figure(snapshot, dpi=300):
+def build_figure(snapshot, dpi=300, _figure=None):
     width, height = snapshot["width_mm"], snapshot["height_mm"]
     if not all(math.isfinite(v) and v > 0 for v in (width, height, dpi, snapshot["font_pt"])):
         raise ValueError("Size, font size and DPI must be finite and positive")
@@ -286,8 +331,8 @@ def build_figure(snapshot, dpi=300):
         raise ValueError("Invalid snapshot ranges")
     font_path, family = resolve_font(snapshot["font_family"], snapshot.get("font_file", ""))
     font = FontProperties(family=family, fname=font_path, size=snapshot["font_pt"])
-    fig = Figure(figsize=(width / 25.4, height / 25.4), dpi=dpi)
-    FigureCanvasAgg(fig)
+    fig = _figure if _figure is not None else Figure(figsize=(width / 25.4, height / 25.4), dpi=dpi)
+    if _figure is None: FigureCanvasAgg(fig)
     three = any(e["kind"] in (4, 5, 6) for e in snapshot["series"])
     heatmap = any(e["kind"] == 7 for e in snapshot["series"])
     if (three and any(e["kind"] not in (4, 5, 6) for e in snapshot["series"]) or
@@ -348,7 +393,7 @@ def build_figure(snapshot, dpi=300):
             formatter(FixedFormatter([t["label"] for t in ticks]))
         if not three: axis.grid(config["grid"])
         axis.label.set_fontproperties(font)
-        if snapshot.get("axis_geometry") is None:
+        if three or snapshot.get("axis_geometry") is None:
             for tick in axis.get_ticklabels(minor=False) + axis.get_ticklabels(minor=True):
                 tick.set_fontproperties(font)
     ax.set_xlabel(axis_label(snapshot["x_axis"]), fontproperties=font)
@@ -359,6 +404,25 @@ def build_figure(snapshot, dpi=300):
         if x.ndim != 1 or y.shape != x.shape:
             raise ValueError("Series must have equal length one-dimensional X/Y data")
         kind = series["kind"]
+        if kind in range(9, 19):
+            chart = series.get("chart")
+            if chart is None:
+                raise ValueError("Chart requires the shared typed geometry")
+            style = series["style"]
+            for path in chart["paths"]:
+                points = np.asarray(path["points"], dtype=float)
+                if points.ndim != 2 or points.shape[1] != 2 or not np.all(np.isfinite(points)):
+                    raise ValueError("Invalid chart geometry")
+                fill = path["filled"]
+                alpha = mpl.colors.to_rgba(style["color"])[3] * (series.get("fill_alpha", .35) if kind in (15, 16, 18) and fill else 1)
+                if fill:
+                    ax.add_patch(Polygon(points, facecolor=style["color"],
+                                         edgecolor="none" if kind in (16, 18) else style["color"],
+                                         linewidth=style["line_pt"], alpha=alpha, clip_on=True))
+                else:
+                    ax.plot(points[:, 0], points[:, 1], color=style["color"], linewidth=style["line_pt"],
+                            linestyle=_LINE_STYLES[style.get("line_style", 0)], clip_on=True)
+            continue
         if kind in (4, 5, 6, 7):
             draw_spatial(fig, ax, snapshot, series, x, y, font, three)
             continue
@@ -381,12 +445,11 @@ def build_figure(snapshot, dpi=300):
             gaps = np.abs(np.diff(x))
             gaps = gaps[np.isfinite(gaps) & (gaps > 0)]
             bar_width = .8 * float(np.min(gaps)) if gaps.size else .8
-            error = np.asarray(series["y_error"], dtype=float) if series["y_error"] else None
-            if error is not None and (error.shape != y.shape or np.any(error < 0) or np.any(np.isinf(error))):
-                raise ValueError("Invalid yErr")
+            error = _errors(series, "y_error", "y_error_plus", y, snapshot["y_axis"])
+            x_error = _errors(series, "x_error", "x_error_plus", x, snapshot["x_axis"])
             ax.bar(x, y, width=bar_width, color=style["color"], edgecolor=style["outline"],
                    linewidth=style["line_pt"], label=series["label"] if style["legend"] else "_nolegend_",
-                   yerr=error, ecolor=style["color"], capsize=style["cap_pt"]/2)
+                   yerr=error, xerr=x_error, ecolor=style["color"], capsize=style["cap_pt"]/2)
             continue
         marker = markers[style["marker"]]
         if kind in (1, 2) and not marker and style.get("marker_auto", True): marker = "o"
@@ -396,14 +459,10 @@ def build_figure(snapshot, dpi=300):
                     markerfacecolor=style["fill"], markeredgecolor=style["outline"],
                     linestyle=_LINE_STYLES[style.get("line_style", 0)] if kind in (0, 2) else "none",
                     label=series["label"] if style["legend"] else "_nolegend_", clip_on=True)
-        if series["y_error"]:
-            error = np.asarray(series["y_error"], dtype=float)
-            if error.shape != y.shape or np.any(error < 0) or np.any(np.isinf(error)):
-                raise ValueError("Invalid yErr")
-            y_scale = snapshot["y_axis"].get("spec", {}).get("scale", 1 if snapshot["y_axis"]["log"] else 0)
-            if y_scale in (1,2,3): error = np.where(y-error > 0, error, np.nan)
-            if y_scale == 4: error = np.where((y-error)*(y+error) > 0, error, np.nan)
-            ax.errorbar(x, y, yerr=error, capsize=style["cap_pt"]/2, **args)
+        if series["y_error"] or series.get("x_error"):
+            error = _errors(series, "y_error", "y_error_plus", y, snapshot["y_axis"])
+            x_error = _errors(series, "x_error", "x_error_plus", x, snapshot["x_axis"])
+            ax.errorbar(x, y, yerr=error, xerr=x_error, capsize=style["cap_pt"]/2, **args)
         elif kind == 3:
             raise ValueError("ErrorBars requires yErr")
         else:
@@ -422,20 +481,36 @@ def build_figure(snapshot, dpi=300):
         _draw_legend(fig, snapshot, font)
     elif legend["visible"] and ax.get_legend_handles_labels()[0]:
         ax.legend(prop=font, loc="upper right", **({"bbox_to_anchor": (1, 1.28)} if legend["outside"] else {}))
+    for layer in snapshot.get("layers", []):
+        build_figure(layer, dpi, _figure=fig)
     return fig
 
 
-def export_graph(snapshot, destination, format, dpi=300):
+def export_graph(snapshot, destination, format, dpi=300, background=None):
     """Return the rendered limits, useful to verify the embedded C++ boundary."""
     format = format.lower()
-    if format not in ("svg", "pdf", "png"):
-        raise ValueError("Supported export formats: SVG, PDF, PNG")
+    if format == "jpg": format = "jpeg"
+    if format not in ("svg", "pdf", "png", "jpeg", "eps"):
+        raise ValueError("Supported export formats: SVG, PDF, PNG, JPEG, EPS")
+    if format == "jpeg":
+        if background is None or not mpl.colors.is_color_like(background):
+            raise ValueError("JPEG requires an explicit opaque background")
+        if mpl.colors.to_rgba(background)[3] != 1: raise ValueError("JPEG background must be opaque")
     destination = Path(destination)
     # Context isolates publication settings from any earlier embedded script.
     with _export_lock, mpl.rc_context({"svg.fonttype": "path", "pdf.fonttype": 42, "text.usetex": False,
                          "savefig.bbox": None, "path.simplify": False}):
         fig = build_figure(snapshot, dpi)
-        if format == "png":
+        if format == "eps":
+            # PostScript has no alpha; composite fills against the chosen opaque page.
+            page = np.array(mpl.colors.to_rgb(background or "white"))
+            for axis in fig.axes:
+                for artist in axis.patches:
+                    alpha = artist.get_alpha()
+                    if alpha is not None and alpha < 1:
+                        artist.set_facecolor(alpha*np.array(artist.get_facecolor()[:3])+(1-alpha)*page)
+                        artist.set_alpha(1)
+        if format in ("png", "jpeg"):
             # Agg truncates fractional pixels. Round the requested physical size.
             pixels = [math.floor(v*dpi/25.4 + 0.5) for v in (snapshot["width_mm"], snapshot["height_mm"])]
             fig.set_size_inches([(v + 1e-7)/dpi for v in pixels])
@@ -444,7 +519,8 @@ def export_graph(snapshot, destination, format, dpi=300):
             with tempfile.NamedTemporaryFile(prefix=f".{destination.name}.", suffix=f".{format}",
                                              dir=destination.parent, delete=False) as stream:
                 temporary = Path(stream.name)
-                fig.savefig(stream, format=format, dpi=dpi, bbox_inches=None)
+                fig.savefig(stream, format=format, dpi=dpi, bbox_inches=None,
+                            **({"facecolor": background, "transparent": False} if format == "jpeg" else {}))
                 stream.flush(); os.fsync(stream.fileno())
             os.replace(temporary, destination)
             limits = tuple(snapshot["ranges"]) if fig.axes[0].name == "3d" else (*fig.axes[0].get_xlim(), *fig.axes[0].get_ylim())
@@ -469,7 +545,7 @@ def export_plots(exports, cancelled=lambda: False):
                 fd, name = tempfile.mkstemp(prefix=".sst-plot-", dir=path.parent)
                 os.close(fd)
                 staged.append(Path(name))
-                export_graph(item["snapshot"], name, item["format"], item["dpi"])
+                export_graph(item["snapshot"], name, item["format"], item["dpi"], item.get("background"))
             commit_files(list(zip(staged, destinations)), cancelled)
     finally:
         for temporary in staged:

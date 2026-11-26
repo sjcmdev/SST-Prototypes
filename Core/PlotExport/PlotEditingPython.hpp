@@ -16,7 +16,7 @@ namespace nb = nanobind;
 // Called only at nanobind edges; GUI callers construct PlotEdit directly.
 inline plot::PlotEdit Decode(const Json& request, const pl::Project& project, pl::Id layer) {
     plot::PlotEdit edit;
-    const char* actions[]={"axis","legend","style","group_style","visibility","rename","move","remove","rescale","group_colors"};
+    const char* actions[]={"axis","legend","style","group_style","visibility","rename","move","remove","rescale","group_colors","kind","errors","group","transfer","independent_style"};
     const auto action=request.at("action").get<std::string>();
     const auto found=std::find(std::begin(actions),std::end(actions),action);
     if(found==std::end(actions)) throw std::invalid_argument("plot.edit.action: unknown action");
@@ -52,8 +52,11 @@ inline plot::PlotEdit Decode(const Json& request, const pl::Project& project, pl
         style.lineStyle=static_cast<plot::LineStyle>(value.value("line_style",static_cast<int>(style.lineStyle)));
         style.lineWidthPt=value.value("line_pt",style.lineWidthPt);style.markerSizePt=value.value("marker_pt",style.markerSizePt);
         style.maskedColor=value.value("masked_color",style.maskedColor);
+        style.baseline=value.value("baseline_y_units",style.baseline);style.offsetX=value.value("offset_x_units",style.offsetX);style.offsetY=value.value("offset_y_units",style.offsetY);
+        style.histogramBins=value.value("bins",style.histogramBins);style.density=value.value("density",style.density);style.fillAlpha=value.value("fill_alpha",style.fillAlpha);
     }
     edit.visible=request.value("visible",true);edit.text=request.value("text",std::string{});edit.offset=request.value("offset",0);
+    edit.seriesKind=static_cast<plot::SeriesKind>(request.value("kind",0));edit.xError=request.value("x_error_column_id",pl::Id{});edit.yError=request.value("y_error_column_id",pl::Id{});edit.xErrorPlus=request.value("x_error_plus_column_id",pl::Id{});edit.yErrorPlus=request.value("y_error_plus_column_id",pl::Id{});edit.targetLayer=request.value("target_layer_id",pl::Id{});
     return edit;
 }
 inline Json Request(nb::dict request) {
@@ -86,8 +89,8 @@ template<class Host> void Bind(nb::module_& module) {
         .def("snapshot",[](S& s,pl::Id graph,nb::list ranges) {
             if(nb::len(ranges)!=4) throw std::invalid_argument("Expected four axis limits");
             const auto layers=s.project->children(graph);
-            if(layers.size()!=1) throw std::invalid_argument("Expected one plot layer");
-            auto view=std::get<pl::Layer>(s.project->object(layers.front()).data).view;
+            if(layers.empty()) throw std::invalid_argument("Expected a plot layer");
+            auto view=pl::resolveLayerView(*s.project,layers.front());
             view.viewport=plot::Bounds{nb::cast<double>(ranges[0]),nb::cast<double>(ranges[1]),nb::cast<double>(ranges[2]),nb::cast<double>(ranges[3])};
             return nb::module_::import_("json").attr("loads")(nb::str(pl::snapshotJson(*pl::snapshotGraph(*s.project,graph,view)).c_str()));
         },nb::arg("graph_id"),nb::arg("ranges"));

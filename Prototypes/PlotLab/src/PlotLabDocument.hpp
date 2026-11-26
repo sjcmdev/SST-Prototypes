@@ -3,9 +3,12 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include <sst/plotlab/Extensions.hpp>
+#include "ImportWorkflow.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Utils/Path.hpp"
+#include "PlotWorkflowState.hpp"
+#include "ProjectFiles.hpp"
 
 namespace SST::Prototypes::PlotLab
 {
@@ -21,6 +24,7 @@ namespace SST::Prototypes::PlotLab
         Path path;
         Ref<pl::Project> project;
         std::optional<pl::Table> table;
+        std::optional<ProjectSidecars> sidecars;
     };
     double ParseNumericCell(const std::string &);
     std::vector<double> ParseNumericList(const std::string&);
@@ -84,6 +88,7 @@ namespace SST::Prototypes::PlotLab
         std::vector<ScriptParameter> parameters;
     };
     class PythonWork;
+    class PlotWorkflow;
     class Document final : public pl::Observer
     {
       public:
@@ -94,6 +99,17 @@ namespace SST::Prototypes::PlotLab
         void WorksheetCommand(pl::WorksheetEdit);
         DataResult WorksheetCommand(pl::DataRequest, bool wait = true);
         DataResult DataStatus();
+        JobId ImportCommand(ImportRequest);
+        JobId CommitImport(std::shared_ptr<const ImportResult>);
+        std::shared_ptr<const ImportResult> PollImport();
+        std::shared_ptr<const ImportResult> WaitImport();
+        void CancelImport();
+        void TrustImportRecipe(const pl::ImportRecipe&);
+        bool ImportRecipeTrusted(const pl::ImportRecipe&) const;
+        std::map<std::string,pl::ImportRecipe> importPresets;
+        const ImportRecipes& ImportRecipeHistory() const { return importRecipes; }
+        bool importPresetsDirty = false;
+        ImportUiState importUi;
         void SetColumnValues(pl::Id column, pl::Formula);
         JobId SubmitPython(PythonRequest);
         const PythonResult& PollPython(JobId);
@@ -103,6 +119,12 @@ namespace SST::Prototypes::PlotLab
         bool PythonTrusted() const { return pythonTrusted; }
         void TrustPython();
         bool HasPython() const;
+        PlotWorkflow& Workflow();
+        JobContext* ActiveJobContext() const {return importContext;}
+        std::map<pl::Id,plot::PlotViewState> graphViews;
+        std::shared_ptr<const pl::GraphSnapshot> SnapshotGraph(pl::Id,std::optional<std::array<double,2>> sizeMm={}) const;
+        WorkflowState workflowState;
+        bool workflowDirty=false;
         pl::Id activeSheet = 0;
         std::vector<std::string> pythonHistory;
         std::map<pl::Id,std::string> scriptDrafts;
@@ -117,13 +139,13 @@ namespace SST::Prototypes::PlotLab
         void PollDataOperation();
         void New();
         void Open(const std::filesystem::path &);
-        void Open(Ref<pl::Project>, const std::filesystem::path &);
+        void Open(Ref<pl::Project>, const std::filesystem::path &, std::optional<ProjectSidecars> = {});
         void Save(const std::filesystem::path &);
-        Ref<pl::Project> RecoverySnapshot() const;
+        std::function<void(const Path&)> RecoverySnapshot() const;
         bool recovered = false;
         bool Dirty() const
         {
-            return recovered || !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty();
+            return recovered || !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty() || importPresetsDirty || workflowDirty;
         }
         pl::Id Create(pl::Id parent, int type, std::string name);
         void Rename(pl::Id, std::string);
@@ -145,10 +167,12 @@ namespace SST::Prototypes::PlotLab
 
       private:
         friend class PythonWork;
+        friend class ImportStartCommand;
         Ref<EventBus> bus;
         pl::Id correlation = 0;
         void Replace(Ref<pl::Project>);
         Ref<JobSystem> dataJobs;
+        std::unique_ptr<PlotWorkflow> workflow;
         bool ownsDataJobs = false;
         Ref<IJob> dataWork;
         JobId dataJob = 0;
@@ -160,6 +184,15 @@ namespace SST::Prototypes::PlotLab
         std::vector<std::size_t> recordingGroups;
         void InstallPythonEvaluator();
         void ResetPython();
+        void StartImportItem();
+        JobId StartImport(ImportRequest);
+        void StopImport();
+        void WaitImportItem();
+        std::shared_ptr<ImportRun> importRun;
+        std::vector<pl::ImportRecipe> trustedImportRecipes;
+        std::stop_token importStop;
+        JobContext* importContext = nullptr;
+        ImportRecipes importRecipes;
     };
     void InstallWorksheetPython(Document* active = nullptr, const std::filesystem::path& pythonRoot = {});
 } // namespace SST::Prototypes::PlotLab

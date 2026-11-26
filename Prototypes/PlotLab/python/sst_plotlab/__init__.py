@@ -36,6 +36,16 @@ class WorksheetSession:
                          else _sst_plotlab.WorksheetSession())
 
     @property
+    def analysis(self):
+        from .analysis import AnalysisSession
+        return AnalysisSession(self._session)
+
+    @property
+    def analysis_recipes(self):
+        """Accepted, versioned native recipes keyed by their output workbook IDs."""
+        return self._session.analysis_recipes
+
+    @property
     def project(self):
         from .worksheet import Project
         return Project(self._session)
@@ -67,6 +77,40 @@ class WorksheetSession:
         import json
         return json.loads(self._session.command_json(json.dumps(request, allow_nan=False)))
 
+    def import_preview(self, paths, recipe, *, wait=True):
+        """Plan every full input without publication; names/roles/units are explicit.
+
+        mapping: [{source, name, role (0..7), units, required, numeric}].
+        hooks: stage -> {source, reference, version, numbers, strings}; see
+        importing.STAGES. Hooks run only in preview, after explicit trust.
+        Import commits that immutable preview after checking its source hash.
+        """
+        return self._session.import_preview([str(p) for p in paths], recipe, wait)
+
+    def import_commit(self, *, wait=True):
+        return self._session.import_commit(wait)
+
+    def import_status(self):
+        return self._session.import_status()
+
+    def import_cancel(self):
+        self._session.import_cancel()
+
+    def trust_import_recipe(self, recipe):
+        """Explicitly grant this exact recipe the worksheet Python permissions."""
+        self._session.trust_import_recipe(recipe)
+
+    def save_import_presets(self, path, presets):
+        self._session.save_import_presets(str(path), presets)
+
+    def load_import_presets(self, path):
+        return self._session.load_import_presets(str(path))
+
+    @property
+    def import_recipes(self):
+        """Immutable accepted recipe versions, keyed by stable fingerprint."""
+        return self._session.import_recipes
+
     def plot_columns(self, worksheet_id, column_ids, kind=2, graph_id=0,
                      x_column_id=0, y_error_column_id=0):
         """Plot stable column IDs; kinds: 0 line, 1 scatter, 2 line+symbol, 8 column.
@@ -77,6 +121,38 @@ class WorksheetSession:
         """
         return self._session.plot_columns(worksheet_id, column_ids, kind, graph_id,
                                           x_column_id, y_error_column_id)
+
+    def create_map(self, request):
+        return self._session.create_map(request)
+
+    def edit_plot(self, layer_id, request):
+        """Typed Core command: kind/style/errors/group/transfer; stable IDs and coordinate units."""
+        return self._session.plot_edit(layer_id, request)
+
+    def create_layer(self, graph_id, request):
+        """Frame is [left, bottom, width, height] in page fractions; copy_layer_id creates an inset."""
+        return self._session.create_layer(graph_id, request)
+
+    def edit_layer(self, layer_id, request):
+        return self._session.edit_layer(layer_id, request)
+
+    def arrange_layers(self, graph_id, columns=1, *, shared_x=False, shared_y=False):
+        return self._session.arrange_layers(graph_id, columns, shared_x, shared_y)
+
+    def import_image(self, path, calibration):
+        return self._session.import_image(str(path), calibration)
+
+    def save_graph_template(self, graph_id, path):
+        return self._session.save_graph_template(graph_id, str(path))
+
+    def template_batch(self, path, inputs, *, format="png", wait=True):
+        return self._session.template_batch(str(path), inputs, format, wait)
+
+    def export_data(self, request):
+        return self._session.export_data(request)
+
+    def export_figure(self, graph_id, path, format, *, dpi=300, width_mm=None, height_mm=None, background_rgb=(1, 1, 1)):
+        return self._session.export_figure(graph_id, str(path), format, dpi, width_mm, height_mm, background_rgb)
 
 
 __all__.append("WorksheetSession")

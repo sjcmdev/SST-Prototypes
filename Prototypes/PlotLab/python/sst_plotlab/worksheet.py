@@ -504,7 +504,9 @@ def plot(x, y, *, kind="line+symbol"):
     """Plot worksheet columns through the shared Core command and undo path."""
     if not isinstance(x, Column) or not isinstance(y, Column) or x._project._native is not y._project._native:
         raise ValueError("plot requires columns from the same project")
-    kinds = {"line": 0, "scatter": 1, "line+symbol": 2, "column": 8}
+    kinds = {"line": 0, "scatter": 1, "line+symbol": 2, "column": 8, "bar": 9,
+             "stacked-column": 10, "percent-column": 11, "stacked-bar": 12, "percent-bar": 13,
+             "histogram": 14, "box": 15, "area": 16, "waterfall": 17, "error-band": 18}
     result = x._project._native.plot_columns(y._info["parent"], [y.id], kinds[kind], 0, x.id, 0)
     if not result["ok"]:
         raise ValueError(result["error"]["message"])

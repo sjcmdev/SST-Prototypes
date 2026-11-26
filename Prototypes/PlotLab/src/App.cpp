@@ -145,13 +145,10 @@ namespace SST
         editor.RegisterMenuRenderer("help", [panel](EditorServices&) { panel->RenderMenus(true); });
         application.InsertLayerBefore(LayerId::ImGui, CreateUnique<WorkspaceLayer>(state, smokeTest));
         application.InsertLayerBefore(LayerId::ImGui, CreateUnique<ProjectRecoveryLayer>(runtime.configDirectory/"recovery",runtime.jobSystem.lock(),
-            [doc,previous=std::tuple{doc->project.get(),std::uint64_t{0},decltype(doc->scriptDrafts){},decltype(doc->scriptParameterDrafts){},decltype(doc->pythonHistory){}},revision=std::uint64_t{0}](ProjectRecoveryPlan& recovery) mutable {
+            [doc,revision=std::uint64_t{0}](ProjectRecoveryPlan& recovery) mutable {
                 if (!doc->Dirty()) return;
-                const auto& [project,engineRevision,drafts,parameters,history]=previous;
-                if (project!=doc->project.get() || engineRevision!=doc->project->revision() || drafts!=doc->scriptDrafts || parameters!=doc->scriptParameterDrafts || history!=doc->pythonHistory) {
-                    ++revision; previous={doc->project.get(),doc->project->revision(),doc->scriptDrafts,doc->scriptParameterDrafts,doc->pythonHistory};
-                }
-                recovery.Save(1,revision,Path::FromResolved(doc->path),".plotlab",[&] {auto snapshot=doc->RecoverySnapshot();return [snapshot=std::move(snapshot)](const Path& target){snapshot->save(target.Native());};});
+                // Import, workflow and view edits do not advance the engine revision.
+                recovery.Save(1,++revision,Path::FromResolved(doc->path),".plotlab",[&] {return doc->RecoverySnapshot();});
             },
             [doc,state](const RecoveryCandidate& candidate) {
                 if(doc->Dirty()) throw std::runtime_error("Save the current project before restoring another copy.");
