@@ -59,6 +59,9 @@ private:
     Library::Editor libraryEditor;
     int view;
     std::string pinDevice,pinLayer;
+    std::string contactStatus;
+    unsigned contactTakeoverId=0;
+    std::string contactTakeoverSide;
     bool absoluteLog=false, placed=false, gallery=false;
     char file[1024]{}, csvFile[1024]="scapslab-ac.csv";
     bool RunActions(ProjectDraft&);

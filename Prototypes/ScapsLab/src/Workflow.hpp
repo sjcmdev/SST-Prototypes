@@ -120,6 +120,7 @@ public:
     Ref<const BatchPlan> preparedBatch;
     bool deferMetadata=false,retainProfiles=true,refinePv=true,parallelMember=false,retainBiasProfiles=false;
     Ref<const scaps_core::DeviceState> warmInput, warmOutput;
+    Ref<const std::vector<double>> liveMeshInput,liveMeshOutput;
     std::optional<scaps_core::BatchSpec> measurement;
     bool automatic=false;
     std::uint64_t revision=0;
@@ -277,6 +278,10 @@ struct DeviceState {
     Ref<const IvResult> changeIv,changeBand; // last explicit reference, retained across automatic solves; never saved
     int changeBias=0;
     Ref<const scaps_core::DeviceState> warmIv,warmBand;
+    bool liveGesture=false;
+    int liveStride=1;
+    Ref<const std::vector<double>> liveMesh;
+    std::vector<double> liveBiases;
     std::map<std::string,Ref<const AcResult>> changeAc;
     void RememberChange() {if(!changeIv && !changeBand)changeBias=selectedBias;if(!changeIv)changeIv=result.typed();if(!changeBand)changeBand=bandResult.empty()?result.typed():bandResult.typed();for(const auto& [kind,r]:acResults.all())changeAc.try_emplace(kind,r);}
     const IvPoint* ChangePoint() const {const auto& r=changeIv?changeIv:changeBand;return r && !r->points.empty()?&r->points[std::clamp(changeBias,0,int(r->points.size())-1)]:nullptr;}
@@ -344,7 +349,7 @@ public:
     std::vector<ResultRun> ResultRuns() const;
     Json Runs() const;
     void RefreshDirty();
-    void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={},std::string detailRun={},Ref<const AcResult> dlcp={});
+    void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={},std::string detailRun={},Ref<const AcResult> dlcp={},bool automatic=false);
     void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy; undoable as a run delta, see Commands/UndoOps.cpp)
     void RecalculateLive(ActionKind) override;
     void SelectBias(int) override;

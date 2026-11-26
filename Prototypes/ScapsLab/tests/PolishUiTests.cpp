@@ -1,9 +1,12 @@
 #include <gtest/gtest.h>
 #include "Panel.hpp"
 #include "PlotUi.hpp"
+#include <scaps_core/solver_core.hpp>
 #include <imgui_internal.h>
 #include <implot_internal.h>
 #include <thread>
+#include <fstream>
+#include <iomanip>
 using namespace SST;
 using namespace SST::ScapsLab;
 namespace {
@@ -230,4 +233,87 @@ TEST_F(PolishUi,DarkDeviceGenerationRecombinationUsesMeaningfulLogRange) {
     for(int i=0;i<GImPlot->Plots.GetBufSize();++i){const auto* p=GImPlot->Plots.GetByIndex(i);if(p->HasTitle() && std::string(p->GetTitle())=="G(x), R(x)")plot=p;}
     ASSERT_NE(plot,nullptr);const auto& range=plot->Axes[ImAxis_Y1].Range;
     EXPECT_GT(range.Min,0);EXPECT_TRUE(std::isfinite(range.Max));EXPECT_LT(std::log10(range.Max)-std::log10(range.Min),14.);
+}
+TEST_F(PolishUi,FlatBandSliderTakeoverIsOneUndoGesture) {
+    for(const auto* side:{"left","right"}) {
+        Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);w.autoRecalculate=w.autoRecalculateBand=false;
+        auto draft=CreateRef<ProjectDraft>(*w.Current().draft);draft->project.left_contact.flat_band=draft->project.right_contact.flat_band=true;draft->project.left_contact.phi_m_eV=draft->project.right_contact.phi_m_eV=7.75;w.Current().SetDraft(draft);
+        const auto device=scaps_core::make_device_from_project(draft->project);const auto mesh=scaps_core::build_mesh(device,draft->project.mesh);const auto pc=scaps_core::physical_constants(draft->project.constants_mode);
+        const auto node=std::string_view(side)=="left"?std::size_t(0):mesh.size()-1;std::vector<scaps_core::DefectLevel> scratch;const auto& defects=scaps_core::node_defects(device,mesh,node,scratch,draft->project.temperature_K,pc);
+        const double derived=-scaps_core::equilibrium_contact_bc(device.contact_left,mesh.nodes[node],draft->project.temperature_K,pc,defects).psi_V;
+        Panel panel(&w,2);Frame(panel,1100);Frame(panel,1100);
+        const auto depth=w.Current().undo.GetUndoDepth();const auto* window=ImGui::FindWindowByName("Polish UI");
+        const auto row=ImHashStr("Work function phi_m [eV]",0,ImHashStr(side,0,window->ID));const auto table=ImHashStr("Work function phi_m [eV]",0,row);const auto id=ImHashStr("##value",0,table);
+        auto& io=ImGui::GetIO();ImVec2 at;bool found=false;
+        for(float y=60;y<800 && !found;y+=6){io.AddMousePosEvent(700,y);Frame(panel,1100);Frame(panel,1100);if(GImGui->HoveredId==id){at={700,y};found=true;}}
+        ASSERT_TRUE(found)<<side;io.AddKeyEvent(ImGuiMod_Shift,true);Frame(panel,1100);io.AddMouseButtonEvent(0,true);Frame(panel,1100);
+        for(int step=1;step<=10;++step){io.AddMousePosEvent(at.x+step,at.y);Frame(panel,1100);}
+        io.AddMouseButtonEvent(0,false);Frame(panel,1100);
+        const auto& contact=std::string_view(side)=="left"?w.Current().draft->project.left_contact:w.Current().draft->project.right_contact;
+        EXPECT_NEAR(contact.phi_m_eV,derived,.05);EXPECT_GT(std::abs(contact.phi_m_eV-7.75),.1);
+        io.AddKeyEvent(ImGuiMod_Shift,false);Frame(panel,1100);
+        EXPECT_FALSE(contact.flat_band.value());EXPECT_EQ(w.Current().undo.GetUndoDepth(),depth+1);EXPECT_NE(w.status.find("took over flat band"),std::string::npos);
+        io.AddMousePosEvent(at.x,at.y);io.AddMouseButtonEvent(1,true);Frame(panel,1100);io.AddMouseButtonEvent(1,false);Frame(panel,1100);Frame(panel,1100,true);
+        EXPECT_NE(logged.find("Quick batch:"),std::string::npos)<<side;
+        io.AddKeyEvent(ImGuiKey_Escape,true);Frame(panel,1100);io.AddKeyEvent(ImGuiKey_Escape,false);Frame(panel,1100);
+        ASSERT_TRUE(w.Exec(Cmd::Undo::With()).value("ok",false));const auto& restored=std::string_view(side)=="left"?w.Current().draft->project.left_contact:w.Current().draft->project.right_contact;
+        EXPECT_TRUE(restored.flat_band.value());EXPECT_EQ(restored.phi_m_eV,std::string_view(side)=="left"?draft->project.left_contact.phi_m_eV:draft->project.right_contact.phi_m_eV);
+        io.AddMousePosEvent(at.x,at.y);io.AddMouseButtonEvent(0,true);Frame(panel,1100);io.AddMousePosEvent(at.x+20,at.y);Frame(panel,1100);
+        io.AddKeyEvent(ImGuiKey_Escape,true);Frame(panel,1100);io.AddKeyEvent(ImGuiKey_Escape,false);io.AddMouseButtonEvent(0,false);Frame(panel,1100);
+        const auto& cancelled=std::string_view(side)=="left"?w.Current().draft->project.left_contact:w.Current().draft->project.right_contact;
+        EXPECT_TRUE(cancelled.flat_band.value());EXPECT_EQ(cancelled.phi_m_eV,std::string_view(side)=="left"?draft->project.left_contact.phi_m_eV:draft->project.right_contact.phi_m_eV);EXPECT_EQ(w.Current().undo.GetUndoDepth(),depth);
+    }
+}
+TEST_F(PolishUi,DrawnContactAndDopingFramesKeepGestureMeshAndSampling) {
+    const char* evidence=std::getenv("SCAPSLAB_LIVE_EVIDENCE");std::ofstream output;if(evidence)output.open(evidence);
+    if(output)output<<std::setprecision(17)<<"gesture,frame,parameter,render_ms,frame_period_ms,band_revision,x_um,Ec_eV\n";
+    for(int parameter=0;parameter<3;++parameter) {
+        Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);w.autoRecalculate=false;w.autoRecalculateBand=true;
+        auto draft=CreateRef<ProjectDraft>(*w.Current().draft);draft->project.left_contact.flat_band=draft->project.right_contact.flat_band=false;draft->project.left_contact.phi_m_eV=4.3;draft->project.right_contact.phi_m_eV=4.7;w.Current().SetDraft(draft);
+        ASSERT_TRUE(w.Exec(Cmd::RecalculateLive::Make(ActionKind::Band)).value("ok",false));Finish(w);ASSERT_TRUE(w.Current().warmBand);
+        const auto grid=w.Current().warmBand->x_m;Panel panel(&w,5);Frame(panel,1100);Frame(panel,1100);
+        w.dragging=w.interacting=true;w.lastFullMs=200;w.OnUpdate(0);const auto samples=w.Current().liveBiases;
+        const auto start=std::chrono::steady_clock::now();auto lastFrame=start;std::vector<double> previous;double maxDelta=0;int drawn=0;
+        for(int frame=0;frame<120;++frame) {
+            const auto frameStart=std::chrono::steady_clock::now();const double period=frame==0?1000./60:std::chrono::duration<double,std::milli>(frameStart-lastFrame).count();lastFrame=frameStart;ImGui::GetIO().DeltaTime=float(period/1000.);
+            double value=parameter==2?1.+.001*frame:(parameter==0?4.3:4.7)+.0001*frame;
+            auto next=CreateRef<ProjectDraft>(*w.Current().draft);if(parameter==0)next->project.left_contact.phi_m_eV=value;else if(parameter==1)next->project.right_contact.phi_m_eV=value;else {auto& layer=next->project.layers.front();const auto& base=draft->project.layers.front();if(base.Nd_m3>=base.Na_m3)layer.Nd_m3=base.Nd_m3*value;else layer.Na_m3=base.Na_m3*value;}
+            ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next,"recorded-drag")).value("ok",false));w.lastFullMs=frame%2?50:500;w.OnUpdate(0);
+            const auto t=std::chrono::steady_clock::now();Frame(panel,1100);const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t).count();
+            EXPECT_EQ(w.Current().liveStride,4);EXPECT_EQ(w.Current().liveBiases,samples);ASSERT_TRUE(w.Current().liveMesh);EXPECT_EQ(*w.Current().liveMesh,grid);
+            EXPECT_EQ(w.Current().Band()->mesh_x_m.get(),grid);EXPECT_EQ(w.Current().warmBand->x_m,grid);
+            for(const auto& [id,c]:w.plotSession.curves)if(id.ends_with("/Ec_eV")){
+                if(previous.size()==c.y.size())for(std::size_t i=0;i<c.y.size();++i)maxDelta=std::max(maxDelta,std::abs(c.y[i]-previous[i]));previous=c.y;++drawn;
+                if(output)for(std::size_t i=0;i<c.x.size();++i)output<<parameter<<','<<frame<<','<<value<<','<<ms<<','<<period<<','<<w.Current().bandRevision<<','<<c.x[i]<<','<<c.y[i]<<'\n';
+            }
+            std::this_thread::sleep_until(frameStart+std::chrono::milliseconds(15));
+        }
+        EXPECT_GT(drawn,100);EXPECT_LT(maxDelta,.02);EXPECT_GT(w.liveBandsStarted,2u);
+        const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();std::cout<<"drawn gesture "<<parameter<<": max Ec frame delta "<<maxDelta<<" eV, "<<w.liveBandsStarted/seconds<<" solves/s, "<<120/seconds<<" frames/s\n";
+        w.dragging=w.interacting=false;w.autoRecalculateBand=false;Finish(w);w.OnUpdate(0);EXPECT_FALSE(w.Current().liveGesture);EXPECT_FALSE(w.Current().liveMesh);
+    }
+}
+
+TEST_F(PolishUi,SpatialLegendsKeepQuantityColoursAndGhostReference) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);w.autoRecalculate=w.autoRecalculateBand=false;
+    w.plotSession.settings.grFollow=false;
+    const auto band=[&]{EXPECT_TRUE(w.Dispatch({{"operation","band"},{"live",true},{"voltage_V",0.}}).value("ok",false));Finish(w);};band();
+    auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=301;ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));band();
+    for(int view:{5,22}){Panel panel(&w,view);Frame(panel,1100);Frame(panel,1100);if(view==5)EXPECT_EQ(w.plotSession.morphFrame,ImGui::GetFrameCount());}
+    int blue=0,red=0,references=0,ghosts=0;
+    for(int i=0;i<GImPlot->Plots.GetBufSize();++i){auto* plot=GImPlot->Plots.GetByIndex(i);for(int j=0;j<plot->Items.GetLegendCount();++j){
+        const std::string label=plot->Items.GetLegendLabel(j);const auto colour=plot->Items.GetLegendItem(j)->Color;const auto alpha=(colour>>IM_COL32_A_SHIFT)&255u;
+        if(label=="Reference (40%)"){EXPECT_EQ(alpha,102u);++references;}
+        else if(label=="Ec_eV" || label=="n"){EXPECT_EQ(colour,ImGui::ColorConvertFloat4ToU32(XColour("Ec_eV")));++blue;}
+        else if(label=="Ev_eV" || label=="p"){EXPECT_EQ(colour,ImGui::ColorConvertFloat4ToU32(XColour("Ev_eV")));++red;}
+    }for(int j=0;j<plot->Items.ItemPool.GetBufSize();++j)if(((plot->Items.ItemPool.GetByIndex(j)->Color>>IM_COL32_A_SHIFT)&255u)==102u)++ghosts;}EXPECT_EQ(blue,2);EXPECT_EQ(red,2);EXPECT_EQ(references,3);EXPECT_GE(ghosts,10);
+}
+
+TEST_F(PolishUi,InactiveDeviceWithRetainedPreviewKeepsItsComparisonCurve) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.autoRecalculate=w.autoRecalculateBand=false;w.lightResponse=true;
+    const auto first=w.Current().id;ASSERT_TRUE(w.Dispatch({{"operation","device_add"}}).value("ok",false));
+    for(const auto& d:w.project.devices){auto iv=CreateRef<IvResult>();for(int i=0;i<2;++i){IvPoint p;p.voltage_V=.1*i;p.J_A_m2=1+i;p.valid=true;iv->points.push_back(p);}d->result.adopt(iv);w.project.compare_set.insert(d->id);}
+    auto& inactive=w.Device(first);ASSERT_NE(first,w.Current().id);inactive.previewV={0,.1};inactive.previewJ={2,3};Panel panel(&w,10);Frame(panel,1100);Frame(panel,1100);
+    int curves=0;for(int i=0;i<GImPlot->Plots.GetBufSize();++i){auto* plot=GImPlot->Plots.GetByIndex(i);for(int j=0;j<plot->Items.GetLegendCount();++j)if(plot->Items.GetLegendItem(j)->Color==ImGui::ColorConvertFloat4ToU32(SingleShotColour))++curves;}
+    EXPECT_EQ(curves,2);
 }

@@ -405,7 +405,7 @@ TEST(ScapsLab,LiveDragLatestWinsStartsFewJobsAndEndsWithTheExactFinalRun) {
         for(int k=0;k<5;++k) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     }
     const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
-    EXPECT_LE(w.previewsStarted,unsigned(ms/100)+2)<<"<=10 per second, never queued; ms="<<ms;
+    EXPECT_LE(w.previewsStarted,unsigned(ms/33)+2)<<"<=30 per second, never queued; ms="<<ms;
     EXPECT_EQ(w.Current().history.size(),baseline)<<"previews never enter history";
     auto last=w.EditDraft()?DraftDocument(*w.EditDraft()):w.Current().Document();last["temperature_K"]=329.;
     w.dragging=false;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",last},{"gesture_id","drag"}}).at("ok").get<bool>());
@@ -428,6 +428,28 @@ TEST(ScapsLab,CoarsePreviewIsNeverSavedStoredOrUsedForReadouts) {
     EXPECT_EQ(*d.result,resultBefore);EXPECT_EQ(*d.history,historyBefore);
     const auto saved=w.Workspace(true).dump();EXPECT_EQ(saved.find("previewV"),std::string::npos);EXPECT_EQ(saved.find("\"preview\":true"),std::string::npos);
     w.dragging=false;Settle(w);EXPECT_TRUE(d.previewV.empty());EXPECT_EQ(d.status,"solved");
+}
+
+TEST(ScapsLabLive, GestureKeepsPreviewBiasesAndMeshWhenSolveTimingChanges) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.Current().SetDocument(TinyDevice());w.autoRecalculate=true;w.autoRecalculateBand=false;
+    ASSERT_TRUE(w.Dispatch({{"operation","run"}}).value("ok",false));Settle(w);ASSERT_TRUE(w.Current().warmIv);
+    const auto grid=w.Current().warmIv->x_m;w.lastFullMs=1000;w.dragging=w.interacting=true;
+    std::vector<double> biases;
+    for(int tick=0;tick<3;++tick){
+        auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=301+tick;ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next,"fixed-grid")).value("ok",false));
+        w.lastLive={};w.OnUpdate(0);ASSERT_TRUE(w.ActiveOp());EXPECT_TRUE(w.ActiveOp()->automatic);EXPECT_EQ(w.ActiveOp()->request.value("stride",0),4);ASSERT_TRUE(w.ActiveOp()->action);const auto samples=ActionSamples(*w.ActiveOp()->action,w.Current().draft->project);
+        if(tick==0)biases=samples;else EXPECT_EQ(samples,biases);ASSERT_TRUE(w.ActiveOp()->liveMeshInput);EXPECT_EQ(*w.ActiveOp()->liveMeshInput,grid);
+        while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}w.lastFullMs=10;
+    }
+    w.dragging=w.interacting=false;w.OnUpdate(0);EXPECT_FALSE(w.Current().liveGesture);Settle(w);
+    w.dragging=true;auto geometry=CreateRef<ProjectDraft>(*w.Current().draft);geometry->project.layers.front().thickness_m*=1.1;
+    ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(geometry,"geometry-drag")).value("ok",false));w.lastLive={};w.OnUpdate(0);ASSERT_TRUE(w.ActiveOp());EXPECT_FALSE(w.ActiveOp()->liveMeshInput);
+    w.dragging=false;Settle(w);
+}
+TEST(ScapsLabLive, FirstGestureUsesStoredSolveTimingBeforeFreezingSampling) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(TinyDevice());w.autoRecalculate=w.autoRecalculateBand=false;
+    auto result=CreateRef<IvResult>();result->meta.prim={{"compute_time_ms",1000.}};w.Current().result.adopt(result);w.dragging=true;w.OnUpdate(0);
+    EXPECT_EQ(w.Current().liveStride,4);EXPECT_FALSE(w.Current().liveMesh);w.lastFullMs=10;w.OnUpdate(0);EXPECT_EQ(w.Current().liveStride,4);
 }
 
 // ---- sllive1: mantissa x 10^exponent log widget, live band/profile refresh ----
@@ -558,6 +580,7 @@ TEST(ScapsLabLive, QeOnEditRunsDuringDragAndRefinesOnRelease) {
     ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make(plan)).value("ok",false));Settle(w);const auto reference=w.Current().acResults.get("qe");
     w.SetRunPlanTyped(plan);w.dragging=true;auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=310;
     ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next,"qe-drag")).value("ok",false));
+    w.OnUpdate(0);ASSERT_TRUE(w.Current().liveMesh);ASSERT_TRUE(w.ActiveOp());EXPECT_EQ(w.ActiveOp()->liveMeshInput,w.Current().liveMesh);
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);
     while(w.Current().acResults.get("qe")==reference && std::chrono::steady_clock::now()<deadline){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_NE(w.Current().acResults.get("qe"),reference);EXPECT_EQ(w.Current().changeAc.at("qe"),reference);EXPECT_LE(w.Current().acResults.get("qe")->points.size(),9u);

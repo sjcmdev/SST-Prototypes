@@ -131,9 +131,11 @@ class ScapsCloseGuard final : public Layer {
     }
 public:
     ScapsCloseGuard(Application &app,ScapsLab::Workflow &w,std::vector<Ref<ScapsLab::Panel>> panels):Layer("ScapsLab file actions"),app(app),w(w),panels(std::move(panels)) {
-        if(!std::getenv("SCAPSLAB_GALLERY_EXPORT") && !std::getenv("SCAPSLAB_NO_IDLE_THROTTLE")) app.SetIdleWaitProvider([this]()->double { // idle: sleep until input; job running: ~20 fps
-            if(ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || this->w.tutorial.Active() || this->requested || this->exporting) return 0.;
-            return this->w.Pending() || this->w.warmJob ? 0.05 : 0.5;});
+        if(!std::getenv("SCAPSLAB_GALLERY_EXPORT") && !std::getenv("SCAPSLAB_NO_IDLE_THROTTLE")) app.SetIdleWaitProvider([this,generation=w.plotGen,busy=w.Pending()]() mutable ->double { // idle: sleep until input; keep result/morph frames active
+            const bool changed=std::exchange(generation,this->w.plotGen)!=this->w.plotGen;
+            const bool pending=this->w.Pending(),finished=std::exchange(busy,pending) && !pending;
+            if(changed || finished || this->w.plotSession.morphFrame==ImGui::GetFrameCount() || ImGui::IsAnyItemActive() || ImGui::GetIO().WantTextInput || this->w.tutorial.Active() || this->requested || this->exporting) return 0.;
+            return pending || this->w.warmJob ? 0.05 : 0.5;});
         app.SetCloseGuard([this] {if(!this->w.dirty && !this->w.Pending()){PersistSession(true);return true;}creating=false;closing=true;requested=true;return false;});
         persistedSettings=w.plotSession.settings;
         if(const auto config=app.GetConfigManager().lock()) w.SetRecentPath((config->GetConfigDirectory()/Path{"scapslab-recent.json"}).Utf8()); // async read/write; Workflow::OnUpdate persists changes

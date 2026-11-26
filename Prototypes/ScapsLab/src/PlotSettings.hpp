@@ -1,5 +1,6 @@
 #pragma once
 #include "DockLayout.hpp"
+#include "CurveMorph.hpp"
 #include <nlohmann/json.hpp>
 #include <algorithm>
 #include <array>
@@ -129,6 +130,8 @@ struct PlotRuntime {
 };
 struct PlotSession {
     PlotSettings settings;
+    std::map<std::string,CurveMorph> curves;
+    int morphFrame=-1;
     std::map<std::string,PlotRuntime> runtime;
     unsigned epoch=~0u;
     std::uint64_t revision=0;
