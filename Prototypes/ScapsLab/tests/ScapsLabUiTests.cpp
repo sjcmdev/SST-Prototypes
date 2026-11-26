@@ -497,7 +497,7 @@ TEST(ScapsLab,LiveBandRefreshesOnDraftChangeIsCoalescedAndKeepsHistoryClean) {
             for(int k=0;k<5;++k) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
         }
         const double ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-t0).count();
-        EXPECT_GE(w.liveBandsStarted,1u);EXPECT_LE(w.liveBandsStarted,unsigned(ms/100)+2)<<"coalesced: <=10 per second; ms="<<ms;
+        EXPECT_GE(w.liveBandsStarted,1u);EXPECT_LE(w.liveBandsStarted,unsigned(ms/33)+2)<<"coalesced: <=30 per second; ms="<<ms;
         EXPECT_GE(w.previewsStarted,1u)<<"the I-V preview is not starved";EXPECT_EQ(w.Current().history.size(),history);
         auto last=w.EditDraft()?DraftDocument(*w.EditDraft()):w.Current().Document();last["layers"][0]["doping"]["Nd_m3"]=nd0*7;
         w.dragging=false;ASSERT_TRUE(w.Dispatch({{"operation","edit"},{"document",last},{"gesture_id","drag"}}).at("ok").get<bool>());
@@ -505,6 +505,64 @@ TEST(ScapsLab,LiveBandRefreshesOnDraftChangeIsCoalescedAndKeepsHistoryClean) {
     }
 }
 
+TEST(ScapsLabLive, ReferenceSurvivesReleaseAndTheNextParameterGesture) {
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDocument(TinyDevice());
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Settle(w);
+    auto& d=w.Current();const auto reference=d.Iv();const auto history=d.history.size();const auto depth=d.undo.GetUndoDepth();
+    w.autoRecalculate=true;w.autoRecalculateBand=true;
+    for(int gesture=0;gesture<2;++gesture) {
+        ASSERT_TRUE(w.Exec(Cmd::LiveEditing::Make(true)).value("ok",false));EXPECT_TRUE(w.dragging);
+        for(int tick=0;tick<4;++tick) {
+            auto draft=CreateRef<ProjectDraft>(w.EditDraft()?*w.EditDraft():*d.draft);draft->project.temperature_K=305+gesture*10+tick;
+            ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(draft,"gesture-"+std::to_string(gesture))).value("ok",false));
+            for(int k=0;k<8;++k){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        }
+        ASSERT_TRUE(w.Dispatch({{"operation","live_editing"},{"active",false}}).value("ok",false));EXPECT_FALSE(w.dragging);
+        Settle(w);ASSERT_FALSE(w.Pending());EXPECT_EQ(d.changeIv,reference);EXPECT_EQ(d.history.size(),history);
+        EXPECT_EQ(d.undo.GetUndoDepth(),depth+gesture+1);EXPECT_EQ(d.resultRevision,d.revision);EXPECT_TRUE(d.previewV.empty());
+    }
+    const double final=d.draft->project.temperature_K;ASSERT_TRUE(w.Exec(Cmd::Undo{}).value("ok",false));
+    EXPECT_LT(d.draft->project.temperature_K,final);EXPECT_EQ(d.changeIv,reference);
+    w.autoRecalculate=w.autoRecalculateBand=false;
+    while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_FALSE(d.changeIv);
+}
+TEST(ScapsLabLive, WarmBandMatchesColdAfterAParameterEdit) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.Current().SetDocument(TinyDevice());
+    const auto run=[&]{w.StartOperation({{"operation","band"},{"live",true},{"voltage_V",.01}},w.Current().id);while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}};
+    run();ASSERT_TRUE(w.Current().warmBand);auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=301;w.Current().SetDraft(next);
+    run();const auto warm=w.Current().Band();w.Current().warmBand.reset();run();const auto cold=w.Current().Band();
+    ASSERT_EQ(warm->points.size(),1u);const auto& a=warm->points[0];const auto& b=cold->points[0];ASSERT_TRUE(a.valid);ASSERT_TRUE(b.valid);
+    EXPECT_NEAR(a.J_A_m2,b.J_A_m2,std::max(1e-8,std::abs(b.J_A_m2)*1e-5));
+    ASSERT_EQ(a.Ec_eV.size(),b.Ec_eV.size());for(std::size_t i=0;i<a.Ec_eV.size();++i)EXPECT_NEAR(a.Ec_eV.get()[i],b.Ec_eV.get()[i],1e-6);
+}
+TEST(ScapsLabLive, ContinuousEditsApplyWithoutWorkerJobsAndRefreshWhileHeld) {
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDocument(TinyDevice());
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Settle(w);const auto reference=w.Current().Iv();
+    const auto depth=w.Current().undo.GetUndoDepth();w.autoRecalculateBand=true;w.dragging=w.interacting=true;
+    int fresh=0;
+    for(int tick=0;tick<60;++tick){
+        auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=300+.02*(tick+1);
+        ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next,"60Hz-drag")).value("ok",false));
+        EXPECT_EQ(w.Current().draft,next);EXPECT_NE(w.ActiveOp()?w.ActiveOp()->request.value("operation",std::string{}):"","edit");
+        for(int k=0;k<16;++k){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+        if(w.Current().BandFresh())++fresh;
+    }
+    EXPECT_GE(fresh,3);EXPECT_EQ(w.Current().changeIv,reference);EXPECT_EQ(w.Current().undo.GetUndoDepth(),depth+1);
+    w.dragging=w.interacting=false;w.autoRecalculateBand=false;while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+}
+TEST(ScapsLabLive, QeOnEditRunsDuringDragAndRefinesOnRelease) {
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDocument(TinyDevice());
+    auto plan=CreateRef<RunPlan>();plan->actions[4].include=true;plan->actions[4].onEdit=true;plan->actions[4].range=SweepRange{SweepSampling::Points,false,500,700,1,17};
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make(plan)).value("ok",false));Settle(w);const auto reference=w.Current().acResults.get("qe");
+    w.SetRunPlanTyped(plan);w.dragging=true;auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=310;
+    ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next,"qe-drag")).value("ok",false));
+    const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);
+    while(w.Current().acResults.get("qe")==reference && std::chrono::steady_clock::now()<deadline){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_NE(w.Current().acResults.get("qe"),reference);EXPECT_EQ(w.Current().changeAc.at("qe"),reference);EXPECT_LE(w.Current().acResults.get("qe")->points.size(),9u);
+    w.dragging=false;Settle(w);EXPECT_EQ(w.Current().acResults.get("qe")->points.size(),17u);EXPECT_EQ(w.Current().changeAc.at("qe"),reference);
+}
 TEST(DlcpUi,TypedPanelsKeepResultsWhileSettingsChange) {
     EXPECT_EQ(DisplayBounds("sweep.step:voltage_V").displayUnit,"V");
     ImGui::CreateContext();ImPlot::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1400,1100);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();

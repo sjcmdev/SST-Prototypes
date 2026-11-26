@@ -12,6 +12,7 @@
 #include "Core/Presentation/Tutorial.hpp"
 #include "Domain/Results.hpp"
 #include "Domain/ProjectDraft.hpp"
+#include <scaps_core/solver_types.hpp>
 #include "Domain/BatchDraft.hpp"
 #include "PlotSettings.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
@@ -117,7 +118,8 @@ public:
     std::size_t nextMember=0;
     Ref<BatchResult> actionBatch;
     Ref<const BatchPlan> preparedBatch;
-    bool deferMetadata=false,retainProfiles=true,refinePv=true,parallelMember=false;
+    bool deferMetadata=false,retainProfiles=true,refinePv=true,parallelMember=false,retainBiasProfiles=false;
+    Ref<const scaps_core::DeviceState> warmInput, warmOutput;
     std::optional<scaps_core::BatchSpec> measurement;
     bool automatic=false;
     std::uint64_t revision=0;
@@ -272,7 +274,8 @@ struct DeviceState {
     double biasVoltage_V = 0;
     int selectedLayer = 0, selectedInterface = -1, selectedBias = 0;
     std::chrono::steady_clock::time_point changedAt;
-    Ref<const IvResult> changeIv,changeBand; // previous exact results, shared until the next exact solve; never saved
+    Ref<const IvResult> changeIv,changeBand; // last explicit reference, retained across automatic solves; never saved
+    Ref<const scaps_core::DeviceState> warmIv,warmBand;
     std::map<std::string,Ref<const AcResult>> changeAc;
     void RememberChange() {if(!changeIv)changeIv=result.typed();if(!changeBand)changeBand=bandResult.empty()?result.typed():bandResult.typed();for(const auto& [kind,r]:acResults.all())changeAc.try_emplace(kind,r);}
     void ClearChange() {changeIv.reset();changeBand.reset();changeAc.clear();}
@@ -343,6 +346,7 @@ public:
     void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy; undoable as a run delta, see Commands/UndoOps.cpp)
     void RecalculateLive(ActionKind) override;
     void SelectBias(int) override;
+    void SetLiveEditing(bool active) override {dragging=active;}
     void RecalculateStoredBias() override;
     Json response;
     std::string status = "Ready", path;
@@ -389,7 +393,7 @@ public:
     std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}
     // Live recalculation while a slider is held (latest wins, <=10/s, coarse every 4th point when the last full run took >150 ms)
     bool dragging = false, dragSeen = false, fineLock = false, liveSeen = false; // dragSeen: set by the slider helper each frame, App copies it to dragging
-    double lastFullMs = 0; unsigned previewsStarted = 0, liveBandsStarted = 0; std::chrono::steady_clock::time_point lastLive, lastBandLive;
+    double lastFullMs = 0; unsigned previewsStarted = 0, liveBandsStarted = 0; std::chrono::steady_clock::time_point lastLive, lastBandLive, lastAcLive;
     bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false, resetLayout = false, pendingSheet = false;
     int focusView = -1, focusPanel = -1, pendingDefect = -1;
     bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true, lightResponse = false;
@@ -467,7 +471,7 @@ public:
     void SingleShotTyped(Ref<const RunPlan>) override;
     void CaptureLiveTyped(ActionKind) override;
     void ResumeActions() override;
-    void StartActions(const std::string& device,Ref<const RunPlan>,bool automatic=false);
+    void StartActions(const std::string& device,Ref<const RunPlan>,bool automatic=false,bool preview=false);
     bool CancelLane(Lane& lane);
     bool DiscardPendingEdits(const std::string &device); // running/queued document-changing jobs of the device are dropped; true when there were any
     void SupersedeJobs(const std::string &device);       // running calculation of the device is cancelled and its result dropped on arrival

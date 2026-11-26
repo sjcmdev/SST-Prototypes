@@ -13,6 +13,13 @@ class Session:
     def poll(self):
         return json.loads(self._native.poll())
 
+    def live_editing(self, active):
+        """Begin a coarse live gesture; release requests the full on-edit Actions.
+
+        Send edits with one gesture_id for one undo step, and poll between ticks.
+        """
+        return self.start(dict(operation='live_editing', active=active))
+
     def execute(self, request):
         response = self.start(request)
         if not response['ok']:

@@ -37,6 +37,10 @@ def check_run_actions(document):
         layer['defects'] = []
     draft['interface_defects'] = []
     run = scapslab.Session(draft)
+    assert run.live_editing(True)['ok']
+    assert not run.live_editing('invalid')['ok']
+    assert run.live_editing(False)['ok']
+    assert 'live' in run.poll()
     def samples(values):
         return dict(sampling='list', values=values)
     actions = dict(band=dict(include=True, voltage_V=0.012),

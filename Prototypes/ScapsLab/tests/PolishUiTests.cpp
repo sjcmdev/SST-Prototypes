@@ -72,18 +72,20 @@ TEST_F(PolishUi,OnEditLoadNewAndDeviceEditRecalculateWithoutStoring) {
 TEST_F(PolishUi,BiasSelectionUpdatesLiveAndStoredProfilesWithoutStoring) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Finish(w);
     const auto run=w.Current().selectedRun;const auto stored=w.Current().RunResult(run);const auto count=w.Current().history.size();
-    ASSERT_TRUE(w.Dispatch({{"operation","select_bias"},{"index",2}}).value("ok",false));
-    Panel band(&w,5);EXPECT_NE(Text(band).find("Recalculate this bias"),std::string::npos);
-    ASSERT_TRUE(Click(band,"Recalculate this bias",""));Finish(w);EXPECT_EQ(w.Current().selectedRun,run);EXPECT_EQ(w.Current().RunResult(run),stored);EXPECT_EQ(w.Current().history.size(),count);
-    EXPECT_EQ(Text(band).find("Profiles not stored at this bias"),std::string::npos);
-    ASSERT_TRUE(w.Current().storedBand);EXPECT_DOUBLE_EQ(w.Current().storedBand->points.front().voltage_V,.02);
-    Panel storedGr(&w,22);EXPECT_EQ(Text(storedGr).find("Profiles not stored at this bias"),std::string::npos);
-    ASSERT_TRUE(w.Dispatch({{"operation","select_bias"},{"index",0}}).value("ok",false));EXPECT_EQ(Text(band).find("Profiles not stored at this bias"),std::string::npos);
-    EXPECT_FALSE(w.Dispatch({{"operation","select_bias"},{"index",99}}).value("ok",true));EXPECT_EQ(w.Current().selectedBias,0);
-    ASSERT_TRUE(w.Exec(Cmd::SelectRun::Make(w.Current().id,"")).value("ok",false));
-    ASSERT_TRUE(w.Dispatch({{"operation","select_bias"},{"index",1}}).value("ok",false));w.Current().changedAt-=std::chrono::seconds(1);
-    for(int i=0;i<3;++i){w.OnUpdate(0);Finish(w);}EXPECT_DOUBLE_EQ(w.Current().Band()->points.at(0).voltage_V,.01);EXPECT_EQ(w.Current().history.size(),count);
-    Panel gr(&w,22);EXPECT_EQ(Text(gr).find("G/R details were not requested"),std::string::npos);
+    w.interacting=true;Panel band(&w,5),gr(&w,22);
+    for(bool live:{false,true}) {
+        if(live)ASSERT_TRUE(w.Exec(Cmd::SelectRun::Make(w.Current().id,"")).value("ok",false));
+        for(int index:{2,1,0,2,0}) {
+            ASSERT_TRUE(w.Dispatch({{"operation","select_bias"},{"index",index}}).value("ok",false));
+            const auto& point=PointAtBias(*w.Current().ProfileSweep(),*w.Current().ProfileBand(),index);
+            EXPECT_TRUE(point.details);EXPECT_DOUBLE_EQ(point.voltage_V,.01*index);w.OnUpdate(0);
+            EXPECT_FALSE(w.Pending());EXPECT_FALSE(w.Current().needsBiasDetails);
+            EXPECT_EQ(Text(band).find("Loading details"),std::string::npos);EXPECT_EQ(Text(gr).find("Loading details"),std::string::npos);
+        }
+    }
+    EXPECT_EQ(w.Current().RunResult(run),stored);EXPECT_EQ(w.Current().history.size(),count);
+    EXPECT_EQ(w.liveBandsStarted,0u);EXPECT_FALSE(w.Dispatch({{"operation","select_bias"},{"index",99}}).value("ok",true));
+    EXPECT_EQ(w.Current().selectedBias,0);
 }
 TEST_F(PolishUi,ManualRecalculateButtonsUseLiveWithoutStoring) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);

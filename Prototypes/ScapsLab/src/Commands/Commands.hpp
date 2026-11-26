@@ -113,6 +113,12 @@ struct RecalculateLive : Req<RecalculateLive> {
         s.RecalculateLive(k);return {};
     }
 };
+struct LiveEditing : Req<LiveEditing> {
+    static constexpr Info info{"live_editing","Live editing","Begin or release a live parameter gesture","","",true};
+    bool active=false;
+    static LiveEditing Make(bool value){LiveEditing c;c.active=value;return c;}
+    Out Execute(ILabStore& s) const {if(args.contains("active") && !args.at("active").is_boolean())return Reject("invalid_active","Invalid gesture","active must be boolean");s.SetLiveEditing(args.value("active",active));return {};}
+};
 struct SelectBias : Req<SelectBias> {
     static constexpr Info info{"select_bias","Select bias","Update the working point of spatial plots","","",true};
     int index=0;

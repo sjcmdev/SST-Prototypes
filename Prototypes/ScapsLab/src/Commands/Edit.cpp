@@ -5,8 +5,7 @@ namespace SST::ScapsLab::Cmd {
 Out EditDocument::Execute(ILabStore &s) const {
     if(s.ReplacingProject()) return Reject("busy", "Busy", "Project structure is changing; wait before editing", "Wait for the operation");
     if(draft) {s.EditTyped(draft,gesture);return {};}
-    if(s.Busy()) {s.QueueEdit(ToJson());return {};} // a job runs: the edit queues behind it (latest wins per gesture)
-    s.StartJob(ToJson());
+    s.QueueEdit(ToJson()); // the file/Python adapter normalizes to the same typed edit as the GUI
     return {};
 }
 namespace {

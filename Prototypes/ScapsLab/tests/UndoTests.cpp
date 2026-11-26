@@ -173,17 +173,17 @@ TEST(ScapsLabUndo, UndoNeedsNoJobAndCancelsTheRunningCalculationOfThatDevice) {
     EXPECT_EQ(w.Current().Document().dump(), original.dump());
     ASSERT_TRUE(Ok(Go(w, {{"operation", "redo"}})));EXPECT_EQ(w.Current().Document().at("temperature_K"), 310.5);
 }
-TEST(ScapsLabUndo, UndoDiscardsAnUnappliedEditInsteadOfPoppingTheStack) {
+TEST(ScapsLabUndo, UndoEditsWithoutWaitingForPausedWorkers) {
     Workflow w(CreateRef<JobSystem>(nullptr, 1));Fast(w);
     ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", 301.5}}}})));
     ASSERT_TRUE(Ok(Go(w, {{"operation", "edit"}, {"patch", {{"temperature_K", 302.5}}}})));
     ASSERT_TRUE(w.jobs->PauseAllJobs());
-    ASSERT_TRUE(w.Dispatch({{"operation", "edit"}, {"patch", {{"temperature_K", 333.5}}}}).at("ok").get<bool>()); // started, not applied
+    ASSERT_TRUE(w.Dispatch({{"operation", "edit"}, {"patch", {{"temperature_K", 333.5}}}}).at("ok").get<bool>()); // applied without a worker
     ASSERT_TRUE(w.CanUndo());
     ASSERT_TRUE(Ok(w.Dispatch({{"operation", "undo"}})));
-    EXPECT_EQ(w.Current().undo.GetUndoDepth(), 2u) << "the pending edit was discarded, nothing was popped";
+    EXPECT_EQ(w.Current().undo.GetUndoDepth(), 2u) << "the synchronous edit is undone without waiting for a worker";
     ASSERT_TRUE(w.jobs->ResumeAllJobs());Drain(w);
-    EXPECT_EQ(w.Current().Document().at("temperature_K"), 302.5) << "the discarded edit never lands";EXPECT_EQ(w.Current().undo.GetUndoDepth(), 2u);
+    EXPECT_EQ(w.Current().Document().at("temperature_K"), 302.5) << "the undone edit does not reappear";EXPECT_EQ(w.Current().undo.GetUndoDepth(), 2u);
     ASSERT_TRUE(Ok(Go(w, {{"operation", "undo"}})));EXPECT_EQ(w.Current().Document().at("temperature_K"), 301.5);
 }
 TEST(ScapsLabUndo, UndoOnOneDeviceLeavesTheOtherDevicesCalculationAlone) {

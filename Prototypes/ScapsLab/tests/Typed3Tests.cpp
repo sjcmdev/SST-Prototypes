@@ -102,7 +102,7 @@ TEST(RunActions, IncludeAndOnEditAreIndependentAndAutoExactNeverStores) {
     // owner 2026-11-23: an edit returns the view to Live; the stored run is kept unchanged
     EXPECT_TRUE(w.Current().selectedRun.empty());EXPECT_EQ(stored,w.Current().RunResult(w.Current().history.back().at("run_id").get<std::string>()));
 }
-TEST(RunActions, InheritedIvMatchesLegacyExactAndOnlyVisibleBiasGetsDetails) {
+TEST(RunActions, InheritedIvMatchesLegacyExactAndCachesAllBiasProfiles) {
     Workflow w(CreateRef<JobSystem>(nullptr,1)),reference(CreateRef<JobSystem>(nullptr,1));w.lightResponse=reference.lightResponse=true;
     const auto draft=SmallDraft();w.Current().SetDraft(draft);reference.Current().SetDraft(draft);
     ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Wait(w);
@@ -110,7 +110,7 @@ TEST(RunActions, InheritedIvMatchesLegacyExactAndOnlyVisibleBiasGetsDetails) {
     ASSERT_EQ(w.Current().Iv()->points.size(),reference.Current().Iv()->points.size());
     for(std::size_t i=0;i<w.Current().Iv()->points.size();++i) {
         EXPECT_DOUBLE_EQ(w.Current().Iv()->points[i].J_A_m2,reference.Current().Iv()->points[i].J_A_m2);
-        EXPECT_EQ(bool(w.Current().Iv()->points[i].details),i==0u);EXPECT_EQ(w.Current().Iv()->points[i].x_m.empty(),i!=0u);
+        EXPECT_TRUE(w.Current().Iv()->points[i].details);EXPECT_FALSE(w.Current().Iv()->points[i].x_m.empty());
     }
     EXPECT_FALSE(w.Current().Iv()->HasView());
 }
@@ -147,8 +147,8 @@ TEST(RunActions, StalePreviewIsInvalidatedAtEditAndCannotPublish) {
     ASSERT_TRUE(w.jobs->PauseAllJobs());w.StartOperation({{"operation","run"},{"preview",true}},w.Current().id);
     const auto stale=w.ActiveOp();stale->feed->Point(0,123);w.Current().previewV={0};w.Current().previewJ={123};
     auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=320;
-    ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));EXPECT_TRUE(stale->superseded);EXPECT_TRUE(stale->cancellation.stop_requested());EXPECT_TRUE(w.Current().previewV.empty());
-    w.PullLive(w.LaneOf(w.Current().id));EXPECT_TRUE(w.Current().previewV.empty());
+    ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));EXPECT_TRUE(stale->superseded);EXPECT_TRUE(stale->cancellation.stop_requested());EXPECT_EQ(w.Current().previewV,std::vector<double>{0});
+    stale->feed->Point(.01,999);w.PullLive(w.LaneOf(w.Current().id));EXPECT_EQ(w.Current().previewJ,std::vector<double>{123});
     ASSERT_TRUE(w.jobs->ResumeAllJobs());w.dragging=false;Wait(w);EXPECT_TRUE(w.Current().history.empty());
 }
 TEST(RunActions, ExplicitGroupsSurviveLegacyRetentionAndPlanRoundTrip) {

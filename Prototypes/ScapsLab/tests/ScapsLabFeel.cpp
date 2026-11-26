@@ -4,6 +4,7 @@
 // runs, 500 ms idle. Output lines start with "FEEL|" (machine-readable, '|' separated) for REPORT.md.
 #include <gtest/gtest.h>
 #include "Panel.hpp"
+#include "Commands/Commands.hpp"
 #include <imgui.h>
 #include <implot.h>
 #include <algorithm>
@@ -178,6 +179,7 @@ TEST(Feel,Actions) {
             }
             r.w.dragging=false;r.held=false;r.sink=nullptr;Settle(r,700);
             const auto l=Summ(lat),f=Summ(fr);
+            EXPECT_EQ(timeouts,0);EXPECT_EQ(l.n,25);EXPECT_LT(l.p95,2000.)<<"Live-update stall guard; the 150 ms UX target is reported separately";
             std::printf("FEEL|%s|band_live_latency_ms|n=%d|p50=%.1f|p95=%.1f|max=%.1f|timeouts=%d|bands_started=%u|previews=%u\n",name.c_str(),l.n,l.p50,l.p95,l.mx,timeouts,r.w.liveBandsStarted,r.w.previewsStarted);
             std::printf("FEEL|%s|band_live_ui_frames_ms|frames=%d|p50=%.2f|p95=%.2f|max=%.2f|over16=%d\n",name.c_str(),f.n,f.p50,f.p95,f.mx,f.over16);
             (void)r.Send({{"operation","auto_recalculate"},{"enabled",false},{"band_enabled",false}});
@@ -185,6 +187,30 @@ TEST(Feel,Actions) {
     }
 }
 
+TEST(Feel, LiveIvParameterLatency) {
+    if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
+    for(const auto& path:Projects()) {
+        Rig r;ASSERT_TRUE(r.Send({{"operation","project_load"},{"path",path}}).value("ok",false));Settle(r,500);
+        ASSERT_TRUE(r.Send({{"operation","run"}}).value("ok",false));Settle(r,500);
+        auto& d=r.w.Current();const auto reference=d.Iv();const auto history=d.history.size();
+        r.w.autoRecalculate=r.w.autoRecalculateBand=true;
+        for(int parameter=0;parameter<2;++parameter) {
+            r.w.dragging=r.held=true;std::vector<double> latency;
+            for(int tick=0;tick<25;++tick) {
+                auto next=CreateRef<ProjectDraft>(*d.draft);
+                if(parameter==0){auto& layer=next->project.layers[0];if(layer.Nd_m3>0)layer.Nd_m3*=1.01;else layer.Na_m3=std::max(1e15,layer.Na_m3*1.01);}
+                else next->project.right_contact.phi_m_eV+=.001;
+                const auto start=Clock::now();ASSERT_TRUE(r.w.Exec(Cmd::EditDocument::Make(next,"latency-"+std::to_string(parameter))).value("ok",false));
+                while(d.previewV.empty() || d.previewRev!=d.revision || r.w.Pending()) {r.Frame();ASSERT_LT(Since(start),20000.);}
+                latency.push_back(Since(start,r.frameEnd));EXPECT_EQ(d.changeIv,reference);EXPECT_EQ(d.history.size(),history);
+            }
+            const auto stats=Summ(latency);std::printf("FEEL|%s|iv_live_%s_ms|n=%d|p50=%.1f|p95=%.1f|max=%.1f|points=%zu\n",Stem(path).c_str(),parameter==0?"doping":"work_function",stats.n,stats.p50,stats.p95,stats.mx,d.previewV.size());
+            EXPECT_LT(stats.p95,2000.)<<"Stall guard; report the separate 150 ms UX target";
+            r.w.dragging=r.held=false;Settle(r,700);EXPECT_EQ(d.resultRevision,d.revision);EXPECT_EQ(d.changeIv,reference);
+        }
+        r.w.autoRecalculate=r.w.autoRecalculateBand=false;
+    }
+}
 // Engine-only I-V, same sequence as Operation::Execute "run" (prepare_mesh, equilibrium, solve_iv/solve_bias) but no JSON and no UI.
 TEST(Feel,EngineOnly) {
     if(!std::getenv("SCAPSLAB_PERF_TEST"))GTEST_SKIP()<<"set SCAPSLAB_PERF_TEST=1";
