@@ -15,6 +15,7 @@
 #include "Domain/BatchDraft.hpp"
 #include "PlotSettings.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
+#include "Library/Session.hpp"
 #include <algorithm>
 #include <chrono>
 #include <mutex>
@@ -135,6 +136,9 @@ public:
     std::string batchGroup;
     Ref<const BatchDraft> batch=CreateRef<const BatchDraft>();
     Ref<const RecorderDraft> recorder=CreateRef<const RecorderDraft>();
+    std::shared_ptr<const Library::State> assetState;
+    Library::Browser assetBrowser;
+    std::shared_ptr<const Library::DraftMap> assetDrafts;
     bool superseded=false;                // set on the UI thread when undo/redo changed the document (or removed the device) under this job: its result is dropped on arrival
     bool outputValid=false;
     bool jsonResponse=false; // JSON adapter preserves full-curve profile output; GUI requests lightweight typed samples
@@ -308,6 +312,13 @@ public:
     Workflow(const Workflow &) = delete;
     Workflow &operator=(const Workflow &) = delete;
     Project project;
+    Library::Session library;
+    std::optional<Library::Request> libraryDrop;
+    bool libraryDropShown=false;
+    bool bindingLibraryReply=false,bindingLibraryData=false;
+    void LibraryTyped(std::shared_ptr<const Library::Request>) override;
+    void PollLibrary();
+    void RefreshLinkedAssets();
     DeviceState &Current();
     DeviceState &Device(const std::string &id);
     Json Workspace(bool withResults=true) const;
@@ -461,7 +472,7 @@ public:
     bool ViewsReady();                                    // typed results are ready to render immediately
     std::chrono::steady_clock::time_point viewTrimAt{};
     void TrimViews();
-    bool Pending() const { return Busy() || Saving(); } // calculations or saves
+    bool Pending() const { return Busy() || Saving() || library.Busy(); } // calculations, saves or typed library jobs
     bool Busy() const override {for(const auto &[id,l]:lanes) if(!l.Idle()) return true;return !projectLane.Idle();}
     bool Busy(const std::string &device) const {auto it=lanes.find(device);return it!=lanes.end() && !it->second.Idle();}
 };

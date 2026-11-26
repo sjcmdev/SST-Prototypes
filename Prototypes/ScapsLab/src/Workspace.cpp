@@ -1,4 +1,5 @@
 #include "Workflow.hpp"
+#include "Library/PythonLibrary.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -538,6 +539,10 @@ Json SingleDeviceWorkspace(Json document,std::string projectName) { // what Work
 }
 void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<DeviceResults> *typed,const std::vector<Ref<const ProjectDraft>>* drafts) { // validated: value came from NormalizeWorkspace (already checked and normalized)
     if(!validated){auto normalized=NormalizeWorkspace(value);SetWorkspace(normalized,true);return;}
+    if(value.contains("asset_library_schema"))Assets::Require(value.at("asset_library_schema")==1,"Unsupported project asset library schema");
+    const auto assetState=value.contains("asset_libraries")?Library::Python::ReadState(value.at("asset_libraries")):library.state;
+    const auto assetBrowser=value.contains("asset_browser")?Library::Python::ReadBrowser(value.at("asset_browser")):library.browser;
+    const auto assetDrafts=value.contains("asset_editor_drafts")?Library::Python::ReadDrafts(value.at("asset_editor_drafts"),*assetState):std::make_shared<const Library::DraftMap>();
     ++plotGen;
     if(!validated) ValidateWorkspace(value);
     std::vector<DeviceResults> own;
@@ -567,6 +572,9 @@ void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<D
         checked.devices.push_back(state);++index;
     }
     project=std::move(checked);
+    library.state=assetState;library.browser=assetBrowser;
+    library.drafts=assetDrafts;
+    for(const auto* key:{"asset_libraries","asset_browser","asset_library_schema","asset_editor_drafts"})project.fileExtensions.erase(key);
 }
 void Workflow::RefreshDirty() {const bool was=dirty;for(auto &d:project.devices) d->dirty=d->metadataDirty || !d->undo.IsClean();dirty=projectDirty || std::any_of(project.devices.begin(),project.devices.end(),[](const auto &d){return d->dirty;});if(dirty!=was)Emit(ProjectDirtyChanged(dirty));}
 Json Workflow::Snapshot() const {

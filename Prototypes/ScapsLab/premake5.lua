@@ -55,7 +55,9 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
     links { "Core", "ScapsCore" }
     if name ~= "ScapsLabHeadless" then
         files { root .. "/src/Domain/ParameterBounds.cpp" }
+        defines { 'SCAPSLAB_LIBRARY_DATA="' .. root .. '/library"' }
         postbuildcommands { '{COPYFILE} "' .. root .. '/config/parameter_bounds.yaml" "%{cfg.targetdir}/parameter_bounds.yaml"' }
+        postbuildcommands { '{COPYDIR} "' .. root .. '/library" "%{cfg.targetdir}/library"' }
     end
     if name ~= "ScapsLabHeadless" then
         sst_link_ui(); sst_link_plotlab()
@@ -73,6 +75,7 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         files { root .. "/src/PlotUi.cpp" }
         files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Commands/*.cpp", root .. "/src/Workspace.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp", root .. "/src/Batch.cpp", root .. "/src/ResultsIO.cpp", root .. "/src/Domain/Results.cpp", root .. "/src/Domain/Packed.cpp", root .. "/src/Tutorials.cpp" }
         files { root .. "/src/Domain/ProjectDraft.cpp", root .. "/src/Domain/BatchDraft.cpp" }
+        files { root .. "/src/Library/**.cpp", root .. "/src/Library/**.hpp" }
         links { "GoogleTest", "GoogleTestMain" }
         dependson { "ScapsLabHeadless" } -- EmbeddedPythonRunAndHeadlessCsv runs the headless exe
     else

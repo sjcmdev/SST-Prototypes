@@ -28,6 +28,8 @@
 #include <numbers>
 #include <thread>
 #include "Core/JobSystem/ParallelFor.hpp"
+#include "Library/PythonLibrary.hpp"
+#include "Library/LibraryUi.hpp"
 // shortcut: IVSession/prepare_mesh/PV have no public ExecutionContext; use the engine scope until their public APIs accept it.
 #include <scaps_core/../../src/parallel.hpp>
 #include <mutex>
@@ -666,10 +668,15 @@ void Operation::Execute(JobContext &ctx) try {
             if(loadedDrafts.size()<importedWarnings.size())read->importWarnings=std::move(importedWarnings[loadedDrafts.size()]);
             loadedDrafts.push_back(std::move(read));
         }
+        if(workspace.contains("asset_library_schema"))Assets::Require(workspace.at("asset_library_schema")==1,"Unsupported project asset library schema");
+        if(workspace.contains("asset_libraries")){assetState=Library::Python::ReadState(workspace.at("asset_libraries"));workspace.erase("asset_libraries");}
+        if(workspace.contains("asset_browser")){assetBrowser=Library::Python::ReadBrowser(workspace.at("asset_browser"));workspace.erase("asset_browser");}
+        if(workspace.contains("asset_editor_drafts")){assetDrafts=Library::Python::ReadDrafts(workspace.at("asset_editor_drafts"),assetState?*assetState:*Library::Builtins());workspace.erase("asset_editor_drafts");}
         loaded=ExtractResults(workspace); // typed results leave the Json here, on the job thread
     }
     else if(op=="project_save" || (op=="save" && std::filesystem::path(request.at("path").get<std::string>()).extension()==".scapslab")) {
         workspace["schema_version"]=4;
+        if(assetState && Library::NeedsPersistence(*assetState,assetBrowser,assetDrafts.get())){workspace["asset_library_schema"]=1;workspace["asset_libraries"]=Library::Python::StateDocument(*assetState);workspace["asset_browser"]=Library::Python::BrowserDocument(assetBrowser);if(assetDrafts && !assetDrafts->empty())workspace["asset_editor_drafts"]=Library::Python::DraftsDocument(*assetDrafts);}
         if(!shared.empty()) {auto &devs=workspace["devices"];for(std::size_t i=0;i<shared.size();++i) AttachResults(devs[i],*shared[i].history,shared[i].results,false,true);shared.clear();}
         ValidateWorkspace(workspace);
         if(!request.value("include_results",true)) for(auto &d:workspace["devices"]) for(const auto *key:{"result","band_result","ac_results","batch_result"}) d[key]=Json::object();
@@ -1187,6 +1194,7 @@ Workflow::~Workflow() {
     for(auto &[id,l]:lanes) {l.queue.clear();if(l.active) (void)CancelLane(l);}
     while(AnyActive()) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     while(saveLane.active) {OnUpdate(0); std::this_thread::sleep_for(std::chrono::milliseconds(5));}
+    while(library.Busy()) {PollLibrary();std::this_thread::sleep_for(std::chrono::milliseconds(2));}
     while(!ioTasks.empty()) {PollIo(); std::this_thread::sleep_for(std::chrono::milliseconds(2));}
 }
 void Workflow::Submit(const std::string &device,Json request,std::string key) {
@@ -1223,6 +1231,8 @@ bool Workflow::ReplacingProject() const {
     const std::string op=it->second.Op();return op=="project_load" || op=="load" || op=="layer";
 }
 void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const ProjectDraft> edit,Ref<const BatchDraft> batch,Ref<const RecorderDraft> recorder,Ref<const RunPlan> plan,std::string detailRun) {
+    const auto operation=r.at("operation").get<std::string>();
+    if(operation=="run" || operation=="band" || operation=="cv" || operation=="cf" || operation=="qe" || operation=="single_shot" || operation=="run_batch" || operation=="quick_sweep")Library::ValidateLinks(*Device(id).draft,*library.state);
     auto &d=Device(id);auto &L=LaneOf(id);if(L.active) throw std::invalid_argument("A job is still active on this device");L.pending=CreateRef<Operation>(d.draft,r);auto &pending=L.pending;pending->jsonResponse=!lightResponse;const std::string op0=r.at("operation");if(op0=="edit"){pending->draft=edit?std::move(edit):ReadDraftEdit(d.draft.get(),r);pending->request.erase("document");pending->request.erase("patch");pending->request.erase("pointer_set");}if(op0=="export_ac" && r.contains("kind") && r.at("kind").is_string())pending->acInput=d.acResults.get(r.at("kind").get<std::string>());if(op0.find("batch")!=std::string::npos || op0=="send_to_plotlab")pending->batchInput=d.batchResult.typed();pending->batch=batch?std::move(batch):r.contains("spec")?ReadBatchDraft(r.at("spec")):d.batch;pending->recorder=recorder?std::move(recorder):r.contains("columns")?ReadRecorderDraft(r.at("columns")):d.recorder;
     const std::string op=r.at("operation");
     if(!detailRun.empty()){pending->draft=std::move(edit);pending->detailRun=std::move(detailRun);}
@@ -1290,6 +1300,7 @@ void Workflow::StartSave(const Json &r) {
         return;
     }
     auto op=CreateRef<Operation>(Current().draft,r);op->request["operation"]="project_save";
+    op->assetState=library.state;op->assetBrowser=library.browser;op->assetDrafts=library.drafts;
     op->workspace=Workspace(false);
     for(std::size_t i=0;i<project.devices.size();++i) {
         const auto &d=*project.devices[i];op->workspace["devices"][i]["selected_run"]=d.selectedRun;
@@ -1356,6 +1367,7 @@ bool Workflow::EditQueued() const {
 }
 bool Workflow::CancelAll() {
     bool any=false;
+    if(library.Busy() && library.cancellable)any=jobs->RequestCancel(library.job);
     for(auto &[id,lane]:lanes) {std::erase_if(lane.queue,[](const Queued &q){return q.request.value("batch",false);});if(lane.active && CancelLane(lane)) any=true;}
     return any;
 }
@@ -1480,13 +1492,14 @@ void Workflow::DropDeviceLane(const std::string &id) {
     it->second.queue.clear();SupersedeJobs(id);
 }
 bool Workflow::CanUndo() const {
+    if(const auto available=Library::EditorCanStep(library,true))return *available;
     if(const auto it=lanes.find(project.active_device);it!=lanes.end()) {
         const auto &l=it->second;
         if((l.active && IsEditOp(l.Op())) || std::any_of(l.queue.begin(),l.queue.end(),[](const Queued &q){return IsEditOp(q.request.value("operation",std::string{}));})) return true;
     }
     return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanUndo();
 }
-bool Workflow::CanRedo() const {return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanRedo();}
+bool Workflow::CanRedo() const {if(const auto available=Library::EditorCanStep(library,false))return *available;return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanRedo();}
 void Workflow::ApplyDraft(DeviceState &d,Ref<const ProjectDraft> draft) {
     d.RememberChange();
     d.liveV.clear();d.liveJ.clear(); // the last preview curve stays visible until a newer one replaces it point by point (owner: no blinking)
@@ -1500,6 +1513,8 @@ void Workflow::ReturnToLive(DeviceState &d) { // owner 2026-11-23: an edit shows
     d.selectedRun.clear();d.selectedAttempt=0;Emit(SelectionChanged(d.id));
 }
 Result<void> Workflow::Step(bool undo) {
+    const auto libraryBefore=library.state;
+    if(const auto result=Library::EditorStep(library,undo)){if(*result){if(library.state!=libraryBefore)RefreshLinkedAssets();projectDirty=true;RefreshDirty();}return *result;}
     const auto id=project.active_device;
     if(DiscardPendingEdits(id)) {
         preferProjectUndo=false;++plotGen;status=undo?"Pending edit discarded":"Nothing to redo";
@@ -1560,7 +1575,7 @@ bool Workflow::ViewsReady() {return true;}
 void Workflow::OnUpdate(float) {
     static const bool perf=std::getenv("SCAPSLAB_PERF")!=nullptr; // SCAPSLAB_PERF=1: log UI-thread hitches (>2 ms) to stderr
     const auto t0=std::chrono::steady_clock::now();
-    UpdateOperation();PollIo();PersistRecent();
+    UpdateOperation();PollLibrary();PollIo();PersistRecent();
     const auto t1=std::chrono::steady_clock::now();
     UpdateTutorial();
     TrimViews();
@@ -1716,6 +1731,8 @@ void Workflow::FinishOperation(Lane &L) {
     if(snapshot->status==JobStatus::Completed && !dropped) {
         if(op=="project_new" || op=="project_load" || op=="load") {
             SetWorkspace(pending->workspace,true,&pending->loaded,&pending->loadedDrafts);for(auto &device:project.devices) device->undo.Clear();projectUndo.Clear();projectDirty=false;preferProjectUndo=false;
+            library.state=pending->assetState?pending->assetState:Library::Builtins();library.browser=pending->assetBrowser;library.dirty.clear();library.undo.Clear();library.preview.reset();library.selected.reset();
+            library.drafts=pending->assetDrafts?pending->assetDrafts:std::make_shared<const Library::DraftMap>();
             ++epoch;path=op=="project_new"?std::string{}:pending->request.at("path").get<std::string>();
             if(op!="project_new" && std::filesystem::path(path).extension()!=".scapslab") {path=std::filesystem::path(path).replace_extension(".scapslab").string();projectDirty=true;}
             for(auto &device:project.devices) {device->dirty=false;device->metadataDirty=false;device->undo.MarkClean();}

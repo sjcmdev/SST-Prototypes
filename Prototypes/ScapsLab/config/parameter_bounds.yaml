@@ -2813,3 +2813,33 @@ parameters:
     allow_infinity: false
     source: "scaps_core typed model / numerical input domain"
     note: "Absolute profile table abscissae use um in the engine, metres in this table."
+  varshni_alpha_eV_K:
+    hard_min: 0
+    hard_max: 1.602176634e-17
+    soft_min: 1.602176634e-26
+    soft_max: 1.602176634e-21
+    scale: "log"
+    step: 1.602176634e-26
+    unit: "J K^-1"
+    display_unit: "eV K^-1"
+    display_scale: 6.241509074460763e18
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Library temperature-law metadata / engineering input envelope"
+    note: "Numerical envelope, not a universal material bound; cite fitted coefficients per item."
+  effective_mass_ratio:
+    hard_min: 1e-9
+    hard_max: 1e6
+    soft_min: 0.01
+    soft_max: 10
+    scale: "log"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Library effective-mass metadata / engineering input envelope"
+    note: "m*/m0; Nc/Nv remain the explicit solver input. No implicit DOS conversion."

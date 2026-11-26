@@ -6,6 +6,7 @@
 #include "Commands/Store.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include <functional>
+#include "Library/Session.hpp"
 namespace SST::ScapsLab::Cmd {
 using Out = Result<void>;
 struct Info {
@@ -13,6 +14,17 @@ struct Info {
     bool hidden = false;      // needs arguments: not offered in the command palette
     bool menuDefault = false; // runs with no arguments from a menu/palette
     bool legacy = false;      // explicit legacy JSON handler (no typed arguments)
+};
+struct LibraryOperation {
+    static constexpr Info info{"library","Asset library","Inspect, edit, import or apply typed scientific assets","","",true};
+    std::shared_ptr<const Library::Request> request;
+    static LibraryOperation Make(Library::Request value) {return {std::make_shared<const Library::Request>(std::move(value))};}
+    static LibraryOperation FromJson(const Json&) {throw std::invalid_argument("Convert library inputs in the Python binding");}
+    Out Execute(ILabStore& s) const {
+        if(!request)return StructuredError{ErrorCategory::Validation,Severity::Error,"Asset request required","Missing typed asset request","Supply a typed request","ScapsLab","invalid_asset"};
+        try{s.LibraryTyped(request);return {};}
+        catch(const Assets::Error& e){return StructuredError{ErrorCategory::Validation,Severity::Error,"Asset operation rejected",e.what(),"Review the asset operation","ScapsLab",Assets::CodeName(e.code)};}
+    }
 };
 Out Reject(const char *code, std::string title, std::string details, std::string hint = "Wait or cancel");
 Out Job(ILabStore &store, Json request); // busy gate + job on the active device

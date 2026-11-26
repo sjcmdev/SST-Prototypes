@@ -1,0 +1,2134 @@
+schema_version: 1
+library:
+  id: cigs-literature-libdata1
+  name: CIGS literature
+  scope: builtin
+  read_only: true
+items:
+- id: azo-zhang2022-partial
+  name: ZnO:Al - partial CIGS SCAPS model
+  kind: material
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - zhang2022
+  - partial-sourced-payload
+  description: 'Partial model: no Nc/Nv, affinity, hole mobility or permittivity are inferred from the
+    missing supplement. The nominal model doping is distinct from measured Hall carrier concentration.
+    Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper denotes
+    a transcribed nominal value, not zero experimental uncertainty.'
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Zhang, Qu and Li (2022). Front Transparent Passivation of CIGS-Based Solar Cells via AZO.
+      Molecules 27, 6285.
+    doi: 10.3390/molecules27196285
+    locator: PDF p. 2, section 1 (Eg); p. 7, paragraph above Figure 5 (model donor concentration)
+    author: Zhang, Qu and Li
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/cao2022.pdf
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 3.37
+    upper: 3.37
+    citation: DOI 10.3390/molecules27196285; PDF p. 2, section 1 (Eg); p. 7, paragraph above Figure 5
+      (model donor concentration)
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 1.0e+26
+    upper: 1.0e+26
+    citation: DOI 10.3390/molecules27196285; PDF p. 2, section 1 (Eg); p. 7, paragraph above Figure 5
+      (model donor concentration)
+  data:
+    schema_version: 1
+    layers:
+    - material:
+        Eg_eV: 3.37
+      doping:
+        Nd_m3: 1.0e+26
+- id: cds-liu2018
+  name: cds-liu2018
+  kind: material
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - liu2018
+  - partial-sourced-payload
+  description: wxAMPS model table. CdS thickness is a range, so omitted from the nominal payload. Keep
+    distinct from the other CdS/ZnO baselines. Omitted fields are unknown here; importer defaults are
+    not literature claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental
+    uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Liu et al. (2018). Numerical analysis on effects of experimental Ga grading on Cu(In,Ga)Se2
+      solar cell performance. Journal of Physics and Chemistry of Solids 120, 190-196.
+    doi: 10.1016/j.jpcs.2018.04.041
+    locator: accepted manuscript printed p. 17 / PDF p. 19, Table 1
+    author: Liu et al.
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/li2019.pdf
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 2.4
+    upper: 2.4
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.2
+    upper: 4.2
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 10.0
+    upper: 10.0
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 1.1e+24
+    upper: 1.1e+24
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  data:
+    schema_version: 1
+    layers:
+    - name: cds-liu2018
+      material:
+        Eg_eV: 2.4
+        chi_eV: 4.2
+        eps_r: 10.0
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+      doping:
+        Nd_m3: 1.1e+24
+- id: cds-ou2013
+  name: CdS - Ouedraogo baseline
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - ouedraogo2013
+  - partial-sourced-payload
+  description: Source keeps OVC Nv different from CIGS Nv. i-ZnO has finite donor density in this model.
+    No uncertainty is reported. Omitted fields are unknown here; importer defaults are not literature
+    claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Ouedraogo, Zougmoré and Ndjaka (2013). Numerical Analysis of Copper-Indium-Gallium-Diselenide-Based
+      Solar Cells by SCAPS-1D. International Journal of Photoenergy, 421076.
+    doi: 10.1155/2013/421076
+    locator: 'PDF p. 3, Table 1; temperature and intrinsic-level convention: p. 2, section 2.2'
+    author: Ouedraogo, Zougmoré and Ndjaka
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: https://onlinelibrary.wiley.com/doi/pdf/10.1155/2013/421076
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 2.4
+    upper: 2.4
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.45
+    upper: 4.45
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 10.0
+    upper: 10.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 1.3e+24
+    upper: 1.3e+24
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 9.1e+24
+    upper: 9.1e+24
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.007200000000000001
+    upper: 0.007200000000000001
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.002
+    upper: 0.002
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.T_ref_K
+    unit: K
+    lower: 300
+    upper: 300
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 310000.0
+    upper: 310000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 160000.0
+    upper: 160000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 5.0e-08
+    upper: 5.0e-08
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 5.0e+23
+    upper: 5.0e+23
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  data:
+    schema_version: 1
+    layers:
+    - name: CdS - Ouedraogo baseline
+      material:
+        Eg_eV: 2.4
+        chi_eV: 4.45
+        eps_r: 10.0
+        Nc_ref_m3: 1.3e+24
+        Nv_ref_m3: 9.1e+24
+        mu_n_m2_V_s: 0.007200000000000001
+        mu_p_m2_V_s: 0.002
+        T_ref_K: 300
+        vth_n_ref_m_s: 310000.0
+        vth_p_ref_m_s: 160000.0
+      thickness_m: 5.0e-08
+      doping:
+        Nd_m3: 5.0e+23
+  validity:
+    temperature_min_K: 300
+    temperature_max_K: 300
+- id: cds-za2021
+  name: CdS buffer - Zaabar
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - zaabar2021
+  - partial-sourced-payload
+  description: SCAPS model assumption. CIGS snapshot uses the authors’ minimum GGI, not a homogeneous
+    replacement for their graded device. Omitted fields are unknown here; importer defaults are not literature
+    claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Za’abar et al. (2021). A Numerical Investigation on the Combined Effects of MoSe2 Interface
+      Layer and Graded Bandgap Absorber in CIGS Thin Film Solar Cells. Coatings 11, 930.
+    doi: 10.3390/coatings11080930
+    locator: PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+    author: Za’abar et al.
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/zaabar2021.pdf
+  parameters:
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 5.0e-08
+    upper: 5.0e-08
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 2.4
+    upper: 2.4
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.0
+    upper: 4.0
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 9.0
+    upper: 9.0
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 1.0e+23
+    upper: 1.0e+23
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].doping.Na_m3
+    unit: m^-3
+    lower: 0.0
+    upper: 0.0
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  data:
+    schema_version: 1
+    layers:
+    - name: CdS buffer - Zaabar
+      thickness_m: 5.0e-08
+      material:
+        Eg_eV: 2.4
+        chi_eV: 4.0
+        eps_r: 9.0
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+      doping:
+        Nd_m3: 1.0e+23
+        Na_m3: 0.0
+- id: cigs-donor-ou2013
+  name: CIGS compensating donor at intrinsic level
+  kind: defect
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - ouedraogo2013
+  - partial-sourced-payload
+  description: Single-level phenomenological SRH center. Not an assignment to In_Cu, V_Se, N1 or N2. Omitted
+    fields are unknown here; importer defaults are not literature claims. Equal lower/upper denotes a
+    transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Ouedraogo, Zougmoré and Ndjaka (2013). Numerical Analysis of Copper-Indium-Gallium-Diselenide-Based
+      Solar Cells by SCAPS-1D. International Journal of Photoenergy, 421076.
+    doi: 10.1155/2013/421076
+    locator: 'PDF p. 3, Table 1; temperature and intrinsic-level convention: p. 2, section 2.2'
+    author: Ouedraogo, Zougmoré and Ndjaka
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: https://onlinelibrary.wiley.com/doi/pdf/10.1155/2013/421076
+  parameters:
+  - path: layers[0].defects[0].energy_offset_eV
+    unit: eV
+    lower: 0.0
+    upper: 0.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].defects[0].Nt_m3
+    unit: m^-3
+    lower: 1.0e+20
+    upper: 1.0e+20
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].defects[0].sigma_n_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].defects[0].sigma_p_m2
+    unit: m^2
+    lower: 1.0e-15
+    upper: 1.0e-15
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  data:
+    schema_version: 1
+    layers:
+    - defects:
+      - label: CIGS compensating donor - Ouedraogo
+        charge_type: donor_like
+        energy_reference: relative_to_Ei
+        energy_offset_eV: 0.0
+        energy_distribution: single
+        Nt_m3: 1.0e+20
+        sigma_n_m2: 1.0e-19
+        sigma_p_m2: 1.0e-15
+- id: cigs-gh2021
+  name: CIGS - Gharibshahian model
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - gharibshahian2021
+  - partial-sourced-payload
+  description: Electrical model values, not universal measured constants. Temperature and statistical
+    uncertainties are not specified for Table 1. Mixed Mo(S,Se) must not be substituted for pure MoSe2.
+    Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper denotes
+    a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Gharibshahian, Orouji and Sharbati (2021). Suitable top cell partners for CIGS-based tandem
+      solar cells to achieve >30% efficiency. Phys. Status Solidi A 218, 2000796.
+    doi: 10.1002/pssa.202000796
+    locator: accepted manuscript PDF p. 6, Table 1
+    author: Gharibshahian, Orouji and Sharbati
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/gharibshahian2021.pdf
+  parameters:
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 2.0e-06
+    upper: 2.0e-06
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 1.08
+    upper: 1.08
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.25
+    upper: 4.25
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 13.6
+    upper: 13.6
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].doping.Na_m3
+    unit: m^-3
+    lower: 7.6e+22
+    upper: 7.6e+22
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  data:
+    schema_version: 1
+    layers:
+    - name: CIGS - Gharibshahian model
+      thickness_m: 2.0e-06
+      material:
+        Eg_eV: 1.08
+        chi_eV: 4.25
+        eps_r: 13.6
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+        vth_n_ref_m_s: 100000.0
+        vth_p_ref_m_s: 100000.0
+      doping:
+        Na_m3: 7.6e+22
+- id: cigs-ou2013
+  name: CIGS - Ouedraogo baseline, graded Eg omitted
+  kind: material
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - ouedraogo2013
+  - partial-sourced-payload
+  description: Source keeps OVC Nv different from CIGS Nv. i-ZnO has finite donor density in this model.
+    No uncertainty is reported. Omitted fields are unknown here; importer defaults are not literature
+    claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Ouedraogo, Zougmoré and Ndjaka (2013). Numerical Analysis of Copper-Indium-Gallium-Diselenide-Based
+      Solar Cells by SCAPS-1D. International Journal of Photoenergy, 421076.
+    doi: 10.1155/2013/421076
+    locator: 'PDF p. 3, Table 1; temperature and intrinsic-level convention: p. 2, section 2.2'
+    author: Ouedraogo, Zougmoré and Ndjaka
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: https://onlinelibrary.wiley.com/doi/pdf/10.1155/2013/421076
+  parameters:
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.5
+    upper: 4.5
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 13.6
+    upper: 13.6
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.5e+25
+    upper: 1.5e+25
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.00125
+    upper: 0.00125
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.T_ref_K
+    unit: K
+    lower: 300
+    upper: 300
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 390000.0
+    upper: 390000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 140000.0
+    upper: 140000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  data:
+    schema_version: 1
+    layers:
+    - name: CIGS - Ouedraogo baseline, graded Eg omitted
+      material:
+        chi_eV: 4.5
+        eps_r: 13.6
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.5e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.00125
+        T_ref_K: 300
+        vth_n_ref_m_s: 390000.0
+        vth_p_ref_m_s: 140000.0
+  validity:
+    temperature_min_K: 300
+    temperature_max_K: 300
+- id: cigs-ovc-ou2013
+  name: CIGS/OVC neutral interface states
+  kind: interface
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - ouedraogo2013
+  - partial-sourced-payload
+  description: Boundary surrogate includes an explicit OVC. Do not collapse it into a direct CdS/CIGS
+    sheet. The paper gives one cross section per carrier; it is applied to both sides. Printed density
+    unit cm2 is interpreted as sheet density cm^-2 from the interface context. Layer index is an importer
+    placeholder. Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper
+    denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Ouedraogo, Zougmoré and Ndjaka (2013). Numerical Analysis of Copper-Indium-Gallium-Diselenide-Based
+      Solar Cells by SCAPS-1D. International Journal of Photoenergy, 421076.
+    doi: 10.1155/2013/421076
+    locator: PDF p. 3, Table 1; energy reference p. 2, section 2.2
+    author: Ouedraogo, Zougmoré and Ndjaka
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: https://onlinelibrary.wiley.com/doi/pdf/10.1155/2013/421076
+  parameters:
+  - path: interface_defects[0].energy_offset_eV
+    unit: eV
+    lower: -0.2
+    upper: -0.2
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].Nt_m2
+    unit: m^-2
+    lower: 1000000000000000.0
+    upper: 1000000000000000.0
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].sigma_n_left_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].sigma_n_right_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].sigma_p_left_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].sigma_p_right_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  data:
+    schema_version: 1
+    interface_defects:
+    - id: cigs-ovc-ou2013
+      left_layer_index: 0
+      charge_type: neutral
+      energy_reference: relative_to_Ec
+      energy_offset_eV: -0.2
+      Nt_m2: 1000000000000000.0
+      energy_distribution: single
+      density_convention: total
+      sigma_n_left_m2: 1.0e-19
+      sigma_n_right_m2: 1.0e-19
+      sigma_p_left_m2: 1.0e-19
+      sigma_p_right_m2: 1.0e-19
+- id: cigs-walker2014-x000
+  name: CIGSe Walker parameterization at GGI=0
+  kind: material
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - walker2014
+  - partial-sourced-payload
+  description: Calculated snapshot of the published composition law; evaluation composition is a curation
+    choice, not a measurement. B_rad is deliberately suppressed by the authors to make SRH dominate. Doping
+    omitted. Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper
+    denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Walker, Bouchard, Trojnar and Hinzer (2014). Inverted Metamorphic III-V Triple-Junction
+      Solar Cell with a 1 eV CuInSe2 Bottom Subcell. International Journal of Photoenergy, 913170.
+    doi: 10.1155/2014/913170
+    locator: PDF p. 4, Table 1 and paragraph immediately below; room-temperature definition pp. 3-4
+    author: Walker, Bouchard, Trojnar and Hinzer
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/walker2014.pdf
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 1.01
+    upper: 1.01
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.35
+    upper: 4.35
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 15.1
+    upper: 15.1
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.030000000000000002
+    upper: 0.030000000000000002
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.02
+    upper: 0.02
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.T_ref_K
+    unit: K
+    lower: 300
+    upper: 300
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].recombination.radiative_cm3_s
+    unit: cm^3/s
+    lower: 1.0e-14
+    upper: 1.0e-14
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  data:
+    schema_version: 1
+    layers:
+    - material:
+        Eg_eV: 1.01
+        chi_eV: 4.35
+        eps_r: 15.1
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.030000000000000002
+        mu_p_m2_V_s: 0.02
+        T_ref_K: 300
+      recombination:
+        radiative_cm3_s: 1.0e-14
+  validity:
+    composition_min: 0.0
+    composition_max: 0.0
+    temperature_min_K: 300
+    temperature_max_K: 300
+- id: cigs-walker2014-x030
+  name: CIGSe Walker parameterization at GGI=0.3
+  kind: material
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - walker2014
+  - partial-sourced-payload
+  description: Calculated snapshot of the published composition law; evaluation composition is a curation
+    choice, not a measurement. B_rad is deliberately suppressed by the authors to make SRH dominate. Doping
+    omitted. Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper
+    denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Walker, Bouchard, Trojnar and Hinzer (2014). Inverted Metamorphic III-V Triple-Junction
+      Solar Cell with a 1 eV CuInSe2 Bottom Subcell. International Journal of Photoenergy, 913170.
+    doi: 10.1155/2014/913170
+    locator: PDF p. 4, Table 1 and paragraph immediately below; room-temperature definition pp. 3-4
+    author: Walker, Bouchard, Trojnar and Hinzer
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/walker2014.pdf
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 1.16273
+    upper: 1.16273
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.20174
+    upper: 4.20174
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 13.6
+    upper: 13.6
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.030000000000000002
+    upper: 0.030000000000000002
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.02
+    upper: 0.02
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.T_ref_K
+    unit: K
+    lower: 300
+    upper: 300
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].recombination.radiative_cm3_s
+    unit: cm^3/s
+    lower: 1.0e-14
+    upper: 1.0e-14
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  data:
+    schema_version: 1
+    layers:
+    - material:
+        Eg_eV: 1.16273
+        chi_eV: 4.20174
+        eps_r: 13.6
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.030000000000000002
+        mu_p_m2_V_s: 0.02
+        T_ref_K: 300
+      recombination:
+        radiative_cm3_s: 1.0e-14
+  validity:
+    composition_min: 0.3
+    composition_max: 0.3
+    temperature_min_K: 300
+    temperature_max_K: 300
+- id: cigs-walker2014-x100
+  name: CIGSe Walker parameterization at GGI=1
+  kind: material
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - walker2014
+  - partial-sourced-payload
+  description: Calculated snapshot of the published composition law; evaluation composition is a curation
+    choice, not a measurement. B_rad is deliberately suppressed by the authors to make SRH dominate. Doping
+    omitted. Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper
+    denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Walker, Bouchard, Trojnar and Hinzer (2014). Inverted Metamorphic III-V Triple-Junction
+      Solar Cell with a 1 eV CuInSe2 Bottom Subcell. International Journal of Photoenergy, 913170.
+    doi: 10.1155/2014/913170
+    locator: PDF p. 4, Table 1 and paragraph immediately below; room-temperature definition pp. 3-4
+    author: Walker, Bouchard, Trojnar and Hinzer
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/walker2014.pdf
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 1.6360000000000001
+    upper: 1.6360000000000001
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 3.6849999999999996
+    upper: 3.6849999999999996
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 10.1
+    upper: 10.1
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.030000000000000002
+    upper: 0.030000000000000002
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.02
+    upper: 0.02
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].material.T_ref_K
+    unit: K
+    lower: 300
+    upper: 300
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  - path: layers[0].recombination.radiative_cm3_s
+    unit: cm^3/s
+    lower: 1.0e-14
+    upper: 1.0e-14
+    citation: DOI 10.1155/2014/913170; PDF p. 4, Table 1 and paragraph immediately below; room-temperature
+      definition pp. 3-4
+  data:
+    schema_version: 1
+    layers:
+    - material:
+        Eg_eV: 1.6360000000000001
+        chi_eV: 3.6849999999999996
+        eps_r: 10.1
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.030000000000000002
+        mu_p_m2_V_s: 0.02
+        T_ref_K: 300
+      recombination:
+        radiative_cm3_s: 1.0e-14
+  validity:
+    composition_min: 1.0
+    composition_max: 1.0
+    temperature_min_K: 300
+    temperature_max_K: 300
+- id: cigs-za2021-x030
+  name: CIGS at GGI=0.3 - Zaabar
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - zaabar2021
+  - partial-sourced-payload
+  description: SCAPS model assumption. CIGS snapshot uses the authors’ minimum GGI, not a homogeneous
+    replacement for their graded device. Omitted fields are unknown here; importer defaults are not literature
+    claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Za’abar et al. (2021). A Numerical Investigation on the Combined Effects of MoSe2 Interface
+      Layer and Graded Bandgap Absorber in CIGS Thin Film Solar Cells. Coatings 11, 930.
+    doi: 10.3390/coatings11080930
+    locator: PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+    author: Za’abar et al.
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/zaabar2021.pdf
+  parameters:
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 2.5e-06
+    upper: 2.5e-06
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 1.15926
+    upper: 1.15926
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.20174
+    upper: 4.20174
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 13.6
+    upper: 13.6
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 0.0
+    upper: 0.0
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].doping.Na_m3
+    unit: m^-3
+    lower: 2.0e+22
+    upper: 2.0e+22
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  data:
+    schema_version: 1
+    layers:
+    - name: CIGS at GGI=0.3 - Zaabar
+      thickness_m: 2.5e-06
+      material:
+        Eg_eV: 1.15926
+        chi_eV: 4.20174
+        eps_r: 13.6
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+      doping:
+        Nd_m3: 0.0
+        Na_m3: 2.0e+22
+- id: izno-ou2013
+  name: i-ZnO - Ouedraogo baseline
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - ouedraogo2013
+  - partial-sourced-payload
+  description: Source keeps OVC Nv different from CIGS Nv. i-ZnO has finite donor density in this model.
+    No uncertainty is reported. Omitted fields are unknown here; importer defaults are not literature
+    claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Ouedraogo, Zougmoré and Ndjaka (2013). Numerical Analysis of Copper-Indium-Gallium-Diselenide-Based
+      Solar Cells by SCAPS-1D. International Journal of Photoenergy, 421076.
+    doi: 10.1155/2013/421076
+    locator: 'PDF p. 3, Table 1; temperature and intrinsic-level convention: p. 2, section 2.2'
+    author: Ouedraogo, Zougmoré and Ndjaka
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: https://onlinelibrary.wiley.com/doi/pdf/10.1155/2013/421076
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 3.3
+    upper: 3.3
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.55
+    upper: 4.55
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 9.0
+    upper: 9.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 3.1e+24
+    upper: 3.1e+24
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0031000000000000003
+    upper: 0.0031000000000000003
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.T_ref_K
+    unit: K
+    lower: 300
+    upper: 300
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 240000.0
+    upper: 240000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 130000.0
+    upper: 130000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 2.0e-07
+    upper: 2.0e-07
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 1.0e+23
+    upper: 1.0e+23
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  data:
+    schema_version: 1
+    layers:
+    - name: i-ZnO - Ouedraogo baseline
+      material:
+        Eg_eV: 3.3
+        chi_eV: 4.55
+        eps_r: 9.0
+        Nc_ref_m3: 3.1e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0031000000000000003
+        T_ref_K: 300
+        vth_n_ref_m_s: 240000.0
+        vth_p_ref_m_s: 130000.0
+      thickness_m: 2.0e-07
+      doping:
+        Nd_m3: 1.0e+23
+  validity:
+    temperature_min_K: 300
+    temperature_max_K: 300
+- id: mose2-za2021-fixed
+  name: MoSe2 fixed properties from parameter sweep
+  kind: material
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - zaabar2021
+  - partial-sourced-payload
+  description: Pure MoSe2 model fixed quantities only. Eg, chi, thickness and doping are sweep variables
+    retained in the reference card; no nominal value is invented. Note reversed electron/hole mobility
+    ordering versus CIGS. Omitted fields are unknown here; importer defaults are not literature claims.
+    Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Za’abar et al. (2021). A Numerical Investigation on the Combined Effects of MoSe2 Interface
+      Layer and Graded Bandgap Absorber in CIGS Thin Film Solar Cells. Coatings 11, 930.
+    doi: 10.3390/coatings11080930
+    locator: PDF p. 4, Table 1
+    author: Za’abar et al.
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/zaabar2021.pdf
+  parameters:
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 7.29
+    upper: 7.29
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1
+  data:
+    schema_version: 1
+    layers:
+    - material:
+        eps_r: 7.29
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.0025
+        mu_p_m2_V_s: 0.01
+- id: mosse-gh2021
+  name: Mo(S,Se) - mixed back interlayer model
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - gharibshahian2021
+  - partial-sourced-payload
+  description: Electrical model values, not universal measured constants. Temperature and statistical
+    uncertainties are not specified for Table 1. Mixed Mo(S,Se) must not be substituted for pure MoSe2.
+    Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper denotes
+    a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Gharibshahian, Orouji and Sharbati (2021). Suitable top cell partners for CIGS-based tandem
+      solar cells to achieve >30% efficiency. Phys. Status Solidi A 218, 2000796.
+    doi: 10.1002/pssa.202000796
+    locator: accepted manuscript PDF p. 6, Table 1
+    author: Gharibshahian, Orouji and Sharbati
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/gharibshahian2021.pdf
+  parameters:
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 2.0e-08
+    upper: 2.0e-08
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 1.17
+    upper: 1.17
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.32
+    upper: 4.32
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 7.29
+    upper: 7.29
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 9.0e+24
+    upper: 9.0e+24
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 9.0e+24
+    upper: 9.0e+24
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].doping.Na_m3
+    unit: m^-3
+    lower: 1.2e+24
+    upper: 1.2e+24
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  data:
+    schema_version: 1
+    layers:
+    - name: Mo(S,Se) - mixed back interlayer model
+      thickness_m: 2.0e-08
+      material:
+        Eg_eV: 1.17
+        chi_eV: 4.32
+        eps_r: 7.29
+        Nc_ref_m3: 9.0e+24
+        Nv_ref_m3: 9.0e+24
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+        vth_n_ref_m_s: 100000.0
+        vth_p_ref_m_s: 100000.0
+      doping:
+        Na_m3: 1.2e+24
+- id: ovc-cds-ou2013
+  name: OVC/CdS neutral interface states
+  kind: interface
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - ouedraogo2013
+  - partial-sourced-payload
+  description: Boundary surrogate includes an explicit OVC. Do not collapse it into a direct CdS/CIGS
+    sheet. The paper gives one cross section per carrier; it is applied to both sides. Printed density
+    unit cm2 is interpreted as sheet density cm^-2 from the interface context. Layer index is an importer
+    placeholder. Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper
+    denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Ouedraogo, Zougmoré and Ndjaka (2013). Numerical Analysis of Copper-Indium-Gallium-Diselenide-Based
+      Solar Cells by SCAPS-1D. International Journal of Photoenergy, 421076.
+    doi: 10.1155/2013/421076
+    locator: PDF p. 3, Table 1; energy reference p. 2, section 2.2
+    author: Ouedraogo, Zougmoré and Ndjaka
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: https://onlinelibrary.wiley.com/doi/pdf/10.1155/2013/421076
+  parameters:
+  - path: interface_defects[0].energy_offset_eV
+    unit: eV
+    lower: -0.2
+    upper: -0.2
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].Nt_m2
+    unit: m^-2
+    lower: 3.0e+17
+    upper: 3.0e+17
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].sigma_n_left_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].sigma_n_right_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].sigma_p_left_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  - path: interface_defects[0].sigma_p_right_m2
+    unit: m^2
+    lower: 1.0e-19
+    upper: 1.0e-19
+    citation: DOI 10.1155/2013/421076; PDF p. 3, Table 1; energy reference p. 2, section 2.2
+  data:
+    schema_version: 1
+    interface_defects:
+    - id: ovc-cds-ou2013
+      left_layer_index: 0
+      charge_type: neutral
+      energy_reference: relative_to_Ec
+      energy_offset_eV: -0.2
+      Nt_m2: 3.0e+17
+      energy_distribution: single
+      density_convention: total
+      sigma_n_left_m2: 1.0e-19
+      sigma_n_right_m2: 1.0e-19
+      sigma_p_left_m2: 1.0e-19
+      sigma_p_right_m2: 1.0e-19
+- id: ovc-ou2013
+  name: OVC - Ouedraogo surface layer
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - ouedraogo2013
+  - partial-sourced-payload
+  description: Source keeps OVC Nv different from CIGS Nv. i-ZnO has finite donor density in this model.
+    No uncertainty is reported. Omitted fields are unknown here; importer defaults are not literature
+    claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Ouedraogo, Zougmoré and Ndjaka (2013). Numerical Analysis of Copper-Indium-Gallium-Diselenide-Based
+      Solar Cells by SCAPS-1D. International Journal of Photoenergy, 421076.
+    doi: 10.1155/2013/421076
+    locator: 'PDF p. 3, Table 1; temperature and intrinsic-level convention: p. 2, section 2.2'
+    author: Ouedraogo, Zougmoré and Ndjaka
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: https://onlinelibrary.wiley.com/doi/pdf/10.1155/2013/421076
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 1.3
+    upper: 1.3
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.5
+    upper: 4.5
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 13.6
+    upper: 13.6
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.5e+24
+    upper: 1.5e+24
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.001
+    upper: 0.001
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.000125
+    upper: 0.000125
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.T_ref_K
+    unit: K
+    lower: 300
+    upper: 300
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 390000.0
+    upper: 390000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 140000.0
+    upper: 140000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 3.0e-08
+    upper: 3.0e-08
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].doping.Na_m3
+    unit: m^-3
+    lower: 1.0e+19
+    upper: 1.0e+19
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  data:
+    schema_version: 1
+    layers:
+    - name: OVC - Ouedraogo surface layer
+      material:
+        Eg_eV: 1.3
+        chi_eV: 4.5
+        eps_r: 13.6
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.5e+24
+        mu_n_m2_V_s: 0.001
+        mu_p_m2_V_s: 0.000125
+        T_ref_K: 300
+        vth_n_ref_m_s: 390000.0
+        vth_p_ref_m_s: 140000.0
+      thickness_m: 3.0e-08
+      doping:
+        Na_m3: 1.0e+19
+  validity:
+    temperature_min_K: 300
+    temperature_max_K: 300
+- id: zn08mg02o-gh2021
+  name: Zn0.8Mg0.2O - ALD buffer model
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - gharibshahian2021
+  - partial-sourced-payload
+  description: Electrical model values, not universal measured constants. Temperature and statistical
+    uncertainties are not specified for Table 1. Mixed Mo(S,Se) must not be substituted for pure MoSe2.
+    Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper denotes
+    a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Gharibshahian, Orouji and Sharbati (2021). Suitable top cell partners for CIGS-based tandem
+      solar cells to achieve >30% efficiency. Phys. Status Solidi A 218, 2000796.
+    doi: 10.1002/pssa.202000796
+    locator: accepted manuscript PDF p. 6, Table 1
+    author: Gharibshahian, Orouji and Sharbati
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/gharibshahian2021.pdf
+  parameters:
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 5.0e-08
+    upper: 5.0e-08
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 3.7
+    upper: 3.7
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 3.9
+    upper: 3.9
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 9.0
+    upper: 9.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 6.77e+24
+    upper: 6.77e+24
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  data:
+    schema_version: 1
+    layers:
+    - name: Zn0.8Mg0.2O - ALD buffer model
+      thickness_m: 5.0e-08
+      material:
+        Eg_eV: 3.7
+        chi_eV: 3.9
+        eps_r: 9.0
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+        vth_n_ref_m_s: 100000.0
+        vth_p_ref_m_s: 100000.0
+      doping:
+        Nd_m3: 6.77e+24
+- id: zno-liu2018
+  name: zno-liu2018
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - liu2018
+  - partial-sourced-payload
+  description: wxAMPS model table. CdS thickness is a range, so omitted from the nominal payload. Keep
+    distinct from the other CdS/ZnO baselines. Omitted fields are unknown here; importer defaults are
+    not literature claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental
+    uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Liu et al. (2018). Numerical analysis on effects of experimental Ga grading on Cu(In,Ga)Se2
+      solar cell performance. Journal of Physics and Chemistry of Solids 120, 190-196.
+    doi: 10.1016/j.jpcs.2018.04.041
+    locator: accepted manuscript printed p. 17 / PDF p. 19, Table 1
+    author: Liu et al.
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/li2019.pdf
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 3.3
+    upper: 3.3
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.4
+    upper: 4.4
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 9.0
+    upper: 9.0
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 1.0e+24
+    upper: 1.0e+24
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 3.0e-07
+    upper: 3.0e-07
+    citation: DOI 10.1016/j.jpcs.2018.04.041; accepted manuscript printed p. 17 / PDF p. 19, Table 1
+  data:
+    schema_version: 1
+    layers:
+    - name: zno-liu2018
+      material:
+        Eg_eV: 3.3
+        chi_eV: 4.4
+        eps_r: 9.0
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+      doping:
+        Nd_m3: 1.0e+24
+      thickness_m: 3.0e-07
+- id: zno-za2021
+  name: ZnO window - Zaabar
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - zaabar2021
+  - partial-sourced-payload
+  description: SCAPS model assumption. CIGS snapshot uses the authors’ minimum GGI, not a homogeneous
+    replacement for their graded device. Omitted fields are unknown here; importer defaults are not literature
+    claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Za’abar et al. (2021). A Numerical Investigation on the Combined Effects of MoSe2 Interface
+      Layer and Graded Bandgap Absorber in CIGS Thin Film Solar Cells. Coatings 11, 930.
+    doi: 10.3390/coatings11080930
+    locator: PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+    author: Za’abar et al.
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/zaabar2021.pdf
+  parameters:
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 1.5e-07
+    upper: 1.5e-07
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 3.3
+    upper: 3.3
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.0
+    upper: 4.0
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 9.0
+    upper: 9.0
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 1.0e+24
+    upper: 1.0e+24
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  - path: layers[0].doping.Na_m3
+    unit: m^-3
+    lower: 0.0
+    upper: 0.0
+    citation: DOI 10.3390/coatings11080930; PDF p. 4, Table 1; CIGS composition law p. 5, equations (2)-(3)
+  data:
+    schema_version: 1
+    layers:
+    - name: ZnO window - Zaabar
+      thickness_m: 1.5e-07
+      material:
+        Eg_eV: 3.3
+        chi_eV: 4.0
+        eps_r: 9.0
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+      doping:
+        Nd_m3: 1.0e+24
+        Na_m3: 0.0
+- id: znob-gh2021
+  name: ZnO:B - MOCVD TCO model
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - gharibshahian2021
+  - partial-sourced-payload
+  description: Electrical model values, not universal measured constants. Temperature and statistical
+    uncertainties are not specified for Table 1. Mixed Mo(S,Se) must not be substituted for pure MoSe2.
+    Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper denotes
+    a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Gharibshahian, Orouji and Sharbati (2021). Suitable top cell partners for CIGS-based tandem
+      solar cells to achieve >30% efficiency. Phys. Status Solidi A 218, 2000796.
+    doi: 10.1002/pssa.202000796
+    locator: accepted manuscript PDF p. 6, Table 1
+    author: Gharibshahian, Orouji and Sharbati
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/gharibshahian2021.pdf
+  parameters:
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 5.0e-07
+    upper: 5.0e-07
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 3.7
+    upper: 3.7
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 3.9
+    upper: 3.9
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 9.0
+    upper: 9.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 1.0e+26
+    upper: 1.0e+26
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  data:
+    schema_version: 1
+    layers:
+    - name: ZnO:B - MOCVD TCO model
+      thickness_m: 5.0e-07
+      material:
+        Eg_eV: 3.7
+        chi_eV: 3.9
+        eps_r: 9.0
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+        vth_n_ref_m_s: 100000.0
+        vth_p_ref_m_s: 100000.0
+      doping:
+        Nd_m3: 1.0e+26
+- id: znob-ou2013
+  name: ZnO:B - Ouedraogo baseline
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - ouedraogo2013
+  - partial-sourced-payload
+  description: Source keeps OVC Nv different from CIGS Nv. i-ZnO has finite donor density in this model.
+    No uncertainty is reported. Omitted fields are unknown here; importer defaults are not literature
+    claims. Equal lower/upper denotes a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Ouedraogo, Zougmoré and Ndjaka (2013). Numerical Analysis of Copper-Indium-Gallium-Diselenide-Based
+      Solar Cells by SCAPS-1D. International Journal of Photoenergy, 421076.
+    doi: 10.1155/2013/421076
+    locator: 'PDF p. 3, Table 1; temperature and intrinsic-level convention: p. 2, section 2.2'
+    author: Ouedraogo, Zougmoré and Ndjaka
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: https://onlinelibrary.wiley.com/doi/pdf/10.1155/2013/421076
+  parameters:
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 3.3
+    upper: 3.3
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.55
+    upper: 4.55
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 9.0
+    upper: 9.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 3.0e+24
+    upper: 3.0e+24
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0031000000000000003
+    upper: 0.0031000000000000003
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.T_ref_K
+    unit: K
+    lower: 300
+    upper: 300
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 240000.0
+    upper: 240000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 130000.0
+    upper: 130000.0
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 4.0e-07
+    upper: 4.0e-07
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 1.0e+26
+    upper: 1.0e+26
+    citation: 'DOI 10.1155/2013/421076; PDF p. 3, Table 1; temperature and intrinsic-level convention:
+      p. 2, section 2.2'
+  data:
+    schema_version: 1
+    layers:
+    - name: ZnO:B - Ouedraogo baseline
+      material:
+        Eg_eV: 3.3
+        chi_eV: 4.55
+        eps_r: 9.0
+        Nc_ref_m3: 3.0e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0031000000000000003
+        T_ref_K: 300
+        vth_n_ref_m_s: 240000.0
+        vth_p_ref_m_s: 130000.0
+      thickness_m: 4.0e-07
+      doping:
+        Nd_m3: 1.0e+26
+  validity:
+    temperature_min_K: 300
+    temperature_max_K: 300
+- id: znosoh-gh2021
+  name: Zn(O,S,OH) - CBD buffer model
+  kind: layer
+  collection: Semiconductors/CIGS/Literature
+  tags:
+  - CIGS-family
+  - literature
+  - gharibshahian2021
+  - partial-sourced-payload
+  description: Electrical model values, not universal measured constants. Temperature and statistical
+    uncertainties are not specified for Table 1. Mixed Mo(S,Se) must not be substituted for pure MoSe2.
+    Omitted fields are unknown here; importer defaults are not literature claims. Equal lower/upper denotes
+    a transcribed nominal value, not zero experimental uncertainty.
+  version: 1
+  change_note: Initial PDF-curated import
+  locked: false
+  provenance:
+    source: paper
+    citation: Gharibshahian, Orouji and Sharbati (2021). Suitable top cell partners for CIGS-based tandem
+      solar cells to achieve >30% efficiency. Phys. Status Solidi A 218, 2000796.
+    doi: 10.1002/pssa.202000796
+    locator: accepted manuscript PDF p. 6, Table 1
+    author: Gharibshahian, Orouji and Sharbati
+    date: '2026-11-26'
+    run_id: libdata1
+    source_path: evidence/gharibshahian2021.pdf
+  parameters:
+  - path: layers[0].thickness_m
+    unit: m
+    lower: 5.0e-08
+    upper: 5.0e-08
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Eg_eV
+    unit: eV
+    lower: 2.95
+    upper: 2.95
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.chi_eV
+    unit: eV
+    lower: 4.0
+    upper: 4.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.eps_r
+    unit: '1'
+    lower: 9.0
+    upper: 9.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nc_ref_m3
+    unit: m^-3
+    lower: 2.2e+24
+    upper: 2.2e+24
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.Nv_ref_m3
+    unit: m^-3
+    lower: 1.8e+25
+    upper: 1.8e+25
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_n_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.01
+    upper: 0.01
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.mu_p_m2_V_s
+    unit: m^2/(V s)
+    lower: 0.0025
+    upper: 0.0025
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_n_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].material.vth_p_ref_m_s
+    unit: m/s
+    lower: 100000.0
+    upper: 100000.0
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  - path: layers[0].doping.Nd_m3
+    unit: m^-3
+    lower: 5.12e+23
+    upper: 5.12e+23
+    citation: DOI 10.1002/pssa.202000796; accepted manuscript PDF p. 6, Table 1
+  data:
+    schema_version: 1
+    layers:
+    - name: Zn(O,S,OH) - CBD buffer model
+      thickness_m: 5.0e-08
+      material:
+        Eg_eV: 2.95
+        chi_eV: 4.0
+        eps_r: 9.0
+        Nc_ref_m3: 2.2e+24
+        Nv_ref_m3: 1.8e+25
+        mu_n_m2_V_s: 0.01
+        mu_p_m2_V_s: 0.0025
+        vth_n_ref_m_s: 100000.0
+        vth_p_ref_m_s: 100000.0
+      doping:
+        Nd_m3: 5.12e+23
