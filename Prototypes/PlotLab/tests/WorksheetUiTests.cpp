@@ -667,3 +667,23 @@ TEST_F(WorksheetUi, PhysicalExportSizeAndFontsDoNotScaleTheInteractiveGraph) {
     const auto& saved=std::get<pl::Graph>(doc->project->object(graph).data);
     EXPECT_DOUBLE_EQ(saved.widthMm,300); EXPECT_DOUBLE_EQ(saved.heightMm,20); EXPECT_DOUBLE_EQ(saved.fontSizePt,72);
 }
+TEST_F(WorksheetUi, LayerAndErrorPopupsSurviveRenderingInsetChildren) {
+    const auto graph=doc->PlotColumns(sheet,{columns[1],columns[2]},plot::SeriesKind::Waterfall);
+    const auto layer=doc->project->children(graph).front();doc->Execute(pl::duplicateLayer(*doc->project,layer,"Inset",{.55,.55,.4,.4}));
+    for(const char* popup:{"Layers / inset","Series / errors"})for(int frame=0;frame<3;++frame){
+        ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({1300,800});ImGui::Begin("Graph popup test");
+        if(frame==0)ImGui::OpenPopup(popup);panel.GraphContents(graph);EXPECT_TRUE(ImGui::IsPopupOpen(popup));
+        ImGui::End();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);
+    }
+}
+TEST_F(WorksheetUi, LayerPopupOpensFromItsToolbarButtonAndStaysOpen) {
+    const auto graph=doc->PlotColumns(sheet,{columns[1]},plot::SeriesKind::Waterfall);const auto layer=doc->project->children(graph).front();doc->Execute(pl::duplicateLayer(*doc->project,layer,"Inset",{.55,.55,.4,.4}));
+    ImVec2 target{};
+    for(int frame=0;frame<6;++frame){
+        if(frame>=2){ImGui::GetIO().AddMousePosEvent(target.x,target.y);if(frame==2)ImGui::GetIO().AddMouseButtonEvent(0,true);if(frame==3)ImGui::GetIO().AddMouseButtonEvent(0,false);}
+        ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({1300,800});ImGui::Begin("Graph click test");
+        auto pos=ImGui::GetCursorScreenPos();for(const char* text:{"Rescale","Layer Contents...","Plot Details (F2)","Axes","Legend","Templates / batch"})pos.x+=ImGui::CalcTextSize(text).x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x;
+        target={pos.x+ImGui::CalcTextSize("Layers / inset").x*.5f+ImGui::GetStyle().FramePadding.x,pos.y+ImGui::GetFrameHeight()*.5f};
+        panel.GraphContents(graph);if(frame>=3)EXPECT_TRUE(ImGui::IsPopupOpen("Layers / inset"));ImGui::End();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);
+    }
+}

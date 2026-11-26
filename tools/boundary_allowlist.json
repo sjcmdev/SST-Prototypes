@@ -8051,6 +8051,51 @@
       "sha256": "fff547ef1a9cee2262b1c9fe613deb333ac815539a7045c336271d4e96d3095d",
       "count": 1,
       "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 138,
+      "code": ".def(\"create_layer\",[](Document& d,pl::Id graph,nb::dict request){return Respond([&]()->nb::object {",
+      "sha256": "83261d0bdad283cc656e8dd82dab07ad4746628d2415ba8b196541b84f9de080",
+      "count": 2,
+      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 143,
+      "code": "nb::dict result;for(auto key:p.children(graph))if(std::find(before.begin(),before.end(),key)==before.end())result[\"layer_id\"]=key;return result;",
+      "sha256": "28c9ca1a7aa1654ea771613445ee6205d0588c1d06867aa76f33f2905e83b01d",
+      "count": 1,
+      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 145,
+      "code": ".def(\"edit_layer\",[](Document& d,pl::Id layer,nb::dict request){return Respond([&]()->nb::object {",
+      "sha256": "cc44e82b88d6d67d9e43f69609c7ea8182b70e5b7b5c844c1fbbc8847f807a1a",
+      "count": 2,
+      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 148,
+      "code": "d.Execute(pl::editLayer(*d.project,layer,std::move(l)));return nb::dict();",
+      "sha256": "7d4bdbe328626e5529d16a2dc0b7d12b5eab85acc15bd84d320cdeba398dd2da",
+      "count": 1,
+      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotWorkflowPython.cpp",
+      "rule": "python",
+      "line": 150,
+      "code": ".def(\"arrange_layers\",[](Document& d,pl::Id graph,unsigned columns,bool x,bool y){return Respond([&]()->nb::object {d.Execute(pl::arrangeLayers(*d.project,graph,columns,x,y));return nb::dict();});},nb::arg(\"graph_id\"),nb::arg(\"columns\"),nb::arg(\"shared_x\")=false,nb::arg(\"shared_y\")=false)",
+      "sha256": "1f1c382faa4cfb98100ea3ace27a141ecf273deb2a5c11a52c3c5ff198f96c51",
+      "count": 6,
+      "reason": "Public nanobind workflow edge: decode caller fields to typed Core requests or encode completed typed scientific results to JSON-serializable Python values."
     }
   ],
   "known-debt": [

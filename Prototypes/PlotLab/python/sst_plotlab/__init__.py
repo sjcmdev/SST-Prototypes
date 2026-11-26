@@ -125,6 +125,20 @@ class WorksheetSession:
     def create_map(self, request):
         return self._session.create_map(request)
 
+    def edit_plot(self, layer_id, request):
+        """Typed Core command: kind/style/errors/group/transfer; stable IDs and coordinate units."""
+        return self._session.plot_edit(layer_id, request)
+
+    def create_layer(self, graph_id, request):
+        """Frame is [left, bottom, width, height] in page fractions; copy_layer_id creates an inset."""
+        return self._session.create_layer(graph_id, request)
+
+    def edit_layer(self, layer_id, request):
+        return self._session.edit_layer(layer_id, request)
+
+    def arrange_layers(self, graph_id, columns=1, *, shared_x=False, shared_y=False):
+        return self._session.arrange_layers(graph_id, columns, shared_x, shared_y)
+
     def import_image(self, path, calibration):
         return self._session.import_image(str(path), calibration)
 

@@ -253,7 +253,7 @@ namespace SST::Prototypes::PlotLab
     {
         std::vector<pl::Object> views;
         for(const auto& [id,view]:graphViews)if(project->objects().contains(id)) {
-            const auto layers=project->children(id);if(layers.empty())continue;auto layer=project->object(layers.front());
+            pl::Id layerId=id;if(!std::holds_alternative<pl::Layer>(project->object(id).data)){const auto layers=project->children(id);if(layers.empty())continue;layerId=layers.front();}auto layer=project->object(layerId);
             if(!plot::StoredViewEqual(std::get<pl::Layer>(layer.data).view,view)){std::get<pl::Layer>(layer.data).view=CapturePublicationView(view);views.push_back(std::move(layer));}
         }
         if(!views.empty())project->change("Graph view",std::move(views)).apply(*project);
@@ -287,7 +287,7 @@ namespace SST::Prototypes::PlotLab
         return *workflow;
     }
     std::shared_ptr<const pl::GraphSnapshot> Document::SnapshotGraph(pl::Id graph,std::optional<std::array<double,2>> sizeMm) const {
-        const auto found=graphViews.find(graph);return PublicationSnapshot(*project,graph,found==graphViews.end()?nullptr:&found->second,sizeMm);
+        const auto found=graphViews.find(graph);return PublicationSnapshot(*project,graph,found==graphViews.end()?nullptr:&found->second,sizeMm,&graphViews);
     }
     pl::Id Document::Create(pl::Id parent, int type, std::string name)
     {
@@ -451,7 +451,7 @@ namespace SST::Prototypes::PlotLab
     }
     pl::Id Document::AddSeries(pl::Id graph, pl::Id sheet, pl::Id x, pl::Id y, pl::Id error)
     {
-        const auto layer = project->children(graph).at(0);
+        const auto layer = pl::activeLayer(*project,graph);
         pl::Plot p{sheet, x, y, 0, error};
         p.kind = plot::SeriesKind::LineScatter;
         const auto id = project->reserveId();
@@ -461,8 +461,8 @@ namespace SST::Prototypes::PlotLab
     pl::Id Document::PlotColumns(pl::Id sheet, const std::vector<pl::Id>& selected, plot::SeriesKind kind,
                                  pl::Id graph, pl::Id explicitX, pl::Id error)
     {
-        if (kind != plot::SeriesKind::Line && kind != plot::SeriesKind::Scatter && kind != plot::SeriesKind::LineScatter && kind != plot::SeriesKind::Column)
-            throw std::invalid_argument("Choose Line, Scatter, Line + Symbol or Column");
+        if (kind != plot::SeriesKind::Line && kind != plot::SeriesKind::Scatter && kind != plot::SeriesKind::LineScatter && kind != plot::SeriesKind::Column && !plot::IsChart(kind))
+            throw std::invalid_argument("Choose a 2D plot type; use the X/Y/Z gallery for spatial data");
         auto& p = *project; const auto columns = p.children(sheet);
         for (auto column : selected) if (std::find(columns.begin(), columns.end(), column) == columns.end()) throw std::invalid_argument("Selected column belongs to another worksheet");
         for (auto column : selected) if (std::get<pl::Column>(p.object(column).data).role == pl::Role::X) explicitX = column;
@@ -476,18 +476,27 @@ namespace SST::Prototypes::PlotLab
                 pl::Id addedSeries = 0;
                 if (!graph) graph = AddGraph(p.root(), sheet, x, column, error);
                 else addedSeries = AddSeries(graph, sheet, x, column, error);
-                const auto layer = p.children(graph).front();
+                const auto layer = addedSeries?p.object(addedSeries).parent:pl::activeLayer(p,graph);
                 auto o = p.object(addedSeries ? addedSeries : p.children(layer).front()); auto& series = std::get<pl::Plot>(o.data);
                 series.kind = kind; series.style.color = plot::ScientificColor(p.children(layer).size() - 1);
                 series.style.marker = kind == plot::SeriesKind::Line || kind == plot::SeriesKind::Column ? plot::Marker::None : plot::Marker::Circle;
                 series.style.markerAuto = false; series.group = "Worksheet selection";
+                if(kind==plot::SeriesKind::Box)series.style.offsetX=static_cast<double>(p.children(layer).size()-1);
+                if(kind==plot::SeriesKind::Waterfall) {const auto& values=std::get<std::vector<double>>(c.values);double lo=0,hi=0;for(double value:values)if(std::isfinite(value)){lo=std::min(lo,value);hi=std::max(hi,value);}series.style.offsetY=(hi>lo?hi-lo:1)*.2*(p.children(layer).size()-1);}
                 Execute(p.change("Plot type", {std::move(o)})); added = true;
+                auto settings=p.object(layer);auto& spec=std::get<pl::Layer>(settings.data).spec;
+                spec.x.unit=x?std::get<pl::Column>(p.object(x).data).units:"";spec.y.unit=c.units;
+                if(plot::IsHorizontalBar(kind)){spec.y.label=x?p.object(x).name:"Category";spec.x.label=p.object(column).name;std::swap(spec.x.unit,spec.y.unit);}
+                if(kind==plot::SeriesKind::PercentBar || kind==plot::SeriesKind::PercentColumn)(plot::IsHorizontalBar(kind)?spec.x:spec.y).unit="%";
+                if(kind==plot::SeriesKind::Histogram){spec.x.label=p.object(column).name;spec.x.unit=c.units;spec.y.label="Count";spec.y.unit="";}
+                if(kind==plot::SeriesKind::Box){spec.x.label="Series";spec.x.unit="";}
+                Execute(p.change("Plot axes",{std::move(settings)}));
             }
             if (!added) throw std::invalid_argument("Select at least one numeric Y column first.");
             const auto result = group.Commit(); if (!result) throw std::runtime_error(result.Error().technicalDetails);
             for(auto column:selected)if(std::get<pl::Column>(p.object(column).data).role!=pl::Role::X) {
                 const auto x=explicitX?explicitX:p.pairedX(column);
-                const char* name=kind==plot::SeriesKind::Line?"line":kind==plot::SeriesKind::Scatter?"scatter":kind==plot::SeriesKind::Column?"column":"line+symbol";
+                const char* names[]={"line","scatter","line+symbol","error","surface","scatter3d","line3d","heatmap","column","bar","stacked-column","percent-column","stacked-bar","percent-bar","histogram","box","area","waterfall","error-band"};const char* name=names[static_cast<int>(kind)];
                 if(x)RecordPython("plot(project.by_id("+std::to_string(x)+"), project.by_id("+std::to_string(column)+"), kind='"+name+"')");
             }
             return graph;

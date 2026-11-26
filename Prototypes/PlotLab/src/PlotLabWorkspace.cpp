@@ -1,4 +1,4 @@
-#include "PlotLabWorkspace.hpp"
+﻿#include "PlotLabWorkspace.hpp"
 #include "WorksheetPython.hpp"
 #include "PlotWorkflowPanel.hpp"
 #include "Core/PlotExport/PlotEditing.hpp"
@@ -10,6 +10,7 @@
 #include "Core/Platform/NativeFileDialog.hpp"
 #include <algorithm>
 #include <charconv>
+#include <bit>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
@@ -40,8 +41,19 @@ namespace SST::Prototypes::PlotLab
             {"explorer", "Project Explorer", "View"},
             {"python_console", "Python Console", "View"}, {"python_script", "Python Script", "View"}, {"python_history", "History as Python", "View"},
             {"line", "Line", "Plot"}, {"scatter", "Scatter", "Plot"}, {"line_symbol", "Line + Symbol", "Plot"}, {"column", "Column", "Plot"},
-            {"map", "Heatmap / contour...", "Plot"}, {"templates", "Graph templates / batch...", "Graph"},
+            {"chart.9", "Horizontal bar", "Plot"},
+            {"chart.10", "Stacked column", "Plot"},
+            {"chart.11", "100% column", "Plot"},
+            {"chart.12", "Stacked bar", "Plot"},
+            {"chart.13", "100% bar", "Plot"},
+            {"chart.14", "Histogram", "Plot"},
+            {"chart.15", "Box", "Plot"},
+            {"chart.16", "Filled area", "Plot"},
+            {"chart.17", "Waterfall", "Plot"},
+            {"chart.18", "Error band", "Plot"},
+            {"map", "Heatmap / 3D gallery...", "Plot"}, {"templates", "Graph templates / batch...", "Graph"},
             {"map_settings", "Map / contour settings...", "Graph"},
+            {"layers", "Layers / inset...", "Graph"}, {"uncertainty", "Series / errors...", "Graph"},
             {"analysis", "Fit model / scientific analysis...", "Analysis"},
             {"set_none", "None", "Column/Set As..."}, {"set_x", "X", "Column/Set As..."}, {"set_y", "Y", "Column/Set As..."}, {"set_z", "Z", "Column/Set As..."},
             {"set_yerr", "yErr", "Column/Set As..."}, {"set_xerr", "xErr", "Column/Set As..."}, {"set_label", "Label", "Column/Set As..."}, {"set_disregard", "Disregard", "Column/Set As..."},
@@ -149,7 +161,7 @@ namespace SST::Prototypes::PlotLab
                 if (o->data.index() == 4) {
                     const auto layers = document->project->children(id); if (layers.empty()) continue;
                     const auto& layer = std::get<pl::Layer>(document->project->object(layers.front()).data);
-                    views[id] = layer.view; views[id].fitted = views[id].viewport.has_value();
+                    views[id] = layer.view; views[id].fitted = views[id].viewport.has_value();for(auto extra:layers)if(extra!=layers.front())views[extra]=std::get<pl::Layer>(document->project->object(extra).data).view;
                 }
             }
     }
@@ -484,7 +496,7 @@ namespace SST::Prototypes::PlotLab
         if (action == "redo") return state->document->undo->GetRedoDepth() > 0;
         if (action == "analysis" || action == "export_data") return CurrentSheet()!=0;
         if (action == "map_settings") return Exists(p,state->selected,4);
-        if (action == "export" || action == "contents" || action == "details" || action == "axes" || action == "legend" || action == "rescale") return Exists(p, state->selected, 4);
+        if (action == "export" || action == "contents" || action == "details" || action == "axes" || action == "legend" || action == "rescale" || action == "layers" || action == "uncertainty") return Exists(p, state->selected, 4);
         if (action == "rename" || action == "delete_object") return p.objects().contains(state->selected) && state->selected != p.root();
         for (const auto& item : menuCommands) if (action == item.action) {
             const std::string_view category = item.category;
@@ -534,10 +546,17 @@ namespace SST::Prototypes::PlotLab
         if (!ActionEnabled(action)) throw std::invalid_argument("Activate a worksheet or graph first.");
         const auto sheet = CurrentSheet();
         const auto graph = Exists(p, state->selected, 4) ? state->selected : 0;
-        if (action == "new") state->File(FileAction::New);
+        if(action.starts_with("chart.")) {
+            unsigned kind=0;const auto text=std::string_view(action).substr(6);const auto parsed=std::from_chars(text.data(),text.data()+text.size(),kind);
+            if(parsed.ec!=std::errc{} || parsed.ptr!=text.data()+text.size() || kind<9 || kind>18)throw std::invalid_argument("Unknown plot type");
+            PlotSelection(sheet,static_cast<plot::SeriesKind>(kind));
+        }
+        else if (action == "new") state->File(FileAction::New);
         else if (action == "open") state->File(FileAction::Open, path);
         else if (action == "save" || action == "save_as") state->Save(action == "save_as");
         else if (action == "import") BeginImport();
+        else if(action=="layers")layerPopupGraph=graph;
+        else if(action=="uncertainty")errorPopupGraph=graph;
         else if (action == "map" || action == "map_settings" || action == "analysis" || action == "templates" || action == "export_data" || action == "image_map") {
             if(!state->workflowPanel)state->workflowPanel=CreateRef<PlotWorkflowPanel>(*state);
             if(action=="map")state->workflowPanel->OpenMap(sheet);
@@ -934,6 +953,8 @@ namespace SST::Prototypes::PlotLab
             if (ImGui::MenuItem("Scatter")) Attempt([&] { PlotSelection(sheet, plot::SeriesKind::Scatter); });
             if (ImGui::MenuItem("Line + Symbol")) Attempt([&] { PlotSelection(sheet, plot::SeriesKind::LineScatter); });
             if (ImGui::MenuItem("Column")) Attempt([&] { PlotSelection(sheet, plot::SeriesKind::Column); });
+            for(int k=9;k<=18;++k)if(ImGui::MenuItem(plot::SeriesNames[k]))Attempt([&]{PlotSelection(sheet,static_cast<plot::SeriesKind>(k));});
+            if(ImGui::MenuItem("Heatmap / 3D gallery..."))Attempt([&]{RunAction("map");});
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Header rows")) { HeaderMenu(sheet); ImGui::EndMenu(); }
@@ -978,7 +999,7 @@ namespace SST::Prototypes::PlotLab
         if (graph) {
             const auto layers = p.children(graph);
             if (!layers.empty()) {
-                const auto plots = p.children(layers.front());
+                const auto plots = p.children(pl::activeLayer(p,graph));
                 if (!plots.empty()) {
                     const auto& source = std::get<pl::Plot>(p.object(plots.front()).data);
                     if (!sheetChoice) sheetChoice = source.worksheet;
@@ -991,8 +1012,7 @@ namespace SST::Prototypes::PlotLab
     }
     void WorkspacePanel::AddAvailablePlots()
     {
-        static constexpr plot::SeriesKind kinds[] = {plot::SeriesKind::Line, plot::SeriesKind::Scatter, plot::SeriesKind::LineScatter, plot::SeriesKind::Column};
-        targetGraph = state->document->PlotColumns(sheetChoice, {availableColumns.begin(), availableColumns.end()}, kinds[plotType], targetGraph, xChoice, errorChoice);
+        targetGraph = state->document->PlotColumns(sheetChoice, {availableColumns.begin(), availableColumns.end()}, static_cast<plot::SeriesKind>(plotType<3?plotType:plotType+5), targetGraph, xChoice, errorChoice);
         state->Show(targetGraph); availableColumns.clear();
     }
     void WorkspacePanel::Worksheet(pl::Id id)
@@ -1043,7 +1063,7 @@ namespace SST::Prototypes::PlotLab
         button(ICON_FA_CHART_LINE "##graph", "New Graph from selection (Line + Symbol)", [&] { PlotSelection(id, plot::SeriesKind::LineScatter); });
         button(ICON_FA_FILE_IMPORT, "Import CSV / TSV / DAT", [&] { (void)state->document->commands->Execute(CommandID{"plotlab.ui.import"}); });
         button(ICON_FA_FLASK "##analysis", "Fit model / scientific analysis", [&] { RunAction("analysis"); });
-        button(ICON_FA_BORDER_ALL "##map", "Heatmap / contour", [&] { RunAction("map"); });
+        button(ICON_FA_BORDER_ALL "##map", "Heatmap / contour / surface / 3D scatter / 3D line", [&] { RunAction("map"); });
         button(ICON_FA_FILE_EXPORT "##data", "Export worksheet CSV / TSV / DAT", [&] { RunAction("export_data"); });
         button(ICON_FA_TABLE_COLUMNS, "Add New Columns (Ctrl+D)", [&] { doc.AddColumn(id); });
         button(ICON_FA_CALCULATOR, "Set Column Values (Ctrl+Q)", [&] { if (!v.column) throw std::invalid_argument("Select a column first"); EditColumn(v.column); valuesDialog = true; });
@@ -1054,6 +1074,9 @@ namespace SST::Prototypes::PlotLab
         button(ICON_FA_BRAILLE, "Scatter", [&] { PlotSelection(id, plot::SeriesKind::Scatter); });
         button(ICON_FA_BEZIER_CURVE, "Line + Symbol", [&] { PlotSelection(id, plot::SeriesKind::LineScatter); });
         button(ICON_FA_CHART_COLUMN, "Column", [&] { PlotSelection(id, plot::SeriesKind::Column); });
+        if(ImGui::Button(ICON_FA_CHART_SIMPLE "##gallery"))ImGui::OpenPopup("Plot gallery");
+        if(ImGui::IsItemHovered())ImGui::SetTooltip("Bar, histogram, box, area, waterfall and error band");
+        if(ImGui::BeginPopup("Plot gallery")){for(int k=9;k<=18;++k)if(ImGui::MenuItem(plot::SeriesNames[k]))Attempt([&]{PlotSelection(id,static_cast<plot::SeriesKind>(k));});ImGui::EndPopup();}ImGui::SameLine();
         if (ImGui::Button(ICON_FA_ELLIPSIS)) ImGui::OpenPopup("Sheet actions");
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Worksheet actions and header rows");
         if (ImGui::BeginPopup("Sheet actions")) {
@@ -1262,9 +1285,11 @@ namespace SST::Prototypes::PlotLab
     {
         SyncProject();
         auto& doc = *state->document; auto& p = *doc.project;
-        auto& editor = state->plotEditors[id];
+        const auto active=pl::activeLayer(p,id);const auto activeKey=active==p.children(id).front()?id:active;auto& editor = state->plotEditors[activeKey];
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !state->activate) state->selected = id;
-        const auto plotsInLayer = p.children(p.children(id).front());
+        const auto plotsInLayer = p.children(active);
+        if(layerPopupGraph==id){ImGui::OpenPopup("Layers / inset");layerPopupGraph=0;}
+        if(errorPopupGraph==id){ImGui::OpenPopup("Series / errors");errorPopupGraph=0;}
         const auto details = [&] {
             if (editor.selected.empty() && !plotsInLayer.empty()) editor.Select(std::to_string(plotsInLayer.front()), false);
             editor.details = true;
@@ -1281,6 +1306,33 @@ namespace SST::Prototypes::PlotLab
         }
         ImGui::SameLine(); if (ImGui::Button("Legend")) editor.legendDialog = true;
         ImGui::SameLine(); if (ImGui::Button("Templates / batch")) RunAction("templates");
+        ImGui::SameLine();if(ImGui::Button("Layers / inset")){state->status="Choose the active layer, inset frame and shared ranges.";ImGui::OpenPopup("Layers / inset");}
+        if(ImGui::BeginPopup("Layers / inset")) {
+            if(sst::ui::widgets::BeginCombo("Active layer",p.object(active).name.c_str())){for(auto key:p.children(id))if(ImGui::Selectable(p.object(key).name.c_str(),key==active))Attempt([&]{auto l=std::get<pl::Layer>(p.object(key).data);l.active=true;doc.Execute(pl::editLayer(p,key,std::move(l)));});sst::ui::widgets::EndCombo();}
+            for(auto key:p.children(active)){ImGui::PushID(static_cast<int>(key));auto e=p.series(key);const auto c=e.style.color[3]<0?plot::ScientificColor(static_cast<std::size_t>(key)):e.style.color;ImGui::ColorButton("##style",{c[0],c[1],c[2],c[3]},ImGuiColorEditFlags_NoTooltip,{18,18});if(ImGui::IsItemHovered())ImGui::SetTooltip("Group: %s; %s; %s",e.group.c_str(),plot::SeriesNames[static_cast<int>(e.kind)],e.independentStyle?"own style":"group style");ImGui::SameLine();if(ImGui::Selectable(p.object(key).name.c_str(),std::find(editor.selected.begin(),editor.selected.end(),std::to_string(key))!=editor.selected.end()))editor.Select(std::to_string(key),ImGui::GetIO().KeyCtrl);ImGui::PopID();}
+            if(ImGui::Button("Add layer"))Attempt([&]{pl::Layer l;l.spec.autoFit=plot::AutoFit::Once;doc.Execute(pl::createLayer(p,id,"Layer "+std::to_string(p.children(id).size()+1),std::move(l)));});
+            ImGui::SameLine();if(ImGui::Button("Create inset"))Attempt([&]{doc.Execute(pl::duplicateLayer(p,active,"Inset",{.55,.55,.4,.4},&state->views));});
+            if(ImGui::IsItemHovered())ImGui::SetTooltip("Duplicates curve references and the current view; zoom inside the inset independently.");
+            auto l=std::get<pl::Layer>(p.object(active).data);bool changed=false;const char* labels[]={"Left (page fraction)","Bottom (page fraction)","Width (page fraction)","Height (page fraction)"};
+            for(int k=0;k<4;++k)changed|=sst::ui::widgets::Double(labels[k],&l.frame[k],.01f);
+            const auto link=[&](const char* label,pl::Id& source){if(sst::ui::widgets::BeginCombo(label,source?p.object(source).name.c_str():"Independent")){if(ImGui::Selectable("Independent",!source)){source=0;changed=true;}for(auto key:p.children(id))if(key!=active && ImGui::Selectable(p.object(key).name.c_str(),key==source)){source=key;changed=true;}sst::ui::widgets::EndCombo();}};
+            link("Share X range",l.sharedX);link("Share Y range",l.sharedY);if(changed)Attempt([&]{doc.Execute(pl::editLayer(p,active,std::move(l)));});
+            if(ImGui::Button("Arrange in grid"))Attempt([&]{doc.Execute(pl::arrangeLayers(p,id,p.children(id).size()>1?2:1,false,false));});
+            ImGui::EndPopup();
+        }
+        ImGui::SameLine();if(ImGui::Button("Series / errors")){state->status="Choose uncertainty columns and series grouping.";ImGui::OpenPopup("Series / errors");}
+        if(ImGui::BeginPopup("Series / errors")) {
+            const auto targets=editor.selected.empty() && !plotsInLayer.empty()?std::vector<std::string>{std::to_string(plotsInLayer.front())}:editor.selected;
+            if(!targets.empty()) {pl::Id plotId=0;for(auto key:plotsInLayer)if(std::to_string(key)==targets.front())plotId=key;
+                if(plotId){const auto& source=std::get<pl::Plot>(p.object(plotId).data);plot::PlotEdit edit;edit.kind=plot::PlotEditKind::Errors;edit.series=targets;edit.xError=source.xError;edit.yError=source.yError;edit.xErrorPlus=source.xErrorPlus;edit.yErrorPlus=source.yErrorPlus;
+                    bool changed=ColumnPicker("X error minus",p,source.worksheet,edit.xError,true);changed|=ColumnPicker("X error plus",p,source.worksheet,edit.xErrorPlus,true);changed|=ColumnPicker("Y error minus",p,source.worksheet,edit.yError,true);changed|=ColumnPicker("Y error plus",p,source.worksheet,edit.yErrorPlus,true);if(changed)editor.pending.push_back(edit);
+                    if(sst::ui::widgets::BeginCombo("Plot type",plot::SeriesNames[static_cast<int>(source.kind)])){for(int k=0;k<=18;++k)if(k<3 || k>=8)if(ImGui::Selectable(plot::SeriesNames[k],static_cast<int>(source.kind)==k)){plot::PlotEdit e;e.kind=plot::PlotEditKind::Kind;e.series=targets;e.seriesKind=static_cast<plot::SeriesKind>(k);editor.pending.push_back(e);}sst::ui::widgets::EndCombo();}
+                    auto group=source.group;if(sst::ui::widgets::Text("Group",&group)){plot::PlotEdit e;e.kind=plot::PlotEditKind::Group;e.series=targets;e.text=group;editor.pending.push_back(e);}
+                    if(sst::ui::widgets::BeginCombo("Move to layer",p.object(active).name.c_str())){for(auto key:p.children(id))if(key!=active && ImGui::Selectable(p.object(key).name.c_str())){plot::PlotEdit e;e.kind=plot::PlotEditKind::Transfer;e.series=targets;e.targetLayer=key;editor.pending.push_back(e);}sst::ui::widgets::EndCombo();}
+                }
+            }else ImGui::TextDisabled("Add a plot to select its errors and group.");
+            ImGui::TextWrapped("Plus unset: symmetric error. Values are nonnegative absolute errors in the coordinate column units.");ImGui::EndPopup();
+        }
         ImGui::SameLine(); if (ImGui::Button("Font")) ImGui::OpenPopup("Graph font");
         ImGui::SameLine(); if (ImGui::Button("Export...")) {
             exportGraph = id; const auto& g = std::get<pl::Graph>(p.object(id).data); width = g.widthMm; height = g.heightMm;
@@ -1315,14 +1367,31 @@ namespace SST::Prototypes::PlotLab
             }
             if (fontChanged)
                 Attempt([&] { doc.Execute(p.change("Graph font", {graphObject})); });
-            const auto layer = p.children(id).at(0);
+            const auto origin=ImGui::GetCursorScreenPos();const auto size=ImGui::GetContentRegionAvail();
+            const auto layers=p.children(id);
+            if(layers.size()==1 && std::get<pl::Layer>(p.object(layers.front()).data).frame==std::array<double,4>{0,0,1,1})GraphLayer(id,layers.front());
+            else for(auto layer:layers) {
+                const auto f=std::get<pl::Layer>(p.object(layer).data).frame;
+                ImGui::SetCursorScreenPos({origin.x+static_cast<float>(f[0])*size.x,origin.y+static_cast<float>(1-f[1]-f[3])*size.y});
+                ImGui::PushID(static_cast<int>(layer));
+                if(ImGui::BeginChild("##layer",{static_cast<float>(f[2])*size.x,static_cast<float>(f[3])*size.y},ImGuiChildFlags_Borders)) {
+                    GraphLayer(id,layer);
+                    if(ImGui::IsWindowHovered() && ImGui::IsMouseClicked(0) && pl::activeLayer(p,id)!=layer)Attempt([&]{auto l=std::get<pl::Layer>(p.object(layer).data);l.active=true;doc.Execute(pl::editLayer(p,layer,std::move(l)));});
+                }ImGui::EndChild();ImGui::PopID();
+            }
+            ImGui::SetCursorScreenPos(origin);ImGui::Dummy(size);
+    }
+    void WorkspacePanel::GraphLayer(pl::Id id,pl::Id layer) {
+        auto& doc=*state->document;auto& p=*doc.project;const auto viewId=layer==p.children(id).front()?id:layer;
+        auto& editor=state->plotEditors[viewId];
+        const auto details=[&]{const auto plots=p.children(layer);if(editor.selected.empty() && !plots.empty())editor.Select(std::to_string(plots.front()),false);editor.details=true;};
             auto spec = std::get<pl::Layer>(p.object(layer).data).spec;
             auto plots = p.children(layer);
             bool stale = false;
             for (auto series : plots)
             {
                 const auto &source = std::get<pl::Plot>(p.object(series).data);
-                for (auto column : {source.x, source.y, source.yError})
+                for (auto column : {source.x, source.y, source.z, source.yError, source.xError, source.xErrorPlus, source.yErrorPlus})
                     if (column)
                     {
                         const auto &info = p.recomputeInfo(column);
@@ -1345,7 +1414,7 @@ namespace SST::Prototypes::PlotLab
                 if (e.style.errorCapPt < 0)
                     e.style.errorCapPt = 4;
                 entries.push_back(e);
-                if (e.data.yError && e.kind != plot::SeriesKind::ErrorBars)
+                if ((e.data.yError || e.data.xError) && e.kind != plot::SeriesKind::ErrorBars && e.kind != plot::SeriesKind::ErrorBand)
                 {
                     auto error = e;
                     error.id = "##error" + std::to_string(plots[i]);
@@ -1359,18 +1428,19 @@ namespace SST::Prototypes::PlotLab
             for (auto series : plots)
             {
                 entryPlots.push_back(series);
-                if (p.series(series).data.yError && p.series(series).kind != plot::SeriesKind::ErrorBars)
+                if ((p.series(series).data.yError || p.series(series).data.xError) && p.series(series).kind != plot::SeriesKind::ErrorBars && p.series(series).kind != plot::SeriesKind::ErrorBand)
                     entryPlots.push_back(series);
             }
-        auto &view = state->views[id];
+        auto &view = state->views[viewId];
             std::vector<std::pair<pl::Id, std::uint64_t>> sources;
             for (auto series : plots) {
                 const auto& source = std::get<pl::Plot>(p.object(series).data);
-                sources.emplace_back(series, 0);
-                for (auto column : {source.x, source.y, source.yError, source.worksheet})
+                sources.emplace_back(series,static_cast<std::uint64_t>(source.kind));
+                sources.emplace_back(series,std::bit_cast<std::uint64_t>(source.style.baseline));sources.emplace_back(series,std::bit_cast<std::uint64_t>(source.style.offsetX));sources.emplace_back(series,std::bit_cast<std::uint64_t>(source.style.offsetY));sources.emplace_back(series,source.style.histogramBins);sources.emplace_back(series,source.style.density);
+                for (auto column : {source.x, source.y, source.z, source.yError, source.xError, source.xErrorPlus, source.yErrorPlus, source.worksheet})
                     if (column) sources.emplace_back(column, p.object(column).revision);
             }
-            auto [seen, first] = graphSources.try_emplace(id, sources);
+            auto [seen, first] = graphSources.try_emplace(viewId, sources);
             view.dataChanged = !first && seen->second != sources;
             seen->second = std::move(sources);
             for (std::size_t i = 0; i < entries.size(); ++i)
@@ -1382,7 +1452,7 @@ namespace SST::Prototypes::PlotLab
             std::vector<std::vector<double>> highlightX(plots.size()), highlightY(plots.size());
             for (std::size_t i = 0; i < plots.size(); ++i)
             {
-                auto e = p.series(plots[i]);
+                auto e = p.series(plots[i]);if(plot::IsChart(e.kind) || plot::Is3D(e.kind) || plot::IsGrid(e.kind))continue;
                 for (auto point : p.selectedPoints(plots[i]))
                 {
                     highlightX[i].push_back(e.data.x[point]);
@@ -1403,7 +1473,7 @@ namespace SST::Prototypes::PlotLab
                 }
             }
             for(auto series:plots) {
-                const auto& source=std::get<pl::Plot>(p.object(series).data);auto e=p.series(series);
+                const auto& source=std::get<pl::Plot>(p.object(series).data);auto e=p.series(series);if(plot::IsChart(e.kind) || plot::Is3D(e.kind) || plot::IsGrid(e.kind))continue;
                 auto& mask=maskPreviews[series];
                 if(mask.owner.lock()!=doc.project || mask.revision!=p.revision()+1) {
                     mask.x.clear();mask.y.clear();
@@ -1418,6 +1488,18 @@ namespace SST::Prototypes::PlotLab
                     overlay.visible=e.visible && (!view.visibility.contains(std::to_string(series)) || view.visibility.at(std::to_string(series)));entries.push_back(overlay);
                 }
             }
+            const auto layout=std::get<pl::Layer>(p.object(layer).data);
+            if(layout.sharedX || layout.sharedY) {
+                const auto linked=pl::resolveLayerView(p,layer,&state->views);view.viewport=linked.viewport;
+                if(layout.sharedX){spec.x.range=std::array<double,2>{linked.viewport->minX,linked.viewport->maxX};spec.x.rescale=plot::RescaleMode::Fixed;}
+                if(layout.sharedY){spec.y.range=std::array<double,2>{linked.viewport->minY,linked.viewport->maxY};spec.y.rescale=plot::RescaleMode::Fixed;}
+            }
+            std::vector<std::array<double,5>> insetX,insetY;insetX.reserve(p.children(id).size());insetY.reserve(p.children(id).size());
+            for(auto child:p.children(id))if(std::get<pl::Layer>(p.object(child).data).insetOf==layer && std::none_of(entries.begin(),entries.end(),[](const auto& e){return plot::Is3D(e.kind) || plot::IsGrid(e.kind);})) {
+                const auto zoom=pl::resolveLayerView(p,child,&state->views).viewport;if(!zoom)continue;
+                insetX.push_back({zoom->minX,zoom->maxX,zoom->maxX,zoom->minX,zoom->minX});insetY.push_back({zoom->minY,zoom->minY,zoom->maxY,zoom->maxY,zoom->minY});
+                plot::SeriesEntryView rectangle{"##inset"+std::to_string(child),{insetX.back().data(),insetY.back().data(),5}};rectangle.style.color={.2f,.2f,.2f,1};rectangle.style.legend=false;rectangle.style.lineStyle=plot::LineStyle::Dashed;entries.push_back(rectangle);
+            }
             if (!view.fitted)
                 spec.autoFit = plot::AutoFit::Once;
             const auto publication = plot::InteractivePreview(ImGui::GetContentRegionAvail());
@@ -1430,6 +1512,8 @@ namespace SST::Prototypes::PlotLab
             if (auto* rendered = ImPlot::GetPlot("##graph"); rendered && rendered->PlotRect.Contains(ImGui::GetMousePos()) && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && ImGui::IsMouseClicked(1) && !plot::IsPlotLegendHovered(editor)) ImGui::OpenPopup("Graph actions");
             if (ImGui::BeginPopup("Graph actions")) {
                 if (ImGui::MenuItem("Add Plot to Layer...")) BeginGraphDialog(id);
+                if(ImGui::MenuItem("Layers / inset..."))layerPopupGraph=id;
+                if(ImGui::MenuItem("Series / errors..."))errorPopupGraph=id;
                 if (ImGui::MenuItem("Layer Contents...")) BeginGraphDialog(id);
                 if (ImGui::MenuItem("Plot Details", "F2")) details();
                 if (ImGui::MenuItem("Legend properties")) editor.legendDialog = true;
@@ -1444,10 +1528,10 @@ namespace SST::Prototypes::PlotLab
             for (const auto& edit : pending) Attempt([&] {
                 auto saved = p.object(layer); std::get<pl::Layer>(saved.data).view = view;
                 p.change("Graph viewport", {std::move(saved)}).apply(p);
-                const auto result = ExecutePlotEdit(*doc.commands, doc.project, layer, edit, [owner=std::weak_ptr<Session>(state), id, layer] {
+                const auto result = ExecutePlotEdit(*doc.commands, doc.project, layer, edit, [owner=std::weak_ptr<Session>(state), id, layer, viewId] {
                     if (auto session=owner.lock()) {
-                        session->views[id] = std::get<pl::Layer>(session->document->project->object(layer).data).view;
-                        session->views[id].visibility.clear();
+                        session->views[viewId] = std::get<pl::Layer>(session->document->project->object(layer).data).view;
+                        session->views[viewId].visibility.clear();
                     }
                 });
                 if (!result) { editor.error = result.Error().technicalDetails; throw std::runtime_error(editor.error); }
@@ -1676,7 +1760,7 @@ namespace SST::Prototypes::PlotLab
             ColumnPicker("X", p, sheetChoice, xChoice, true, targetGraph ? "Row numbers" : "Automatic (designation / row numbers)");
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("None uses the nearest designated X column, or row numbers.");
             ColumnPicker("yErr", p, sheetChoice, errorChoice, true);
-            sst::ui::widgets::Combo("Plot type", &plotType, "Line\0Scatter\0Line + Symbol\0Column\0");
+            sst::ui::widgets::Combo("Plot type", &plotType, "Line\0Scatter\0Line + Symbol\0Column\0Horizontal bar\0Stacked column\0" "100% column\0Stacked bar\0" "100% bar\0Histogram\0Box\0Filled area\0Waterfall\0Error band\0");
             if (ImGui::BeginTable("Contents", 2, ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV)) {
                 ImGui::TableNextColumn(); ImGui::TextUnformatted("Available columns");
                 ImGui::BeginChild("Available", {0, std::max(100.0f, ImGui::GetContentRegionAvail().y - 95)}, ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
@@ -1692,7 +1776,7 @@ namespace SST::Prototypes::PlotLab
                 ImGui::BeginDisabled(availableColumns.empty());
                 if (ImGui::Button("Add Plot to Layer >>")) Attempt([&] { AddAvailablePlots(); });
                 ImGui::EndDisabled();
-                ImGui::TableNextColumn(); ImGui::TextUnformatted("Plotted in Layer1");
+                ImGui::TableNextColumn(); ImGui::TextUnformatted(targetGraph?p.object(pl::activeLayer(p,targetGraph)).name.c_str():"New layer");
                 ImGui::BeginChild("Plotted", {0, std::max(100.0f, ImGui::GetContentRegionAvail().y - 95)}, ImGuiChildFlags_Borders, ImGuiWindowFlags_HorizontalScrollbar);
                 if (targetGraph) for (auto series : p.children(p.children(targetGraph).front())) {
                     const auto& o = p.object(series); const auto& source = std::get<pl::Plot>(o.data);
@@ -1727,7 +1811,7 @@ namespace SST::Prototypes::PlotLab
             sst::ui::widgets::Double("Width (mm)", &width, .01f, "%.6g");
             sst::ui::widgets::Double("Height (mm)", &height, .01f, "%.6g");
             sst::ui::widgets::Int("DPI", &dpi);
-            sst::ui::widgets::Combo("Format", &format, "SVG\0PDF\0PNG\0JPEG\0");
+            sst::ui::widgets::Combo("Format", &format, "SVG\0PDF\0PNG\0JPEG\0EPS\0");
             if(format==3 && sst::ui::widgets::BeginLabelledRow("JPEG background")) {ImGui::ColorEdit3("##background",exportBackground.data(),ImGuiColorEditFlags_NoInputs);sst::ui::widgets::EndLabelledRow();}
             ImGui::TextUnformatted("Exports current ranges, ticks and visible series. Recompute must be clean.\n"
                                    "Uses graph font settings; SVG outlines, PDF embedded TrueType.");
@@ -1738,7 +1822,7 @@ namespace SST::Prototypes::PlotLab
                     {
                         if (!std::isfinite(width) || !std::isfinite(height) || width <= 0 || height <= 0 || dpi <= 0)
                             throw std::runtime_error("Size and DPI must be positive");
-                        const char *formats[] = {"svg", "pdf", "png", "jpg"};
+                        const char *formats[] = {"svg", "pdf", "png", "jpg", "eps"};
                         const auto filename = std::string("figure.") + formats[format];
                         auto destination = SaveFileDialog({"Publication figure", formats[format]}, filename.c_str());
                         if (!destination)

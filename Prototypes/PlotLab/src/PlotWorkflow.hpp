@@ -5,7 +5,7 @@
 #include <set>
 
 namespace SST::Prototypes::PlotLab {
-std::shared_ptr<const pl::GraphSnapshot> PublicationSnapshot(const pl::Project&,pl::Id,const plot::PlotViewState* current=nullptr,std::optional<std::array<double,2>> sizeMm={});
+std::shared_ptr<const pl::GraphSnapshot> PublicationSnapshot(const pl::Project&,pl::Id,const plot::PlotViewState* current=nullptr,std::optional<std::array<double,2>> sizeMm={},const std::map<pl::Id,plot::PlotViewState>* allViews=nullptr);
 struct ExportRequest {
     std::shared_ptr<const pl::GraphSnapshot> graph;
     std::shared_ptr<const pl::DataExportSnapshot> data;

@@ -9,14 +9,15 @@ plot::PlotViewState CapturePublicationView(const plot::PlotViewState& v) {
     // Only publication state crosses to a worker; contour/axis caches can contain large source-derived arrays.
     return {.viewport=v.viewport,.legendLayout=v.legendLayout,.frame=v.frame,.visibility=v.visibility,.excluded=v.excluded,.fitted=v.fitted,.xTicks=v.xTicks,.yTicks=v.yTicks,.zTicks=v.zTicks,.camera=v.camera};
 }
-std::shared_ptr<const pl::GraphSnapshot> PublicationSnapshot(const pl::Project& p,pl::Id graph,const plot::PlotViewState* current,std::optional<std::array<double,2>> sizeMm) {
+std::shared_ptr<const pl::GraphSnapshot> PublicationSnapshot(const pl::Project& p,pl::Id graph,const plot::PlotViewState* current,std::optional<std::array<double,2>> sizeMm,const std::map<pl::Id,plot::PlotViewState>* allViews) {
     const auto layer=p.children(graph).front();const auto& settings=std::get<pl::Layer>(p.object(layer).data);auto view=CapturePublicationView(current?*current:settings.view);
     if(!view.viewport) {
         std::vector<plot::SeriesEntryView> series;for(auto id:p.children(layer))series.push_back(p.series(id));
         view.viewport=plot::ResolveBounds(settings.spec,series.data(),series.size(),view);
         if(!view.viewport)throw std::invalid_argument("Graph has no finite visible values in the axis domains");
     }
-    return pl::snapshotGraph(p,graph,view,sizeMm);
+    if(!view.camera)view.camera=pl::resolveLayerView(p,layer,allViews).camera;
+    return pl::snapshotGraph(p,graph,view,sizeMm,allViews);
 }
 namespace {
 class FileExportJob final:public IJob {

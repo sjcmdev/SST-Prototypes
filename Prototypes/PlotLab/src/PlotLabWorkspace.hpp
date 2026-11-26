@@ -82,6 +82,8 @@ namespace SST::Prototypes::PlotLab
         // Component entry points also used by backend-free ImGui validation.
         void WorksheetContents(pl::Id);
         void GraphContents(pl::Id);
+        void GraphLayer(pl::Id,pl::Id);
+        pl::Id layerPopupGraph=0,errorPopupGraph=0;
         void Dialogs();
         void ResetLayout() { SetVisible(true); layoutReady = false; resetLayoutRequested = true; }
         void RegisterCommands(Ref<KeymapResolver> keymap = {});

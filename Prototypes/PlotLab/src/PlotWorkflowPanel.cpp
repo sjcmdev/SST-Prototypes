@@ -18,8 +18,8 @@ void PlotWorkflowPanel::OpenMap(pl::Id sheet) {
 void PlotWorkflowPanel::EditMap(pl::Id graph) {
     const auto& p=*session.document->project;auto layer=p.children(graph).front();const auto plots=p.children(layer);
     if(plots.size()!=1)throw std::invalid_argument("Select a single-series heatmap layer");const auto& source=std::get<pl::Plot>(p.object(plots.front()).data);
-    if(source.kind!=plot::SeriesKind::Heatmap)throw std::invalid_argument("Select a heatmap graph");
-    map={};map.worksheet=source.worksheet;map.x=source.x;map.y=source.y;map.z=source.z;map.gridColumns=source.gridColumns;map.mask=source.mask;map.spec=std::get<pl::Layer>(p.object(layer).data).spec;map.name=p.object(graph).name;mapLayer=layer;mapOpen=true;session.document->Workflow().PreviewMap(map);
+    if(source.kind!=plot::SeriesKind::Heatmap && !plot::Is3D(source.kind))throw std::invalid_argument("Select a heatmap graph");
+    map={};map.worksheet=source.worksheet;map.x=source.x;map.y=source.y;map.z=source.z;map.gridColumns=source.gridColumns;map.mask=source.mask;map.spec=std::get<pl::Layer>(p.object(layer).data).spec;map.kind=source.kind;map.name=p.object(graph).name;mapLayer=layer;mapOpen=true;session.document->Workflow().PreviewMap(map);
 }
 void PlotWorkflowPanel::OpenAnalysis(pl::Id sheet) {
     auto& panel=session.document->Workflow().panel;auto recipe=panel.Recipe();
@@ -58,7 +58,7 @@ void PlotWorkflowPanel::Templates() {
         if(graphTemplate) {
             ImGui::Text("Template: %s (v%u)",graphTemplate->name.c_str(),graphTemplate->version());
             if(ImGui::Button("Save template..."))Attempt([&]{if(auto path=SaveFileDialog({"Graph template","plottemplate"},"graph.plottemplate"))pl::saveGraphTemplate(*graphTemplate,path->Native());});
-            if(w::Combo("Export format",&batchFormat,"PNG\0JPEG\0SVG\0PDF\0"))plan.reset();
+            if(w::Combo("Export format",&batchFormat,"PNG\0JPEG\0SVG\0PDF\0EPS\0"))plan.reset();
             if(ImGui::Button("Output directory..."))Attempt([&]{if(auto path=SaveFileDialog({"Choose a filename in output directory","png"},"batch.png")){outputDirectory=path->Native().parent_path();plan.reset();}});
             if(!outputDirectory.empty())ImGui::TextWrapped("Output: %s",Path(outputDirectory.filename()).Utf8().c_str());
             for(const auto& [id,o]:session.document->project->objects())if(std::holds_alternative<pl::Worksheet>(o->data)) {ImGui::PushID(static_cast<int>(id));bool selected=batchSheets.contains(id);if(w::Checkbox(o->name.c_str(),&selected,"Select this stable worksheet as a template batch input.")){if(selected)batchSheets.insert(id);else batchSheets.erase(id);plan.reset();}ImGui::PopID();}
@@ -72,7 +72,7 @@ void PlotWorkflowPanel::Templates() {
                 }ImGui::PopID();
             }
             if(ImGui::Button("Preflight mapping / destinations"))Attempt([&]{
-                static const char* formats[]={"png","jpg","svg","pdf"};std::vector<pl::BatchPlotInput> inputs;
+                static const char* formats[]={"png","jpg","svg","pdf","eps"};std::vector<pl::BatchPlotInput> inputs;
                 for(auto sheet:batchSheets) {std::map<std::string,pl::Id> overrides;for(const auto& [key,id]:templateBindings[sheet])if(id)overrides.emplace(key,id);inputs.push_back({sheet,outputDirectory.empty()?std::filesystem::path{}:outputDirectory/("sheet-"+std::to_string(sheet)+"."+formats[batchFormat]),std::move(overrides)});}
                 plan=pl::planBatchPlots(*session.document->project,graphTemplate,inputs);
             });
@@ -80,7 +80,7 @@ void PlotWorkflowPanel::Templates() {
                 for(const auto& item:plan->items) {ImGui::Text("Sheet %llu -> %s",static_cast<unsigned long long>(item.worksheet),Path(item.destination.filename()).Utf8().c_str());for(const auto& [key,id]:item.mapping.columns)ImGui::Text("  %s = %llu",key.c_str(),static_cast<unsigned long long>(id));for(const auto& issue:item.mapping.issues)ImGui::TextWrapped("%s",issue.message.c_str());}
                 auto& workflow=session.document->Workflow();const auto& status=workflow.PollBatch();
                 ImGui::BeginDisabled(!plan->valid() || plan->items.empty() || status.running);
-                if(ImGui::Button("Run template batch"))Attempt([&]{static const char* formats[]={"png","jpg","svg","pdf"};workflow.StartBatch(*plan,formats[batchFormat],session.pythonRoot);});ImGui::EndDisabled();
+                if(ImGui::Button("Run template batch"))Attempt([&]{static const char* formats[]={"png","jpg","svg","pdf","eps"};workflow.StartBatch(*plan,formats[batchFormat],session.pythonRoot);});ImGui::EndDisabled();
                 if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Resolve required mappings and output collisions; wait for the current batch to finish.");
                 ImGui::SameLine();if(ImGui::Button("Cancel batch"))workflow.CancelBatch();
                 ImGui::Text("Published graphs: %zu",status.graphs.size());for(auto graph:status.graphs){ImGui::PushID(static_cast<int>(graph));if(ImGui::SmallButton("Show graph"))session.Show(graph);ImGui::PopID();}

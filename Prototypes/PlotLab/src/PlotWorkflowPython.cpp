@@ -7,6 +7,7 @@
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/map.h>
 #include <nanobind/stl/optional.h>
+#include <nanobind/stl/array.h>
 #include <algorithm>
 #include <cmath>
 #include <numeric>
@@ -97,8 +98,9 @@ pl::UserAnalysisModel UserModel(const nb::dict& d,nb::object callback,Document& 
     };return m;
 }
 pl::MapPlotRequest MapRequest(const nb::dict& d) {
-    Keys(d,{"worksheet_id","x_column_id","y_column_id","z_column_id","grid_columns","name","log_color","nonpositive","contour_levels_z_units","contour_labels","colormap","color_range_z_units","mask"});
+    Keys(d,{"worksheet_id","x_column_id","y_column_id","z_column_id","grid_columns","name","log_color","nonpositive","contour_levels_z_units","contour_labels","colormap","color_range_z_units","mask","kind"});
     pl::MapPlotRequest r;r.worksheet=nb::cast<pl::Id>(d["worksheet_id"]);r.x=nb::cast<pl::Id>(d["x_column_id"]);r.y=nb::cast<pl::Id>(d["y_column_id"]);r.z=nb::cast<pl::Id>(d["z_column_id"]);r.gridColumns=nb::cast<std::size_t>(d["grid_columns"]);r.name=Field<std::string>(d,"name","Map");
+    const auto kind=Field<std::string>(d,"kind","heatmap");if(kind=="surface")r.kind=plot::SeriesKind::Surface;else if(kind=="scatter3d")r.kind=plot::SeriesKind::Scatter3D;else if(kind=="line3d")r.kind=plot::SeriesKind::Line3D;else if(kind!="heatmap")throw std::invalid_argument("Expected heatmap/surface/scatter3d/line3d");
     r.mask=Field<std::vector<unsigned char>>(d,"mask",{});r.spec.z.scale=Field<bool>(d,"log_color",false)?plot::AxisScale::Log10:plot::AxisScale::Linear;r.spec.colorScale=true;
     auto policy=Field<std::string>(d,"nonpositive","mask");if(policy!="mask" && policy!="error")throw std::invalid_argument("Expected nonpositive policy mask/error");r.spec.nonpositiveColor=policy=="error"?plot::NonpositiveColorPolicy::Error:plot::NonpositiveColorPolicy::Mask;
     r.spec.contours.levels=Field<std::vector<double>>(d,"contour_levels_z_units",{});r.spec.contours.labels=Field<bool>(d,"contour_labels",true);r.spec.colormap=Field<std::string>(d,"colormap","Viridis");
@@ -133,6 +135,19 @@ void BindPlotWorkflow(nb::class_<Document>& cls) {
     .def("analysis_cancel",[](Document& d,JobId id){return Respond([&]()->nb::object {auto& w=d.Workflow();CheckJob(w,id);w.analysis.Cancel();return AnalysisStatusDict(w.analysis.Status(),false);});})
     .def("analysis_accept",[](Document& d,JobId id,pl::Id folder){return Respond([&]()->nb::object {auto& w=d.Workflow();CheckJob(w,id);w.analysis.Accept(folder);return AnalysisStatusDict(w.analysis.Status(),false);});},nb::arg("job_id"),nb::arg("folder_id")=0)
     .def("create_map",[](Document& d,nb::dict request){return Respond([&]()->nb::object {nb::dict r;r["graph_id"]=d.Workflow().CreateMap(MapRequest(request));return r;});})
+    .def("create_layer",[](Document& d,pl::Id graph,nb::dict request){return Respond([&]()->nb::object {
+        Keys(request,{"name","frame_page_fraction","copy_layer_id"});auto& p=*d.project;const auto before=p.children(graph);
+        const auto frame=Field<std::array<double,4>>(request,"frame_page_fraction",{0,0,1,1});const auto source=Field<pl::Id>(request,"copy_layer_id",0);const auto name=Field<std::string>(request,"name","Layer");
+        if(source){if(p.object(source).parent!=graph)throw std::invalid_argument("Copy source must belong to this graph");d.Execute(pl::duplicateLayer(p,source,name,frame,&d.graphViews));}
+        else {pl::Layer l;l.spec=std::get<pl::Layer>(p.object(before.front()).data).spec;l.spec.bounds.reset();l.spec.autoFit=plot::AutoFit::Once;l.frame=frame;d.Execute(pl::createLayer(p,graph,name,std::move(l)));}
+        nb::dict result;for(auto key:p.children(graph))if(std::find(before.begin(),before.end(),key)==before.end())result["layer_id"]=key;return result;
+    });})
+    .def("edit_layer",[](Document& d,pl::Id layer,nb::dict request){return Respond([&]()->nb::object {
+        Keys(request,{"frame_page_fraction","shared_x_layer_id","shared_y_layer_id","active"});auto l=std::get<pl::Layer>(d.project->object(layer).data);
+        l.frame=Field<std::array<double,4>>(request,"frame_page_fraction",l.frame);l.sharedX=Field<pl::Id>(request,"shared_x_layer_id",l.sharedX);l.sharedY=Field<pl::Id>(request,"shared_y_layer_id",l.sharedY);l.active=Field<bool>(request,"active",l.active);
+        d.Execute(pl::editLayer(*d.project,layer,std::move(l)));return nb::dict();
+    });})
+    .def("arrange_layers",[](Document& d,pl::Id graph,unsigned columns,bool x,bool y){return Respond([&]()->nb::object {d.Execute(pl::arrangeLayers(*d.project,graph,columns,x,y));return nb::dict();});},nb::arg("graph_id"),nb::arg("columns"),nb::arg("shared_x")=false,nb::arg("shared_y")=false)
     .def("import_image",[](Document& d,const std::string& file,nb::dict calibration){return Respond([&]()->nb::object {
         Keys(calibration,{"first_x_x_units","first_y_y_units","step_x_x_units","step_y_y_units","x_units","y_units","z_units"});
         pl::ImageGrid grid;grid.firstX=nb::cast<double>(calibration["first_x_x_units"]);grid.firstY=nb::cast<double>(calibration["first_y_y_units"]);grid.stepX=nb::cast<double>(calibration["step_x_x_units"]);grid.stepY=nb::cast<double>(calibration["step_y_y_units"]);grid.xUnit=nb::cast<std::string>(calibration["x_units"]);grid.yUnit=nb::cast<std::string>(calibration["y_units"]);grid.zUnit=nb::cast<std::string>(calibration["z_units"]);

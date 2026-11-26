@@ -263,3 +263,13 @@ def test_spatial_marker_style_is_exported(spatial, kind):
         assert line.get_marker() == "s" and line.get_markersize() == 3
         assert line.get_markerfacecolor() == [1,0,0,1]
     fig.clear()
+
+def test_chart_fill_combines_series_alpha_and_fill_opacity(snapshot, tmp_path):
+    series=snapshot['series'][0]
+    series.update(kind=16,fill_alpha=.4,chart=dict(paths=[dict(points=[[1,-3],[4,-3],[4,8],[1,8]],filled=True)]))
+    series['style']['color']=[.1,.3,.7,.5]
+    figure=build_figure(snapshot)
+    assert figure.axes[0].patches[0].get_facecolor()[3]==pytest.approx(.2)
+    target=tmp_path/'area.eps'
+    export_graph(snapshot,target,'eps')
+    assert target.read_bytes().startswith(b'%!PS-Adobe-3.0 EPSF-3.0')

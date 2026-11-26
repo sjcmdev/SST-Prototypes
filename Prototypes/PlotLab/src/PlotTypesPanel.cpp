@@ -34,6 +34,8 @@ PlotTypesPanelResult DrawPlotTypesPanel(const sst::plotlab::Project& project,sst
             tip("Explicit measured column; coordinates keep their source order. No sorting or interpolation.");ImGui::PopID();
         };
         ImGui::BeginDisabled(!sourceEditable);
+        row("Plot type");int kind=draft.kind==plot::SeriesKind::Surface?1:draft.kind==plot::SeriesKind::Scatter3D?2:draft.kind==plot::SeriesKind::Line3D?3:0;
+        if(ImGui::Combo("##kind",&kind,"Heatmap / contour\0Surface\0Scatter 3D\0Line 3D\0")){const plot::SeriesKind kinds[]={plot::SeriesKind::Heatmap,plot::SeriesKind::Surface,plot::SeriesKind::Scatter3D,plot::SeriesKind::Line3D};draft.kind=kinds[kind];result.changed=true;}tip("Shared 3D renderer; rotate and zoom directly in the preview. Camera is saved with the project.");
         column("X",draft.x);column("Y",draft.y);column("Z / intensity",draft.z);
         row("Grid columns");int count=static_cast<int>(std::min<std::size_t>(draft.gridColumns,std::numeric_limits<int>::max()));
         if(ImGui::DragInt("##columns",&count,1,2,std::numeric_limits<int>::max(),"%d pixels",ImGuiSliderFlags_AlwaysClamp)) {draft.gridColumns=count;result.changed=true;}
@@ -74,7 +76,7 @@ PlotTypesPanelResult DrawPlotTypesPanel(const sst::plotlab::Project& project,sst
         ImGui::EndTable();
     }
     if(!diagnostic.empty()) ImGui::TextWrapped("%s",diagnostic.c_str());
-    const bool ready=draft.x && draft.y && draft.z && draft.gridColumns>=2 && diagnostic.empty();
+    const bool ready=draft.x && draft.y && draft.z && (!plot::IsGrid(draft.kind) || draft.gridColumns>=2) && diagnostic.empty();
     ImGui::BeginDisabled(!ready);result.apply=ImGui::Button("Apply");tip("Select X/Y/Z and a grid width; resolve preview validation errors before applying.");ImGui::EndDisabled();
     ImGui::SameLine();result.cancel=ImGui::Button("Cancel");tip("Cancel preview and keep the published graph.");
     ImGui::PopID();return result;
