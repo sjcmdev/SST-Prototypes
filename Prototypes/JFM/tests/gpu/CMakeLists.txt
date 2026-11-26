@@ -17,12 +17,14 @@ add_executable(JFMGpuTests ../JFMGpuBatchTests.cpp
     "${ROOT}/Prototypes/JFM/src/Analysis/JFMFitEngine.cpp"
     "${ROOT}/Core/JobSystem/JobContext.cpp"
     "${SOLVER}/gpu/gpu_backend.cu" "${SOLVER}/solver/objective.cpp" "${SOLVER}/solver/diode_objective.cpp")
+target_sources(JFMGpuTests PRIVATE "${SOLVER}/solver/cpu_kernel.cpp" "${SOLVER}/solver/cpu_kernel_avx2.cpp")
+set_source_files_properties("${SOLVER}/solver/cpu_kernel_avx2.cpp" PROPERTIES COMPILE_OPTIONS "/arch:AVX2")
 target_include_directories(JFMGpuTests PRIVATE "${ROOT}" "${ROOT}/Core" "${ROOT}/Prototypes/JFM/src"
     "${SOLVER}" "${SOLVER}/gpu" "${SOLVER}/lambertw-gpu"
     "${LIBRARIES}/SST-Math/include" "${LIBRARIES}/SST-Physics/include")
 target_compile_definitions(JFMGpuTests PRIVATE JFM_CUDA_AVAILABLE=1 NOMINMAX)
-target_compile_options(JFMGpuTests PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/fp:strict;/utf-8;/MP6>"
-    "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false;-allow-unsupported-compiler;-Xcompiler=/fp:strict;-Xcompiler=/utf-8>")
+target_compile_options(JFMGpuTests PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:/fp:strict;/utf-8;/MP4>"
+    "$<$<COMPILE_LANGUAGE:CUDA>:--fmad=false;-lineinfo;-Xptxas=-v;-allow-unsupported-compiler;-Xcompiler=/fp:strict;-Xcompiler=/utf-8>")
 target_link_libraries(JFMGpuTests PRIVATE gtest_main
     "${LIBRARIES}/build/bin/$<CONFIG>-windows-x86_64/SST-Math/SST-Math.lib")
 enable_testing()
