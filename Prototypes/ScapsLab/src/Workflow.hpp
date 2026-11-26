@@ -15,12 +15,14 @@
 #include "Domain/BatchDraft.hpp"
 #include "PlotSettings.hpp"
 #include "Core/Presentation/TutorialOverlay.hpp"
+#include "Library/Session.hpp"
 #include <algorithm>
 #include <chrono>
 #include <mutex>
 #include <atomic>
 #include <array>
 #include <deque>
+#include <exception>
 #include <set>
 #include <functional>
 #include <map>
@@ -47,8 +49,11 @@ void WriteProject(const Json &document, const std::string &path);
 Json AM15Spectrum();
 const scaps_core::OpticalTable& AM15SpectrumValues();
 Json SelfContained(Json document);
-Json ResultRuns(const Json &workspace);
-Json ExportResults(const Json &workspace, const Json &request);
+struct ResultRun {
+    std::string runId,deviceId,deviceName,kind;
+    Ref<const ResultBase> result;
+};
+std::vector<std::filesystem::path> ExportResults(const std::vector<ResultRun>& selected,const std::filesystem::path& path,const std::string& format);
 Json NewDefect(bool sheet = false);
 const Json &PointAtBias(const Json &sweep,const Json &band,int selected);
 void ChangeSheetDistribution(Json &defect,const std::string &shape,const std::string &convention);
@@ -91,9 +96,11 @@ struct LiveFeed {
     std::vector<double> v,j;           // I-V points solved so far (plotted voltage [V], terminal J [A/m^2], NaN when not converged)
     PvEstimate pv;
     std::vector<Ref<const DlcpProfilePoint>> dlcp;
+    std::vector<Ref<const DltsTrace>> dlts;
     std::vector<LiveMember> members;   // batch members finished so far
     std::size_t memberTotal=0;
     Ref<const BatchDraft> batch;
+    void Dlts(Ref<const DltsTrace> p){std::lock_guard g(lock);dlts.push_back(std::move(p));++seq;}
     void Dlcp(Ref<const DlcpProfilePoint> p) {std::lock_guard g(lock);dlcp.push_back(std::move(p));++seq;}
     void Point(double V,double J) {std::lock_guard g(lock);v.push_back(V);j.push_back(J);++seq;}
     void Estimate(const PvEstimate &e) {std::lock_guard g(lock);pv=e;++seq;}
@@ -116,7 +123,11 @@ public:
     std::uint64_t revision=0;
     int detailBias=0;
     std::string detailRun;
-    Json document, request, output, acResults, workspace, batchResult;
+    Json document, request, output, workspace, batchResult;
+    std::vector<ResultRun> exportRuns;
+    std::exception_ptr exportError;
+    Ref<const AcResult> acInput;
+    Ref<const IvResult> ivInput;
     Ref<const ResultBase> typedOut;       // typed form of `output` (run/band/cv/cf/qe/batch ops), built on the job thread
     Ref<const AcResult> dlcpInput;
     Ref<const BatchResult> batchInput;
@@ -130,6 +141,9 @@ public:
     std::string batchGroup;
     Ref<const BatchDraft> batch=CreateRef<const BatchDraft>();
     Ref<const RecorderDraft> recorder=CreateRef<const RecorderDraft>();
+    std::shared_ptr<const Library::State> assetState;
+    Library::Browser assetBrowser;
+    std::shared_ptr<const Library::DraftMap> assetDrafts;
     bool superseded=false;                // set on the UI thread when undo/redo changed the document (or removed the device) under this job: its result is dropped on arrival
     bool outputValid=false;
     bool jsonResponse=false; // JSON adapter preserves full-curve profile output; GUI requests lightweight typed samples
@@ -139,6 +153,7 @@ public:
     void Execute(JobContext &context) override;
 };
 bool BatchOperation(Operation &operation,JobContext &context);
+void SolveDlts(Operation&,JobContext&,const scaps_core::Mesh1D&);
 // Copy-on-write JSON: a save job shares the pointer (O(1) snapshot); writers use mut()/assignment, which never touch a shared value.
 class Cow {
     Ref<Json> p;
@@ -265,6 +280,7 @@ struct DeviceState {
     // Progressive exact run (never saved/stored/exported): partial I-V, photovoltaic estimate, finished batch members. Copied from the job's LiveFeed; cleared when the job ends.
     std::vector<double> liveV, liveJ;
     std::vector<Ref<const DlcpProfilePoint>> liveDlcp;
+    std::vector<Ref<const DltsTrace>> liveDlts;
     PvEstimate pvEstimate;
     std::vector<LiveMember> liveMembers;
     std::size_t liveMemberTotal = 0;
@@ -304,6 +320,13 @@ public:
     Workflow(const Workflow &) = delete;
     Workflow &operator=(const Workflow &) = delete;
     Project project;
+    Library::Session library;
+    std::optional<Library::Request> libraryDrop;
+    bool libraryDropShown=false;
+    bool bindingLibraryReply=false,bindingLibraryData=false;
+    void LibraryTyped(std::shared_ptr<const Library::Request>) override;
+    void PollLibrary();
+    void RefreshLinkedAssets();
     DeviceState &Current();
     DeviceState &Device(const std::string &id);
     Json Workspace(bool withResults=true) const;
@@ -313,6 +336,7 @@ public:
     static inline std::atomic_size_t constructed{0}; // test counter: Workflow instances ever built
     Json Snapshot() const;
     std::string MemoryReport() const; // SCAPSLAB_PERF: private bytes + history/result sizes
+    std::vector<ResultRun> ResultRuns() const;
     Json Runs() const;
     void RefreshDirty();
     void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={},std::string detailRun={},Ref<const AcResult> dlcp={});
@@ -458,7 +482,7 @@ public:
     bool ViewsReady();                                    // typed results are ready to render immediately
     std::chrono::steady_clock::time_point viewTrimAt{};
     void TrimViews();
-    bool Pending() const { return Busy() || Saving(); } // calculations or saves
+    bool Pending() const { return Busy() || Saving() || library.Busy(); } // calculations, saves or typed library jobs
     bool Busy() const override {for(const auto &[id,l]:lanes) if(!l.Idle()) return true;return !projectLane.Idle();}
     bool Busy(const std::string &device) const {auto it=lanes.find(device);return it!=lanes.end() && !it->second.Idle();}
 };

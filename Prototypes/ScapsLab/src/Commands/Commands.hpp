@@ -6,6 +6,7 @@
 #include "Commands/Store.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include <functional>
+#include "Library/Session.hpp"
 namespace SST::ScapsLab::Cmd {
 using Out = Result<void>;
 struct Info {
@@ -13,6 +14,17 @@ struct Info {
     bool hidden = false;      // needs arguments: not offered in the command palette
     bool menuDefault = false; // runs with no arguments from a menu/palette
     bool legacy = false;      // explicit legacy JSON handler (no typed arguments)
+};
+struct LibraryOperation {
+    static constexpr Info info{"library","Asset library","Inspect, edit, import or apply typed scientific assets","","",true};
+    std::shared_ptr<const Library::Request> request;
+    static LibraryOperation Make(Library::Request value) {return {std::make_shared<const Library::Request>(std::move(value))};}
+    static LibraryOperation FromJson(const Json&) {throw std::invalid_argument("Convert library inputs in the Python binding");}
+    Out Execute(ILabStore& s) const {
+        if(!request)return StructuredError{ErrorCategory::Validation,Severity::Error,"Asset request required","Missing typed asset request","Supply a typed request","ScapsLab","invalid_asset"};
+        try{s.LibraryTyped(request);return {};}
+        catch(const Assets::Error& e){return StructuredError{ErrorCategory::Validation,Severity::Error,"Asset operation rejected",e.what(),"Review the asset operation","ScapsLab",Assets::CodeName(e.code)};}
+    }
 };
 Out Reject(const char *code, std::string title, std::string details, std::string hint = "Wait or cancel");
 Out Job(ILabStore &store, Json request); // busy gate + job on the active device
@@ -58,6 +70,14 @@ struct RunDlcp : Req<RunDlcp> {
     static RunDlcp FromJson(const Json& request){RunDlcp c;if(request.size()>1)c.action=ReadRunAction(ActionKind::Dlcp,request);return c;}
     Out Execute(ILabStore& s) const {if(s.Busy())return Reject("busy","Busy","A job is still active");s.RunDlcpTyped(action);return {};}
 };
+template<ActionKind Kind> struct RunTransient {
+    static constexpr Info info{Kind==ActionKind::Dlts?"dlts":Kind==ActionKind::Laplace?"laplace_dlts":Kind==ActionKind::Capture?"capture_dlts":"optical_dlts",Kind==ActionKind::Dlts?"Classic DLTS":Kind==ActionKind::Laplace?"Laplace DLTS":Kind==ActionKind::Capture?"Capture / depth / DDLTS":"MCTS / ODLTS","Run a virtual transient experiment","","",true};
+    RunAction action=RunPlan{}.actions[int(Kind)];
+    static RunTransient Make(RunAction a){RunTransient c;c.action=std::move(a);return c;}
+    static RunTransient FromJson(const Json& request){return Make(ReadRunAction(Kind,request));}
+    Out Execute(ILabStore& s) const {if(s.Busy())return Reject("busy","Busy","A job is still active");auto plan=std::make_shared<RunPlan>();for(auto& a:plan->actions)a.include=false;plan->actions[int(Kind)]=action;plan->actions[int(Kind)].include=true;s.SingleShotTyped(std::move(plan));return {};}
+};
+using RunDlts=RunTransient<ActionKind::Dlts>;using RunLaplace=RunTransient<ActionKind::Laplace>;using RunCapture=RunTransient<ActionKind::Capture>;using RunOptical=RunTransient<ActionKind::Optical>;
 SL_JOB(RunQe, "qe", "Calculate QE", "External quantum efficiency", "", "", true);
 struct SingleShot : Req<SingleShot> {
     static constexpr Info info{"single_shot","Single shot","Execute and store included Run Actions","Simulate/Single shot","",false,true};
@@ -76,7 +96,7 @@ struct CaptureLive : Req<CaptureLive> {
     static constexpr Info info{"capture_live","Capture live","Store the current exact live result","","",true};
     ActionKind kind=ActionKind::Iv;
     static CaptureLive Make(ActionKind k) {CaptureLive c;c.kind=k;return c;}
-    Out Execute(ILabStore& s) const {auto k=kind;if(args.contains("kind")){bool found=false;for(int i=0;i<6;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Capture requires band, iv, cv, cf or qe");}s.CaptureLiveTyped(k);return {};}
+    Out Execute(ILabStore& s) const {auto k=kind;if(args.contains("kind")){bool found=false;for(int i=0;i<kActionCount;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Capture requires band, iv, cv, cf or qe");}s.CaptureLiveTyped(k);return {};}
 };
 struct ResumeRun : Req<ResumeRun> {
     static constexpr Info info{"resume_actions","Resume Actions","Continue after the completed Action","","",true};
@@ -89,7 +109,7 @@ struct RecalculateLive : Req<RecalculateLive> {
     Out Execute(ILabStore& s) const {
         if(s.Busy())return Reject("busy","Busy","A job is still active");
         auto k=kind;
-        if(args.contains("kind")){bool found=false;for(int i=0;i<6;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Expected band, iv, cv, cf or qe");}
+        if(args.contains("kind")){bool found=false;for(int i=0;i<kActionCount;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Expected band, iv, cv, cf or qe");}
         s.RecalculateLive(k);return {};
     }
 };

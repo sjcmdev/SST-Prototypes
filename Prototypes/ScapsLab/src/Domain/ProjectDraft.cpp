@@ -432,6 +432,10 @@ void ReadFields(ProjectDraft& d,const Json& input,const std::string& prefix="") 
 }
 Json Canonical(const ProjectDraft& d) {
     Json out=Json::object();
+    if(!d.assetUses.empty()) {
+        out["asset_uses"]=Json::array();
+        for(const auto& use:d.assetUses)out["asset_uses"].push_back({{"library_id",use.source.libraryId},{"item_id",use.source.itemId},{"version",use.source.version},{"policy",use.policy==Assets::UsePolicy::Linked?"linked":"copy"},{"target",use.target}});
+    }
     Fields(d.project,[&](std::string path,const auto& value) {
         using T=std::decay_t<decltype(value)>;
         if(path.ends_with("?")) {
@@ -527,9 +531,9 @@ std::optional<scaps_core::Profile>& GradingProfile(scaps_core::LayerGrading& g,c
     throw std::invalid_argument("Unsupported grading parameter: "+name);
 }
 const std::optional<scaps_core::Profile>& GradingProfile(const scaps_core::LayerGrading& grading,const std::string& name) {return GradingProfile(const_cast<scaps_core::LayerGrading&>(grading),name);}
-std::map<std::string,double> ProjectNumbers(const scaps_core::DeviceProject& project) {
+std::map<std::string,double> ProjectNumbers(const scaps_core::DeviceProject& project,bool includeTableCells) {
     std::map<std::string,double> values;
-    Fields(project,[&](const std::string& path,const auto& value){using T=std::decay_t<decltype(value)>;if constexpr(std::is_arithmetic_v<T> && !std::is_same_v<T,bool>)if(path!="schema_version" && !path.starts_with("scaps_native.") && std::isfinite(double(value)))values[path]=double(value);});return values;
+    Fields(project,[&](const std::string& path,const auto& value){using T=std::decay_t<decltype(value)>;if constexpr(std::is_arithmetic_v<T> && !std::is_same_v<T,bool>)if(path!="schema_version" && !path.starts_with("scaps_native.") && (includeTableCells || (path.find("][")==path.npos && path.find(".coordinate[")==path.npos && path.find(".value[")==path.npos)) && std::isfinite(double(value)))values[path]=double(value);});return values;
 }
 std::string ProjectFieldPath(const scaps_core::DeviceProject& project,const void* address) {
     std::string result;Fields(project,[&](const std::string& path,const auto& value){if(std::addressof(value)==address && !path.ends_with("?"))result=path;});return result;
@@ -595,12 +599,17 @@ void ClampImportedBounds(ProjectDraft& draft) {
 std::shared_ptr<const ProjectDraft> DraftFromDocument(const nlohmann::json& document,bool imported) {
     auto d=std::make_shared<ProjectDraft>();d->project=scaps_core::make_default_device_project();
     ReadFields(*d,document);
+    if(document.contains("asset_uses"))for(const auto& item:document.at("asset_uses")) {
+        const auto policy=item.at("policy").get<std::string>();Assets::Require(policy=="copy" || policy=="linked","Unknown asset use policy");
+        d->assetUses.push_back({{item.at("library_id").get<std::string>(),item.at("item_id").get<std::string>(),item.at("version").get<std::uint32_t>()},policy=="linked"?Assets::UsePolicy::Linked:Assets::UsePolicy::Copy,item.at("target").get<std::string>()});
+    }
     const auto canonical=Canonical(*d);
     d->extensions=Extensions(document,canonical);
     d->file=std::make_shared<DraftFileData>(DraftFileData{document,canonical});
     if(imported)ClampImportedBounds(*d);
     ValidateDraft(*d);return d;
 }
+bool ProfileFieldActive(const scaps_core::Profile& profile,std::string_view field) {return ActiveProfileField(profile,field);}
 std::shared_ptr<const ProjectDraft> DraftFromProject(scaps_core::DeviceProject project,bool imported) {
     auto d=std::make_shared<ProjectDraft>();d->project=std::move(project);
     unsigned defect=1;
@@ -637,6 +646,11 @@ nlohmann::json DraftDocument(const ProjectDraft& draft) {
 }
 void ValidateDraft(const ProjectDraft& d) {
     const auto& p=d.project;
+    std::set<std::string> assetTargets;
+    for(const auto& use:d.assetUses) {
+        Assets::Require(Assets::ValidId(use.source.libraryId) && Assets::ValidId(use.source.itemId) && use.source.version>0 && !use.target.empty(),"Invalid asset link-back");
+        Assets::Require(assetTargets.insert(use.target).second,"Duplicate asset target: "+use.target);
+    }
     const auto table=BoundsTable();
     BoundFields(d,[&](const std::string& path,const std::string& key,const auto& value){
         using T=std::decay_t<decltype(value)>;
@@ -727,6 +741,7 @@ DraftDelta CompareDrafts(const ProjectDraft& before,const ProjectDraft& after) {
         else if constexpr(Vector<T>::value) {if(a.size()!=b.size()){Change(result,path,a,b);replaced.push_back(path);}}
     });
     if(before.profileFields!=after.profileFields)result.changes.push_back({[a=before.profileFields,b=after.profileFields](ProjectDraft& d,bool f){d.profileFields=f?b:a;},sizeof(DraftChange)});
+    if(before.assetUses!=after.assetUses)result.changes.push_back({[a=before.assetUses,b=after.assetUses](ProjectDraft& d,bool f){d.assetUses=f?b:a;},sizeof(DraftChange)+(before.assetUses.size()+after.assetUses.size())*sizeof(Assets::Use)});
     if(before.file!=after.file)result.changes.push_back({[a=before.file,b=after.file](ProjectDraft& d,bool f){d.file=f?b:a;},sizeof(DraftChange)});
     if(before.extensions!=after.extensions)result.changes.push_back({[a=before.extensions,b=after.extensions](ProjectDraft& d,bool f){d.extensions=f?b:a;},sizeof(DraftChange)});
     return result;

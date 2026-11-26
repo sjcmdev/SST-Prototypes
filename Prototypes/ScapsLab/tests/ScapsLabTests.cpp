@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 #include "Workflow.hpp"
 #include "Commands/Commands.hpp"
+#include "LegacyResultRuns.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "Core/Platform/PlatformPythonRuntime.hpp"
@@ -130,6 +131,18 @@ TEST(ScapsLab,EmbeddedPythonRunAndHeadlessCsv) {
 
 
 
+TEST(ScapsLab,ExportPlotsMatchLegacy) {
+#if DS_PYTHON_CAPI_AVAILABLE
+    RegisterPython();PythonInterpreter python;ASSERT_TRUE(python.Start());
+    const auto gil=PythonInterpreter::AcquireRuntimeGil();
+    const bool ready=PyRun_SimpleString("import matplotlib\n_json2_svg_salt=matplotlib.rcParams['svg.hashsalt']\nmatplotlib.rcParams['svg.hashsalt']='scapslab-export-regression'\n")==0;
+    if(ready){EXPECT_NO_THROW(ComparePlotExports());}else PyErr_Print();
+    if(ready)PyRun_SimpleString("matplotlib.rcParams['svg.hashsalt']=_json2_svg_salt\ndel _json2_svg_salt\n");
+    PythonInterpreter::ReleaseRuntimeGil(gil);EXPECT_TRUE(ready);
+#else
+    FAIL()<<"Embedded Python is required";
+#endif
+}
 TEST(ScapsLab,ACMatchesCoreAndExports) {
     using namespace scaps_core;
     const auto p=load_device_project_yaml(SCAPSLAB_PROJECT);

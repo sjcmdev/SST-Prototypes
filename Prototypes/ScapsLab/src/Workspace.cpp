@@ -1,4 +1,5 @@
 #include "Workflow.hpp"
+#include "Library/PythonLibrary.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -33,7 +34,7 @@ RunAction ReadRunAction(ActionKind kind,const Json& value) {
     if(a.temperature_K!=0)RequireParameter("temperature_K",a.temperature_K);
     RequireParameter("voltage_V",a.voltage_V);RequireParameter("frequency_Hz",a.frequency_Hz);
     RequireParameter("probe_photon_flux_m2_s",a.photon_flux_m2_s);RequireParameter("probe_power_W_m2",a.probe_power_W_m2);
-    if(a.range)for(double x:SweepValues(*a.range))RequireParameter(kind==ActionKind::Cf?"frequency_Hz":kind==ActionKind::Qe?"wavelength_nm":"voltage_V",x);
+    if(!IsDlts(kind) && a.range)for(double x:SweepValues(*a.range))RequireParameter(kind==ActionKind::Cf?"frequency_Hz":kind==ActionKind::Qe?"wavelength_nm":"voltage_V",x);
     if(kind==ActionKind::Dlcp) {
         if(value.contains("amplitudes")) {
             auto amplitude=ReadRunAction(ActionKind::Cv,Json{{"range",value.at("amplitudes")}});a.amplitudes=*amplitude.range;
@@ -45,6 +46,7 @@ RunAction ReadRunAction(ActionKind kind,const Json& value) {
         c.samples_per_period=value.value("samples_per_period",c.samples_per_period);c.min_periods=value.value("min_periods",c.min_periods);c.max_periods=value.value("max_periods",c.max_periods);
         RunPlan check;for(auto& entry:check.actions)entry.include=false;check.actions[5]=a;check.actions[5].include=true;ValidateRunPlan(check,ProjectDraft{});
     }
+    if(IsDlts(kind)){if(value.contains("protocol"))a.dlts=ReadDltsConfig(value.at("protocol"));RunPlan check;for(auto& e:check.actions)e.include=false;check.actions[int(kind)]=a;check.actions[int(kind)].include=true;ValidateRunPlan(check,ProjectDraft{});}
     return a;
 }
 RunPlan ReadRunPlan(const Json& value) {
@@ -63,6 +65,7 @@ Json RunPlanJson(const RunPlan& plan,const Json& original) {
         v["probe_mode"]=a.constantFlux?"constant_flux":"constant_power";v["probe_photon_flux_m2_s"]=a.photon_flux_m2_s;v["probe_power_W_m2"]=a.probe_power_W_m2;
         if(a.range) {const auto& r=*a.range;auto& fields=v["range"];if(!fields.is_object())fields=Json::object();fields.update({{"sampling",r.sampling==SweepSampling::Points?"points":r.sampling==SweepSampling::Step?"step":"list"},{"logarithmic",r.logarithmic},{"minimum",r.minimum},{"maximum",r.maximum},{"step",r.step},{"points",r.points},{"values",r.custom}});}
         else v.erase("range");
+        if(IsDlts(a.kind)){auto& protocol=v["protocol"];if(!protocol.is_object())protocol=Json::object();protocol.update(DltsConfigJson(a.dlts));}
         if(a.kind==ActionKind::Dlcp) {
             v.erase("V_max_V");v.erase("amplitudes_V");
             const auto& r=a.amplitudes;v["amplitudes"]={{"sampling",r.sampling==SweepSampling::Points?"points":r.sampling==SweepSampling::Step?"step":"list"},{"logarithmic",r.logarithmic},{"minimum",r.minimum},{"maximum",r.maximum},{"step",r.step},{"points",r.points},{"values",r.custom}};
@@ -103,7 +106,7 @@ std::size_t TypedBytes(const ResultBase *r,std::set<const void*> &seen) {
         }
         if(iv->optics) {n+=VBytes(iv->optics->x_m,seen)+VBytes(iv->optics->generation_m3_s,seen);for(const auto& c:iv->optics->absorption)n+=VBytes(c.wavelength_nm,seen)+VBytes(c.alpha_m1,seen)+VBytes(c.without_tail_m1,seen);}
     } else if(auto ac=dynamic_cast<const AcResult*>(r)) {
-        n=PBytes(ac->meta,seen)+VBytes(ac->mesh_x_m,seen);for(const auto &p:ac->points)n+=sizeof(AcPoint)+PBytes(p.rest,seen);
+        n=PBytes(ac->meta,seen)+VBytes(ac->mesh_x_m,seen);if(ac->dlts && seen.insert(ac->dlts.get()).second)for(const auto& trace:ac->dlts->traces)if(seen.insert(trace.get()).second){n+=sizeof(DltsTrace)+VBytes(trace->time_s,seen)+VBytes(trace->capacitance_F,seen)+VBytes(trace->current_A_m2,seen)+VBytes(trace->reference_capacitance_F,seen)+8*(trace->signal_F.size()+trace->amplitude_F.size());if(trace->laplace){const auto& l=*trace->laplace;n+=8*(l.rate_per_s.size()+l.amplitude_F.size()+l.density_F_per_log_rate.size()+l.residuals.predicted_F.size()+l.residuals.residual_F.size());}}for(const auto &p:ac->points)n+=sizeof(AcPoint)+PBytes(p.rest,seen);
     } else if(auto b=dynamic_cast<const BatchResult*>(r)) {
         n=PBytes(b->body,seen);
         for(const auto& row:b->rows)if(seen.insert(row.get()).second) {
@@ -396,7 +399,7 @@ int ValidateUi(const Json &ui,bool strictPlotRanges) {
     }
     for(const auto *key:{"optical_tab","gr_tab","recorder_plot"})if(ui.contains(key) && (!ui.at(key).is_number_integer() || ui.at(key).get<int>()<0 || ui.at(key).get<int>()>10000))throw std::invalid_argument("Invalid selected tab/plot");
     for(const auto *key:{"gr_follow","iv_absolute_log","contact_annotations","batch_absolute"})if(ui.contains(key) && !ui.at(key).is_boolean())throw std::invalid_argument("Invalid plot toggle");
-    if(ui.contains("results_action")){bool valid=false;for(int i=0;i<6;++i)valid|=ui.at("results_action")==ActionId(ActionKind(i));if(!valid)throw std::invalid_argument("Unknown Results Action");}
+    if(ui.contains("results_action")){bool valid=false;for(int i=0;i<kActionCount;++i)valid|=ui.at("results_action")==ActionId(ActionKind(i));if(!valid)throw std::invalid_argument("Unknown Results Action");}
     if(ui.contains("gr_hidden")){if(!ui.at("gr_hidden").is_array())throw std::invalid_argument("gr_hidden must be an array");for(const auto &id:ui.at("gr_hidden"))if(!id.is_string())throw std::invalid_argument("Invalid mechanism ID");}
     if(ui.contains("gr_bias") && (!ui.at("gr_bias").is_object() || !ui.at("gr_bias").at("voltage_V").is_number() || !std::isfinite(ui.at("gr_bias").at("voltage_V").get<double>())))throw std::invalid_argument("Invalid G/R voltage_V");
     const auto retention=ui.value("history_retention",5);
@@ -412,7 +415,7 @@ void ValidateActions(const Json &actions) {
         for(const auto *key:{"temperature_K","voltage_V","start_V","stop_V","step_V","frequency_Hz","start_Hz","stop_Hz","points","start_nm","stop_nm","probe_photon_flux_m2_s","probe_power_W_m2"})
             if(a->contains(key) && (!a->at(key).is_number() || !std::isfinite(a->at(key).get<double>())))throw std::invalid_argument("Invalid numeric action setting");
         if(a->contains("probe_mode") && a->at("probe_mode")!="constant_flux" && a->at("probe_mode")!="constant_power")throw std::invalid_argument("Invalid QE probe mode");
-        if(a->contains("range"))for(int i=0;i<6;++i)if(a.key()==ActionId(ActionKind(i))) {
+        if(a->contains("range"))for(int i=0;i<kActionCount;++i)if(a.key()==ActionId(ActionKind(i))) {
             const auto typed=ReadRunAction(ActionKind(i),*a);(void)SweepValues(*typed.range);
         }
     }
@@ -451,7 +454,7 @@ if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::inv
         for(const auto &run:history) {
             if(run.contains("profiles_stored") && !run.at("profiles_stored").is_boolean())throw std::invalid_argument("profiles_stored must be boolean");
             const auto kind=run.at("kind").get<std::string>();
-            if(kind!="iv" && kind!="band" && kind!="cv" && kind!="cf" && kind!="qe" && kind!="dlcp" && kind!="batch")throw std::invalid_argument("Invalid history kind");
+            if(kind!="iv" && kind!="band" && kind!="cv" && kind!="cf" && kind!="qe" && kind!="dlcp" && kind!="dlts" && kind!="laplace_dlts" && kind!="capture_dlts" && kind!="optical_dlts" && kind!="batch")throw std::invalid_argument("Invalid history kind");
             if(kind!="batch")(void)Model(run.at("document"));
             else if(!run.at("document").is_object() || !run.at("document").at("layers").is_array() || !run.at("document").at("temperature_K").is_number())throw std::invalid_argument("Invalid batch history model structure");
             if(run.at("result").at("provenance")!=run.at("provenance") || run.at("result").at("project_snapshot")!=run.at("document"))throw std::invalid_argument("History result does not match its model/provenance");
@@ -475,6 +478,7 @@ if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::inv
             if(!r.at("provenance").at("solver_version").is_string() || !r.at("provenance").at("time_unix_ms").is_number_integer()) throw std::invalid_argument("Invalid result provenance");
             if(!r.at("points").is_array() || r.at("points").empty()) throw std::invalid_argument("Invalid result points");
             const bool ac=r.contains("kind");
+            if(r.contains("dlts"))(void)ReadDltsData(r.at("dlts"));
             if(r.value("kind",std::string{})=="dlcp") {
                 const auto typed=AcFromJson(r);
                 if(typed.dlcp.empty() || typed.dlcp.size()!=typed.points.size())throw std::invalid_argument("DLCP and C-V point counts differ");
@@ -558,6 +562,10 @@ Json SingleDeviceWorkspace(Json document,std::string projectName) { // what Work
 }
 void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<DeviceResults> *typed,const std::vector<Ref<const ProjectDraft>>* drafts) { // validated: value came from NormalizeWorkspace (already checked and normalized)
     if(!validated){auto normalized=NormalizeWorkspace(value);SetWorkspace(normalized,true);return;}
+    if(value.contains("asset_library_schema"))Assets::Require(value.at("asset_library_schema")==1,"Unsupported project asset library schema");
+    const auto assetState=value.contains("asset_libraries")?Library::Python::ReadState(value.at("asset_libraries")):library.state;
+    const auto assetBrowser=value.contains("asset_browser")?Library::Python::ReadBrowser(value.at("asset_browser")):library.browser;
+    const auto assetDrafts=value.contains("asset_editor_drafts")?Library::Python::ReadDrafts(value.at("asset_editor_drafts"),*assetState):std::make_shared<const Library::DraftMap>();
     ++plotGen;
     if(!validated) ValidateWorkspace(value);
     std::vector<DeviceResults> own;
@@ -587,6 +595,9 @@ void Workflow::SetWorkspace(const Json &value,bool validated,const std::vector<D
         checked.devices.push_back(state);++index;
     }
     project=std::move(checked);
+    library.state=assetState;library.browser=assetBrowser;
+    library.drafts=assetDrafts;
+    for(const auto* key:{"asset_libraries","asset_browser","asset_library_schema","asset_editor_drafts"})project.fileExtensions.erase(key);
 }
 void Workflow::RefreshDirty() {const bool was=dirty;for(auto &d:project.devices) d->dirty=d->metadataDirty || !d->undo.IsClean();dirty=projectDirty || std::any_of(project.devices.begin(),project.devices.end(),[](const auto &d){return d->dirty;});if(dirty!=was)Emit(ProjectDirtyChanged(dirty));}
 Json Workflow::Snapshot() const {

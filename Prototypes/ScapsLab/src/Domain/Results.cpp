@@ -152,6 +152,7 @@ template<class J, class R, class P, size_t N, size_t M> R FromJson(J &j, const F
         }
         meta.erase("dlcp_points");meta.erase("profiling_eps_r");
     }
+    if constexpr(std::is_same_v<R,AcResult>)if(meta.contains("dlts")){r.dlts=ReadDltsData(meta.at("dlts"));meta.erase("dlts");}
     r.meta.prim = std::move(meta);
     if (j.contains("points")) r.has |= 1u << 31;
     J *pts = j.contains("points") && j["points"].is_array() ? &j["points"] : nullptr;
@@ -362,7 +363,7 @@ scaps_core::BatchRow ExtractActions(const MemberActions& member,const RecorderDr
             }
             if(iv->photovoltaic){row.photovoltaic=iv->photovoltaic;row.photovoltaic_requested=true;}
         } else if(const auto ac=std::dynamic_pointer_cast<const AcResult>(result)) {
-            if(kind==ActionKind::Qe || kind==ActionKind::Dlcp)continue;
+            if(kind==ActionKind::Qe || kind==ActionKind::Dlcp || IsDlts(kind))continue;
             for(const auto& point:ac->points) {
                 scaps_core::ACSample sample;sample.voltage_V=point.voltage_V;sample.frequency_Hz=point.frequency_Hz;sample.C_F=point.capacitance_F;sample.G_S=point.conductance_S;sample.status=point.valid?scaps_core::SolverStatus::Converged:scaps_core::SolverStatus::DivergedNaN;
                 if(!point.valid)invalid=true;row.thermal_voltage_V=8.617333262145e-5*point.temperature_K;row.ac.push_back(std::move(sample));
@@ -395,12 +396,12 @@ Ref<const MemberActions> ReadMemberActions(const Json& source) {
     auto out=CreateRef<MemberActions>();
     out->illuminated=source.value("illuminated",false);
     for(const auto& a:source.at("actions")) {
-        bool found=false;for(int k=0;k<6;++k)if(a.at("kind")==ActionId(ActionKind(k))) {
+        bool found=false;for(int k=0;k<kActionCount;++k)if(a.at("kind")==ActionId(ActionKind(k))) {
             const auto kind=ActionKind(k);if(kind==ActionKind::Iv || kind==ActionKind::Band)out->results.emplace_back(kind,CreateRef<const IvResult>(IvFromJson(a.at("result"))));else out->results.emplace_back(kind,CreateRef<const AcResult>(AcFromJson(a.at("result"))));found=true;
         }
         if(!found)throw std::invalid_argument("Unknown stored Action");
     }
-    if(source.contains("errors"))for(int k=0;k<6;++k)if(source.at("errors").contains(ActionId(ActionKind(k))))out->errors[ActionKind(k)]=source.at("errors").at(ActionId(ActionKind(k)));
+    if(source.contains("errors"))for(int k=0;k<kActionCount;++k)if(source.at("errors").contains(ActionId(ActionKind(k))))out->errors[ActionKind(k)]=source.at("errors").at(ActionId(ActionKind(k)));
     if(source.contains("summary")){auto summary=BatchFromJson({{"rows",Json::array({source.at("summary")})}});out->summary=summary.rows.at(0);}
     if(source.contains("recorder_samples")){auto samples=BatchFromJson({{"rows",Json::array({source.at("recorder_samples")})}});out->recorderSamples=samples.rows.at(0)->iv;}
     if(source.contains("previous"))out->previous=ReadMemberActions(source.at("previous"));
@@ -454,6 +455,7 @@ Json IvResult::Dump() const {SCAPS_BOUNDARY_RESULT();
 }
 Json AcResult::Dump() const {
     SCAPS_BOUNDARY_RESULT();auto out=To(*this,acTop,acFields);
+    if(dlts)out["dlts"]=DltsDataJson(*dlts);
     if(kind=="dlcp") {
         out["profiling_eps_r"]=dlcp_eps_r;out["dlcp_points"]=Json::array();
         for(std::size_t i=0;i<dlcp.size();++i) {

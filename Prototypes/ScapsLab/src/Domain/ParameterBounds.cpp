@@ -36,6 +36,7 @@ std::string EnsureUserBoundsFile() {
 }
 double ParameterToSI(std::string_view key) {
     constexpr double electronvolt=1.602176634e-19;
+    if(key=="varshni_alpha_eV_K")return electronvolt;
     if(key=="peak_density_m2_eV")return 1/electronvolt;
     // Legacy A/B key exponents are reversed; alpha=(A+B/E)*sqrt(E-Eg).
     if(key=="A_m1_eV_half")return 1/std::sqrt(electronvolt);

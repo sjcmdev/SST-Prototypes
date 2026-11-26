@@ -2,6 +2,7 @@
 #include "Workflow.hpp"
 #include "Domain/ParameterBounds.hpp"
 #include "Commands/Commands.hpp"
+#include "Library/LibraryUi.hpp"
 #include <cmath>
 #include <algorithm>
 #include "Core/Presentation/Panels/EditorWindow.hpp"
@@ -16,7 +17,7 @@ double PlotCacheSum();
 void SetPlotDataHook(void (*hook)(bool)); // called with true/false around plot-data cache lookups/drawing (allocation-count test)
 void OpenLayerWindow(Workflow *w,const std::string &device,const std::string &layer); // adds an extra pinned "Layer: <name>" editor (drawn by the tutorial/UI layer)
 // Basic mode (owner 2026-11-21): only these panels (indices into Panel.cpp names[]) are created/docked/listed in View. The rest stay in code.
-inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,16,17,18,22,23}; // all except Structure (14; strip lives in Band diagram), C-V, Mott-Schottky, C-f, G-omega-f, History, Illumination, Absorption, Grading
+inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,16,17,18,22,23,24,25}; // hidden panels remain available in experimental mode
 inline bool &ExperimentalPanels() {static bool on=false;return on;} // View > Show experimental panels; persisted in app settings, applied at start
 inline std::string &UiSettingsPath() {static std::string path;return path;}
 inline bool PanelShown(int view) {if(ExperimentalPanels())return true;for(const int p:kBasicPanels)if(p==view)return true;return false;}
@@ -55,6 +56,7 @@ public:
     void SelectGradingParameter(const std::string &key) {gradingParameter=key;} // what the user does before a Grading step
 private:
     Workflow *w;
+    Library::Editor libraryEditor;
     int view;
     std::string pinDevice,pinLayer;
     bool absoluteLog=false, placed=false, gallery=false;
@@ -62,7 +64,7 @@ private:
     bool RunActions(ProjectDraft&);
     int selectedAction=1;
     WeakRef<const RunPlan> actionSource;
-    std::array<SweepControlState,6> actionEditors;
+    std::array<SweepControlState,kActionCount> actionEditors;
     SweepControlState dlcpAmplitudes;
     WeakRef<const RunPlan> dlcpSource;
     WeakRef<const AcResult> dlcpPlotSource;
@@ -72,6 +74,9 @@ private:
     bool DlcpControls(RunAction&,const ProjectDraft&);
     void DLCP(Ref<const AcResult> stored={});
     int dlcpSelected=0;
+    bool DltsControls(RunAction&,const ProjectDraft&);
+    void DLTS(Ref<const AcResult> stored={});
+    int dltsAction=6,dltsSelected=0;
     void AC();
     bool Illumination(ProjectDraft &draft);
     bool Absorption(ProjectDraft &draft);
@@ -108,4 +113,3 @@ private:
 };
 void InstallTutorialUi(Application &app,Workflow &w,const std::vector<Ref<Panel>> &panels);
 }
-

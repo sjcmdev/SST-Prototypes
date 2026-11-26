@@ -24,11 +24,11 @@
 #include "Vendor/ImGuiNotify/win32Example/fonts/IconsFontAwesome6.h"
 namespace SST {void PerfAdd(const std::string &name, double ms);}
 namespace SST::ScapsLab {
-static const char *names[]={"Project","Layers","Contacts","Solver","Run","Band diagram & profiles","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination","DLCP"};
+static const char *names[]={"Project","Layers","Contacts","Solver","Run","Band diagram & profiles","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination","DLCP","Library","DLTS"};
 Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.")+names[v],v==18?"Results":names[v],true),w(w),view(v),gallery(gallery) {
     auto s=GetState(); s.x=gallery?25.f:10.f+float(v%3)*415.f; s.y=gallery?50.f:45.f+float(v/3)*335.f;
     if(gallery) s.mode=WindowMode::Maximized;
-    s.width=gallery?1100.f:v==23?800.f:v==4?620.f:405.f; s.height=gallery?650.f:v==23?700.f:v==4?650.f:325.f;
+    s.width=gallery?1100.f:v==24?1050.f:v==23?800.f:v==4?620.f:405.f; s.height=gallery?650.f:v==24?720.f:v==23?700.f:v==4?650.f:325.f;
     if(v==23 && !gallery){s.x=50;s.y=50;}ApplyState(s);
     absoluteLog=w->plotSession.settings.ivAbsoluteLog;
     std::snprintf(file,sizeof(file),"%s",w->path.c_str());
@@ -92,7 +92,7 @@ bool SweepRangeControl(SweepControlState& state,bool compact=false,const char* q
         const auto& style=ImGui::GetStyle();
         const std::string quantityLabel=std::string(quantityName?quantityName:editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage")+" ["+editor.displayUnit+"]";
         const float quantity=ImGui::CalcTextSize(quantityLabel.c_str()).x;
-        const float number=std::max(ImGui::CalcTextSize("-1.234e+100").x+style.FramePadding.x*2,ImGui::CalcTextSize("Step [decades]").x);
+        const float number=std::max(ImGui::CalcTextSize("-1.234e+100").x*2+style.FramePadding.x*2,ImGui::CalcTextSize("Step [decades]").x);
         const float combo=ImGui::CalcTextSize("Custom list").x+ImGui::GetFrameHeight()+style.FramePadding.x*2;
         const float available=ImGui::GetContentRegionAvail().x;
         const bool split=available<quantity+number*3+combo*3+style.CellPadding.x*14;
@@ -113,9 +113,9 @@ bool SweepRangeControl(SweepControlState& state,bool compact=false,const char* q
         if(opened) {
             ImGui::TableNextColumn();ImGui::Text("%s [%s]",quantityName?quantityName:editor.displayUnit=="Hz"?"Frequency":editor.displayUnit=="nm"?"Wavelength":"Voltage",editor.displayUnit.c_str());
             const auto drag=[&](const char* id,double& value,bool step=false){return SweepNumber(state,id,value,step);};
-            ImGui::TableNextColumn();ImGui::BeginDisabled(input!=0);changed|=drag("##minimum",range.minimum);
-            ImGui::TableNextColumn();changed|=drag("##maximum",range.maximum);
-            ImGui::TableNextColumn();if(sampling)changed|=drag("##step",range.step,true);else {ImGui::SetNextItemWidth(-1);changed|=SweepPoints("##points",range.points);}ImGui::EndDisabled();
+            ImGui::TableNextColumn();if(input)ImGui::TextDisabled("%.5g %s",range.custom.empty()?0:range.custom.front(),editor.displayUnit.c_str());else changed|=drag("##minimum",range.minimum);
+            ImGui::TableNextColumn();if(input)ImGui::TextDisabled("%.5g %s",range.custom.empty()?0:range.custom.back(),editor.displayUnit.c_str());else changed|=drag("##maximum",range.maximum);
+            ImGui::TableNextColumn();if(input)ImGui::TextDisabled("%zu values",range.custom.size());else if(sampling)changed|=drag("##step",range.step,true);else {ImGui::SetNextItemWidth(-1);changed|=SweepPoints("##points",range.points);}
             if(input!=0 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Custom list supplies the values. Choose Range to edit From, To and Step / Points.");
             if(split)ImGui::EndTable();
         }
@@ -830,7 +830,7 @@ bool Panel::DlcpControls(RunAction& a,const ProjectDraft& draft) {
 bool Panel::RunActions(ProjectDraft& draft) {
     const auto source=w->Current().runPlan;auto plan=CreateRef<RunPlan>(*source);bool changed=false;
     plan->actions[1].onEdit |=w->autoRecalculate;plan->actions[0].onEdit |=w->autoRecalculateBand;
-    const char* labels[]={"Band / profiles","I-V","C-V","C-f","QE","DLCP"};
+    const char* labels[]={"Band / profiles","I-V","C-V","C-f","QE","DLCP","Classic DLTS","Laplace DLTS","Capture / depth / DDLTS","MCTS / ODLTS"};
     const bool conditions=Number("Temperature [K]",draft.project.temperature_K,"temperature_K");w->tutorialOverlay.Item("scapslab.Run","temperature");
     ImGui::TextWrapped("Voltage: left minus right. Include selects Single shot; On edit updates Live without storing Results.");
     if(actionSource.lock()!=source) {
@@ -889,11 +889,14 @@ bool Panel::RunActions(ProjectDraft& draft) {
         }
         ImGui::EndTable();
     }
+    if(ImGui::BeginTable("Transient Actions",3,ImGuiTableFlags_BordersInnerV|ImGuiTableFlags_RowBg)) {
+        for(int i=6;i<kActionCount;++i){auto& a=plan->actions[i];ImGui::PushID(i);ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::TextUnformatted(labels[i]);ImGui::TableNextColumn();ImGui::TextUnformatted("Include");ImGui::SameLine();changed|=ImGui::Checkbox("##include",&a.include);TrackGesture();ImGui::TableNextColumn();if(ImGui::Button("Settings")){selectedAction=i;more=true;}if(ImGui::IsItemHovered())ImGui::SetTooltip("Explicit cancellable transient experiment. Settings are recorded per run.");ImGui::PopID();}ImGui::EndTable();
+    }
     if(more)ImGui::OpenPopup("Action settings");
     ImGui::SetNextWindowSize(ImVec2(600,0),ImGuiCond_Appearing);
     if(ImGui::BeginPopup("Action settings")) {
     ImGui::SeparatorText(labels[selectedAction]);auto& a=plan->actions[selectedAction];ImGui::PushID(ActionId(a.kind));
-    if(a.kind!=ActionKind::Dlcp) {
+    if(a.kind!=ActionKind::Dlcp && !IsDlts(a.kind)) {
     bool ownTemperature=a.temperature_K>0;
     if(ImGui::BeginTable("Action temperature",2)) {
         ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Override temperature");ImGui::SameLine();
@@ -901,7 +904,8 @@ bool Panel::RunActions(ProjectDraft& draft) {
         ImGui::TableNextColumn();ImGui::BeginDisabled(!ownTemperature);double temperature=ownTemperature?a.temperature_K:draft.project.temperature_K;if(Number("T [K]",temperature,"temperature_K") && ownTemperature){a.temperature_K=temperature;changed=true;}ImGui::EndDisabled();ImGui::EndTable();
     }
     }
-    if(a.kind==ActionKind::Dlcp)changed|=DlcpControls(a,draft);
+    if(IsDlts(a.kind))changed|=DltsControls(a,draft);
+    else if(a.kind==ActionKind::Dlcp)changed|=DlcpControls(a,draft);
     else {
     if(a.kind==ActionKind::Band || a.kind==ActionKind::Cf)changed|=Number("Bias [V]",a.voltage_V,"voltage_V");
     if(a.kind!=ActionKind::Band) {
@@ -942,6 +946,7 @@ void Panel::RenderContent() {
     w->WatchPlots();
     numericWorkflow=w;numericDraft=nullptr;
     struct ResetNumeric {~ResetNumeric(){numericDraft=nullptr;numericWorkflow=nullptr;}} resetNumeric;
+    if(view==24){if(ImGui::GetContentRegionAvail().x<760 && ImGui::Button("Expand Library")){auto state=GetState();state.mode=WindowMode::Maximized;ApplyState(state);}libraryEditor.Draw(*w);return;}
     if(!placed && !gallery) {auto s=GetState();const auto *vp=ImGui::GetMainViewport();s.x+=vp->Pos.x;s.y+=vp->Pos.y;ApplyState(s);placed=true;}
     ImGui::TextDisabled("SCAPSLAB / %s",names[view]);
     if(w->fineLock || ImGui::GetIO().KeyShift) {ImGui::SameLine();ImGui::TextColored(ImVec4(1.f,.75f,.2f,1.f),"[FINE%s]",w->fineLock?" lock, F":"");}
@@ -967,6 +972,7 @@ void Panel::RenderContent() {
     if(view==5) {Results();return;}
     if(view==22) {GenerationRecombination();return;}
     if(view==23) {DLCP();return;}
+    if(view==25) {DLTS();return;}
     if(view>=6 && view<10) {AC();return;}
     if(view==19)ShotBar(*w,"qe");
     const bool replacing=w->ReplacingProject();
@@ -1013,6 +1019,7 @@ void Panel::RenderContent() {
             if(ImGui::Button("Down") && selected+1<int(layers.size())) Do(Cmd::EditLayer::With({{"action","move"},{"layer_id",id},{"index",selected+1}}));
             if(pinLayer.empty()) {ImGui::SameLine();if(ImGui::Button("Open in new window")) OpenLayerWindow(w,w->project.active_device,id);if(ImGui::IsItemHovered())ImGui::SetTooltip("Edit this layer in a separate window, side by side with other layers");}
             ImGui::TextDisabled("Stable ID: %s",id.c_str());
+            Library::DropTarget(*w,{id,-1,false,false,w->project.active_device});
             {   // Defects / interface shortcuts: edit through the Defects and Interfaces panels.
                 static std::string picked;const bool last=selected+1>=int(layers.size());
                 if(ImGui::Button("Add defect")){w->pendingDefect=AddDraftDefect(draft,selected,false);w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;picked=draft.layers[selected].defects.back().id;changed=true;++gesture;}
@@ -1684,6 +1691,108 @@ void Panel::Results() {
         DrawLayerRegions(layers);bandBadge();EndSavedPlot(*w,"Carriers");
     }
 }
+
+bool Panel::DltsControls(RunAction& a,const ProjectDraft& draft) {
+    auto& c=a.dlts;bool changed=false;
+    const auto combo=[&](const char* label,int& value,const char* items,const char* tip){BeginRow(label);const bool edit=ImGui::Combo("##value",&value,items);TrackGesture();if(ImGui::IsItemHovered())ImGui::SetTooltip("%s",tip);EndRow();return edit;};
+    if(a.kind==ActionKind::Capture) {
+        int series=int(c.series)-1;
+        if(combo("Experiment",series,"Pulse-width capture\0Bias depth profile\0DDLTS paired pulses\0","DDLTS subtracts independently prepared nearby filling pulses at the same reverse bias.")) {
+            c.series=DltsSeries(series+1);a.range=c.series==DltsSeries::PulseWidth?SweepRange{SweepSampling::Points,true,1e-8,1e-3,1,21}:c.series==DltsSeries::Depth?SweepRange{SweepSampling::Points,false,-.5,-.1,1,9}:SweepRange{SweepSampling::Points,false,200,350,1,31};changed=true;
+        }
+    }
+    auto& state=actionEditors[int(a.kind)];const bool width=c.series==DltsSeries::PulseWidth,depth=c.series==DltsSeries::Depth;
+    const auto key=width?"dlts.time_s":depth?"voltage_V":"temperature_K";
+    SweepEditor editor;editor.range=*a.range;editor.displayUnit=width?"s":depth?"V":"K";
+    if(state.parameterKey!=key || state.editor.range.minimum!=editor.range.minimum || state.editor.range.maximum!=editor.range.maximum || state.editor.range.step!=editor.range.step || state.editor.range.points!=editor.range.points || state.editor.range.sampling!=editor.range.sampling || state.editor.range.logarithmic!=editor.range.logarithmic || state.editor.range.custom!=editor.range.custom)InitSweepControl(state,editor,key);
+    state.showUnit=true;if(SweepRangeControl(state,true,width?"Pulse width":depth?"Reverse bias":"Temperature")){a.range=state.editor.range;changed=true;}
+    ImGui::BeginDisabled(depth);changed|=Number("Reverse bias [V]",c.reverse_V,"voltage_V",1,true);ImGui::EndDisabled();
+    if(depth && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Reverse bias comes from the depth series above.");
+    const bool heldBias=a.kind==ActionKind::Optical && c.minority;
+    ImGui::BeginDisabled(heldBias);changed|=Number("Filling pulse [V]",c.pulse_V,"voltage_V",1,true);ImGui::EndDisabled();
+    if(heldBias && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("MCTS keeps the reverse bias during optical filling. Clear Keep reverse bias to apply a voltage pulse.");
+    ImGui::BeginDisabled(width);changed|=Number("Filling width [s]",c.pulse_width_s,"dlts.time_s",1,true);ImGui::EndDisabled();
+    if(width && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Filling width comes from the pulse-width series above.");
+    if(c.series==DltsSeries::DoublePulse)changed|=Number("Second filling pulse [V]",c.second_pulse_V,"voltage_V");
+    int readout=int(c.readout);if(combo("C readout",readout,"Frozen small-signal\0AC demodulation\0","Frozen: local AC about the transient state. Demodulated: one-period lock-in of the actual driven terminal current.")){c.readout=DltsReadout(readout);changed=true;}
+    changed|=Number("Probe frequency [Hz]",a.frequency_Hz,"frequency_Hz");
+    if(c.readout==DltsReadout::Demodulated)changed|=Number("AC peak amplitude [V]",c.ac_amplitude_V,"dlts.ac_V");
+    if(a.kind==ActionKind::Optical){changed|=Toggle("MCTS: keep reverse bias during light pulse",c.minority);changed|=Number("Light multiplier [1]",c.generation_multiplier,"dlts.positive");ImGui::TextWrapped("%s",draft.project.illumination.enabled?"Stage-6 source enabled. Pulse injects carriers; direct optical trap ionization is unsupported.":"Enable and configure Illumination before running MCTS / ODLTS.");}
+    if(ImGui::TreeNode("Sampling / rate windows")) {
+        changed|=Number("First sample [s]",c.first_sample_s,"dlts.time_s");changed|=Number("Last sample [s]",c.last_sample_s,"dlts.time_s");
+        double samples=c.samples;if(Number("Samples [1]",samples,"dlts.samples")){c.samples=int(samples);changed=true;}
+        int filter=int(c.filter);if(combo("Rate window",filter,"Boxcar\0Finite multi-gate\0Square lock-in\0Sine lock-in\0Exponential\0","Each window is calibrated with its own response H(e); no transfer of lock-in calibration.")){c.filter=sst::physics::dlts::FilterKind(filter);changed=true;}
+        changed|=Number("First gate t1 [s]",c.gate_start_s,"dlts.time_s");changed|=Number("t2 / t1 [1]",c.gate_ratio,"dlts.ratio");changed|=Number("Window spacing [1]",c.window_ratio,"dlts.ratio");
+        double windows=c.windows;if(Number("Windows [1]",windows,"dlts.windows")){c.windows=int(windows);changed=true;}
+        ImGui::TreePop();
+    }
+    if(a.kind==ActionKind::Laplace && ImGui::TreeNode("Inverse Laplace")) {
+        int method=int(c.alpha_method);if(combo("Regularization",method,"GCV\0L-curve\0Fixed alpha\0","Nonnegative Tikhonov. Two rates separated by a factor of two typically need SNR near 1000; inspect residuals and alpha stability.")){c.alpha_method=sst::physics::dlts::AlphaMethod(method);changed=true;}
+        changed|=Number("Alpha [1]",c.alpha,"dlts.alpha");changed|=Number("Minimum rate [s^-1]",c.rate_min_per_s,"dlts.rate");changed|=Number("Maximum rate [s^-1]",c.rate_max_per_s,"dlts.rate");
+        double grid=c.grid_size,order=c.regularization_order;if(Number("Rate grid [1]",grid,"dlts.grid")){c.grid_size=int(grid);changed=true;}if(Number("Penalty order [1]",order,"dlts.order")){c.regularization_order=int(order);changed=true;}
+        bool positive=c.polarity>0;if(Toggle("Positive transient amplitude",positive)){c.polarity=positive?1:-1;changed=true;}
+        ImGui::TextWrapped("Ill-posed inversion: peaks depend on noise, time span and regularization. Check residuals and repeat with another alpha.");ImGui::TreePop();
+    }
+    if(ImGui::TreeNode("Material conventions / numerical controls")) {
+        changed|=Number("DOS mass [m0]",c.dos_mass_m0,"dlts.positive");changed|=Number("Velocity mass [m0]",c.velocity_mass_m0,"dlts.positive");changed|=Number("Emission degeneracy [1]",c.degeneracy_factor,"dlts.positive");
+        changed|=Number("Doping N_D [m^-3]",c.donor_density_m3,"Nd_m3");changed|=Number("Profiling epsilon_r [1]",c.profiling_eps_r,"eps_r");changed|=Number("Reverse E_F - E_t [eV]",c.fermi_minus_trap_reverse_eV,"energy_offset_eV");changed|=Number("Pulse E_F - E_t [eV]",c.fermi_minus_trap_pulse_eV,"energy_offset_eV");
+        if(width){changed|=Number("Local capture n [m^-3]",c.capture_density_m3,"Nd_m3");changed|=Number("Capture v_th [m/s]",c.capture_velocity_m_s,"dlts.velocity");}
+        changed|=Number("Initial step [s]",c.initial_step_s,"dlts.time_s");changed|=Number("Maximum step [s]",c.max_step_s,"dlts.time_s");
+        double limit=c.max_steps;if(Number("Step limit [1]",limit,"dlts.steps")){c.max_steps=int(limit);changed=true;}
+        changed|=Toggle("Poole-Frenkel emission",c.poole_frenkel);ImGui::TreePop();
+    }
+    try {
+        ValidateDlts(c);const auto filters=DltsFilters(c);const auto calibration=sst::physics::dlts::rateWindow({filters.front()});
+        ImGui::Text("Preview: %zu members | first window %.5g s^-1 | gain %.5g",SweepValues(*a.range).size(),calibration.rate_per_s,calibration.gain);
+        if(BeginSavedPlot(*w,"DLTS protocol preview",ImVec2(-1,105))){const double filling=heldBias?c.reverse_V:c.pulse_V;const double t[]={0,c.pulse_width_s,c.pulse_width_s,c.pulse_width_s+c.last_sample_s},v[]={filling,filling,c.reverse_V,c.reverse_V};ImPlot::SetupAxes("Time [s]","Bias [V]");if(a.kind==ActionKind::Optical)ImPlot::SetupAxis(ImAxis_Y2,"Generation [1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,"DLTS protocol preview");ImPlot::PlotLine("Bias",t,v,4);if(a.kind==ActionKind::Optical){const double g[]={c.generation_multiplier,c.generation_multiplier,0,0};ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlot::PlotLine("Light",t,g,4);}EndSavedPlot(*w,"DLTS protocol preview");}
+    }catch(const std::exception& e){ImGui::TextWrapped("%s",e.what());}
+    return changed;
+}
+void Panel::DLTS(Ref<const AcResult> stored) {
+    auto& d=w->Current();const bool frozen=bool(stored);
+    if(!frozen) {
+        dltsAction=std::clamp(w->project.ui.value("dlts_action",dltsAction),6,9);int choice=dltsAction-6;
+        BeginRow("Run Action");if(ImGui::Combo("##dlts-action",&choice,"Classic DLTS\0Laplace DLTS\0Capture / depth / DDLTS\0MCTS / ODLTS\0")){dltsAction=choice+6;w->project.ui["dlts_action"]=dltsAction;w->projectDirty=true;w->RefreshDirty();}EndRow();
+        auto plan=CreateRef<RunPlan>(*d.runPlan);auto& a=plan->actions[dltsAction];
+        if(ImGui::CollapsingHeader("Protocol settings",ImGuiTreeNodeFlags_DefaultOpen))if(DltsControls(a,*d.draft))try{Do(Cmd::SetRunPlan::Make(plan,std::to_string(gesture)));}catch(const std::exception& e){w->status=e.what();}
+        std::string error;try{for(auto& entry:plan->actions)entry.include=entry.kind==a.kind;ValidateRunPlan(*plan,*d.draft);if(a.kind==ActionKind::Optical && !d.draft->project.illumination.enabled)throw std::invalid_argument("Enable and configure Illumination for optical injection");}catch(const std::exception& e){error=e.what();}
+        ImGui::BeginDisabled(w->DeviceRunning(d.id) || !error.empty());if(ImGui::Button("Run DLTS"))Do(Cmd::SingleShot::Make(plan));ImGui::EndDisabled();if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("%s",w->DeviceRunning(d.id)?"This device is running; cancel it or wait for completion.":error.empty()?"Explicit run; settings and results are retained separately in Results.":error.c_str());
+        if(w->DeviceRunning(d.id)){ImGui::SameLine();if(ImGui::Button("Cancel DLTS"))Do(Cmd::Cancel::With({{"device_id",d.id}}));}
+        ImGui::SameLine();if(ImGui::Button("Saved runs"))w->focusView=18;
+        if(const auto id=w->LaneJob(d.id)){const auto job=w->jobs->GetJob(id);ImGui::ProgressBar(job && job->totalWork>0?float(job->completedWork/job->totalWork):0.f,ImVec2(-1,0),job?job->currentStage.c_str():"Starting");}
+        else ImGui::ProgressBar(0,ImVec2(-1,0),"Ready");
+        stored=d.acResults.get(ActionId(ActionKind(dltsAction)));
+    }
+    if(frozen && stored->runPlan){for(const auto& action:stored->runPlan->actions)if(stored->kind==ActionId(action.kind)){const auto& c=action.dlts;ImGui::Text("Recorded protocol | Vr %.5g V | Vp %.5g V | width %.5g s | f %.5g Hz",c.reverse_V,c.pulse_V,c.pulse_width_s,action.frequency_Hz);}}
+    const auto data=stored?stored->dlts:nullptr;
+    if(data && data->cancelled)ImGui::TextUnformatted("Partial run: cancelled; completed transient members were retained.");
+    auto rows=data?data->traces:std::vector<Ref<const DltsTrace>>{};
+    if(!frozen && !d.liveDlts.empty())rows=d.liveDlts;
+    if(ImGui::Button("Export CSV / figure"))w->focusView=18;if(ImGui::IsItemHovered())ImGui::SetTooltip("Results: select this saved run and use the shared CSV / PNG / SVG / PDF exporter.");
+    if(rows.empty()){ImGui::TextWrapped("Run a configured protocol to see C(t), S(T), Arrhenius and Laplace spectra. The last completed result stays visible during a new run.");return;}
+    const std::string selectionKey=std::string("dlts_trace_")+d.id+"/"+(frozen?d.selectedRun:stored?stored->kind:ActionId(ActionKind(dltsAction)));
+    dltsSelected=std::clamp(w->project.ui.value(selectionKey,0),0,int(rows.size())-1);
+    BeginRow("Transient member");if(BoundIndex("##dlts-trace",dltsSelected,"selection.bias_index",int(rows.size())-1)){w->project.ui[selectionKey]=dltsSelected;w->projectDirty=true;w->RefreshDirty();}EndRow();const auto& row=*rows[dltsSelected];
+    ImGui::Text("%s | T %.5g K | pulse %.5g s | reverse %.5g V | %s",row.id.c_str(),row.temperature_K,row.pulse_width_s,row.reverse_V,row.status.c_str());if(!row.message.empty())ImGui::TextWrapped("%s",row.message.c_str());
+    const float h=185;
+    const std::string plotPrefix="DLTS "+(stored?stored->kind:std::string(ActionId(ActionKind(dltsAction))));
+    if(BeginSavedPlot(*w,(plotPrefix+" transient").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Time after filling [s]","C [F]");ImPlot::SetupAxisFormat(ImAxis_Y1,"%.15g");ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" transient").c_str());if(row.time_s.size()==row.capacitance_F.size())ImPlot::PlotLine("C(t)",row.time_s.get().data(),row.capacitance_F.get().data(),int(row.time_s.size()));EndSavedPlot(*w,(plotPrefix+" transient").c_str());}
+    if(data && !data->spectra.empty() && BeginSavedPlot(*w,(plotPrefix+" spectrum").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Temperature [K]","S(T) [F]");ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" spectrum").c_str());for(const auto& spectrum:data->spectra)ImPlot::PlotLine(spectrum.id.c_str(),spectrum.temperature_K.data(),spectrum.signal_F.data(),int(spectrum.temperature_K.size()));EndSavedPlot(*w,(plotPrefix+" spectrum").c_str());}
+    if(row.laplace){const auto& l=*row.laplace;if(BeginSavedPlot(*w,(plotPrefix+" Laplace").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Emission rate [s^-1]","Amplitude / log(rate) [F]");ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" Laplace").c_str());ImPlot::PlotLine("Tikhonov",l.rate_per_s.data(),l.density_F_per_log_rate.data(),int(l.rate_per_s.size()));EndSavedPlot(*w,(plotPrefix+" Laplace").c_str());}ImGui::Text("alpha %.5g | RMS residual %.5g F | %zu peaks",l.alpha,l.residuals.rms_residual_F,l.peaks.size());for(const auto& warning:l.warnings)ImGui::TextWrapped("%s",warning.c_str());}
+    if(data && data->arrhenius){const auto& fit=*data->arrhenius;ImGui::Text("Ea = %.6g +/- %.3g eV | sigma = %.6g +/- %.3g cm^2",fit.trap_activation_eV,fit.sigma_activation_eV,fit.sigma_infinity_cm2,fit.sigma_cross_section_cm2);std::vector<double> x,y,line;for(const auto& s:data->spectra)if(s.peaks.size()==1){const auto& p=s.peaks[0];x.push_back(1/p.temperature_K);y.push_back(std::log(p.rate_per_s/(p.temperature_K*p.temperature_K)));line.push_back(std::log(fit.prefactor_per_s_K2)-fit.apparent_activation_eV/(8.617333262145e-5*p.temperature_K));}if(BeginSavedPlot(*w,(plotPrefix+" Arrhenius").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("1/T [K^-1]","ln(e/T^2) [s^-1 K^-2]");ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" Arrhenius").c_str());ImPlot::PlotScatter("Peaks",x.data(),y.data(),int(x.size()));ImPlot::PlotLine("Fit",x.data(),line.data(),int(x.size()));EndSavedPlot(*w,(plotPrefix+" Arrhenius").c_str());}}
+    if(stored && stored->runPlan) {
+        int storedAction=6;for(int i=6;i<kActionCount;++i)if(stored->kind==ActionId(ActionKind(i)))storedAction=i;const auto& config=stored->runPlan->actions[storedAction].dlts;
+        if(config.series==DltsSeries::PulseWidth || config.series==DltsSeries::Depth) {
+            std::vector<double> x,y,fit;
+            for(const auto& t:rows)if(t->status=="converged" && !t->amplitude_F.empty()){x.push_back(config.series==DltsSeries::PulseWidth?t->pulse_width_s:t->depth_m*1e6);y.push_back(config.series==DltsSeries::PulseWidth?t->amplitude_F.front():t->density_valid?t->trap_density_m3:NAN);if(data && data->capture)fit.push_back(data->capture->amplitude_F*(-std::expm1(-data->capture->rate_per_s*t->pulse_width_s)));}
+            if(BeginSavedPlot(*w,(plotPrefix+" profile").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes(config.series==DltsSeries::PulseWidth?"Filling width [s]":"Depletion depth [um]",config.series==DltsSeries::PulseWidth?"Amplitude [F]":"N_T [m^-3]");if(config.series==DltsSeries::PulseWidth)ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" profile").c_str());ImPlot::PlotLine("Members",x.data(),y.data(),int(x.size()));if(fit.size()==x.size())ImPlot::PlotLine("Capture fit",x.data(),fit.data(),int(x.size()));EndSavedPlot(*w,(plotPrefix+" profile").c_str());}
+        }
+    }
+    if(data && data->capture)ImGui::Text("Capture sigma %.6g m^2 | rate %.6g s^-1 | RMS %.4g F",data->capture->sigma_m2,data->capture->rate_per_s,data->capture->rms_F);
+    if(ImGui::BeginTable("DLTS members",7,ImGuiTableFlags_Borders|ImGuiTableFlags_ScrollY,ImVec2(0,130))){for(const auto* title:{"Member","T [K]","width [s]","reverse [V]","x [um]","N_T [m^-3]","S [F]"})ImGui::TableSetupColumn(title);ImGui::TableHeadersRow();for(int i=0;i<int(rows.size());++i){const auto& t=*rows[i];ImGui::PushID(i);ImGui::TableNextRow();if(i==dltsSelected)ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,IM_COL32(50,140,220,90));ImGui::TableNextColumn();if(ImGui::Selectable(t.id.c_str(),false,ImGuiSelectableFlags_SpanAllColumns)){w->project.ui[selectionKey]=i;w->projectDirty=true;w->RefreshDirty();}for(double value:{t.temperature_K,t.pulse_width_s,t.reverse_V,t.depth_m*1e6,t.density_valid?t.trap_density_m3:NAN,t.signal_F.empty()?NAN:t.signal_F.front()}){ImGui::TableNextColumn();ImGui::Text("%.5g",value);}ImGui::PopID();}ImGui::EndTable();}
+    if(data)for(const auto& warning:data->warnings)ImGui::TextWrapped("%s",warning.c_str());
+}
+
 void Panel::DLCP(Ref<const AcResult> stored) {
     auto& d=w->Current();const bool frozen=bool(stored);
     if(!frozen) {
@@ -1849,6 +1958,7 @@ void Panel::Devices() {
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nStatus: %s",d.name.c_str(),d.status.c_str());
                 if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_DEVICE",d.id.c_str(),d.id.size()+1);ImGui::TextUnformatted(d.name.c_str());ImGui::EndDragDropSource();}
                 if(ImGui::BeginDragDropTarget()) {if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_DEVICE")) Do(Cmd::MoveDevice::With({{"device_id",static_cast<const char*>(payload->Data)},{"index",int(&dp-&devices[0])}}));ImGui::EndDragDropTarget();}
+                Library::DropTarget(*w,{d.draft->layers[std::clamp(d.selectedLayer,0,int(d.draft->layers.size())-1)].id,-1,false,false,d.id});
                 if(ImGui::BeginPopupContextItem("device-menu")) {
                     select(d);
                     if(ImGui::MenuItem("Rename...")) {renameId=d.id;std::snprintf(renameBuf,sizeof(renameBuf),"%s",d.name.c_str());ImGui::CloseCurrentPopup();openRename=true;}
@@ -1902,6 +2012,7 @@ void Panel::Devices() {
                             const auto &l=layers[i];const auto &defects=l.value("defects",Json::array());ImGui::PushID(i);
                             const auto [lopen,lclick]=node("##layer",defects.empty()?ImGuiTreeNodeFlags_Leaf:ImGuiTreeNodeFlags_None,active && d.selectedLayer==i && d.selectedInterface<0);
                             if(lclick) {select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;go(1);}
+                            Library::DropTarget(*w,{d.draft->layers[i].id,i,false,false,d.id});
                             { // drag a layer onto another row of the same device: reorder through the layer "move" operation (stable IDs kept)
                                 const std::string payloadText=d.id+"\n"+l.value("scapslab_id",std::string{});
                                 if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_LAYER",payloadText.c_str(),payloadText.size()+1);ImGui::TextUnformatted(l.value("name",std::string("layer")).c_str());ImGui::EndDragDropSource();}
@@ -2284,8 +2395,8 @@ void Panel::ResultsBrowser() {
     }
     ImGui::SameLine();if(ImGui::Button("Clear unpinned")){Do(Cmd::ClearHistory::With());ImGui::EndDisabled();return;}
     ImGui::EndDisabled();
-    for(int i=0;i<6;++i)if(w->project.ui.value("results_action",std::string("iv"))==ActionId(ActionKind(i)))resultAction=i;
-    BeginRow("Action");if(ImGui::Combo("##result-action",&resultAction,"Band / profiles\0I-V\0C-V\0C-f\0QE\0DLCP\0"))w->project.ui["results_action"]=ActionId(ActionKind(resultAction));EndRow();const auto kind=ActionKind(resultAction);
+    for(int i=0;i<kActionCount;++i)if(w->project.ui.value("results_action",std::string("iv"))==ActionId(ActionKind(i)))resultAction=i;
+    BeginRow("Action");if(ImGui::Combo("##result-action",&resultAction,"Band / profiles\0I-V\0C-V\0C-f\0QE\0DLCP\0Classic DLTS\0Laplace DLTS\0Capture / depth / DDLTS\0MCTS / ODLTS\0"))w->project.ui["results_action"]=ActionId(ActionKind(resultAction));EndRow();const auto kind=ActionKind(resultAction);
     const auto resolve=[&](const DeviceState& device,const std::string& id,int index,int action,int attempt)->Ref<const ResultBase> {
         auto source=device.RunResult(id);
         if(auto batch=std::dynamic_pointer_cast<const BatchResult>(source);batch && batch->runPlan) {
@@ -2320,6 +2431,7 @@ void Panel::ResultsBrowser() {
     const auto key=std::make_tuple(d.id,d.selectedRun,d.selectedMember,resultAction,attempt);bool compare=w->resultCompare.contains(key);
     if(Toggle("Compare selected Action / attempt",compare)){if(compare)w->resultCompare.insert(key);else w->resultCompare.erase(key);}
     const auto selected=resolve(d,d.selectedRun,d.selectedMember,resultAction,attempt);
+    if(IsDlts(kind)){if(selected)DLTS(std::dynamic_pointer_cast<const AcResult>(selected));else ImGui::TextUnformatted("DLTS was not sampled in this Run.");return;}
     if(kind==ActionKind::Dlcp){if(selected)DLCP(std::dynamic_pointer_cast<const AcResult>(selected));else ImGui::TextUnformatted("DLCP was not sampled in this Run.");return;}
     if(ImGui::BeginTabBar("Results views")) {
         if(ImGui::BeginTabItem("Curves")) {

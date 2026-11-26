@@ -8,6 +8,186 @@
 # +infinity is allowed only for named ideal/open/optical sentinels; NaN is never valid.
 schema_version: 1
 parameters:
+  dlts.time_s:
+    hard_min: 1e-18
+    hard_max: 1000.0
+    soft_min: 1e-10
+    soft_max: 0.1
+    scale: "log"
+    step: 1e-12
+    unit: "s"
+    display_unit: "s"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.ac_V:
+    hard_min: 1e-09
+    hard_max: 1
+    soft_min: 1e-05
+    soft_max: 0.01
+    scale: "log"
+    step: 1.0000000000000001e-07
+    unit: "V"
+    display_unit: "V"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.ratio:
+    hard_min: 1.000001
+    hard_max: 100
+    soft_min: 1.1
+    soft_max: 10
+    scale: "linear"
+    step: 0.011000000000000001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.positive:
+    hard_min: 1e-06
+    hard_max: 1000000.0
+    soft_min: 0.01
+    soft_max: 10
+    scale: "log"
+    step: 0.0001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.samples:
+    hard_min: 17
+    hard_max: 4097
+    soft_min: 33
+    soft_max: 513
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: true
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.windows:
+    hard_min: 1
+    hard_max: 16
+    soft_min: 1
+    soft_max: 10
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: true
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.alpha:
+    hard_min: 1e-12
+    hard_max: 1000000.0
+    soft_min: 1e-06
+    soft_max: 1
+    scale: "log"
+    step: 1e-08
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.rate:
+    hard_min: 1e-12
+    hard_max: 1e+18
+    soft_min: 1
+    soft_max: 1000000.0
+    scale: "log"
+    step: 0.01
+    unit: "s^-1"
+    display_unit: "s^-1"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.grid:
+    hard_min: 11
+    hard_max: 201
+    soft_min: 31
+    soft_max: 121
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: true
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.order:
+    hard_min: 0
+    hard_max: 2
+    soft_min: 0
+    soft_max: 2
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: true
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.velocity:
+    hard_min: 1
+    hard_max: 100000000.0
+    soft_min: 1000.0
+    soft_max: 1000000.0
+    scale: "log"
+    step: 10.0
+    unit: "m/s"
+    display_unit: "m/s"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
+  dlts.steps:
+    hard_min: 100
+    hard_max: 2000000
+    soft_min: 1000
+    soft_max: 200000
+    scale: "linear"
+    step: 1
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: true
+    allow_infinity: false
+    source: "Virtual DLTS controls"
+    note: "Protocol / processing setting. Ctrl+click for exact entry. Numerical range is not a physical qualification."
   dlcp.max_periods:
     hard_min: 3
     hard_max: 10000
@@ -2858,3 +3038,33 @@ parameters:
     allow_infinity: false
     source: "scaps_core typed model / numerical input domain"
     note: "Absolute profile table abscissae use um in the engine, metres in this table."
+  varshni_alpha_eV_K:
+    hard_min: 0
+    hard_max: 1.602176634e-17
+    soft_min: 1.602176634e-26
+    soft_max: 1.602176634e-21
+    scale: "log"
+    step: 1.602176634e-26
+    unit: "J K^-1"
+    display_unit: "eV K^-1"
+    display_scale: 6.241509074460763e18
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Library temperature-law metadata / engineering input envelope"
+    note: "Numerical envelope, not a universal material bound; cite fitted coefficients per item."
+  effective_mass_ratio:
+    hard_min: 1e-9
+    hard_max: 1e6
+    soft_min: 0.01
+    soft_max: 10
+    scale: "log"
+    step: 0.001
+    unit: "1"
+    display_unit: "1"
+    display_scale: 1
+    format: "%.5g"
+    integer: false
+    allow_infinity: false
+    source: "Library effective-mass metadata / engineering input envelope"
+    note: "m*/m0; Nc/Nv remain the explicit solver input. No implicit DOS conversion."

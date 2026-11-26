@@ -1137,6 +1137,123 @@
       "sha256": "22f7445d664b02f45aefe10e4dcffd9be089e027b5440f59237c2ee0fe93f4c4",
       "count": 1,
       "reason": "Parameter bounds YAML configuration file codec (startup/reload only); no runtime data serialization."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/ResultsIO.cpp",
+      "rule": "text-json",
+      "line": 68,
+      "code": "for(const auto& run:runs)selected.push_back({{\"run_id\",run.runId},{\"device_id\",run.deviceId},{\"device_name\",run.deviceName},{\"kind\",run.kind},{\"result\",run.result?run.result->Dump():Json::object()}});",
+      "sha256": "8ce1ff444ac8ef7ef3e69728ccf47731d3ca43bf5918ac49636d34ef0bd79b5d",
+      "count": 1,
+      "reason": "Selected immutable typed results are materialized only in the worker file codec for CSV/JSON/plot export; no JSON state crosses the UI/job boundary."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 607,
+      "code": "const auto workspace=ivInput?ivInput->Dump():Json::object();",
+      "sha256": "d3045a6526b0111ad42282d6be3c967954a84d47badf581c2f4c17a5363894d7",
+      "count": 1,
+      "reason": "Selected immutable typed results are materialized only in the worker file codec for CSV/JSON/plot export; no JSON state crosses the UI/job boundary."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Workflow.cpp",
+      "rule": "text-json",
+      "line": 697,
+      "code": "const auto result=acInput->Dump();",
+      "sha256": "65ec3b5319541aa4747bb0c8669e80cda635b5a7e8004cd86f4dba7b32d8e3b4",
+      "count": 1,
+      "reason": "Selected immutable typed results are materialized only in the worker file codec for CSV/JSON/plot export; no JSON state crosses the UI/job boundary."
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-yaml",
+      "line": 14,
+      "code": "using Node=YAML::Node;",
+      "sha256": "aa72ef304714fef0cf35c650723cce4e5f9c00d26827fd6abe51cc944e5c337b",
+      "reason": "Real versioned library YAML/JSON file codec; YAML nodes never leave this file adapter.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-yaml",
+      "line": 30,
+      "code": "n[\"parameters\"]=Node(YAML::NodeType::Sequence);for(const auto& p:m.parameters){Node r;r[\"path\"]=p.path;r[\"unit\"]=p.unit;r[\"citation\"]=p.citation;if(p.lower)r[\"lower\"]=*p.lower;if(p.upper)r[\"upper\"]=*p.upper;if(p.uncertainty)r[\"uncertainty\"]=*p.uncertainty;n[\"parameters\"].push_back(r);}",
+      "sha256": "c015d93ca6fa50207ef9903eb702872d7bbd84036dbaf5e9f51569bb78172d6b",
+      "reason": "Real versioned library YAML/JSON file codec; YAML nodes never leave this file adapter.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-yaml",
+      "line": 48,
+      "code": "if(const auto* o=std::get_if<Optical>(&payload)){n[\"refractive_index\"]=Node(YAML::NodeType::Sequence);for(const auto& row:o->refractiveIndex){Node a;for(double value:row)a.push_back(value);n[\"refractive_index\"].push_back(a);}}",
+      "sha256": "268fdb3ba54b9bf6d58b9cdc367dbfa06ada4fff89b56253f61c00b393d215ef",
+      "reason": "Real versioned library YAML/JSON file codec; YAML nodes never leave this file adapter.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-yaml",
+      "line": 65,
+      "code": "const auto text=Read(path);const auto root=YAML::Load(text);Assets::Require(root.IsMap(),\"Expected a library object\");const int schema=Get<int>(root,\"schema_version\",-1);",
+      "sha256": "0b16bc45e8500754aa34b932cf7835f3b2ee492317272ac7c994f0345288fb63",
+      "reason": "Real versioned library YAML/JSON file codec; YAML nodes never leave this file adapter.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-yaml",
+      "line": 81,
+      "code": "Node root;root[\"schema_version\"]=1;auto m=root[\"library\"];m[\"id\"]=catalog.id;m[\"name\"]=catalog.name;m[\"scope\"]=ScopeName(catalog.scope);m[\"read_only\"]=catalog.readOnly;m[\"generation\"]=catalog.generation;root[\"items\"]=Node(YAML::NodeType::Sequence);",
+      "sha256": "470bca650baf2b78895d2c9ab2b55e9931f36fefccd119e955a17c99c3abd1f3",
+      "reason": "Real versioned library YAML/JSON file codec; YAML nodes never leave this file adapter.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-stream",
+      "line": 108,
+      "code": "std::ostringstream stream;stream<<std::setprecision(17);",
+      "sha256": "9ebf876313c1c91650bd459f6fb866b18feaecaff12a39cd5c3b7a954f43df54",
+      "reason": "Real CSV table file import/export; stream parses file rows or writes an exported file.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-json",
+      "line": 87,
+      "code": "text=document.dump(2)+\"\\n\";",
+      "sha256": "1657060697a8432e7b23184542c717e9875c72e44b555e92caaf3636161068be",
+      "reason": "Real versioned library YAML/JSON file codec; nodes and text never leave this file adapter.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-yaml",
+      "line": 90,
+      "code": "for(const auto& [key,history]:catalog.Items()){auto item=RevisionNode(*history.back());if(history.size()>1){item[\"history\"]=Node(YAML::NodeType::Sequence);for(std::size_t i=0;i+1<history.size();++i)item[\"history\"].push_back(RevisionNode(*history[i]));}root[\"items\"].push_back(item);}",
+      "sha256": "9f0a50e5b1ee2ee2cc1e8c65d66bc43510eb597f04afc9d9212b75d0238e393a",
+      "reason": "Real versioned library YAML/JSON file codec; nodes and text never leave this file adapter.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Library/LibraryIO.cpp",
+      "rule": "text-yaml",
+      "line": 91,
+      "code": "YAML::Emitter emitter;emitter.SetDoublePrecision(17);emitter<<root;Assets::Require(emitter.good(),\"Failed to encode library YAML\");text=std::string(emitter.c_str())+\"\\n\";",
+      "sha256": "b1d6ea7bd1ee8b9b607061c5c237a4f3a401fee5ed75356348b4b2e8aba02c9f",
+      "reason": "Real versioned library YAML/JSON file codec; nodes and text never leave this file adapter.",
+      "count": 1
+    },
+    {
+      "file": "Prototypes/ScapsLab/src/Python.cpp",
+      "rule": "text-json",
+      "line": 40,
+      "code": "catch(const Assets::Error &e) {return Json{{\"ok\",false},{\"error\",{{\"code\",Assets::CodeName(e.code)},{\"message\",e.what()}}}}.dump();}",
+      "sha256": "6322660310d11489decf82754921e3a5e01ec1593ef344c1fe793206eeab54fa",
+      "reason": "Nanobind/Python edge: serialize a typed asset error for the Python caller.",
+      "count": 1
     }
   ],
   "known-debt": [

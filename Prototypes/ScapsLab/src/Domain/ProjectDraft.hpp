@@ -6,7 +6,9 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <variant>
+#include "Core/Assets/Library.hpp"
 
 namespace SST::ScapsLab {
 struct DraftIdentity {
@@ -22,6 +24,7 @@ struct ProjectDraft {
     std::shared_ptr<const DraftFileData> file;
     std::set<std::string> profileFields; // explicit scalars; profile root marks a replacement with authoritative presence
     std::vector<std::string> importWarnings; // transient diagnostics; never written into the project
+    std::vector<Assets::Use> assetUses;
 };
 using ProjectValue = std::variant<std::monostate,bool,std::int64_t,double,std::string,
     scaps_core::ConstantsMode,scaps_core::MobilityTemperatureModel,scaps_core::CarrierStatistics,
@@ -36,7 +39,7 @@ nlohmann::json IlluminationDocument(const scaps_core::Illumination&);
 void ValidateDraft(const ProjectDraft&);
 [[nodiscard]] ProjectValue ProjectField(const scaps_core::DeviceProject&,const std::string& path);
 void SetProjectField(scaps_core::DeviceProject&,const std::string& path,const ProjectValue&);
-[[nodiscard]] std::map<std::string,double> ProjectNumbers(const scaps_core::DeviceProject&);
+[[nodiscard]] std::map<std::string,double> ProjectNumbers(const scaps_core::DeviceProject&,bool includeTableCells=true);
 [[nodiscard]] std::string ProjectFieldPath(const scaps_core::DeviceProject&,const void* address);
 [[nodiscard]] std::string ProjectFieldPath(const scaps_core::DeviceProject&,const scaps_core::Profile*);
 [[nodiscard]] const std::optional<scaps_core::Profile>& GradingProfile(const scaps_core::LayerGrading&,const std::string&);
@@ -46,6 +49,7 @@ void SetProjectParameter(scaps_core::DeviceProject&,const std::string& path,doub
 [[nodiscard]] std::optional<scaps_core::Profile>& GradingProfile(scaps_core::LayerGrading&,const std::string&);
 void EditLayer(ProjectDraft&,const std::string& action,const std::string& id={},int index=0);
 void ResetProfileFields(ProjectDraft&,const scaps_core::Profile&,const std::set<std::string>& explicitFields={});
+bool ProfileFieldActive(const scaps_core::Profile&,std::string_view field);
 double& ProfileParameter(ProjectDraft&,scaps_core::Profile&,const std::string&,double fallback);
 bool& ProfileParameter(ProjectDraft&,scaps_core::Profile&,const std::string&,bool fallback);
 int AddDraftDefect(ProjectDraft&,int layer,bool sheet);

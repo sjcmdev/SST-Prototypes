@@ -13,6 +13,20 @@ assert _bounds['parameter_bounds']['Eg_eV']['unit'] == 'J'
 assert _bounds_session.reload_parameter_bounds()['ok']
 print('Parameter bounds: Python inspection (SI units) and command/job Reload PASS')
 
+# Asset inputs cross into typed C++ in the binding; GUI and Python share one command/job path.
+_assets = scapslab.Session()
+_seed = _assets.library(library_id='sst-examples', item_id='si-default', include_data=True)
+assert _seed['ok'], _seed
+assert _seed['selected']['kind'] == 'material' and _seed['selected']['data']['layers'][0]['material']['Eg_eV'] == 1.12
+assert _assets.library('derive', library_id='user', source_library_id='sst-examples', item_id='si-default', new_id='python-si')['ok']
+_derived = _assets.library(library_id='user', item_id='python-si', include_data=True)['selected']
+_derived['data']['layers'][0]['material']['Eg_eV'] = 1.18
+_derived['change_note'] = 'Python gap edit'
+assert _assets.library('revise', library_id='user', expected_version=1, kind='material', metadata=_derived, data=_derived['data'])['ok']
+_bad = _assets.library('revise', library_id='user', expected_version=1, kind='material', metadata=_derived, data=_derived['data'])
+assert not _bad['ok'] and _bad['error']['code'] == 'conflict', _bad
+print('Asset library: Python metadata, payload, derive, revision and stale-write rejection PASS')
+
 # S4: public wrappers use the same typed command/job path as GUI Actions.
 def check_run_actions(document):
     import copy
@@ -127,6 +141,106 @@ _dlcp_document['contacts'] = dict(left=dict(flat_band=True, Sn_m_s=1e5, Sp_m_s=1
 _dlcp = scapslab.Session(_dlcp_document)
 _bad_dlcp = _dlcp.dlcp(V_max_V=[-.8], amplitudes_V=[.1,.1,.2])
 assert not _bad_dlcp['ok'] and _bad_dlcp['error']['code']
+
+# The virtual DLTS edge and Single shot produce identical typed experiments.
+_transient_document = copy.deepcopy(_dlcp_document)
+_transient_document['layers'][0]['thickness_m'] = 2e-6
+_transient_document['layers'][0]['doping'] = dict(Nd_m3=1e22, Na_m3=0)
+_transient_document['mesh'] = dict(points_per_layer=21, clustering_beta=0, adaptivity_level='0')
+_transient_document['contacts']['right']['flat_band'] = True
+_transient_document['illumination'] = dict(enabled=True, mode='uniform', uniform_generation_m3_s=1e23)
+_protocol = dict(reverse_V=0, pulse_V=1e-4, second_pulse_V=5e-5,
+                 pulse_width_s=2e-8, first_sample_s=1e-9, last_sample_s=2e-7,
+                 initial_step_s=1e-10, max_step_s=1e-9, gate_start_s=1e-8,
+                 windows=3, samples=33, max_steps=10000,
+                 rate_min_per_s=1e6, rate_max_per_s=1e9, grid_size=31)
+assert scapslab.Session(_transient_document).dlts('unknown')['error']['code'] == 'invalid_variant'
+for _variant, _operation in dict(classic='dlts', laplace='laplace_dlts', capture='capture_dlts', optical='optical_dlts').items():
+    _request = dict(range=dict(sampling='list', values=[300]), protocol=dict(_protocol, series=3 if _variant == 'capture' else 0))
+    _direct = scapslab.Session(_transient_document)
+    _edge = _direct.dlts(_variant, **_request)
+    assert _edge['ok'], _edge
+    _actions = scapslab.Session(_transient_document)
+    _shot = _actions.single_shot(dict(iv=dict(include=False), **{_operation: dict(include=True, **_request)}))
+    assert _shot['ok'], _shot
+    _trace = _edge['ac_results'][_operation]['dlts']['traces'][0]
+    assert _trace['status'] == 'converged', _trace
+    assert _trace == _shot['ac_results'][_operation]['dlts']['traces'][0]
+    assert len(_trace['time_s']) == 33
+    if _variant == 'optical':
+        _odlts = _direct.dlts('optical', range=_request['range'], protocol=dict(_protocol, minority=False))
+        assert _odlts['ok'], _odlts
+        _optical_trace = _odlts['ac_results']['optical_dlts']['dlts']['traces'][0]
+        assert _optical_trace['status'] == 'converged' and _optical_trace['pulse_V'] == _protocol['pulse_V']
+    _rejected = _direct.dlts(_variant, protocol=dict(_protocol, readout=99))
+    assert not _rejected['ok'] and _rejected['error']['code'], _rejected
+print('Virtual DLTS: all four Python / typed Run Action paths and typed input errors PASS')
+
+# Isolated CdTe:Ga E1 reconstruction from the engine DLTS1 reference gate.
+# This exercises the app's complete scan -> rate windows -> Arrhenius path.
+_cdte = copy.deepcopy(_transient_document)
+_cdte['layers'][0].update(thickness_m=1e-6, doping=dict(Nd_m3=4.6e22, Na_m3=0),
+    material=dict(T_ref_K=300, eps_r=10.2, Eg_eV=1.5, chi_eV=4.28,
+                  Nc_ref_m3=8e23, Nv_ref_m3=1.8e25, mu_n_m2_V_s=.1, mu_p_m2_V_s=.008,
+                  vth_n_ref_m_s=1e5, vth_p_ref_m_s=1e5),
+    defects=[dict(scapslab_id='E1', label='E1', charge_type='donor_like',
+                  energy_reference='relative_to_Ec', energy_offset_eV=.19,
+                  Nt_m3=1e21, sigma_n_m2=1e-20, sigma_p_m2=0)])
+_cdte['contacts']['right'] = dict(flat_band=False, phi_m_eV=4.66, Sn_m_s=0, Sp_m_s=1e5)
+_cdte['mesh'] = dict(points_per_layer=101, clustering_beta=0, adaptivity_level='0')
+_cdte['solver'] = dict(max_newton_iterations=300, residual_tolerance=1e-10,
+                       max_step_multiple_of_Vt=4, max_line_search_backtracks=16)
+_cdte['illumination'] = dict(enabled=False)
+_cdte['external'] = dict(area_m2=1e-6)
+_kb, _h, _m0 = 1.380649e-23, 6.62607015e-34, 9.1093837015e-31
+_mass_dos = (8e23 / 2)**(2/3) * _h**2 / (2 * math.pi * _kb * 300 * _m0)
+_mass_velocity = 8 * _kb * 300 / (math.pi * _m0 * 1e10)
+_reference = scapslab.Session(_cdte)
+# The engine reference uses right minus left; ScapsLab presents left minus right.
+_recovery = _reference.dlts('classic', frequency_Hz=1e6,
+    range=dict(sampling='list', values=[77] + list(range(115, 196, 5)) + [350]),
+    protocol=dict(reverse_V=1.5, pulse_V=0, pulse_width_s=.006,
+                  first_sample_s=1e-5, last_sample_s=.2, samples=257,
+                  initial_step_s=1e-13, max_step_s=1e-3,
+                  gate_start_s=math.log(2)/1000, gate_ratio=2, window_ratio=5, windows=4,
+                  dos_mass_m0=_mass_dos, velocity_mass_m0=_mass_velocity,
+                  donor_density_m3=4.6e22, profiling_eps_r=10.2))
+assert _recovery['ok'], _recovery
+_dlts_reference = _recovery['ac_results']['dlts']['dlts']
+assert all(t['status'] == 'converged' for t in _dlts_reference['traces']), _dlts_reference
+assert 'arrhenius' in _dlts_reference, _dlts_reference.get('warnings')
+_fit = _dlts_reference['arrhenius']
+assert abs(_fit['trap_activation_eV'] - .19) < .02, _fit
+assert .5 < _fit['sigma_infinity_cm2'] / 1e-16 < 2, _fit
+print(f"App CdTe E1 recovery: Ea={_fit['trap_activation_eV']:.9g} eV, sigma={_fit['sigma_infinity_cm2']:.9g} cm^2 PASS")
+import os
+if os.environ.get('SCAPSLAB_DLTS_EVIDENCE'):
+    assert _reference.project_save(Path(os.environ['SCAPSLAB_DLTS_EVIDENCE']) / 'CdTe-E1-app.scapslab')['ok']
+
+# Two charged levels: test separation; capacitance includes spatial recapture,
+# so absolute emission-rate recovery is checked on analytic transients in C++.
+_two_levels = copy.deepcopy(_cdte)
+_two_levels['layers'][0]['defects'] = [dict(scapslab_id=f'laplace-{rate}', label=f'{rate} s^-1',
+    charge_type='donor_like', energy_reference='relative_to_Ec',
+    energy_offset_eV=8.617333262145e-5 * 300 * math.log(8e8 / rate),
+    Nt_m3=1e19, sigma_n_m2=1e-20, sigma_p_m2=0) for rate in (50, 100)]
+_laplace_session = scapslab.Session(_two_levels)
+_laplace_run = _laplace_session.dlts('laplace', frequency_Hz=1e6,
+    range=dict(sampling='list', values=[300]),
+    protocol=dict(reverse_V=1.5, pulse_V=0, pulse_width_s=.006,
+                  first_sample_s=1e-5, last_sample_s=.2, samples=401,
+                  initial_step_s=1e-13, max_step_s=1e-4,
+                  rate_min_per_s=10, rate_max_per_s=300, grid_size=101,
+                  alpha_method=2, alpha=1e-6, polarity=-1,
+                  donor_density_m3=4.6e22, profiling_eps_r=10.2))
+assert _laplace_run['ok'], _laplace_run
+_laplace_trace = _laplace_run['ac_results']['laplace_dlts']['dlts']['traces'][0]
+assert _laplace_trace['status'] == 'converged', _laplace_trace
+_laplace_peaks = [p['rate_per_s'] for p in _laplace_trace['laplace']['peaks']]
+if os.environ.get('SCAPSLAB_DLTS_EVIDENCE'):
+    assert _laplace_session.project_save(Path(os.environ['SCAPSLAB_DLTS_EVIDENCE']) / 'Laplace-two-level-app.scapslab')['ok']
+assert len(_laplace_peaks) == 2 and abs(max(_laplace_peaks) / min(_laplace_peaks) / 2 - 1) < .12, _laplace_peaks
+print(f'App inverse Laplace two-level separation: {_laplace_peaks} s^-1 PASS')
 _result_dlcp = _dlcp.dlcp(V_max_V=[-.8], samples_per_period=64, max_periods=16)
 assert _result_dlcp['ok'], _result_dlcp
 _row_dlcp = _result_dlcp['ac_results']['dlcp']['dlcp_points'][0]

@@ -29,6 +29,14 @@ class Session:
         """Effective bounds; numeric limits use the explicit SI unit field."""
         return self.start(dict(operation='parameter_bounds', action='inspect'))
 
+    def library(self, action='inspect', **request):
+        """Typed asset operations through the same Core command/job path as the GUI.
+
+        Payload fields use device_project v1 units. include_data=True returns a
+        selected payload; default inspection returns lightweight metadata only.
+        """
+        return self.execute(dict(operation='library', action=action, **request))
+
     def reload_parameter_bounds(self):
         return self.execute(dict(operation='parameter_bounds', action='reload'))
 
@@ -75,6 +83,17 @@ class Session:
     def dlcp(self, **settings):
         """Explicit cancellable DLCP; V_max_V and amplitudes_V use V (peak-to-peak)."""
         return self.execute(dict(operation='dlcp', **settings))
+
+    def dlts(self, variant='classic', **settings):
+        """Virtual DLTS through the same command/job path as Run Actions.
+
+        variant: classic, laplace, capture (pulse width/depth/DDLTS), optical.
+        Protocol fields use SI units; voltage is left minus right.
+        """
+        operations = dict(classic='dlts', laplace='laplace_dlts', capture='capture_dlts', optical='optical_dlts')
+        if variant not in operations:
+            return dict(ok=False, error=dict(code='invalid_variant', message='Use classic, laplace, capture or optical'))
+        return self.execute(dict(operation=operations[variant], **settings))
 
     def export_dlcp(self, path):
         return self.execute(dict(operation='export_dlcp', path=str(path)))

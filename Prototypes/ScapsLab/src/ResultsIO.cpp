@@ -6,31 +6,45 @@
 #include <cmath>
 #include <sstream>
 namespace SST::ScapsLab {
-Json ResultRuns(const Json &workspace) {
-    Json runs=Json::array();
-    for(const auto &d:workspace.at("devices")) {
-        auto add=[&](const std::string &kind,const Json &result) {
-            if(result.empty()) return;
-            for(const auto &run:d.value("history",Json::array())) if(run.at("provenance")==result.value("provenance",Json()) && run.at("kind")==kind && kind!="batch")return;
-            const auto id=d.at("id").get<std::string>()+"/"+kind+"/"+std::to_string(result.at("provenance").at("time_unix_ms").get<std::int64_t>());
-            runs.push_back({{"run_id",id},{"device_id",d.at("id")},{"device_name",d.at("name")},{"kind",kind},{"result",result}});
+std::vector<ResultRun> Workflow::ResultRuns() const {
+    std::vector<ResultRun> runs;
+    for(const auto& device:project.devices) {
+        const auto& d=*device;
+        const auto live=[&](const std::string& kind)->Ref<const ResultBase> {
+            Ref<const ResultBase> result=kind=="iv"?std::static_pointer_cast<const ResultBase>(d.result.typed()):kind=="band"?std::static_pointer_cast<const ResultBase>(d.bandResult.typed()):std::static_pointer_cast<const ResultBase>(d.acResults.get(kind));
+            return result && !result->liveOnly?result:nullptr;
         };
-        for(const auto &run:d.value("history",Json::array())) {
-            if(run.at("kind")=="batch" && !d.value("batch_result",Json::object()).empty() && run.at("provenance").at("time_unix_ms")==d.at("batch_result").at("provenance").at("time_unix_ms"))continue;
+        const auto time=[](const ResultBase& result)->std::int64_t {
+            if(const auto* batch=dynamic_cast<const BatchResult*>(&result);batch && batch->runPlan)return batch->time_unix_ms;
+            return result.Provenance().at("time_unix_ms").get<std::int64_t>();
+        };
+        for(const auto& run:d.history) {
             const auto kind=run.at("kind").get<std::string>();
-            const auto live=kind=="iv"?d.value("result",Json::object()):kind=="band"?d.value("band_result",Json::object()):d.value("ac_results",Json::object()).value(kind,Json::object());
-            const auto &result=!live.empty() && live.at("provenance")==run.at("provenance")?live:run.at("result");
-            runs.push_back({{"run_id",run.at("run_id")},{"device_id",d.at("id")},{"device_name",d.at("name")},{"kind",run.at("kind")},{"result",result}});
+            const auto stored=d.RunResult(run.at("run_id").get<std::string>());
+            const auto* storedBatch=dynamic_cast<const BatchResult*>(stored.get());
+            if(kind=="batch" && d.batchResult.typed()) {
+                const auto timestamp=storedBatch && storedBatch->runPlan?time(*stored):run.at("provenance").at("time_unix_ms").get<std::int64_t>();
+                if(timestamp==time(*d.batchResult.typed()))continue;
+            }
+            auto result=live(kind);
+            if(!result || result->Provenance()!=run.at("provenance"))result=stored;
+            runs.push_back({run.at("run_id"),d.id,d.name,kind,std::move(result)});
         }
-
-        add("iv",d.value("result",Json::object()));add("band",d.value("band_result",Json::object()));
-        for(auto it=d.at("ac_results").begin();it!=d.at("ac_results").end();++it) add(it.key(),it.value());
-        add("batch",d.value("batch_result",Json::object()));
+        const auto add=[&](const std::string& kind,Ref<const ResultBase> result) {
+            if(!result)return;
+            for(const auto& run:d.history)if(kind!="batch" && run.at("kind")==kind && run.at("provenance")==result->Provenance())return;
+            runs.push_back({d.id+"/"+kind+"/"+std::to_string(time(*result)),d.id,d.name,kind,std::move(result)});
+        };
+        add("iv",live("iv"));add("band",live("band"));
+        for(const auto& [kind,result]:d.acResults.all())add(kind,live(kind));
+        add("batch",d.batchResult.typed());
     }
     return runs;
 }
 Json Workflow::Runs() const {
-    auto runs=ResultRuns(Workspace());for(auto &run:runs)run.erase("result");return runs;
+    Json runs=Json::array();
+    for(const auto& run:ResultRuns())runs.push_back({{"run_id",run.runId},{"device_id",run.deviceId},{"device_name",run.deviceName},{"kind",run.kind}});
+    return runs;
 }
 
 namespace {
@@ -50,15 +64,13 @@ void Save(const std::string &path,const std::string &text) {
     std::string error;if(!Io::Save(path,text,error)) throw std::runtime_error(error);
 }
 }
-Json ExportResults(const Json &workspace,const Json &request) {
-    const auto runs=ResultRuns(workspace);Json selected=Json::array();
-    const auto ids=request.value("run_ids",Json::array());
-    if(!ids.is_array()) throw std::invalid_argument("run_ids must be an array");
-    for(const auto &id:ids) if(!id.is_string() || std::none_of(runs.begin(),runs.end(),[&](const Json &r){return r.at("run_id")==id;})) throw std::invalid_argument("Unknown run_id");
-    for(const auto &r:runs) if(request.value("all",false) || std::find(ids.begin(),ids.end(),r.at("run_id"))!=ids.end()) selected.push_back(r);
-    if(selected.empty()) throw std::invalid_argument("Select at least one saved run");
-    const auto path=request.at("path").get<std::string>(),format=request.value("format",std::string("csv"));
-    Json files=Json::array();
+std::vector<std::filesystem::path> ExportResults(const std::vector<ResultRun>& runs,const std::filesystem::path& destination,const std::string& format) {
+    if(runs.empty())throw std::invalid_argument("Select at least one saved run");
+    // File edge: materialize only selected immutable results, on the IO worker.
+    Json selected=Json::array();
+    for(const auto& run:runs)selected.push_back({{"run_id",run.runId},{"device_id",run.deviceId},{"device_name",run.deviceName},{"kind",run.kind},{"result",run.result?run.result->Dump():Json::object()}});
+    const auto path=destination.string();
+    std::vector<std::filesystem::path> files;
     if(format=="json") {
         for(auto &run:selected) if(run.at("kind")!="batch") {
             run["effective_conditions"]=Effective(run.at("result"),run.at("result").at("points").front());
@@ -74,6 +86,19 @@ Json ExportResults(const Json &workspace,const Json &request) {
         Json rows=Json::array();std::set<std::string> columns;
         for(const auto &run:selected) {
             const auto &r=run.at("result"),&snapshot=r.at("project_snapshot");
+            if(r.contains("dlts")) {
+                for(const auto& trace:r.at("dlts").at("traces"))for(std::size_t i=0;i<trace.at("time_s").size();++i) {
+                    Json row={{"run_id",run.at("run_id")},{"device_id",run.at("device_id")},{"kind",run.at("kind")},{"trace_id",trace.at("id")},{"time_s",trace.at("time_s")[i]},{"capacitance_F",trace.at("capacitance_F")[i]},{"current_A_m2",trace.at("current_A_m2")[i]},{"run_plan_json",r.at("run_plan")},{"provenance_json",r.at("provenance")}};
+                    for(const auto* key:{"temperature_K","pulse_width_s","reverse_V","pulse_V","readout_resolution_F","baseline_F","equilibrium_F","density_valid","depth_m","pulse_depth_m","trap_density_m3","status","message"})row[key]=trace.at(key);
+                    if(!trace.at("reference_capacitance_F").empty())row["reference_capacitance_F"]=trace.at("reference_capacitance_F")[i];
+                    if(i==0){row["signal_F"]=trace.at("signal_F");row["amplitude_F"]=trace.at("amplitude_F");}
+                    if(i==0 && trace.contains("laplace"))row["laplace_json"]=trace.at("laplace");
+                    if(i==0 && r.at("dlts").contains("arrhenius"))row["arrhenius_json"]=r.at("dlts").at("arrhenius");
+                    if(i==0 && r.at("dlts").contains("capture"))row["capture_json"]=r.at("dlts").at("capture");
+                    for(const auto& [key,value]:row.items())columns.insert(key);rows.push_back(std::move(row));
+                }
+                continue;
+            }
             std::size_t index=0;
             for(const auto &point:r.at(run.at("kind")=="batch"?"rows":run.at("kind")=="dlcp"?"dlcp_points":"points")) {
                 Json row={{"run_id",run.at("run_id")},{"device_id",run.at("device_id")},{"kind",run.at("kind")},{"point_index",index++},
@@ -99,6 +124,16 @@ Json ExportResults(const Json &workspace,const Json &request) {
     } else if(format=="png" || format=="svg" || format=="pdf") {
         Json plots=Json::array();
         for(const auto &run:selected) {
+            if(run.at("result").contains("dlts")) {
+                const auto& result=run.at("result");
+                const auto add=[&](const std::string& name,const std::string& x,const std::string& y,const Json& xs,const Json& ys){auto plot=run;plot["kind"]="dlts_plot";plot["run_id"]=run.at("run_id").get<std::string>()+"/"+name;plot["x_label"]=x;plot["y_label"]=y;plot["result"]["points"]=Json::array();for(std::size_t i=0;i<xs.size() && i<ys.size();++i)plot["result"]["points"].push_back({{"dlts_x",xs[i]},{"dlts_y",ys[i]},{"valid",true}});plots.push_back(std::move(plot));};
+                for(const auto& trace:result.at("dlts").at("traces"))if(trace.at("status")=="converged") {
+                    add(trace.at("id"),"Time after filling [s]","C [F]",trace.at("time_s"),trace.at("capacitance_F"));
+                    if(trace.contains("laplace")){const auto& l=trace.at("laplace");add(trace.at("id").get<std::string>()+"-Laplace","Rate [s^-1]","Amplitude / log(rate) [F]",l.at("rate_per_s"),l.at("density_F_per_log_rate"));}
+                }
+                for(const auto& spectrum:result.at("dlts").at("spectra"))add(spectrum.at("id"),"Temperature [K]","Signal [F]",spectrum.at("temperature_K"),spectrum.at("signal_F"));
+                continue;
+            }
             if(run.at("kind")!="batch") {plots.push_back(run);continue;}
             for(const auto &member:run.at("result").at("rows")) if(member.contains("curves")) {
                 auto curve=run;curve["kind"]="iv";curve["run_id"]=run.at("run_id").get<std::string>()+"/"+member.at("id").get<std::string>()+" "+member.at("parameters").dump();curve["result"]["points"]=Json::array();
@@ -108,9 +143,9 @@ Json ExportResults(const Json &workspace,const Json &request) {
         if(plots.empty()) throw std::invalid_argument("No retained curves to plot");
         for(const auto &run:plots) {
             const auto kind=run.at("kind").get<std::string>();
-            const std::string x=kind=="dlcp"?"x_m":kind=="qe"?"wavelength_nm":kind=="cf"?"frequency_Hz":"voltage_V";
-            const std::string y=kind=="dlcp"?"N_DL_m3":kind=="qe"?"EQE":kind=="cv" || kind=="cf"?"capacitance_F":"J_A_m2";
-            sst::plotlab::GraphSnapshot graph;graph.spec.x.label=x;graph.spec.y.label=y;graph.widthMm=160;graph.heightMm=100;
+            const std::string x=kind=="dlts_plot"?"dlts_x":kind=="dlcp"?"x_m":kind=="qe"?"wavelength_nm":kind=="cf"?"frequency_Hz":"voltage_V";
+            const std::string y=kind=="dlts_plot"?"dlts_y":kind=="dlcp"?"N_DL_m3":kind=="qe"?"EQE":kind=="cv" || kind=="cf"?"capacitance_F":"J_A_m2";
+            sst::plotlab::GraphSnapshot graph;graph.spec.x.label=run.value("x_label",x);graph.spec.y.label=run.value("y_label",y);graph.widthMm=160;graph.heightMm=100;
             sst::plotlab::SnapshotSeries series;series.kind=sst::ui::plot::SeriesKind::Line;series.label=run.at("run_id");
             series.style.color={.12f,.45f,.8f,1.f};series.style.markerFill=series.style.color;series.style.markerOutline=series.style.color;series.style.lineWidthPt=1.5f;series.style.markerSizePt=3;series.style.errorCapPt=3;
             bool finite=false;graph.ranges={0,1,0,1};
@@ -129,8 +164,6 @@ Json ExportResults(const Json &workspace,const Json &request) {
             files.push_back(destination.string());
         }
     } else throw std::invalid_argument("format must be csv, json, png, svg or pdf");
-    Json output={{"export_status","saved"},{"run_count",selected.size()},{"files",Json::array()}};
-    for(const auto &file:files) output["files"].push_back({{"path",file},{"size_bytes",std::filesystem::file_size(file.get<std::string>())}});
-    return output;
+    return files;
 }
 }

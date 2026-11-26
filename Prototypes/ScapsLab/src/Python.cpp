@@ -1,6 +1,7 @@
 #include "Workflow.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #include "Commands/Commands.hpp"
+#include "Library/PythonLibrary.hpp"
 #include <thread>
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
@@ -18,8 +19,10 @@ NB_MODULE(sst_scapslab, m) {
             try {
                 auto value=Json::parse(request);const auto op=value.at("operation").get<std::string>();
                 s.bindingBoundsReply=op=="parameter_bounds";
+                s.bindingLibraryReply=op=="library";s.bindingLibraryData=value.value("include_data",false);
                 Json response;
-                if(op=="run_settings")response=s.Exec(Cmd::SetRunPlan::Make(CreateRef<const RunPlan>(ReadRunPlan(value.at("actions")))));
+                if(op=="library")response=s.Exec(Cmd::LibraryOperation::Make(Library::Python::ReadRequest(value)));
+                else if(op=="run_settings")response=s.Exec(Cmd::SetRunPlan::Make(CreateRef<const RunPlan>(ReadRunPlan(value.at("actions")))));
                 else if(op=="single_shot")response=s.Exec(Cmd::SingleShot::Make(value.contains("actions")?CreateRef<const RunPlan>(ReadRunPlan(value.at("actions"))):nullptr));
                 else if(op=="run_batch" && (value.contains("actions") || value.contains("spec") || value.contains("columns")))response=s.Exec(Cmd::RunBatch::Make(value.contains("spec")?ReadBatchDraft(value.at("spec")):s.Current().batch,value.contains("columns")?ReadRecorderDraft(value.at("columns")):s.Current().recorder,value.contains("actions")?CreateRef<const RunPlan>(ReadRunPlan(value.at("actions"))):s.Current().runPlanEdited?s.Current().runPlan:nullptr));
                 else response=s.Dispatch(value);
@@ -34,12 +37,14 @@ NB_MODULE(sst_scapslab, m) {
                 if((op=="run_settings" || op=="select_bias") && response.value("ok",false))s.response=s.Snapshot();
                 return response.dump();
             }
+            catch(const Assets::Error &e) {return Json{{"ok",false},{"error",{{"code",Assets::CodeName(e.code)},{"message",e.what()}}}}.dump();}
             catch(const std::exception &e) {return Json{{"ok",false},{"error",{{"code","invalid_request"},{"message",e.what()}}}}.dump();}
         })
         .def("poll",[](Workflow &s) {
             s.OnUpdate(0); Json j={{"running",s.Pending() || s.boundsFileBusy || s.tutorial.Automatic()},{"auto_recalculate_pending",(s.autoRecalculate && s.Current().needsRecalculate) || (s.autoRecalculateBand && s.Current().needsBand)},{"status",s.status},{"response",s.response}};
             if(s.bindingBoundsReply && !s.boundsFileDiagnostic.empty())j["response"]={{"ok",false},{"error",{{"code","invalid_bounds_file"},{"message",s.boundsFileDiagnostic}}}};
             j["tutorial"]=s.tutorial.Report();
+            if(s.bindingLibraryReply && !s.Pending())j["response"]=Library::Python::Reply(s.library,s.bindingLibraryData);
             j["paused"]=s.ActiveOp() && s.ActiveOp()->paused.load();
             j["batch_progress"]={{"completed",s.batchCompleted},{"total",s.batchTotal}};
             if(const auto aj=s.ActiveJob()) { const auto p=s.jobs->GetJob(aj); if(p) j["progress"]={{"completed",p->completedWork},{"total",p->totalWork},{"stage",p->currentStage}}; }

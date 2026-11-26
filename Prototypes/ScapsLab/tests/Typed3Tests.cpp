@@ -1,4 +1,4 @@
-﻿#include <gtest/gtest.h>
+#include <gtest/gtest.h>
 #include "Workflow.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Commands/Commands.hpp"
@@ -63,7 +63,7 @@ TEST(Typed3, ProfileMetadataUsesProfilePathAndLegacyNumericScalarsLoad) {
 // slux3 S2: typed Actions, explicit storage, bounded/cancellable preview.
 TEST(RunActions, OwnRangesAndSingleGroupUseTypedResults) {
     Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDraft(SmallDraft());
-    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions)a.include=a.kind!=ActionKind::Dlcp;
+    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions)a.include=a.kind<ActionKind::Dlcp;
     plan->actions[0].voltage_V=.013;
     plan->actions[1].range=SweepRange{SweepSampling::List,false,0,0,1,2,{0,.012,.024}};
     plan->actions[2].range=SweepRange{SweepSampling::List,false,0,0,1,2,{0,.021}};plan->actions[2].frequency_Hz=1234;plan->actions[2].temperature_K=315;
@@ -194,7 +194,7 @@ TEST(RunActions, OnEditSettingsDoNotEnableAnotherDevice) {
 }
 namespace {
 Ref<RunPlan> SmallActions() {
-    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions)a.include=a.kind!=ActionKind::Dlcp;
+    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions)a.include=a.kind<ActionKind::Dlcp;
     plan->actions[0].voltage_V=.012;
     plan->actions[1].range=SweepRange{SweepSampling::List,false,0,0,1,1,{0,.012,.024}};
     plan->actions[2].range=SweepRange{SweepSampling::List,false,0,0,1,1,{0,.021}};plan->actions[2].frequency_Hz=1234;plan->actions[2].temperature_K=315;
@@ -385,7 +385,7 @@ TEST(OwnerUi, DistributionAndPlotControlsRenderWithoutChangingImportedValuesOrCo
 
 TEST(OwnerUi, LiveReferenceKeepsThePreviousExactTypedResultsUntilRelease) {
     Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.autoRecalculate=w.autoRecalculateBand=false;w.Current().SetDraft(SmallDraft());
-    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions){a.include=true;a.onEdit=false;}
+    auto plan=CreateRef<RunPlan>();for(auto& a:plan->actions){a.include=a.kind<ActionKind::Dlcp;a.onEdit=false;}
     plan->actions[1].range=SweepRange{SweepSampling::List,false,0,0,1,1,{0.,.01}};
     plan->actions[2].range=SweepRange{SweepSampling::List,false,0,0,1,1,{0.,.01}};
     plan->actions[3].range=SweepRange{SweepSampling::List,false,0,0,1,1,{1000.,2000.}};

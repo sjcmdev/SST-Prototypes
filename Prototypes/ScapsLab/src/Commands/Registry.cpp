@@ -3,7 +3,7 @@
 // Table of all typed commands + registration. Workflow::Dispatch reaches them by id "scapslab.<operation>" (the JSON adapter).
 namespace SST::ScapsLab::Cmd {
 namespace {
-using All = std::tuple<BoundsFile, Run, RunBand, RunCv, RunCf, RunQe, RunDlcp, SingleShot, SetRunPlan, CaptureLive, ResumeRun, RecalculateLive, SelectBias, RecalculateStoredBias, RunBatch, RetryBatchMember, RecordBatch, PreviewBatch, QuickSweep, BatchParameters, SelectBatchMember, SetBatchSettings, Inspect, RunAll, Cancel, SetAutoRecalculate,
+using All = std::tuple<LibraryOperation, BoundsFile, Run, RunBand, RunCv, RunCf, RunQe, RunDlcp, RunDlts, RunLaplace, RunCapture, RunOptical, SingleShot, SetRunPlan, CaptureLive, ResumeRun, RecalculateLive, SelectBias, RecalculateStoredBias, RunBatch, RetryBatchMember, RecordBatch, PreviewBatch, QuickSweep, BatchParameters, SelectBatchMember, SetBatchSettings, Inspect, RunAll, Cancel, SetAutoRecalculate,
     EditDocument, EditLayer, LoadMaterial, SaveMaterial, SetProfile, LoadProfile, PreviewProfile, ImportDef, Undo, Redo, ListHistory, SelectRun, UpdateRun, ClearHistory,
     AddDevice, DuplicateDevice, RemoveDevice, UpdateDevice, MoveDevice, ListDevices, EditProject, SetActionSettings, SelectDevice,
     NewProject, LoadProject, LoadDocument, SaveProject, SaveDocument, ExportAc, ExportDlcp, ExportGr, ExportResults, ExportBatch, ExportProfile, ExportDef, SendToPlotLab,

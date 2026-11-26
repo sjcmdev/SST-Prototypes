@@ -1,4 +1,4 @@
-﻿newoption { trigger = "scaps-core", value = "PATH", description = "Read-only scaps_core checkout (default ../scaps_core)" }
+newoption { trigger = "scaps-core", value = "PATH", description = "Read-only scaps_core checkout (default ../scaps_core)" }
 local scaps = path.getabsolute(_OPTIONS["scaps-core"] or "../scaps_core", _SST_ROOT)
 local root = _SST_ROOT .. "/Prototypes/ScapsLab"
 -- One versioned source for shipped config and the emergency compiled fallback.
@@ -55,10 +55,12 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
     links { "Core", "ScapsCore" }
     if name ~= "ScapsLabHeadless" then
         files { root .. "/src/Domain/ParameterBounds.cpp" }
+        defines { 'SCAPSLAB_LIBRARY_DATA="' .. root .. '/library"' }
         postbuildcommands { '{COPYFILE} "' .. root .. '/config/parameter_bounds.yaml" "%{cfg.targetdir}/parameter_bounds.yaml"' }
+        postbuildcommands { '{COPYDIR} "' .. root .. '/library" "%{cfg.targetdir}/library"' }
     end
     if name ~= "ScapsLabHeadless" then
-        sst_link_ui(); sst_link_plotlab()
+        sst_link_ui(); sst_link_plotlab(); sst_link_libraries()
         files { _SST_ROOT .. "/Prototypes/PlotLab/src/PlotLabExport.cpp" }
         defines { 'SCAPSLAB_PLOTLAB_PYTHON="' .. _SST_ROOT .. '/Prototypes/PlotLab/python"' }
     end
@@ -70,9 +72,10 @@ for _, name in ipairs { "ScapsLab", "ScapsLabTests", "ScapsLabHeadless" } do
         postbuildcommands { '{COPYDIR} "' .. _SST_ROOT .. '/PrototypeTemplate/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/install" "%{cfg.targetdir}/install"', '{COPYDIR} "' .. root .. '/python" "%{cfg.targetdir}/python"', '{COPYDIR} "' .. root .. '/examples" "%{cfg.targetdir}/examples"', '{COPYDIR} "' .. root .. '/tutorials" "%{cfg.targetdir}/tutorials"' }
     elseif name == "ScapsLabTests" then
         defines { "SCAPS_BOUNDARY_PROBE" }
-        files { root .. "/src/PlotUi.cpp" }
+        files { root .. "/src/PlotUi.cpp", root .. "/src/Dlts.cpp", root .. "/src/DltsCodec.cpp" }
         files { root .. "/tests/**.cpp", root .. "/src/Workflow.cpp", root .. "/src/Commands/*.cpp", root .. "/src/Workspace.cpp", root .. "/src/Python.cpp", root .. "/src/Panel.cpp", root .. "/src/Batch.cpp", root .. "/src/ResultsIO.cpp", root .. "/src/Domain/Results.cpp", root .. "/src/Domain/Packed.cpp", root .. "/src/Tutorials.cpp" }
         files { root .. "/src/Domain/ProjectDraft.cpp", root .. "/src/Domain/BatchDraft.cpp" }
+        files { root .. "/src/Library/**.cpp", root .. "/src/Library/**.hpp" }
         links { "GoogleTest", "GoogleTestMain" }
         dependson { "ScapsLabHeadless" } -- EmbeddedPythonRunAndHeadlessCsv runs the headless exe
     else

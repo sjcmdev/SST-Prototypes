@@ -119,6 +119,7 @@ struct AcResult final : ResultBase { // cv, cf, qe
     std::vector<AcPoint> points;
     std::vector<Ref<const DlcpProfilePoint>> dlcp;
     double dlcp_eps_r=0;
+    Ref<const DltsData> dlts;
     std::string kind;
     double area_m2 = NAN;
     PJson meta;
