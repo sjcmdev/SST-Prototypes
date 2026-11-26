@@ -3,6 +3,7 @@
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Undo/UndoStack.hpp"
 #include <sst/plotlab/Extensions.hpp>
+#include "ImportWorkflow.hpp"
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Utils/Path.hpp"
@@ -94,6 +95,17 @@ namespace SST::Prototypes::PlotLab
         void WorksheetCommand(pl::WorksheetEdit);
         DataResult WorksheetCommand(pl::DataRequest, bool wait = true);
         DataResult DataStatus();
+        JobId ImportCommand(ImportRequest);
+        JobId CommitImport(std::shared_ptr<const ImportResult>);
+        std::shared_ptr<const ImportResult> PollImport();
+        std::shared_ptr<const ImportResult> WaitImport();
+        void CancelImport();
+        void TrustImportRecipe(const pl::ImportRecipe&);
+        bool ImportRecipeTrusted(const pl::ImportRecipe&) const;
+        std::map<std::string,pl::ImportRecipe> importPresets;
+        const ImportRecipes& ImportRecipeHistory() const { return importRecipes; }
+        bool importPresetsDirty = false;
+        ImportUiState importUi;
         void SetColumnValues(pl::Id column, pl::Formula);
         JobId SubmitPython(PythonRequest);
         const PythonResult& PollPython(JobId);
@@ -121,7 +133,7 @@ namespace SST::Prototypes::PlotLab
         void Save(const std::filesystem::path &);
         bool Dirty() const
         {
-            return !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty();
+            return !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty() || importPresetsDirty;
         }
         pl::Id Create(pl::Id parent, int type, std::string name);
         void Rename(pl::Id, std::string);
@@ -143,6 +155,7 @@ namespace SST::Prototypes::PlotLab
 
       private:
         friend class PythonWork;
+        friend class ImportStartCommand;
         Ref<EventBus> bus;
         pl::Id correlation = 0;
         void Replace(Ref<pl::Project>);
@@ -158,6 +171,15 @@ namespace SST::Prototypes::PlotLab
         std::vector<std::size_t> recordingGroups;
         void InstallPythonEvaluator();
         void ResetPython();
+        void StartImportItem();
+        JobId StartImport(ImportRequest);
+        void StopImport();
+        void WaitImportItem();
+        std::shared_ptr<ImportRun> importRun;
+        std::vector<pl::ImportRecipe> trustedImportRecipes;
+        std::stop_token importStop;
+        JobContext* importContext = nullptr;
+        ImportRecipes importRecipes;
     };
     void InstallWorksheetPython(Document* active = nullptr, const std::filesystem::path& pythonRoot = {});
 } // namespace SST::Prototypes::PlotLab

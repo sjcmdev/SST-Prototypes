@@ -5,6 +5,7 @@
 #include "Core/Presentation/Panels/HostedWindows.hpp"
 #include "PlotLabDocument.hpp"
 #include "PlotLabExport.hpp"
+#include "ImportPanel.hpp"
 #include <set>
 #include <imgui.h>
 
@@ -32,6 +33,8 @@ namespace SST::Prototypes::PlotLab
         std::vector<std::filesystem::path> recentFiles;
         std::map<pl::Id, plot::PlotViewState> views;
         std::map<pl::Id, plot::PlotEditorState> plotEditors;
+        Ref<ImportPanel> importPanel;
+        WeakRef<pl::Project> importProject;
         pl::Id selected = 0;
         std::string status = "Create a Workbook and Worksheet, or import CSV/TXT.";
         FileAction pending = FileAction::None;
@@ -138,10 +141,7 @@ namespace SST::Prototypes::PlotLab
         double previewDue=0;
         std::string beforeScript;
         int role = 0, format = 0;
-        bool graphDialog = false, importDialog = false;
-        std::string importText, importName, importPath;
-        pl::ImportOptions importOptions;
-        std::optional<pl::Table> preview;
+        bool graphDialog = false;
         struct MaskPreview { std::weak_ptr<pl::Project> owner; std::uint64_t revision=0; std::vector<double> x,y; };
         std::map<pl::Id,MaskPreview> maskPreviews;
         std::map<pl::Id, std::vector<std::pair<pl::Id, std::uint64_t>>> graphSources;
@@ -182,7 +182,6 @@ namespace SST::Prototypes::PlotLab
         void Graph(pl::Id);
         void EditColumn(pl::Id);
         void BeginImport();
-        void PreviewImport();
         template <class F> void Attempt(F &&operation)
         {
             try

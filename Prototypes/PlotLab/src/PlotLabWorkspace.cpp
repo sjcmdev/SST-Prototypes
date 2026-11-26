@@ -328,29 +328,11 @@ namespace SST::Prototypes::PlotLab
     }
     void WorkspacePanel::BeginImport()
     {
-        auto source = OpenFileDialog({"Delimited data", "csv,txt,dat"});
-        if (!source)
-            return;
-        std::string error;
-        if (!TextFileIO::Load(*source, importText, error))
-            throw std::runtime_error(error);
-        importPath = source->Utf8();
-        importName = Path::FromResolved(source->Native().stem()).Utf8();
-        importOptions = {};
-        importDialog = true;
-        PreviewImport();
-    }
-    void WorkspacePanel::PreviewImport()
-    {
-        preview.reset();
-        try
-        {
-            preview = pl::CsvImporter{}.preview(importText, importOptions);
-        }
-        catch (const std::exception &e)
-        {
-            state->status = e.what();
-        }
+        auto selected=OpenFilesDialog({"Delimited data", "csv,tsv,txt,dat"});
+        if(selected.empty())return;
+        std::vector<std::filesystem::path> paths;for(const auto& path:selected)paths.push_back(path.Native());
+        if(!state->importPanel)state->importPanel=CreateRef<ImportPanel>(*state);
+        state->importPanel->Open(std::move(paths));
     }
     void WorkspacePanel::EditColumn(pl::Id id)
     {
@@ -380,10 +362,14 @@ namespace SST::Prototypes::PlotLab
         viewProject = state->document->project;
         rename = remove = metadata = exportGraph = operationsSheet = contextColumn = 0;
         targetGraph = sheetChoice = xChoice = errorChoice = 0;
-        graphDialog = importDialog = false;
+        graphDialog = false;
+        if(state->importProject.lock()!=state->document->project) {
+            state->importPanel.reset();state->importProject=state->document->project;
+            if(state->document->importUi.open)state->importPanel=CreateRef<ImportPanel>(*state);
+        }
         sheetViews.clear(); activeSheets.clear(); renderedSheets.clear(); maskPreviews.clear(); graphSources.clear();
         availableColumns.clear(); plottedSeries.clear();
-        nestedKeys.clear(); operationColumns.clear(); joinSheet = 0; preview.reset(); importText.clear();
+        nestedKeys.clear(); operationColumns.clear(); joinSheet = 0;
         pythonRun=previewJob=parameterJob=0;scriptId=0;scriptWindow=false;lastPreviewSource.clear();formulaCode={};scriptCode={};consoleCode={};
         headerDrafts.clear();headerCodes.clear();
         if (replaced) {
@@ -1067,7 +1053,7 @@ namespace SST::Prototypes::PlotLab
         ImGui::BeginChild("Toolbar", {0, ImGui::GetFrameHeight() + ImGui::GetStyle().ScrollbarSize + 3}, ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
         button(ICON_FA_BOOK "##new", "New Book", [&] { NewWorkbook(p.root()); });
         button(ICON_FA_CHART_LINE "##graph", "New Graph from selection (Line + Symbol)", [&] { PlotSelection(id, plot::SeriesKind::LineScatter); });
-        button(ICON_FA_FILE_IMPORT, "Import CSV / TXT", [&] { BeginImport(); });
+        button(ICON_FA_FILE_IMPORT, "Import CSV / TSV / DAT", [&] { (void)state->document->commands->Execute(CommandID{"plotlab.ui.import"}); });
         button(ICON_FA_TABLE_COLUMNS, "Add New Columns (Ctrl+D)", [&] { doc.AddColumn(id); });
         button(ICON_FA_CALCULATOR, "Set Column Values (Ctrl+Q)", [&] { if (!v.column) throw std::invalid_argument("Select a column first"); EditColumn(v.column); valuesDialog = true; });
         button(ICON_FA_SORT, "Sort / Filter", [&] { operationsSheet = id; dataAction = 0; });
@@ -1293,7 +1279,7 @@ namespace SST::Prototypes::PlotLab
             editor.details = true;
         };
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F2)) details();
-        if (ImGui::Button("Fit")) { plot::PlotEdit edit; edit.kind = plot::PlotEditKind::Rescale; editor.pending.push_back(std::move(edit)); }
+        if (ImGui::Button("Rescale")) { plot::PlotEdit edit; edit.kind = plot::PlotEditKind::Rescale; editor.pending.push_back(std::move(edit)); }
         ImGui::SameLine(); if (ImGui::Button("Layer Contents...")) BeginGraphDialog(id);
         ImGui::SameLine(); if (ImGui::Button("Plot Details (F2)")) details();
         ImGui::SameLine(); if (ImGui::Button("Axes")) ImGui::OpenPopup("Axes");
@@ -1741,91 +1727,7 @@ namespace SST::Prototypes::PlotLab
             ImGui::TextWrapped("%s", state->status.c_str());
             ImGui::EndPopup();
         }
-        if (importDialog)
-            ImGui::OpenPopup("Import preview");
-        if (ImGui::BeginPopupModal("Import preview", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-        {
-            ImGui::TextWrapped("%s", importPath.c_str());
-            const char delimiters[] = {0, ',', ';', '\t', ' ', '|'}, decimals[] = {0, '.', ','};
-            int delimiter = 0, decimal = 0, header = static_cast<int>(importOptions.header),
-                unitRows = static_cast<int>(importOptions.units);
-            for (int i = 0; i < 6; ++i)
-                if (delimiters[i] == importOptions.delimiter)
-                    delimiter = i;
-            for (int i = 0; i < 3; ++i)
-                if (decimals[i] == importOptions.decimal)
-                    decimal = i;
-            bool changed = sst::ui::widgets::Combo("Delimiter", &delimiter, "Detect\0Comma\0Semicolon\0Tab\0Whitespace\0Pipe\0");
-            changed |= sst::ui::widgets::Combo("Decimal", &decimal, "Detect\0Point\0Comma\0");
-            changed |= sst::ui::widgets::Combo("Header", &header, "Detect\0Present\0Absent\0");
-            changed |= sst::ui::widgets::Combo("Units row", &unitRows, "Detect\0Present\0Absent\0");
-            if (changed)
-            {
-                importOptions.delimiter = delimiters[delimiter];
-                importOptions.decimal = decimals[decimal];
-                importOptions.header = static_cast<pl::RowMode>(header);
-                importOptions.units = static_cast<pl::RowMode>(unitRows);
-                PreviewImport();
-            }
-            if (preview)
-            {
-                for (const auto &[key, value] : preview->source)
-                    ImGui::Text("%s: %s", key.c_str(), value == "\t" ? "tab" : value.c_str());
-                for (const auto &diagnostic : preview->diagnostics)
-                    ImGui::TextWrapped("%s", diagnostic.c_str());
-                const auto visibleColumns = std::min<std::size_t>(8, preview->columns.size());
-                if (visibleColumns < preview->columns.size())
-                    ImGui::Text("Preview: first 8 of %zu columns", preview->columns.size());
-                if (ImGui::BeginTable("preview", static_cast<int>(visibleColumns), ImGuiTableFlags_Borders))
-                {
-                    for (std::size_t c = 0; c < visibleColumns; ++c)
-                        ImGui::TableSetupColumn((preview->names[c] + " [" + preview->columns[c].units + "]").c_str());
-                    ImGui::TableHeadersRow();
-                    auto count = std::min<std::size_t>(
-                        5, std::visit([](const auto &v) { return v.size(); }, preview->columns[0].values));
-                    for (std::size_t r = 0; r < count; ++r)
-                    {
-                        ImGui::TableNextRow();
-                        for (std::size_t c = 0; c < visibleColumns; ++c)
-                        {
-                            ImGui::TableSetColumnIndex(static_cast<int>(c));
-                            std::visit(
-                                [&](const auto &v)
-                                {
-                                    using T = typename std::decay_t<decltype(v)>::value_type;
-                                    if constexpr (std::is_same_v<T, double>)
-                                        ImGui::Text("%.8g", v[r]);
-                                    else
-                                        ImGui::TextUnformatted(v[r].c_str());
-                                },
-                                preview->columns[c].values);
-                        }
-                    }
-                    ImGui::EndTable();
-                }
-            }
-            ImGui::BeginDisabled(!preview.has_value());
-            if (ImGui::Button("Import"))
-                Attempt(
-                    [&]
-                    {
-                        auto table = pl::CsvImporter{}.read(importText, importOptions);
-                        table.source["path"] = importPath;
-                        doc.Execute(pl::importTable(p, p.root(), importName, table));
-                        state->RefreshWindows();
-                        importDialog = false;
-                        ImGui::CloseCurrentPopup();
-                    });
-            ImGui::EndDisabled();
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape))
-            {
-                importDialog = false;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::TextWrapped("%s", state->status.c_str());
-            ImGui::EndPopup();
-        }
+        if(state->importPanel)state->importPanel->Render();
         if (exportGraph)
             ImGui::OpenPopup("Export publication figure");
         if (ImGui::BeginPopupModal("Export publication figure", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
