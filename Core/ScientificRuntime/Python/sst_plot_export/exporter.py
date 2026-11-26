@@ -414,7 +414,7 @@ def build_figure(snapshot, dpi=300, _figure=None):
                 if points.ndim != 2 or points.shape[1] != 2 or not np.all(np.isfinite(points)):
                     raise ValueError("Invalid chart geometry")
                 fill = path["filled"]
-                alpha = mpl.colors.to_rgba(style["color"])[3] * (series.get("fill_alpha", .35) if kind in (16, 18) and fill else 1)
+                alpha = mpl.colors.to_rgba(style["color"])[3] * (series.get("fill_alpha", .35) if kind in (15, 16, 18) and fill else 1)
                 if fill:
                     ax.add_patch(Polygon(points, facecolor=style["color"],
                                          edgecolor="none" if kind in (16, 18) else style["color"],

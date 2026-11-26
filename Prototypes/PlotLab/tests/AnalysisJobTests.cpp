@@ -65,6 +65,15 @@ TEST_F(PlotGapAnalysisJobs, PreviewCannotBeAcceptedAndBatchKeepsMixedStatusIds) 
     EXPECT_EQ(result->items[1].id,"bad");EXPECT_EQ(result->items[1].recipeId,"bad-recipe");EXPECT_EQ(result->items[1].result->error,pl::AnalysisError::InsufficientPoints);
     analysis.Accept();EXPECT_EQ(analysis.Status().outputWorksheets.size(),2);EXPECT_EQ(undo->GetUndoDepth(),1);
 }
+TEST_F(PlotGapAnalysisJobs, EmptyModelDiagnosticKeepsLastResultAndReportsFailure) {
+    analysis.Submit(recipe);ASSERT_EQ(analysis.Wait().stage,AnalysisStage::PreviewReady);const auto previous=analysis.Status().preview;
+    recipe.settings.operation=pl::ScientificOperation::UserFit;recipe.settings.userModelId="empty-error";
+    recipe.settings.parameters={{"a","V",2,-10,10}};
+    pl::UserAnalysisModel model{"empty-error","s","V",1,{"a"},[](auto,auto,auto){throw std::runtime_error("");}};
+    analysis.Submit(recipe,model);ASSERT_EQ(analysis.Wait().stage,AnalysisStage::Failed);
+    EXPECT_FALSE(analysis.Status().message.empty());EXPECT_NE(analysis.Status().error,pl::AnalysisError::None);
+    EXPECT_EQ(analysis.Status().preview,previous);EXPECT_THROW(analysis.Accept(),std::invalid_argument);
+}
 TEST_F(PlotGapAnalysisJobs, GlobalFitUsesSameCommandJobAndAtomicAcceptWithFullRecipe) {
     auto second=doc.AddColumn(recipe.worksheet);doc.SetValues(second,std::vector<double>{4,7,10,13});auto column=doc.project->object(second);std::get<pl::Column>(column.data).units="V";doc.Execute(doc.project->change("Units",{std::move(column)}));
     recipe.settings.parameters=pl::defaultAnalysisParameters(recipe.settings,"s","V");recipe.settings.parameters[1].shared=true;

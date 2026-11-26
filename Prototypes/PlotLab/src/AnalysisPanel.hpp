@@ -30,6 +30,11 @@ private:
     std::uint64_t checkedProjectRevision=0,checkedSettingsRevision=0;
     std::map<pl::Id,std::array<pl::Id,3>> batchInputs;
     std::weak_ptr<const AnalysisJobResult> drawnPreview;
+    struct PreviewRange {
+        std::optional<sst::ui::plot::Bounds> target, applied;
+        std::string xUnits, yUnits;
+        bool manual=false;
+    } previewRange, residualRange;
     void Run(bool preview);
     bool DrawPreview();
     void DrawBatch();

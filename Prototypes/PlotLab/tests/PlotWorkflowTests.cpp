@@ -122,3 +122,29 @@ TEST(PlotWorkflow, PeakMarkerDragEditsTypedParametersAndKeepsSourcesAndIds) {
     w.analysis.Submit(changed);EXPECT_EQ(w.analysis.Wait().stage,AnalysisStage::PreviewReady);EXPECT_TRUE(w.analysis.Status().exact);
     jobs->Shutdown(true);ImPlot::DestroyContext();ImGui::DestroyContext();
 }
+TEST(PlotWorkflow, AnalysisPreviewKeepsHeldRangeEasesAfterReleaseAndPreservesManualPan) {
+    ImGui::CreateContext();ImPlot::CreateContext();
+    struct Cleanup {~Cleanup(){ImPlot::DestroyContext();ImGui::DestroyContext();}} cleanup;
+    auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1600,1200};io.DeltaTime=.05f;io.BackendFlags|=ImGuiBackendFlags_RendererHasTextures;
+    auto bus=CreateRef<EventBus>();auto jobs=CreateRef<JobSystem>(bus,1);Document doc(CreateRef<CommandRegistry>(),CreateRef<UndoStack>(),bus,jobs);
+    doc.Execute(pl::importTable(*doc.project,doc.project->root(),"Signal",pl::CsvImporter{}.read("X,Y\n0,1\n1,3\n2,5\n")));
+    const auto sheet=doc.project->children(doc.project->children(doc.project->root()).front()).front();const auto c=doc.project->children(sheet);
+    auto& w=doc.Workflow();w.panel.open=true;pl::AnalysisRecipe r;r.id="stable";r.worksheet=sheet;r.xColumn=c[0];r.yColumn=c[1];r.autoPreview=false;r.showResiduals=false;
+    r.settings.operation=pl::ScientificOperation::LinearFit;r.settings.parameters=pl::defaultAnalysisParameters(r.settings,"","");
+    for(auto& p:r.settings.parameters){p.fixed=true;p.start=10;}
+    auto submit=[&]{w.panel.SetRecipe(r);w.analysis.Submit(r);ASSERT_EQ(w.analysis.Wait().stage,AnalysisStage::PreviewReady);};
+    auto frame=[&]{ImGui::NewFrame();ImGui::SetNextWindowPos({20,20},ImGuiCond_Always);w.panel.Draw();ImGui::Render();};
+    submit();for(int i=0;i<4;++i)frame();ASSERT_TRUE(w.panel.previewView.viewport);const auto initial=*w.panel.previewView.viewport;
+    io.AddMousePosEvent(-100,-100);io.AddMouseButtonEvent(0,true);frame();
+    for(auto& p:r.settings.parameters)p.start=.1;submit();for(int i=0;i<4;++i)frame();
+    EXPECT_EQ(w.panel.previewView.viewport->maxY,initial.maxY);
+    io.AddMouseButtonEvent(0,false);frame();EXPECT_LT(w.panel.previewView.viewport->maxY,initial.maxY);
+    for(int i=0;i<40;++i)frame();
+    ImPlotPlot* plot=nullptr;auto* context=ImPlot::GetCurrentContext();
+    for(int i=0;i<context->Plots.GetBufSize();++i){auto* candidate=context->Plots.GetByIndex(i);if(candidate->TitleOffset>=0 && std::string(candidate->GetTitle())=="analysis-preview")plot=candidate;}
+    ASSERT_NE(plot,nullptr);const auto point=plot->PlotRect.GetCenter();
+    io.AddMousePosEvent(point.x,point.y);frame();io.AddMouseButtonEvent(0,true);frame();io.AddMousePosEvent(point.x+30,point.y+10);frame();io.AddMouseButtonEvent(0,false);frame();
+    const auto manual=*w.panel.previewView.viewport;EXPECT_NE(manual.minX,initial.minX);
+    for(auto& p:r.settings.parameters)p.start=100;submit();for(int i=0;i<4;++i)frame();
+    EXPECT_EQ(*w.panel.previewView.viewport,manual);jobs->Shutdown(true);
+}

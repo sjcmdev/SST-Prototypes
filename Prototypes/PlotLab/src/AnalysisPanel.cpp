@@ -12,7 +12,8 @@ namespace w=sst::ui::widgets;
 namespace {
 bool ParameterControl(const char* label,double& value,const std::string& units) {
     const auto tip="Physical value ["+units+"]. Drag mantissa/exponent; Ctrl+click for exact entry.";
-    return w::LogValue(label,&value,-100,100,tip.c_str());
+    const auto caption=std::string(label)+(units.empty()?"":" ["+units+"]");
+    return w::LogValue(caption.c_str(),&value,-100,100,tip.c_str());
 }
 plot::Color IdentityColor(const std::string& id) {
     std::uint32_t hash=2166136261u;for(unsigned char c:id)hash=(hash^c)*16777619u;
@@ -46,7 +47,10 @@ bool ParameterRows(std::vector<pl::AnalysisParameter>& parameters,bool local=fal
         for(auto& p:parameters) {
             ImGui::PushID(p.name.c_str());ImGui::TableNextRow();ImGui::TableNextColumn();ImGui::Text("%s [%s]",p.name.c_str(),p.units.c_str());
             ImGui::BeginDisabled(local && p.shared);
-            ImGui::TableNextColumn();changed|=w::LogControl("##start",&p.start,-100,100,"Start in parameter units. Drag mantissa/exponent; Ctrl+click for exact entry.");
+            ImGui::TableNextColumn();if(w::LogControl("##start",&p.start,-100,100,"Start in parameter units, constrained to the configured bounds. Drag mantissa/exponent; Ctrl+click for exact entry.")) {
+                if(p.lower<=p.upper)p.start=std::clamp(p.start,p.lower,p.upper);
+                changed=true;
+            }
             ImGui::TableNextColumn();changed|=ImGui::Checkbox("##fixed",&p.fixed);if(ImGui::IsItemHovered())ImGui::SetTooltip("Keep this parameter fixed at its start.");
             ImGui::TableNextColumn();ImGui::BeginDisabled(local);changed|=ImGui::Checkbox("##shared",&p.shared);if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip("Shared scope and shared values are edited in the main parameter table. Local parameters may have different starts and bounds here.");ImGui::EndDisabled();
             ImGui::BeginDisabled(p.fixed);ImGui::TableNextColumn();changed|=w::LogControl("##lower",&p.lower,-100,100,"Lower bound in parameter units. Disabled for a fixed parameter.");
@@ -67,6 +71,8 @@ void AnalysisPanel::Draw() {
     if(!open)return;
     ImGui::PushID(this);
     ImGui::SetNextWindowSize({1180,680},ImGuiCond_FirstUseEver);
+    const auto display=ImGui::GetIO().DisplaySize;
+    ImGui::SetNextWindowSizeConstraints({std::min(1180.f,display.x),std::min(500.f,display.y)},display);
     if(!ImGui::Begin("Scientific analysis",&open)) {ImGui::End();ImGui::PopID();return;}
     controller.Poll();bool changed=false;auto& project=*controller.document.project;
     if(!ImGui::BeginTable("Analysis layout",2,ImGuiTableFlags_Resizable|ImGuiTableFlags_SizingStretchProp)){ImGui::End();ImGui::PopID();return;}
@@ -116,7 +122,7 @@ void AnalysisPanel::Draw() {
         auto& bound=side?recipe.settings.xTo:recipe.settings.xFrom;bool enabled=bound.has_value();
         const char* label=side?"Limit X to":"Limit X from";
         if(w::Checkbox(label,&enabled,"Inclusive physical X range; all samples are used when disabled.")) {bound=enabled?std::optional<double>{0}:std::nullopt;changed=true;}
-        if(enabled) {ImGui::PushID(side);changed|=ParameterControl("X [physical units]",*bound,units(recipe.xColumn));ImGui::PopID();}
+        if(enabled) {ImGui::PushID(side);changed|=ParameterControl("X",*bound,units(recipe.xColumn));ImGui::PopID();}
     }
     const auto op=recipe.settings.operation;
     const bool peakBaseline=op==pl::ScientificOperation::Peaks || op==pl::ScientificOperation::MultiPeakFit;
@@ -276,8 +282,8 @@ bool AnalysisPanel::DrawPreview() {
             const auto& r=*item.result;if(!r.ok() || r.x.size()!=r.values.size() || r.x.empty())continue;
             if(previous && status.preview && !status.preview->items.empty() && r.outputUnits!=status.preview->items.front().result->outputUnits)continue;
             plot::SeriesEntryView view;view.id=item.id+suffix;view.data={r.x.data(),r.values.data(),r.x.size()};
-            view.style.color=previous?plot::Color{.6f,.6f,.6f,.7f}:IdentityColor(item.id);
-            if(previous)view.style.lineStyle=plot::LineStyle::Dashed;
+            view.style.color=IdentityColor(item.id);
+            if(!previous && status.accepted)for(int c=0;c<3;++c)view.style.color[c]*=.75f;
             series.push_back(std::move(view));
             if(!previous)for(std::size_t j=0;j<r.components.size();++j) {
                 plot::SeriesEntryView component;component.id=item.id+" "+r.settings.peaks[j].id;component.data={r.x.data(),r.components[j].data(),r.x.size()};component.style.color=IdentityColor(item.id+"."+r.settings.peaks[j].id);component.style.lineStyle=plot::LineStyle::Dashed;series.push_back(std::move(component));
@@ -289,12 +295,36 @@ bool AnalysisPanel::DrawPreview() {
         }
     };
     append(status.accepted," accepted",true);append(status.preview," preview",false);
-    plot::PlotSpec spec;spec.x.label="Physical X";spec.y.label="Analysis";spec.autoFit=previewView.dataChanged?plot::AutoFit::Always:plot::AutoFit::Once;
+    plot::PlotSpec spec;spec.x.label="Physical X";spec.y.label="Analysis";spec.legend.outside=true;
     if(status.preview && !status.preview->items.empty()) {
         const auto& item=status.preview->items.front();const auto& r=*item.result;
         spec.x.unit=r.xUnits;spec.y.unit=r.outputUnits;
     }
     plot::PreviewMetrics metrics;metrics.interactive=true;
+    auto axes=[&](const auto& entries,plot::PlotViewState& view,PreviewRange& range) {
+        if(range.xUnits!=spec.x.unit || range.yUnits!=spec.y.unit) {
+            range={};range.xUnits=spec.x.unit;range.yUnits=spec.y.unit;view.viewport.reset();view.fitted=false;
+        }
+        if(range.applied && view.viewport && *range.applied!=*view.viewport)range.manual=true;
+        spec.bounds.reset();spec.autoFit=plot::AutoFit::Always;
+        if(view.dataChanged || !range.target)range.target=plot::ResolveBounds(spec,entries.data(),entries.size(),view);
+        spec.autoFit=plot::AutoFit::Once;
+        if(range.manual || !range.target)return;
+        auto bounds=*range.target;
+        if(view.viewport) {
+            const auto previous=*view.viewport;
+            if(ImGui::IsMouseDown(ImGuiMouseButton_Left) || exactPending || status.stage==AnalysisStage::Running) {
+                bounds.minX=std::min(bounds.minX,previous.minX);bounds.maxX=std::max(bounds.maxX,previous.maxX);
+                bounds.minY=std::min(bounds.minY,previous.minY);bounds.maxY=std::max(bounds.maxY,previous.maxY);
+            }
+            const double fraction=1-std::exp(-12*ImGui::GetIO().DeltaTime);
+            auto ease=[&](double from,double to){return std::abs(to-from)<1e-7*std::max(1.,std::abs(to))?to:from+(to-from)*fraction;};
+            bounds={ease(previous.minX,bounds.minX),ease(previous.maxX,bounds.maxX),ease(previous.minY,bounds.minY),ease(previous.maxY,bounds.maxY)};
+        }
+        if(!view.viewport || bounds!=*view.viewport){spec.bounds=bounds;spec.autoFit=plot::AutoFit::Always;}
+        range.applied=bounds;
+    };
+    axes(series,previewView,previewRange);
     if(!series.empty()) {plot::RenderPlot("analysis-preview",spec,series.data(),series.size(),previewView,metrics,{0,220},nullptr,[&] {
         if(recipe.settings.operation!=pl::ScientificOperation::MultiPeakFit)return;
         for(std::size_t i=0;i<recipe.settings.peaks.size();++i) {
@@ -313,7 +343,7 @@ bool AnalysisPanel::DrawPreview() {
     if(recipe.showResiduals && status.preview && !status.preview->items.empty()) {
         std::vector<plot::SeriesEntryView> residuals;
         for(const auto& item:status.preview->items){const auto& r=*item.result;if(r.residuals.size()==r.x.size() && !r.x.empty()){plot::SeriesEntryView view;view.id=item.id+" residual";view.data={r.x.data(),r.residuals.data(),r.x.size()};view.style.color=IdentityColor(item.id);residuals.push_back(std::move(view));}}
-        if(!residuals.empty()){spec.y.label="Residual";spec.y.unit=status.preview->items.front().result->yUnits;spec.autoFit=residualView.dataChanged?plot::AutoFit::Always:plot::AutoFit::Once;plot::RenderPlot("analysis-residuals",spec,residuals.data(),residuals.size(),residualView,metrics,{0,140});}
+        if(!residuals.empty()){spec.y.label="Residual";spec.y.unit=status.preview->items.front().result->yUnits;axes(residuals,residualView,residualRange);plot::RenderPlot("analysis-residuals",spec,residuals.data(),residuals.size(),residualView,metrics,{0,140});}
     }
     return parametersChanged;
 }

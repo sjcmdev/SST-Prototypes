@@ -146,10 +146,10 @@ const AnalysisStatus& AnalysisController::Poll() {
     auto finished=std::move(work);
     if(job->status==JobStatus::Cancelled || job->cancellationRequested) {status.stage=AnalysisStage::Cancelled;status.error=pl::AnalysisError::Cancelled;status.message="Analysis cancelled";return status;}
     if(base.lock()!=document.project || (finished->result && finished->result->revision!=document.project->revision())) {status.stage=AnalysisStage::Stale;status.error=pl::AnalysisError::Stale;status.message="Source changed; recalculate analysis";return status;}
-    if(job->status==JobStatus::Failed || !finished->result) {status.stage=AnalysisStage::Failed;status.error=pl::AnalysisError::Model;status.message=job->errorMessage;return status;}
+    if(job->status==JobStatus::Failed || !finished->result) {status.stage=AnalysisStage::Failed;status.error=pl::AnalysisError::Model;status.message=job->errorMessage.empty()?"Analysis failed without diagnostic details.":job->errorMessage;return status;}
     const auto& items=finished->result->items;
     const auto ok=std::count_if(items.begin(),items.end(),[](const auto& item){return item.result->ok();});
-    if(!ok) {status.stage=AnalysisStage::Failed;status.error=items.front().result->error;status.message=items.front().result->message;return status;}
+    if(!ok) {status.stage=AnalysisStage::Failed;status.error=items.front().result->error;status.message=items.front().result->message.empty()?"Analysis failed without diagnostic details.":items.front().result->message;return status;}
     status.preview=std::move(finished->result);status.stage=AnalysisStage::PreviewReady;status.error=pl::AnalysisError::None;
     status.message=coarsePreview?"Live preview; release control for exact result":"Exact result ready to accept";return status;
 }

@@ -276,12 +276,14 @@ def test_spatial_marker_style_is_exported(spatial, kind):
         assert line.get_markerfacecolor() == [1,0,0,1]
     fig.clear()
 
-def test_chart_fill_combines_series_alpha_and_fill_opacity(snapshot, tmp_path):
+@pytest.mark.parametrize('kind', [15, 16, 18])
+def test_chart_fill_combines_series_alpha_and_fill_opacity(snapshot, tmp_path, kind):
     series=snapshot['series'][0]
-    series.update(kind=16,fill_alpha=.4,chart=dict(paths=[dict(points=[[1,-3],[4,-3],[4,8],[1,8]],filled=True)]))
+    series.update(kind=kind,fill_alpha=.4,chart=dict(paths=[dict(points=[[1,-3],[4,-3],[4,8],[1,8]],filled=True),dict(points=[[1,2],[4,2]],filled=False)]))
     series['style']['color']=[.1,.3,.7,.5]
     figure=build_figure(snapshot)
     assert figure.axes[0].patches[0].get_facecolor()[3]==pytest.approx(.2)
+    assert figure.axes[0].lines[0].get_color()==series['style']['color']
     target=tmp_path/'area.eps'
     export_graph(snapshot,target,'eps')
     assert target.read_bytes().startswith(b'%!PS-Adobe-3.0 EPSF-3.0')
