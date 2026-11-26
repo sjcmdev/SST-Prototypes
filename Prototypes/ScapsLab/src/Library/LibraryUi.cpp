@@ -31,7 +31,7 @@ public:
 RevisionRef Find(const State& s,const std::string& library,const std::string& item,std::uint32_t version=0){const auto c=s.libraries.find(library);if(c==s.libraries.end() || !c->second.catalog.Items().contains(item))return {};return c->second.catalog.Find(item,version);}
 void PlotLine(const char* name,const Preview& p) {if(p.x.size()==1)ImPlot::PlotScatter(name,p.x.data(),p.y.data(),1);else if(!p.x.empty())ImPlot::PlotLine(name,p.x.data(),p.y.data(),int(p.x.size()));if(p.y2.size()==p.x.size() && !p.y2.empty())ImPlot::PlotLine((std::string(name)+" / "+p.secondLabel).c_str(),p.x.data(),p.y2.data(),int(p.x.size()));}
 bool Combo(const char* label,std::string& value,const std::vector<std::string>& choices,const char* tooltip) {
-    bool changed=false;widgets::BeginLabelledRow(label);if(ImGui::BeginCombo("##value",value.c_str())){for(const auto& c:choices)if(ImGui::Selectable(c.c_str(),c==value)){value=c;changed=true;}ImGui::EndCombo();}Help(tooltip);widgets::EndLabelledRow();return changed;
+    bool changed=false;widgets::BeginLabelledRow(label);if(ImGui::BeginCombo("##value",value.c_str())){for(std::size_t i=0;i<choices.size();++i){const auto& c=choices[i];ImGui::PushID(int(i));if(ImGui::Selectable(c.empty()?"(any)":c.c_str(),c==value)){value=c;changed=true;}ImGui::PopID();}ImGui::EndCombo();}Help(tooltip);widgets::EndLabelledRow();return changed;
 }
 std::vector<std::string> WritableLibraries(const State& s){std::vector<std::string> out;for(const auto& [id,m]:s.libraries)if(!m.catalog.ReadOnly())out.push_back(id);return out;}
 std::string LabelPath(const std::string& path){const auto last=path.find_last_of('.');return path.substr(last==path.npos?0:last+1);}
