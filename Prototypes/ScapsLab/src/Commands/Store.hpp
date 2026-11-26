@@ -10,10 +10,12 @@
 #include <vector>
 #include "Core/Diagnostics/StructuredError.hpp"
 namespace SST::ScapsLab {
+namespace Library {struct Request;}
 using Json = nlohmann::json;
 class ILabStore {
 public:
     virtual ~ILabStore() = default;
+    virtual void LibraryTyped(std::shared_ptr<const Library::Request>) {throw std::logic_error("Asset library unavailable");}
     virtual void BoundsFileTyped(BoundsFileAction) {throw std::logic_error("Parameter bounds unavailable");}
     // queries
     virtual bool Busy() const = 0;                                   // any device lane or the project lane has work

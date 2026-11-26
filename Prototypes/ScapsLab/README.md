@@ -1,5 +1,23 @@
 # ScapsLab multi-device projects
 
+## Scientific asset libraries
+
+Open **View > Library** for built-in, user, project-local and mounted shared libraries. Search names/tags, switch list/grid, inspect cited parameters and version history, or derive an editable item. Drag an item onto a layer/device target, or choose **Use in device**. The confirmation defaults to a copy with source/version link-back; linked use is explicit. Copies keep their values until refreshed. Linked changes use normal device edits/undo; unresolved updates prevent calculating with an outdated linked source. **Keep current copy** detaches a missing/stale link.
+
+The catalog includes nine typed item kinds, example assets and the cited `cigs-literature-libdata1` packet. Example defaults are identified separately from cited measurements. Composition-specific material snapshots require an explicit uniform composition. Two imported interface items require reviewing the energy-reference convention in a derived item before use. Varshni laws are evaluated when applying an item at the receiving temperature; they are not an additional engine sweep model. Refractive index data is retained/previewed; the solver consumes explicit absorption data.
+
+C++ callers use `Library::Request` through `Cmd::LibraryOperation` and the existing command/job path. `Core/Assets/Library.hpp` is the app-independent immutable revision catalog; ScapsLab provides the scientific payload variant, validation and file adapters. Python uses the same path:
+
+```python
+catalog = session.library()
+session.library('derive', source_library_id='sst-examples', library_id='project',
+                item_id='si-default', new_id='my-silicon')
+session.library('apply', library_id='project', item_id='my-silicon',
+                policy='copy', target={'layer_id': layer_id})
+```
+
+Other library actions are `create_library`, `mount`, `preview_import`, `commit_import`, `create`, `revise`, `lock`, `save`, `export`, `refresh`, `where_used`, `undo`, `redo`. Revision writes require `expected_version`. JSON conversion occurs only in the Python binding and project/file adapters. Versioned YAML/JSON libraries preserve history, provenance, parameter units/ranges and derivation. SCAPS DEF/material and explicit-unit CSV adapters operate at file edges; export only represents fields supported by the target format. Shared saves reject changed file fingerprints. Where-used scans the current project plus an explicitly selected project file/folder, without a global watcher. Browser state and unpublished editor drafts persist in `.scapslab`.
+
 Core application for the read-only sibling `scaps_core` checkout. The old viewer remains independent. No solver sources are copied. `ScapsCore` is a static library compiled with MSVC `/fp:precise`, sharing SST's yaml-cpp target.
 
 Generate with `bash D:/SJCM/01_SemiconductorStudio/tools/agents/build-lock.sh Vendor/Binaries/Premake/Windows/premake5.exe --scaps-core=D:/SJCM/01_SemiconductorStudio/scaps_core-wt/integ vs2022`. Build ScapsCore/Core explicitly when changed, then the generated `ScapsLab`, `ScapsLabHeadless`, and `ScapsLabTests` vcxproj files through the same lock, with `-p:Configuration=Release -p:Platform=x64 -p:BuildProjectReferences=false -nr:false -m:1` and `/MP6`. Run `ScapsLabTests.exe` through the lock. Build outputs are under `build/bin/Release-windows-x86_64/`.

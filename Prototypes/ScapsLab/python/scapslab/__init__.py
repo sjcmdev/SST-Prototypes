@@ -29,6 +29,14 @@ class Session:
         """Effective bounds; numeric limits use the explicit SI unit field."""
         return self.start(dict(operation='parameter_bounds', action='inspect'))
 
+    def library(self, action='inspect', **request):
+        """Typed asset operations through the same Core command/job path as the GUI.
+
+        Payload fields use device_project v1 units. include_data=True returns a
+        selected payload; default inspection returns lightweight metadata only.
+        """
+        return self.execute(dict(operation='library', action=action, **request))
+
     def reload_parameter_bounds(self):
         return self.execute(dict(operation='parameter_bounds', action='reload'))
 

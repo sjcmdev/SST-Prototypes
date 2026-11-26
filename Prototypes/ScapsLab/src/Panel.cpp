@@ -24,11 +24,12 @@
 #include "Vendor/ImGuiNotify/win32Example/fonts/IconsFontAwesome6.h"
 namespace SST {void PerfAdd(const std::string &name, double ms);}
 namespace SST::ScapsLab {
-static const char *names[]={"Project","Layers","Contacts","Solver","Run","Band diagram & profiles","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination"};
+static const char *names[]={"Project","Layers","Contacts","Solver","Run","Band diagram & profiles","C-V","Mott-Schottky","C-f","G-omega-f","I-V","Defects","Interfaces","Rs-Rsh","Structure","History","Batch","Recorder","Batch overlay","Illumination","Absorption","Grading","Generation-Recombination","Library"};
 Panel::Panel(Workflow *w,int v,bool gallery):EditorWindow(std::string("scapslab.")+names[v],v==18?"Results":names[v],true),w(w),view(v),gallery(gallery) {
     auto s=GetState(); s.x=gallery?25.f:10.f+float(v%3)*415.f; s.y=gallery?50.f:45.f+float(v/3)*335.f;
     if(gallery) s.mode=WindowMode::Maximized;
     s.width=gallery?1100.f:v==4?620.f:405.f; s.height=gallery?650.f:v==4?650.f:325.f; ApplyState(s);
+    if(v==23 && !gallery){s.width=1050;s.height=720;ApplyState(s);}
     absoluteLog=w->plotSession.settings.ivAbsoluteLog;
     std::snprintf(file,sizeof(file),"%s",w->path.c_str());
 }
@@ -902,6 +903,7 @@ void Panel::RenderContent() {
     w->WatchPlots();
     numericWorkflow=w;numericDraft=nullptr;
     struct ResetNumeric {~ResetNumeric(){numericDraft=nullptr;numericWorkflow=nullptr;}} resetNumeric;
+    if(view==23){if(ImGui::GetContentRegionAvail().x<760 && ImGui::Button("Expand Library")){auto state=GetState();state.mode=WindowMode::Maximized;ApplyState(state);}libraryEditor.Draw(*w);return;}
     if(!placed && !gallery) {auto s=GetState();const auto *vp=ImGui::GetMainViewport();s.x+=vp->Pos.x;s.y+=vp->Pos.y;ApplyState(s);placed=true;}
     ImGui::TextDisabled("SCAPSLAB / %s",names[view]);
     if(w->fineLock || ImGui::GetIO().KeyShift) {ImGui::SameLine();ImGui::TextColored(ImVec4(1.f,.75f,.2f,1.f),"[FINE%s]",w->fineLock?" lock, F":"");}
@@ -972,6 +974,7 @@ void Panel::RenderContent() {
             if(ImGui::Button("Down") && selected+1<int(layers.size())) Do(Cmd::EditLayer::With({{"action","move"},{"layer_id",id},{"index",selected+1}}));
             if(pinLayer.empty()) {ImGui::SameLine();if(ImGui::Button("Open in new window")) OpenLayerWindow(w,w->project.active_device,id);if(ImGui::IsItemHovered())ImGui::SetTooltip("Edit this layer in a separate window, side by side with other layers");}
             ImGui::TextDisabled("Stable ID: %s",id.c_str());
+            Library::DropTarget(*w,{id,-1,false,false,w->project.active_device});
             {   // Defects / interface shortcuts: edit through the Defects and Interfaces panels.
                 static std::string picked;const bool last=selected+1>=int(layers.size());
                 if(ImGui::Button("Add defect")){w->pendingDefect=AddDraftDefect(draft,selected,false);w->pendingSheet=false;w->Current().selectedInterface=-1;w->focusPanel=11;picked=draft.layers[selected].defects.back().id;changed=true;++gesture;}
@@ -1740,6 +1743,7 @@ void Panel::Devices() {
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nStatus: %s",d.name.c_str(),d.status.c_str());
                 if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_DEVICE",d.id.c_str(),d.id.size()+1);ImGui::TextUnformatted(d.name.c_str());ImGui::EndDragDropSource();}
                 if(ImGui::BeginDragDropTarget()) {if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_DEVICE")) Do(Cmd::MoveDevice::With({{"device_id",static_cast<const char*>(payload->Data)},{"index",int(&dp-&devices[0])}}));ImGui::EndDragDropTarget();}
+                Library::DropTarget(*w,{d.draft->layers[std::clamp(d.selectedLayer,0,int(d.draft->layers.size())-1)].id,-1,false,false,d.id});
                 if(ImGui::BeginPopupContextItem("device-menu")) {
                     select(d);
                     if(ImGui::MenuItem("Rename...")) {renameId=d.id;std::snprintf(renameBuf,sizeof(renameBuf),"%s",d.name.c_str());ImGui::CloseCurrentPopup();openRename=true;}
@@ -1793,6 +1797,7 @@ void Panel::Devices() {
                             const auto &l=layers[i];const auto &defects=l.value("defects",Json::array());ImGui::PushID(i);
                             const auto [lopen,lclick]=node("##layer",defects.empty()?ImGuiTreeNodeFlags_Leaf:ImGuiTreeNodeFlags_None,active && d.selectedLayer==i && d.selectedInterface<0);
                             if(lclick) {select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;go(1);}
+                            Library::DropTarget(*w,{d.draft->layers[i].id,i,false,false,d.id});
                             { // drag a layer onto another row of the same device: reorder through the layer "move" operation (stable IDs kept)
                                 const std::string payloadText=d.id+"\n"+l.value("scapslab_id",std::string{});
                                 if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_LAYER",payloadText.c_str(),payloadText.size()+1);ImGui::TextUnformatted(l.value("name",std::string("layer")).c_str());ImGui::EndDragDropSource();}

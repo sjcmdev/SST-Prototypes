@@ -2,6 +2,7 @@
 #include "Workflow.hpp"
 #include "Domain/ParameterBounds.hpp"
 #include "Commands/Commands.hpp"
+#include "Library/LibraryUi.hpp"
 #include <cmath>
 #include <algorithm>
 #include "Core/Presentation/Panels/EditorWindow.hpp"
@@ -16,7 +17,7 @@ double PlotCacheSum();
 void SetPlotDataHook(void (*hook)(bool)); // called with true/false around plot-data cache lookups/drawing (allocation-count test)
 void OpenLayerWindow(Workflow *w,const std::string &device,const std::string &layer); // adds an extra pinned "Layer: <name>" editor (drawn by the tutorial/UI layer)
 // Basic mode (owner 2026-11-21): only these panels (indices into Panel.cpp names[]) are created/docked/listed in View. The rest stay in code.
-inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,16,17,18,22}; // all except Structure (14; strip lives in Band diagram), C-V, Mott-Schottky, C-f, G-omega-f, History, Illumination, Absorption, Grading
+inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,16,17,18,22,23}; // hidden: Structure, C-V, Mott-Schottky, C-f, G-omega-f, History, Illumination, Absorption, Grading
 inline bool &ExperimentalPanels() {static bool on=false;return on;} // View > Show experimental panels; persisted in app settings, applied at start
 inline std::string &UiSettingsPath() {static std::string path;return path;}
 inline bool PanelShown(int view) {if(ExperimentalPanels())return true;for(const int p:kBasicPanels)if(p==view)return true;return false;}
@@ -54,6 +55,7 @@ public:
     void SelectGradingParameter(const std::string &key) {gradingParameter=key;} // what the user does before a Grading step
 private:
     Workflow *w;
+    Library::Editor libraryEditor;
     int view;
     std::string pinDevice,pinLayer;
     bool absoluteLog=false, placed=false, gallery=false;

@@ -13,6 +13,20 @@ assert _bounds['parameter_bounds']['Eg_eV']['unit'] == 'J'
 assert _bounds_session.reload_parameter_bounds()['ok']
 print('Parameter bounds: Python inspection (SI units) and command/job Reload PASS')
 
+# Asset inputs cross into typed C++ in the binding; GUI and Python share one command/job path.
+_assets = scapslab.Session()
+_seed = _assets.library(library_id='sst-examples', item_id='si-default', include_data=True)
+assert _seed['ok'], _seed
+assert _seed['selected']['kind'] == 'material' and _seed['selected']['data']['layers'][0]['material']['Eg_eV'] == 1.12
+assert _assets.library('derive', library_id='user', source_library_id='sst-examples', item_id='si-default', new_id='python-si')['ok']
+_derived = _assets.library(library_id='user', item_id='python-si', include_data=True)['selected']
+_derived['data']['layers'][0]['material']['Eg_eV'] = 1.18
+_derived['change_note'] = 'Python gap edit'
+assert _assets.library('revise', library_id='user', expected_version=1, kind='material', metadata=_derived, data=_derived['data'])['ok']
+_bad = _assets.library('revise', library_id='user', expected_version=1, kind='material', metadata=_derived, data=_derived['data'])
+assert not _bad['ok'] and _bad['error']['code'] == 'conflict', _bad
+print('Asset library: Python metadata, payload, derive, revision and stale-write rejection PASS')
+
 # S4: public wrappers use the same typed command/job path as GUI Actions.
 def check_run_actions(document):
     import copy
