@@ -48,9 +48,12 @@ void ExpectSame(const JFMMonteCarloComputation& a, const JFMMonteCarloComputatio
     for (std::size_t i = 0; i < a.result.samples.size(); ++i) {
         const auto& x = a.result.samples[i]; const auto& y = b.result.samples[i];
         EXPECT_EQ(x.parameters, y.parameters); EXPECT_EQ(x.chiSquared, y.chiSquared);
+        EXPECT_EQ(x.reducedChiSquared, y.reducedChiSquared); EXPECT_EQ(x.converged, y.converged);
         EXPECT_EQ(x.objectiveChiSquared, y.objectiveChiSquared); EXPECT_EQ(x.iterations, y.iterations);
         EXPECT_EQ(x.lmStatus, y.lmStatus); EXPECT_EQ(x.stopReason, y.stopReason);
         EXPECT_EQ(x.accepted, y.accepted); EXPECT_EQ(x.solverConverged, y.solverConverged);
+        EXPECT_EQ(x.fitMethod, y.fitMethod); EXPECT_EQ(x.flatDirections, y.flatDirections);
+        EXPECT_EQ(x.linearPoints, y.linearPoints); EXPECT_EQ(x.logPoints, y.logPoints);
     }
 }
 }
@@ -65,8 +68,8 @@ TEST(JFMGpuBatch, ExplicitDeviceSelection) {
     EXPECT_EQ(device.device_id,selected ? std::atoi(selected) : 0);
 }
 
-TEST(JFMGpuBatch, BackendReturnsOnlyRequestedNoisePrefix) {
-    if (!gpuQueryDevice().available) GTEST_SKIP() << gpuQueryDevice().message;
+namespace {
+GpuMonteCarloRequest GpuRequest() {
     GpuMonteCarloRequest q; q.model_type=GpuModelType::SD0; q.n_samples=17; q.noise_pct=1.;
     q.layout.n_total=q.layout.n_free=2; q.layout.free_to_total[1]=1;
     q.layout.fixed_values[0]=1e-10; q.layout.fixed_values[1]=1.5;
@@ -77,6 +80,49 @@ TEST(JFMGpuBatch, BackendReturnsOnlyRequestedNoisePrefix) {
         const auto v=.02+.7*i/23.;q.voltages.push_back(v);
         q.true_current.push_back(EvaluateJFMCurrent("SD-0",v,300.,{{"I0",1e-10},{"A",1.5}}));
     }
+    return q;
+}
+void ExpectSameGpuResult(const GpuMcResult& a, const GpuMcResult& b) {
+    for (int j=0;j<GpuMcResult::MAX_FREE;++j) EXPECT_EQ(a.best_free_params[j],b.best_free_params[j]);
+    EXPECT_EQ(a.chi2_min,b.chi2_min); EXPECT_EQ(a.reduced_chi2_min,b.reduced_chi2_min);
+    EXPECT_EQ(a.ref_reduced_chi2,b.ref_reduced_chi2); EXPECT_EQ(a.delta_reduced_chi2,b.delta_reduced_chi2);
+    EXPECT_EQ(a.iterations,b.iterations); EXPECT_EQ(a.converged,b.converged);
+    EXPECT_EQ(a.solver_converged,b.solver_converged); EXPECT_EQ(a.stop_status,b.stop_status);
+    EXPECT_EQ(a.lm_status,b.lm_status); EXPECT_EQ(a.lm_fallback,b.lm_fallback);
+    EXPECT_EQ(a.flat_directions,b.flat_directions); EXPECT_EQ(a.objective_chi2,b.objective_chi2);
+    EXPECT_EQ(a.linear_points,b.linear_points); EXPECT_EQ(a.log_points,b.log_points); EXPECT_EQ(a.n_free,b.n_free);
+}
+}
+
+TEST(JFMGpuBatch, BackendInitializesEveryResultFieldAndPadding) {
+    if (!gpuQueryDevice().available) GTEST_SKIP() << gpuQueryDevice().message;
+    for (const bool useLm : {false,true}) for (const int budget : {0,40}) for (const bool reject : {false,true}) {
+        SCOPED_TRACE(::testing::Message() << "LM=" << useLm << " budget=" << budget << " reject=" << reject);
+        auto q=GpuRequest(); q.use_lm=useLm; q.nm_config.max_iter=budget; q.start_perturbation_pct=3.;
+        if (reject) q.true_current[0]=0.;
+        const auto whole=gpuRunMonteCarlo(q); ASSERT_TRUE(whole.success); ASSERT_EQ(whole.results.size(),17u);
+        for (const auto& result : whole.results) {
+            EXPECT_EQ(result.n_free,q.layout.n_free); EXPECT_EQ(result.converged,!reject);
+            for (int j=result.n_free;j<GpuMcResult::MAX_FREE;++j) EXPECT_EQ(result.best_free_params[j],0.);
+            EXPECT_EQ(result.ref_reduced_chi2,0.); EXPECT_EQ(result.delta_reduced_chi2,0.);
+            const auto* bytes=reinterpret_cast<const unsigned char*>(&result);
+            for (auto i=offsetof(GpuMcResult,flat_directions)+sizeof(result.flat_directions);i<offsetof(GpuMcResult,objective_chi2);++i)
+                EXPECT_EQ(bytes[i],0);
+            for (auto i=offsetof(GpuMcResult,n_free)+sizeof(result.n_free);i<sizeof(result);++i) EXPECT_EQ(bytes[i],0);
+        }
+        for (const int chunk : {1,8,16}) for (int offset=0;offset<q.n_samples;offset+=chunk) {
+            auto part=q; part.n_samples=std::min(chunk,q.n_samples-offset);
+            part.noise_seed=q.noise_seed+static_cast<std::uint64_t>(offset)*0xD1B54A32D192ED03ULL;
+            const auto output=gpuRunMonteCarlo(part); ASSERT_TRUE(output.success);
+            ASSERT_EQ(output.results.size(),static_cast<std::size_t>(part.n_samples));
+            for (int i=0;i<part.n_samples;++i) ExpectSameGpuResult(whole.results[offset+i],output.results[i]);
+        }
+    }
+}
+
+TEST(JFMGpuBatch, BackendReturnsOnlyRequestedNoisePrefix) {
+    if (!gpuQueryDevice().available) GTEST_SKIP() << gpuQueryDevice().message;
+    auto q=GpuRequest();
     auto none=gpuRunMonteCarlo(q);ASSERT_TRUE(none.success);EXPECT_TRUE(none.noisy_current.empty());
     q.noisy_samples=3;auto prefix=gpuRunMonteCarlo(q);ASSERT_TRUE(prefix.success);EXPECT_EQ(prefix.noisy_current.size(),72u);
     q.noisy_samples=q.n_samples;auto all=gpuRunMonteCarlo(q);ASSERT_TRUE(all.success);
@@ -163,14 +209,18 @@ TEST(JFMGpuBatch, CpuGpuParityIncludesRemainderAndSignedObjective) {
 TEST(JFMGpuBatch, CancelAtChunkBoundaryNeverPublishesPartialResult) {
     if (!gpuQueryDevice().available) GTEST_SKIP() << gpuQueryDevice().message;
     auto r = GpuRecord(); auto f = FitFor(r); ChunkOverride chunk("64");
-    JFMFitMonteCarloSettings s; s.monteCarloSamples = 641; s.monteCarloMaxIterations = 40;
+    JFMFitMonteCarloSettings s; s.monteCarloSamples = 65; s.monteCarloMaxIterations = 40;
     for (const auto [method, calibration] : {std::pair{"lm",false},std::pair{"nm",false},std::pair{"nm",true}}) {
         s.fitMethod = method; s.autoCalibrateGpuSimplexIterations=calibration;
+        const auto expected=RunJFMMonteCarlo(r,*r.info.prefit,f,s); ASSERT_TRUE(expected);
+        ASSERT_EQ(expected->state.backend,"cuda");
         bool cancel = false; int progress = 0;
         JobContext ctx([&](float done,float total){ EXPECT_GT(done,0); EXPECT_LT(done,total); ++progress; cancel=true; },
             {}, {}, {}, [&]{return cancel;});
         EXPECT_THROW((void)RunJFMMonteCarlo(r,*r.info.prefit,f,s,&ctx),JobCancelledException);
         EXPECT_EQ(progress,1);
+        const auto repeated=RunJFMMonteCarlo(r,*r.info.prefit,f,s); ASSERT_TRUE(repeated);
+        ASSERT_EQ(repeated->state.backend,"cuda"); ExpectSame(*expected,*repeated);
     }
 }
 } // namespace SST::Prototypes::JFM
