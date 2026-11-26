@@ -34,7 +34,19 @@ RunAction ReadRunAction(ActionKind kind,const Json& value) {
     if(a.temperature_K!=0)RequireParameter("temperature_K",a.temperature_K);
     RequireParameter("voltage_V",a.voltage_V);RequireParameter("frequency_Hz",a.frequency_Hz);
     RequireParameter("probe_photon_flux_m2_s",a.photon_flux_m2_s);RequireParameter("probe_power_W_m2",a.probe_power_W_m2);
-    if(a.range)for(double x:SweepValues(*a.range))RequireParameter(kind==ActionKind::Cf?"frequency_Hz":kind==ActionKind::Qe?"wavelength_nm":"voltage_V",x);
+    if(!IsDlts(kind) && a.range)for(double x:SweepValues(*a.range))RequireParameter(kind==ActionKind::Cf?"frequency_Hz":kind==ActionKind::Qe?"wavelength_nm":"voltage_V",x);
+    if(kind==ActionKind::Dlcp) {
+        if(value.contains("amplitudes")) {
+            auto amplitude=ReadRunAction(ActionKind::Cv,Json{{"range",value.at("amplitudes")}});a.amplitudes=*amplitude.range;
+        }
+        if(value.contains("V_max_V")){a.range->sampling=SweepSampling::List;a.range->custom=value.at("V_max_V").get<std::vector<double>>();}
+        if(value.contains("amplitudes_V")){a.amplitudes.sampling=SweepSampling::List;a.amplitudes.custom=value.at("amplitudes_V").get<std::vector<double>>();}
+        auto& c=a.dlcp;c.profiling_eps_r=value.value("profiling_eps_r",0.);c.periodic_tolerance=value.value("periodic_tolerance",c.periodic_tolerance);
+        for(const auto* key:{"samples_per_period","min_periods","max_periods"})if(value.contains(key) && !value.at(key).is_number_integer())throw std::invalid_argument("DLCP period controls must be integers");
+        c.samples_per_period=value.value("samples_per_period",c.samples_per_period);c.min_periods=value.value("min_periods",c.min_periods);c.max_periods=value.value("max_periods",c.max_periods);
+        RunPlan check;for(auto& entry:check.actions)entry.include=false;check.actions[5]=a;check.actions[5].include=true;ValidateRunPlan(check,ProjectDraft{});
+    }
+    if(IsDlts(kind)){if(value.contains("protocol"))a.dlts=ReadDltsConfig(value.at("protocol"));RunPlan check;for(auto& e:check.actions)e.include=false;check.actions[int(kind)]=a;check.actions[int(kind)].include=true;ValidateRunPlan(check,ProjectDraft{});}
     return a;
 }
 RunPlan ReadRunPlan(const Json& value) {
@@ -53,6 +65,12 @@ Json RunPlanJson(const RunPlan& plan,const Json& original) {
         v["probe_mode"]=a.constantFlux?"constant_flux":"constant_power";v["probe_photon_flux_m2_s"]=a.photon_flux_m2_s;v["probe_power_W_m2"]=a.probe_power_W_m2;
         if(a.range) {const auto& r=*a.range;auto& fields=v["range"];if(!fields.is_object())fields=Json::object();fields.update({{"sampling",r.sampling==SweepSampling::Points?"points":r.sampling==SweepSampling::Step?"step":"list"},{"logarithmic",r.logarithmic},{"minimum",r.minimum},{"maximum",r.maximum},{"step",r.step},{"points",r.points},{"values",r.custom}});}
         else v.erase("range");
+        if(IsDlts(a.kind)){auto& protocol=v["protocol"];if(!protocol.is_object())protocol=Json::object();protocol.update(DltsConfigJson(a.dlts));}
+        if(a.kind==ActionKind::Dlcp) {
+            v.erase("V_max_V");v.erase("amplitudes_V");
+            const auto& r=a.amplitudes;v["amplitudes"]={{"sampling",r.sampling==SweepSampling::Points?"points":r.sampling==SweepSampling::Step?"step":"list"},{"logarithmic",r.logarithmic},{"minimum",r.minimum},{"maximum",r.maximum},{"step",r.step},{"points",r.points},{"values",r.custom}};
+            const auto& c=a.dlcp;v["profiling_eps_r"]=c.profiling_eps_r;v["samples_per_period"]=c.samples_per_period;v["min_periods"]=c.min_periods;v["max_periods"]=c.max_periods;v["periodic_tolerance"]=c.periodic_tolerance;
+        }
     }
     out["iv"]["pause_after_action"]=plan.pauseAfterAction;if(plan.pauseAfterMember || out["iv"].contains("pause_after_member"))out["iv"]["pause_after_member"]=plan.pauseAfterMember;return out;
 }
@@ -88,7 +106,7 @@ std::size_t TypedBytes(const ResultBase *r,std::set<const void*> &seen) {
         }
         if(iv->optics) {n+=VBytes(iv->optics->x_m,seen)+VBytes(iv->optics->generation_m3_s,seen);for(const auto& c:iv->optics->absorption)n+=VBytes(c.wavelength_nm,seen)+VBytes(c.alpha_m1,seen)+VBytes(c.without_tail_m1,seen);}
     } else if(auto ac=dynamic_cast<const AcResult*>(r)) {
-        n=PBytes(ac->meta,seen)+VBytes(ac->mesh_x_m,seen);for(const auto &p:ac->points)n+=sizeof(AcPoint)+PBytes(p.rest,seen);
+        n=PBytes(ac->meta,seen)+VBytes(ac->mesh_x_m,seen);if(ac->dlts && seen.insert(ac->dlts.get()).second)for(const auto& trace:ac->dlts->traces)if(seen.insert(trace.get()).second){n+=sizeof(DltsTrace)+VBytes(trace->time_s,seen)+VBytes(trace->capacitance_F,seen)+VBytes(trace->current_A_m2,seen)+VBytes(trace->reference_capacitance_F,seen)+8*(trace->signal_F.size()+trace->amplitude_F.size());if(trace->laplace){const auto& l=*trace->laplace;n+=8*(l.rate_per_s.size()+l.amplitude_F.size()+l.density_F_per_log_rate.size()+l.residuals.predicted_F.size()+l.residuals.residual_F.size());}}for(const auto &p:ac->points)n+=sizeof(AcPoint)+PBytes(p.rest,seen);
     } else if(auto b=dynamic_cast<const BatchResult*>(r)) {
         n=PBytes(b->body,seen);
         for(const auto& row:b->rows)if(seen.insert(row.get()).second) {
@@ -381,7 +399,7 @@ int ValidateUi(const Json &ui,bool strictPlotRanges) {
     }
     for(const auto *key:{"optical_tab","gr_tab","recorder_plot"})if(ui.contains(key) && (!ui.at(key).is_number_integer() || ui.at(key).get<int>()<0 || ui.at(key).get<int>()>10000))throw std::invalid_argument("Invalid selected tab/plot");
     for(const auto *key:{"gr_follow","iv_absolute_log","contact_annotations","batch_absolute"})if(ui.contains(key) && !ui.at(key).is_boolean())throw std::invalid_argument("Invalid plot toggle");
-    if(ui.contains("results_action")){bool valid=false;for(int i=0;i<5;++i)valid|=ui.at("results_action")==ActionId(ActionKind(i));if(!valid)throw std::invalid_argument("Unknown Results Action");}
+    if(ui.contains("results_action")){bool valid=false;for(int i=0;i<kActionCount;++i)valid|=ui.at("results_action")==ActionId(ActionKind(i));if(!valid)throw std::invalid_argument("Unknown Results Action");}
     if(ui.contains("gr_hidden")){if(!ui.at("gr_hidden").is_array())throw std::invalid_argument("gr_hidden must be an array");for(const auto &id:ui.at("gr_hidden"))if(!id.is_string())throw std::invalid_argument("Invalid mechanism ID");}
     if(ui.contains("gr_bias") && (!ui.at("gr_bias").is_object() || !ui.at("gr_bias").at("voltage_V").is_number() || !std::isfinite(ui.at("gr_bias").at("voltage_V").get<double>())))throw std::invalid_argument("Invalid G/R voltage_V");
     const auto retention=ui.value("history_retention",5);
@@ -397,7 +415,7 @@ void ValidateActions(const Json &actions) {
         for(const auto *key:{"temperature_K","voltage_V","start_V","stop_V","step_V","frequency_Hz","start_Hz","stop_Hz","points","start_nm","stop_nm","probe_photon_flux_m2_s","probe_power_W_m2"})
             if(a->contains(key) && (!a->at(key).is_number() || !std::isfinite(a->at(key).get<double>())))throw std::invalid_argument("Invalid numeric action setting");
         if(a->contains("probe_mode") && a->at("probe_mode")!="constant_flux" && a->at("probe_mode")!="constant_power")throw std::invalid_argument("Invalid QE probe mode");
-        if(a->contains("range"))for(int i=0;i<5;++i)if(a.key()==ActionId(ActionKind(i))) {
+        if(a->contains("range"))for(int i=0;i<kActionCount;++i)if(a.key()==ActionId(ActionKind(i))) {
             const auto typed=ReadRunAction(ActionKind(i),*a);(void)SweepValues(*typed.range);
         }
     }
@@ -436,7 +454,7 @@ if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::inv
         for(const auto &run:history) {
             if(run.contains("profiles_stored") && !run.at("profiles_stored").is_boolean())throw std::invalid_argument("profiles_stored must be boolean");
             const auto kind=run.at("kind").get<std::string>();
-            if(kind!="iv" && kind!="band" && kind!="cv" && kind!="cf" && kind!="qe" && kind!="batch")throw std::invalid_argument("Invalid history kind");
+            if(kind!="iv" && kind!="band" && kind!="cv" && kind!="cf" && kind!="qe" && kind!="dlcp" && kind!="dlts" && kind!="laplace_dlts" && kind!="capture_dlts" && kind!="optical_dlts" && kind!="batch")throw std::invalid_argument("Invalid history kind");
             if(kind!="batch")(void)Model(run.at("document"));
             else if(!run.at("document").is_object() || !run.at("document").at("layers").is_array() || !run.at("document").at("temperature_K").is_number())throw std::invalid_argument("Invalid batch history model structure");
             if(run.at("result").at("provenance")!=run.at("provenance") || run.at("result").at("project_snapshot")!=run.at("document"))throw std::invalid_argument("History result does not match its model/provenance");
@@ -460,6 +478,11 @@ if(!devices.is_array() || devices.empty() || devices.size()>1000) throw std::inv
             if(!r.at("provenance").at("solver_version").is_string() || !r.at("provenance").at("time_unix_ms").is_number_integer()) throw std::invalid_argument("Invalid result provenance");
             if(!r.at("points").is_array() || r.at("points").empty()) throw std::invalid_argument("Invalid result points");
             const bool ac=r.contains("kind");
+            if(r.contains("dlts"))(void)ReadDltsData(r.at("dlts"));
+            if(r.value("kind",std::string{})=="dlcp") {
+                const auto typed=AcFromJson(r);
+                if(typed.dlcp.empty() || typed.dlcp.size()!=typed.points.size())throw std::invalid_argument("DLCP and C-V point counts differ");
+            }
             if((profiles && !r.at("mesh_x_m").is_array()) || (!ac && (!r.at("contact_phi_eV").is_array() || r.at("contact_phi_eV").size()!=2))) throw std::invalid_argument("Invalid result mesh/contacts");
             for(const auto &point:r.at("points")) {
                 if(!point.is_object() || !point.at("status").is_string() || !point.at("valid").is_boolean() || !point.at("voltage_V").is_number()) throw std::invalid_argument("Invalid result point");

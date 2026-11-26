@@ -86,12 +86,26 @@ std::vector<std::filesystem::path> ExportResults(const std::vector<ResultRun>& r
         Json rows=Json::array();std::set<std::string> columns;
         for(const auto &run:selected) {
             const auto &r=run.at("result"),&snapshot=r.at("project_snapshot");
+            if(r.contains("dlts")) {
+                for(const auto& trace:r.at("dlts").at("traces"))for(std::size_t i=0;i<trace.at("time_s").size();++i) {
+                    Json row={{"run_id",run.at("run_id")},{"device_id",run.at("device_id")},{"kind",run.at("kind")},{"trace_id",trace.at("id")},{"time_s",trace.at("time_s")[i]},{"capacitance_F",trace.at("capacitance_F")[i]},{"current_A_m2",trace.at("current_A_m2")[i]},{"run_plan_json",r.at("run_plan")},{"provenance_json",r.at("provenance")}};
+                    for(const auto* key:{"temperature_K","pulse_width_s","reverse_V","pulse_V","readout_resolution_F","baseline_F","equilibrium_F","density_valid","depth_m","pulse_depth_m","trap_density_m3","status","message"})row[key]=trace.at(key);
+                    if(!trace.at("reference_capacitance_F").empty())row["reference_capacitance_F"]=trace.at("reference_capacitance_F")[i];
+                    if(i==0){row["signal_F"]=trace.at("signal_F");row["amplitude_F"]=trace.at("amplitude_F");}
+                    if(i==0 && trace.contains("laplace"))row["laplace_json"]=trace.at("laplace");
+                    if(i==0 && r.at("dlts").contains("arrhenius"))row["arrhenius_json"]=r.at("dlts").at("arrhenius");
+                    if(i==0 && r.at("dlts").contains("capture"))row["capture_json"]=r.at("dlts").at("capture");
+                    for(const auto& [key,value]:row.items())columns.insert(key);rows.push_back(std::move(row));
+                }
+                continue;
+            }
             std::size_t index=0;
-            for(const auto &point:r.at(run.at("kind")=="batch"?"rows":"points")) {
+            for(const auto &point:r.at(run.at("kind")=="batch"?"rows":run.at("kind")=="dlcp"?"dlcp_points":"points")) {
                 Json row={{"run_id",run.at("run_id")},{"device_id",run.at("device_id")},{"kind",run.at("kind")},{"point_index",index++},
                     {"project_hash",r.at("provenance").at("device_hash")},{"provenance_json",r.at("provenance")},{"settings_json",snapshot},{"request_json",r.value("request",Json::object())},
                     {"effective_conditions_json",Effective(r,point)},
                     {"point_json",point}};
+                if(run.at("kind")=="dlcp"){row["frequency_Hz"]=r.at("points").front().at("frequency_Hz");row["temperature_K"]=r.at("points").front().at("temperature_K");row["profiling_eps_r"]=r.at("profiling_eps_r");}
                 for(auto field=point.begin();field!=point.end();++field) if(field->is_primitive()) row[field.key()]=field.value();
                 row["terminal_voltage_V"]=point.value("terminal_voltage_V",point.value("voltage_V",Json(nullptr)));
                 row["internal_voltage_V"]=point.value("internal_voltage_V",Json(nullptr));
@@ -110,6 +124,16 @@ std::vector<std::filesystem::path> ExportResults(const std::vector<ResultRun>& r
     } else if(format=="png" || format=="svg" || format=="pdf") {
         Json plots=Json::array();
         for(const auto &run:selected) {
+            if(run.at("result").contains("dlts")) {
+                const auto& result=run.at("result");
+                const auto add=[&](const std::string& name,const std::string& x,const std::string& y,const Json& xs,const Json& ys){auto plot=run;plot["kind"]="dlts_plot";plot["run_id"]=run.at("run_id").get<std::string>()+"/"+name;plot["x_label"]=x;plot["y_label"]=y;plot["result"]["points"]=Json::array();for(std::size_t i=0;i<xs.size() && i<ys.size();++i)plot["result"]["points"].push_back({{"dlts_x",xs[i]},{"dlts_y",ys[i]},{"valid",true}});plots.push_back(std::move(plot));};
+                for(const auto& trace:result.at("dlts").at("traces"))if(trace.at("status")=="converged") {
+                    add(trace.at("id"),"Time after filling [s]","C [F]",trace.at("time_s"),trace.at("capacitance_F"));
+                    if(trace.contains("laplace")){const auto& l=trace.at("laplace");add(trace.at("id").get<std::string>()+"-Laplace","Rate [s^-1]","Amplitude / log(rate) [F]",l.at("rate_per_s"),l.at("density_F_per_log_rate"));}
+                }
+                for(const auto& spectrum:result.at("dlts").at("spectra"))add(spectrum.at("id"),"Temperature [K]","Signal [F]",spectrum.at("temperature_K"),spectrum.at("signal_F"));
+                continue;
+            }
             if(run.at("kind")!="batch") {plots.push_back(run);continue;}
             for(const auto &member:run.at("result").at("rows")) if(member.contains("curves")) {
                 auto curve=run;curve["kind"]="iv";curve["run_id"]=run.at("run_id").get<std::string>()+"/"+member.at("id").get<std::string>()+" "+member.at("parameters").dump();curve["result"]["points"]=Json::array();
@@ -119,14 +143,14 @@ std::vector<std::filesystem::path> ExportResults(const std::vector<ResultRun>& r
         if(plots.empty()) throw std::invalid_argument("No retained curves to plot");
         for(const auto &run:plots) {
             const auto kind=run.at("kind").get<std::string>();
-            const std::string x=kind=="qe"?"wavelength_nm":kind=="cf"?"frequency_Hz":"voltage_V";
-            const std::string y=kind=="qe"?"EQE":kind=="cv" || kind=="cf"?"capacitance_F":"J_A_m2";
-            sst::plotlab::GraphSnapshot graph;graph.spec.x.label=x;graph.spec.y.label=y;graph.widthMm=160;graph.heightMm=100;
+            const std::string x=kind=="dlts_plot"?"dlts_x":kind=="dlcp"?"x_m":kind=="qe"?"wavelength_nm":kind=="cf"?"frequency_Hz":"voltage_V";
+            const std::string y=kind=="dlts_plot"?"dlts_y":kind=="dlcp"?"N_DL_m3":kind=="qe"?"EQE":kind=="cv" || kind=="cf"?"capacitance_F":"J_A_m2";
+            sst::plotlab::GraphSnapshot graph;graph.spec.x.label=run.value("x_label",x);graph.spec.y.label=run.value("y_label",y);graph.widthMm=160;graph.heightMm=100;
             sst::plotlab::SnapshotSeries series;series.kind=sst::ui::plot::SeriesKind::Line;series.label=run.at("run_id");
             series.style.color={.12f,.45f,.8f,1.f};series.style.markerFill=series.style.color;series.style.markerOutline=series.style.color;series.style.lineWidthPt=1.5f;series.style.markerSizePt=3;series.style.errorCapPt=3;
             bool finite=false;graph.ranges={0,1,0,1};
-            for(const auto &p:run.at("result").at("points")) {
-                const bool valid=p.value("valid",false) && p.at(x).is_number() && p.at(y).is_number();
+            for(const auto &p:run.at("result").at(kind=="dlcp"?"dlcp_points":"points")) {
+                const bool valid=(kind=="dlcp"?p.at("status")=="converged":p.value("valid",false)) && p.at(x).is_number() && p.at(y).is_number();
                 const double a=p.at(x).is_number()?p.at(x).get<double>():NAN,b=valid?p.at(y).get<double>():NAN;
                 series.x.push_back(a);series.y.push_back(b);
                 if(std::isfinite(a) && std::isfinite(b)) {if(!finite)graph.ranges={a,a,b,b};finite=true;graph.ranges.minX=std::min(graph.ranges.minX,a);graph.ranges.maxX=std::max(graph.ranges.maxX,a);graph.ranges.minY=std::min(graph.ranges.minY,b);graph.ranges.maxY=std::max(graph.ranges.maxY,b);}

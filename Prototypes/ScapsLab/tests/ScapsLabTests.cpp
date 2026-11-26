@@ -1,11 +1,13 @@
 #include "DocumentFixture.hpp"
 #include <gtest/gtest.h>
 #include "Workflow.hpp"
+#include "Commands/Commands.hpp"
 #include "LegacyResultRuns.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
 #include "Core/Platform/PlatformPythonRuntime.hpp"
 #include <scaps_core/api.hpp>
+#include <scaps_core/boundary_probe.hpp>
 #include <scaps_core/grading.hpp>
 #include <sst/plotlab/Engine.hpp>
 #include <scaps_core/device_project_yaml.hpp>
@@ -1030,4 +1032,92 @@ TEST(CorePythonRuntime,VenvSitePackagesFoundFromNestedDir) {
     EXPECT_EQ(Platform::GetVenvSitePackages(venv).Native(),root/".venv"/"Lib"/"site-packages");
     EXPECT_TRUE(Platform::GetVenvSitePackages(Path{}).Empty());
     std::filesystem::remove_all(root);
+}
+
+
+namespace {
+Ref<const ProjectDraft> DlcpBarrierDraft() {
+    scaps_core::DeviceProject p;scaps_core::ProjectLayer layer;layer.thickness_m=4e-6;layer.Na_m3=1e21;p.layers={layer};
+    p.left_contact.flat_band=true;p.right_contact.flat_band=false;p.right_contact.phi_m_eV=4.45;
+    p.left_contact.Sn_mps=p.left_contact.Sp_mps=p.right_contact.Sn_mps=p.right_contact.Sp_mps=1e5;
+    p.external.area_m2=2.2e-5;p.mesh.points_per_layer=81;p.mesh.clustering_beta=3;
+    p.mesh.adaptivity_level="0";return DraftFromProject(std::move(p));
+}
+Ref<RunPlan> DlcpOnlyPlan() {
+    auto p=CreateRef<RunPlan>();for(auto& a:p->actions)a.include=a.kind==ActionKind::Dlcp;
+    p->actions[5].range=SweepRange{SweepSampling::List,false,0,0,1,1,{-.8}};
+    p->actions[5].dlcp.samples_per_period=64;p->actions[5].dlcp.max_periods=16;return p;
+}
+void DrainDlcp(Workflow& w) {while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}}
+}
+TEST(DlcpUi,SettingsPersistenceValidationAndOneDragUndo) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDraft(DlcpBarrierDraft());
+    const auto original=w.Current().runPlan->actions[5].frequency_Hz;
+    auto plan=DlcpOnlyPlan();plan->actions[5].frequency_Hz=1e5;
+    w.SetRunPlanTyped(plan,"frequency-drag");plan=CreateRef<RunPlan>(*plan);plan->actions[5].frequency_Hz=2e5;w.SetRunPlanTyped(plan,"frequency-drag");
+    EXPECT_EQ(w.Current().undo.GetUndoDepth(),1u);
+    ASSERT_TRUE(w.Step(true));EXPECT_EQ(w.Current().runPlan->actions[5].frequency_Hz,original);
+    ASSERT_TRUE(w.Step(false));EXPECT_EQ(w.Current().runPlan->actions[5].frequency_Hz,2e5);
+    const auto actions=RunPlanJson(*plan);const auto restored=ReadRunPlan(actions);
+    EXPECT_EQ(RunPlanJson(restored),actions);EXPECT_EQ(restored.actions[5].dlcp.samples_per_period,64);
+    const auto canonical=RunPlanJson(*plan,Json{{"dlcp",{{"V_max_V",{-.1}},{"amplitudes_V",{.1,.2,.3}}}}});
+    EXPECT_FALSE(canonical.at("dlcp").contains("V_max_V"));EXPECT_FALSE(canonical.at("dlcp").contains("amplitudes_V"));EXPECT_EQ(RunPlanJson(ReadRunPlan(canonical)),actions);
+    const auto saved=w.Workspace();ValidateWorkspace(saved);Workflow loaded(CreateRef<JobSystem>(nullptr,1));loaded.SetWorkspace(saved);
+    EXPECT_EQ(RunPlanJson(*loaded.Current().runPlan),actions);
+    auto invalid=actions;invalid["dlcp"]["on_edit"]=true;EXPECT_THROW((void)ReadRunPlan(invalid),std::invalid_argument);
+    invalid=actions;invalid["dlcp"]["amplitudes_V"]={.1,.1,.2};EXPECT_THROW((void)ReadRunPlan(invalid),std::invalid_argument);
+    invalid=actions;invalid["dlcp"]["samples_per_period"]=63.5;EXPECT_THROW((void)ReadRunPlan(invalid),std::invalid_argument);
+    invalid=actions;invalid["dlcp"]["max_periods"]=2;EXPECT_THROW((void)ReadRunPlan(invalid),std::invalid_argument);
+}
+TEST(DlcpUi,TypedSolverMappingStreamingPersistenceAndCsv) {
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDraft(DlcpBarrierDraft());
+    auto plan=DlcpOnlyPlan();w.SetRunPlanTyped(plan);
+    const auto start=std::chrono::steady_clock::now();ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make(plan)).at("ok"));DrainDlcp(w);
+    const auto result=w.Current().acResults.get("dlcp");ASSERT_TRUE(result)<<w.response.dump();ASSERT_EQ(result->dlcp.size(),1u);ASSERT_EQ(result->points.size(),1u);
+    EXPECT_FALSE(result->HasView());const auto& q=result->dlcp.front()->value;
+    EXPECT_EQ(q.status,scaps_core::DlcpStatus::Converged)<<q.message;EXPECT_EQ(q.V_max_V,-.8);EXPECT_EQ(q.samples.size(),5u);
+    EXPECT_NEAR(q.N_DL_m3/1e21,1,.08);EXPECT_NEAR(result->dlcp.front()->N_CV_m3/1e21,1,.08);
+    const auto device=scaps_core::make_device_from_project(w.Current().draft->project);
+    auto config=plan->actions[5].dlcp;config.V_max_V={-.8};config.frequency_Hz=plan->actions[5].frequency_Hz;config.amplitudes_V=SweepValues(plan->actions[5].amplitudes);config.profiling_eps_r=result->dlcp_eps_r;
+    const auto mesh=scaps_core::mesh_from_coordinates(device,result->mesh_x_m.get());
+    const auto expected=scaps_core::solve_dlcp(device,mesh,config,300,w.Current().draft->project.solver).front();
+    EXPECT_DOUBLE_EQ(q.C0_F,expected.C0_F);EXPECT_DOUBLE_EQ(q.C1_F_per_V,expected.C1_F_per_V);EXPECT_DOUBLE_EQ(q.N_DL_m3,expected.N_DL_m3);
+    const auto saved=w.Workspace();ValidateWorkspace(saved);Workflow loaded(CreateRef<JobSystem>(nullptr,1));loaded.SetWorkspace(saved);
+    EXPECT_EQ(loaded.Current().acResults.get("dlcp")->Dump(),result->Dump());
+    EXPECT_EQ(loaded.Current().acResults.get("dlcp")->Dump(),loaded.Current().RunResult(loaded.Current().selectedRun)->Dump());
+    const auto projectFile=Temp("scapslab-dlcp.scapslab");ASSERT_TRUE(Execute(w,{{"operation","project_save"},{"path",projectFile.string()}}).at("ok").get<bool>());
+    ASSERT_TRUE(Execute(loaded,{{"operation","project_load"},{"path",projectFile.string()}}).at("ok").get<bool>());
+    EXPECT_EQ(loaded.Current().acResults.get("dlcp"),loaded.Current().RunResult(loaded.Current().selectedRun));std::filesystem::remove(projectFile);
+    const auto csv=Temp("scapslab-dlcp.csv");ASSERT_TRUE(w.Exec(Cmd::ExportDlcp::Make(result,csv.string())).at("ok"));DrainDlcp(w);
+    std::ifstream file(csv);std::string header;std::getline(file,header);EXPECT_NE(header.find("Vpp_V"),std::string::npos);EXPECT_NE(header.find("N_DL_m3"),std::string::npos);
+    int rows=0;std::string line;while(std::getline(file,line))++rows;EXPECT_EQ(rows,5);file.close();std::filesystem::remove(csv);
+    const auto malformed=result->Dump();auto invalid=malformed;invalid["dlcp_points"][0]["status"]="invented";EXPECT_THROW((void)AcFromJson(invalid),std::invalid_argument);
+    invalid=malformed;invalid["dlcp_points"][0]["C0_F"]=nullptr;EXPECT_THROW((void)AcFromJson(invalid),std::invalid_argument);
+    // Feed shares immutable points; publication never constructs a result Json view.
+    LiveFeed feed;feed.Dlcp(result->dlcp.front());EXPECT_EQ(feed.dlcp.front(),result->dlcp.front());EXPECT_EQ(feed.seq,1u);
+    if(const char* evidence=std::getenv("SCAPSLAB_DLCP_EVIDENCE")) {
+        const auto dir=std::filesystem::path(evidence);std::filesystem::create_directories(dir);std::ofstream(dir/"barrier-after.scapslab")<<saved.dump(2);
+    }
+    std::printf("DLCP integration including independent typed solve: %.3f s\n",std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count());
+}
+TEST(DlcpUi,CancelKeepsLastResultAndFinishingJobKeepsActiveCase) {
+    Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDraft(DlcpBarrierDraft());
+    const auto first=w.Current().id;ASSERT_TRUE(Execute(w,{{"operation","device_duplicate"}}).at("ok").get<bool>());const auto second=w.Current().id;
+    ASSERT_TRUE(w.Dispatch({{"operation","device_select"},{"device_id",first}}).at("ok").get<bool>());
+    w.SingleShotTyped(DlcpOnlyPlan());DrainDlcp(w);const auto previous=w.Current().acResults.get("dlcp");ASSERT_TRUE(previous);
+    auto plan=DlcpOnlyPlan();plan->actions[5].range=SweepRange{SweepSampling::Points,false,-1.4,-.4,1,100};w.SingleShotTyped(plan);
+    const auto job=w.ActiveJob();bool streamed=false;
+    for(int i=0;i<10000 && w.Pending();++i){w.OnUpdate(0);if(!w.Device(first).liveDlcp.empty()){streamed=true;break;}std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    ASSERT_TRUE(streamed)<<"A completed point must reach the UI before the profile ends";EXPECT_EQ(w.Device(first).liveDlcp.front()->value.V_max_V,-1.4);EXPECT_EQ(w.Device(first).acResults.get("dlcp"),previous);
+    scaps_core::boundary_probe::result_adapters=0;
+    ASSERT_TRUE(w.Dispatch({{"operation","device_select"},{"device_id",second}}).at("ok").get<bool>());
+    EXPECT_EQ(scaps_core::boundary_probe::result_adapters,0u);
+    const auto start=std::chrono::steady_clock::now();ASSERT_TRUE(w.Dispatch({{"operation","cancel"},{"device_id",first}}).at("ok").get<bool>());DrainDlcp(w);
+    EXPECT_EQ(w.jobs->GetJob(job)->status,JobStatus::Cancelled);EXPECT_EQ(w.project.active_device,second);EXPECT_EQ(w.Device(first).acResults.get("dlcp"),previous);EXPECT_EQ(w.Device(first).status,"stopped");
+    const double cancelSeconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
+    std::printf("DLCP cancel after streamed point: %.6f s\n",cancelSeconds);EXPECT_LT(cancelSeconds,5.);
+    // A successful completion on an inactive case must also leave selection alone.
+    ASSERT_TRUE(w.Dispatch({{"operation","device_select"},{"device_id",first}}).at("ok").get<bool>());w.SingleShotTyped(DlcpOnlyPlan());
+    ASSERT_TRUE(w.Dispatch({{"operation","device_select"},{"device_id",second}}).at("ok").get<bool>());DrainDlcp(w);
+    EXPECT_EQ(w.project.active_device,second);ASSERT_TRUE(w.Device(first).acResults.get("dlcp"));EXPECT_EQ(w.Device(first).acResults.get("dlcp")->dlcp.size(),1u);
 }

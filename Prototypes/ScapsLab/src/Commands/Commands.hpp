@@ -63,6 +63,21 @@ struct RunBand : Req<RunBand> {
 };
 SL_JOB(RunCv, "cv", "Calculate C-V", "Capacitance-voltage sweep", "", "", true);
 SL_JOB(RunCf, "cf", "Calculate C-f", "Capacitance-frequency sweep", "", "", true);
+struct RunDlcp : Req<RunDlcp> {
+    static constexpr Info info{"dlcp","Calculate DLCP","Large-signal drive-level capacitance profile","","",true};
+    std::optional<RunAction> action;
+    static RunDlcp Make(RunAction action){RunDlcp c;c.action=std::move(action);return c;}
+    static RunDlcp FromJson(const Json& request){RunDlcp c;if(request.size()>1)c.action=ReadRunAction(ActionKind::Dlcp,request);return c;}
+    Out Execute(ILabStore& s) const {if(s.Busy())return Reject("busy","Busy","A job is still active");s.RunDlcpTyped(action);return {};}
+};
+template<ActionKind Kind> struct RunTransient {
+    static constexpr Info info{Kind==ActionKind::Dlts?"dlts":Kind==ActionKind::Laplace?"laplace_dlts":Kind==ActionKind::Capture?"capture_dlts":"optical_dlts",Kind==ActionKind::Dlts?"Classic DLTS":Kind==ActionKind::Laplace?"Laplace DLTS":Kind==ActionKind::Capture?"Capture / depth / DDLTS":"MCTS / ODLTS","Run a virtual transient experiment","","",true};
+    RunAction action=RunPlan{}.actions[int(Kind)];
+    static RunTransient Make(RunAction a){RunTransient c;c.action=std::move(a);return c;}
+    static RunTransient FromJson(const Json& request){return Make(ReadRunAction(Kind,request));}
+    Out Execute(ILabStore& s) const {if(s.Busy())return Reject("busy","Busy","A job is still active");auto plan=std::make_shared<RunPlan>();for(auto& a:plan->actions)a.include=false;plan->actions[int(Kind)]=action;plan->actions[int(Kind)].include=true;s.SingleShotTyped(std::move(plan));return {};}
+};
+using RunDlts=RunTransient<ActionKind::Dlts>;using RunLaplace=RunTransient<ActionKind::Laplace>;using RunCapture=RunTransient<ActionKind::Capture>;using RunOptical=RunTransient<ActionKind::Optical>;
 SL_JOB(RunQe, "qe", "Calculate QE", "External quantum efficiency", "", "", true);
 struct SingleShot : Req<SingleShot> {
     static constexpr Info info{"single_shot","Single shot","Execute and store included Run Actions","Simulate/Single shot","",false,true};
@@ -73,14 +88,15 @@ struct SingleShot : Req<SingleShot> {
 struct SetRunPlan : Req<SetRunPlan> {
     static constexpr Info info{"run_settings","Run settings","Edit Run Actions","","",true};
     std::shared_ptr<const RunPlan> plan;
-    static SetRunPlan Make(std::shared_ptr<const RunPlan> p) {SetRunPlan c;c.plan=std::move(p);return c;}
-    Out Execute(ILabStore& s) const {s.SetRunPlanTyped(plan?plan:std::make_shared<const RunPlan>(ReadRunPlan(args.at("actions"))));return {};}
+    std::string gesture;
+    static SetRunPlan Make(std::shared_ptr<const RunPlan> p,std::string gesture={}) {SetRunPlan c;c.plan=std::move(p);c.gesture=std::move(gesture);return c;}
+    Out Execute(ILabStore& s) const {s.SetRunPlanTyped(plan?plan:std::make_shared<const RunPlan>(ReadRunPlan(args.at("actions"))),gesture);return {};}
 };
 struct CaptureLive : Req<CaptureLive> {
     static constexpr Info info{"capture_live","Capture live","Store the current exact live result","","",true};
     ActionKind kind=ActionKind::Iv;
     static CaptureLive Make(ActionKind k) {CaptureLive c;c.kind=k;return c;}
-    Out Execute(ILabStore& s) const {auto k=kind;if(args.contains("kind")){bool found=false;for(int i=0;i<5;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Capture requires band, iv, cv, cf or qe");}s.CaptureLiveTyped(k);return {};}
+    Out Execute(ILabStore& s) const {auto k=kind;if(args.contains("kind")){bool found=false;for(int i=0;i<kActionCount;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Capture requires band, iv, cv, cf or qe");}s.CaptureLiveTyped(k);return {};}
 };
 struct ResumeRun : Req<ResumeRun> {
     static constexpr Info info{"resume_actions","Resume Actions","Continue after the completed Action","","",true};
@@ -93,7 +109,7 @@ struct RecalculateLive : Req<RecalculateLive> {
     Out Execute(ILabStore& s) const {
         if(s.Busy())return Reject("busy","Busy","A job is still active");
         auto k=kind;
-        if(args.contains("kind")){bool found=false;for(int i=0;i<5;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Expected band, iv, cv, cf or qe");}
+        if(args.contains("kind")){bool found=false;for(int i=0;i<kActionCount;++i)if(args.at("kind")==ActionId(ActionKind(i))){k=ActionKind(i);found=true;}if(!found)return Reject("invalid_kind","Unknown Action","Expected band, iv, cv, cf or qe");}
         s.RecalculateLive(k);return {};
     }
 };
@@ -224,6 +240,12 @@ struct SaveProject : Req<SaveProject> {
 struct SaveDocument : Req<SaveDocument> {
     static constexpr Info info{"save", "Save device or project file", "Save the device YAML or a .scapslab project", "", "", true};
     Out Execute(ILabStore &s) const;
+};
+struct ExportDlcp : Req<ExportDlcp> {
+    static constexpr Info info{"export_dlcp","Export DLCP CSV","Write DLCP and amplitude samples with units","","",true};
+    std::shared_ptr<const AcResult> result;
+    static ExportDlcp Make(std::shared_ptr<const AcResult> result,const std::string& path){auto c=With({{"path",path}});c.result=std::move(result);return c;}
+    Out Execute(ILabStore& s) const {if(s.Busy())return Reject("busy","Busy","Wait before exporting");s.ExportDlcpTyped(result,args.at("path").get<std::string>());return {};}
 };
 SL_JOB(ExportAc, "export_ac", "Export C-V / C-f CSV", "Write an AC result as CSV", "", "", true);
 SL_JOB(ExportGr, "export_gr", "Export generation-recombination", "Write G/R results", "", "", true);

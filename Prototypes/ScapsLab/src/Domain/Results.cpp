@@ -128,6 +128,31 @@ template<class J, class R, class P, size_t N, size_t M> R FromJson(J &j, const F
         if(meta.contains("optics"))try {const auto& o=meta.at("optics");OpticsResult optics;optics.x_m=Column::Intern(Numbers(o.at("x_m")));optics.generation_m3_s=Column::Intern(Numbers(o.at("generation_m3_s")));optics.incident_power_W_m2=Number(o,"incident_power_W_m2");for(const auto& c:o.at("absorption"))optics.absorption.push_back({c.at("layer_id"),Column::Intern(Numbers(c.at("wavelength_nm"))),Column::Intern(Numbers(c.at("alpha_m1"))),Column::Intern(Numbers(c.at("without_tail_m1")))});IvResult check;check.optics=std::move(optics);r.preserve_optics=check.Dump().at("optics").dump()!=o.dump();r.optics=std::move(check.optics);if(!r.preserve_optics)meta.erase("optics");}catch(const Json::exception&){}
         if(meta.contains("photovoltaic"))try {const auto& o=meta.at("photovoltaic");scaps_core::PhotovoltaicResult pv;for(auto v:{scaps_core::PhotovoltaicStatus::Converged,scaps_core::PhotovoltaicStatus::SolveFailed,scaps_core::PhotovoltaicStatus::OpenCircuitNotBracketed,scaps_core::PhotovoltaicStatus::NoPhotovoltaicPower})if(o.at("status")==scaps_core::to_string(v))pv.status=v;pv.message=o.value("message",std::string{});pv.Voc_V=-Number(o,"Voc_V");pv.Jsc_Am2=-Number(o,"Jsc_A_m2");pv.FF=Number(o,"FF_fraction");pv.eta=Number(o,"efficiency_fraction");pv.Pmax_Wm2=Number(o,"Pmax_W_m2");pv.Vmpp_V=-Number(o,"Vmpp_V");pv.Jmpp_Am2=Number(o,"Jmpp_A_m2");IvResult check;check.photovoltaic=std::move(pv);r.preserve_photovoltaic=check.Dump().at("photovoltaic").dump()!=o.dump();r.photovoltaic=std::move(check.photovoltaic);if(!r.preserve_photovoltaic)meta.erase("photovoltaic");}catch(const Json::exception&){}
     }
+    if constexpr(std::is_same_v<R,AcResult>)if(r.kind=="dlcp") {
+        r.dlcp_eps_r=Number(meta,"profiling_eps_r");
+        if(!std::isfinite(r.dlcp_eps_r) || r.dlcp_eps_r<1 || r.dlcp_eps_r>10000 || !meta.at("dlcp_points").is_array() || meta.at("dlcp_points").size()>1001)throw std::invalid_argument("Invalid DLCP result controls");
+        for(const auto& n:meta.at("dlcp_points")) {
+            auto row=CreateRef<DlcpProfilePoint>();auto& p=row->value;
+            p.V_max_V=n.at("V_max_V").template get<double>();if(!std::isfinite(p.V_max_V))throw std::invalid_argument("Invalid DLCP Vmax");
+            bool known=false;for(auto status:{scaps_core::DlcpStatus::Converged,scaps_core::DlcpStatus::TransientFailed,scaps_core::DlcpStatus::PeriodicStateNotReached,scaps_core::DlcpStatus::InvalidFit})if(n.at("status")==scaps_core::to_string(status)){p.status=status;known=true;}
+            if(!known)throw std::invalid_argument("Unknown DLCP status");
+            p.message=n.value("message",std::string{});
+            const auto number=[&](const char* key){const auto& v=n.at(key);if(!v.is_number() && !v.is_null())throw std::invalid_argument("Invalid DLCP numeric field");return Number(n,key);};
+            p.x_m=number("x_m");p.C0_F=number("C0_F");p.C1_F_per_V=number("C1_F_per_V");p.C2_F_per_V2=number("C2_F_per_V2");p.N_DL_m3=number("N_DL_m3");p.fit_relative_rms=number("fit_relative_rms");row->cv_x_m=number("cv_x_m");row->N_CV_m3=number("N_CV_m3");
+            if(!n.at("samples").is_array() || n.at("samples").size()>101)throw std::invalid_argument("Invalid DLCP samples");
+            for(const auto& s:n.at("samples")) {
+                scaps_core::DlcpSample sample;sample.amplitude_V=s.at("Vpp_V").template get<double>();
+                if(!std::isfinite(sample.amplitude_V) || sample.amplitude_V<=0 || (!p.samples.empty() && sample.amplitude_V<=p.samples.back().amplitude_V))throw std::invalid_argument("Invalid DLCP sample amplitude");
+                for(const auto* key:{"delta_Q_C","C_F","G_S","periodic_error","current_conservation_relative"})if(!s.at(key).is_number() && !s.at(key).is_null())throw std::invalid_argument("Invalid DLCP sample value");
+                sample.delta_Q_C=Number(s,"delta_Q_C");sample.C_F=Number(s,"C_F");sample.G_S=Number(s,"G_S");sample.periodic_error=Number(s,"periodic_error");sample.current_conservation_relative=Number(s,"current_conservation_relative");sample.periods=s.at("periods").template get<int>();
+                if(sample.periods<0 || sample.periods>10000)throw std::invalid_argument("Invalid DLCP period count");p.samples.push_back(sample);
+            }
+            if(p.status==scaps_core::DlcpStatus::Converged && (p.samples.size()<3 || !(p.C0_F>0) || !(p.C1_F_per_V<0) || !std::isfinite(p.C0_F) || !std::isfinite(p.C1_F_per_V) || !std::isfinite(p.C2_F_per_V2) || !std::isfinite(p.fit_relative_rms) || p.fit_relative_rms<0 || !(p.x_m>0) || !(p.N_DL_m3>0) || !std::isfinite(p.x_m) || !std::isfinite(p.N_DL_m3)))throw std::invalid_argument("Invalid converged DLCP point");
+            r.dlcp.push_back(std::move(row));
+        }
+        meta.erase("dlcp_points");meta.erase("profiling_eps_r");
+    }
+    if constexpr(std::is_same_v<R,AcResult>)if(meta.contains("dlts")){r.dlts=ReadDltsData(meta.at("dlts"));meta.erase("dlts");}
     r.meta.prim = std::move(meta);
     if (j.contains("points")) r.has |= 1u << 31;
     J *pts = j.contains("points") && j["points"].is_array() ? &j["points"] : nullptr;
@@ -338,7 +363,7 @@ scaps_core::BatchRow ExtractActions(const MemberActions& member,const RecorderDr
             }
             if(iv->photovoltaic){row.photovoltaic=iv->photovoltaic;row.photovoltaic_requested=true;}
         } else if(const auto ac=std::dynamic_pointer_cast<const AcResult>(result)) {
-            if(kind==ActionKind::Qe)continue;
+            if(kind==ActionKind::Qe || kind==ActionKind::Dlcp || IsDlts(kind))continue;
             for(const auto& point:ac->points) {
                 scaps_core::ACSample sample;sample.voltage_V=point.voltage_V;sample.frequency_Hz=point.frequency_Hz;sample.C_F=point.capacitance_F;sample.G_S=point.conductance_S;sample.status=point.valid?scaps_core::SolverStatus::Converged:scaps_core::SolverStatus::DivergedNaN;
                 if(!point.valid)invalid=true;row.thermal_voltage_V=8.617333262145e-5*point.temperature_K;row.ac.push_back(std::move(sample));
@@ -371,12 +396,12 @@ Ref<const MemberActions> ReadMemberActions(const Json& source) {
     auto out=CreateRef<MemberActions>();
     out->illuminated=source.value("illuminated",false);
     for(const auto& a:source.at("actions")) {
-        bool found=false;for(int k=0;k<5;++k)if(a.at("kind")==ActionId(ActionKind(k))) {
+        bool found=false;for(int k=0;k<kActionCount;++k)if(a.at("kind")==ActionId(ActionKind(k))) {
             const auto kind=ActionKind(k);if(kind==ActionKind::Iv || kind==ActionKind::Band)out->results.emplace_back(kind,CreateRef<const IvResult>(IvFromJson(a.at("result"))));else out->results.emplace_back(kind,CreateRef<const AcResult>(AcFromJson(a.at("result"))));found=true;
         }
         if(!found)throw std::invalid_argument("Unknown stored Action");
     }
-    if(source.contains("errors"))for(int k=0;k<5;++k)if(source.at("errors").contains(ActionId(ActionKind(k))))out->errors[ActionKind(k)]=source.at("errors").at(ActionId(ActionKind(k)));
+    if(source.contains("errors"))for(int k=0;k<kActionCount;++k)if(source.at("errors").contains(ActionId(ActionKind(k))))out->errors[ActionKind(k)]=source.at("errors").at(ActionId(ActionKind(k)));
     if(source.contains("summary")){auto summary=BatchFromJson({{"rows",Json::array({source.at("summary")})}});out->summary=summary.rows.at(0);}
     if(source.contains("recorder_samples")){auto samples=BatchFromJson({{"rows",Json::array({source.at("recorder_samples")})}});out->recorderSamples=samples.rows.at(0)->iv;}
     if(source.contains("previous"))out->previous=ReadMemberActions(source.at("previous"));
@@ -428,7 +453,20 @@ Json IvResult::Dump() const {SCAPS_BOUNDARY_RESULT();
     if(photovoltaic && !preserve_photovoltaic) {const auto& p=*photovoltaic;out["photovoltaic"]={{"status",scaps_core::to_string(p.status)},{"message",p.message},{"Voc_V",FiniteOrNull(-p.Voc_V)},{"Jsc_A_m2",FiniteOrNull(-p.Jsc_Am2)},{"FF_fraction",FiniteOrNull(p.FF)},{"efficiency_fraction",FiniteOrNull(p.eta)},{"Pmax_W_m2",FiniteOrNull(p.Pmax_Wm2)},{"Vmpp_V",FiniteOrNull(-p.Vmpp_V)},{"Jmpp_A_m2",FiniteOrNull(p.Jmpp_Am2)}};}
     return out;
 }
-Json AcResult::Dump() const {SCAPS_BOUNDARY_RESULT();return To(*this, acTop, acFields);}
+Json AcResult::Dump() const {
+    SCAPS_BOUNDARY_RESULT();auto out=To(*this,acTop,acFields);
+    if(dlts)out["dlts"]=DltsDataJson(*dlts);
+    if(kind=="dlcp") {
+        out["profiling_eps_r"]=dlcp_eps_r;out["dlcp_points"]=Json::array();
+        for(std::size_t i=0;i<dlcp.size();++i) {
+            const auto& row=*dlcp[i];const auto& p=row.value;
+            Json n={{"point_id","dlcp-"+std::to_string(i)},{"V_max_V",p.V_max_V},{"x_m",FiniteOrNull(p.x_m)},{"C0_F",FiniteOrNull(p.C0_F)},{"C1_F_per_V",FiniteOrNull(p.C1_F_per_V)},{"C2_F_per_V2",FiniteOrNull(p.C2_F_per_V2)},{"N_DL_m3",FiniteOrNull(p.N_DL_m3)},{"fit_relative_rms",FiniteOrNull(p.fit_relative_rms)},{"status",scaps_core::to_string(p.status)},{"message",p.message},{"cv_x_m",FiniteOrNull(row.cv_x_m)},{"N_CV_m3",FiniteOrNull(row.N_CV_m3)},{"samples",Json::array()}};
+            for(const auto& s:p.samples)n["samples"].push_back({{"Vpp_V",s.amplitude_V},{"delta_Q_C",FiniteOrNull(s.delta_Q_C)},{"C_F",FiniteOrNull(s.C_F)},{"G_S",FiniteOrNull(s.G_S)},{"periods",s.periods},{"periodic_error",FiniteOrNull(s.periodic_error)},{"current_conservation_relative",FiniteOrNull(s.current_conservation_relative)}});
+            out["dlcp_points"].push_back(std::move(n));
+        }
+    }
+    return out;
+}
 namespace {
 struct Node {const PJson *p = nullptr; const Json *j = nullptr;}; // a packed node or a plain Json value
 Node Step(Node n, const std::string &key) {

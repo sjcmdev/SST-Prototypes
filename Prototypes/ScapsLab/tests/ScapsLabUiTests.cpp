@@ -504,3 +504,29 @@ TEST(ScapsLab,LiveBandRefreshesOnDraftChangeIsCoalescedAndKeepsHistoryClean) {
         Settle(w);EXPECT_EQ(w.Current().result.at("project_snapshot").at("layers")[0]["doping"]["Nd_m3"].get<double>(),nd0*7);
     }
 }
+
+TEST(DlcpUi,TypedPanelsKeepResultsWhileSettingsChange) {
+    EXPECT_EQ(DisplayBounds("sweep.step:voltage_V").displayUnit,"V");
+    ImGui::CreateContext();ImPlot::CreateContext();auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize=ImVec2(1400,1100);io.ConfigDebugHighlightIdConflicts=true;io.Fonts->AddFontDefault();io.Fonts->Build();
+    {
+        Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));w.autoRecalculate=false;w.autoRecalculateBand=false;
+        auto result=CreateRef<AcResult>();result->kind="dlcp";result->dlcp_eps_r=11.7;result->snapshot=w.Current().draft;
+        for(int i=0;i<3;++i) {
+            auto row=CreateRef<DlcpProfilePoint>();auto& p=row->value;p.V_max_V=-1.4+i*.5;p.C0_F=1e-9+i*1e-10;p.C1_F_per_V=-1e-10;p.C2_F_per_V2=1e-11;p.x_m=(.8-i*.1)*1e-6;p.N_DL_m3=1e21;p.fit_relative_rms=1e-6;p.status=scaps_core::DlcpStatus::Converged;row->cv_x_m=p.x_m;row->N_CV_m3=1.05e21;
+            for(double a:{.05,.1,.15,.2,.25}){scaps_core::DlcpSample s;s.amplitude_V=a;s.C_F=p.C0_F+a*(p.C1_F_per_V+a*p.C2_F_per_V2);p.samples.push_back(s);}result->dlcp.push_back(row);
+            AcPoint cv;cv.temperature_K=300;cv.frequency_Hz=3e5;result->points.push_back(cv);
+        }
+        w.Current().acResults.set("dlcp",result);Panel panel(&w,23,true);std::vector<double> times;
+        for(int i=0;i<120;++i) {
+            const auto start=std::chrono::steady_clock::now();
+            if(i>=10 && i<70){auto plan=CreateRef<RunPlan>(*w.Current().runPlan);plan->actions[5].frequency_Hz=3e5+i*1000;w.SetRunPlanTyped(plan,"one-drag");}
+            io.DeltaTime=1.f/60;io.AddMousePosEvent(400+float(i%20)*20,120);ImGui::NewFrame();panel.Render();ImGui::Render();
+            EXPECT_LE(GImGui->HoveredIdPreviousFrameItemCount,1);EXPECT_EQ(w.Current().acResults.get("dlcp"),result);EXPECT_FALSE(result->HasView());EXPECT_FALSE(w.Pending());
+            if(i>=10)times.push_back(std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count());
+        }
+        int logPlots=0;for(const auto& plot:GImPlot->Plots.Buf)if(plot.Axes[ImAxis_Y1].Scale==ImPlotScale_Log10){++logPlots;int labels=0;for(const auto& tick:plot.Axes[ImAxis_Y1].Ticker.Ticks)labels+=tick.ShowLabel;EXPECT_GE(labels,3);}
+        EXPECT_EQ(logPlots,1);
+        EXPECT_EQ(w.Current().undo.GetUndoDepth(),1u);std::sort(times.begin(),times.end());std::printf("DLCP settings + plot CPU frame: median %.3f ms, p95 %.3f ms, max %.3f ms\n",times[times.size()/2],times[times.size()*95/100],times.back());
+    }
+    ImPlot::DestroyContext();ImGui::DestroyContext();
+}

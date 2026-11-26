@@ -61,7 +61,7 @@ public:
                 if(!ScapsLab::PanelShown(int(i))) continue;
                 auto &panel=panels[i]; auto state=panel->GetState();
                 state.visible=true;state.mode=WindowMode::Normal;
-                state.dockId=i==0?tree:i==4?right:i==10?iv:i==5||i==16||i==17||i==18||i==22||i==23?center:bottomLeft;
+                state.dockId=i==0?tree:i==4?right:i==10?iv:i==5||i==16||i==17||i==18||i==22||i==23||i==24||i==25?center:bottomLeft;
                 panel->ApplyState(state); ImGui::DockBuilderDockWindow(panel->ImGuiName().c_str(),state.dockId);
             }
             ImGui::DockBuilderFinish(root); focus=true; return;
@@ -339,7 +339,7 @@ void SetupApplication(Application &app) {
     auto &editor=app.GetEditorLayer();
     editor.RegisterSettingsTab({"scapslab.parameter_bounds","Parameter bounds",[w]{DrawParameterBoundsPreferences(*w);}});
     std::vector<Ref<Panel>> panels;
-    for(int v=0;v<24;++v) if(!single || std::atoi(gallery)==v) {
+    for(int v=0;v<26;++v) if(!single || std::atoi(gallery)==v) {
         auto panel=CreateRef<Panel>(w,v,single); panels.push_back(panel);
         if(!single && !PanelShown(v)) continue; // hidden in basic mode: kept only so panel indices stay valid, never registered or docked
         const auto id=editor.RegisterWindow(panel);

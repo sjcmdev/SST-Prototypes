@@ -9,7 +9,7 @@
 namespace SST {class Application;}
 namespace SST::ScapsLab {
 Bounds DisplayBounds(std::string_view key,double nativeScale=1);
-bool DrawBoundValue(const char* id,double& value,std::string_view key,double nativeScale=1,const void* address=nullptr,const char* label="");
+bool DrawBoundValue(const char* id,double& value,std::string_view key,double nativeScale=1,const void* address=nullptr,const char* label="",bool showUnit=false);
 void DrawParameterBoundsPreferences(Workflow&);
 void DrawHistory(Workflow &workflow,bool global=false);
 int PlotCacheBuildCount();   // test hooks (S3): number of plot-cache (re)builds so far, and the sum of all finite cached values
@@ -17,7 +17,7 @@ double PlotCacheSum();
 void SetPlotDataHook(void (*hook)(bool)); // called with true/false around plot-data cache lookups/drawing (allocation-count test)
 void OpenLayerWindow(Workflow *w,const std::string &device,const std::string &layer); // adds an extra pinned "Layer: <name>" editor (drawn by the tutorial/UI layer)
 // Basic mode (owner 2026-11-21): only these panels (indices into Panel.cpp names[]) are created/docked/listed in View. The rest stay in code.
-inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,16,17,18,22,23}; // hidden: Structure, C-V, Mott-Schottky, C-f, G-omega-f, History, Illumination, Absorption, Grading
+inline constexpr int kBasicPanels[]={0,1,2,3,4,5,10,11,12,13,16,17,18,22,23,24,25}; // hidden panels remain available in experimental mode
 inline bool &ExperimentalPanels() {static bool on=false;return on;} // View > Show experimental panels; persisted in app settings, applied at start
 inline std::string &UiSettingsPath() {static std::string path;return path;}
 inline bool PanelShown(int view) {if(ExperimentalPanels())return true;for(const int p:kBasicPanels)if(p==view)return true;return false;}
@@ -44,6 +44,7 @@ inline double SliderScale(bool shift,bool ctrl,bool lock) {return shift&&ctrl?.0
 struct SweepControlState {
     SweepEditor editor;
     std::string customText,error,parameterKey;
+    bool showUnit=false;
 };
 class Panel final : public EditorWindow {
 public:
@@ -63,7 +64,19 @@ private:
     bool RunActions(ProjectDraft&);
     int selectedAction=1;
     WeakRef<const RunPlan> actionSource;
-    std::array<SweepControlState,5> actionEditors;
+    std::array<SweepControlState,kActionCount> actionEditors;
+    SweepControlState dlcpAmplitudes;
+    WeakRef<const RunPlan> dlcpSource;
+    WeakRef<const AcResult> dlcpPlotSource;
+    Ref<const DlcpProfilePoint> dlcpLastLive;
+    std::string dlcpDevice;
+    std::vector<Ref<const DlcpProfilePoint>> dlcpRows;
+    bool DlcpControls(RunAction&,const ProjectDraft&);
+    void DLCP(Ref<const AcResult> stored={});
+    int dlcpSelected=0;
+    bool DltsControls(RunAction&,const ProjectDraft&);
+    void DLTS(Ref<const AcResult> stored={});
+    int dltsAction=6,dltsSelected=0;
     void AC();
     bool Illumination(ProjectDraft &draft);
     bool Absorption(ProjectDraft &draft);
@@ -100,4 +113,3 @@ private:
 };
 void InstallTutorialUi(Application &app,Workflow &w,const std::vector<Ref<Panel>> &panels);
 }
-

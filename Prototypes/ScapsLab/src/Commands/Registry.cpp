@@ -3,10 +3,10 @@
 // Table of all typed commands + registration. Workflow::Dispatch reaches them by id "scapslab.<operation>" (the JSON adapter).
 namespace SST::ScapsLab::Cmd {
 namespace {
-using All = std::tuple<LibraryOperation, BoundsFile, Run, RunBand, RunCv, RunCf, RunQe, SingleShot, SetRunPlan, CaptureLive, ResumeRun, RecalculateLive, SelectBias, RecalculateStoredBias, RunBatch, RetryBatchMember, RecordBatch, PreviewBatch, QuickSweep, BatchParameters, SelectBatchMember, SetBatchSettings, Inspect, RunAll, Cancel, SetAutoRecalculate,
+using All = std::tuple<LibraryOperation, BoundsFile, Run, RunBand, RunCv, RunCf, RunQe, RunDlcp, RunDlts, RunLaplace, RunCapture, RunOptical, SingleShot, SetRunPlan, CaptureLive, ResumeRun, RecalculateLive, SelectBias, RecalculateStoredBias, RunBatch, RetryBatchMember, RecordBatch, PreviewBatch, QuickSweep, BatchParameters, SelectBatchMember, SetBatchSettings, Inspect, RunAll, Cancel, SetAutoRecalculate,
     EditDocument, EditLayer, LoadMaterial, SaveMaterial, SetProfile, LoadProfile, PreviewProfile, ImportDef, Undo, Redo, ListHistory, SelectRun, UpdateRun, ClearHistory,
     AddDevice, DuplicateDevice, RemoveDevice, UpdateDevice, MoveDevice, ListDevices, EditProject, SetActionSettings, SelectDevice,
-    NewProject, LoadProject, LoadDocument, SaveProject, SaveDocument, ExportAc, ExportGr, ExportResults, ExportBatch, ExportProfile, ExportDef, SendToPlotLab,
+    NewProject, LoadProject, LoadDocument, SaveProject, SaveDocument, ExportAc, ExportDlcp, ExportGr, ExportResults, ExportBatch, ExportProfile, ExportDef, SendToPlotLab,
     TutorialStart, TutorialStop, TutorialState, TutorialList>;
 // Runs the typed command carried in the context ("args": a T from a typed caller) or parsed from the legacy request ("request": Json).
 template<class T> class Typed final : public ICommand {

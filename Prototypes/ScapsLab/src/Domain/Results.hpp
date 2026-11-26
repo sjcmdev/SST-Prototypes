@@ -110,9 +110,16 @@ struct IvResult final : ResultBase { // run and band (band = a single-bias run)
     const PJson &MetaOf() const override {return meta;}
 };
 inline bool ValidIvSample(const scaps_core::IVSample& p) {return p.status==scaps_core::SolverStatus::Converged && std::isfinite(p.J_Am2) && std::isfinite(p.current_conservation_error_Am2) && p.current_conservation_error_Am2<=std::max(1e-10,std::abs(p.J_Am2)*.01);}
+struct DlcpProfilePoint {
+    scaps_core::DlcpPoint value;
+    double cv_x_m=NAN, N_CV_m3=NAN;
+};
 struct AcResult final : ResultBase { // cv, cf, qe
     Column mesh_x_m;
     std::vector<AcPoint> points;
+    std::vector<Ref<const DlcpProfilePoint>> dlcp;
+    double dlcp_eps_r=0;
+    Ref<const DltsData> dlts;
     std::string kind;
     double area_m2 = NAN;
     PJson meta;

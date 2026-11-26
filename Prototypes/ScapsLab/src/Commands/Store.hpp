@@ -12,6 +12,7 @@
 namespace SST::ScapsLab {
 namespace Library {struct Request;}
 using Json = nlohmann::json;
+struct AcResult;
 class ILabStore {
 public:
     virtual ~ILabStore() = default;
@@ -26,6 +27,7 @@ public:
     virtual std::vector<std::string> ActiveOps() const = 0;          // operation names of the running jobs
     virtual bool EditQueued() const = 0;                             // some lane has a queued edit
     // actions
+    virtual void ExportDlcpTyped(std::shared_ptr<const AcResult>,const std::string&) {throw std::logic_error("DLCP export unavailable");}
     virtual void StartJob(Json request) = 0;                         // job on the active device's lane (request carries "operation")
     virtual void StartSave(const Json &request) = 0;                 // own save lane, coalesced
     virtual bool CancelAll() = 0;                                    // true when something was running
@@ -35,7 +37,8 @@ public:
     virtual void QuickSweepTyped(std::shared_ptr<const BatchDraft>,std::shared_ptr<const RecorderDraft>,std::shared_ptr<const ProjectDraft>,std::shared_ptr<const RunPlan> = {}){throw std::logic_error("Typed quick batch unavailable");}
     virtual void RunBatchTyped(std::shared_ptr<const BatchDraft>,std::shared_ptr<const RecorderDraft>,std::shared_ptr<const RunPlan>){throw std::logic_error("Typed batch unavailable");}
     virtual void EditTyped(std::shared_ptr<const ProjectDraft>,const std::string&) {throw std::logic_error("Typed editing unavailable");}
-    virtual void SetRunPlanTyped(std::shared_ptr<const RunPlan>) {throw std::logic_error("Run Actions unavailable");}
+    virtual void SetRunPlanTyped(std::shared_ptr<const RunPlan>,const std::string& gesture={}) {throw std::logic_error("Run Actions unavailable");}
+    virtual void RunDlcpTyped(std::optional<RunAction>) {throw std::logic_error("DLCP unavailable");}
     virtual void SingleShotTyped(std::shared_ptr<const RunPlan>) {throw std::logic_error("Single shot unavailable");}
     virtual void CaptureLiveTyped(ActionKind) {throw std::logic_error("Capture live unavailable");}
     virtual void RecalculateLive(ActionKind) {throw std::logic_error("Live recalculation unavailable");}

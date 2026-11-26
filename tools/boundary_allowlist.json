@@ -1378,10 +1378,10 @@
       "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
       "rule": "text-json",
       "line": 317,
-      "code": "Json AcResult::Dump() const {SCAPS_BOUNDARY_RESULT();return To(*this, acTop, acFields);}",
-      "sha256": "e232f0b97cc82543cf8623d7b01e48ad73086b728a8b547c8c1ac2471dd042cb",
+      "code": "Json AcResult::Dump() const {",
+      "sha256": "6a61e79e5045bab26dcc79eb079e1bc0d1daa49ebecb8b576b458cb14dfc9a79",
       "count": 1,
-      "reason": "F11: legacy packed/result JSON compatibility codecs remain callable; typed consumers must avoid them."
+      "reason": "F11: typed DLCP/AC result codec at project-file/Python edges; DLCP panels and jobs consume typed points without this adapter."
     },
     {
       "file": "Prototypes/ScapsLab/src/Domain/Results.cpp",
@@ -1668,8 +1668,8 @@
       "line": 556,
       "code": "std::ostringstream csv;csv<<std::setprecision(17);",
       "sha256": "c16a524c9a3ed165c64451d653a8f1cdc070c0471f58f3fe293b8ef681612f48",
-      "count": 1,
-      "reason": "F16 F36: legacy document/model/metadata or grading adapter inside workflow; migration tracked in audit."
+      "count": 2,
+      "reason": "F16 F36: CSV file edges, existing export_ac and typed export_dlcp; no serialization for in-process delivery."
     },
     {
       "file": "Prototypes/ScapsLab/src/Workflow.cpp",

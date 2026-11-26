@@ -95,9 +95,13 @@ struct LiveFeed {
     std::uint64_t seq=0;
     std::vector<double> v,j;           // I-V points solved so far (plotted voltage [V], terminal J [A/m^2], NaN when not converged)
     PvEstimate pv;
+    std::vector<Ref<const DlcpProfilePoint>> dlcp;
+    std::vector<Ref<const DltsTrace>> dlts;
     std::vector<LiveMember> members;   // batch members finished so far
     std::size_t memberTotal=0;
     Ref<const BatchDraft> batch;
+    void Dlts(Ref<const DltsTrace> p){std::lock_guard g(lock);dlts.push_back(std::move(p));++seq;}
+    void Dlcp(Ref<const DlcpProfilePoint> p) {std::lock_guard g(lock);dlcp.push_back(std::move(p));++seq;}
     void Point(double V,double J) {std::lock_guard g(lock);v.push_back(V);j.push_back(J);++seq;}
     void Estimate(const PvEstimate &e) {std::lock_guard g(lock);pv=e;++seq;}
     void AddMember(LiveMember m) {std::lock_guard g(lock);members.push_back(std::move(m));++seq;}
@@ -125,6 +129,7 @@ public:
     Ref<const AcResult> acInput;
     Ref<const IvResult> ivInput;
     Ref<const ResultBase> typedOut;       // typed form of `output` (run/band/cv/cf/qe/batch ops), built on the job thread
+    Ref<const AcResult> dlcpInput;
     Ref<const BatchResult> batchInput;
     Ref<const ProjectDraft> draft;
     std::vector<DeviceResults> loaded;
@@ -148,6 +153,7 @@ public:
     void Execute(JobContext &context) override;
 };
 bool BatchOperation(Operation &operation,JobContext &context);
+void SolveDlts(Operation&,JobContext&,const scaps_core::Mesh1D&);
 // Copy-on-write JSON: a save job shares the pointer (O(1) snapshot); writers use mut()/assignment, which never touch a shared value.
 class Cow {
     Ref<Json> p;
@@ -273,6 +279,8 @@ struct DeviceState {
     std::vector<double> previewV, previewJ; // live slider-drag preview curve (J-V only): never saved, never in history/readouts/exports; cleared by the next exact run
     // Progressive exact run (never saved/stored/exported): partial I-V, photovoltaic estimate, finished batch members. Copied from the job's LiveFeed; cleared when the job ends.
     std::vector<double> liveV, liveJ;
+    std::vector<Ref<const DlcpProfilePoint>> liveDlcp;
+    std::vector<Ref<const DltsTrace>> liveDlts;
     PvEstimate pvEstimate;
     std::vector<LiveMember> liveMembers;
     std::size_t liveMemberTotal = 0;
@@ -331,7 +339,7 @@ public:
     std::vector<ResultRun> ResultRuns() const;
     Json Runs() const;
     void RefreshDirty();
-    void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={},std::string detailRun={});
+    void StartOperation(const Json &request, const std::string &deviceId,Ref<const ProjectDraft> edit={},Ref<const BatchDraft> batch={},Ref<const RecorderDraft> recorder={},Ref<const RunPlan> plan={},std::string detailRun={},Ref<const AcResult> dlcp={});
     void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy; undoable as a run delta, see Commands/UndoOps.cpp)
     void RecalculateLive(ActionKind) override;
     void SelectBias(int) override;
@@ -453,7 +461,9 @@ public:
     void BatchTyped(Ref<const BatchDraft>,Ref<const RecorderDraft>) override; // undo/redo of an edit: new document, revision++, DocumentEdited, auto-recalculate arms
     void QuickSweepTyped(Ref<const BatchDraft>,Ref<const RecorderDraft>,Ref<const ProjectDraft>,Ref<const RunPlan> = {}) override;
     void RunBatchTyped(Ref<const BatchDraft>,Ref<const RecorderDraft>,Ref<const RunPlan>) override;
-    void SetRunPlanTyped(Ref<const RunPlan>) override;
+    void ExportDlcpTyped(Ref<const AcResult>,const std::string&) override;
+    void SetRunPlanTyped(Ref<const RunPlan>,const std::string& gesture={}) override;
+    void RunDlcpTyped(std::optional<RunAction>) override;
     void SingleShotTyped(Ref<const RunPlan>) override;
     void CaptureLiveTyped(ActionKind) override;
     void ResumeActions() override;

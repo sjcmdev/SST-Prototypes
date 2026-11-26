@@ -185,7 +185,7 @@ TEST(Commands, JsonRoundTripKeepsTheRequestExactly) { // the request is what lan
 }
 
 // Public Dispatch contract: legacy operations plus the S2 typed Actions adapters.
-static const char *const kPublicOps[] = {"library","load_material","save_material","set_profile","load_profile","preview_profile","export_profile","tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
+static const char *const kPublicOps[] = {"library","load_material","save_material","set_profile","load_profile","preview_profile","export_profile","tutorial_start","tutorial_stop","tutorial_state","tutorial_list","load","save","edit","layer","run","cv","cf","qe","dlcp","dlts","laplace_dlts","capture_dlts","optical_dlts","export_dlcp","export_ac","export_gr","export_results","action_settings","inspect","cancel","undo","redo","auto_recalculate","band",
     "history_list","history_update","history_select","history_clear","quick_sweep","project_new","project_load","project_save","project_edit","device_list","device_add","device_duplicate","device_remove","device_select","device_update","device_move","run_all","batch_parameters","batch_select","batch_settings","preview_batch","run_batch","retry_batch","record_batch","export_batch","send_to_plotlab","import_def","export_def","single_shot","run_settings","capture_live","resume_actions","recalculate_live","select_bias","recalculate_stored_bias","parameter_bounds"};
 
 TEST(CommandAdapter, EveryPublicOperationMapsToATypedCommandOrAnExplicitLegacyHandler) {
