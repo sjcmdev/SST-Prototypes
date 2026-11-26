@@ -2,6 +2,7 @@
 #include "Core/Diagnostics/OperationOutcome.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
+#include "Core/Logging/Logger.hpp"
 #include <thread>
 #include <algorithm>
 #include <cmath>
@@ -18,6 +19,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 
 namespace SST::Prototypes::JFM
 {
@@ -87,6 +89,8 @@ namespace SST::Prototypes::JFM
 			if (!noise)
 				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo noise could not be saved.", "Cannot open noise.tsv.", "Check the projects directory permissions.", "JFMMonteCarloJob", "jfm.mc.noise"};
 			noise << std::setprecision(17) << "sample\tvoltage\tideal_current\tnoisy_current\tnoise\tsigma\n";
+			std::string row;
+			row.reserve(192);
 			const std::size_t points = computation.result.voltage.size();
 			for (std::size_t sample = 0; sample < savedSamples; ++sample)
 			{
@@ -97,7 +101,10 @@ namespace SST::Prototypes::JFM
 						break;
 					const double ideal = computation.result.idealCurrent[point];
 					const double noisy = curve[point];
-					noise << sample << '\t' << computation.result.voltage[point] << '\t' << ideal << '\t' << noisy << '\t' << noisy - ideal << '\t' << computation.result.currentSigma[point] << '\n';
+					row.clear();
+					fmt::format_to(std::back_inserter(row), "{}\t{:.17g}\t{:.17g}\t{:.17g}\t{:.17g}\t{:.17g}\n",
+						sample, computation.result.voltage[point], ideal, noisy, noisy - ideal, computation.result.currentSigma[point]);
+					noise.write(row.data(), static_cast<std::streamsize>(row.size()));
 				}
 			}
 
@@ -246,7 +253,9 @@ namespace SST::Prototypes::JFM
                         [&] { return context.IsCancellationRequested(); },
                         [&](const Ref<IJob>& job, JobPriority priority) { return context.SubmitJob(job, priority); },
                         [&](JobId id) { return context.WaitForJob(id); }, context.GetWorkerCount(), context.GetStopToken());
+					const auto started = std::chrono::steady_clock::now();
 					auto result = RunJFMMonteCarlo(item.characteristic, item.prefit, item.fit, item.settings, &sampleContext);
+					const auto solved = std::chrono::steady_clock::now();
                     if (!result || result->state.acceptedCount == 0)
                     {
 						const std::string error = !result ? result.Error().technicalDetails : "No accepted Monte Carlo samples: non-finite objective or model domain.";
@@ -256,6 +265,10 @@ namespace SST::Prototypes::JFM
 						continue;
 					}
 					auto outputPath = PersistMonteCarlo(item, *result);
+					DS_LOG_INFO("JFM MC [{}] backend={} N={} workers={} solve_ms={:.3f} save_ms={:.3f}",
+						item.characteristic.info.name, result->state.backend, item.settings.monteCarloSamples, context.GetWorkerCount(),
+						std::chrono::duration<double, std::milli>(solved-started).count(),
+						std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-solved).count());
 					if (!outputPath)
 					{
 						const std::string error = outputPath.Error().userMessage + " " + outputPath.Error().technicalDetails;

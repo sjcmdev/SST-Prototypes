@@ -16,6 +16,8 @@
 #endif
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/IO/TextFileIO.hpp"
+#include <sstream>
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/Utils/Memory.hpp"
 #include "Events/JFMEvents.hpp"
@@ -162,7 +164,7 @@ namespace SST::Prototypes::JFM
         IOLayer io(bus);
         RegisterJFMIOHandlers(io, {bus, store});
         JFMFitMonteCarloSettings settings;
-        settings.preferGpu = false; settings.saveSamples = false;
+        settings.preferGpu = false; settings.saveSamples = true;
         settings.monteCarloSamples = 4; settings.monteCarloMaxIterations = 100;
         settings.parameters = {{"I0", {1e-15, 1e-5, true}}, {"A", {.5, 3., true}}};
         auto context = MakeTestJobContext();
@@ -178,6 +180,31 @@ namespace SST::Prototypes::JFM
         ASSERT_TRUE(mcQueue->Enqueue({{ref, mcGeneration, *store->FindCharacteristicRecord(ref), prefit, *store->GetFitState(ref), settings, root}}));
         JFMMonteCarloJob mcJob(bus, store, mcQueue);
         mcJob.Execute(context); bus->ProcessQueue();
+        const auto mc = store->GetMonteCarloResult(ref);
+        ASSERT_TRUE(mc);
+        std::string savedNoise, readError;
+        ASSERT_TRUE(TextFileIO::Load(store->GetMonteCarloState(ref)->outputPath / Path("noise.tsv"), savedNoise, readError)) << readError;
+        std::istringstream rows(savedNoise);
+        std::string header;
+        std::getline(rows, header);
+        if (!header.empty() && header.back() == '\r') header.pop_back();
+        EXPECT_EQ(header, "sample\tvoltage\tideal_current\tnoisy_current\tnoise\tsigma");
+        for (std::size_t sample = 0; sample < mc->samples.size(); ++sample) {
+            const auto noisyCurve = JFMMonteCarloNoisyCurve(*mc, sample);
+            for (std::size_t point = 0; point < mc->voltage.size(); ++point) {
+                std::size_t savedSample;
+                double voltage, ideal, noisy, noise, sigma;
+                ASSERT_TRUE(rows >> savedSample >> voltage >> ideal >> noisy >> noise >> sigma);
+                EXPECT_EQ(savedSample, sample);
+                EXPECT_EQ(voltage, mc->voltage[point]);
+                EXPECT_EQ(ideal, mc->idealCurrent[point]);
+                EXPECT_EQ(noisy, noisyCurve[point]);
+                EXPECT_EQ(noise, noisyCurve[point] - mc->idealCurrent[point]);
+                EXPECT_EQ(sigma, mc->currentSigma[point]);
+            }
+        }
+        std::string extra;
+        EXPECT_FALSE(rows >> extra);
         const auto snapshot = store->GetProjectSnapshot();
         ASSERT_EQ(snapshot.monteCarloRuns.size(), 1);
         EXPECT_FALSE(store->ApplyFitResult(ref, fitGeneration, *store->GetFitState(ref), {}));

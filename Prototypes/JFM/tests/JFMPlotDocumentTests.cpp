@@ -5,6 +5,8 @@
 #include "Presentation/JFMFitMonteCarloWidgets.hpp"
 #include <limits>
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include "Presentation/Panels/MonteCarloCurvesPanel.hpp"
 #include "Vendor/implot/implot.h"
 #include "Vendor/implot/implot_internal.h"
@@ -152,6 +154,51 @@ namespace SST::Prototypes::JFM
             ASSERT_EQ(plot->Plots.GetBufSize(),1);
             // Ideal + accepted noisy + accepted fitted; rejected curves create no items.
             EXPECT_EQ(plot->Plots.GetByIndex(0)->Items.GetItemCount(),3);
+        }
+        ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
+    }
+
+    TEST(JFMPlotDocumentTests, LargeMonteCarloCurvesUseBoundedPreview)
+    {
+        auto store = CreateRef<JFMWorkspaceStore>(); auto bus = CreateRef<EventBus>();
+        const auto project = store->GetActiveProjectHandle();
+        JFMCharacteristic curve; curve.info.name = "Large MC"; curve.info.temperatureK = 300.;
+        for (int i = 0; i < 96; ++i) { curve.data.voltage.push_back(.02 + .7*i/95.); curve.data.current.push_back(1e-5); }
+        const auto id = store->AddCharacteristics(project,{curve}).front();
+        const JFMCharacteristicRef ref{project,id};
+        ASSERT_TRUE(store->SetPrefitModel(project,{id},"SD-RsRsh-alpha-Rsh2"));
+        JFMPrefitState pre; pre.modelId = "SD-RsRsh-alpha-Rsh2";
+        ASSERT_TRUE(store->ApplyPrefitResult(ref,store->BeginPrefit(ref),pre,{}));
+        JFMFitState fit; fit.modelId = pre.modelId;
+        ASSERT_TRUE(store->ApplyFitResult(ref,store->BeginFit(ref),fit,{}));
+        JFMMonteCarloState state; state.modelId = pre.modelId;
+        JFMMonteCarloResult result; result.parameterNames = {"I0","A","Rs","Rsh","alpha","Rsh2"};
+        result.voltage = curve.data.voltage; result.idealCurrent = curve.data.current;
+        result.noiseSeed = 42; result.noiseAmplitude.assign(96,1e-7);
+        result.samples.resize(30000,{{1e-10,1.5,2.,1e6,2.,2e5},0,0,1,true});
+        const auto shared = CreateRef<const JFMMonteCarloResult>(std::move(result));
+        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,shared));
+        auto *gui = ImGui::CreateContext(); auto *plot = ImPlot::CreateContext();
+        auto &io = ImGui::GetIO(); io.DisplaySize = {1200,800}; io.DeltaTime = 1.f/60; io.IniFilename = nullptr;
+        io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
+        unsigned char *pixels; int width,height; io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+        {
+            MonteCarloCurvesPanel panel(store,bus,"Large MC",true);
+            bus->PublishNew<MonteCarloRequested>(project,std::vector<CharacteristicId>{id});
+            double milliseconds[3];
+            for (int frame = 0; frame < 3; ++frame) {
+                const auto start = std::chrono::steady_clock::now();
+                ImGui::NewFrame(); ImGui::SetNextWindowSize({1100,700}); panel.Render(); ImGui::Render();
+                milliseconds[frame] = std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+            }
+            ASSERT_EQ(plot->Plots.GetBufSize(),1);
+            EXPECT_EQ(plot->Plots.GetByIndex(0)->Items.GetItemCount(),513);
+            EXPECT_EQ(store->GetMonteCarloResult(ref),shared);
+            EXPECT_EQ(shared->samples.size(),30000);
+            std::printf("MC_CURVES N=30000 frame_ms=%.3f,%.3f,%.3f items=%d vertices=%d\n",
+                milliseconds[0],milliseconds[1],milliseconds[2],plot->Plots.GetByIndex(0)->Items.GetItemCount(),ImGui::GetDrawData()->TotalVtxCount);
+            std::sort(std::begin(milliseconds),std::end(milliseconds));
+            EXPECT_LT(milliseconds[1],200.0);
         }
         ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
     }

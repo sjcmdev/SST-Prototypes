@@ -145,6 +145,9 @@ namespace SST::Prototypes::JFM
 			const std::size_t sampleCount = result->noiseSeed ? result->samples.size() : std::min(result->samples.size(), result->noisyCurrent.size() / pointCount);
 			if (sampleCount == 0)
 				continue;
+			const std::size_t previewCount = std::min(sampleCount, std::size_t{256});
+			if (!m_SingleIteration && previewCount < sampleCount)
+				ImGui::TextDisabled("Preview: %zu / %zu evenly spaced samples. Use Single iteration to inspect any sample.", previewCount, sampleCount);
 			m_Iteration = std::clamp(m_Iteration, 0, static_cast<int>(sampleCount - 1));
 			if (m_SingleIteration)
 			{
@@ -171,10 +174,12 @@ namespace SST::Prototypes::JFM
 					PlotCurrent("Ideal", result->voltage, result->idealCurrent.data(), pointCount, spec, m_SemiLog);
 				}
 
-				const std::size_t first = m_SingleIteration ? static_cast<std::size_t>(m_Iteration) : 0;
-				const std::size_t last = m_SingleIteration ? first + 1 : sampleCount;
-				for (std::size_t sampleIndex = first; sampleIndex < last; ++sampleIndex)
+				// Bound frame work while retaining the full ensemble for inspection and export.
+				const std::size_t drawCount = m_SingleIteration ? 1 : previewCount;
+				for (std::size_t preview = 0; preview < drawCount; ++preview)
 				{
+					const std::size_t sampleIndex = m_SingleIteration ? static_cast<std::size_t>(m_Iteration)
+						: drawCount > 1 ? preview * (sampleCount - 1) / (drawCount - 1) : 0;
                     const bool rejected = !result->samples[sampleIndex].converged;
                     if (rejected && !m_ShowRejected) continue;
 					if (m_ShowNoisy)
