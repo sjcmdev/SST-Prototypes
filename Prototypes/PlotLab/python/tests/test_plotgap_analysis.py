@@ -63,6 +63,16 @@ def test_python_passes_recipe_to_native_command_job_only():
     assert session.cancel(99)["state"] == "cancelled"
 
 
+def test_global_fit_is_one_native_job_and_preserves_shared_local_definitions():
+    backend = Backend()
+    primary = recipe()
+    primary["settings"]["parameters"][0]["shared"] = True
+    datasets = [dict(id="330K", worksheet_id=22, x_column_id=23, y_column_id=24)]
+    AnalysisSession(backend).global_fit(primary, datasets)
+    assert backend.calls[0] == ("submit", dict(primary, global_inputs=datasets), None, False)
+    assert backend.calls[1] == ("wait", 99)
+
+
 def test_async_preview_and_batch_are_native_requests():
     backend = Backend()
     session = AnalysisSession(backend)

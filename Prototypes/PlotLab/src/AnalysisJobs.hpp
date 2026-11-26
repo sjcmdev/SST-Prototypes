@@ -24,6 +24,7 @@ class AnalysisJob final : public IJob {
 public:
     std::vector<AnalysisJobItem> items;
     pl::UserAnalysisModel userModel;
+    std::optional<pl::AnalysisRecipe> globalRecipe;
     std::stop_token parentStop;
     std::shared_ptr<const AnalysisJobResult> result;
     std::string GetName() const override {return "PlotLab scientific analysis";}
@@ -52,7 +53,7 @@ public:
     AnalysisController(const AnalysisController&)=delete;
     AnalysisController& operator=(const AnalysisController&)=delete;
     JobId Submit(pl::AnalysisRecipe,pl::UserAnalysisModel = {},bool preview=false);
-    JobId SubmitBatch(std::vector<std::pair<std::string,pl::AnalysisRecipe>>,pl::UserAnalysisModel = {},bool preview=false);
+    JobId SubmitBatch(std::vector<std::pair<std::string,pl::AnalysisRecipe>>,pl::UserAnalysisModel = {},bool preview=false,std::optional<pl::AnalysisRecipe> global={});
     const AnalysisStatus& Poll();
     const AnalysisStatus& Wait();
     void Cancel();

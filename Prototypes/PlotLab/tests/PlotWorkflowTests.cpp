@@ -6,8 +6,25 @@
 #include <thread>
 #include <imgui_internal.h>
 #include <implot.h>
+#include <nlohmann/json.hpp>
 using namespace SST;
 using namespace SST::Prototypes::PlotLab;
+TEST(PlotShouldPersistence, NewSettingsRoundtripAndVersionOneMigration) {
+    const auto file=std::filesystem::temp_directory_path()/"plotshould2-migration.plotlab";
+    WorkflowState state;auto& r=state.recipe;r.id="shared-peaks";r.worksheet=12;r.xColumn=13;r.yColumn=14;
+    auto& s=r.settings;s.operation=pl::ScientificOperation::MultiPeakFit;s.peaks={{"a",pl::PeakShape::Voigt},{"b",pl::PeakShape::SplitGaussian}};s.anchors={{0,1},{10,2}};
+    s.parameters=pl::defaultAnalysisParameters(s,"ns","counts");s.parameters[2].shared=true;
+    s.outputFrom=-2;s.outputTo=15;s.acknowledgeExtrapolation=true;s.targetX={-2,15};r.globalInputs={{"330K",22,23,24,0,s.parameters}};
+    state.acceptedRecipes.emplace(80,std::make_shared<const pl::AnalysisRecipe>(r));SaveWorkflowState(file,state);
+    auto loaded=LoadWorkflowState(file);EXPECT_EQ(loaded.recipe,r);ASSERT_EQ(loaded.acceptedRecipes.size(),1);EXPECT_EQ(*loaded.acceptedRecipes.at(80),r);
+    auto sidecar=file;sidecar+=".analysis.json";nlohmann::json j;{std::ifstream in(sidecar);in>>j;}j["version"]=1;j["accepted_recipes"]=nlohmann::json::array();
+    auto& old=j["recipe"];old.erase("global_inputs");auto& settings=old["settings"];settings["operation"]=0;
+    for(auto key:{"output_from","output_to","acknowledge_extrapolation","peaks"})settings.erase(key);
+    for(auto& p:settings["parameters"])p.erase("shared");{std::ofstream out(sidecar);out<<j;}
+    loaded=LoadWorkflowState(file);EXPECT_TRUE(loaded.recipe.globalInputs.empty());EXPECT_FALSE(loaded.recipe.settings.outputFrom);EXPECT_FALSE(loaded.recipe.settings.outputTo);EXPECT_FALSE(loaded.recipe.settings.acknowledgeExtrapolation);EXPECT_TRUE(loaded.recipe.settings.peaks.empty());
+    for(const auto& p:loaded.recipe.settings.parameters)EXPECT_FALSE(p.shared);EXPECT_EQ(loaded.recipe.settings.operation,pl::ScientificOperation::LinearFit);
+    j["version"]=3;{std::ofstream out(sidecar);out<<j;}EXPECT_THROW(LoadWorkflowState(file),std::invalid_argument);std::filesystem::remove(sidecar);
+}
 
 TEST(PlotWorkflow, SharedCommandsAnalysisMapTemplateAndPersistenceMigration) {
     auto bus=CreateRef<EventBus>();auto jobs=CreateRef<JobSystem>(bus,2);

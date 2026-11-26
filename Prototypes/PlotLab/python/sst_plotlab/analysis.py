@@ -111,6 +111,17 @@ class AnalysisSession:
         job_id = _result(self._native.analysis_submit(request, callback, False))["job_id"]
         return _result(self._native.analysis_wait(job_id)) if wait else {"job_id": job_id}
 
+    def global_fit(self, recipe, datasets, *, model=None, wait=True, accept=False):
+        """One simultaneous fit including the recipe's primary dataset.
+
+        Additional datasets contain id, worksheet_id, x_column_id, y_column_id,
+        optional sigma_column_id and parameters. Parameter shared=True means one
+        common value; False means a local value per dataset. Local starts/bounds
+        may differ; shared definitions must agree. All inputs use identical units.
+        """
+        return self.run(dict(recipe, global_inputs=list(datasets)), model=model,
+                        wait=wait, accept=accept)
+
     def status(self, job_id, *, include_arrays=False):
         """Poll scalar status; request curve/covariance/peak arrays explicitly."""
         return _result(self._native.analysis_status(job_id, True) if include_arrays else self._native.analysis_status(job_id))

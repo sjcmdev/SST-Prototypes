@@ -43,6 +43,9 @@ namespace SST::Prototypes::PlotLab
             {"map", "Heatmap / contour...", "Plot"}, {"templates", "Graph templates / batch...", "Graph"},
             {"map_settings", "Map / contour settings...", "Graph"},
             {"analysis", "Fit model / scientific analysis...", "Analysis"},
+            {"global_fit", "Global fit (shared / local)...", "Analysis"},
+            {"extrapolate", "Extrapolate (explicit range)...", "Analysis"},
+            {"multi_peak", "Multi-peak fit...", "Analysis"},
             {"set_none", "None", "Column/Set As..."}, {"set_x", "X", "Column/Set As..."}, {"set_y", "Y", "Column/Set As..."}, {"set_z", "Z", "Column/Set As..."},
             {"set_yerr", "yErr", "Column/Set As..."}, {"set_xerr", "xErr", "Column/Set As..."}, {"set_label", "Label", "Column/Set As..."}, {"set_disregard", "Disregard", "Column/Set As..."},
             {"values", "Set Column Values...", "Column", "Ctrl+Q"}, {"properties", "Properties...", "Column", "F4"},
@@ -482,7 +485,7 @@ namespace SST::Prototypes::PlotLab
         const auto& p = *state->document->project;
         if (action == "undo") return state->document->undo->GetUndoDepth() > 0;
         if (action == "redo") return state->document->undo->GetRedoDepth() > 0;
-        if (action == "analysis" || action == "export_data") return CurrentSheet()!=0;
+        if (action == "analysis" || action == "global_fit" || action == "extrapolate" || action == "multi_peak" || action == "export_data") return CurrentSheet()!=0;
         if (action == "map_settings") return Exists(p,state->selected,4);
         if (action == "export" || action == "contents" || action == "details" || action == "axes" || action == "legend" || action == "rescale") return Exists(p, state->selected, 4);
         if (action == "rename" || action == "delete_object") return p.objects().contains(state->selected) && state->selected != p.root();
@@ -538,11 +541,17 @@ namespace SST::Prototypes::PlotLab
         else if (action == "open") state->File(FileAction::Open, path);
         else if (action == "save" || action == "save_as") state->Save(action == "save_as");
         else if (action == "import") BeginImport();
-        else if (action == "map" || action == "map_settings" || action == "analysis" || action == "templates" || action == "export_data" || action == "image_map") {
+        else if (action == "map" || action == "map_settings" || action == "analysis" || action == "global_fit" || action == "extrapolate" || action == "multi_peak" || action == "templates" || action == "export_data" || action == "image_map") {
             if(!state->workflowPanel)state->workflowPanel=CreateRef<PlotWorkflowPanel>(*state);
             if(action=="map")state->workflowPanel->OpenMap(sheet);
             else if(action=="map_settings")state->workflowPanel->EditMap(graph);
             else if(action=="analysis")state->workflowPanel->OpenAnalysis(sheet);
+            else if(action=="global_fit" || action=="extrapolate" || action=="multi_peak") {
+                state->workflowPanel->OpenAnalysis(sheet);auto& panel=doc.Workflow().panel;auto recipe=panel.Recipe();
+                const auto operation=action=="multi_peak"?pl::ScientificOperation::MultiPeakFit:action=="extrapolate"?pl::ScientificOperation::Extrapolate:pl::isAnalysisFit(recipe.settings.operation)?recipe.settings.operation:pl::ScientificOperation::ExponentialFit;
+                if(recipe.settings.operation!=operation){recipe.settings={};recipe.settings.operation=operation;recipe.globalInputs.clear();}
+                panel.SetRecipe(std::move(recipe));if(action=="global_fit")panel.OpenGlobal();
+            }
             else if(action=="templates")state->workflowPanel->OpenTemplates();
             else if(action=="export_data")state->workflowPanel->OpenData(sheet);
             else state->workflowPanel->OpenImage();
@@ -646,7 +655,7 @@ namespace SST::Prototypes::PlotLab
         if(dataAction==12) widgets::Text("New X values (comma-separated)",&filterText);
         if(dataAction==10) {operationMode=std::clamp(operationMode,0,1);widgets::Combo("Reduction",&operationMode,"Every n-th row\0Group average\0");widgets::Int("Every n rows",&everyN,1,1,1000000);}
         if(dataAction==11) {operationMode=std::clamp(operationMode,0,3);widgets::Combo("Normalization",&operationMode,"Max\0Range\0Area\0Value at X\0");if(operationMode==3) widgets::Double("Normalize at X (X units)",&normalizationX);}
-        if(dataAction==13) {operationMode=std::clamp(operationMode,0,1);widgets::Combo("Statistics axis",&operationMode,"Column\0Row\0");widgets::Checkbox("Exclude filtered rows",&excludeFiltered);}
+        if(dataAction==13) {operationMode=std::clamp(operationMode,0,1);widgets::Combo("Statistics axis",&operationMode,"Column\0Row\0");widgets::Checkbox("Exclude filtered rows",&excludeFiltered);ImGui::TextWrapped("Linked count, sum, mean, min, max and sample standard deviation (N-1). Masks and nonfinite/missing values are excluded; count reports the usable N. Row statistics combine selected numeric columns; choose matching units.");}
         auto submit=[&](bool clear) {
             pl::DataRequest request;request.action=static_cast<pl::DataAction>(dataAction);request.worksheet=sheet;request.column=columns[dataColumn];request.name=operationName;
             if(!operationColumns.empty())request.columns=std::vector<pl::Id>(operationColumns.begin(),operationColumns.end());
@@ -1213,6 +1222,11 @@ namespace SST::Prototypes::PlotLab
                         if (ImGui::MenuItem("Paste", "Ctrl+V")) Attempt([&] { PasteSelection(id, ImGui::GetClipboardText()); });
                         if (ImGui::MenuItem("Mask")) Attempt([&] { MaskSelection(id, true); });
                         if (ImGui::MenuItem("Unmask")) Attempt([&] { MaskSelection(id, false); });
+                        if(ImGui::BeginMenu("Analysis")) {
+                            for(const auto& item:menuCommands)if(std::string_view(item.category)=="Analysis" || std::string_view(item.action)=="statistics")
+                                if(ImGui::MenuItem(item.name))Attempt([&]{state->selected=id;auto result=doc.commands->Execute(CommandID{"plotlab.ui."+std::string(item.action)});if(!result)throw std::runtime_error(result.Error().technicalDetails);});
+                            ImGui::EndMenu();
+                        }
                         ImGui::EndPopup();
                     }
                     if (ImGui::BeginPopup("Edit cell")) {

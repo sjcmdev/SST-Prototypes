@@ -65,6 +65,18 @@ TEST_F(PlotGapAnalysisJobs, PreviewCannotBeAcceptedAndBatchKeepsMixedStatusIds) 
     EXPECT_EQ(result->items[1].id,"bad");EXPECT_EQ(result->items[1].recipeId,"bad-recipe");EXPECT_EQ(result->items[1].result->error,pl::AnalysisError::InsufficientPoints);
     analysis.Accept();EXPECT_EQ(analysis.Status().outputWorksheets.size(),2);EXPECT_EQ(undo->GetUndoDepth(),1);
 }
+TEST_F(PlotGapAnalysisJobs, GlobalFitUsesSameCommandJobAndAtomicAcceptWithFullRecipe) {
+    auto second=doc.AddColumn(recipe.worksheet);doc.SetValues(second,std::vector<double>{4,7,10,13});auto column=doc.project->object(second);std::get<pl::Column>(column.data).units="V";doc.Execute(doc.project->change("Units",{std::move(column)}));
+    recipe.settings.parameters=pl::defaultAnalysisParameters(recipe.settings,"s","V");recipe.settings.parameters[1].shared=true;
+    recipe.globalInputs={{"second",recipe.worksheet,recipe.xColumn,second,0,{}}};undo->Clear();
+    auto id=analysis.Submit(recipe);ASSERT_GT(id,0);ASSERT_EQ(analysis.Wait().stage,AnalysisStage::PreviewReady)<<analysis.Status().message;
+    auto result=analysis.Status().preview;ASSERT_EQ(result->items.size(),3);EXPECT_EQ(result->items.back().result->modelId,"global");EXPECT_EQ(result->items.back().result->degreesOfFreedom,5);
+    EXPECT_DOUBLE_EQ(result->items[0].result->parameters[1],result->items[1].result->parameters[1]);EXPECT_NEAR(result->items[1].result->parameters[0],4,1e-4);EXPECT_EQ(result->snapshotNumericCopiedBytes,0);
+    analysis.Accept();EXPECT_EQ(undo->GetUndoDepth(),1);ASSERT_EQ(doc.workflowState.acceptedRecipes.size(),3);
+    for(const auto& [book,saved]:doc.workflowState.acceptedRecipes)EXPECT_EQ(*saved,recipe);
+    const auto outputs=analysis.Status().outputWorksheets;ASSERT_TRUE(undo->Undo());for(auto sheet:outputs)EXPECT_FALSE(doc.project->objects().contains(sheet));ASSERT_TRUE(undo->Redo());for(auto sheet:outputs)EXPECT_TRUE(doc.project->objects().contains(sheet));
+    recipe.settings.includeCurves=false;analysis.Submit(recipe);ASSERT_EQ(analysis.Wait().stage,AnalysisStage::PreviewReady);for(const auto& item:analysis.Status().preview->items)EXPECT_TRUE(item.result->values.empty());
+}
 TEST_F(PlotGapAnalysisJobs, UntrustedProjectRejectsUserCallableBeforeExecution) {
     const auto file=std::filesystem::temp_directory_path()/("plotgap-untrusted-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".plotlab");
     doc.SaveScript("Owner model","raise RuntimeError('must not execute before trust')");
@@ -111,4 +123,37 @@ TEST_F(PlotGapAnalysisJobs, HeadlessPanelKeepsPreviewAndHasNoIdConflicts) {
         EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);EXPECT_EQ(analysis.Status().preview,preview);
     }
     EXPECT_EQ(undo->GetUndoDepth(),0);
+}
+TEST_F(PlotGapAnalysisJobs, MultiPeakAndGlobalEditorsRetainPreviewAndUniqueIds) {
+    ImGui::CreateContext();ImPlot::CreateContext();
+    struct Cleanup {~Cleanup(){ImPlot::DestroyContext();ImGui::DestroyContext();}} cleanup;
+    auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1700,1200};io.DeltaTime=1.f/60;io.BackendFlags|=ImGuiBackendFlags_RendererHasTextures;io.ConfigDebugHighlightIdConflicts=true;
+    recipe.settings.operation=pl::ScientificOperation::MultiPeakFit;recipe.settings.peaks={{"a",pl::PeakShape::Voigt},{"b",pl::PeakShape::SplitGaussian}};recipe.settings.anchors={{0,0}};
+    recipe.settings.parameters=pl::defaultAnalysisParameters(recipe.settings,"s","V");for(auto& p:recipe.settings.parameters)p.fixed=true;
+    analysis.Submit(recipe);ASSERT_EQ(analysis.Wait().stage,AnalysisStage::PreviewReady)<<analysis.Status().message;
+    AnalysisPanel panel{analysis};panel.SetRecipe(recipe);panel.OpenGlobal();auto previous=analysis.Status().preview;
+    for(int frame=0;frame<5;++frame){ImGui::NewFrame();ImGui::SetNextWindowSize({1300,1100});panel.Draw();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);EXPECT_EQ(analysis.Status().preview,previous);}
+}
+TEST_F(PlotGapAnalysisJobs, RecalculateRemainsClickableBesideScrollingSettings) {
+    ImGui::CreateContext();ImPlot::CreateContext();
+    struct Cleanup {~Cleanup(){ImPlot::DestroyContext();ImGui::DestroyContext();}} cleanup;
+    auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1600,1000};io.DeltaTime=1.f/60;io.BackendFlags|=ImGuiBackendFlags_RendererHasTextures;
+    recipe.settings.operation=pl::ScientificOperation::MultiPeakFit;recipe.settings.peaks={{"a",pl::PeakShape::Gaussian},{"b",pl::PeakShape::Lorentzian}};recipe.settings.anchors={{0,0}};
+    recipe.settings.parameters=pl::defaultAnalysisParameters(recipe.settings,"s","V");for(auto& p:recipe.settings.parameters)p.fixed=true;
+    AnalysisPanel panel{analysis};panel.SetRecipe(recipe);
+    auto frame=[&]{ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({800,900});panel.Draw();ImGui::Render();};
+    frame();frame();auto* window=ImGui::FindWindowByName("Scientific analysis");ASSERT_NE(window,nullptr);
+    auto* table=GImGui->Tables.GetByKey(ImHashStr("Analysis layout",0,window->ID));ASSERT_NE(table,nullptr);
+    const ImVec2 point{table->Columns[1].WorkMinX+20,window->DC.CursorStartPos.y+ImGui::GetFrameHeight()/2};
+    io.AddMousePosEvent(point.x,point.y);frame();io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();
+    EXPECT_GT(analysis.Status().job,0u)<<(GImGui->HoveredWindow?GImGui->HoveredWindow->Name:"no hovered window");
+    if(analysis.Status().job)EXPECT_EQ(analysis.Wait().stage,AnalysisStage::PreviewReady);
+}
+TEST_F(PlotGapAnalysisJobs, GlobalEditorPreservesDatasetIdentitiesWithinOneWorksheet) {
+    ImGui::CreateContext();ImPlot::CreateContext();
+    struct Cleanup {~Cleanup(){ImPlot::DestroyContext();ImGui::DestroyContext();}} cleanup;
+    auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1600,1000};io.DeltaTime=1.f/60;io.BackendFlags|=ImGuiBackendFlags_RendererHasTextures;io.ConfigDebugHighlightIdConflicts=true;
+    recipe.settings.parameters=pl::defaultAnalysisParameters(recipe.settings,"s","V");recipe.globalInputs={{"330K",recipe.worksheet,recipe.xColumn,recipe.yColumn,0,{}},{"350K",recipe.worksheet,recipe.xColumn,recipe.yColumn,0,{}}};recipe.autoPreview=false;
+    AnalysisPanel panel{analysis};panel.SetRecipe(recipe);panel.OpenGlobal();
+    for(int frame=0;frame<4;++frame){ImGui::NewFrame();panel.Draw();ImGui::Render();EXPECT_EQ(panel.Recipe(),recipe);EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);}
 }

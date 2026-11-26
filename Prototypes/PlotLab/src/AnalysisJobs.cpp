@@ -59,9 +59,20 @@ void AnalysisJob::Execute(JobContext& context) {
     auto output=std::make_shared<AnalysisJobResult>();
     output->project=inputs.front().source.project;output->revision=inputs.front().source.revision;
     const auto start=std::chrono::steady_clock::now();
+    auto model=userModel;
+    if(globalRecipe) {
+        std::vector<pl::GlobalAnalysisItem> datasets;
+        for(const auto& item:inputs){output->maskCopiedBytes+=item.source.excluded.size();datasets.push_back({item.id,item.source.View(),item.recipe.settings.parameters});output->recipes.push_back(*globalRecipe);}
+        auto computed=pl::analyzeGlobal(datasets,*globalRecipe,{cancelled,{}},model);
+        if(computed.fit.error==pl::AnalysisError::Cancelled)checkCancellation();
+        output->items=std::move(computed.items);
+        output->items.push_back({globalRecipe->id+".global",globalRecipe->id,std::make_shared<const pl::ScientificResult>(std::move(computed.fit))});
+        output->recipes.resize(output->items.size(),*globalRecipe);
+        context.SetProgress(1,1);
+    } else
     for(auto& item:inputs) {
         checkCancellation();output->maskCopiedBytes+=item.source.excluded.size();
-        auto computed=pl::analyze(item.source.View(),item.recipe.settings,{cancelled,{}},userModel);
+        auto computed=pl::analyze(item.source.View(),item.recipe.settings,{cancelled,{}},model);
         if(computed.error==pl::AnalysisError::Cancelled)checkCancellation();
         output->items.push_back({std::move(item.id),item.recipe.id,std::make_shared<const pl::ScientificResult>(std::move(computed))});
         output->recipes.push_back(std::move(item.recipe));
@@ -85,14 +96,26 @@ AnalysisController::AnalysisController(Document& doc,Ref<JobSystem> pool):docume
 AnalysisController::~AnalysisController() {if(work)(void)jobs->RequestCancel(status.job);}
 JobId AnalysisController::Submit(pl::AnalysisRecipe recipe,pl::UserAnalysisModel model,bool preview) {
     const auto id=recipe.id;std::vector<std::pair<std::string,pl::AnalysisRecipe>> batch;batch.emplace_back(id,std::move(recipe));
+    if(!batch.front().second.globalInputs.empty()) {
+        auto global=batch.front().second;
+        for(const auto& input:global.globalInputs) {
+            auto local=global;local.globalInputs.clear();local.worksheet=input.worksheet;local.xColumn=input.xColumn;local.yColumn=input.yColumn;local.sigmaColumn=input.sigmaColumn;
+            if(!input.parameters.empty())local.settings.parameters=input.parameters;
+            batch.emplace_back(input.id,std::move(local));
+        }
+        batch.front().second.globalInputs.clear();
+        if(preview)global.settings.tolerance=std::max(global.settings.tolerance,1e-5);
+        return SubmitBatch(std::move(batch),std::move(model),preview,std::move(global));
+    }
     return SubmitBatch(std::move(batch),std::move(model),preview);
 }
-JobId AnalysisController::SubmitBatch(std::vector<std::pair<std::string,pl::AnalysisRecipe>> recipes,pl::UserAnalysisModel model,bool preview) {
+JobId AnalysisController::SubmitBatch(std::vector<std::pair<std::string,pl::AnalysisRecipe>> recipes,pl::UserAnalysisModel model,bool preview,std::optional<pl::AnalysisRecipe> global) {
     if(recipes.empty())throw std::invalid_argument("Select at least one analysis source");
     const auto sourceProject=document.project;
-    auto next=CreateRef<AnalysisJob>();std::set<std::string> ids;
+    auto next=CreateRef<AnalysisJob>();next->globalRecipe=std::move(global);std::set<std::string> ids;
     for(auto& [id,recipe]:recipes) {
         if(id.empty() || !ids.insert(id).second)throw std::invalid_argument("Analysis batch item IDs must be nonempty and unique");
+        if(!recipe.globalInputs.empty())throw std::invalid_argument("Submit global recipes individually, not as independent batch items");
         if(recipe.settings.operation==pl::ScientificOperation::UserFit && !document.PythonTrusted())
             throw pl::AnalysisException(pl::AnalysisError::Trust,"Trust this project before executing its user model");
         auto source=CaptureAnalysisSource(*sourceProject,recipe);
@@ -155,8 +178,9 @@ void AnalysisController::Accept(pl::Id folder) {
             std::get<std::vector<double>>(c.values).resize(count,std::numeric_limits<double>::quiet_NaN());
             objects.push_back({project.reserveId(),sheet,std::move(name),0,std::move(c),order++});
         };
-        column("X",result.x,result.xUnits,pl::Role::X);column("Analysis",result.values,result.outputUnits);
+        column("X",result.x,result.xUnits,pl::Role::X);column(result.settings.operation==pl::ScientificOperation::Extrapolate?"Extrapolated (linear endpoints)":"Analysis",result.values,result.outputUnits);
         column("Residual",result.residuals,result.yUnits);column("Normalized residual",result.normalizedResiduals,"");column("Baseline",result.baseline,result.yUnits);
+        for(std::size_t j=0;j<result.components.size();++j)column(result.settings.peaks.at(j).id+" component",result.components[j],result.yUnits);
         if(!result.peakX.empty()) {
             sheet=project.reserveId();sheets.push_back(sheet);count=result.peakX.size();order=0;pl::Worksheet report;
             for(std::size_t i=0;i<count;++i)report.rows.push_back(project.reserveId());report.source={{"analysis.model_id",result.modelId},{"analysis.recipe_id",item.recipeId},{"analysis.item_id",item.id}};
@@ -172,9 +196,17 @@ void AnalysisController::Accept(pl::Id folder) {
                 const auto& definition=result.parameterDefinitions[j];column(definition.name,{result.parameters[j]},definition.units);
                 column(definition.name+" standard error",{result.standardErrors[j]},definition.units);
             }
-            column("Objective",{result.objective},result.settings.weights==pl::WeightSemantics::Unweighted?"("+result.yUnits+")^2":"");
-            column("Degrees of freedom",{static_cast<double>(result.degreesOfFreedom)},"");
+            column(result.globalFit?"Global objective":"Objective",{result.objective},result.settings.weights==pl::WeightSemantics::Unweighted?"("+result.yUnits+")^2":"");
+            column(result.globalFit?"Global degrees of freedom":"Degrees of freedom",{static_cast<double>(result.degreesOfFreedom)},"");
             column("Used points",{static_cast<double>(result.usedPoints)},"");column("Excluded points",{static_cast<double>(result.excludedPoints)},"");
+            if(result.modelId=="global" && result.covariance.size()==result.parameters.size()*result.parameters.size()) {
+                count=result.parameters.size();sheet=project.reserveId();sheets.push_back(sheet);order=0;pl::Worksheet covariance;
+                for(std::size_t i=0;i<count;++i)covariance.rows.push_back(project.reserveId());
+                covariance.source={{"analysis.recipe_id",item.recipeId},{"analysis.model_id","global"}};objects.push_back({sheet,book,"Global covariance",0,std::move(covariance)});
+                pl::Column labels;labels.role=pl::Role::Label;std::vector<std::string> names;
+                for(const auto& p:result.parameterDefinitions)names.push_back(p.name+" ["+p.units+"]");labels.values=std::move(names);objects.push_back({project.reserveId(),sheet,"Row parameter",0,std::move(labels),order++});
+                for(std::size_t j=0;j<count;++j){std::vector<double> values;values.reserve(count);for(std::size_t i=0;i<count;++i)values.push_back(result.covariance[i*count+j]);const auto& p=result.parameterDefinitions[j];column(p.name,values,p.units+" * row parameter unit");}
+            }
         }
     }
     document.Execute(project.change("Accept scientific analysis",std::move(objects)));
