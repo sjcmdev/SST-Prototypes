@@ -410,6 +410,17 @@ TEST_F(WorksheetUi, SheetTabsUseWorkbookIdentityAndCreateUsableGrid) {
     EXPECT_EQ(session->selected, second);
     ASSERT_TRUE(undo->Undo()); EXPECT_FALSE(doc->project->objects().contains(second));
 }
+TEST_F(WorksheetUi, ProgrammaticSheetSelectionDoesNotRefocusPreviousTab) {
+    const auto first=sheet;const auto book=doc->project->object(sheet).parent;
+    WorkspaceTestAccess::NewSheet(panel,book);const auto second=session->selected;
+    for(auto selected:{second,first,second}) {
+        session->Show(selected);sheet=selected;
+        for(int frame=0;frame<8;++frame) {
+            session->activate=0;Frame();
+            EXPECT_EQ(session->selected,selected);EXPECT_EQ(session->activate,0);
+        }
+    }
+}
 TEST_F(WorksheetUi, GraphContextAndMaskedSnapshotKeepSourceValues) {
     const auto graph = doc->PlotColumns(sheet, {columns[1]}, plot::SeriesKind::LineScatter);
     WorkspaceTestAccess::SelectCell(panel, sheet, columns[1], rows[1]); WorkspaceTestAccess::Mask(panel, sheet, true);

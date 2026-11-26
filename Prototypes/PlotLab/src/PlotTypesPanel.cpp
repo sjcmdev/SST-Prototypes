@@ -5,7 +5,7 @@
 #include <cmath>
 #include <limits>
 namespace SST::Prototypes::PlotLab {
-PlotTypesPanelResult DrawPlotTypesPanel(const sst::plotlab::Project& project,sst::plotlab::MapPlotRequest& draft,const std::string& diagnostic) {
+PlotTypesPanelResult DrawPlotTypesPanel(const sst::plotlab::Project& project,sst::plotlab::MapPlotRequest& draft,const std::string& diagnostic,bool sourceEditable) {
     namespace pl=sst::plotlab;namespace plot=sst::ui::plot;
     PlotTypesPanelResult result;
     const auto sheet=project.objects().find(draft.worksheet);
@@ -33,10 +33,13 @@ PlotTypesPanelResult DrawPlotTypesPanel(const sst::plotlab::Project& project,sst
             }
             tip("Explicit measured column; coordinates keep their source order. No sorting or interpolation.");ImGui::PopID();
         };
+        ImGui::BeginDisabled(!sourceEditable);
         column("X",draft.x);column("Y",draft.y);column("Z / intensity",draft.z);
         row("Grid columns");int count=static_cast<int>(std::min<std::size_t>(draft.gridColumns,std::numeric_limits<int>::max()));
         if(ImGui::DragInt("##columns",&count,1,2,std::numeric_limits<int>::max(),"%d pixels",ImGuiSliderFlags_AlwaysClamp)) {draft.gridColumns=count;result.changed=true;}
         tip("X varies fastest, then Y. Complete rectilinear grid, at least 2 by 2. Ctrl+click for exact typing.");result.editing|=ImGui::IsItemActive();
+        ImGui::EndDisabled();
+        if(!sourceEditable) {row("Source");ImGui::TextDisabled("Fixed for this map; create a new map to change source columns/grid.");}
         row("Colour scale");int scale=plot::LogColor(draft.spec)?1:0;
         if(ImGui::Combo("##scale",&scale,"Linear\0Logarithmic\0")) {draft.spec.z.scale=scale?plot::AxisScale::Log10:plot::AxisScale::Linear;result.changed=true;}
         tip("Logarithmic intensity uses positive physical Z values; no epsilon is substituted.");

@@ -271,6 +271,8 @@ public:
     std::vector<pl::Operation> operations;
     std::map<std::string,pl::ImportRecipe> importPresets;
     ImportRecipes importRecipes;
+    std::map<pl::Id,std::shared_ptr<const pl::AnalysisRecipe>> analysisRecipes;
+    std::map<pl::Id,plot::PlotViewState> graphViews;
     std::vector<pl::ImportRecipe> importTrust;
     std::optional<std::map<std::string,pl::ImportRecipe>> importPresetChanges;
     pl::Formula formula;
@@ -291,6 +293,7 @@ public:
                 worker.Open(snapshot,{});worker.pythonTrusted=true;worker.activeSheet=request.worksheet;
                 worker.importPresets=importPresets;worker.trustedImportRecipes=std::move(importTrust);
                 worker.importRecipes=importRecipes;
+                worker.workflowState.acceptedRecipes=analysisRecipes;worker.graphViews=std::move(graphViews);
                 worker.importStop=context.GetStopToken();
                 worker.importContext=&context;
                 worker.InstallPythonEvaluator();
@@ -300,6 +303,7 @@ public:
                 if(worker.importPresets!=importPresets)importPresetChanges=std::move(worker.importPresets);
                 importTrust=std::move(worker.trustedImportRecipes);
                 importRecipes=std::move(worker.importRecipes);
+                analysisRecipes=std::move(worker.workflowState.acceptedRecipes);
             } else if(request.action==PythonAction::Completion) {
                 FormulaView view{&snapshot->objects(),request.worksheet};
                 const auto entries=nb::cast<std::vector<std::tuple<std::string,std::string,std::string>>>(runtime.attr("complete")(nb::cast(&view,nb::rv_policy::reference),request.source,request.worksheet,request.consoleSession));
@@ -384,6 +388,7 @@ JobId Document::SubmitPython(PythonRequest request) {
     work->jobs=dataJobs;
     if(work->request.action==PythonAction::Script || work->request.action==PythonAction::Console){work->importPresets=importPresets;work->importTrust=trustedImportRecipes;}
     if(work->request.action==PythonAction::Script || work->request.action==PythonAction::Console)work->importRecipes=importRecipes;
+    if(work->request.action==PythonAction::Script || work->request.action==PythonAction::Console){work->analysisRecipes=workflowState.acceptedRecipes;for(const auto& [id,view]:graphViews)work->graphViews.emplace(id,CapturePublicationView(view));}
     work->snapshot=Ref<pl::Project>(project->operationSnapshot().release());
     const auto job=dataJobs->Submit(work);if(!job)throw std::runtime_error("Could not submit Python job");
     // Completed UI requests are disposable; callers retain the latest result only.
@@ -414,9 +419,10 @@ const PythonResult& Document::PollPython(JobId job) {
             if(work->importPresetChanges){importPresets=std::move(*work->importPresetChanges);importPresetsDirty=true;}
             for(auto& recipe:work->importTrust)if(std::find(trustedImportRecipes.begin(),trustedImportRecipes.end(),recipe)==trustedImportRecipes.end())trustedImportRecipes.push_back(std::move(recipe));
             for(auto& [fingerprint,recipe]:work->importRecipes)if(!importRecipes.contains(fingerprint)){importRecipes.emplace(fingerprint,std::move(recipe));importPresetsDirty=true;}
+            workflowState.acceptedRecipes.insert(work->analysisRecipes.begin(),work->analysisRecipes.end());
         }
     } catch(const std::exception& error) {result.ok=false;result.error=error.what();result.errorCode=PythonErrorCode::Execution;}
-    work->operations.clear();work->importPresets.clear();work->importRecipes.clear();work->importPresetChanges.reset();work->importTrust.clear();work->snapshot.reset();work->base.reset();work->jobs.reset();return result;
+    work->operations.clear();work->importPresets.clear();work->importRecipes.clear();work->analysisRecipes.clear();work->graphViews.clear();work->importPresetChanges.reset();work->importTrust.clear();work->snapshot.reset();work->base.reset();work->jobs.reset();return result;
 }
 PythonResult Document::WaitPython(JobId job) {
 #if DS_PYTHON_CAPI_AVAILABLE

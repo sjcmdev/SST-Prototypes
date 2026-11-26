@@ -20,6 +20,22 @@ class AnalysisError(RuntimeError):
         self.code = code
 
 
+def evaluate_model(callback, x, parameters):
+    """Binding edge: the existing runtime budget also covers explicit user models."""
+    from .runtime import Budget
+    with Budget(5, lambda: False):
+        return callback(x, parameters)
+
+
+def _load_model_file(path):
+    import runpy
+    from .runtime import Budget
+    with Budget(5, lambda: False):
+        namespace = runpy.run_path(str(path))
+        model = namespace["model"]
+        return model.descriptor(), model.evaluate, namespace["parameters"]
+
+
 def _result(response):
     if not response.get("ok", False):
         error = response.get("error", {})
@@ -62,6 +78,10 @@ class AnalysisSession:
     def __init__(self, backend):
         self._native = backend
 
+    def load_model(self, path):
+        """Explicit trusted file load; returns a JSON-compatible recipe with model settings."""
+        return _result(self._native.analysis_load_model(str(path)))
+
     def run(self, recipe, *, model=None, wait=True, accept=False, preview=False):
         """Recipe uses stable *_id fields; ranges/anchors/parameters declare their units.
 
@@ -91,8 +111,9 @@ class AnalysisSession:
         job_id = _result(self._native.analysis_submit(request, callback, False))["job_id"]
         return _result(self._native.analysis_wait(job_id)) if wait else {"job_id": job_id}
 
-    def status(self, job_id):
-        return _result(self._native.analysis_status(job_id))
+    def status(self, job_id, *, include_arrays=False):
+        """Poll scalar status; request curve/covariance/peak arrays explicitly."""
+        return _result(self._native.analysis_status(job_id, True) if include_arrays else self._native.analysis_status(job_id))
 
     def cancel(self, job_id):
         return _result(self._native.analysis_cancel(job_id))

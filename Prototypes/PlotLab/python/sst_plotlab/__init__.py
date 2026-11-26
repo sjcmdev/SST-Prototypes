@@ -36,6 +36,16 @@ class WorksheetSession:
                          else _sst_plotlab.WorksheetSession())
 
     @property
+    def analysis(self):
+        from .analysis import AnalysisSession
+        return AnalysisSession(self._session)
+
+    @property
+    def analysis_recipes(self):
+        """Accepted, versioned native recipes keyed by their output workbook IDs."""
+        return self._session.analysis_recipes
+
+    @property
     def project(self):
         from .worksheet import Project
         return Project(self._session)
@@ -111,6 +121,24 @@ class WorksheetSession:
         """
         return self._session.plot_columns(worksheet_id, column_ids, kind, graph_id,
                                           x_column_id, y_error_column_id)
+
+    def create_map(self, request):
+        return self._session.create_map(request)
+
+    def import_image(self, path, calibration):
+        return self._session.import_image(str(path), calibration)
+
+    def save_graph_template(self, graph_id, path):
+        return self._session.save_graph_template(graph_id, str(path))
+
+    def template_batch(self, path, inputs, *, format="png", wait=True):
+        return self._session.template_batch(str(path), inputs, format, wait)
+
+    def export_data(self, request):
+        return self._session.export_data(request)
+
+    def export_figure(self, graph_id, path, format, *, dpi=300, width_mm=None, height_mm=None, background_rgb=(1, 1, 1)):
+        return self._session.export_figure(graph_id, str(path), format, dpi, width_mm, height_mm, background_rgb)
 
 
 __all__.append("WorksheetSession")

@@ -299,6 +299,37 @@ Rows/ranges in data operations are zero-based, `[row_from,row_to)`. Formula rang
 | interpolate | `column_id,x_column_id,new_x_column_units`; linear, strictly increasing usable source X, NaN outside source range; creates a sheet |
 | statistics | `axis=column/row`, optional `column_ids,exclude_filtered,name`; linked mean/sum/min/max/sample std/count producers |
 
-Filters never change source arrays and hide rows in worksheets, graphs and exports. Raw edits refresh filter visibility. Formula requests explicitly opt in with `exclude_filtered=True`; default false. Masks follow row IDs, colour cells and appear as cross markers in graph previews. Statistics always omit masks. `analysis_column` with `column_id` returns `values_column_units,units,row_ids`, with masked samples represented by JSON null, for future fit adapters; it optionally excludes filters. No fit engine is registered in PlotLab yet.
+Filters never change source arrays and hide rows in worksheets, graphs and exports. Raw edits refresh filter visibility. Formula requests explicitly opt in with `exclude_filtered=True`; default false. Masks follow row IDs, colour cells and appear as cross markers in graph previews. Statistics always omit masks. `analysis_column` with `column_id` returns `values_column_units,units,row_ids`, with masked samples represented by JSON null; it optionally excludes filters.
 
 Normalization, interpolation and group averaging omit masked/nonfinite input samples. Derived transformations create independent sheets with their source operation recorded in worksheet metadata; statistics alone stay linked and automatically recompute. Worksheet sort supports automatic full-range producers; frozen/ranged producers retain the engine's existing detach guard. Transpose/stack require homogeneous column types; join is row append, not a relational key join. Undo restores source value bytes (including signed zero and NaN payloads); commit/revision and ID reservation counters intentionally remain monotonic.
+
+## Scientific analysis, maps, templates and export
+
+The **Analysis** menu and worksheet toolbar open the native scientific editor; **Batch...** maps X/Y/sigma explicitly per worksheet, checks source mappings before Run, and accepts successful reports with one undo. Python uses the same `plotlab.analysis.run` Core command, shared jobs and owner-thread acceptance:
+
+```python
+from sst_plotlab import WorksheetSession
+s = WorksheetSession(active=True)
+result = s.analysis.run(dict(
+    id="fit-1", version=1, worksheet_id=sheet_id,
+    x_column_id=x_id, y_column_id=y_id,
+    settings=dict(operation="linear", weights="unweighted")))
+if result["stage"] == "preview_ready":
+    s.analysis.accept(result["job_id"])
+```
+
+Operations: `linear`, `exponential`, `gaussian`, `user`, `interpolate`, `mean3`, `sg5`, `constant_baseline`, `linear_baseline`, `differentiate`, `integrate`, `peaks`. Ranges use `x_from_x_units` / `x_to_x_units`; interpolation uses `target_x_units`. Parameters declare `name`, `units`, `start_parameter_units`, `lower_parameter_units`, `upper_parameter_units`, `fixed`. Sigma weights are `absolute_sigma` or `relative_sigma`, with `sigma_column_id` in Y units. Nonfinite results become Python `None`; rank deficiency and nonconvergence retain explicit error/status fields. User functions use `sst_plotlab.analysis.NamedModel` and explicit project trust; reopen does not execute them.
+
+The user-model editor's **Load Python model...** explicitly executes a trusted `.py` file defining `model = NamedModel(...)` and `parameters = [...]` in the parameter format above. `s.analysis.load_model(path)` exposes the same load headlessly and returns its recipe/settings; subsequent `analysis.run` calls resolve the loaded callable by its stable model ID. Loading and evaluation use the existing five-second Python budget. Reopen restores metadata and requires an explicit reload of the callable.
+
+`analysis.status(job_id)` returns scalar progress and report metadata; use `include_arrays=True` to request curves/covariance/peak arrays. Wait returns the requested result once; Accept/Cancel do not resend full arrays. Worksheet scripts use Core's cooperative child-job submit/wait path, including with a single worker. GUI and active-Python figure export capture the same current viewport; render caches are excluded from worker snapshots. Export rejects destinations that identify a known source file, including hard links.
+
+Peaks require one constant baseline anchor `{x_x_units: 0, y_y_units: baseline}`. Reports contain strict interior maxima and linearly interpolated physical FWHM, with `None` when half-height crossings cannot be resolved without crossing a mask/gap or another peak. Endpoints and plateaus are excluded; this is not deconvolution. `include_curves=False` produces scalar fit/peak summaries; curve-only operations require `True`.
+
+`s.create_map(request)` takes `worksheet_id`, explicit `x_column_id`, `y_column_id`, `z_column_id`, `grid_columns` (X fastest), optional `log_color`, `nonpositive="mask"|"error"`, `contour_levels_z_units`, `color_range_z_units`, `colormap`, `name`. Native **Plot → Heatmap / contour** has cancellable previews; **Graph → Map / contour settings** edits an existing map with one undo. `s.import_image(path, calibration)` accepts single-channel intensity images and explicit `first_x_x_units`, `first_y_y_units`, `step_x_x_units`, `step_y_y_units`, `x_units`, `y_units`, `z_units`; image row order is retained.
+
+`s.save_graph_template(graph_id, path)` writes a versioned `.plottemplate`. `s.template_batch(path, [{worksheet_id, destination, bindings}], format="png")` preflights names/roles/units and output collisions, then publishes each graph and exports through Core jobs. The native **Graph templates / batch** window exposes the mapping overrides before Run. Successful items survive cancellation, and completion leaves the active worksheet unchanged.
+
+`s.export_figure(graph_id, path, format, dpi=300, width_mm=None, height_mm=None, background_rgb=(1,1,1))` supports PNG/JPEG/SVG/PDF, explicit physical size and an opaque JPEG background. `s.export_data(request)` supports CSV/TSV/DAT with explicit `worksheet_id`, `column_ids`, `row_indices`, `destination`, `format`, `mask_policy="preserve"|"missing"|"omit_rows"`, `missing_policy="empty"|"nan"`. Both return `{ok, result}` or `{ok: False, error: {type, message}}`.
+
+Keep `.plotlab`, `.plotlab.imports.json` and `.plotlab.analysis.json` together. The analysis sidecar restores the editor recipe/views and immutable accepted recipes (`s.analysis_recipes`); older projects without it use closed/default editor state. Unsupported or malformed editor state is rejected before replacing the current document. Each file is replaced atomically; the three files do not form a filesystem transaction.

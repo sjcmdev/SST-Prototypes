@@ -1,14 +1,33 @@
 #include "PlotLabExport.hpp"
 #include "Core/ScientificRuntime/Python/PythonApi.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include "Core/Utils/Path.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #if DS_PYTHON_CAPI_AVAILABLE
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/ndarray.h>
 #endif
 namespace SST::Prototypes::PlotLab
 {
+    sst::plotlab::ImageGrid LoadIntensityImage(const std::filesystem::path& path,sst::plotlab::ImageGrid grid) {
+#if DS_PYTHON_CAPI_AVAILABLE
+        nanobind::gil_scoped_acquire gil;
+        namespace nb=nanobind;
+        const auto text=path.u8string();auto image=nb::module_::import_("PIL.Image").attr("open")(nb::str(reinterpret_cast<const char*>(text.c_str())));
+        try {
+            const auto mode=nb::cast<std::string>(image.attr("mode"));
+            if(mode!="L" && mode!="I" && mode!="F" && !mode.starts_with("I;16"))throw std::invalid_argument("Choose a single-channel intensity image; RGB conversion requires an explicit channel");
+            auto values=nb::module_::import_("numpy").attr("ascontiguousarray")(image,nb::arg("dtype")="float64");
+            auto array=nb::cast<nb::ndarray<nb::numpy,const double,nb::c_contig>>(values);
+            if(array.ndim()!=2)throw std::invalid_argument("Expected a two-dimensional intensity image");
+            grid.rows=array.shape(0);grid.columns=array.shape(1);grid.pixels.assign(array.data(),array.data()+array.size());grid.name=Path(path.stem()).Utf8();grid.sourcePath=path;image.attr("close")();return grid;
+        }catch(...){image.attr("close")();throw;}
+#else
+        (void)path;(void)grid;throw std::runtime_error("Rebuild with embedded Python for image import");
+#endif
+    }
     using Json = nlohmann::json;
     std::string FriendlyFontError(std::string_view details)
     {

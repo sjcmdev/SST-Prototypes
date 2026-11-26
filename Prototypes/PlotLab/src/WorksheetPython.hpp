@@ -8,6 +8,7 @@ std::string WorksheetCommandJson(Document&, const std::string&);
 #include <nanobind/nanobind.h>
 namespace SST::Prototypes::PlotLab::PythonBinding {
 void BindWorksheetRuntime(nanobind::module_&, nanobind::class_<Document>&);
+void BindPlotWorkflow(nanobind::class_<Document>&);
 bool TrustedFile(const std::filesystem::path&);
 void RememberTrustedFile(const std::filesystem::path&);
 }

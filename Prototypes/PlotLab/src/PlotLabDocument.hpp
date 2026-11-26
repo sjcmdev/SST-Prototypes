@@ -7,6 +7,7 @@
 #include "Core/JobSystem/JobSystemTypes.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/Utils/Path.hpp"
+#include "PlotWorkflowState.hpp"
 
 namespace SST::Prototypes::PlotLab
 {
@@ -85,6 +86,7 @@ namespace SST::Prototypes::PlotLab
         std::vector<ScriptParameter> parameters;
     };
     class PythonWork;
+    class PlotWorkflow;
     class Document final : public pl::Observer
     {
       public:
@@ -115,6 +117,12 @@ namespace SST::Prototypes::PlotLab
         bool PythonTrusted() const { return pythonTrusted; }
         void TrustPython();
         bool HasPython() const;
+        PlotWorkflow& Workflow();
+        JobContext* ActiveJobContext() const {return importContext;}
+        std::map<pl::Id,plot::PlotViewState> graphViews;
+        std::shared_ptr<const pl::GraphSnapshot> SnapshotGraph(pl::Id,std::optional<std::array<double,2>> sizeMm={}) const;
+        WorkflowState workflowState;
+        bool workflowDirty=false;
         pl::Id activeSheet = 0;
         std::vector<std::string> pythonHistory;
         std::map<pl::Id,std::string> scriptDrafts;
@@ -133,7 +141,7 @@ namespace SST::Prototypes::PlotLab
         void Save(const std::filesystem::path &);
         bool Dirty() const
         {
-            return !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty() || importPresetsDirty;
+            return !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty() || importPresetsDirty || workflowDirty;
         }
         pl::Id Create(pl::Id parent, int type, std::string name);
         void Rename(pl::Id, std::string);
@@ -160,6 +168,7 @@ namespace SST::Prototypes::PlotLab
         pl::Id correlation = 0;
         void Replace(Ref<pl::Project>);
         Ref<JobSystem> dataJobs;
+        std::unique_ptr<PlotWorkflow> workflow;
         bool ownsDataJobs = false;
         Ref<IJob> dataWork;
         JobId dataJob = 0;

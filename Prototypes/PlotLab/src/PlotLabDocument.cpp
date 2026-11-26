@@ -1,5 +1,6 @@
 #include "PlotLabDocument.hpp"
 #include "WorksheetPython.hpp"
+#include "PlotWorkflow.hpp"
 #include <sst/plotlab/edges/CommandJson.hpp>
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -146,8 +147,15 @@ namespace SST::Prototypes::PlotLab
     }
     Document::~Document()
     {
+        workflow.reset();
         try{StopImport();}catch(...){}
-        if(ownsDataJobs) dataJobs->Shutdown(true);
+        if(ownsDataJobs) {
+#if DS_PYTHON_CAPI_AVAILABLE
+            std::optional<nanobind::gil_scoped_release> release;
+            if(PythonInterpreter::IsRuntimeInitialized() && PyGILState_Check())release.emplace();
+#endif
+            dataJobs->Shutdown(true);
+        }
         else if(dataJob) (void)dataJobs->RequestCancel(dataJob);
         try {ResetPython();} catch(...) {}
         StopWorker(*project);
@@ -168,6 +176,7 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Replace(Ref<pl::Project> next)
     {
+        workflow.reset();workflowState={};workflowDirty=false;graphViews.clear();
         StopImport();trustedImportRecipes.clear();importPresets.clear();importRecipes.clear();importPresetsDirty=false;importUi={};
         ResetPython();
         if (project)
@@ -222,11 +231,13 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Open(Ref<pl::Project> next, const std::filesystem::path &source)
     {
+        auto editor=LoadWorkflowState(source);
         std::map<std::string,pl::ImportRecipe> presets;
         ImportRecipes recipes;
         ImportUiState ui;auto presetFile=source;presetFile+=".imports.json";
         if(!source.empty() && std::filesystem::exists(presetFile))presets=LoadImportPresets(presetFile,&ui,&recipes);
         Replace(std::move(next));
+        workflowState=std::move(editor);
         path = source;
         importPresets=std::move(presets);importRecipes=std::move(recipes);importUi=std::move(ui);
         pythonTrusted=!HasPython();
@@ -240,6 +251,14 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Save(const std::filesystem::path &destination)
     {
+        std::vector<pl::Object> views;
+        for(const auto& [id,view]:graphViews)if(project->objects().contains(id)) {
+            const auto layers=project->children(id);if(layers.empty())continue;auto layer=project->object(layers.front());
+            if(!plot::StoredViewEqual(std::get<pl::Layer>(layer.data).view,view)){std::get<pl::Layer>(layer.data).view=CapturePublicationView(view);views.push_back(std::move(layer));}
+        }
+        if(!views.empty())project->change("Graph view",std::move(views)).apply(*project);
+        if(workflow)workflow->StoreState();
+        std::erase_if(workflowState.acceptedRecipes,[&](const auto& item){return !project->objects().contains(item.first);});
         for(const auto& [id,source]:scriptDrafts)if(project->objects().contains(id))SaveScript(project->object(id).name,source,id);
         scriptDrafts.clear();
         std::vector<pl::Object> updates;
@@ -249,6 +268,8 @@ namespace SST::Prototypes::PlotLab
         if(history!=pythonHistory){history=pythonHistory;updates.push_back(std::move(root));}
         if(!updates.empty())Execute(project->change("Save Python workspace",std::move(updates)));
         project->save(destination);
+        SaveWorkflowState(destination,workflowState);
+        workflowDirty=false;
         auto presets=destination;presets+=".imports.json";
         if(!importPresets.empty() || !importRecipes.empty() || importUi.open || std::filesystem::exists(presets))SaveImportPresets(presets,importPresets,&importUi,&importRecipes);
         importPresetsDirty=false;
@@ -259,6 +280,14 @@ namespace SST::Prototypes::PlotLab
             PythonBinding::RememberTrustedFile(path);
 #endif
         }
+    }
+    PlotWorkflow& Document::Workflow() {
+        if(!dataJobs){dataJobs=CreateRef<JobSystem>(bus,1);ownsDataJobs=true;}
+        if(!workflow)workflow=std::make_unique<PlotWorkflow>(*this,dataJobs);
+        return *workflow;
+    }
+    std::shared_ptr<const pl::GraphSnapshot> Document::SnapshotGraph(pl::Id graph,std::optional<std::array<double,2>> sizeMm) const {
+        const auto found=graphViews.find(graph);return PublicationSnapshot(*project,graph,found==graphViews.end()?nullptr:&found->second,sizeMm);
     }
     pl::Id Document::Create(pl::Id parent, int type, std::string name)
     {
@@ -654,6 +683,7 @@ NB_MODULE(_sst_plotlab, module)
     SST::PlotEditingPython::Bind<Document>(module);
     auto session=nanobind::class_<Document>(module, "WorksheetSession");
     PythonBinding::BindWorksheetRuntime(module,session);
+    PythonBinding::BindPlotWorkflow(session);
     session
         .def("__init__", [](Document* self) {
             new (self) Document(CreateRef<CommandRegistry>(), CreateRef<UndoStack>(), CreateRef<EventBus>());

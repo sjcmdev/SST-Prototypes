@@ -1,5 +1,6 @@
 #include "PlotLabWorkspace.hpp"
 #include "WorksheetPython.hpp"
+#include "PlotWorkflowPanel.hpp"
 #include "Core/PlotExport/PlotEditing.hpp"
 #include "Core/App/Application.hpp"
 #include "Core/IO/TextFileIO.hpp"
@@ -33,11 +34,15 @@ namespace SST::Prototypes::PlotLab
             {"new", "New Project", "File", "Ctrl+N"}, {"open", "Open...", "File", "Ctrl+O"},
             {"save", "Save", "File", "Ctrl+S"}, {"save_as", "Save As...", "File", "Ctrl+Shift+S"},
             {"import", "Import...", "File"}, {"export", "Export...", "File"},
+            {"export_data", "Export worksheet data...", "File"}, {"image_map", "Import calibrated image...", "File"},
             {"undo", "Undo", "Edit", "Ctrl+Z"}, {"redo", "Redo", "Edit", "Ctrl+Y"},
             {"copy", "Copy", "Edit", "Ctrl+C"}, {"paste", "Paste", "Edit", "Ctrl+V"}, {"clear", "Delete", "Edit", "Delete"},
             {"explorer", "Project Explorer", "View"},
             {"python_console", "Python Console", "View"}, {"python_script", "Python Script", "View"}, {"python_history", "History as Python", "View"},
             {"line", "Line", "Plot"}, {"scatter", "Scatter", "Plot"}, {"line_symbol", "Line + Symbol", "Plot"}, {"column", "Column", "Plot"},
+            {"map", "Heatmap / contour...", "Plot"}, {"templates", "Graph templates / batch...", "Graph"},
+            {"map_settings", "Map / contour settings...", "Graph"},
+            {"analysis", "Fit model / scientific analysis...", "Analysis"},
             {"set_none", "None", "Column/Set As..."}, {"set_x", "X", "Column/Set As..."}, {"set_y", "Y", "Column/Set As..."}, {"set_z", "Z", "Column/Set As..."},
             {"set_yerr", "yErr", "Column/Set As..."}, {"set_xerr", "xErr", "Column/Set As..."}, {"set_label", "Label", "Column/Set As..."}, {"set_disregard", "Disregard", "Column/Set As..."},
             {"values", "Set Column Values...", "Column", "Ctrl+Q"}, {"properties", "Properties...", "Column", "F4"},
@@ -60,30 +65,6 @@ namespace SST::Prototypes::PlotLab
                 return StructuredError{ErrorCategory::Validation, Severity::Error, "Project session closed", {}, {}, "PlotLab", "plotlab.session.closed"};
             }
             std::string Description() const override { return "PlotLab menu action"; }
-        };
-        class ExportJob final : public IJob
-        {
-          public:
-            std::shared_ptr<const pl::GraphSnapshot> snapshot;
-            std::filesystem::path destination, pythonRoot;
-            std::string format;
-            int dpi = 300;
-            std::string GetName() const override
-            {
-                return "Export PlotLab graph";
-            }
-            std::string GetType() const override
-            {
-                return "plotlab.export";
-            }
-            void Execute(JobContext &context) override
-            {
-                context.SetProgress(0, 1);
-                context.SetStage("Rendering publication snapshot");
-                context.ThrowIfCancellationRequested();
-                ExportGraph(*snapshot, destination, format, dpi, pythonRoot);
-                context.SetProgress(1, 1); // Replacement has committed; a late cancel cannot undo it.
-            }
         };
         std::string Title(const char *prefix, const pl::Object &object, pl::Id project)
         {
@@ -136,13 +117,6 @@ namespace SST::Prototypes::PlotLab
                 return false;
             destination = result->Native();
         }
-        std::vector<pl::Object> updates;
-        for (const auto& [id, view] : views) if (document->project->objects().contains(id)) {
-            const auto layers = document->project->children(id); if (layers.empty()) continue;
-            auto layer = document->project->object(layers.front());
-            if (!plot::StoredViewEqual(std::get<pl::Layer>(layer.data).view, view)) { std::get<pl::Layer>(layer.data).view = view; updates.push_back(std::move(layer)); }
-        }
-        if (!updates.empty()) document->project->change("Graph view", std::move(updates)).apply(*document->project);
         document->Save(destination);
         TouchRecent(recentFiles, destination);
         status = "Saved.";
@@ -364,6 +338,7 @@ namespace SST::Prototypes::PlotLab
         targetGraph = sheetChoice = xChoice = errorChoice = 0;
         graphDialog = false;
         if(state->importProject.lock()!=state->document->project) {
+            state->workflowPanel.reset();
             state->importPanel.reset();state->importProject=state->document->project;
             if(state->document->importUi.open)state->importPanel=CreateRef<ImportPanel>(*state);
         }
@@ -434,6 +409,8 @@ namespace SST::Prototypes::PlotLab
                 Graph(id);
         }
         Dialogs();
+        if(!state->workflowPanel)state->workflowPanel=CreateRef<PlotWorkflowPanel>(*state);
+        state->workflowPanel->Render();
         PythonWindows(true);
         windows.EndFrame();
         if (state->activate) { Activate(state->activate); state->activate = 0; }
@@ -505,6 +482,8 @@ namespace SST::Prototypes::PlotLab
         const auto& p = *state->document->project;
         if (action == "undo") return state->document->undo->GetUndoDepth() > 0;
         if (action == "redo") return state->document->undo->GetRedoDepth() > 0;
+        if (action == "analysis" || action == "export_data") return CurrentSheet()!=0;
+        if (action == "map_settings") return Exists(p,state->selected,4);
         if (action == "export" || action == "contents" || action == "details" || action == "axes" || action == "legend" || action == "rescale") return Exists(p, state->selected, 4);
         if (action == "rename" || action == "delete_object") return p.objects().contains(state->selected) && state->selected != p.root();
         for (const auto& item : menuCommands) if (action == item.action) {
@@ -527,7 +506,7 @@ namespace SST::Prototypes::PlotLab
             }
         };
         if (helpOnly) { if (ImGui::BeginMenu("Help")) { drawItems("Help"); ImGui::EndMenu(); } return; }
-        for (const char* menu : {"File", "Edit", "View", "Plot", "Column", "Worksheet", "Graph"}) if (ImGui::BeginMenu(menu)) {
+        for (const char* menu : {"File", "Edit", "View", "Plot", "Column", "Worksheet", "Graph", "Analysis"}) if (ImGui::BeginMenu(menu)) {
             if (std::string_view(menu) == "Column" && ImGui::BeginMenu("Set As...", CurrentSheet() != 0)) { drawItems("Column/Set As..."); ImGui::EndMenu(); }
             drawItems(menu);
             if (std::string_view(menu) == "Column" && ImGui::BeginMenu("Fill", CurrentSheet() != 0)) { drawItems("Column/Fill"); ImGui::EndMenu(); }
@@ -559,6 +538,15 @@ namespace SST::Prototypes::PlotLab
         else if (action == "open") state->File(FileAction::Open, path);
         else if (action == "save" || action == "save_as") state->Save(action == "save_as");
         else if (action == "import") BeginImport();
+        else if (action == "map" || action == "map_settings" || action == "analysis" || action == "templates" || action == "export_data" || action == "image_map") {
+            if(!state->workflowPanel)state->workflowPanel=CreateRef<PlotWorkflowPanel>(*state);
+            if(action=="map")state->workflowPanel->OpenMap(sheet);
+            else if(action=="map_settings")state->workflowPanel->EditMap(graph);
+            else if(action=="analysis")state->workflowPanel->OpenAnalysis(sheet);
+            else if(action=="templates")state->workflowPanel->OpenTemplates();
+            else if(action=="export_data")state->workflowPanel->OpenData(sheet);
+            else state->workflowPanel->OpenImage();
+        }
         else if (action == "undo" || action == "redo") {
             const auto result = action == "undo" ? doc.undo->Undo() : doc.undo->Redo();
             if (!result) throw std::runtime_error(result.Error().technicalDetails);
@@ -1054,6 +1042,9 @@ namespace SST::Prototypes::PlotLab
         button(ICON_FA_BOOK "##new", "New Book", [&] { NewWorkbook(p.root()); });
         button(ICON_FA_CHART_LINE "##graph", "New Graph from selection (Line + Symbol)", [&] { PlotSelection(id, plot::SeriesKind::LineScatter); });
         button(ICON_FA_FILE_IMPORT, "Import CSV / TSV / DAT", [&] { (void)state->document->commands->Execute(CommandID{"plotlab.ui.import"}); });
+        button(ICON_FA_FLASK "##analysis", "Fit model / scientific analysis", [&] { RunAction("analysis"); });
+        button(ICON_FA_BORDER_ALL "##map", "Heatmap / contour", [&] { RunAction("map"); });
+        button(ICON_FA_FILE_EXPORT "##data", "Export worksheet CSV / TSV / DAT", [&] { RunAction("export_data"); });
         button(ICON_FA_TABLE_COLUMNS, "Add New Columns (Ctrl+D)", [&] { doc.AddColumn(id); });
         button(ICON_FA_CALCULATOR, "Set Column Values (Ctrl+Q)", [&] { if (!v.column) throw std::invalid_argument("Select a column first"); EditColumn(v.column); valuesDialog = true; });
         button(ICON_FA_SORT, "Sort / Filter", [&] { operationsSheet = id; dataAction = 0; });
@@ -1249,7 +1240,7 @@ namespace SST::Prototypes::PlotLab
             for (auto tabSheet : p.children(book)) {
                 const auto label = p.object(tabSheet).name + "##" + std::to_string(tabSheet);
                 if (ImGui::BeginTabItem(label.c_str(), nullptr, tabSheet == id && renderedSheets[book] != id ? ImGuiTabItemFlags_SetSelected : 0)) {
-                    if (tabSheet != id) { activeSheets[book] = tabSheet; state->Show(tabSheet); }
+                    if (tabSheet != id && renderedSheets[book] == id) { activeSheets[book] = tabSheet; state->Show(tabSheet); }
                     ImGui::EndTabItem();
                 }
             }
@@ -1289,6 +1280,7 @@ namespace SST::Prototypes::PlotLab
             ImGui::EndPopup();
         }
         ImGui::SameLine(); if (ImGui::Button("Legend")) editor.legendDialog = true;
+        ImGui::SameLine(); if (ImGui::Button("Templates / batch")) RunAction("templates");
         ImGui::SameLine(); if (ImGui::Button("Font")) ImGui::OpenPopup("Graph font");
         ImGui::SameLine(); if (ImGui::Button("Export...")) {
             exportGraph = id; const auto& g = std::get<pl::Graph>(p.object(id).data); width = g.widthMm; height = g.heightMm;
@@ -1735,7 +1727,8 @@ namespace SST::Prototypes::PlotLab
             sst::ui::widgets::Double("Width (mm)", &width, .01f, "%.6g");
             sst::ui::widgets::Double("Height (mm)", &height, .01f, "%.6g");
             sst::ui::widgets::Int("DPI", &dpi);
-            sst::ui::widgets::Combo("Format", &format, "SVG\0PDF\0PNG\0");
+            sst::ui::widgets::Combo("Format", &format, "SVG\0PDF\0PNG\0JPEG\0");
+            if(format==3 && sst::ui::widgets::BeginLabelledRow("JPEG background")) {ImGui::ColorEdit3("##background",exportBackground.data(),ImGuiColorEditFlags_NoInputs);sst::ui::widgets::EndLabelledRow();}
             ImGui::TextUnformatted("Exports current ranges, ticks and visible series. Recompute must be clean.\n"
                                    "Uses graph font settings; SVG outlines, PDF embedded TrueType.");
             ImGui::BeginDisabled(state->exporting != 0);
@@ -1745,19 +1738,15 @@ namespace SST::Prototypes::PlotLab
                     {
                         if (!std::isfinite(width) || !std::isfinite(height) || width <= 0 || height <= 0 || dpi <= 0)
                             throw std::runtime_error("Size and DPI must be positive");
-                        const char *formats[] = {"svg", "pdf", "png"};
-                        auto snapshot = pl::snapshotGraph(p, exportGraph, state->views.at(exportGraph), std::array<double,2>{width, height});
+                        const char *formats[] = {"svg", "pdf", "png", "jpg"};
                         const auto filename = std::string("figure.") + formats[format];
                         auto destination = SaveFileDialog({"Publication figure", formats[format]}, filename.c_str());
                         if (!destination)
                             return;
-                        auto job = CreateRef<ExportJob>();
-                        job->snapshot = snapshot;
-                        job->destination = destination->Native();
-                        job->format = formats[format];
-                        job->dpi = dpi;
-                        job->pythonRoot = state->pythonRoot;
-                        state->exporting = state->jobs->Submit(job);
+                        auto snapshot = doc.SnapshotGraph(exportGraph,std::array<double,2>{width,height});
+                        ExportRequest request;request.graph=std::move(snapshot);request.destination=destination->Native();request.format=formats[format];request.dpi=dpi;request.pythonRoot=state->pythonRoot;
+                        std::copy(exportBackground.begin(),exportBackground.end(),request.background.begin());
+                        state->exporting = doc.Workflow().Export(std::move(request));
                         if (!state->exporting)
                             throw std::runtime_error("Export job submission failed");
                         exportGraph = 0;

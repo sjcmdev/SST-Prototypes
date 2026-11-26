@@ -7,11 +7,11 @@
 
 namespace SST::Prototypes::PlotLab {
 namespace {
-struct Submission {Ref<JobSystem> jobs;Ref<AnalysisJob> work;JobId id=0;};
+struct Submission {Ref<JobSystem> jobs;Ref<AnalysisJob> work;JobId id=0;JobContext* context=nullptr;};
 class SubmitCommand final : public ICommand {
 public:
     explicit SubmitCommand(Ref<Submission> submission):submission(std::move(submission)) {}
-    Result<void> Execute(CommandContext&) override {submission->id=submission->jobs->Submit(submission->work);return {};}
+    Result<void> Execute(CommandContext&) override {submission->id=submission->context?submission->context->SubmitJob(submission->work):submission->jobs->Submit(submission->work);return {};}
     std::string Description() const override {return "Run scientific analysis";}
 private:
     Ref<Submission> submission;
@@ -51,6 +51,8 @@ AnalysisSource CaptureAnalysisSource(const pl::Project& project,const pl::Analys
     return source;
 }
 void AnalysisJob::Execute(JobContext& context) {
+    const auto cancelled=[&]{return context.IsCancellationRequested() || parentStop.stop_requested();};
+    const auto checkCancellation=[&]{if(cancelled())throw JobCancelledException();};
     // Release immutable column owners when work ends, even while Core keeps job metadata.
     auto inputs=std::move(items);
     if(inputs.empty())throw std::invalid_argument("Resubmit analysis with a fresh source snapshot");
@@ -58,15 +60,15 @@ void AnalysisJob::Execute(JobContext& context) {
     output->project=inputs.front().source.project;output->revision=inputs.front().source.revision;
     const auto start=std::chrono::steady_clock::now();
     for(auto& item:inputs) {
-        context.ThrowIfCancellationRequested();output->maskCopiedBytes+=item.source.excluded.size();
-        auto computed=pl::analyze(item.source.View(),item.recipe.settings,{[&]{return context.IsCancellationRequested();},{}},userModel);
-        if(computed.error==pl::AnalysisError::Cancelled)context.ThrowIfCancellationRequested();
+        checkCancellation();output->maskCopiedBytes+=item.source.excluded.size();
+        auto computed=pl::analyze(item.source.View(),item.recipe.settings,{cancelled,{}},userModel);
+        if(computed.error==pl::AnalysisError::Cancelled)checkCancellation();
         output->items.push_back({std::move(item.id),item.recipe.id,std::make_shared<const pl::ScientificResult>(std::move(computed))});
         output->recipes.push_back(std::move(item.recipe));
         context.SetProgress(static_cast<float>(output->items.size()),static_cast<float>(inputs.size()));
         item.source={};
     }
-    context.ThrowIfCancellationRequested();
+    checkCancellation();
     output->elapsedMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();result=std::move(output);
 }
 AnalysisController::AnalysisController(Document& doc,Ref<JobSystem> pool):document(doc),jobs(std::move(pool)) {
@@ -99,6 +101,7 @@ JobId AnalysisController::SubmitBatch(std::vector<std::pair<std::string,pl::Anal
     }
     if(std::any_of(next->items.begin(),next->items.end(),[](const auto& item){return item.recipe.settings.operation==pl::ScientificOperation::UserFit;}))next->userModel=std::move(model);
     auto submission=CreateRef<Submission>();submission->jobs=jobs;submission->work=next;
+    submission->context=document.ActiveJobContext();if(submission->context)next->parentStop=submission->context->GetStopToken();
     CommandContext context;context.Set("analysis.submission",submission);
     const auto outcome=document.commands->Execute(CommandID{"plotlab.analysis.run"},std::move(context));
     if(!outcome)throw std::runtime_error(outcome.Error().technicalDetails);
@@ -127,21 +130,24 @@ const AnalysisStatus& AnalysisController::Poll() {
     status.preview=std::move(finished->result);status.stage=AnalysisStage::PreviewReady;status.error=pl::AnalysisError::None;
     status.message=coarsePreview?"Live preview; release control for exact result":"Exact result ready to accept";return status;
 }
-const AnalysisStatus& AnalysisController::Wait() {while(Poll().stage==AnalysisStage::Running)std::this_thread::sleep_for(std::chrono::milliseconds(1));return status;}
+const AnalysisStatus& AnalysisController::Wait() {if(work && document.ActiveJobContext())(void)document.ActiveJobContext()->WaitForJob(status.job);while(Poll().stage==AnalysisStage::Running)std::this_thread::sleep_for(std::chrono::milliseconds(1));return status;}
 void AnalysisController::Accept(pl::Id folder) {
     Poll();
     if(coarsePreview || status.stage!=AnalysisStage::PreviewReady || !status.preview)throw std::invalid_argument("Wait for an exact successful result before accepting");
     if(base.lock()!=document.project || status.preview->revision!=document.project->revision())throw std::invalid_argument("Source changed; recalculate analysis");
     auto& project=*document.project;if(!folder)folder=project.root();
     std::vector<pl::Object> objects;std::vector<pl::Id> sheets;std::size_t copied=0;
+    std::map<pl::Id,std::shared_ptr<const pl::AnalysisRecipe>> recipes;
     for(std::size_t k=0;k<status.preview->items.size();++k) {
         const auto& item=status.preview->items[k];const auto& result=*item.result;if(!result.ok())continue;
-        const auto book=project.reserveId();auto sheet=project.reserveId();sheets.push_back(sheet);
+        const auto book=project.reserveId();auto sheet=project.reserveId();
+        recipes.emplace(book,std::make_shared<const pl::AnalysisRecipe>(status.preview->recipes.at(k)));
         pl::Worksheet worksheet;auto count=result.values.size();
         worksheet.rows.reserve(count);
         worksheet.source={{"analysis.model_id",result.modelId},{"analysis.recipe_id",item.recipeId},{"analysis.item_id",item.id}};
         for(std::size_t i=0;i<count;++i)worksheet.rows.push_back(project.reserveId());
-        objects.push_back({book,folder,item.id+" analysis",0,pl::Workbook{}});objects.push_back({sheet,book,"Analysis",0,std::move(worksheet)});
+        objects.push_back({book,folder,item.id+" analysis",0,pl::Workbook{}});
+        if(count) {sheets.push_back(sheet);objects.push_back({sheet,book,"Analysis",0,std::move(worksheet)});}
         std::size_t order=0;
         auto column=[&](std::string name,const std::vector<double>& values,const std::string& units,pl::Role role=pl::Role::Y) {
             if(values.empty())return;
@@ -151,6 +157,11 @@ void AnalysisController::Accept(pl::Id folder) {
         };
         column("X",result.x,result.xUnits,pl::Role::X);column("Analysis",result.values,result.outputUnits);
         column("Residual",result.residuals,result.yUnits);column("Normalized residual",result.normalizedResiduals,"");column("Baseline",result.baseline,result.yUnits);
+        if(!result.peakX.empty()) {
+            sheet=project.reserveId();sheets.push_back(sheet);count=result.peakX.size();order=0;pl::Worksheet report;
+            for(std::size_t i=0;i<count;++i)report.rows.push_back(project.reserveId());report.source={{"analysis.model_id",result.modelId},{"analysis.recipe_id",item.recipeId},{"analysis.item_id",item.id}};
+            objects.push_back({sheet,book,"Peak report",0,std::move(report)});column("Position",result.peakX,result.xUnits,pl::Role::X);column("Peak Y",result.peakY,result.yUnits);column("Height",result.peakHeight,result.yUnits);column("FWHM",result.peakFwhm,result.xUnits);
+        }
         if(!result.parameters.empty()) {
             // Keep scalar reports separate; never pad every parameter to the curve's row count.
             sheet=project.reserveId();sheets.push_back(sheet);count=1;order=0;
@@ -167,6 +178,7 @@ void AnalysisController::Accept(pl::Id folder) {
         }
     }
     document.Execute(project.change("Accept scientific analysis",std::move(objects)));
+    document.workflowState.acceptedRecipes.insert(recipes.begin(),recipes.end());
     status.accepted=status.preview;status.outputWorksheets=std::move(sheets);status.publishedCopiedBytes=copied;status.stage=AnalysisStage::Accepted;status.message="Analysis accepted";
 }
 }

@@ -24,6 +24,7 @@ class AnalysisJob final : public IJob {
 public:
     std::vector<AnalysisJobItem> items;
     pl::UserAnalysisModel userModel;
+    std::stop_token parentStop;
     std::shared_ptr<const AnalysisJobResult> result;
     std::string GetName() const override {return "PlotLab scientific analysis";}
     std::string GetType() const override {return "plotlab.analysis";}
