@@ -33,3 +33,49 @@ The native exception/terminate/signal handlers ask a separate, hidden copy of th
 Windows executables also embed `VERSIONINFO` from the same generator; File Properties shows the product version and source/build details. Numeric Windows version components are limited to 65535; the full SemVer remains in the string fields. Release/Dist builds emit private PDBs. Every host postbuild writes `<app>.build.json` with source/dependency hashes and SHA256 of that exact EXE and PDB. The manifest excludes absolute paths. Update [CHANGELOG](../CHANGELOG.md) for API/schema changes, migration instructions and known qualification failures before publishing. This package does not choose a publisher, sign artifacts or create an installer.
 
 Embedded Python (with the existing interpreter initialized, also headless) exposes `sst_application.version_info()` as a JSON-serializable dict and `sst_application.export_diagnostics(destination_path)` as `{ok, error?: {code, message}}`. Conversion happens in the nanobind edge. The export runs the same Core Command → Job without requiring a window; no JSON is used between C++ modules.
+
+
+## Error, settings and recovery contracts
+
+The shared terminal adapter preserves a namespaced error code, category, actionable message,
+details, suggestion, retryability and job/run identity. Cancellation, timeout and partial
+completion stay distinct; completed member results are retained. The Progress Monitor shows
+the message and remedy first, with technical details expandable. Python errors expose the same
+fields at the binding edge.
+
+CLI exit contract **v1**: 0 completed; 2 invalid input or unsupported schema; 3 numerical failure
+or partial completion; 4 file IO; 5 internal/unavailable/resource failure; 124 timeout;
+130 cancellation. Scripts should accept only 0 as complete success. Python can inspect
+`sst_application.exit_contract()`. Partial results must be written before returning a nonzero
+exit code. This versions the shared application contract separately from project schemas.
+
+Settings load into a candidate, reject malformed values or future schema versions, validate,
+then commit. Missing fields retain typed defaults; a rejected profile cannot partly change
+the current settings. Installed apps keep preferences under
+`%LOCALAPPDATA%/SemiconductorStudio/<app>/config`; packaged defaults/assets remain read-only.
+For explicit portable mode set `SST_PORTABLE_ROOT` to a writable folder before starting the app;
+preferences then live under `<root>/<app>/config`. Existing preference files, profiles, themes
+and layouts are copied only when the new destination is missing; originals are preserved.
+
+In Settings, **System**, **Interface** and **Viewport** offer **Reset this section...**.
+The confirmation describes the affected section. Reset changes the preview; Undo restores it,
+and **Apply & Save YAML** persists it. Other sections and project data are preserved. Headless
+Python uses the same typed reset Command → Job: `sst_application.reset_settings("interface",
+persist=True)`; omit `persist` to preview without saving.
+
+JFM, CapLab, PlotLab and generated prototypes checkpoint dirty documents every **30 seconds**.
+They capture typed snapshots on the UI thread and write them in one background Core job per
+app; unchanged revisions are skipped. Each document keeps five completed generations and at
+most one unfinished generation in its current session. Ready markers commit a generation only
+after its project files are complete. OS leases exclude active sessions from recovery.
+
+After an interrupted session, **Recover project** offers **Restore copy**, **Discard snapshot**
+with confirmation, or **Later**. Restore preserves the original project, opens an unsaved copy,
+and retains the old checkpoint until a new recovery copy commits. Check the result and use
+Save As. Python/code evaluation is not automatically trusted by a restored PlotLab file.
+
+PlotLab project saves reserve an OS lease alongside `.writing`. After a killed current writer,
+the next save preserves unfinished bytes in `.writing.interrupted-*` and continues. Unknown
+legacy `.writing` directories are preserved: close all writers, back up/rename that directory,
+then retry. These guarantees cover process interruption; a storage-device power failure still
+requires an independent backup policy.

@@ -143,6 +143,7 @@ namespace SST
 		entry.createdAt = event.createdAt;
 		entry.finished = false;
 		entry.errorSummary.clear();
+        entry.error.reset();
 	}
 
 	void ProgressTracker::onStarted(const JobStartedEvent &event)
@@ -205,6 +206,7 @@ namespace SST
 		entry.id = event.id;
 		entry.status = JobStatus::Failed;
 		entry.errorSummary = JobHistoryText(event.errorMessage);
+        entry.error=event.error;
 		entry.finishedAt = event.finishedAt;
 		entry.finished = true;
 		trimHistory();

@@ -100,7 +100,6 @@ namespace SST
         void performUndo();
         void performRedo();
         [[nodiscard]] bool configsEquivalent(const ApplicationConfig &left, const ApplicationConfig &right) const;
-        [[nodiscard]] std::string configFingerprint(const ApplicationConfig &config) const;
 
     private:
         bool m_DraftInitialized = false;

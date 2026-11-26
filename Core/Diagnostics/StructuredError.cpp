@@ -57,6 +57,7 @@ namespace SST
 		notification.category = toNotificationCategory(error.category);
 		notification.title = error.code.empty() ? std::string("Error") : error.code;
 		notification.message = error.userMessage;
+        if (!error.suggestion.empty()) notification.message += " " + error.suggestion;
 		notification.source = error.source;
 		notification.timestamp = Time::Now();
 		notification.timeoutMs = error.severity == Severity::Warning ? 8000u : 12000u;

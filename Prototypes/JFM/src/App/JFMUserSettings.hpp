@@ -121,6 +121,7 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] std::vector<Path> GetRecentProjects() const;
 
 		void Load();
+        [[nodiscard]] std::string GetLoadError() const;
 		void Save() const;
 		void SetDefaultImportDirectory(Path path);
 		void SetDefaultProjectsDirectory(Path path);
@@ -147,5 +148,6 @@ namespace SST::Prototypes::JFM
 		Path m_ConfigDirectory;
 		Path m_PrototypeRoot;
 		JFMUserSettings m_Settings;
+        std::string m_LoadError;
 	};
 } // namespace SST::Prototypes::JFM

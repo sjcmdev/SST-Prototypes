@@ -60,6 +60,7 @@ namespace SST
 
 	struct WindowConfig
 	{
+		bool operator==(const WindowConfig &) const = default;
 		int x = -1;
 		int y = -1;
 		int width = 1280;
@@ -70,6 +71,7 @@ namespace SST
 
 	struct LogConfig
 	{
+		bool operator==(const LogConfig &) const = default;
 		LogLevel level = LogLevel::Info;
 		bool toFile = true;
 		Path filePath;
@@ -78,17 +80,20 @@ namespace SST
 
 	struct EventQueueConfig
 	{
+		bool operator==(const EventQueueConfig &) const = default;
 		std::size_t initialCapacity = 32;
 		std::size_t growthStep = 32;
 	};
 
 	struct LayoutConfig
 	{
+		bool operator==(const LayoutConfig &) const = default;
 		std::string imGuiIniPath;
 	};
 
 	struct ApplicationConfig
 	{
+		bool operator==(const ApplicationConfig &) const = default;
 		Path directory;
 		ApplicationPaths paths;
 		WindowConfig window;

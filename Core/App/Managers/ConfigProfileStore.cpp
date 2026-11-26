@@ -83,10 +83,11 @@ namespace SST
 		if (!TextFileIO::Load(path, text, error))
 			return false;
 
-		config = ConfigManager::CreateDefaultConfig(manager->GetConfigDirectory());
-		if (!YamlCodecFacade::Default().DeserializeConfigProfile(text, config, error))
+		auto candidate = ConfigManager::CreateDefaultConfig(manager->GetConfigDirectory());
+		if (!YamlCodecFacade::Default().DeserializeConfigProfile(text, candidate, error))
 			return false;
 
+		config = std::move(candidate);
 		config.directory = manager->GetConfigDirectory();
 		config.paths = ConfigManager::ResolvePortablePaths(manager->GetConfigDirectory());
 		config.layout.imGuiIniPath = ConfigManager::GetLayoutPath(manager->GetConfigDirectory()).Utf8();

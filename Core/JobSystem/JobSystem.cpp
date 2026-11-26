@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/JobSystem/JobOutcome.hpp"
 
 #include "Core/Utils/Time.hpp"
 #include "Core/Utils/Memory.hpp"
@@ -194,6 +195,7 @@ namespace SST
 				it->second.snapshot.startedAt = Time::TimePoint{};
 				it->second.snapshot.finishedAt = Time::TimePoint{};
 				it->second.snapshot.errorMessage.clear();
+            it->second.snapshot.error.reset();
 				it->second.snapshot.completedWork = 0.0f;
 				it->second.snapshot.currentStage.clear();
 				it->second.snapshot.currentMessage.clear();
@@ -235,6 +237,7 @@ namespace SST
 		it->second.snapshot.startedAt = Time::TimePoint{};
 		it->second.snapshot.finishedAt = Time::TimePoint{};
 		it->second.snapshot.errorMessage.clear();
+            it->second.snapshot.error.reset();
 		it->second.snapshot.cancellationRequested = false;
 		it->second.snapshot.completedWork = 0.0f;
 		it->second.snapshot.currentStage.clear();
@@ -268,6 +271,7 @@ namespace SST
 			it->second.snapshot.startedAt = Time::TimePoint{};
 			it->second.snapshot.finishedAt = Time::TimePoint{};
 			it->second.snapshot.errorMessage.clear();
+            it->second.snapshot.error.reset();
 			it->second.snapshot.cancellationRequested = false;
 			it->second.snapshot.completedWork = 0.0f;
 			it->second.snapshot.currentStage.clear();
@@ -525,6 +529,7 @@ namespace SST
 
 		JobStatus finalStatus = JobStatus::Completed;
 		std::string errorMessage;
+        std::optional<StructuredError> error;
 
 		try
 		{
@@ -555,6 +560,30 @@ namespace SST
 			finalStatus = JobStatus::Cancelled;
 			errorMessage = ex.what();
 		}
+        catch (const OperationException &ex)
+        {
+            error = ex.error;
+            finalStatus = error->category == ErrorCategory::Cancelled ? JobStatus::Cancelled : JobStatus::Failed;
+            errorMessage = OperationErrorSummary(*error);
+        }
+        catch (const std::invalid_argument &ex)
+        {
+            finalStatus = JobStatus::Failed;
+            errorMessage = ex.what();
+            error = MakeOperationError(ErrorCategory::Validation, errorMessage, job->GetType());
+        }
+        catch (const std::filesystem::filesystem_error &ex)
+        {
+            finalStatus = JobStatus::Failed;
+            errorMessage = ex.what();
+            error = MakeOperationError(ErrorCategory::IO, errorMessage, job->GetType());
+        }
+        catch (const std::bad_alloc &)
+        {
+            finalStatus = JobStatus::Failed;
+            error = MakeOperationError(ErrorCategory::OutOfMemory, {}, job->GetType());
+            errorMessage = error->userMessage;
+        }
 		catch (const std::exception &ex)
 		{
 			finalStatus = JobStatus::Failed;
@@ -569,7 +598,7 @@ namespace SST
 		const auto finishedAt = Time::Now();
 		if(finalStatus == JobStatus::Failed) DS_LOG_ERROR("Job failed: {}. Review the task details and retry after correcting the input.", errorMessage);
 		else DS_LOG_INFO("Job finished status={}", static_cast<int>(finalStatus));
-		markFinished(id, finalStatus, errorMessage, finishedAt);
+		markFinished(id, finalStatus, errorMessage, finishedAt, std::move(error));
 		publishFinishedEvent(id, *job, finalStatus, errorMessage, finishedAt);
 	}
 
@@ -708,7 +737,7 @@ namespace SST
 		return it->second.cancellationRequested->stop_requested();
 	}
 
-	void JobSystem::markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt)
+	void JobSystem::markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt, std::optional<StructuredError> error)
 	{
 		ZoneScoped;
 		std::lock_guard<std::mutex> lock(m_RecordsMutex);
@@ -717,6 +746,16 @@ namespace SST
 			return;
 
 		it->second.snapshot.status = finalStatus;
+        if (finalStatus != JobStatus::Completed) {
+            if (!error) error = MakeOperationError(finalStatus == JobStatus::Cancelled ? ErrorCategory::Cancelled : ErrorCategory::Internal, errorMessage, it->second.snapshot.type);
+            error->jobId = id; error->runId = it->second.logContext.runId;
+            error->technicalDetails = JobHistoryText(error->technicalDetails);
+            error->userMessage = JobHistoryText(error->userMessage);
+            error->suggestion = JobHistoryText(error->suggestion);
+            error->source = JobHistoryText(error->source); error->code = JobHistoryText(error->code);
+            error->fieldPath = JobHistoryText(error->fieldPath); error->runId = JobHistoryText(error->runId);
+        }
+        it->second.snapshot.error = std::move(error);
 		it->second.snapshot.finishedAt = finishedAt;
 		it->second.snapshot.cancellationRequested = it->second.cancellationRequested->stop_requested();
 
@@ -812,7 +851,11 @@ namespace SST
 		else if (status == JobStatus::Cancelled)
 			(*eventBus)->Queue(JobCancelledEvent{id, JobHistoryText(job.GetName()), JobHistoryText(job.GetType()), finishedAt});
 		else
-			(*eventBus)->Queue(JobFailedEvent{id, JobHistoryText(job.GetName()), JobHistoryText(job.GetType()), JobHistoryText(errorMessage), finishedAt});
+			{
+            JobFailedEvent event{id,JobHistoryText(job.GetName()),JobHistoryText(job.GetType()),JobHistoryText(errorMessage),finishedAt};
+            if(const auto snapshot=GetJob(id)) event.error=snapshot->error;
+            (*eventBus)->Queue(std::move(event));
+        }
 	}
 
 	void JobSystem::delayedWorkerLoop(std::stop_token stopToken)

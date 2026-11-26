@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/Presentation/ProjectRecoveryLayer.hpp"
 #include "App/Application.hpp"
 
 #include "Core/Commands/SystemCommandEvents.hpp"
@@ -22,7 +23,7 @@ public:
     CapLabFileActions(Application &app, Prototypes::CapLab::CapLabWorkflow &state)
         : Layer("CapLab file actions"), app(app), state(state) {
         app.SetCloseGuard([this] { return this->state.RequestClose(true); });
-        if (const auto config=app.GetConfigManager().lock()) recentPath=config->GetConfigDirectory()/Path{"caplab-recent.json"};
+        if (const auto config=app.GetConfigManager().lock()) recentPath=config->GetPaths().userConfigDirectory/Path{"caplab-recent.json"};
         std::string text,error;
         if (TextFileIO::Load(recentPath,text,error)) {
             try {
@@ -192,6 +193,24 @@ void SetupApplication(Application &application) {
         editor.RegisterPanel<CapLabPrototypePanel>(state, registry, view);
     application.InsertLayerBefore(LayerId::ImGui, std::move(workflow));
     application.InsertLayerBefore(LayerId::ImGui, CreateUnique<CapLabFileActions>(application,*state));
+    application.InsertLayerBefore(LayerId::ImGui, CreateUnique<ProjectRecoveryLayer>(services.configDirectory/"recovery",services.jobSystem.lock(),
+        [state](ProjectRecoveryPlan& recovery) {
+            for (const auto& doc:state->workspace.projects) if(doc.IsDirty())
+                recovery.Save(doc.handle,doc.revision,doc.path.value_or(Path{}),".caplab.json",[&] {
+                    auto snapshot=CloneProject(doc.project);
+                    return [snapshot=std::move(snapshot)](const Path& target) {
+                        std::string error;
+                        if(!TextFileIO::Save(target,Serialize(snapshot),error)) throw std::runtime_error(error);
+                    };
+                });
+        },
+        [state](const RecoveryCandidate& candidate) {
+            std::string text,error;
+            if(!TextFileIO::Load(candidate.snapshot,text,error)) throw std::runtime_error(error);
+            CapLabDocument doc; doc.project=Parse(text); doc.Changed();
+            (void)state->workspace.Open(std::move(doc)); state->ReconcileSelection();
+            state->status="Recovered a project copy. Use Save As after checking it.";
+        }));
 }
 }
 

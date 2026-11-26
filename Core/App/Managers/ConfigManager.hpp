@@ -25,6 +25,7 @@ namespace SST
 		[[nodiscard]] const ApplicationConfig &GetConfig() const;
 		[[nodiscard]] const ApplicationPaths &GetPaths() const;
 
+		[[nodiscard]] static bool Validate(const ApplicationConfig &config, std::string &error);
 		void SetConfig(const ApplicationConfig &config);
 		void SetUiConfig(const UIConfig &config);
 		void SetAppearanceConfig(const AppearanceConfig &config);

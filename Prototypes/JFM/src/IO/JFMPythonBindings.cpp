@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/ScientificRuntime/Python/OperationErrorJson.hpp"
 
 #include "IO/JFMPythonBindings.hpp"
 
@@ -95,8 +96,8 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
             throw std::invalid_argument("seed must be an integer in [0, 4294967295]");
         settings.monteCarloSeed = seed.get<std::uint32_t>();
         if (!std::isfinite(settings.monteCarloNoisePercent) || settings.monteCarloNoisePercent < 0 || settings.monteCarloNoisePercent > 100
-            || !std::isfinite(settings.monteCarloStartPerturbationPercent) || settings.monteCarloStartPerturbationPercent < 0 || settings.monteCarloStartPerturbationPercent > 100)
-            throw std::invalid_argument("noise_percent and start_perturbation_percent must be in [0, 100]");
+            || !std::isfinite(settings.monteCarloStartPerturbationPercent) || settings.monteCarloStartPerturbationPercent < 0 || settings.monteCarloStartPerturbationPercent > 1000)
+            throw std::invalid_argument("noise_percent must be in [0, 100] and start_perturbation_percent in [0, 1000]");
         settings.autoCalibrateGpuSimplexIterations = false; settings.saveSamples = false;
         for (const auto &[name, bound] : request.value("bounds", Json::object()).items()) {
             if (std::find(names.begin(), names.end(), name) == names.end()) throw std::invalid_argument("Unknown bound parameter: "+name);
@@ -191,7 +192,10 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
             if (status->status == JobStatus::Failed || status->status == JobStatus::Cancelled)
             {
                 bus->ProcessQueue();
-                if (result.is_null()) throw std::runtime_error(status->errorMessage);
+                auto error=SST::JobError(*status);
+                error.code=error.category==SST::ErrorCategory::Cancelled ? "jfm.fit.cancelled" : error.category==SST::ErrorCategory::TimedOut ? "jfm.fit.timeout" : error.category==SST::ErrorCategory::Partial ? "jfm.fit.partial" : "jfm.fit.failed";
+                error.userMessage=SST::OperationErrorSummary(error);
+                result = SST::PythonBoundary::Failure(error);
                 break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -201,11 +205,11 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
         result["project_id"] = project; result["characteristic_id"] = ref.characteristic; result["job_id"] = *id;
         return result;
     } catch (const std::invalid_argument &e) {
-        return {{"ok", false}, {"error", {{"code", "jfm.fit.validation"}, {"message", e.what()}}}};
+        return SST::PythonBoundary::Failure(SST::MakeOperationError(SST::ErrorCategory::Validation,e.what(),"JFM","jfm.fit.validation"));
     } catch (const Json::exception &e) {
-        return {{"ok", false}, {"error", {{"code", "jfm.fit.validation"}, {"message", e.what()}}}};
+        return SST::PythonBoundary::Failure(SST::MakeOperationError(SST::ErrorCategory::Validation,e.what(),"JFM","jfm.fit.validation"));
     } catch (const std::exception &e) {
-        return {{"ok", false}, {"error", {{"code", "jfm.fit.failed"}, {"message", e.what()}}}};
+        return SST::PythonBoundary::Failure(SST::MakeOperationError(SST::ErrorCategory::Internal,e.what(),"JFM","jfm.fit.failed"));
     }
 }
 }
@@ -236,7 +240,7 @@ NB_MODULE(sst_jfm, module)
             return json.attr("loads")(nb::str(value.dump().c_str()));
         };
         auto failure = [&](const SST::StructuredError &error) {
-            return response({{"ok", false}, {"error", {{"code", error.code}, {"message", error.userMessage}}}});
+            return response(SST::PythonBoundary::Failure(error));
         };
         try {
             const auto operation = nb::cast<std::string>(request["operation"]);
@@ -248,7 +252,8 @@ NB_MODULE(sst_jfm, module)
                 nlohmann::json result = {{"ok", true}, {"job_id", id}, {"status", names[static_cast<int>(job->status)]}};
                 if (job->status == SST::JobStatus::Failed || job->status == SST::JobStatus::Cancelled) {
                     result["ok"] = false;
-                    result["error"] = {{"code", job->status == SST::JobStatus::Cancelled ? "jfm.plot.cancelled" : "jfm.plot.export_failed"}, {"message", job->errorMessage}};
+                    result["status"] = SST::JobOutcomeName(*job);
+                    result["error"] = SST::PythonBoundary::Error(SST::JobError(*job));
                 }
                 return response(result);
             }

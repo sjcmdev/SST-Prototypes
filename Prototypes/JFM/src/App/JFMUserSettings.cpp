@@ -15,11 +15,30 @@ namespace SST::Prototypes::JFM
 {
 	namespace UserSettingsDetail
 	{
+        template<class T> T RequireMinimum(T minimum,T value) {
+            if(!std::isfinite(static_cast<double>(value)) || value<minimum) throw std::invalid_argument("JFM numeric setting is below its minimum or is not finite. Correct the value; settings were not applied.");
+            return value;
+        }
+        template<class T> T RequireRange(T value,T minimum,T maximum) {
+            if(!std::isfinite(static_cast<double>(value)) || value<minimum || value>maximum) throw std::invalid_argument("JFM numeric setting is outside its allowed range. Correct the value; settings were not applied.");
+            return value;
+        }
+        void ValidateFitSettings(const JFMFitMonteCarloSettings& s) {
+            if(s.fitMethod!="lm" && s.fitMethod!="nm") throw std::invalid_argument("fit_method must be lm or nm.");
+            if(s.objectiveMode!="auto" && s.objectiveMode!="isc_shift" && s.objectiveMode!="signed_sigma" && s.objectiveMode!="log_legacy") throw std::invalid_argument("Unknown objective_mode. Choose auto, isc_shift, signed_sigma or log_legacy.");
+            if(!std::isfinite(s.objectiveSwitchK) || s.objectiveSwitchK<=0 || !std::isfinite(s.sigmaAbsolute) || s.sigmaAbsolute<0) throw std::invalid_argument("objective_switch_k must be positive and sigma_absolute nonnegative; both must be finite.");
+            RequireMinimum(1,s.fitMaxIterations); RequireMinimum(0.,s.fitReducedChiSquaredTolerance);
+            RequireMinimum(1,s.monteCarloSamples); RequireMinimum(1,s.monteCarloMaxIterations);
+            RequireMinimum(1,s.simplexCalibrationRuns); RequireMinimum(0,s.simplexCalibrationExtraIterations);
+            RequireRange(s.monteCarloNoisePercent,0.,100.); RequireRange(s.monteCarloStartPerturbationPercent,0.,1000.);
+            RequireMinimum(0,s.savedSampleLimit); RequireRange(s.scatterZoomOut,0.f,1.f);
+            for(const auto& [name,p]:s.parameters) if(!std::isfinite(p.minimum) || !std::isfinite(p.maximum) || p.minimum>=p.maximum) throw std::invalid_argument("Invalid fit parameter bounds: "+name+" requires finite minimum < maximum.");
+        }
 		template <typename T>
 		T ReadOr(const YAML::Node &node, const char *key, T fallback)
 		{
 			const YAML::Node value = node[key];
-			return value && !value.IsNull() ? value.as<T>() : fallback;
+			return value.IsDefined() ? value.as<T>() : fallback;
 		}
 
 		Path ExistingOr(Path path, Path fallback)
@@ -44,8 +63,8 @@ namespace SST::Prototypes::JFM
 
 		std::array<float, 4> ReadColor(const YAML::Node &node, std::array<float, 4> fallback)
 		{
-			if (!node || !node.IsSequence() || node.size() < 4)
-				return fallback;
+			if (!node.IsDefined()) return fallback;
+            if(!node.IsSequence() || node.size()!=4) throw std::invalid_argument("Invalid color: expected four RGBA components in [0, 1].");
 			return {node[0].as<float>(), node[1].as<float>(), node[2].as<float>(), node[3].as<float>()};
 		}
 
@@ -57,8 +76,8 @@ namespace SST::Prototypes::JFM
 		template <std::size_t Size>
 		std::array<bool, Size> ReadFlags(const YAML::Node &node, std::array<bool, Size> fallback)
 		{
-			if (!node || !node.IsSequence())
-				return fallback;
+			if (!node.IsDefined()) return fallback;
+            if(!node.IsSequence() || node.size()>Size) throw std::invalid_argument("Invalid display flags: expected a boolean sequence.");
 			for (std::size_t index = 0; index < Size && index < node.size(); ++index)
 				fallback[index] = node[index].as<bool>();
 			return fallback;
@@ -129,6 +148,7 @@ namespace SST::Prototypes::JFM
 		return m_Settings.recentProjects;
 	}
 
+    std::string JFMUserSettingsStore::GetLoadError() const { std::scoped_lock lock(m_Mutex); return m_LoadError; }
 	void JFMUserSettingsStore::Load()
 	{
 		std::string text;
@@ -139,57 +159,61 @@ namespace SST::Prototypes::JFM
 		try
 		{
 			const YAML::Node root = YAML::Load(text);
-			std::scoped_lock lock(m_Mutex);
-			m_Settings.defaultImportDirectory = ReadPath(root, "default_import_directory", m_Settings.defaultImportDirectory);
-			m_Settings.defaultProjectsDirectory = ReadPath(root, "default_projects_directory", m_Settings.defaultProjectsDirectory);
-			m_Settings.defaultScriptsDirectory = ReadPath(root, "default_scripts_directory", m_Settings.defaultScriptsDirectory);
-			m_Settings.defaultPlotSemiLog = root["default_plot_semilog"] ? root["default_plot_semilog"].as<bool>() : m_Settings.defaultPlotSemiLog;
-			m_Settings.defaultPlotAutoFit = root["default_plot_auto_fit"] ? root["default_plot_auto_fit"].as<bool>() : m_Settings.defaultPlotAutoFit;
-			m_Settings.defaultPlotShowLegend = root["default_plot_show_legend"] ? root["default_plot_show_legend"].as<bool>() : m_Settings.defaultPlotShowLegend;
-			m_Settings.defaultPlotFitPadding = root["default_plot_fit_padding"] ? root["default_plot_fit_padding"].as<float>() : m_Settings.defaultPlotFitPadding;
-			m_Settings.showPrefitCurves = root["show_prefit_curves"] ? root["show_prefit_curves"].as<bool>() : m_Settings.showPrefitCurves;
-			m_Settings.prefitCurveColor = ReadColor(root["prefit_curve_color"], m_Settings.prefitCurveColor);
-			m_Settings.prefitCurveLineWeight = root["prefit_curve_line_weight"] ? std::clamp(root["prefit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.prefitCurveLineWeight;
-			m_Settings.prefitCurvesFitRangeOnly = root["prefit_curves_fit_range_only"] ? root["prefit_curves_fit_range_only"].as<bool>() : m_Settings.prefitCurvesFitRangeOnly;
-			m_Settings.showFitCurves = root["show_fit_curves"] ? root["show_fit_curves"].as<bool>() : m_Settings.showFitCurves;
-			m_Settings.fitCurveColor = ReadColor(root["fit_curve_color"], m_Settings.fitCurveColor);
-			m_Settings.fitCurveLineWeight = root["fit_curve_line_weight"] ? std::clamp(root["fit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.fitCurveLineWeight;
-			m_Settings.fitCurvesFitRangeOnly = root["fit_curves_fit_range_only"] ? root["fit_curves_fit_range_only"].as<bool>() : m_Settings.fitCurvesFitRangeOnly;
-			m_Settings.showTunedCurves = root["show_tuned_curves"] ? root["show_tuned_curves"].as<bool>() : m_Settings.showTunedCurves;
-			m_Settings.tunedCurveColor = ReadColor(root["tuned_curve_color"], m_Settings.tunedCurveColor);
-			m_Settings.tunedCurveLineWeight = root["tuned_curve_line_weight"] ? std::clamp(root["tuned_curve_line_weight"].as<float>(), 0.5f, 8.0f) : m_Settings.tunedCurveLineWeight;
-			m_Settings.tunedCurvesFitRangeOnly = root["tuned_curves_fit_range_only"] ? root["tuned_curves_fit_range_only"].as<bool>() : m_Settings.tunedCurvesFitRangeOnly;
-			m_Settings.autoPrefitFitOnRangeChange = root["auto_prefit_fit_on_range_change"] ? root["auto_prefit_fit_on_range_change"].as<bool>() : m_Settings.autoPrefitFitOnRangeChange;
-			m_Settings.autoPrefitOnRangeChange = root["auto_prefit_on_range_change"] ? root["auto_prefit_on_range_change"].as<bool>() : m_Settings.autoPrefitFitOnRangeChange;
-			m_Settings.autoFitOnRangeChange = root["auto_fit_on_range_change"] ? root["auto_fit_on_range_change"].as<bool>() : m_Settings.autoPrefitFitOnRangeChange;
-			m_Settings.hoveredCurveLineWeight = root["hovered_curve_line_weight"] ? std::clamp(root["hovered_curve_line_weight"].as<float>(), 0.5f, 10.0f) : m_Settings.hoveredCurveLineWeight;
-			m_Settings.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : m_Settings.autoPlotAfterImport;
+            if(!root.IsMap()) throw std::invalid_argument("JFM settings root must be a mapping.");
+            if(const auto version=root["schema_version"]; version.IsDefined() && version.as<int>()!=1) throw std::invalid_argument("Unsupported JFM settings schema_version. Use the matching SST version or a compatible backup.");
+			for(const char* section:{"fit_monte_carlo","auto_prefit"}) if(const auto node=root[section];node.IsDefined() && !node.IsMap()) throw std::invalid_argument(std::string("Invalid JFM settings section: ")+section+" requires a mapping.");
+            std::scoped_lock lock(m_Mutex);
+            auto candidate=m_Settings;
+			candidate.defaultImportDirectory = ReadPath(root, "default_import_directory", candidate.defaultImportDirectory);
+			candidate.defaultProjectsDirectory = ReadPath(root, "default_projects_directory", candidate.defaultProjectsDirectory);
+			candidate.defaultScriptsDirectory = ReadPath(root, "default_scripts_directory", candidate.defaultScriptsDirectory);
+			candidate.defaultPlotSemiLog = root["default_plot_semilog"] ? root["default_plot_semilog"].as<bool>() : candidate.defaultPlotSemiLog;
+			candidate.defaultPlotAutoFit = root["default_plot_auto_fit"] ? root["default_plot_auto_fit"].as<bool>() : candidate.defaultPlotAutoFit;
+			candidate.defaultPlotShowLegend = root["default_plot_show_legend"] ? root["default_plot_show_legend"].as<bool>() : candidate.defaultPlotShowLegend;
+			candidate.defaultPlotFitPadding = root["default_plot_fit_padding"] ? root["default_plot_fit_padding"].as<float>() : candidate.defaultPlotFitPadding;
+			candidate.showPrefitCurves = root["show_prefit_curves"] ? root["show_prefit_curves"].as<bool>() : candidate.showPrefitCurves;
+			candidate.prefitCurveColor = ReadColor(root["prefit_curve_color"], candidate.prefitCurveColor);
+			candidate.prefitCurveLineWeight = root["prefit_curve_line_weight"] ? RequireRange(root["prefit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : candidate.prefitCurveLineWeight;
+			candidate.prefitCurvesFitRangeOnly = root["prefit_curves_fit_range_only"] ? root["prefit_curves_fit_range_only"].as<bool>() : candidate.prefitCurvesFitRangeOnly;
+			candidate.showFitCurves = root["show_fit_curves"] ? root["show_fit_curves"].as<bool>() : candidate.showFitCurves;
+			candidate.fitCurveColor = ReadColor(root["fit_curve_color"], candidate.fitCurveColor);
+			candidate.fitCurveLineWeight = root["fit_curve_line_weight"] ? RequireRange(root["fit_curve_line_weight"].as<float>(), 0.5f, 8.0f) : candidate.fitCurveLineWeight;
+			candidate.fitCurvesFitRangeOnly = root["fit_curves_fit_range_only"] ? root["fit_curves_fit_range_only"].as<bool>() : candidate.fitCurvesFitRangeOnly;
+			candidate.showTunedCurves = root["show_tuned_curves"] ? root["show_tuned_curves"].as<bool>() : candidate.showTunedCurves;
+			candidate.tunedCurveColor = ReadColor(root["tuned_curve_color"], candidate.tunedCurveColor);
+			candidate.tunedCurveLineWeight = root["tuned_curve_line_weight"] ? RequireRange(root["tuned_curve_line_weight"].as<float>(), 0.5f, 8.0f) : candidate.tunedCurveLineWeight;
+			candidate.tunedCurvesFitRangeOnly = root["tuned_curves_fit_range_only"] ? root["tuned_curves_fit_range_only"].as<bool>() : candidate.tunedCurvesFitRangeOnly;
+			candidate.autoPrefitFitOnRangeChange = root["auto_prefit_fit_on_range_change"] ? root["auto_prefit_fit_on_range_change"].as<bool>() : candidate.autoPrefitFitOnRangeChange;
+			candidate.autoPrefitOnRangeChange = root["auto_prefit_on_range_change"] ? root["auto_prefit_on_range_change"].as<bool>() : candidate.autoPrefitFitOnRangeChange;
+			candidate.autoFitOnRangeChange = root["auto_fit_on_range_change"] ? root["auto_fit_on_range_change"].as<bool>() : candidate.autoPrefitFitOnRangeChange;
+			candidate.hoveredCurveLineWeight = root["hovered_curve_line_weight"] ? RequireRange(root["hovered_curve_line_weight"].as<float>(), 0.5f, 10.0f) : candidate.hoveredCurveLineWeight;
+			candidate.autoPlotAfterImport = root["auto_plot_after_import"] ? root["auto_plot_after_import"].as<bool>() : candidate.autoPlotAfterImport;
 			if (const YAML::Node fit = root["fit_monte_carlo"]; fit && fit.IsMap())
 			{
-				m_Settings.fitMonteCarlo.fitMethod = ReadOr<std::string>(fit, "fit_method", "lm");
-                m_Settings.fitMonteCarlo.objectiveMode = ReadOr<std::string>(fit, "objective_mode", "auto");
-                m_Settings.fitMonteCarlo.objectiveSwitchK = ReadOr<double>(fit, "objective_switch_k", 3.0);
-                m_Settings.fitMonteCarlo.sigmaAbsolute = ReadOr<double>(fit, "sigma_absolute", 0.0);
-				m_Settings.fitMonteCarlo.fitMaxIterations = std::max(1, ReadOr<int>(fit, "fit_max_iterations", m_Settings.fitMonteCarlo.fitMaxIterations));
-				m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance = std::max(0.0, ReadOr<double>(fit, "fit_reduced_chi2_tolerance", m_Settings.fitMonteCarlo.fitReducedChiSquaredTolerance));
-				m_Settings.fitMonteCarlo.monteCarloSamples = std::max(1, ReadOr<int>(fit, "mc_samples", m_Settings.fitMonteCarlo.monteCarloSamples));
-				m_Settings.fitMonteCarlo.monteCarloMaxIterations = std::max(1, ReadOr<int>(fit, "mc_max_iterations", m_Settings.fitMonteCarlo.monteCarloMaxIterations));
-				m_Settings.fitMonteCarlo.autoCalibrateGpuSimplexIterations = ReadOr<bool>(fit, "auto_calibrate_gpu_simplex_iterations", m_Settings.fitMonteCarlo.autoCalibrateGpuSimplexIterations);
-				m_Settings.fitMonteCarlo.simplexCalibrationRuns = std::max(1, ReadOr<int>(fit, "simplex_calibration_runs", m_Settings.fitMonteCarlo.simplexCalibrationRuns));
-				m_Settings.fitMonteCarlo.simplexCalibrationExtraIterations = std::max(0, ReadOr<int>(fit, "simplex_calibration_extra_iterations", m_Settings.fitMonteCarlo.simplexCalibrationExtraIterations));
-				m_Settings.fitMonteCarlo.monteCarloNoisePercent = std::clamp(ReadOr<double>(fit, "mc_noise_percent", m_Settings.fitMonteCarlo.monteCarloNoisePercent), 0.0, 100.0);
-				m_Settings.fitMonteCarlo.monteCarloStartPerturbationPercent = std::clamp(ReadOr<double>(fit, "mc_start_perturbation_percent", m_Settings.fitMonteCarlo.monteCarloStartPerturbationPercent), 0.0, 1000.0);
-				m_Settings.fitMonteCarlo.monteCarloSeed = ReadOr<std::uint32_t>(fit, "mc_seed", m_Settings.fitMonteCarlo.monteCarloSeed);
-				m_Settings.fitMonteCarlo.preferGpu = ReadOr<bool>(fit, "prefer_gpu", m_Settings.fitMonteCarlo.preferGpu);
-				m_Settings.fitMonteCarlo.saveSamples = ReadOr<bool>(fit, "save_samples", m_Settings.fitMonteCarlo.saveSamples);
-				m_Settings.fitMonteCarlo.savedSampleLimit = std::max(0, ReadOr<int>(fit, "saved_sample_limit", m_Settings.fitMonteCarlo.savedSampleLimit));
-				m_Settings.fitMonteCarlo.scatterZoomOut = std::clamp(ReadOr<float>(fit, "scatter_zoom_out", m_Settings.fitMonteCarlo.scatterZoomOut), 0.0f, 1.0f);
-				m_Settings.fitMonteCarlo.showSigmaClasses = ReadFlags(fit["show_sigma_classes"], m_Settings.fitMonteCarlo.showSigmaClasses);
-				m_Settings.fitMonteCarlo.showSigmaEllipses = ReadFlags(fit["show_sigma_ellipses"], m_Settings.fitMonteCarlo.showSigmaEllipses);
+				candidate.fitMonteCarlo.fitMethod = ReadOr<std::string>(fit, "fit_method", "lm");
+                candidate.fitMonteCarlo.objectiveMode = ReadOr<std::string>(fit, "objective_mode", "auto");
+                candidate.fitMonteCarlo.objectiveSwitchK = ReadOr<double>(fit, "objective_switch_k", 3.0);
+                candidate.fitMonteCarlo.sigmaAbsolute = ReadOr<double>(fit, "sigma_absolute", 0.0);
+				candidate.fitMonteCarlo.fitMaxIterations = RequireMinimum(1, ReadOr<int>(fit, "fit_max_iterations", candidate.fitMonteCarlo.fitMaxIterations));
+				candidate.fitMonteCarlo.fitReducedChiSquaredTolerance = RequireMinimum(0.0, ReadOr<double>(fit, "fit_reduced_chi2_tolerance", candidate.fitMonteCarlo.fitReducedChiSquaredTolerance));
+				candidate.fitMonteCarlo.monteCarloSamples = RequireMinimum(1, ReadOr<int>(fit, "mc_samples", candidate.fitMonteCarlo.monteCarloSamples));
+				candidate.fitMonteCarlo.monteCarloMaxIterations = RequireMinimum(1, ReadOr<int>(fit, "mc_max_iterations", candidate.fitMonteCarlo.monteCarloMaxIterations));
+				candidate.fitMonteCarlo.autoCalibrateGpuSimplexIterations = ReadOr<bool>(fit, "auto_calibrate_gpu_simplex_iterations", candidate.fitMonteCarlo.autoCalibrateGpuSimplexIterations);
+				candidate.fitMonteCarlo.simplexCalibrationRuns = RequireMinimum(1, ReadOr<int>(fit, "simplex_calibration_runs", candidate.fitMonteCarlo.simplexCalibrationRuns));
+				candidate.fitMonteCarlo.simplexCalibrationExtraIterations = RequireMinimum(0, ReadOr<int>(fit, "simplex_calibration_extra_iterations", candidate.fitMonteCarlo.simplexCalibrationExtraIterations));
+				candidate.fitMonteCarlo.monteCarloNoisePercent = RequireRange(ReadOr<double>(fit, "mc_noise_percent", candidate.fitMonteCarlo.monteCarloNoisePercent), 0.0, 100.0);
+				candidate.fitMonteCarlo.monteCarloStartPerturbationPercent = RequireRange(ReadOr<double>(fit, "mc_start_perturbation_percent", candidate.fitMonteCarlo.monteCarloStartPerturbationPercent), 0.0, 1000.0);
+				candidate.fitMonteCarlo.monteCarloSeed = ReadOr<std::uint32_t>(fit, "mc_seed", candidate.fitMonteCarlo.monteCarloSeed);
+				candidate.fitMonteCarlo.preferGpu = ReadOr<bool>(fit, "prefer_gpu", candidate.fitMonteCarlo.preferGpu);
+				candidate.fitMonteCarlo.saveSamples = ReadOr<bool>(fit, "save_samples", candidate.fitMonteCarlo.saveSamples);
+				candidate.fitMonteCarlo.savedSampleLimit = RequireMinimum(0, ReadOr<int>(fit, "saved_sample_limit", candidate.fitMonteCarlo.savedSampleLimit));
+				candidate.fitMonteCarlo.scatterZoomOut = RequireRange(ReadOr<float>(fit, "scatter_zoom_out", candidate.fitMonteCarlo.scatterZoomOut), 0.0f, 1.0f);
+				candidate.fitMonteCarlo.showSigmaClasses = ReadFlags(fit["show_sigma_classes"], candidate.fitMonteCarlo.showSigmaClasses);
+				candidate.fitMonteCarlo.showSigmaEllipses = ReadFlags(fit["show_sigma_ellipses"], candidate.fitMonteCarlo.showSigmaEllipses);
 				if (const YAML::Node colors = fit["sigma_colors"]; colors && colors.IsSequence())
 				{
-					for (std::size_t index = 0; index < m_Settings.fitMonteCarlo.sigmaColors.size() && index < colors.size(); ++index)
-						m_Settings.fitMonteCarlo.sigmaColors[index] = ReadColor(colors[index], m_Settings.fitMonteCarlo.sigmaColors[index]);
+					for (std::size_t index = 0; index < candidate.fitMonteCarlo.sigmaColors.size() && index < colors.size(); ++index)
+						candidate.fitMonteCarlo.sigmaColors[index] = ReadColor(colors[index], candidate.fitMonteCarlo.sigmaColors[index]);
 				}
 				if (const YAML::Node pairs = fit["default_parameter_pairs"]; pairs && pairs.IsSequence())
 				{
@@ -200,25 +224,25 @@ namespace SST::Prototypes::JFM
 							parsed.push_back({pair[0].as<std::string>(), pair[1].as<std::string>()});
 					}
 					if (!parsed.empty())
-						m_Settings.fitMonteCarlo.defaultParameterPairs = std::move(parsed);
+						candidate.fitMonteCarlo.defaultParameterPairs = std::move(parsed);
 				}
 				if (const YAML::Node parameters = fit["parameters"]; parameters && parameters.IsMap())
 				{
 					for (const auto &entry : parameters)
 					{
 						const std::string name = entry.first.as<std::string>();
-						auto existing = m_Settings.fitMonteCarlo.parameters.find(name);
-						JFMParameterSolverSetting setting = existing == m_Settings.fitMonteCarlo.parameters.end()
+						auto existing = candidate.fitMonteCarlo.parameters.find(name);
+						JFMParameterSolverSetting setting = existing == candidate.fitMonteCarlo.parameters.end()
 							? JFMParameterSolverSetting{}
 							: existing->second;
 						setting.minimum = ReadOr<double>(entry.second, "minimum", setting.minimum);
 						setting.maximum = ReadOr<double>(entry.second, "maximum", setting.maximum);
 						setting.monteCarloFree = ReadOr<bool>(entry.second, "free", setting.monteCarloFree);
-						if (std::isfinite(setting.minimum) && std::isfinite(setting.maximum) && setting.minimum < setting.maximum)
-							m_Settings.fitMonteCarlo.parameters[name] = setting;
+						if (!std::isfinite(setting.minimum) || !std::isfinite(setting.maximum) || setting.minimum >= setting.maximum) throw std::invalid_argument("Invalid fit parameter bounds: "+name+" requires finite minimum < maximum.");
+                        candidate.fitMonteCarlo.parameters[name] = setting;
 					}
 				}
-				if (auto ideality = m_Settings.fitMonteCarlo.parameters.find("A"); ideality != m_Settings.fitMonteCarlo.parameters.end()
+				if (auto ideality = candidate.fitMonteCarlo.parameters.find("A"); ideality != candidate.fitMonteCarlo.parameters.end()
 					&& ideality->second.minimum == 0.1 && ideality->second.maximum == 10.0)
 				{
 					ideality->second.minimum = 0.0;
@@ -227,35 +251,43 @@ namespace SST::Prototypes::JFM
 			}
 			if (const YAML::Node autoPrefit = root["auto_prefit"]; autoPrefit && autoPrefit.IsMap())
 			{
-				m_Settings.autoPrefit.residualWindowFraction = std::clamp(ReadOr<double>(autoPrefit, "residual_window_fraction", m_Settings.autoPrefit.residualWindowFraction), 0.001, 1.0);
-				m_Settings.autoPrefit.residualWindowMinPoints = std::max(3, ReadOr<int>(autoPrefit, "residual_window_min_points", m_Settings.autoPrefit.residualWindowMinPoints));
-				m_Settings.autoPrefit.residualWindowMaxPoints = std::max(m_Settings.autoPrefit.residualWindowMinPoints, ReadOr<int>(autoPrefit, "residual_window_max_points", m_Settings.autoPrefit.residualWindowMaxPoints));
+				candidate.autoPrefit.residualWindowFraction = RequireRange(ReadOr<double>(autoPrefit, "residual_window_fraction", candidate.autoPrefit.residualWindowFraction), 0.001, 1.0);
+				candidate.autoPrefit.residualWindowMinPoints = RequireMinimum(3, ReadOr<int>(autoPrefit, "residual_window_min_points", candidate.autoPrefit.residualWindowMinPoints));
+				candidate.autoPrefit.residualWindowMaxPoints = RequireMinimum(candidate.autoPrefit.residualWindowMinPoints, ReadOr<int>(autoPrefit, "residual_window_max_points", candidate.autoPrefit.residualWindowMaxPoints));
 			}
-			m_Settings.defaultColorPresetName = root["default_color_preset"] ? root["default_color_preset"].as<std::string>() : m_Settings.defaultColorPresetName;
+			candidate.defaultColorPresetName = root["default_color_preset"] ? root["default_color_preset"].as<std::string>() : candidate.defaultColorPresetName;
 			if (const YAML::Node presets = root["color_presets"])
 			{
-				m_Settings.colorPresets.clear();
+				candidate.colorPresets.clear();
 				for (const YAML::Node &presetNode : presets)
 				{
 					JFMColorPreset preset;
 					preset.name = presetNode["name"] ? presetNode["name"].as<std::string>() : "Preset";
 					preset.start = ReadColor(presetNode["start"], preset.start);
 					preset.end = ReadColor(presetNode["end"], preset.end);
-					m_Settings.colorPresets.push_back(std::move(preset));
+					candidate.colorPresets.push_back(std::move(preset));
 				}
 			}
-			if (!HasPreset(m_Settings.colorPresets, m_Settings.defaultColorPresetName))
-				m_Settings.defaultColorPresetName = FirstPresetName(m_Settings.colorPresets);
-			m_Settings.recentProjects.clear();
+			if (!HasPreset(candidate.colorPresets, candidate.defaultColorPresetName))
+				candidate.defaultColorPresetName = FirstPresetName(candidate.colorPresets);
+			candidate.recentProjects.clear();
 			if (const YAML::Node recent = root["recent_projects"])
 			{
 				for (const YAML::Node &entry : recent)
-					m_Settings.recentProjects.push_back(Path::FromResolved(std::filesystem::u8path(entry.as<std::string>())));
+					candidate.recentProjects.push_back(Path::FromResolved(std::filesystem::u8path(entry.as<std::string>())));
 			}
+            ValidateFitSettings(candidate.fitMonteCarlo);
+            RequireRange(candidate.defaultPlotFitPadding,0.f,.5f);
+            for(const auto& color:{candidate.prefitCurveColor,candidate.fitCurveColor,candidate.tunedCurveColor}) for(float component:color) RequireRange(component,0.f,1.f);
+            for(const auto& preset:candidate.colorPresets) for(const auto& color:{preset.start,preset.end}) for(float component:color) RequireRange(component,0.f,1.f);
+            for(const auto& color:candidate.fitMonteCarlo.sigmaColors) for(float component:color) RequireRange(component,0.f,1.f);
+            m_Settings=std::move(candidate);
+            m_LoadError.clear();
 		}
 		catch (const std::exception &exception)
 		{
-			DS_LOG_WARN("JFM user settings load failed: {}", exception.what());
+			{ std::scoped_lock lock(m_Mutex); m_LoadError="JFM settings were not applied: "+std::string(exception.what())+" Correct the settings file or restore a compatible backup."; }
+            DS_LOG_WARN("JFM settings were not applied [{}]: {}. Correct the file or restore a compatible backup.",GetSettingsPath().Utf8(),exception.what());
 		}
 	}
 
@@ -264,6 +296,7 @@ namespace SST::Prototypes::JFM
 		JFMUserSettings snapshot = GetSnapshot();
 		YAML::Emitter out;
 		out << YAML::BeginMap;
+        out << YAML::Key << "schema_version" << YAML::Value << 1;
 		EmitPath(out, "default_import_directory", snapshot.defaultImportDirectory);
 		EmitPath(out, "default_projects_directory", snapshot.defaultProjectsDirectory);
 		EmitPath(out, "default_scripts_directory", snapshot.defaultScriptsDirectory);
@@ -472,33 +505,7 @@ namespace SST::Prototypes::JFM
 
 	void JFMUserSettingsStore::SetFitMonteCarloSettings(JFMFitMonteCarloSettings settings)
 	{
-		if (settings.fitMethod != "nm") settings.fitMethod = "lm";
-        if (settings.objectiveMode != "isc_shift" && settings.objectiveMode != "signed_sigma" && settings.objectiveMode != "log_legacy") settings.objectiveMode = "auto";
-        if (!std::isfinite(settings.objectiveSwitchK) || settings.objectiveSwitchK <= 0) settings.objectiveSwitchK = 3;
-        if (!std::isfinite(settings.sigmaAbsolute) || settings.sigmaAbsolute < 0) settings.sigmaAbsolute = 0;
-		settings.fitMaxIterations = std::max(1, settings.fitMaxIterations);
-		settings.fitReducedChiSquaredTolerance = std::max(0.0, settings.fitReducedChiSquaredTolerance);
-		settings.monteCarloSamples = std::max(1, settings.monteCarloSamples);
-		settings.monteCarloMaxIterations = std::max(1, settings.monteCarloMaxIterations);
-		settings.simplexCalibrationRuns = std::max(1, settings.simplexCalibrationRuns);
-		settings.simplexCalibrationExtraIterations = std::max(0, settings.simplexCalibrationExtraIterations);
-		settings.monteCarloNoisePercent = std::clamp(settings.monteCarloNoisePercent, 0.0, 100.0);
-		settings.monteCarloStartPerturbationPercent = std::clamp(settings.monteCarloStartPerturbationPercent, 0.0, 1000.0);
-		settings.savedSampleLimit = std::max(0, settings.savedSampleLimit);
-		settings.scatterZoomOut = std::clamp(settings.scatterZoomOut, 0.0f, 1.0f);
-		for (auto &[name, parameter] : settings.parameters)
-		{
-			(void)name;
-			if (!std::isfinite(parameter.minimum) || !std::isfinite(parameter.maximum))
-			{
-				parameter.minimum = 0.0;
-				parameter.maximum = 1.0;
-			}
-			else if (parameter.minimum > parameter.maximum)
-				std::swap(parameter.minimum, parameter.maximum);
-			if (parameter.minimum == parameter.maximum)
-				parameter.maximum = std::nextafter(parameter.minimum, std::numeric_limits<double>::infinity());
-		}
+        ValidateFitSettings(settings);
 		{
 			std::scoped_lock lock(m_Mutex);
 			m_Settings.fitMonteCarlo = std::move(settings);

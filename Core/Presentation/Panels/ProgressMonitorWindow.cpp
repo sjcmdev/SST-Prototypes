@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/Diagnostics/OperationOutcome.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -585,8 +586,14 @@ namespace SST
 			ImGui::EndTable();
 		}
 
-		if (!snapshot.errorSummary.empty())
-			ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "Error: %s", snapshot.errorSummary.c_str());
+		if (snapshot.error) {
+            const auto& error=*snapshot.error;
+            ImGui::TextWrapped("%s: %s",ErrorCategoryName(error.category),error.userMessage.c_str());
+            ImGui::TextWrapped("%s",error.suggestion.c_str());
+            if (ImGui::TreeNode("Technical details")) {ImGui::TextWrapped("%s",error.technicalDetails.c_str()); ImGui::TreePop();}
+        }
+        else if (!snapshot.errorSummary.empty())
+            ImGui::TextColored(ImVec4(0.95f, 0.35f, 0.35f, 1.0f), "Error: %s", snapshot.errorSummary.c_str());
 
 		std::reverse(ancestry.begin(), ancestry.end());
 		if (!ancestry.empty())

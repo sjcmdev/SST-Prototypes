@@ -1,6 +1,8 @@
 #include "Core/dspch.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <Windows.h>
 #include <array>
 #include <cctype>
 #include <filesystem>
@@ -45,12 +47,22 @@ namespace SST
 		{
 			ApplicationPaths paths;
 			paths.appConfigDirectory = NormalizeConfigDirectory(configDirectory);
+            wchar_t executable[32768]{};
+                GetModuleFileNameW(nullptr, executable, 32768);
+                const auto *portable = _wgetenv(L"SST_PORTABLE_ROOT");
+                const auto *local = _wgetenv(L"LOCALAPPDATA");
+                if (portable && *portable)
+                    paths.userConfigDirectory = Path::FromResolved(std::filesystem::absolute(std::filesystem::path(portable)) / std::filesystem::path(executable).stem() / "config");
+                else if (local && *local)
+                    paths.userConfigDirectory = Path::FromResolved(std::filesystem::path(local) / "SemiconductorStudio" / std::filesystem::path(executable).stem() / "config");
+                else
+                    throw std::runtime_error("Cannot locate user settings: LOCALAPPDATA is missing. Set SST_PORTABLE_ROOT to a writable directory.");
 
 			if (IsPortableAppConfigDirectory(paths.appConfigDirectory))
 			{
 				paths.installRoot = Path::FromResolved(paths.appConfigDirectory.Native().parent_path().parent_path());
 				const Path appRoot = Path::FromResolved(paths.installRoot.Native() / "app");
-				paths.userConfigDirectory = paths.appConfigDirectory;
+
 				paths.profilesDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "profiles");
 				paths.themesDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "themes");
 				paths.layoutsDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "layouts");
@@ -61,10 +73,10 @@ namespace SST
 			}
 
 			paths.installRoot = Path::FromResolved(paths.appConfigDirectory.Native().parent_path());
-			paths.userConfigDirectory = paths.appConfigDirectory;
+
 			paths.profilesDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "profiles");
 			paths.themesDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "themes");
-			paths.layoutsDirectory = paths.userConfigDirectory;
+			paths.layoutsDirectory = paths.userConfigDirectory / "layouts";
 			paths.exportsDirectory = Path::FromResolved(paths.userConfigDirectory.Native() / "exports");
 			paths.assetsDirectory = Path::FromResolved(paths.installRoot.Native() / "assets");
 			paths.fontsDirectory = Path::FromResolved(paths.assetsDirectory.Native() / "fonts");
@@ -84,16 +96,33 @@ namespace SST
 
 		bool EnsurePortableDirectories(const ApplicationPaths &paths, std::string &error)
 		{
-			return EnsureDirectory(paths.appConfigDirectory, error)
-				&& EnsureDirectory(paths.userConfigDirectory, error)
+			return EnsureDirectory(paths.userConfigDirectory, error)
 				&& EnsureDirectory(paths.profilesDirectory, error)
 				&& EnsureDirectory(paths.themesDirectory, error)
 				&& EnsureDirectory(paths.layoutsDirectory, error)
-				&& EnsureDirectory(paths.exportsDirectory, error)
-				&& EnsureDirectory(paths.assetsDirectory, error)
-				&& EnsureDirectory(paths.fontsDirectory, error);
+				&& EnsureDirectory(paths.exportsDirectory, error);
 		}
 
+        bool MigratePreferences(const ApplicationPaths& paths,std::string& error) {
+            auto copy=[&](const Path& source,const Path& target) {
+                if(source==target || FileSystem::Exists(target.Native()) || !FileSystem::Exists(source.Native()) || std::filesystem::is_symlink(source.Native())) return true;
+                std::string text;
+                return TextFileIO::Load(source,text,error) && TextFileIO::Save(target,text,error);
+            };
+            for(const char* file:{"keybindings.yaml","imgui.ini","jfm_user_settings.yaml","caplab-recent.json","caplab-import-profiles.json","prototype_settings.txt"}) {
+                const auto target=std::string_view(file)=="imgui.ini" ? paths.layoutsDirectory/file : paths.userConfigDirectory/file;
+                if(!copy(paths.appConfigDirectory/file,target)) return false;
+            }
+            for(const char* section:{"profiles","themes","layouts"}) {
+                const auto source=paths.appConfigDirectory/section;
+                if(!std::filesystem::is_directory(source.Native()) || std::filesystem::is_symlink(source.Native())) continue;
+                for(const auto& file:std::filesystem::directory_iterator(source.Native()))
+                    if(file.is_regular_file() && !file.is_symlink() && !copy(Path::FromResolved(file.path()),paths.userConfigDirectory/section/Path::FromResolved(file.path().filename()))) return false;
+            }
+            const auto* local=_wgetenv(L"LOCALAPPDATA");wchar_t executable[32768]{};GetModuleFileNameW(nullptr,executable,32768);
+            if(local && *local && !copy(Path::FromResolved(std::filesystem::path(local)/"Semiconductor Studio"/std::filesystem::path(executable).stem()/"imgui.ini"),paths.layoutsDirectory/"imgui.ini")) return false;
+            return true;
+        }
 		std::vector<Path> ListFilesByExtension(const Path &directory, std::string_view extension)
 		{
 			std::vector<Path> result;
@@ -134,10 +163,17 @@ namespace SST
 
 	bool ConfigManager::Initialize(std::string &error)
 	{
-		m_ConfigDirectory = ConfigPaths::NormalizeConfigDirectory(m_ConfigDirectory);
+		auto previous=m_Config;
+        bool committed=false;
+        struct Rollback { ApplicationConfig& live; ApplicationConfig& previous; bool& committed;
+            ~Rollback() { if(!committed) live=std::move(previous); }
+        } rollback{m_Config,previous,committed};
+        m_ConfigDirectory = ConfigPaths::NormalizeConfigDirectory(m_ConfigDirectory);
 		m_Config = CreateDefaultConfig(m_ConfigDirectory);
 		if (!ConfigPaths::EnsurePortableDirectories(m_Config.paths, error))
 			return false;
+
+		if (!ConfigPaths::MigratePreferences(m_Config.paths,error)) return false;
 
 		if (!loadOrCreateDefaultConfig(error))
 			return false;
@@ -148,6 +184,7 @@ namespace SST
 		m_Config.paths = ResolvePortablePaths(m_ConfigDirectory);
 		m_Config.layout.imGuiIniPath = GetLayoutPath(m_ConfigDirectory).Utf8();
 		m_Initialized = true;
+        committed=true;
 		return true;
 	}
 
@@ -166,8 +203,37 @@ namespace SST
 		return m_Config.paths;
 	}
 
+	bool ConfigManager::Validate(const ApplicationConfig &config, std::string &error)
+    {
+        auto reject = [&](const char *field, const char *expected) {
+            error = std::string("Invalid settings field '") + field + "': " + expected + ". Correct this field or reset its section; settings were not applied.";
+            return false;
+        };
+        const auto &u = config.ui;
+        if (config.window.width < 320 || config.window.height < 240) return reject("window.width/height", "minimum size is 320 x 240 pixels");
+        if (!std::isfinite(u.fontScaleMin) || !std::isfinite(u.fontScaleMax) || u.fontScaleMin <= 0 || u.fontScaleMax < u.fontScaleMin) return reject("ui.font_scale", "finite limits with 0 < min <= max are required");
+        if (!std::isfinite(u.fontScale) || u.fontScale < u.fontScaleMin || u.fontScale > u.fontScaleMax) return reject("ui.font_scale", "value must be finite and within the configured limits");
+        if (!std::isfinite(u.fontScaleStepMin) || !std::isfinite(u.fontScaleStepMax) || u.fontScaleStepMin <= 0 || u.fontScaleStepMax < u.fontScaleStepMin) return reject("ui.font_scale_step", "finite limits with 0 < min <= max are required");
+        for (const auto value : {u.fontScaleStep, u.fontScaleStepSliderMax})
+            if (!std::isfinite(value) || value < u.fontScaleStepMin || value > u.fontScaleStepMax) return reject("ui.font_scale_step", "step must be finite and within the configured limits");
+        if (config.jobs.defaultWorkerThreadCount < 1) return reject("jobs.default_worker_threads", "at least one worker is required");
+        if (config.eventQueue.initialCapacity < RuntimeDefaults::EventQueueMinCapacity || config.eventQueue.growthStep < RuntimeDefaults::EventQueueMinGrowthStep) return reject("event_queue", "capacity and growth must be at least 32");
+        const auto &a = config.appearance;
+        for (const auto &color : {a.backgroundColor,a.surfaceColor,a.raisedSurfaceColor,a.borderColor,a.collapsibleColor,a.textColor,a.mutedTextColor,a.accentColor,a.clearColor})
+            for (float value : color) if (!std::isfinite(value) || value < 0 || value > 1) return reject("appearance.colors", "RGBA components must be finite and in [0, 1]");
+        for (float value : {a.windowRounding,a.frameRounding,a.grabRounding,a.popupRounding,a.scrollbarRounding,a.tabRounding,a.windowPaddingX,a.windowPaddingY,a.framePaddingX,a.framePaddingY,a.itemSpacingX,a.itemSpacingY})
+            if (!std::isfinite(value) || value < 0) return reject("appearance", "rounding and spacing must be finite and nonnegative");
+        const auto &r = a.stateRules;
+        for (float value : {r.neutralHoverLighten,r.neutralActiveLighten,r.accentHoverLighten,r.accentHoverSaturation,r.accentActiveDarken,r.accentActiveSaturation,r.selectedAlpha,r.selectedHoverAlpha,r.selectedActiveAlpha,r.disabledAlpha,r.disabledBackgroundMix})
+            if (!std::isfinite(value) || value < 0 || value > 1) return reject("appearance.state_rules", "values must be finite and in [0, 1]");
+        error.clear();
+        return true;
+    }
+
 	void ConfigManager::SetConfig(const ApplicationConfig &config)
 	{
+		std::string error;
+		if (!Validate(config, error)) throw std::invalid_argument(error);
 		m_Config = config;
 		m_Config.directory = m_ConfigDirectory;
 		m_Config.paths = ResolvePortablePaths(m_ConfigDirectory);
@@ -177,12 +243,12 @@ namespace SST
 
 	void ConfigManager::SetUiConfig(const UIConfig &config)
 	{
-		m_Config.ui = config;
+		auto candidate=m_Config; candidate.ui=config; SetConfig(candidate);
 	}
 
 	void ConfigManager::SetAppearanceConfig(const AppearanceConfig &config)
 	{
-		m_Config.appearance = config;
+		auto candidate=m_Config; candidate.appearance=config; SetConfig(candidate);
 	}
 
 	std::vector<Path> ConfigManager::ListYamlFiles(const Path &directory) const
@@ -310,18 +376,18 @@ namespace SST
 	{
 		const Path path = GetDefaultConfigPath(m_ConfigDirectory);
 		if (!FileSystem::Exists(path.Native()))
-		{
-			std::string text;
-			if (!YamlCodecFacade::Default().SerializeDefaultConfig(m_Config, text, error))
-				return false;
-			return TextFileIO::Save(path, text, error);
-		}
+			return true; // Packaged defaults are read-only; built-in typed defaults remain valid.
+
 
 		std::string text;
 		if (!TextFileIO::Load(path, text, error))
 			return false;
 
-		return YamlCodecFacade::Default().DeserializeDefaultConfig(text, m_Config, error);
+		if (!YamlCodecFacade::Default().DeserializeDefaultConfig(text, m_Config, error)) {
+            error=path.Utf8()+": "+error;
+            return false;
+        }
+        return true;
 	}
 
 	bool ConfigManager::loadOrCreateUserSettings(std::string &error)
@@ -349,7 +415,10 @@ namespace SST
 		if (!TextFileIO::Load(path, text, error))
 			return false;
 
-		return YamlCodecFacade::Default().DeserializeUserSettings(text, m_Config, error);
+		if (!YamlCodecFacade::Default().DeserializeUserSettings(text, m_Config, error)) {
+            error=path.Utf8()+": "+error;
+            return false;
+        }
+        return true;
 	}
 } // namespace SST
-

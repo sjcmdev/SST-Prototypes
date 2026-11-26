@@ -68,6 +68,7 @@ namespace SST
 		Time::TimePoint startedAt{};
 		Time::TimePoint finishedAt{};
 		std::string errorSummary;
+        std::optional<StructuredError> error;
 		bool finished = false;
 
 		// Natural ordering in tracker snapshots: by stable JobId.

@@ -28,7 +28,9 @@ namespace SST::Prototypes::JFM
 		if (m_Settings == nullptr)
 			return;
 
-		const JFMUserSettings settings = m_Settings->GetSnapshot();
+		const auto loadError=m_Settings->GetLoadError();
+        if(!loadError.empty()) ImGui::TextWrapped("%s",loadError.c_str());
+        const JFMUserSettings settings = m_Settings->GetSnapshot();
 		ImGui::SeparatorText("JFM Paths");
 		renderPathRow("Import directory", settings.defaultImportDirectory, &JFMUserSettingsStore::SetDefaultImportDirectory);
 		renderPathRow("Projects directory", settings.defaultProjectsDirectory, &JFMUserSettingsStore::SetDefaultProjectsDirectory);

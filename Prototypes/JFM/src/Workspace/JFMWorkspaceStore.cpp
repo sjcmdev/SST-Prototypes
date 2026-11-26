@@ -149,7 +149,7 @@ namespace SST::Prototypes::JFM
 		return m_Workspace.Open(std::move(document), activate);
 	}
 
-	ProjectHandle JFMWorkspaceStore::AttachProjectBundle(JFMProjectBundleSnapshot snapshot, std::optional<Path> path, bool activate)
+	ProjectHandle JFMWorkspaceStore::AttachProjectBundle(JFMProjectBundleSnapshot snapshot, std::optional<Path> path, bool activate, bool recovered)
 	{
 		std::scoped_lock lock(m_Mutex);
 		if (path) {
@@ -165,7 +165,7 @@ namespace SST::Prototypes::JFM
 		document.path = std::move(path);
 		document.status = "Project bundle loaded.";
 		document.revision = m_NextRevision++;
-		document.savedRevision = document.revision;
+		document.savedRevision = recovered ? 0 : document.revision;
 		document.arrheniusLayout = std::move(snapshot.arrheniusLayout);
 		for (JFMCharacteristicRecord &record : snapshot.characteristics)
 		{
@@ -176,7 +176,7 @@ namespace SST::Prototypes::JFM
 		for (JFMMonteCarloBundleRecord &record : snapshot.monteCarloResults)
 		{
 			if (record.characteristic != InvalidCharacteristicId)
-				document.monteCarloResults[record.characteristic] = CreateRef<const JFMMonteCarloResult>(std::move(record.result));
+				document.monteCarloResults[record.characteristic] = std::move(record.result);
 		}
 		updateNextCharacteristicIdLocked(document);
 		ensureSelectionLocked(document);
@@ -296,7 +296,7 @@ namespace SST::Prototypes::JFM
 		for (const auto &[id, result] : value.monteCarloResults)
 		{
 			if (result != nullptr)
-				snapshot.monteCarloResults.push_back(JFMMonteCarloBundleRecord{id, *result});
+				snapshot.monteCarloResults.push_back(JFMMonteCarloBundleRecord{id, result});
 		}
 		return snapshot;
 	}

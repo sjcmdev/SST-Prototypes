@@ -5,6 +5,7 @@
 #include "Core/Diagnostics/LocalDiagnostics.hpp"
 #include "Core/Diagnostics/DiagnosticsCommand.hpp"
 #include <charconv>
+#include "Core/Diagnostics/OperationOutcome.hpp"
 #include <iostream>
 
 namespace SST {
@@ -88,7 +89,7 @@ std::optional<int> HandleEarlyApplicationArguments(int argc, char** argv) {
         if(spec.showVersion) { std::cout<<BuildDescription()<<'\n'; return 0; }
         if(!spec.diagnosticExportPath.Empty()) {
             const auto result=ExportDiagnosticsHeadless({spec.diagnosticExportPath,DiagnosticPreview({})});
-            if(!result) { std::cerr<<result.Error().userMessage<<' '<<result.Error().technicalDetails<<". Check the destination and free space.\n"; return 1; }
+            if(!result) { std::cerr<<result.Error().userMessage<<' '<<result.Error().technicalDetails<<". Check the destination and free space.\n"; return CliExitCode(result.Error()); }
             return 0;
         }
         if(spec.crashProbe) {
@@ -102,13 +103,16 @@ std::optional<int> HandleEarlyApplicationArguments(int argc, char** argv) {
         }
         return std::nullopt;
     } catch(const std::invalid_argument& error) { std::cerr<<"Invalid arguments: "<<error.what()<<". Use --help for supported options.\n"<<Usage; return 2; }
-      catch(const std::exception& error) { std::cerr<<"Startup action failed: "<<error.what()<<". Check diagnostics directory permissions and retry.\n"; return 1; }
+      catch(const std::exception& error) { std::cerr<<"Startup action failed: "<<error.what()<<". Check diagnostics directory permissions and retry.\n"; return CliExitCode(MakeOperationError(ErrorCategory::Internal)); }
 }
 int RunApplication(int argc, char** argv, Application::ApplicationSetup setup) {
     if(const auto early=HandleEarlyApplicationArguments(argc,argv)) return *early;
     try {
         auto app=Application::Create(argc,argv,std::move(setup));
         return app.Run();
-    } catch(const std::exception& error) { std::cerr<<"Application startup failed: "<<error.what()<<". Review local diagnostics and retry.\n"; return 1; }
+    } catch(const OperationException& error) { std::cerr<<error.error.userMessage<<' '<<error.error.suggestion<<' '<<error.error.technicalDetails<<'\n';return CliExitCode(error.error); }
+      catch(const std::invalid_argument& error) { std::cerr<<"Invalid application settings: "<<error.what()<<'\n';return CliExitCode(MakeOperationError(ErrorCategory::Validation)); }
+      catch(const std::filesystem::filesystem_error& error) {std::cerr<<"File operation failed: "<<error.what()<<". Check the path and permissions.\n";return CliExitCode(MakeOperationError(ErrorCategory::IO));}
+      catch(const std::exception& error) { std::cerr<<"Application startup failed: "<<error.what()<<". Review local diagnostics and retry.\n"; return CliExitCode(MakeOperationError(ErrorCategory::Internal)); }
 }
 }

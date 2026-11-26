@@ -772,6 +772,9 @@ TEST_F(UnicodePaths, CoreConfigAndLayoutRoundtrip) {
     YamlConfigSerializer codec;
     ASSERT_TRUE(codec.SerializeDefaultConfig(config, text, error)) << error;
     ASSERT_TRUE(TextFileIO::Save(ConfigManager::GetDefaultConfigPath(configPath), text, error)) << error;
+    // The per-user layer intentionally overrides packaged defaults, including log paths.
+    ASSERT_TRUE(codec.SerializeUserSettings(config, text, error)) << error;
+    ASSERT_TRUE(TextFileIO::Save(ConfigManager::GetUserSettingsPath(configPath), text, error)) << error;
     ConfigManager reopened(configPath);
     ASSERT_TRUE(reopened.Initialize(error)) << error;
     EXPECT_EQ(reopened.GetConfig().log.filePath, config.log.filePath);
@@ -844,7 +847,7 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     sample.solverConverged = false; sample.stopReason = "max_iter"; sample.fitMethod = "LM→NM";
     sample.lmStatus = 0; sample.flatDirections = true; sample.objectiveChiSquared = .125; mc.samples.push_back(sample);
     mc.voltage={0.,.1};mc.idealCurrent={-.03,.02};mc.currentSigma={.00123,.0006};mc.noisyCurrent={-.029,.021};
-    snapshot.monteCarloResults.push_back({1,mc});
+    snapshot.monteCarloResults.push_back({1,CreateRef<const JFMMonteCarloResult>(mc)});
     const auto bundle = root / "bundle.jfm";
     auto saved = JFMProjectBundleSerializer::Save(bundle, snapshot);
     ASSERT_TRUE(saved) << saved.Error().technicalDetails;
@@ -855,7 +858,8 @@ TEST_F(UnicodePaths, JFMProjectAndBundleRoundtrip) {
     ASSERT_TRUE(opened) << opened.Error().technicalDetails;
     EXPECT_EQ(opened->snapshot.project.characteristics[0].monteCarlo->outputPath, bundle / Path("mc/1"));
     ASSERT_EQ(opened->snapshot.monteCarloResults.size(),1);
-    const auto &roundtrip = opened->snapshot.monteCarloResults.front().result;
+    ASSERT_TRUE(opened->snapshot.monteCarloResults.front().result);
+    const auto &roundtrip = *opened->snapshot.monteCarloResults.front().result;
     EXPECT_EQ(roundtrip.currentSigma,mc.currentSigma); EXPECT_EQ(roundtrip.idealCurrent,mc.idealCurrent);
     EXPECT_EQ(opened->snapshot.project.characteristics[0].monteCarlo->objective.mode,"signed_sigma");
     EXPECT_DOUBLE_EQ(opened->snapshot.project.characteristics[0].monteCarlo->objective.sigmaAbsolute,1e-5);

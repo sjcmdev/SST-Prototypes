@@ -1,4 +1,4 @@
-﻿local function readActivePrototypeName()
+local function readActivePrototypeName()
     local file = io.open(".sst-prototype", "r")
     if file == nil then
         return "Core"
@@ -259,6 +259,8 @@ project "Core"
         "Core/Presentation/EditorUiState.hpp",
         "Core/Presentation/EditorLayer.hpp",
         "Core/Presentation/EditorLayer.cpp",
+        "Core/Presentation/ProjectRecoveryLayer.hpp",
+        "Core/Presentation/ProjectRecoveryLayer.cpp",
         "Core/Presentation/ImGuiLayer.hpp",
         "Core/Presentation/ImGuiLayer.cpp",
         "Core/Presentation/Panels/**.hpp",
@@ -415,9 +417,11 @@ project "CoreProfessionalTests"
     staticruntime "off"
     targetdir (_SST_ROOT .. "/build/bin/" .. outputdir .. "/%{prj.name}")
     objdir (_SST_ROOT .. "/build/bin-int/" .. outputdir .. "/%{prj.name}")
-    files { _SST_ROOT .. "/Core/tests/ProfessionalTests.cpp" }
+    files { _SST_ROOT .. "/Core/tests/**.cpp" }
     includedirs { _SST_ROOT, _SST_ROOT .. "/Core", _SST_ROOT .. "/Vendor/GoogleTest/googletest/include", _SST_ROOT .. "/Vendor/spdlog/include", _SST_ROOT .. "/Vendor/thread-pool/include", _SST_ROOT .. "/Vendor/json/include", _SST_ROOT .. "/Vendor/yaml-cpp/include" }
     links { "Core", "GoogleTest", "GoogleTestMain" }
+    sst_link_plotlab()
+    defines { "YAML_CPP_STATIC_DEFINE" }
     sst_link_libraries()
     filter "system:windows"
         defines { "DS_PLATFORM_WINDOWS" }

@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/Diagnostics/OperationOutcome.hpp"
 
 #include <functional>
 #include <optional>
@@ -48,7 +49,7 @@ namespace SST
 	int Application::Run()
 	{
 		if (!m_Runtime.lifecycle.IsRunning())
-			return 1;
+			return CliExitCode(MakeOperationError(ErrorCategory::Internal));
 
 		ApplicationDetail::SetCrashStage("main loop");
 		try
@@ -61,7 +62,7 @@ namespace SST
 			Logger::Flush();
 			ApplicationDetail::AppendCrashMarker("[CRASH] unhandled C++ exception in main loop");
 			shutdownInternal();
-			return 1;
+			return CliExitCode(MakeOperationError(ErrorCategory::Internal));
 		}
 		catch (...)
 		{
@@ -69,7 +70,7 @@ namespace SST
 			Logger::Flush();
 			ApplicationDetail::AppendCrashMarker("[CRASH] unhandled unknown exception in main loop");
 			shutdownInternal();
-			return 1;
+			return CliExitCode(MakeOperationError(ErrorCategory::Internal));
 		}
 
 		ApplicationDetail::SetCrashStage("shutdown");

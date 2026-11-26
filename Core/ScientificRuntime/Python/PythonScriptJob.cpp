@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/Diagnostics/OperationOutcome.hpp"
 
 #include "ScientificRuntime/Python/PythonScriptJob.hpp"
 
@@ -52,9 +53,7 @@ namespace SST
 		Result<ScriptRunResult> runResult = m_ScriptRunner.RunFile(options);
 		if (!runResult)
 		{
-			if (runResult.Error().category == ErrorCategory::Cancelled)
-				throw JobCancelledException(runResult.Error().technicalDetails);
-			throw std::runtime_error(runResult.Error().technicalDetails);
+			throw OperationException(runResult.Error());
 		}
 
 		if (!runResult->standardOutput.empty())

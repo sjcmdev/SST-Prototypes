@@ -1,3 +1,4 @@
+#include "Core/ScientificRuntime/Python/OperationErrorJson.hpp"
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include "Domain/CapLabBundleImport.hpp"
@@ -279,7 +280,7 @@ NB_MODULE(sst_caplab, module)
                 state.OnUpdate(0);
                 const auto job=jobs->GetJob(id);
                 if (!job || job->status!=JobStatus::Completed || state.failure)
-                    return Json{{"ok",false},{"project",Json::parse(project)},{"error",{{"code",job && job->status==JobStatus::Cancelled ? "cancelled" : "plot_failed"},{"message",state.status}}}}.dump();
+                    return Json{{"ok",false},{"project",Json::parse(project)},{"error",SST::PythonBoundary::LegacyJobError(job,"plot_failed",state.status)}}.dump();
                 response["graph_id"]=state.Document().project.graph;
 
             } else if (operation=="profile") {
@@ -324,7 +325,7 @@ NB_MODULE(sst_caplab, module)
                     {RunningOperation running(operationId,[&] {return bool(commands->Execute(CommandID{"caplab.cancel"}));}); jobs->Shutdown();}
                     state.OnUpdate(0);
                     if (!state.sourceDraft) return Json{{"ok",false},{"project",Json::parse(project)},
-                        {"error",{{"code",jobs->GetJob(id) && jobs->GetJob(id)->status==JobStatus::Cancelled ? "cancelled" : "caplab.source"},{"message",state.status}}}}.dump();
+                        {"error",SST::PythonBoundary::LegacyJobError(jobs->GetJob(id),"caplab.source",state.status)}}.dump();
                     response["source_draft"]={{"base_project",ProjectJson(state.Document().project)},{"project",ProjectJson(*state.sourceDraft)},
                         {"diff",state.sourceDiff},{"provenance_only",state.sourceRelink}};
                 }
@@ -402,7 +403,7 @@ NB_MODULE(sst_caplab, module)
                 state.OnUpdate(0);
                 const auto job=jobs->GetJob(id);
                 if ((!job && state.failure) || (job && job->status!=JobStatus::Completed))
-                    return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(project)},{"error",{{"code",job && job->status==JobStatus::Cancelled ? "cancelled" : operation+"_failed"},{"message",state.status}}}}.dump();
+                    return Json{{"ok",false},{"workspace",state.WorkspaceJson()},{"project",Json::parse(project)},{"error",SST::PythonBoundary::LegacyJobError(job,operation+"_failed",state.status)}}.dump();
                 state.importTargetSample=r.value("target_sample_id",pl::Id{0});
                 response["target_sample_name"]=r.value("target_sample_name",std::string{});
                 response["groups"]=state.ImportGroups();
@@ -487,7 +488,7 @@ NB_MODULE(sst_caplab, module)
                 const auto job=jobs->GetJob(id);
                 if (!job || job->status!=SST::JobStatus::Completed || (!state.analysisDraft && state.Document().project.analyses.size()!=analysisCount+1))
                     return Json{{"ok",false},{"project",Json::parse(project)},
-                        {"error",{{"code",job && job->status==SST::JobStatus::Cancelled ? "cancelled" : operation=="analyze" ? "analysis_failed" : operation=="fit" ? "fit_failed" : (operation=="walter" || operation=="integrate_saved_walter") ? "walter_failed" : "simulation_failed"},{"message",state.status}}}}.dump();
+                        {"error",SST::PythonBoundary::LegacyJobError(job,operation=="analyze" ? "analysis_failed" : operation=="fit" ? "fit_failed" : (operation=="walter" || operation=="integrate_saved_walter") ? "walter_failed" : "simulation_failed",state.status)}}.dump();
             } else throw std::runtime_error("Unknown CapLab operation");
             response["draft"]=state.analysisDraft ? Json{{"base_project",Json::parse(project)},
                 {"project",ProjectJson(*state.analysisDraft)}} : Json(nullptr);

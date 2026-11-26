@@ -119,9 +119,11 @@ namespace SST::Prototypes::PlotLab
         void Open(const std::filesystem::path &);
         void Open(Ref<pl::Project>, const std::filesystem::path &);
         void Save(const std::filesystem::path &);
+        Ref<pl::Project> RecoverySnapshot() const;
+        bool recovered = false;
         bool Dirty() const
         {
-            return !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty();
+            return recovered || !undo->IsClean() || !scriptDrafts.empty() || !scriptParameterDrafts.empty();
         }
         pl::Id Create(pl::Id parent, int type, std::string name);
         void Rename(pl::Id, std::string);

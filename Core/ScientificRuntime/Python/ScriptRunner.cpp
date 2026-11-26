@@ -86,7 +86,8 @@ namespace SST
 
 		if (processResult->timedOut)
 		{
-			return MakePythonExecutionError(
+			return StructuredError(
+                ErrorCategory::TimedOut, Severity::Error,
 				"Python script timed out.",
 				"Command timed out and was terminated: " + processResult->commandLine,
 				"Increase the timeout or check the Python script for hangs.",

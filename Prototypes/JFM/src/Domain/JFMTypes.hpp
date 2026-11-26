@@ -229,7 +229,7 @@ namespace SST::Prototypes::JFM
 	struct JFMMonteCarloBundleRecord
 	{
 		CharacteristicId characteristic = InvalidCharacteristicId;
-		JFMMonteCarloResult result;
+		Ref<const JFMMonteCarloResult> result;
 	};
 
 	struct JFMArrheniusLayoutStyle

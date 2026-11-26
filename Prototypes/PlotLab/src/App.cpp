@@ -1,11 +1,13 @@
-﻿#include "Core/App/Application.hpp"
+#include "Core/dspch.hpp"
+#include "Core/Presentation/ProjectRecoveryLayer.hpp"
+#include "Core/App/Application.hpp"
 #include "Core/Commands/SystemCommandEvents.hpp"
 #include "Core/App/ApplicationInternals.hpp"
 #include "Core/Diagnostics/LocalDiagnostics.hpp"
 #include "Core/IO/IOLayer.hpp"
 #include "Core/Input/KeymapResolver.hpp"
 #include "Core/Presentation/EditorLayer.hpp"
-#include "Core/dspch.hpp"
+#include "Core/Diagnostics/OperationOutcome.hpp"
 #include "PlotLabWorkspace.hpp"
 #include <imgui.h>
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
@@ -142,6 +144,20 @@ namespace SST
         editor.RegisterMenuRenderer("plotlab", [panel](EditorServices&) { panel->RenderMenus(); });
         editor.RegisterMenuRenderer("help", [panel](EditorServices&) { panel->RenderMenus(true); });
         application.InsertLayerBefore(LayerId::ImGui, CreateUnique<WorkspaceLayer>(state, smokeTest));
+        application.InsertLayerBefore(LayerId::ImGui, CreateUnique<ProjectRecoveryLayer>(runtime.configDirectory/"recovery",runtime.jobSystem.lock(),
+            [doc,previous=std::tuple{doc->project.get(),std::uint64_t{0},decltype(doc->scriptDrafts){},decltype(doc->scriptParameterDrafts){},decltype(doc->pythonHistory){}},revision=std::uint64_t{0}](ProjectRecoveryPlan& recovery) mutable {
+                if (!doc->Dirty()) return;
+                const auto& [project,engineRevision,drafts,parameters,history]=previous;
+                if (project!=doc->project.get() || engineRevision!=doc->project->revision() || drafts!=doc->scriptDrafts || parameters!=doc->scriptParameterDrafts || history!=doc->pythonHistory) {
+                    ++revision; previous={doc->project.get(),doc->project->revision(),doc->scriptDrafts,doc->scriptParameterDrafts,doc->pythonHistory};
+                }
+                recovery.Save(1,revision,Path::FromResolved(doc->path),".plotlab",[&] {auto snapshot=doc->RecoverySnapshot();return [snapshot=std::move(snapshot)](const Path& target){snapshot->save(target.Native());};});
+            },
+            [doc,state](const RecoveryCandidate& candidate) {
+                if(doc->Dirty()) throw std::runtime_error("Save the current project before restoring another copy.");
+                doc->Open(candidate.snapshot.Native()); doc->path.clear(); doc->recovered=true; state->RefreshWindows();
+                state->status="Recovered a project copy. Use Save As after checking it.";
+            }));
     }
 } // namespace SST
 int main(int argc, char **argv)
@@ -172,18 +188,18 @@ int main(int argc, char **argv)
         SST::ApplicationDetail::InstallCrashFallbackHandlers();
 #if DS_PYTHON_CAPI_AVAILABLE
             SST::PythonInterpreter interpreter;
-            if(!interpreter.Start()) return 1;
+            if(!interpreter.Start()) return SST::CliExitCode(SST::MakeOperationError(SST::ErrorCategory::Capability));
             auto pythonRoot=std::filesystem::absolute(argv[0]).parent_path()/"python";
             if(!std::filesystem::is_directory(pythonRoot)) pythonRoot=SST_PLOTLAB_PYTHON_ROOT;
             SST::Prototypes::PlotLab::InstallWorksheetPython(nullptr,pythonRoot);
-            std::ifstream in(worksheetScript); if(!in) { std::cerr<<"Cannot read worksheet script. Check the path and permissions.\n"; return 1; }
+            std::ifstream in(worksheetScript); if(!in) { std::cerr<<"Cannot read worksheet script. Check the path and permissions.\n"; return SST::CliExitCode(SST::MakeOperationError(SST::ErrorCategory::IO)); }
             const std::string code(std::istreambuf_iterator<char>(in),{});
             auto gil=SST::PythonInterpreter::AcquireRuntimeGil();
             const int result=PyRun_SimpleString(code.c_str());
             SST::PythonInterpreter::ReleaseRuntimeGil(gil);
-            return result==0?0:1;
+            return result==0?0:SST::CliExitCode(SST::MakeOperationError(SST::ErrorCategory::Internal));
 #else
-            return 1;
+            return SST::CliExitCode(SST::MakeOperationError(SST::ErrorCategory::Capability));
 #endif
     }
     return SST::RunApplication(sharedArgc, arguments.data(), SST::SetupApplication);

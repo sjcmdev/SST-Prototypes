@@ -1,4 +1,9 @@
 #include "Core/dspch.hpp"
+#include "Core/App/Managers/SettingsReset.hpp"
+#include "Core/App/Managers/ConfigManager.hpp"
+#include "Core/App/Serialization/YamlConfigSerializer.hpp"
+#include "Core/IO/TextFileIO.hpp"
+#include "Core/ScientificRuntime/Python/OperationErrorJson.hpp"
 #include "Core/Utils/FramebufferScreenshot.hpp"
 #include "Core/Utils/Path.hpp"
 #include "Core/Threading/ThreadAffinity.hpp"
@@ -212,6 +217,32 @@ static std::string ExecuteApplicationRequest(const char *requestJson)
 }
 NB_MODULE(sst_application, module)
 {
+    module.def("exit_contract", [] {
+        nanobind::dict result;result["version"]=SST::CliExitContractVersion;result["completed"]=0;
+        for(auto category:{SST::ErrorCategory::Validation,SST::ErrorCategory::UnsupportedVersion,SST::ErrorCategory::Numerical,SST::ErrorCategory::Partial,SST::ErrorCategory::IO,SST::ErrorCategory::Internal,SST::ErrorCategory::Cancelled,SST::ErrorCategory::TimedOut,SST::ErrorCategory::Capability,SST::ErrorCategory::ResourceLimit,SST::ErrorCategory::OutOfMemory})
+            result[nanobind::str(SST::ErrorCategoryName(category))]=SST::CliExitCode(SST::MakeOperationError(category));
+        return result;
+    });
+    module.def("reset_settings", [](const std::string& name,bool persist) {
+        using namespace SST;
+        auto response=[&](const nlohmann::json& value) { return nanobind::module_::import_("json").attr("loads")(nanobind::str(value.dump().c_str())); };
+        try {
+            const auto section=name=="system" ? SettingsSection::System : name=="interface" ? SettingsSection::Interface : name=="viewport" ? SettingsSection::Viewport : throw std::invalid_argument("Unknown section. Choose system, interface or viewport.");
+            ConfigManager manager(Path{});std::string error;
+            if(!manager.Initialize(error)) return response(PythonBoundary::Failure(MakeOperationError(ErrorCategory::Validation,error,"Settings")));
+            CommandRegistry commands;JobSystem jobs({},1);
+            auto result=ResetSettingsSection(commands,jobs,manager.GetConfig(),section);jobs.Shutdown();
+            if(!result)return response(PythonBoundary::Failure(result.Error()));
+            const auto path=ConfigManager::GetUserSettingsPath(result->directory);
+            if(persist) {
+                std::string text;YamlConfigSerializer codec;
+                if(!codec.SerializeUserSettings(*result,text,error) || !TextFileIO::Save(path,text,error))return response(PythonBoundary::Failure(MakeOperationError(ErrorCategory::IO,error,"Settings")));
+            }
+            return response({{"ok",true},{"section",name},{"persisted",persist},{"settings_path",path.Utf8()}});
+        } catch(const std::invalid_argument& error) {return response(PythonBoundary::Failure(MakeOperationError(ErrorCategory::Validation,error.what(),"Settings")));}
+          catch(const std::exception& error) {return response(PythonBoundary::Failure(MakeOperationError(ErrorCategory::Internal,error.what(),"Settings")));}
+    },nanobind::arg("section"),nanobind::arg("persist")=false);
+
     module.def("version_info", [] {
         const auto& b=SST::GetBuildInfo(); nanobind::dict info;
         info["version"]=nanobind::str(b.version.data(),b.version.size());

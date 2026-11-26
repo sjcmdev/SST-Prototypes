@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "App/JFMUserSettings.hpp"
+#include "Core/IO/TextFileIO.hpp"
 
 namespace SST::Prototypes::JFM
 {
@@ -84,3 +85,19 @@ namespace SST::Prototypes::JFM
 		(void)FileSystem::RemoveAll(root.Native(), error);
 	}
 } // namespace SST::Prototypes::JFM
+
+namespace SST::Prototypes::JFM {
+TEST(JFMUserSettingsTests, InvalidLateFieldAndFutureSchemaKeepLastGoodSnapshot) {
+    const auto root=Path::FromResolved(FileSystem::TempDirectoryPath()/"pro-core2-settings-transaction");
+    JFMUserSettingsStore store(root,root);store.SetPlotDefaults(true,true,false,.08f);
+    std::string error;
+    for(const auto* text:{"default_plot_show_legend: true\nfit_monte_carlo: {fit_max_iterations: invalid}",
+                         "schema_version: 99\ndefault_plot_show_legend: true", "default_plot_fit_padding: .nan"}) {
+        ASSERT_TRUE(TextFileIO::Save(store.GetSettingsPath(),text,error))<<error;
+        store.Load();EXPECT_FALSE(store.GetSnapshot().defaultPlotShowLegend);EXPECT_FALSE(store.GetLoadError().empty());
+    }
+    auto invalid=store.GetSnapshot().fitMonteCarlo;invalid.fitMaxIterations=0;
+    EXPECT_THROW(store.SetFitMonteCarloSettings(invalid),std::invalid_argument);
+    EXPECT_GT(store.GetSnapshot().fitMonteCarlo.fitMaxIterations,0);
+}
+}

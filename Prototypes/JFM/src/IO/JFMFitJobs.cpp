@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/Diagnostics/OperationOutcome.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
 #include <thread>
@@ -136,6 +137,9 @@ namespace SST::Prototypes::JFM
 	void JFMFitJob::Execute(JobContext &context)
 	{
 		context.SetStage("JFM fit");
+        std::atomic_size_t completed{0};
+        std::mutex errorMutex;
+        std::optional<StructuredError> firstError;
 		try
 		{
 			while (m_Queue != nullptr)
@@ -151,12 +155,17 @@ namespace SST::Prototypes::JFM
 					if (m_Store == nullptr || !m_Store->IsFitGenerationCurrent(item.ref, item.generation))
 						return;
 					auto result = RunJFMSimplexFit(item.characteristic, item.settings, item.useTunedStart);
-					if (m_EventBus == nullptr)
-						return;
-					if (result)
-						m_EventBus->Queue(FitCompleted{item.ref, item.generation, std::move(result->state), std::move(result->curve)});
-					else
-						m_EventBus->Queue(FitFailed{item.ref, item.generation, result.Error().technicalDetails});
+                    if (result) {
+                        const bool accepted=result->state.accepted;
+                        if (m_EventBus) m_EventBus->Queue(FitCompleted{item.ref,item.generation,std::move(result->state),std::move(result->curve)});
+                        if (accepted) { ++completed; return; }
+                        std::lock_guard guard(errorMutex);
+                        if (!firstError) firstError=MakeOperationError(ErrorCategory::Numerical,"Fit produced an unaccepted solution.","JFM");
+                    } else {
+                        if (m_EventBus) m_EventBus->Queue(FitFailed{item.ref,item.generation,result.Error().technicalDetails});
+                        std::lock_guard guard(errorMutex);
+                        if (!firstError) firstError=result.Error();
+                    }
 				};
                 const bool gpu = std::any_of(items->begin(), items->end(), [](const auto& item) { return item.settings.preferGpu; }) && JFMGpuAvailable();
                 if (gpu) for (std::size_t index = 0; index < items->size(); ++index) fitOne(index);
@@ -164,6 +173,10 @@ namespace SST::Prototypes::JFM
                 context.ThrowIfCancellationRequested();
 				context.SetProgress(static_cast<float>(items->size()), static_cast<float>(items->size()));
 			}
+            if (firstError) {
+                if (completed>0) { auto error=MakeOperationError(ErrorCategory::Partial,firstError->technicalDetails,"JFM"); throw OperationException(std::move(error)); }
+                throw OperationException(std::move(*firstError));
+            }
 		}
 		catch (...)
 		{
@@ -199,7 +212,8 @@ namespace SST::Prototypes::JFM
 	{
 		m_Executed = true;
 		context.SetStage("JFM Monte Carlo");
-		std::string firstError;
+		std::optional<StructuredError> firstError;
+        std::size_t completed=0;
 		std::optional<std::vector<JFMMonteCarloWorkItem>> items;
 		std::size_t index = 0;
 		try
@@ -236,7 +250,7 @@ namespace SST::Prototypes::JFM
                     if (!result || result->state.acceptedCount == 0)
                     {
 						const std::string error = !result ? result.Error().technicalDetails : "No accepted Monte Carlo samples: non-finite objective or model domain.";
-						if (firstError.empty()) firstError = error;
+						if (!firstError) firstError = !result ? result.Error() : MakeOperationError(ErrorCategory::Numerical,error,"JFM");
                         if (m_EventBus != nullptr)
                             m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, error});
 						continue;
@@ -245,12 +259,13 @@ namespace SST::Prototypes::JFM
 					if (!outputPath)
 					{
 						const std::string error = outputPath.Error().userMessage + " " + outputPath.Error().technicalDetails;
-						if (firstError.empty()) firstError = error;
+						if (!firstError) firstError = outputPath.Error();
 						if (m_EventBus != nullptr)
 							m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, error});
 						continue;
 					}
-					result->state.outputPath = std::move(*outputPath);
+					++completed;
+                    result->state.outputPath = std::move(*outputPath);
 					if (m_EventBus != nullptr)
 						m_EventBus->Queue(MonteCarloCompleted{item.ref, item.generation, std::move(result->state), std::move(result->result)});
 				}
@@ -276,11 +291,10 @@ namespace SST::Prototypes::JFM
 			if (m_Queue != nullptr) m_Queue->Reset();
 			throw;
 		}
-		if (!firstError.empty())
-		{
-			context.SetMessage(firstError);
-			throw std::runtime_error(firstError);
-		}
+		if (firstError) {
+            if (completed>0) firstError=MakeOperationError(ErrorCategory::Partial,OperationErrorSummary(*firstError),"JFM");
+            context.SetMessage(OperationErrorSummary(*firstError));
+            throw OperationException(std::move(*firstError));
+        }
 	}
 } // namespace SST::Prototypes::JFM
-

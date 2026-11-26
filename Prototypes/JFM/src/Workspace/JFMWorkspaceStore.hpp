@@ -46,7 +46,7 @@ namespace SST::Prototypes::JFM
 		[[nodiscard]] ProjectHandle CreateProject(std::string name = "Untitled JFM Project");
 		[[nodiscard]] ProjectHandle CreateTransientProject(std::string name = "Transient JFM Project");
 		[[nodiscard]] ProjectHandle AttachProject(JFMProject project, std::optional<Path> path, bool activate = true);
-		[[nodiscard]] ProjectHandle AttachProjectBundle(JFMProjectBundleSnapshot snapshot, std::optional<Path> path, bool activate = true);
+		[[nodiscard]] ProjectHandle AttachProjectBundle(JFMProjectBundleSnapshot snapshot, std::optional<Path> path, bool activate = true, bool recovered = false);
 		[[nodiscard]] std::optional<ProjectHandle> FindProjectByPath(const Path &path) const;
 
 		[[nodiscard]] JFMProject GetProjectSnapshot() const;

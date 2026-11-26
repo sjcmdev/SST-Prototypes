@@ -121,8 +121,6 @@ namespace SST
 			normalized.paths = m_ConfigManager->GetPaths();
 		}
 
-		normalized.window.width = std::max(320, normalized.window.width);
-		normalized.window.height = std::max(240, normalized.window.height);
 		if (normalized.layout.imGuiIniPath.empty() && !normalized.directory.Empty())
 			normalized.layout.imGuiIniPath = ConfigManager::GetLayoutPath(normalized.directory).Utf8();
 
@@ -141,6 +139,7 @@ namespace SST
 			return false;
 		}
 
+		if (!ConfigManager::Validate(config, error)) return false;
 		appliedConfig = normalizeConfigSnapshot(config);
 		DS_LOG_INFO(
 			"Config apply requested: directory={} window={}x{} maximized={} workers={} reserve_urgent={} font_scale={}",
@@ -198,19 +197,11 @@ namespace SST
 		queueAppliedConfigEvents(*m_EventBus, appliedConfig, false);
 		if (event.persist)
 		{
-			std::string contents;
-			if (!YamlCodecFacade::Default().SerializeUserSettings(appliedConfig, contents, error))
-			{
-				m_EventBus->Queue(UserSaveFailed{appliedConfig, error});
-				DS_LOG_ERROR("Config persistence preparation failed: {}", error);
-				return;
-			}
 
 			m_EventBus->Queue(PersistRequested{
 				PersistKind::UserSettings,
 				appliedConfig,
-				ConfigManager::GetUserSettingsPath(appliedConfig.directory),
-				std::move(contents)});
+				ConfigManager::GetUserSettingsPath(appliedConfig.directory)});
 			DS_LOG_INFO("Config persistence queued after successful apply");
 		}
 
@@ -232,19 +223,11 @@ namespace SST
 		}
 
 		queueAppliedConfigEvents(*m_EventBus, appliedConfig, false);
-		std::string contents;
-		if (!YamlCodecFacade::Default().SerializeUserSettings(appliedConfig, contents, error))
-		{
-			m_EventBus->Queue(UserSaveFailed{appliedConfig, error});
-			DS_LOG_ERROR("User config save rejected because serialization failed: {}", error);
-			return;
-		}
 
 		m_EventBus->Queue(PersistRequested{
 			PersistKind::UserSettings,
 			appliedConfig,
-			ConfigManager::GetUserSettingsPath(appliedConfig.directory),
-			std::move(contents)});
+			ConfigManager::GetUserSettingsPath(appliedConfig.directory)});
 		DS_LOG_INFO("User config persistence queued after successful apply");
 	}
 
@@ -263,19 +246,11 @@ namespace SST
 		}
 
 		queueAppliedConfigEvents(*m_EventBus, appliedConfig, false);
-		std::string contents;
-		if (!YamlCodecFacade::Default().SerializeDefaultConfig(appliedConfig, contents, error))
-		{
-			m_EventBus->Queue(DefaultsSaveFailed{appliedConfig, error});
-			DS_LOG_ERROR("Default config save rejected because serialization failed: {}", error);
-			return;
-		}
 
 		m_EventBus->Queue(PersistRequested{
 			PersistKind::Defaults,
 			appliedConfig,
-			ConfigManager::GetDefaultConfigPath(appliedConfig.directory),
-			std::move(contents)});
+			ConfigManager::GetDefaultConfigPath(appliedConfig.directory)});
 		DS_LOG_INFO("Default config persistence queued after successful apply");
 	}
 
@@ -363,15 +338,15 @@ namespace SST
 
 	void ApplicationConfigController::onAppearanceApplyRequested(const EditorUiEvents::AppearanceApplyRequested &event)
 	{
-		m_Config.appearance = event.appearance;
-		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
+		auto candidate=m_Config;candidate.appearance=event.appearance;
+		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{std::move(candidate)});
 		DS_LOG_INFO("Appearance apply requested; user config save queued");
 	}
 
 	void ApplicationConfigController::onThemeLoaded(const EditorUiEvents::ThemeLoaded &event)
 	{
-		m_Config.appearance = event.appearance;
-		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{m_Config});
+		auto candidate=m_Config;candidate.appearance=event.appearance;
+		m_EventBus->Queue(AppEvents::Config::SaveUserRequested{std::move(candidate)});
 		DS_LOG_INFO("Appearance theme loaded; user config save queued: {}", event.path.Utf8());
 	}
 } // namespace SST

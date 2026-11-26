@@ -12,6 +12,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "App/Events/ApplicationConfigEvents.hpp"
+#include "Core/App/Managers/ConfigManager.hpp"
 #include "App/Serialization/YamlCodecFacade.hpp"
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 #include "Core/Input/KeyBindingEvents.hpp"
@@ -173,7 +174,11 @@ namespace SST
 		using namespace AppEvents::Config;
 
 		std::string error;
-		if (!TextFileIO::Save(event.path, event.contents, error))
+		std::string contents;
+        const bool encoded=ConfigManager::Validate(event.config,error) && (event.kind==PersistKind::UserSettings
+            ? YamlCodecFacade::Default().SerializeUserSettings(event.config,contents,error)
+            : YamlCodecFacade::Default().SerializeDefaultConfig(event.config,contents,error));
+        if (!encoded || !TextFileIO::Save(event.path, contents, error))
 		{
 			if (event.kind == PersistKind::UserSettings)
 				m_EventBus->Queue(UserSaveFailed{event.config, error});

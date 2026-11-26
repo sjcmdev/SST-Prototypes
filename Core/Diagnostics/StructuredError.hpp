@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <variant>
@@ -20,7 +21,13 @@ namespace SST
 		Capability,
 		Configuration,
 		Runtime,
-		Cancelled
+		Cancelled,
+		TimedOut,
+		Partial,
+		Numerical,
+		ResourceLimit,
+		OutOfMemory,
+		UnsupportedVersion
 	};
 
 	enum class Severity
@@ -50,6 +57,10 @@ namespace SST
 		std::string userMessage;
 		std::string suggestion;
 		std::string source;
+		std::string fieldPath;
+		std::string runId;
+		std::uint64_t jobId = 0;
+		bool retryable = false;
 
 		StructuredError() = default;
 

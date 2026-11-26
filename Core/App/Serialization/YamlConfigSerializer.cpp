@@ -97,7 +97,7 @@ namespace SST
 				TValue fallback)
 		{
 			const YAML::Node node = FindNode(root, path, legacyFlatKey);
-			if (!node.IsDefined() || node.IsNull())
+			if (!node.IsDefined())
 				return fallback;
 
 			try
@@ -105,9 +105,11 @@ namespace SST
 				return node.as<TValue>();
 			}
 			catch (const YAML::Exception &)
-			{
-				return fallback;
-			}
+            {
+                std::string field;
+                for (auto part : path) { if (!field.empty()) field += '.'; field += part; }
+                throw std::invalid_argument("Invalid settings field '" + field + "': expected the configured scalar type. Correct the value or reset this section.");
+            }
 		}
 
 		template <typename TValue>
@@ -152,7 +154,7 @@ namespace SST
 			if (normalized == "warn" || normalized == "warning")	return LogLevel::Warn;
 			if (normalized == "error")								return LogLevel::Error;
 			if (normalized == "critical")							return  LogLevel::Critical;
-			return fallback;
+			throw std::invalid_argument("Invalid log.level: choose trace, debug, info, warn, error or critical.");
 		}
 
 		std::string LogLevelToString(LogLevel level)
@@ -185,31 +187,23 @@ namespace SST
 			return result;
 		}
 
-		std::array<float, 4> ReadColorNode(const YAML::Node &node, std::array<float, 4> fallback)
-		{
-			if (!node.IsDefined() || node.IsNull())
-				return fallback;
-
-			try
-			{
-				if (node.IsSequence())
-				{
-					std::array<float, 4> result = fallback;
-					const std::size_t count = std::min<std::size_t>(node.size(), result.size());
-					for (std::size_t index = 0; index < count; ++index)
-						result[index] = node[index].as<float>();
-					return result;
-				}
-
-				if (node.IsScalar())
-					return ParseColorList(node.as<std::string>(), fallback);
-			}
-			catch (const YAML::Exception &)
-			{
-			}
-
-			return fallback;
-		}
+        std::array<float, 4> ReadColorNode(const YAML::Node &node, std::array<float, 4> fallback)
+        {
+            if (!node.IsDefined()) return fallback;
+            std::array<float,4> result;
+            if (node.IsSequence() && node.size()==4) {
+                for(std::size_t i=0;i<4;++i) result[i]=node[i].as<float>();
+                return result;
+            }
+            if (node.IsScalar()) {
+                auto text=node.as<std::string>(); std::replace(text.begin(),text.end(),',',' ');
+                std::istringstream stream(text); stream.imbue(std::locale::classic());
+                for(auto& value:result) if(!(stream>>value)) throw std::invalid_argument("Invalid appearance color: expected four RGBA components in [0, 1].");
+                stream>>std::ws;
+                if(stream.eof()) return result;
+            }
+            throw std::invalid_argument("Invalid appearance color: expected exactly four RGBA components in [0, 1].");
+        }
 
 		std::array<float, 3> ReadVec3Node(const YAML::Node &node, std::array<float, 3> fallback)
 		{
@@ -269,7 +263,7 @@ namespace SST
 			std::vector<float> fallback)
 		{
 			const YAML::Node node = FindNode(root, path, legacyFlatKey);
-			if (!node.IsDefined() || node.IsNull())
+			if (!node.IsDefined())
 				return fallback;
 			if (!node.IsSequence())
 				return fallback;
@@ -298,7 +292,7 @@ namespace SST
 			const char *clearColorKey = Name(AppearanceKey::ClearColor);
 
 			YAML::Node node = FindNode(root, {appearanceSection, clearColorKey}, Name(LegacyKey::AppearanceClearColor));
-			if (!node.IsDefined() || node.IsNull())
+			if (!node.IsDefined())
 				node = FindNode(root, {uiSection, clearColorKey});
 			return ReadColorNode(node, fallback);
 		}
@@ -492,8 +486,6 @@ namespace SST
 
 			windowPath[1] = titleKey;
 			config.window.title = ReadString(root, windowPath, Name(LegacyKey::WindowTitle), config.window.title);
-			config.window.width = std::max(320, config.window.width);
-			config.window.height = std::max(240, config.window.height);
 			
 			Path3 fontScalePath = {uiSection, fontScaleKey, fontScaleMinKey};
 			config.ui.fontScaleMin = ReadValue(root, fontScalePath, Name(LegacyKey::UiFontScaleMin), config.ui.fontScaleMin);
@@ -501,8 +493,6 @@ namespace SST
 			fontScalePath[2] = fontScaleMaxKey;
 			config.ui.fontScaleMax = ReadValue(root, fontScalePath, Name(LegacyKey::UiFontScaleMax), config.ui.fontScaleMax);
 
-			if (config.ui.fontScaleMax < config.ui.fontScaleMin)
-				std::swap(config.ui.fontScaleMin, config.ui.fontScaleMax);
 
 			Path3 fontScaleStepPath = {uiSection, fontScaleStepKey, fontScaleStepMinKey};
 			config.ui.fontScaleStepMin = ReadValue(root, fontScaleStepPath, Name(LegacyKey::UiFontScaleStepMin), config.ui.fontScaleStepMin);
@@ -510,8 +500,6 @@ namespace SST
 			fontScaleStepPath[2] = fontScaleStepMaxKey;
 			config.ui.fontScaleStepMax = ReadValue(root, fontScaleStepPath, Name(LegacyKey::UiFontScaleStepMax), config.ui.fontScaleStepMax);
 
-			if (config.ui.fontScaleStepMax < config.ui.fontScaleStepMin)
-				std::swap(config.ui.fontScaleStepMin, config.ui.fontScaleStepMax);
 			fontScaleStepPath[2] = fontScaleStepSliderMaxKey;
 			config.ui.fontScaleStepSliderMax = ReadValue(
 				root,
@@ -519,10 +507,7 @@ namespace SST
 				Name(LegacyKey::UiFontScaleStepSliderMax),
 				config.ui.fontScaleStepSliderMax);
 
-			config.ui.fontScaleStepSliderMax = std::clamp(
-				config.ui.fontScaleStepSliderMax,
-				config.ui.fontScaleStepMin,
-				config.ui.fontScaleStepMax);
+			
 			Path2 uiPath = {uiSection, settingsPreviewEnabledKey};
 			config.ui.settingsPreviewEnabled = ReadValue(
 				root,
@@ -544,7 +529,7 @@ namespace SST
 				jobsPath,
 				Name(LegacyKey::JobsDefaultWorkerThreads),
 				config.jobs.defaultWorkerThreadCount);
-			config.jobs.defaultWorkerThreadCount = std::max(1, defaultWorkerThreadCount);
+			config.jobs.defaultWorkerThreadCount = defaultWorkerThreadCount;
 
 			jobsPath[1] = reserveUrgentWorkerKey;
 			config.jobs.reserveUrgentWorker = ReadValue(
@@ -567,10 +552,11 @@ namespace SST
 				Name(LegacyKey::EventQueueGrowthStep),
 				static_cast<int>(config.eventQueue.growthStep));
 			
+			if(initialCapacity < 32 || growthStep < 32) throw std::invalid_argument("Invalid event_queue: initial_capacity and growth_step must be at least 32.");
 			config.eventQueue.initialCapacity = static_cast<std::size_t>(
-				std::max(initialCapacity, static_cast<int>(RuntimeDefaults::EventQueueMinCapacity)));
+				initialCapacity);
 			config.eventQueue.growthStep = static_cast<std::size_t>(
-				std::max(growthStep, static_cast<int>(RuntimeDefaults::EventQueueMinGrowthStep)));
+				growthStep);
 
 			
 		}
@@ -621,8 +607,6 @@ namespace SST
 			config.window.height = ReadValue(root, windowPath, Name(LegacyKey::WindowHeight), config.window.height);
 			windowPath[1] = maximizedKey;
 			config.window.maximized = ReadValue(root, windowPath, Name(LegacyKey::WindowMaximized), config.window.maximized);
-			config.window.width = std::max(320, config.window.width);
-			config.window.height = std::max(240, config.window.height);
 
 			Path3 fontPath = {uiSection, fontKey, fontPathKey};
 			config.ui.fontPath = ResolvePortablePathValue(
@@ -630,8 +614,6 @@ namespace SST
 				ReadString(root, fontPath, Name(LegacyKey::UiFontPath), config.ui.fontPath));
 			ApplyAppearanceYaml(root, config.appearance);
 
-			config.ui.fontScale = std::clamp( config.ui.fontScale, config.ui.fontScaleMin, config.ui.fontScaleMax);
-			config.ui.fontScaleStep = std::clamp( config.ui.fontScaleStep, config.ui.fontScaleStepMin, config.ui.fontScaleStepMax);
 
 			
 		}
@@ -651,9 +633,18 @@ namespace SST
 					error = "YAML config root must be a mapping: " + path.Utf8();
 					return false;
 				}
-				return true;
-			}
-			catch (const YAML::Exception &exception)
+                if (const auto version = root["schema_version"]; version.IsDefined() && (!version.IsScalar() || version.as<std::string>() != ConfigManager::SchemaVersion)) {
+                    error = "Unsupported settings schema_version. Open this file with the matching SST version or restore a compatible backup; settings were not applied.";
+                    return false;
+                }
+                for (const char *section : {"log", "window", "ui", "jobs", "event_queue", "appearance"})
+                    if (const auto node = root[section]; node.IsDefined() && !node.IsMap()) {
+                        error = std::string("Invalid settings section '") + section + "': expected a mapping. Correct the file or reset this section.";
+                        return false;
+                    }
+                return true;
+            }
+            catch (const YAML::Exception &exception)
 			{
 				error = exception.what();
 				return false;
@@ -1266,9 +1257,18 @@ namespace SST
 					error = "YAML config root must be a mapping";
 					return false;
 				}
-				return true;
-			}
-			catch (const YAML::Exception &exception)
+                if (const auto version = root["schema_version"]; version.IsDefined() && (!version.IsScalar() || version.as<std::string>() != ConfigManager::SchemaVersion)) {
+                    error = "Unsupported settings schema_version. Open this file with the matching SST version or restore a compatible backup; settings were not applied.";
+                    return false;
+                }
+                for (const char *section : {"log", "window", "ui", "jobs", "event_queue", "appearance"})
+                    if (const auto node = root[section]; node.IsDefined() && !node.IsMap()) {
+                        error = std::string("Invalid settings section '") + section + "': expected a mapping. Correct the file or reset this section.";
+                        return false;
+                    }
+                return true;
+            }
+            catch (const YAML::Exception &exception)
 			{
 				error = exception.what();
 				return false;
@@ -1354,6 +1354,12 @@ namespace SST
 		{
 			out << YAML::BeginMap;
 			out << YAML::Key << SchemaVersionKey << YAML::Value << ConfigManager::SchemaVersion;
+            out << YAML::Key << ConfigSchema::Name(ConfigSchema::LegacyKey::UiFontScaleMin) << YAML::Value << config.ui.fontScaleMin;
+            out << YAML::Key << ConfigSchema::Name(ConfigSchema::LegacyKey::UiFontScaleMax) << YAML::Value << config.ui.fontScaleMax;
+            out << YAML::Key << ConfigSchema::Name(ConfigSchema::LegacyKey::UiFontScaleStepMin) << YAML::Value << config.ui.fontScaleStepMin;
+            out << YAML::Key << ConfigSchema::Name(ConfigSchema::LegacyKey::UiFontScaleStepMax) << YAML::Value << config.ui.fontScaleStepMax;
+            out << YAML::Key << ConfigSchema::Name(ConfigSchema::LegacyKey::UiFontScaleStepSliderMax) << YAML::Value << config.ui.fontScaleStepSliderMax;
+
 			out << YAML::Key << LogSection << YAML::Value << YAML::BeginMap;
 			out << YAML::Key << "level" << YAML::Value << ToString(config.log.level);
 			out << YAML::Key << "to_file" << YAML::Value << config.log.toFile;
@@ -1415,8 +1421,14 @@ namespace SST
 		if (!loadYamlText(text, root, error))
 			return false;
 
-		ConfigYaml::ApplyDefaultYaml(root, config);
-		return true;
+        try {
+            auto candidate = config;
+            ConfigYaml::ApplyDefaultYaml(root, candidate);
+            if (!ConfigManager::Validate(candidate, error)) return false;
+            config = std::move(candidate);
+            error.clear();
+            return true;
+        } catch (const std::exception &e) { error = e.what(); return false; }
 	}
 
 	bool YamlConfigSerializer::SerializeUserSettings(
@@ -1425,7 +1437,7 @@ namespace SST
 		std::string &error) const
 	{
 		YAML::Emitter out;
-		emitUserSettings(out, config);
+		emitProfile(out, config);
 		return emitterToString(out, text, error);
 	}
 
@@ -1438,8 +1450,15 @@ namespace SST
 		if (!loadYamlText(text, root, error))
 			return false;
 
-		ConfigYaml::ApplyUserYaml(root, config);
-		return true;
+        try {
+            auto candidate = config;
+            ConfigYaml::ApplyDefaultYaml(root, candidate);
+            ConfigYaml::ApplyUserYaml(root, candidate);
+            if (!ConfigManager::Validate(candidate, error)) return false;
+            config = std::move(candidate);
+            error.clear();
+            return true;
+        } catch (const std::exception &e) { error = e.what(); return false; }
 	}
 
 	bool YamlConfigSerializer::SerializeConfigProfile(
@@ -1461,9 +1480,15 @@ namespace SST
 		if (!loadYamlText(text, root, error))
 			return false;
 
-		ConfigYaml::ApplyDefaultYaml(root, config);
-		ConfigYaml::ApplyUserYaml(root, config);
-		return true;
+        try {
+            auto candidate = config;
+            ConfigYaml::ApplyDefaultYaml(root, candidate);
+		ConfigYaml::ApplyUserYaml(root, candidate);
+            if (!ConfigManager::Validate(candidate, error)) return false;
+            config = std::move(candidate);
+            error.clear();
+            return true;
+        } catch (const std::exception &e) { error = e.what(); return false; }
 	}
 
 	bool YamlConfigSerializer::SerializeAppearanceTheme(
@@ -1488,8 +1513,15 @@ namespace SST
 		if (!loadYamlText(text, root, error))
 			return false;
 
-		ConfigYaml::ApplyAppearanceYaml(root, appearance);
-		return true;
+        try {
+            ApplicationConfig candidate;
+            candidate.appearance = appearance;
+            ConfigYaml::ApplyAppearanceYaml(root, candidate.appearance);
+            if (!ConfigManager::Validate(candidate, error)) return false;
+            appearance = candidate.appearance;
+            error.clear();
+            return true;
+        } catch (const std::exception &e) { error = e.what(); return false; }
 	}
 } // namespace SST
 

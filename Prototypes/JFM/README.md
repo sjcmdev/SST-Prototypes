@@ -104,3 +104,13 @@ unit dependent, and cannot be interpreted as statistical chi-square.
 ## Diagnostics, CLI and build identity
 
 Use **Support ? About Semiconductor Studio** for build identity and **Support ? Export diagnostics?** to preview a redacted local report. `--version` and `--export-diagnostics report.txt` work without opening a window; invalid CLI syntax returns 2. Session/run logs rotate; native crash evidence stays local. See [shared runtime documentation](../../docs/PROFESSIONAL_RUNTIME.md) for retention, crash probes, recovery notices, Python metadata and EXE/PDB manifests.
+
+
+## Settings and crash recovery
+
+Settings validate a complete candidate before applying it. Preferences use a per-user root;
+`SST_PORTABLE_ROOT` explicitly selects a portable root. Settings sections provide a reset preview,
+Undo and Apply & Save. Dirty projects receive a separate recovery snapshot every 30 seconds;
+after interruption, **Recover project** opens a copy for review and Save As. Errors distinguish
+partial completion, cancellation and timeout. See the [shared contracts](../../docs/PROFESSIONAL_RUNTIME.md#error-settings-and-recovery-contracts)
+for paths, Python reset, CLI exit contract v1, retention and safe `.writing` recovery.

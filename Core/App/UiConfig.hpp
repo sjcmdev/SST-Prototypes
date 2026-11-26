@@ -9,6 +9,7 @@ namespace SST
 {
 	struct UIConfig
 	{
+		bool operator==(const UIConfig &) const = default;
 		float fontScale = 1.0f;
 		float fontScaleStep = 0.1f;
 		std::string fontPath;
@@ -23,6 +24,7 @@ namespace SST
 
 	struct AppearanceStateRules
 	{
+		bool operator==(const AppearanceStateRules &) const = default;
 		float neutralHoverLighten = 0.08f;
 		float neutralActiveLighten = 0.04f;
 		float accentHoverLighten = 0.12f;
@@ -38,6 +40,7 @@ namespace SST
 
 	struct AppearanceConfig
 	{
+		bool operator==(const AppearanceConfig &) const = default;
 		std::array<float, 4> backgroundColor = {0.067f, 0.063f, 0.055f, 1.0f};
 		std::array<float, 4> surfaceColor = {0.098f, 0.090f, 0.082f, 1.0f};
 		std::array<float, 4> raisedSurfaceColor = {0.141f, 0.125f, 0.106f, 1.0f};
@@ -64,6 +67,7 @@ namespace SST
 
 	struct ApplicationPaths
 	{
+		bool operator==(const ApplicationPaths &) const = default;
 		Path installRoot;
 		Path appConfigDirectory;
 		Path userConfigDirectory;

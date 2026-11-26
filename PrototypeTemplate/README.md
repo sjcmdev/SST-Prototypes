@@ -42,3 +42,12 @@ resolution remain shared tooling concerns (A1 steps 5?7). No JFM data types are 
 ## Diagnostics, CLI and build identity
 
 Use **Support ? About Semiconductor Studio** for build identity and **Support ? Export diagnostics?** to preview a redacted local report. `--version` and `--export-diagnostics report.txt` work without opening a window; invalid CLI syntax returns 2. Session/run logs rotate; native crash evidence stays local. See [shared runtime documentation](../docs/PROFESSIONAL_RUNTIME.md) for retention, crash probes, recovery notices, Python metadata and EXE/PDB manifests.
+
+
+## Shared settings, errors and recovery
+
+Generated apps inherit transactional settings, explicit user/portable storage roots, section
+reset with preview and Undo, typed terminal errors and a 30-second background recovery policy.
+The template captures input and window layout together; recovery opens an unsaved copy.
+See [shared runtime contracts](../docs/PROFESSIONAL_RUNTIME.md#error-settings-and-recovery-contracts)
+for CLI exit contract v1, Python settings reset and recovery retention.

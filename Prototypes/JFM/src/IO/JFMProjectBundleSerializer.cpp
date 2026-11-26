@@ -679,7 +679,7 @@ namespace SST::Prototypes::JFM
 		{
 			std::unordered_map<CharacteristicId, const JFMMonteCarloBundleRecord *> mcById;
 			for (const JFMMonteCarloBundleRecord &record : snapshot.monteCarloResults)
-				mcById[record.characteristic] = &record;
+				if (record.result) mcById[record.characteristic] = &record;
 
 			YAML::Node root;
 			root["schema_version"] = 1;
@@ -701,8 +701,8 @@ namespace SST::Prototypes::JFM
 					{
 						node["monte_carlo_files"]["parameters"] = McParameterRelativePath(info.id);
 						node["monte_carlo_files"]["noise"] = McNoiseRelativePath(info.id);
-                        node["monte_carlo_files"]["free_parameter_count"] = mcById.at(info.id)->result.freeParameterCount;
-                        node["monte_carlo_files"]["confidence_available"] = mcById.at(info.id)->result.confidenceAvailable;
+                        node["monte_carlo_files"]["free_parameter_count"] = mcById.at(info.id)->result->freeParameterCount;
+                        node["monte_carlo_files"]["confidence_available"] = mcById.at(info.id)->result->confidenceAvailable;
 					}
 				}
 				characteristics.push_back(node);
@@ -739,7 +739,7 @@ namespace SST::Prototypes::JFM
                 if (result) {
                     result->freeParameterCount = ReadOr<int>(files, "free_parameter_count", result->freeParameterCount);
                     result->confidenceAvailable = ReadOr<bool>(files, "confidence_available", info.monteCarlo ? info.monteCarlo->noisePercent > 0.0 : result->confidenceAvailable);
-                    snapshot.monteCarloResults.push_back(JFMMonteCarloBundleRecord{id, std::move(result).Value()});
+                    snapshot.monteCarloResults.push_back(JFMMonteCarloBundleRecord{id, CreateRef<const JFMMonteCarloResult>(std::move(result).Value())});
                 }
 				else
 					warnings.push_back("MC TSV skipped for characteristic " + std::to_string(id) + ": " + result.Error().technicalDetails);
@@ -823,8 +823,9 @@ namespace SST::Prototypes::JFM
 			}
 			for (const JFMMonteCarloBundleRecord &record : snapshot.monteCarloResults)
 			{
+				if (!record.result) return BundleError("Monte Carlo snapshot is missing.","Retain a valid immutable result before saving.");
 				const double noisePercent = mcStateById.contains(record.characteristic) ? mcStateById[record.characteristic].noisePercent : 0.0;
-				auto saved = SaveMonteCarloTsv(root / Path(McParameterRelativePath(record.characteristic)), root / Path(McNoiseRelativePath(record.characteristic)), record.result, noisePercent);
+				auto saved = SaveMonteCarloTsv(root / Path(McParameterRelativePath(record.characteristic)), root / Path(McNoiseRelativePath(record.characteristic)), *record.result, noisePercent);
 				if (!saved)
 					return saved.Error();
 			}

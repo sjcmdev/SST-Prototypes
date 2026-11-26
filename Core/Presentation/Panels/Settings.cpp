@@ -1,4 +1,6 @@
 #include "Core/dspch.hpp"
+#include "Core/App/Managers/ConfigManager.hpp"
+#include "Core/App/Managers/SettingsReset.hpp"
 
 #include <algorithm>
 #include <array>
@@ -185,6 +187,28 @@ namespace SST
 
 		ImGui::BeginChild("SettingsContent", ImVec2(0.0f, 0.0f), true);
 		renderActionBar();
+        if (m_SelectedExtensionTab < 0 && (m_SelectedTab == Tab::System || m_SelectedTab == Tab::Interface || m_SelectedTab == Tab::Viewport)) {
+            if (ImGui::Button("Reset this section...")) ImGui::OpenPopup("Reset settings section");
+            if (ImGui::BeginPopupModal("Reset settings section", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                ImGui::TextUnformatted("Restore built-in defaults for this section? Other settings and project data stay intact.");
+                ImGui::TextUnformatted("Use Undo to restore the previous settings. Apply & save persists the reset.");
+                if (ImGui::Button("Reset section")) {
+                    auto commands=m_CommandRegistry.lock();auto jobs=m_JobSystem.lock();
+                    if(commands && jobs) {
+                        const auto section=m_SelectedTab==Tab::System ? SettingsSection::System : m_SelectedTab==Tab::Interface ? SettingsSection::Interface : SettingsSection::Viewport;
+                        auto result=ResetSettingsSection(*commands,*jobs,m_DraftConfig,section);
+                        if(result) {
+                            m_DraftConfig=std::move(result.Value()); refreshDraftBuffers();m_DraftDirty=true;
+                            m_StatusMessage="Section reset previewed. Apply & save to keep it; Undo to restore.";
+                        } else m_StatusMessage=result.Error().userMessage+" "+result.Error().suggestion;
+                    } else m_StatusMessage="Settings reset is unavailable. Restart the application and retry.";
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
+        }
 
 		if (m_SelectedExtensionTab >= 0 && m_SelectedExtensionTab < static_cast<int>(m_TabExtensions.size()))
 		{
@@ -270,19 +294,9 @@ namespace SST
 		m_DraftConfig.ui.fontPath = m_FontPathBuffer.data();
 	}
 
-	std::string SettingsPanel::configFingerprint(const ApplicationConfig &config) const
-	{
-		YamlConfigSerializer serializer;
-		std::string text;
-		std::string error;
-		if (!serializer.SerializeConfigProfile(config, text, error))
-			return {};
-		return text;
-	}
-
 	bool SettingsPanel::configsEquivalent(const ApplicationConfig &left, const ApplicationConfig &right) const
 	{
-		return configFingerprint(left) == configFingerprint(right);
+		return left == right;
 	}
 
 	void SettingsPanel::pushUndoSnapshot(const ApplicationConfig &snapshot)

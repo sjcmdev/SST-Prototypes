@@ -85,7 +85,7 @@ namespace SST
 		void updateMessage(JobId id, const std::string &message);
 		void appendLog(JobId id, JobLogLevel level, const std::string &message);
 		[[nodiscard]] bool isCancellationRequested(JobId id) const;
-		void markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt);
+		void markFinished(JobId id, JobStatus finalStatus, const std::string &errorMessage, const Time::TimePoint &finishedAt, std::optional<StructuredError> error = std::nullopt);
 
 		// Event publishing boundary.
 		[[nodiscard]] std::optional<Ref<EventBus>> lockEventBus() const;

@@ -1,5 +1,7 @@
 #pragma once
 #include <stop_token>
+#include <optional>
+#include "Core/Diagnostics/StructuredError.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -80,6 +82,7 @@ namespace SST
 		std::string currentStage;
 		std::string currentMessage;
 		std::string errorMessage;
+		std::optional<StructuredError> error;
 		bool cancellationRequested = false;
 		Time::TimePoint createdAt{};
 		Time::TimePoint startedAt{};

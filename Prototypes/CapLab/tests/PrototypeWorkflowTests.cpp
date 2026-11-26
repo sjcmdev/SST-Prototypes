@@ -5,7 +5,35 @@
 #include "TestProject.hpp"
 #include "IO/PrototypePythonBindings.hpp"
 #include "Core/ScientificRuntime/Python/PythonInterpreter.hpp"
+#include "Core/IO/ProjectRecovery.hpp"
+#include "Core/Diagnostics/LocalDiagnostics.hpp"
+#include <thread>
 namespace SST::Prototypes::CapLab {
+TEST(CapLabRecovery, RestartRestoresCopyWithoutOverwritingOriginal) {
+    const auto* configured=std::getenv("SST_CAP_RECOVERY_ROOT");
+    const auto root=configured ? Path::FromResolved(std::filesystem::u8path(configured)) : DiagnosticsDirectory()/"caplab-recovery";
+    const auto original=root.parent_path()/"original.caplab.json";
+    const auto* mode=std::getenv("SST_CAP_RECOVERY_TEST_MODE");
+    std::string text,error;
+    if(!mode || std::string_view(mode)=="write") {
+        Project source;auto object=source.engine->object(source.engine->root());object.name="Original retained";
+        source.engine->change("Original title",{object}).apply(*source.engine);
+        ASSERT_TRUE(TextFileIO::Save(original,Serialize(source),error))<<error;
+        auto snapshot=CloneProject(source);object=snapshot.engine->object(snapshot.engine->root());object.name="Recovered checkpoint";
+        snapshot.engine->change("Unsaved title",{object}).apply(*snapshot.engine);
+        { ProjectRecovery store(root);store.Begin();store.Save(1,7,original,".caplab.json",[&](const Path& target) {
+            if(!TextFileIO::Save(target,Serialize(snapshot),error))throw std::runtime_error(error);
+          });store.End();
+          if(mode) {ASSERT_TRUE(TextFileIO::Save(root/"kill-ready","ready",error));for(;;)std::this_thread::sleep_for(std::chrono::milliseconds(100));}
+        }
+    }
+    const auto candidates=ProjectRecovery::Candidates(root);ASSERT_EQ(candidates.size(),1u);
+    ASSERT_TRUE(TextFileIO::Load(candidates.front().snapshot,text,error));const auto recovered=Parse(text);
+    EXPECT_EQ(recovered.engine->object(recovered.engine->root()).name,"Recovered checkpoint");
+    ASSERT_TRUE(TextFileIO::Load(original,text,error));const auto preserved=Parse(text);
+    EXPECT_EQ(preserved.engine->object(preserved.engine->root()).name,"Original retained");
+    if(!mode)ProjectRecovery::Discard(candidates.front());
+}
 static Path Temp(const char *name) { return Path{FileSystem::TempDirectoryPath()/name}; }
 TEST(CapLabDocument, OlderSaveAndStaleOpenKeepNewerRevision) {
     CapLabDocument d; d.project=FixtureProject(); d.Changed(); const auto revision=d.revision;

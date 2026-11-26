@@ -167,6 +167,7 @@ namespace SST::Prototypes::PlotLab
     }
     void Document::Replace(Ref<pl::Project> next)
     {
+        recovered=false;
         ResetPython();
         if (project)
         {
@@ -231,6 +232,22 @@ namespace SST::Prototypes::PlotLab
 #endif
         InstallPythonEvaluator();
     }
+    Ref<pl::Project> Document::RecoverySnapshot() const
+    {
+        auto snapshot=project->operationSnapshot();
+        std::vector<pl::Object> updates;
+        for (const auto& [id,source]:scriptDrafts) if(snapshot->objects().contains(id)) {
+            auto object=snapshot->object(id); std::get<pl::Script>(object.data).source=source; updates.push_back(std::move(object));
+        }
+        if(!updates.empty()) snapshot->change("Recover script drafts",std::move(updates)).apply(*snapshot);
+        updates.clear();
+        for (const auto& [id,parameters]:scriptParameterDrafts) if(snapshot->objects().contains(id)) {
+            auto object=snapshot->object(id); std::get<pl::Script>(object.data).parameters=parameters; updates.push_back(std::move(object));
+        }
+        auto root=snapshot->object(snapshot->root()); std::get<pl::Folder>(root.data).pythonHistory=pythonHistory; updates.push_back(std::move(root));
+        snapshot->change("Recover Python workspace",std::move(updates)).apply(*snapshot);
+        return snapshot;
+    }
     void Document::Save(const std::filesystem::path &destination)
     {
         for(const auto& [id,source]:scriptDrafts)if(project->objects().contains(id))SaveScript(project->object(id).name,source,id);
@@ -243,6 +260,7 @@ namespace SST::Prototypes::PlotLab
         if(!updates.empty())Execute(project->change("Save Python workspace",std::move(updates)));
         project->save(destination);
         path = destination;
+        recovered=false;
         undo->MarkClean();
         if(pythonTrusted && HasPython()) {
 #if DS_PYTHON_CAPI_AVAILABLE

@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "Core/Presentation/ProjectRecoveryLayer.hpp"
 #include "App/Application.hpp"
 #include "Core/EntryPoint.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
@@ -90,5 +91,24 @@ namespace SST
         // The application owns this layer for the entire editor lifetime.
         editor.RegisterPanel<__PROTOTYPE_NAME__PrototypePanel>(state);
         application.InsertLayerBefore(LayerId::ImGui, std::move(workflow));
+        application.InsertLayerBefore(LayerId::ImGui, CreateUnique<ProjectRecoveryLayer>(services.configDirectory/"recovery",services.jobSystem.lock(),
+            [state](ProjectRecoveryPlan& recovery) {
+                if(state->document.dirty) recovery.Save(1,state->document.revision,state->document.path,".json",[&] {
+                    const auto input=state->document.input;
+                    const auto layout=state->captureWindowLayout ? state->captureWindowLayout() : std::string{};
+                    return [input,layout](const Path& target) {
+                        DocumentJob job(Operation::Save,input,target);job.windowLayout=layout;
+                        JobContext context({}, {}, {}, {}, []{return false;});job.Execute(context);
+                    };
+
+                });
+            },
+            [state](const RecoveryCandidate& candidate) {
+                if(state->document.dirty) throw std::runtime_error("Save the current document before restoring a copy.");
+                DocumentJob job(Operation::Open,{},candidate.snapshot);
+                JobContext context({}, {}, {}, {}, []{return false;}); job.Execute(context);
+                state->document.Edit(job.input); state->document.result=std::move(job.result); state->document.path={};
+                if(state->restoreWindowLayout && !job.windowLayout.empty()) (void)state->restoreWindowLayout(job.windowLayout);
+            }));
     }
 }

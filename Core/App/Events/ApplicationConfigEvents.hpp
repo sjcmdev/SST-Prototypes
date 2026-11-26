@@ -84,18 +84,16 @@ namespace SST::AppEvents::Config
 
 	struct PersistRequested final : public BusEvent
 	{
-		PersistRequested(PersistKind persistKind, ApplicationConfig applicationConfig, Path targetPath, std::string fileContents)
+		PersistRequested(PersistKind persistKind, ApplicationConfig applicationConfig, Path targetPath)
 			: kind(persistKind),
 			  config(std::move(applicationConfig)),
-			  path(std::move(targetPath)),
-			  contents(std::move(fileContents))
+			  path(std::move(targetPath))
 		{
 		}
 
 		PersistKind kind = PersistKind::UserSettings;
 		ApplicationConfig config;
 		Path path;
-		std::string contents;
 	};
 
 	struct SaveDefaultsRequested final : public BusEvent

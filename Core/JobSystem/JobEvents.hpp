@@ -117,6 +117,7 @@ namespace SST
 		std::string name;
 		std::string type;
 		std::string errorMessage;
+        std::optional<StructuredError> error;
 		Time::TimePoint finishedAt{};
 	};
 
