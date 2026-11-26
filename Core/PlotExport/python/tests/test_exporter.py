@@ -1,5 +1,10 @@
 ﻿import copy
 import math
+import json
+import os
+import shutil
+import subprocess
+from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
 
@@ -287,3 +292,50 @@ def test_chart_fill_combines_series_alpha_and_fill_opacity(snapshot, tmp_path, k
     target=tmp_path/'area.eps'
     export_graph(snapshot,target,'eps')
     assert target.read_bytes().startswith(b'%!PS-Adobe-3.0 EPSF-3.0')
+
+
+@pytest.mark.parametrize("format", ["png", "svg", "pdf", "eps"])
+def test_native_outside_legend_is_inside_every_publication_format(tmp_path, format):
+    directory = Path(os.environ.get('AXISUI1_ARTIFACT_DIR', Path(__file__).parent/'fixtures'))
+    native = directory/'cpp-outside-legend.json'
+    if not native.exists(): pytest.skip('Generate native publication geometry with AXISUI1_ARTIFACT_DIR')
+    snapshot = json.loads(native.read_text(encoding='utf8'))
+    before = copy.deepcopy(snapshot)
+    fig = build_figure(snapshot)
+    fig.canvas.draw()
+    x, y, w, h = fig._sst_legend_box_pt
+    width, height = np.array([80, 60])*72/25.4
+    assert x == pytest.approx((snapshot['data_frame'][0]+snapshot['data_frame'][2])*width+6)
+    assert 0 <= x < x+w <= width and 0 <= y < y+h <= height
+    caption = next(t for t in fig.texts if t.get_text() == snapshot['legend_entries'][0]['label'])
+    assert fig.bbox.contains(*caption.get_window_extent().get_points()[0])
+    assert fig.bbox.contains(*caption.get_window_extent().get_points()[1])
+    target = tmp_path/f'outside.{format}'
+    export_graph(snapshot, target, format)
+    assert snapshot == before
+    if format == 'svg':
+        text = target.read_text(encoding='utf8')
+        assert 'sst-legend-frame' in text and '<!-- '+snapshot['legend_entries'][0]['label']+' -->' in text
+    elif format == 'pdf':
+        tool = shutil.which('pdftotext')
+        if tool:
+            text = subprocess.check_output([tool, str(target), '-'], text=True)
+            assert snapshot['legend_entries'][0]['label'] in text
+        else:
+            assert b'/FontFile2' in target.read_bytes()
+    elif format == 'eps':
+        text = target.read_text(encoding='ascii')
+        assert all('/'+c+' glyphshow' in text for c in snapshot['legend_entries'][0]['label'])
+        gs = shutil.which('gswin64c') or shutil.which('mgs') or shutil.which('gs')
+        if gs:
+            raster = tmp_path/'eps.png'
+            subprocess.run([gs, '-q', '-dSAFER', '-dBATCH', '-dNOPAUSE', '-dEPSCrop',
+                            '-sDEVICE=png16m', '-r300', '-sOutputFile='+str(raster), str(target)], check=True)
+        else:
+            raster = None
+    if format == 'png': raster = target
+    if format == 'png' or (format == 'eps' and raster is not None):
+        pixels = np.array(Image.open(raster).convert('RGB'))
+        roi = pixels[int(y*300/72):int((y+h)*300/72), int(x*300/72):int((x+w)*300/72)]
+        assert np.count_nonzero(np.all(roi < 100, axis=2)) > 100  # Frame and caption survive rendering.
+    fig.clear()

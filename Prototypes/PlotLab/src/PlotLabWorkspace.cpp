@@ -24,6 +24,7 @@
 #include <implot_internal.h>
 #include <misc/cpp/imgui_stdlib.h>
 #include <sst/ui/Plot/ImPlotRenderer.hpp>
+#include <sst/ui/Plot/AxisGeometry.hpp>
 #include <sst/ui/Theme/ScientificPlotPreset.hpp>
 
 namespace SST::Prototypes::PlotLab
@@ -1327,7 +1328,15 @@ namespace SST::Prototypes::PlotLab
             if(sst::ui::widgets::BeginCombo("Active layer",p.object(active).name.c_str())){for(auto key:p.children(id))if(ImGui::Selectable((p.object(key).name+"###layer"+std::to_string(key)).c_str(),key==active))Attempt([&]{auto l=std::get<pl::Layer>(p.object(key).data);l.active=true;doc.Execute(pl::editLayer(p,key,std::move(l)));});sst::ui::widgets::EndCombo();}
             for(auto key:p.children(active)){ImGui::PushID(static_cast<int>(key));auto e=p.series(key);const auto c=e.style.color[3]<0?plot::ScientificColor(static_cast<std::size_t>(key)):e.style.color;ImGui::ColorButton("##style",{c[0],c[1],c[2],c[3]},ImGuiColorEditFlags_NoTooltip,{18,18});if(ImGui::IsItemHovered())ImGui::SetTooltip("Group: %s; %s; %s",e.group.c_str(),plot::SeriesNames[static_cast<int>(e.kind)],e.independentStyle?"own style":"group style");ImGui::SameLine();if(ImGui::Selectable(p.object(key).name.c_str(),std::find(editor.selected.begin(),editor.selected.end(),std::to_string(key))!=editor.selected.end()))editor.Select(std::to_string(key),ImGui::GetIO().KeyCtrl);ImGui::PopID();}
             if(ImGui::Button("Add layer"))Attempt([&]{pl::Layer l;l.spec.autoFit=plot::AutoFit::Once;doc.Execute(pl::createLayer(p,id,doc.NextName(5,"Layer",id),std::move(l)));});
-            ImGui::SameLine();if(ImGui::Button("Create inset"))Attempt([&]{doc.Execute(pl::duplicateLayer(p,active,doc.NextName(5,"Inset",id),{.55,.55,.4,.4},&state->views));});
+            ImGui::SameLine();if(ImGui::Button("Create inset"))Attempt([&]{
+                const auto& parent=std::get<pl::Layer>(p.object(active).data);
+                auto data=plot::PlotFrame(parent.spec.legend);
+                if(parent.spec.colorScale && std::any_of(plotsInLayer.begin(),plotsInLayer.end(),[&](auto key){const auto kind=p.series(key).kind;return plot::IsGrid(kind) || plot::Is3D(kind);}))data[2]=std::min(data[2],.66f);
+                const double width=std::min(.4,double(data[2])*.9),height=std::min(.4,double(data[3])*.9);
+                const auto& f=parent.frame;
+                const std::array<double,4> frame={f[0]+f[2]*(data[0]+data[2]-width-.02),f[1]+f[3]*(data[1]+data[3]-height-.02),f[2]*width,f[3]*height};
+                doc.Execute(pl::duplicateLayer(p,active,doc.NextName(5,"Inset",id),frame,&state->views));
+            });
             if(ImGui::IsItemHovered())ImGui::SetTooltip("Duplicates curve references and the current view; zoom inside the inset independently.");
             auto l=std::get<pl::Layer>(p.object(active).data);bool changed=false;const char* labels[]={"Left (page fraction)","Bottom (page fraction)","Width (page fraction)","Height (page fraction)"};
             for(int k=0;k<4;++k)changed|=sst::ui::widgets::Double(labels[k],&l.frame[k],.01f);
@@ -1526,7 +1535,7 @@ namespace SST::Prototypes::PlotLab
             spec.customAxes = true;
             plot::RenderPlot("##graph", spec, entries.data(), entries.size(), view, publication.metrics, publication.size, &editor);
             ImGui::PopFont();
-            if (auto* rendered = ImPlot::GetPlot("##graph"); rendered && rendered->PlotRect.Contains(ImGui::GetMousePos()) && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && ImGui::IsMouseClicked(1) && !plot::IsPlotLegendHovered(editor)) ImGui::OpenPopup("Graph actions");
+            if (auto* rendered = ImPlot::GetPlot("##graph"); rendered && rendered->PlotRect.Contains(ImGui::GetMousePos()) && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && ImGui::IsMouseReleased(1) && !ImGui::IsMouseDragPastThreshold(1) && !plot::IsPlotLegendHovered(editor)) ImGui::OpenPopup("Graph actions");
             if (ImGui::BeginPopup("Graph actions")) {
                 if (ImGui::MenuItem("Add Plot to Layer...")) BeginGraphDialog(id);
                 if(ImGui::MenuItem("Layers / inset..."))layerPopupGraph=id;

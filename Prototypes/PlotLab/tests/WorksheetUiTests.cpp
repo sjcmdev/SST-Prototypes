@@ -688,3 +688,89 @@ TEST_F(WorksheetUi, LayerPopupOpensFromItsToolbarButtonAndStaysOpen) {
         panel.GraphContents(graph);if(frame>=3)EXPECT_TRUE(ImGui::IsPopupOpen("Layers / inset"));ImGui::End();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);
     }
 }
+
+TEST_F(WorksheetUi, HeatmapInsetRoutesEditorsAndZoomToItsOwnLayer) {
+    pl::Table table; table.names={"X","Y","Z"}; table.columns.resize(3);
+    table.columns[0].values=std::vector<double>{0,1,0,1};
+    table.columns[1].values=std::vector<double>{0,0,1,1};
+    table.columns[2].values=std::vector<double>{1,2,3,4};
+    doc->Execute(pl::importTable(*doc->project,doc->project->root(),"Grid",table));
+    auto& p=*doc->project;const auto book=p.children(p.root()).back();const auto grid=p.children(book).front();const auto cols=p.children(grid);
+    pl::MapPlotRequest request;request.worksheet=grid;request.x=cols[0];request.y=cols[1];request.z=cols[2];request.gridColumns=2;
+    doc->Execute(pl::createMapPlot(p,p.root(),request));
+    pl::Id graph=0;for(auto key:p.children(p.root()))if(std::holds_alternative<pl::Graph>(p.object(key).data))graph=key;
+    ASSERT_NE(graph,0u);const auto parent=p.children(graph).front();
+    GraphFrame(graph);GraphFrame(graph);
+    doc->Execute(pl::duplicateLayer(p,parent,"Inset",{.35,.48,.4,.4},&session->views));const auto inset=p.children(graph).back();
+    GraphFrame(graph);GraphFrame(graph);
+    session->plotEditors[inset].axisDialog=plot::AxisSide::Bottom;
+    GraphFrame(graph);GraphFrame(graph);
+    bool visible=false;for(auto* w:GImGui->Windows)if(w->Active && std::string_view(w->Name).starts_with("Axis editor###"))visible=true;
+    EXPECT_TRUE(visible);EXPECT_FALSE(session->plotEditors[graph].axisDialog);
+    session->plotEditors[inset].axisDialog.reset();GraphFrame(graph);GraphFrame(graph);
+    ASSERT_GE(GImPlot->Plots.GetAliveCount(),2);
+    auto* a=GImPlot->Plots.GetByIndex(GImPlot->Plots.GetAliveCount()-2);auto* b=GImPlot->Plots.GetByIndex(GImPlot->Plots.GetAliveCount()-1);
+    auto* child=a->FrameRect.GetWidth()<b->FrameRect.GetWidth()?a:b;
+    const auto parentRange=*session->views[graph].viewport;const auto initial=*session->views[inset].viewport;
+    auto& io=ImGui::GetIO();const auto centre=child->PlotRect.GetCenter();
+    io.AddMousePosEvent(centre.x,centre.y);GraphFrame(graph);io.AddMouseWheelEvent(0,1);GraphFrame(graph);GraphFrame(graph);
+    const auto zoomed=*session->views[inset].viewport;
+    EXPECT_LT(zoomed.maxX-zoomed.minX,initial.maxX-initial.minX);
+    EXPECT_DOUBLE_EQ(session->views[graph].viewport->minX,parentRange.minX);EXPECT_DOUBLE_EQ(session->views[graph].viewport->maxY,parentRange.maxY);
+    const auto start=child->PlotRect.GetTL(),extent=child->PlotRect.GetSize();
+    io.AddMousePosEvent(start.x+extent.x*.2f,start.y+extent.y*.2f);GraphFrame(graph);
+    io.AddMouseButtonEvent(1,true);GraphFrame(graph);
+    for(int i=1;i<=4;++i){io.AddMousePosEvent(start.x+extent.x*(.2f+.15f*i),start.y+extent.y*(.2f+.15f*i));GraphFrame(graph);EXPECT_TRUE(GImGui->OpenPopupStack.empty());}
+    io.AddMouseButtonEvent(1,false);GraphFrame(graph);GraphFrame(graph);
+    const auto boxed=*session->views[inset].viewport;
+    EXPECT_LT(boxed.maxX-boxed.minX,zoomed.maxX-zoomed.minX);EXPECT_TRUE(GImGui->OpenPopupStack.empty());
+    GraphFrame(graph);EXPECT_DOUBLE_EQ(session->views[inset].viewport->minX,boxed.minX);
+    EXPECT_DOUBLE_EQ(session->views[graph].viewport->minX,parentRange.minX);EXPECT_DOUBLE_EQ(session->views[graph].viewport->maxY,parentRange.maxY);
+}
+TEST_F(WorksheetUi, DefaultInsetStaysInsideParentDataFrame) {
+    const auto graph=doc->PlotColumns(sheet,{columns[1]},plot::SeriesKind::Line);
+    auto& p=*doc->project;const auto parent=p.children(graph).front();
+    auto object=p.object(parent);std::get<pl::Layer>(object.data).spec.legend.outside=true;
+    p.change("Outside legend",{object}).apply(p);
+    for(int frame=0;frame<3;++frame){
+        ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({1300,800});ImGui::Begin("Inset create test");
+        if(frame==0)ImGui::OpenPopup("Layers / inset");panel.GraphContents(graph);ImGui::End();ImGui::Render();
+    }
+    auto* popup=GImGui->OpenPopupStack.back().Window;ASSERT_NE(popup,nullptr);
+    // The default button follows the labelled active-layer row and Add layer button.
+    const auto origin=popup->WorkRect.Min;
+    const ImVec2 target(origin.x+ImGui::CalcTextSize("Add layer").x+2*ImGui::GetStyle().FramePadding.x+ImGui::GetStyle().ItemSpacing.x+35,origin.y+ImGui::GetFrameHeightWithSpacing()+ImGui::GetStyle().CellPadding.y*2+ImGui::GetTextLineHeightWithSpacing()+ImGui::GetFrameHeight()*.5f);
+    auto frame=[&]{ImGui::NewFrame();ImGui::SetNextWindowPos({0,0});ImGui::SetNextWindowSize({1300,800});ImGui::Begin("Inset create test");panel.GraphContents(graph);ImGui::End();ImGui::Render();EXPECT_EQ(GImGui->DebugDrawIdConflictsCount,0);};
+    auto& io=ImGui::GetIO();io.AddMousePosEvent(target.x,target.y);frame();io.AddMouseButtonEvent(0,true);frame();io.AddMouseButtonEvent(0,false);frame();
+    ASSERT_EQ(p.children(graph).size(),2u);const auto f=std::get<pl::Layer>(p.object(p.children(graph).back()).data).frame;
+    EXPECT_GE(f[0],.16);EXPECT_LE(f[0]+f[2],.71);EXPECT_GE(f[1],.2);EXPECT_LE(f[1]+f[3],.86);
+}
+
+TEST_F(WorksheetUi, PublicationLegendReservesPageSpaceWithoutChangingPreview) {
+    const auto graph=doc->PlotColumns(sheet,{columns[1]},plot::SeriesKind::Line);
+    auto& p=*doc->project;const auto layer=p.children(graph).front();
+    auto object=p.object(layer);std::get<pl::Layer>(object.data).spec.legend.outside=true;p.change("Outside legend",{object}).apply(p);
+    auto curve=p.object(p.children(layer).front());curve.name="Signal";p.change("Legend label",{curve}).apply(p);
+    GraphFrame(graph);GraphFrame(graph);
+    const auto before=session->views[graph].legendLayout;ASSERT_TRUE(before);EXPECT_GT(before->boxPt[0],80*72/25.4);
+    const auto snapshot=pl::snapshotGraph(p,graph,session->views[graph],std::array<double,2>{80,60});
+    const auto f=*snapshot->frame;const double width=80*72/25.4;
+    const auto& measured=*snapshot->legendLayout;
+    const double font=snapshot->spec.legend.fontSizePt>0?snapshot->spec.legend.fontSizePt:snapshot->fontSizePt;
+    EXPECT_DOUBLE_EQ(measured.fontSizePt,font);
+    EXPECT_NEAR(measured.boxPt[0],(f[0]+f[2])*width+6,1e-4);
+    EXPECT_GE(measured.boxPt[0],0);EXPECT_LE(measured.boxPt[0]+measured.boxPt[2],width-5.9);
+    EXPECT_GE(measured.boxPt[1],0);EXPECT_LE(measured.boxPt[1]+measured.boxPt[3],60*72/25.4);
+    EXPECT_THROW(pl::snapshotGraph(p,graph,session->views[graph],std::array<double,2>{10,10}),std::invalid_argument);
+    EXPECT_EQ(session->views[graph].legendLayout,before);
+    if(const auto* output=std::getenv("AXISUI1_ARTIFACT_DIR")) {
+        std::ofstream out(std::filesystem::path(output)/"cpp-outside-legend.json");out<<pl::snapshotJson(*snapshot);ASSERT_TRUE(out.good());
+    }
+    for(auto position:{plot::LegendPosition::OutsideRight,plot::LegendPosition::OutsideTop,plot::LegendPosition::OutsideBottom}) {
+        auto changed=p.object(layer);std::get<pl::Layer>(changed.data).spec.legend.position=position;p.change("Legend position",{changed}).apply(p);
+        const auto publication=pl::snapshotGraph(p,graph,session->views[graph],std::array<double,2>{80,60});
+        const auto& box=publication->legendLayout->boxPt;
+        EXPECT_GE(box[0],0);EXPECT_LE(box[0]+box[2],width);
+        EXPECT_GE(box[1],0);EXPECT_LE(box[1]+box[3],60*72/25.4);
+    }
+}
