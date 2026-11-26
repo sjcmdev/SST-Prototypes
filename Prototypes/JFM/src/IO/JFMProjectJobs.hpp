@@ -6,8 +6,13 @@
 #include "Core/Utils/Path.hpp"
 #include "Domain/JFMTypes.hpp"
 
+namespace SST { class ProjectRecoveryPlan; }
+
 namespace SST::Prototypes::JFM
 {
+    class JFMWorkspaceStore;
+    void PrepareJFMRecovery(const Ref<JFMWorkspaceStore>& workspace, ProjectRecoveryPlan& recovery);
+
 	class SaveProjectJob final : public IJob
 	{
 	public:

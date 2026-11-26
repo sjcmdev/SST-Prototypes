@@ -6625,55 +6625,37 @@
       "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
       "rule": "text-json",
       "line": 283,
-      "code": "return Json{{\"ok\",false},{\"project\",Json::parse(project)},{\"error\",SST::PythonBoundary::Error(job ? SST::JobError(*job) : SST::MakeOperationError(SST::ErrorCategory::Internal,state.status,\"CapLab\"))}}.dump();",
-      "sha256": "ed14b32d1dccddc10e76b59aa1e1ce8d6bb5fb3198f208c8f28d31ffd5f51133",
-      "count": 1,
-      "reason": "Python binding edge: public JSON/dict input/output adapts typed Core command/job results; no serialization enters the in-process operation."
-    },
-    {
-      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
-      "rule": "text-json",
-      "line": 283,
-      "code": "return Json{{\"ok\",false},{\"project\",Json::parse(project)},{\"error\",SST::PythonBoundary::Error(job ? SST::JobError(*job) : SST::MakeOperationError(SST::ErrorCategory::Internal,state.status,\"CapLab\"))}}.dump();",
-      "sha256": "ed14b32d1dccddc10e76b59aa1e1ce8d6bb5fb3198f208c8f28d31ffd5f51133",
-      "count": 1,
-      "reason": "Python binding edge: public JSON/dict input/output adapts typed Core command/job results; no serialization enters the in-process operation."
+      "code": "return Json{{\"ok\",false},{\"project\",Json::parse(project)},{\"error\",SST::PythonBoundary::LegacyJobError(job,\"plot_failed\",state.status)}}.dump();",
+      "sha256": "6a22fc6f0d9f8ead01f548d66910387d21799a56824a35959c856ccc9779f782",
+      "count": 2,
+      "reason": "Python binding edge: preserves legacy code/message while attaching typed terminal metadata. JSON conversion stays at public Python input/output."
     },
     {
       "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
       "rule": "text-json",
       "line": 328,
-      "code": "{\"error\",SST::PythonBoundary::Error(jobs->GetJob(id) ? SST::JobError(*jobs->GetJob(id)) : SST::MakeOperationError(SST::ErrorCategory::Internal,state.status,\"CapLab\"))}}.dump();",
-      "sha256": "34cb1e0127195f5c23437665cf2ccb64616b9249e0cb68be7ee147c8e0620980",
+      "code": "{\"error\",SST::PythonBoundary::LegacyJobError(jobs->GetJob(id),\"caplab.source\",state.status)}}.dump();",
+      "sha256": "83f095ff8d401ba1406f224632e8697a6f3c66e0bffe16ece462385b52d3fa37",
       "count": 1,
-      "reason": "Python binding edge: public JSON/dict input/output adapts typed Core command/job results; no serialization enters the in-process operation."
+      "reason": "Python binding edge: preserves legacy code/message while attaching typed terminal metadata. JSON conversion stays at public Python input/output."
     },
     {
       "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
       "rule": "text-json",
       "line": 406,
-      "code": "return Json{{\"ok\",false},{\"workspace\",state.WorkspaceJson()},{\"project\",Json::parse(project)},{\"error\",SST::PythonBoundary::Error(job ? SST::JobError(*job) : SST::MakeOperationError(SST::ErrorCategory::Internal,state.status,\"CapLab\"))}}.dump();",
-      "sha256": "307cda4e40b3781a1ffb65d49d8b912311f6304db9dab6b7fb80604abb937dd2",
-      "count": 1,
-      "reason": "Python binding edge: public JSON/dict input/output adapts typed Core command/job results; no serialization enters the in-process operation."
-    },
-    {
-      "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
-      "rule": "text-json",
-      "line": 406,
-      "code": "return Json{{\"ok\",false},{\"workspace\",state.WorkspaceJson()},{\"project\",Json::parse(project)},{\"error\",SST::PythonBoundary::Error(job ? SST::JobError(*job) : SST::MakeOperationError(SST::ErrorCategory::Internal,state.status,\"CapLab\"))}}.dump();",
-      "sha256": "307cda4e40b3781a1ffb65d49d8b912311f6304db9dab6b7fb80604abb937dd2",
-      "count": 1,
-      "reason": "Python binding edge: public JSON/dict input/output adapts typed Core command/job results; no serialization enters the in-process operation."
+      "code": "return Json{{\"ok\",false},{\"workspace\",state.WorkspaceJson()},{\"project\",Json::parse(project)},{\"error\",SST::PythonBoundary::LegacyJobError(job,operation+\"_failed\",state.status)}}.dump();",
+      "sha256": "cfb72d5b14306aab5a9ed4979860b1056ea26bcd5becfc8d6f2e057da488a6c0",
+      "count": 2,
+      "reason": "Python binding edge: preserves legacy code/message while attaching typed terminal metadata. JSON conversion stays at public Python input/output."
     },
     {
       "file": "Prototypes/CapLab/src/IO/PrototypePythonBindings.cpp",
       "rule": "text-json",
       "line": 491,
-      "code": "{\"error\",SST::PythonBoundary::Error(job ? SST::JobError(*job) : SST::MakeOperationError(SST::ErrorCategory::Internal,state.status,\"CapLab\"))}}.dump();",
-      "sha256": "03a8193a8c932fd1f6d13a645fcdf9a9b4c61496d134b241dce879d79eb782ad",
+      "code": "{\"error\",SST::PythonBoundary::LegacyJobError(job,operation==\"analyze\" ? \"analysis_failed\" : operation==\"fit\" ? \"fit_failed\" : (operation==\"walter\" || operation==\"integrate_saved_walter\") ? \"walter_failed\" : \"simulation_failed\",state.status)}}.dump();",
+      "sha256": "5fd2be8e0ef1b2388467304fe74c49fe81c106162caf6b1fd0352dc35fb03d1e",
       "count": 1,
-      "reason": "Python binding edge: public JSON/dict input/output adapts typed Core command/job results; no serialization enters the in-process operation."
+      "reason": "Python binding edge: preserves legacy code/message while attaching typed terminal metadata. JSON conversion stays at public Python input/output."
     }
   ],
   "known-debt": [

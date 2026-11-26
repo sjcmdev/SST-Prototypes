@@ -1,11 +1,21 @@
 """F02/F09/F13 process-boundary acceptance; requires this worktree's MSVC builds."""
 from pathlib import Path
+import hashlib
 import os
 import subprocess
 import time
+import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 BIN = ROOT / 'build/bin/Release-windows-x86_64'
+
+
+@pytest.fixture
+def tmp_path(tmp_path_factory, request):
+    # Recovery generations add nested paths; keep each test's root short and unique.
+    root = tmp_path_factory.getbasetemp() / hashlib.sha256(request.node.nodeid.encode()).hexdigest()[:8]
+    root.mkdir()
+    return root
 
 
 def executable(app):
@@ -98,3 +108,10 @@ def test_python_error_adapter_and_exit_contract_are_json_serializable(tmp_path):
     result = subprocess.run([executable('PlotLab'), '--worksheet-script', script],
                             cwd=ROOT, env=environment(tmp_path), capture_output=True, timeout=45)
     assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+
+
+def test_jfm_kill_during_import_keeps_dirty_document_and_restores_copy(tmp_path):
+    kill_and_restart(tmp_path, 'SST_JFM_RECOVERY_TEST_MODE',
+                     'JFMRecoveryProcess.KillDuringImportKeepsDirtyDocument',
+                     lambda root: (root / 'kill-ready').is_file(), app='JFMTests')
+    assert (tmp_path / 'restored-copy.jfmb').is_dir()

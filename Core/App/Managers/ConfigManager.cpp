@@ -224,8 +224,10 @@ namespace SST
         for (float value : {a.windowRounding,a.frameRounding,a.grabRounding,a.popupRounding,a.scrollbarRounding,a.tabRounding,a.windowPaddingX,a.windowPaddingY,a.framePaddingX,a.framePaddingY,a.itemSpacingX,a.itemSpacingY})
             if (!std::isfinite(value) || value < 0) return reject("appearance", "rounding and spacing must be finite and nonnegative");
         const auto &r = a.stateRules;
-        for (float value : {r.neutralHoverLighten,r.neutralActiveLighten,r.accentHoverLighten,r.accentHoverSaturation,r.accentActiveDarken,r.accentActiveSaturation,r.selectedAlpha,r.selectedHoverAlpha,r.selectedActiveAlpha,r.disabledAlpha,r.disabledBackgroundMix})
+        for (float value : {r.neutralHoverLighten,r.neutralActiveLighten,r.accentHoverLighten,r.accentActiveDarken,r.selectedAlpha,r.selectedHoverAlpha,r.selectedActiveAlpha,r.disabledAlpha,r.disabledBackgroundMix})
             if (!std::isfinite(value) || value < 0 || value > 1) return reject("appearance.state_rules", "values must be finite and in [0, 1]");
+        for (float value : {r.accentHoverSaturation,r.accentActiveSaturation})
+            if (!std::isfinite(value) || value < -1 || value > 1) return reject("appearance.state_rules", "saturation adjustments must be finite and in [-1, 1]");
         error.clear();
         return true;
     }

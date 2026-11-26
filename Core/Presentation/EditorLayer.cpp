@@ -384,7 +384,7 @@ namespace SST
             try { m_InterruptedSessions=PreviousInterruptedSessions(); }
             catch(const std::exception& error) { m_SupportError=error.what(); }
         }
-        if(!m_InterruptedSessions.empty() && !m_ShowDiagnostics && !ImGui::IsPopupOpen("Previous session interrupted")) ImGui::OpenPopup("Previous session interrupted");
+        if(!m_InterruptedSessions.empty() && !m_ShowDiagnostics && !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) ImGui::OpenPopup("Previous session interrupted");
         onMainViewport();
         if(ImGui::BeginPopupModal("Previous session interrupted", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::TextWrapped("A previous session ended unexpectedly. Local crash diagnostics are available if capture succeeded.");

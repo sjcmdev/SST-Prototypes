@@ -9,6 +9,7 @@
 #include <thread>
 #include <chrono>
 #include "Core/IO/TextFileIO.hpp"
+#include "Core/IO/ProjectRecovery.hpp"
 #ifdef _WIN32
 #include <Windows.h>
 #endif
@@ -982,6 +983,75 @@ assert sst_jfm.fit(bad)["error"]["code"] == "jfm.fit.validation"
         first.join(); second.join();
         EXPECT_TRUE(overlapped);
 #endif
+    }
+
+
+    TEST(JFMRecoveryProcess, KillDuringImportKeepsDirtyDocument)
+    {
+        const char* mode=std::getenv("SST_JFM_RECOVERY_TEST_MODE");
+        if(!mode) return;
+        const auto root=Path::FromResolved(std::filesystem::current_path());
+        const auto original=root/"original.jfmb";
+        const auto recoveryRoot=root/"recovery";
+        auto workspace=CreateRef<JFMWorkspaceStore>();
+        if(std::string(mode)=="write") {
+            const auto handle=workspace->CreateProject("Original on disk");
+            ASSERT_TRUE(JFMProjectBundleSerializer::Save(original,*workspace->CaptureProjectBundle(handle)));
+            ASSERT_TRUE(workspace->RenameProject(handle,"Unsaved before import"));
+            ProjectRecovery recovery(recoveryRoot);
+            const auto checkpoint=[&] {
+                ProjectRecoveryPlan plan(recovery); PrepareJFMRecovery(workspace,plan);
+                ASSERT_EQ(plan.writes.size(),1u);
+                recovery.Begin();
+                for(const auto& item:plan.writes)
+                    recovery.Save(item.key,item.revision,item.original,item.extension.c_str(),item.write);
+                recovery.End();
+            };
+            checkpoint();
+            ASSERT_FALSE(::testing::Test::HasFatalFailure());
+            const auto input=root/"import.dat";
+            std::string error;
+            ASSERT_TRUE(TextFileIO::Save(input,"0 0\n1 1\n",error)) << error;
+            auto bus=CreateRef<EventBus>();
+            JFMImportJob importer(bus,{input},Path{},JFMImportOptions{},handle);
+            workspace->SetImportRunning(handle,true);
+            std::promise<void> entered;
+            auto importing=entered.get_future();
+            std::promise<void> release;
+            auto gate=release.get_future().share();
+            std::jthread worker([&] {
+                JobContext context({},[&](const std::string& stage) {
+                    if(stage=="Python import") { entered.set_value(); gate.wait(); }
+                },{},{},[]{return false;});
+                importer.Execute(context);
+            });
+            struct Release { std::promise<void>& signal; ~Release(){signal.set_value();} } unblock{release};
+            ASSERT_EQ(importing.wait_for(std::chrono::seconds(10)),std::future_status::ready);
+            ASSERT_TRUE(workspace->IsImportRunning(handle));
+            checkpoint();
+            ASSERT_FALSE(::testing::Test::HasFatalFailure()); // Unchanged dirty revision must still be visited during import.
+            ASSERT_TRUE(workspace->RenameProject(handle,"Unsaved during import"));
+            checkpoint();
+            ASSERT_FALSE(::testing::Test::HasFatalFailure()); // A new revision must also be captured while the import job is active.
+            ASSERT_TRUE(TextFileIO::Save(root/"kill-ready","import active; checkpoints complete",error)) << error;
+            gate.wait(); // The process harness kills this writer before import completion.
+        } else {
+            const auto candidates=ProjectRecovery::Candidates(recoveryRoot);
+            ASSERT_EQ(candidates.size(),1u);
+            auto restored=JFMProjectBundleSerializer::Load(candidates.front().snapshot);
+            ASSERT_TRUE(restored);
+            EXPECT_EQ(restored->snapshot.project.name,"Unsaved during import");
+            auto disk=JFMProjectBundleSerializer::Load(original);
+            ASSERT_TRUE(disk); EXPECT_EQ(disk->snapshot.project.name,"Original on disk");
+            const auto handle=workspace->AttachProjectBundle(std::move(restored->snapshot),{},true,true);
+            EXPECT_TRUE(workspace->IsDirty(handle));
+            EXPECT_FALSE(workspace->GetProjectPath(handle).has_value());
+            ASSERT_TRUE(JFMProjectBundleSerializer::Save(root/"restored-copy.jfmb",*workspace->CaptureProjectBundle(handle)));
+            disk=JFMProjectBundleSerializer::Load(original);
+            ASSERT_TRUE(disk); EXPECT_EQ(disk->snapshot.project.name,"Original on disk");
+            ProjectRecovery::Discard(candidates.front());
+            EXPECT_TRUE(ProjectRecovery::Candidates(recoveryRoot).empty());
+        }
     }
 
 }

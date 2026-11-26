@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 #include "Core/Presentation/ProjectRecoveryLayer.hpp"
 #include "IO/JFMProjectBundleSerializer.hpp"
+#include "IO/JFMProjectJobs.hpp"
 
 #include "App/Application.hpp"
 #include "App/JFMCommands.hpp"
@@ -150,18 +151,7 @@ namespace SST
 		auto workspace = CreateRef<JFMWorkspaceStore>();
         application.InsertLayerBefore(LayerId::ImGui, CreateUnique<ProjectRecoveryLayer>(runtime.configDirectory/"recovery",runtime.jobSystem.lock(),
             [workspace](ProjectRecoveryPlan& recovery) {
-                for (const auto& info:workspace->GetProjects()) if (info.dirty && !info.importRunning) {
-                    recovery.Save(info.handle,workspace->GetProjectRevision(info.handle),info.path.value_or(Path{}),".jfmb",
-                        [workspace,handle=info.handle] {
-                            auto snapshot=workspace->CaptureProjectBundle(handle);
-                            if (!snapshot) throw std::runtime_error("Cannot capture the JFM document.");
-                            return [snapshot=std::move(*snapshot)](const Path& target) {
-                                const auto saved=JFMProjectBundleSerializer::Save(target,snapshot);
-                                if (!saved) throw std::runtime_error(saved.Error().userMessage+" "+saved.Error().technicalDetails);
-                            };
-
-                        });
-                }
+                PrepareJFMRecovery(workspace,recovery);
             },
             [workspace](const RecoveryCandidate& candidate) {
                 auto restored=JFMProjectBundleSerializer::Load(candidate.snapshot);

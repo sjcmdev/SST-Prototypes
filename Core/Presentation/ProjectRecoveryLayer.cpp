@@ -58,7 +58,10 @@ bool ProjectRecoveryLayer::save(bool wait) {
 void ProjectRecoveryLayer::OnUpdate(float seconds) { if(active)(void)finish(false);elapsed+=seconds;if(elapsed>=30 && !active){elapsed=0;(void)save();} }
 void ProjectRecoveryLayer::OnDetach() { (void)save(true); }
 void ProjectRecoveryLayer::OnImGuiRender() {
-    if (show && !candidates.empty()) { ImGui::OpenPopup("Recover project"); show=false; }
+    if (show && !candidates.empty() && !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)) ImGui::OpenPopup("Recover project");
+    const auto* viewport=ImGui::GetMainViewport();
+    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowPos(viewport->GetWorkCenter(),ImGuiCond_Appearing,ImVec2(.5f,.5f));
     if (ImGui::BeginPopupModal("Recover project",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted("An earlier session left unsaved project changes.");
         ImGui::TextUnformatted("Restore opens a copy. The original project is preserved; use Save As after checking it.");
@@ -89,7 +92,7 @@ void ProjectRecoveryLayer::OnImGuiRender() {
             ImGui::PopID();
         }
         if (!error.empty()) ImGui::TextWrapped("%s",error.c_str());
-        if (candidates.empty() || ImGui::Button("Later") || ImGui::IsKeyPressed(ImGuiKey_Escape)) ImGui::CloseCurrentPopup();
+        if (candidates.empty() || ImGui::Button("Later") || ImGui::IsKeyPressed(ImGuiKey_Escape)) { show=false; ImGui::CloseCurrentPopup(); }
         ImGui::EndPopup();
     } else if (!error.empty()) {
         if (ImGui::Begin("Autosave error")) { ImGui::TextWrapped("%s",error.c_str()); if(ImGui::Button("Dismiss")) error.clear(); } ImGui::End();

@@ -195,7 +195,8 @@ nlohmann::json RunJFMFitRequest(const nlohmann::json &request) {
                 auto error=SST::JobError(*status);
                 error.code=error.category==SST::ErrorCategory::Cancelled ? "jfm.fit.cancelled" : error.category==SST::ErrorCategory::TimedOut ? "jfm.fit.timeout" : error.category==SST::ErrorCategory::Partial ? "jfm.fit.partial" : "jfm.fit.failed";
                 error.userMessage=SST::OperationErrorSummary(error);
-                result = SST::PythonBoundary::Failure(error);
+                if(!result.is_object()) result=Json::object();
+                result.update(SST::PythonBoundary::Failure(error));
                 break;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(1));

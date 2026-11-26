@@ -5,6 +5,10 @@
 #include "Core/App/Serialization/YamlConfigSerializer.hpp"
 #include "Core/Diagnostics/LocalDiagnostics.hpp"
 #include "Core/IO/ProjectRecovery.hpp"
+#include "Core/Presentation/ProjectRecoveryLayer.hpp"
+#include "Core/Logging/Logger.hpp"
+#include <imgui.h>
+#include <imgui_internal.h>
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobOutcome.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
@@ -73,6 +77,26 @@ TEST(CoreSettings, InvalidLateFieldCannotPartiallyApplyAndMissingFieldsKeepDefau
     EXPECT_FALSE(config==before); // Typed comparisons must include fields omitted from old YAML fingerprints.
     auto copy=config;copy.ui.fontScaleMin=0.8f;EXPECT_FALSE(copy==config);
 }
+
+TEST(CoreSettings, PackagedDefaultsAndSignedSaturationAdjustmentsAreValid) {
+    YamlConfigSerializer codec; std::string text,error;
+    const auto root=Path::FromResolved(std::filesystem::path(__FILE__).parent_path().parent_path().parent_path());
+    for(const char* app:{"Prototypes/JFM","Prototypes/CapLab","Prototypes/PlotLab","PrototypeTemplate"}) {
+        auto config=ConfigManager::CreateDefaultConfig(scratch("packaged-defaults"));
+        ASSERT_TRUE(TextFileIO::Load(root/app/"install/app/config/default.yaml",text,error)) << app << ": " << error;
+        EXPECT_TRUE(codec.DeserializeDefaultConfig(text,config,error)) << app << ": " << error;
+    }
+    auto config=ConfigManager::CreateDefaultConfig(scratch("signed-saturation"));
+    ASSERT_TRUE(codec.DeserializeConfigProfile("appearance: {state_rules: {accent_hover_saturation: -0.154, accent_active_saturation: -0.155}}",config,error)) << error;
+    EXPECT_FLOAT_EQ(config.appearance.stateRules.accentHoverSaturation,-0.154f);
+    EXPECT_FLOAT_EQ(config.appearance.stateRules.accentActiveSaturation,-0.155f);
+    const auto before=config;
+    for(const char* text:{"appearance: {state_rules: {accent_hover_saturation: -1.01}}","appearance: {state_rules: {accent_active_saturation: 1.01}}","appearance: {state_rules: {accent_hover_saturation: .nan}}","appearance: {state_rules: {selected_alpha: -0.1}}"}) {
+        EXPECT_FALSE(codec.DeserializeConfigProfile(text,config,error)) << text;
+        EXPECT_EQ(config,before);
+    }
+}
+
 TEST(CoreSettings, ProfileFailurePreservesCallerAndTypedSetterValidatesBeforeCommit) {
     auto manager=CreateRef<ConfigManager>(scratch("profile-install"));std::string error;
     ASSERT_TRUE(manager->Initialize(error))<<error;ConfigProfileStore profiles(manager);
@@ -172,4 +196,62 @@ TEST(CoreSettings, UserPreferencesRoundTripSystemAndLimits) {
     auto loaded=ConfigManager::CreateDefaultConfig(original.directory);
     ASSERT_TRUE(codec.DeserializeUserSettings(text,loaded,error))<<error;
     EXPECT_EQ(loaded.jobs,original.jobs);EXPECT_EQ(loaded.log.level,original.log.level);EXPECT_EQ(loaded.ui,original.ui);EXPECT_EQ(loaded.eventQueue,original.eventQueue);
+}
+
+TEST(CoreRecovery, PromptWaitsForAnotherModalWithoutLosingRecovery) {
+    const auto root=scratch("modal")/std::to_string(GetCurrentProcessId());
+    {
+        ProjectRecovery previous(root/"seed");
+        previous.Begin(); previous.Save(1,1,Path{},".txt",[](const Path& path){save(path,"unsaved");}); previous.End();
+    }
+    std::filesystem::rename((root/"seed"/("session-"+Logger::SessionId())).Native(),(root/"session-interrupted").Native());
+    auto* gui=ImGui::CreateContext();
+    auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1280,720};io.DeltaTime=1.f/60;
+    io.Fonts->AddFontDefault();io.Fonts->Build();
+    auto bus=CreateRef<EventBus>();auto jobs=CreateRef<JobSystem>(bus,1);
+    {
+        ProjectRecoveryLayer layer(root,jobs,[](ProjectRecoveryPlan&){},[](const RecoveryCandidate&){});
+        ImGui::NewFrame();ImGui::Begin("Recovery modal test");
+        ImGui::OpenPopup("Another startup notice");
+        ASSERT_TRUE(ImGui::BeginPopupModal("Another startup notice"));
+        layer.OnImGuiRender();
+        EXPECT_FALSE(ImGui::IsPopupOpen("Recover project"));
+        ImGui::CloseCurrentPopup();ImGui::EndPopup();ImGui::End();ImGui::Render();
+        ImGui::NewFrame();ImGui::Begin("Recovery modal test");
+        layer.OnImGuiRender();
+        EXPECT_TRUE(ImGui::IsPopupOpen("Recover project"));
+        const auto* prompt=ImGui::FindWindowByName("Recover project");
+        ASSERT_NE(prompt,nullptr);
+        EXPECT_EQ(prompt->Viewport,ImGui::GetMainViewport());
+        ImGui::OpenPopup("Late startup notice");
+        ASSERT_TRUE(ImGui::BeginPopupModal("Late startup notice"));
+        ImGui::CloseCurrentPopup();ImGui::EndPopup();
+        ImGui::End();ImGui::Render();
+        ImGui::NewFrame();ImGui::Begin("Recovery modal test");
+        layer.OnImGuiRender();
+        EXPECT_TRUE(ImGui::IsPopupOpen("Recover project"));
+        EXPECT_EQ(ProjectRecovery::Candidates(root).size(),1u);
+        ImGui::End();ImGui::Render();
+    }
+    jobs->Shutdown();ImGui::DestroyContext(gui);
+}
+
+TEST(CoreFiles, AtomicWriteSupportsLongWindowsPathsAndPreservesPreviousDataOnFailure) {
+    auto directory=scratch("long-path").Native();
+    while(directory.native().size()<280) directory/=std::wstring(40,L'x');
+    const auto file=Path::FromResolved(directory/L"project-\u03b1.txt");
+    ASSERT_GT(file.Native().native().size(),260u);
+    std::string error;
+    ASSERT_TRUE(TextFileIO::Save(file,"original",error))<<error;
+    ASSERT_TRUE(TextFileIO::Save(file,"replacement",error))<<error;
+    EXPECT_EQ(load(file),"replacement");
+    EXPECT_FALSE(TextFileIO::Save(file,[](FILE* stream){std::fputs("partial",stream);return false;},error));
+    EXPECT_FALSE(error.empty());
+    EXPECT_EQ(load(file),"replacement");
+    EXPECT_THROW((void)TextFileIO::Save(file,[](FILE*)->bool{throw std::runtime_error("interrupted");},error),std::runtime_error);
+    EXPECT_EQ(load(file),"replacement");
+    std::size_t files=0;
+    const auto extended=std::filesystem::path(L"\\\\?\\"+directory.native());
+    for(const auto& entry:std::filesystem::directory_iterator(extended)) {EXPECT_EQ(entry.path().filename(),file.Native().filename());++files;}
+    EXPECT_EQ(files,1u);
 }

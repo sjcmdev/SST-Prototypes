@@ -3,6 +3,8 @@
 #include "IO/JFMProjectJobs.hpp"
 
 #include "Core/IO/TextFileIO.hpp"
+#include "Core/IO/ProjectRecovery.hpp"
+#include "Workspace/JFMWorkspaceStore.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Events/JFMEvents.hpp"
 #include "IO/JFMPythonImportBridge.hpp"
@@ -14,6 +16,21 @@
 
 namespace SST::Prototypes::JFM
 {
+    void PrepareJFMRecovery(const Ref<JFMWorkspaceStore>& workspace, ProjectRecoveryPlan& recovery)
+    {
+        for (const auto& info:workspace->GetProjects()) if (info.dirty) {
+            recovery.Save(info.handle,workspace->GetProjectRevision(info.handle),info.path.value_or(Path{}),".jfmb",
+                [workspace,handle=info.handle] {
+                    auto snapshot=workspace->CaptureProjectBundle(handle);
+                    if (!snapshot) throw std::runtime_error("Cannot capture the JFM document.");
+                    return [snapshot=std::move(*snapshot)](const Path& target) {
+                        const auto saved=JFMProjectBundleSerializer::Save(target,snapshot);
+                        if (!saved) throw std::runtime_error(saved.Error().userMessage+" "+saved.Error().technicalDetails);
+                    };
+                });
+        }
+    }
+
 	namespace Detail
 	{
 		struct MaterializedSource
