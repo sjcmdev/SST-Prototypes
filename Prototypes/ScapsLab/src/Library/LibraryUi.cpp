@@ -29,7 +29,7 @@ public:
     std::size_t ByteSize() const noexcept override {return sizeof(*this);}
 };
 RevisionRef Find(const State& s,const std::string& library,const std::string& item,std::uint32_t version=0){const auto c=s.libraries.find(library);if(c==s.libraries.end() || !c->second.catalog.Items().contains(item))return {};return c->second.catalog.Find(item,version);}
-void PlotLine(const char* name,const Preview& p) {if(p.x.size()==1)ImPlot::PlotScatter(name,p.x.data(),p.y.data(),1);else if(!p.x.empty())ImPlot::PlotLine(name,p.x.data(),p.y.data(),int(p.x.size()));if(p.y2.size()==p.x.size() && !p.y2.empty())ImPlot::PlotLine((std::string(name)+" / "+p.secondLabel).c_str(),p.x.data(),p.y2.data(),int(p.x.size()));}
+void PlotLine(const char* name,const Preview& p) {if(p.x.size()!=p.y.size())return;if(p.x.size()==1)DrawPlotScatter(name,p.x.data(),p.y.data(),1);else if(!p.x.empty())DrawPlotLine(name,p.x.data(),p.y.data(),int(p.x.size()));if(p.y2.size()==p.x.size() && !p.y2.empty())DrawPlotLine((std::string(name)+" / "+p.secondLabel).c_str(),p.x.data(),p.y2.data(),int(p.x.size()));}
 bool Combo(const char* label,std::string& value,const std::vector<std::string>& choices,const char* tooltip) {
     bool changed=false;widgets::BeginLabelledRow(label);if(ImGui::BeginCombo("##value",value.c_str())){for(std::size_t i=0;i<choices.size();++i){const auto& c=choices[i];ImGui::PushID(int(i));if(ImGui::Selectable(c.empty()?"(any)":c.c_str(),c==value)){value=c;changed=true;}ImGui::PopID();}ImGui::EndCombo();}Help(tooltip);widgets::EndLabelledRow();return changed;
 }
@@ -60,6 +60,7 @@ std::optional<Result<void>> EditorStep(Session& session,bool undo) {
 }
 unsigned Editor::PreviewBuilds() const {unsigned n=0;for(const auto& [key,b]:buffers)n+=b->previewBuilds;return n;}
 void Editor::PreviewPlot(Workflow& w,const EditBuffer& b,const std::string& key,const RevisionRef& compare) {
+    w.plotSession.holdFit=b.gesture.has_value();w.plotSession.smoothFit=true;
     if(BeginSavedPlot(w.plotSession,key.c_str(),ImVec2(-1,195))) {
         ImPlot::SetupAxes(b.preview.xLabel.c_str(),b.preview.yLabel.c_str());ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w.plotSession,key.c_str());
         if(b.gesture)PlotLine("Before",b.reference);

@@ -1,7 +1,15 @@
 #pragma once
 #include "PlotSettings.hpp"
 #include <implot.h>
+#include <span>
+namespace SST {class WindowWorkspace;}
 namespace SST::ScapsLab {
+struct PlotBounds {PlotRange x,y;};
+std::optional<PlotBounds> FitPlotBounds(std::span<const double> x,std::span<const double> y,bool logX=false,bool logY=false);
+void FitDrawnSeries(const char *label,std::span<const double> x,std::span<const double> y);
+void DrawPlotLine(const char *label,const double *x,const double *y,int count,ImPlotSpec spec={});
+void DrawPlotScatter(const char *label,const double *x,const double *y,int count,ImPlotSpec spec={});
+void DrawPlotBars(const char *label,const double *x,const double *y,int count,double width,ImPlotSpec spec={});
 inline const ImVec4 SingleShotColour{.25f,.65f,.95f,1.f};
 inline const ImVec4 LiveCurveColour{.90f,.42f,.07f,1.f};
 inline ImVec4 XColour(const std::string &key,int shade=0) {
@@ -17,7 +25,7 @@ inline ImVec4 XColour(const std::string &key,int shade=0) {
 }
 inline bool DashedQuantity(std::string_view key) {return key=="EFn_eV" || key=="EFp_eV";}
 bool CaptureDockLayout(PlotSettings &settings,bool shuttingDown=false);
-bool ApplyDockLayout(const PlotSettings &settings);
+bool ApplyDockLayout(const PlotSettings &settings,WindowWorkspace &workspace);
 bool BeginSavedPlot(PlotSession &session,const char *title,ImVec2 size);
 void SetupSavedPlot(PlotSession &session,const char *title,bool compactLegend=false);
 bool EndSavedPlot(PlotSession &session,const char *title);

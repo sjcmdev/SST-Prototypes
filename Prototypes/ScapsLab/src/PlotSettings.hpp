@@ -22,7 +22,7 @@ struct PlotRange {
 inline PlotRange PadPlotRange(PlotRange r,double percent,bool log) {
     if(!r.Valid(log)) return r;
     const double m=std::clamp(percent,0.,30.)*.01;
-    if(log) {const double d=(std::log10(r.max)-std::log10(r.min))*m;r.min=std::pow(10.,std::max(-200.,std::log10(r.min)-d));r.max=std::pow(10.,std::min(std::log10(std::numeric_limits<double>::max()),std::log10(r.max)+d));}
+    if(log) {const double d=std::min(.5,(std::log10(r.max)-std::log10(r.min))*m);r.min=std::pow(10.,std::max(-200.,std::log10(r.min)-d));r.max=std::pow(10.,std::min(std::log10(std::numeric_limits<double>::max()),std::log10(r.max)+d));} // margin cannot add many empty decades
     else {const double d=(r.max-r.min)*m;const PlotRange padded{r.min-d,r.max+d};if(padded.Valid())r=padded;}
     return r;
 }

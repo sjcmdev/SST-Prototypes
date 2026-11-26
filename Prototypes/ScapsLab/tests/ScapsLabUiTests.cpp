@@ -187,9 +187,10 @@ Json RunLightViaUi() {
     frame();frame();
     bool pvPlot=false;
     for(int i=0;i<GImPlot->Plots.GetBufSize();++i) if(auto *plot=GImPlot->Plots.GetByIndex(i);plot && plot->HasTitle() && std::string(plot->GetTitle())=="Light I-V") {
-        pvPlot=true;const double jsc=w.Current().result.at("photovoltaic").at("Jsc_A_m2").get<double>()*.1;
-        const double padding=2.2*jsc*w.plotSession.settings.margin*.01;
-        EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Min,-1.2*jsc-padding,1e-10);EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Max,jsc+padding,1e-10);
+        pvPlot=true;double lo=0,hi=0;
+        for(const auto& point:w.Current().Iv()->points)if(point.valid && std::isfinite(point.voltage_V) && std::isfinite(point.J_A_m2)){lo=std::min(lo,point.J_A_m2*.1);hi=std::max(hi,point.J_A_m2*.1);}
+        const double padding=(hi-lo)*w.plotSession.settings.margin*.01;
+        EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Min,lo-padding,1e-10);EXPECT_NEAR(plot->Axes[ImAxis_Y1].Range.Max,hi+padding,1e-10);
         EXPECT_STREQ(plot->GetAxisLabel(plot->Axes[ImAxis_Y1]),"J [mA/cm^2]");
         for(const auto *label:{"Voc","Jsc","MPP"}) {
             bool found=false;for(int item=0;item<plot->Items.GetLegendCount();++item)found|=std::string(plot->Items.GetLegendLabel(item))==label;

@@ -27,6 +27,7 @@ TEST(PlotSettings,LinearAndLogMargin) {
     const auto a=PadPlotRange({10,20},5,false);EXPECT_DOUBLE_EQ(a.min,9.5);EXPECT_DOUBLE_EQ(a.max,20.5);
     const auto b=PadPlotRange({1e-6,1e-2},5,true);EXPECT_NEAR(std::log10(b.min),-6.2,1e-12);EXPECT_NEAR(std::log10(b.max),-1.8,1e-12);
     EXPECT_GE(PadPlotRange({1e-200,1},30,true).min,1e-200);EXPECT_EQ(PadPlotRange({10,20},0,false),(PlotRange{10,20}));
+    const auto wide=PadPlotRange({1e-190,1e8},5,true);EXPECT_NEAR(std::log10(wide.max),8.5,1e-12);EXPECT_NEAR(std::log10(wide.min),-190.5,1e-12);
 }
 TEST(SmoothPlotAxis,UnionAndExpandOnlyDuringGestureAndPending) {
     SmoothPlotAxis axis;axis.Set({0,10},false);
@@ -201,10 +202,10 @@ TEST_F(SavedPlots,ShutdownKeepsLastSubmittedDockSpaceAndRestoresClosedRun) {
     w.settingsPath=(std::filesystem::temp_directory_path()/"slfit1b-shutdown.json").string();w.settings["session"]=session.settings.Write();w.SaveSettings();
     while(w.IoPending()){w.PollIo();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     std::string text,error;ASSERT_TRUE(Io::Load(w.settingsPath,text,error));PlotSettings restored;restored.Read(nlohmann::json::parse(text).at("session"));
-    EXPECT_EQ(restored.layout,good);ASSERT_TRUE(ApplyDockLayout(restored));
+    EXPECT_EQ(restored.layout,good);ASSERT_TRUE(ApplyDockLayout(restored,workspace));
     for(auto panel:{run,recorder})if(const auto it=restored.panels.find(panel->GetTitle());it!=restored.panels.end())panel->SetVisible(it->second);
     EXPECT_FALSE(run->IsVisible());
-    for(int f=0;f<3;++f){frame(true);EXPECT_FALSE(ApplyDockLayout(restored));ImGui::Render();const auto *window=ImGui::FindWindowByName(recorder->ImGuiName().c_str());ASSERT_NE(window->DockNode,nullptr);EXPECT_EQ(ImGui::DockNodeGetRootNode(window->DockNode)->ID,root);EXPECT_FALSE(run->IsVisible());}
+    for(int f=0;f<3;++f){frame(true);EXPECT_FALSE(ApplyDockLayout(restored,workspace));ImGui::Render();const auto *window=ImGui::FindWindowByName(recorder->ImGuiName().c_str());ASSERT_NE(window->DockNode,nullptr);EXPECT_EQ(ImGui::DockNodeGetRootNode(window->DockNode)->ID,root);EXPECT_FALSE(run->IsVisible());}
     Io::Remove(w.settingsPath);workspace.RemoveSettingsHandler();
 }
 TEST_F(SavedPlots,OutsideLegendsKeepPlotInsideItsFrame) {
@@ -243,4 +244,56 @@ TEST(PlotSettingsOwner, BatchLogAxesAndAbsoluteCurrentAreOptionalAndPersistent) 
     PlotSettings initial,s;EXPECT_FALSE(s.Write().contains("batch_absolute"));s.batchAbsolute=true;s.plots["Batch I-V overlay"].log[ImAxis_X1]=true;s.plots["Batch I-V overlay"].log[ImAxis_Y1]=true;s.plots["Stored Actions"].log[ImAxis_Y1]=true;
     Json ui=Json::object();s.WriteChanges(ui,initial);PlotSettings loaded;loaded.Read(ui);EXPECT_EQ(loaded,s);
     s.batchAbsolute=false;s.WriteChanges(ui,loaded);loaded.Read(ui);EXPECT_FALSE(*loaded.batchAbsolute);EXPECT_TRUE(*loaded.plots["Batch I-V overlay"].log[ImAxis_X1]);
+}
+
+TEST(PlotBounds,PairedSamplesFiniteLogEmptyAndMismatch) {
+    const double x[]={-1,0,1,2,3,1e90,NAN,7,8},y[]={-1,2,3,4,INFINITY,NAN,1e90,0,-2};
+    auto bounds=FitPlotBounds(x,y);ASSERT_TRUE(bounds);EXPECT_EQ(bounds->x,(PlotRange{-1,8}));EXPECT_EQ(bounds->y,(PlotRange{-2,4}));
+    bounds=FitPlotBounds(x,y,true,true);ASSERT_TRUE(bounds);EXPECT_EQ(bounds->x,(PlotRange{1,2}));EXPECT_EQ(bounds->y,(PlotRange{3,4}));
+    EXPECT_FALSE(FitPlotBounds({},{}));EXPECT_FALSE(FitPlotBounds(x,{}));const double bad[]={NAN,INFINITY};EXPECT_FALSE(FitPlotBounds(bad,bad));
+    const double zero[]={0,-1};EXPECT_FALSE(FitPlotBounds(zero,zero,true,true));
+    const double tiny[]={1e-190,1e-160};bounds=FitPlotBounds(tiny,tiny,true,true);ASSERT_TRUE(bounds);EXPECT_EQ(bounds->y,(PlotRange{1e-190,1e-160}));
+}
+TEST_F(SavedPlots,EveryPlotFamilyFitsVisibleDrawnPairsAndMarkersOnly) {
+    for(const char* title:{"I-V linear","I-V log","C-V","QE","Bands / contacts","Carriers","G(x), R(x)","DLTS transient","DLCP profile","Contact work functions","Library preview"}) {
+        for(int frame=0;frame<2;++frame) {
+            ImGui::NewFrame();ImGui::SetNextWindowSize({900,700});ImGui::Begin("Fit families");
+            ASSERT_TRUE(BeginSavedPlot(session,title,{-1,500}));ImPlot::SetupAxes("x","y");const bool log=std::string_view(title)=="I-V log" || std::string_view(title)=="Carriers" || std::string_view(title)=="G(x), R(x)";
+            if(log)ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);SetupSavedPlot(session,title);
+            const double x[]={10,20,1e90,NAN},y[]={2,4,NAN,1e54};DrawPlotLine("Primary",x,y,4);
+            const double liveX[]={8,22},liveY[]={1,5};DrawPlotLine("##live",liveX,liveY,2);
+            const double markX=25,markY=6;DrawPlotScatter("Selected",&markX,&markY,1);
+            ImPlot::HideNextItem(true,ImPlotCond_Always);DrawPlotLine("Hidden",x+2,y+3,1);
+            const double deco[]={-1e30,1e30};DrawPlotLine("##decoration",deco,deco,2,{ImPlotProp_Flags,ImPlotItemFlags_NoFit});
+            auto* current=ImPlot::GetCurrentPlot();EndSavedPlot(session,title);
+            EXPECT_NEAR(current->Axes[0].Range.Min,7.15,1e-10)<<title;EXPECT_NEAR(current->Axes[0].Range.Max,25.85,1e-10)<<title;
+            EXPECT_LT(current->Axes[3].Range.Max,10)<<title;EXPECT_GT(current->Axes[3].Range.Max,6)<<title;
+            ImGui::End();ImGui::Render();
+        }
+    }
+}
+TEST_F(SavedPlots,NoStaleFitAfterHidingOrReplacingDataAndLargeConstants) {
+    for(int frame=0;frame<3;++frame) {
+        ImGui::NewFrame();ImGui::SetNextWindowSize({900,700});ImGui::Begin("Fresh fit");ASSERT_TRUE(BeginSavedPlot(session,"Fresh",{-1,500}));ImPlot::SetupAxes("x","y");SetupSavedPlot(session,"Fresh");
+        const double x[]={1,2},y[]={1,2},huge[]={1e54,1e54};
+        ImPlot::HideNextItem(frame>0,ImPlotCond_Always);DrawPlotLine("Old spike",x,huge,2);DrawPlotLine("Now",x,y,2);
+        auto* current=ImPlot::GetCurrentPlot();EndSavedPlot(session,"Fresh");if(frame>0)EXPECT_LT(current->Axes[3].Range.Max,3);
+        ImGui::End();ImGui::Render();
+    }
+}
+TEST_F(SavedPlots,RestoredGlobalLockDoesNotFreezeScapsLabPanels) {
+    auto& io=ImGui::GetIO();io.ConfigFlags|=ImGuiConfigFlags_DockingEnable;PanelRegistry registry;auto workspace=CreateRef<WindowWorkspace>(registry);workspace->InstallSettingsHandler();
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));w.autoRecalculate=w.autoRecalculateBand=false;
+    for(int view=0;view<26;++view){auto panel=CreateRef<Panel>(&w,view);registry.AddExisting(panel,view+1);}
+    ASSERT_TRUE(workspace->Apply({WindowAction::LockLayout}));EXPECT_TRUE(workspace->IsLocked());
+    const std::string saved=ImGui::SaveIniSettingsToMemory();const auto section=saved.find("[SSTWindows][Workspace]");ASSERT_NE(section,std::string::npos);
+    PlotSettings restored;restored.layout=GoodDock+saved.substr(section);ASSERT_TRUE(ApplyDockLayout(restored,*workspace));EXPECT_FALSE(workspace->IsLocked());
+    ImGui::NewFrame();ImGui::DockSpaceOverViewport(ImGui::GetMainViewport()->ID);workspace->RenderOverlays();
+    for(const auto& panel:workspace->Windows()) {
+        panel->Render();const auto* native=ImGui::FindWindowByName(panel->ImGuiName().c_str());ASSERT_NE(native,nullptr);
+        EXPECT_EQ(native->Flags&(ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoDocking),0)<<panel->GetTitle();
+        EXPECT_EQ(native->WindowClass.DockNodeFlagsOverrideSet&(ImGuiDockNodeFlags_NoResize|ImGuiDockNodeFlags_NoUndocking|ImGuiDockNodeFlags_NoDocking),0)<<panel->GetTitle();
+    }
+    ImGui::Render();workspace->RemoveSettingsHandler();
+    ASSERT_TRUE(workspace->Apply({WindowAction::LockLayout}));EXPECT_TRUE(workspace->IsLocked()); // explicit locking remains available
 }

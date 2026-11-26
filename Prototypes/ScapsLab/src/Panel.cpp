@@ -260,18 +260,24 @@ void MovingLine(Workflow& w,const char* key,const char* label,const std::vector<
         if(curve.elapsed<.1)w.plotSession.morphFrame=ImGui::GetFrameCount();
         xx=&curve.x;yy=&curve.y;
     }
-    ImPlot::PlotLine(label,xx->data(),yy->data(),dashed?0:int(xx->size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,weight});
-    if(dashed)if(const auto* item=ImPlot::GetItem(label);item && item->Show){if(ImPlot::FitThisFrame())for(std::size_t i=0;i<xx->size();++i)if(std::isfinite((*xx)[i]) && std::isfinite((*yy)[i]))ImPlot::FitPoint({(*xx)[i],(*yy)[i]});ImPlot::PushPlotClipRect();DashedLine(*xx,*yy,colour);ImPlot::PopPlotClipRect();}
+    std::string ghostLabel;
+    if(const auto* reference=w.Current().ChangePoint();std::string_view(key)!="terminal" && !source && w.Current().selectedRun.empty() && reference && reference->valid) {
+        if(const auto* primary=ImPlot::GetItem(label);primary && !primary->Show)return;
+        colour.w=.5f;weight=1.f;ghostLabel="##live/"+std::string(key);label=ghostLabel.c_str();
+    }
+    const ImPlotSpec style(ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,weight,ImPlotProp_MarkerSize,ImPlotSpec{}.MarkerSize*(ghostLabel.empty()?1.f:.75f),ImPlotProp_MarkerFillColor,colour,ImPlotProp_MarkerLineColor,colour);
+    if(!dashed && xx->size()==1 && std::string_view(key)!="terminal")DrawPlotScatter(label,xx->data(),yy->data(),1,style);
+    else DrawPlotLine(label,xx->data(),yy->data(),dashed?0:int(xx->size()),style);
+    if(dashed)if(const auto* item=ImPlot::GetItem(label);item && item->Show){FitDrawnSeries(label,*xx,*yy);ImPlot::PushPlotClipRect();DashedLine(*xx,*yy,colour,7.f,4.f,weight);ImPlot::PopPlotClipRect();}
 }
-void GhostLine(Workflow& w,const std::string& name,const std::vector<double>& x,const std::vector<double>& y,ImVec4 colour,bool dashed=false) {
-    if(x.empty() || x.size()!=y.size())return;colour.w=.4f;
+void ReferenceProfileLine(Workflow& w,const std::string& name,const std::vector<double>& x,const std::vector<double>& y,ImVec4 colour,bool dashed=false) {
+    if(x.empty() || x.size()!=y.size())return;
     DrawnCurve(w,w.Current(),name.c_str(),x,y);
-    const char* legend="Reference (40%)";const auto* marker=ImPlot::GetItem(legend);
-    if(!marker || !marker->SeenThisFrame)ImPlot::PlotLine(legend,x.data(),y.data(),0,{ImPlotProp_LineColor,ImVec4(.7f,.7f,.7f,.4f),ImPlotProp_LineWeight,1.f});
-    if(!ImPlot::GetItem(legend)->Show)return;
-    const auto label="##change-reference/"+name;
-    ImPlot::PlotLine(label.c_str(),x.data(),y.data(),dashed?0:int(x.size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,1.f});
-    if(dashed)if(const auto* item=ImPlot::GetItem(label.c_str());item && item->Show){if(ImPlot::FitThisFrame())for(std::size_t i=0;i<x.size();++i)if(std::isfinite(x[i]) && std::isfinite(y[i]))ImPlot::FitPoint({x[i],y[i]});ImPlot::PushPlotClipRect();DashedLine(x,y,colour,7.f,4.f,1.f);ImPlot::PopPlotClipRect();}
+    const auto label=name=="n_m3"?"n":name=="p_m3"?"p":name.c_str();
+    const ImPlotSpec style(ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,2.f,ImPlotProp_MarkerFillColor,colour,ImPlotProp_MarkerLineColor,colour);
+    if(!dashed && x.size()==1)DrawPlotScatter(label,x.data(),y.data(),1,style);
+    else DrawPlotLine(label,x.data(),y.data(),dashed?0:int(x.size()),style);
+    if(dashed)if(const auto* item=ImPlot::GetItem(label);item && item->Show){FitDrawnSeries(label,x,y);ImPlot::PushPlotClipRect();DashedLine(x,y,colour);ImPlot::PopPlotClipRect();}
 }
 // Layer type from net doping Nd-Na (graded doping: base value; ponytail: grading ignored, upgrade via ProfileSamples mean).
 // Shaded band + boundary line + name per layer; x in um. Call inside a plot after the data.
@@ -434,7 +440,7 @@ void PlotBadge(const char *text,ImU32 fill,ImU32 ink,int slot) {
 void ReferenceLine(const std::string& name,const std::vector<double>& x,const std::vector<double>& y) {
     if(x.empty() || x.size()!=y.size())return;
     const auto label=name+" (before) reference##change-reference";
-    ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,SingleShotColour,ImPlotProp_LineWeight,2.f});
+    DrawPlotLine(label.c_str(),x.data(),y.data(),int(x.size()),{ImPlotProp_LineColor,SingleShotColour,ImPlotProp_LineWeight,2.f});
 }
 bool IvIsReference(const Workflow&,const DeviceState& d) {return d.changeIv && d.changeIv==d.result.typed();}
 void IvReference(Workflow& w,const DeviceState& d,bool absolute,double scale=1.) {
@@ -445,7 +451,7 @@ void IvReference(Workflow& w,const DeviceState& d,bool absolute,double scale=1.)
 void ProfileReference(Workflow& w,const char* key,double scale=1.) {
     const auto* point=w.Current().ChangePoint();if(!point || !point->valid)return;const auto& p=*point;
     const auto& x=Vec(p.x_m.get(),1e6);const auto& y=Vec(PointColumn(p,key).get(),scale);
-    GhostLine(w,key,x,y,XColour(key),DashedQuantity(key));
+    ReferenceProfileLine(w,key,x,y,XColour(key),DashedQuantity(key));
 }
 void IvStatus(const DeviceState& d) {
     if(d.liveRunning && !d.liveV.empty())ImGui::TextColored(LiveCurveColour,"RUNNING (%zu points so far, exact result follows)",d.liveV.size());
@@ -513,7 +519,7 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
         for(auto &l:e->lines) if((l.modelHash!=hash)!=l.previous) {l.previous=!l.previous;l.name=l.head+(l.previous?" (previous)":"")+l.tail;}
     }
     for(const auto &l:e->lines) {
-        ImPlot::PlotLine(l.name.c_str(),l.x.data(),l.y.data(),int(l.x.size()),{ImPlotProp_LineColor,l.colour,ImPlotProp_LineWeight,l.weight});
+        DrawPlotLine(l.name.c_str(),l.x.data(),l.y.data(),int(l.x.size()),{ImPlotProp_LineColor,l.colour,ImPlotProp_LineWeight,l.weight});
         if(auto *item=ImPlot::GetItem(l.name.c_str());item && !item->Show && !w.Busy())(void)w.Exec(Cmd::UpdateRun::With({{"device_id",device.id},{"run_id",l.runId},{"visible",false}}));
     }
 }
@@ -542,13 +548,15 @@ void HistoryProfiles(Workflow &w,const char *field,double scale=1.,bool gr=false
         }
     }
     for(const auto &l:e->lines) {
-        ImPlot::PlotLine(l.name.c_str(),l.x.data(),l.y.data(),int(l.x.size()),{ImPlotProp_LineColor,ImVec4(l.colour.x,l.colour.y,l.colour.z,dashed?.6f:1.f),ImPlotProp_LineWeight,1.f});
+        DrawPlotLine(l.name.c_str(),l.x.data(),l.y.data(),int(l.x.size()),{ImPlotProp_LineColor,ImVec4(l.colour.x,l.colour.y,l.colour.z,dashed?.6f:1.f),ImPlotProp_LineWeight,1.f});
         if(dashed){ImPlot::PushPlotClipRect();DashedLine(l.x,l.y,l.colour);ImPlot::PopPlotClipRect();}
     }
 }
 bool BeginSavedPlot(Workflow &w,const char *title,ImVec2 size) {
-    const auto &d=w.Current();const bool automatic=w.autoRecalculate || w.autoRecalculateBand || std::any_of(d.runPlan->actions.begin(),d.runPlan->actions.end(),[](const auto& a){return a.onEdit;});
-    auto &s=w.plotSession;s.holdFit=w.dragging || w.dragSeen || w.Busy() || (automatic && (d.needsRecalculate || d.needsBand));
+    const auto &d=w.Current();
+    const bool autoBand=w.autoRecalculateBand || d.runPlan->actions[0].onEdit;
+    const bool autoRun=w.autoRecalculate || std::any_of(d.runPlan->actions.begin()+1,d.runPlan->actions.end(),[](const auto& a){return a.onEdit;});
+    auto &s=w.plotSession;s.holdFit=w.dragging || w.dragSeen || w.Busy() || (autoRun && d.needsRecalculate) || (autoBand && d.needsBand);
     s.liveData=d.changeIv || d.changeBand || !d.changeAc.empty() || !d.previewV.empty() || d.liveRunning;
     s.smoothFit|=s.holdFit || s.liveData;
     return BeginSavedPlot(s,title,size);
@@ -1125,7 +1133,7 @@ void Panel::RenderContent() {
                 ImGui::TextDisabled("Read-only result parameters; drag Work function above to edit.");
                 if(BeginSavedPlot(*w,"Contact work functions",ImVec2(-1,180))) {
                     ImPlot::SetupAxes("Position [um]","phi [eV]");SetupSavedPlot(w->plotSession,"Contact work functions");
-                    ImPlot::PlotLine("Contacts (read-only)",x,phi,2);EndSavedPlot(*w,"Contact work functions");
+                    DrawPlotLine("Contacts (read-only)",x,phi,2);EndSavedPlot(*w,"Contact work functions");
                 }
             }
         } else if(view==3) {
@@ -1171,7 +1179,7 @@ template<class X,class Y> void PlotJson(Workflow &w,const char *title,const char
     // persistent: x/y live inside a stored result, so their vectors come from the plot cache; otherwise (per-frame temporaries) convert here
     std::vector<double> xl,yl;if(!persistent) {if constexpr(std::is_same_v<X,Json>)xl=x.template get<std::vector<double>>();else xl=x;if constexpr(std::is_same_v<Y,Json>)yl=y.template get<std::vector<double>>();else yl=y;if(log) for(auto &v:yl) if(v<=0) v=NAN;}
     const auto &xs=persistent?Vec(x):xl,&ys=persistent?Vec(y,1.,log?1:0):yl;
-    if(BeginSavedPlot(w,title,ImVec2(-1,height))) {ImPlot::SetupAxes(xLabel,yLabel,ImPlotAxisFlags_None,ImPlotAxisFlags_None);if(log) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);SetupSavedPlot(w.plotSession,title);ImPlot::PlotLine(title,xs.data(),ys.data(),int(xs.size()));EndSavedPlot(w,title);}
+    if(BeginSavedPlot(w,title,ImVec2(-1,height))) {ImPlot::SetupAxes(xLabel,yLabel,ImPlotAxisFlags_None,ImPlotAxisFlags_None);if(log) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);SetupSavedPlot(w.plotSession,title);DrawPlotLine(title,xs.data(),ys.data(),int(xs.size()));EndSavedPlot(w,title);}
 }
 }
 bool Panel::OpticalFile(ProjectDraft& draft,std::string& file,scaps_core::OpticalTable& table,const char* extension,const char* label) {
@@ -1254,7 +1262,7 @@ bool Panel::Illumination(ProjectDraft &draft) {
             }
             if(!r.points.empty() || live.liveRunning) {
                 const bool reset=ImGui::Button("Reset PV view");
-                if(ImGui::IsItemHovered())ImGui::SetTooltip("Default range: -1.2 Jsc to +Jsc. Scroll to zoom; drag to pan.");
+                if(ImGui::IsItemHovered())ImGui::SetTooltip("Fit the visible curves and markers. Scroll to zoom; drag to pan.");
                 const auto& cols=IvCols(r.points,false,.1);const auto& x=cols.a;const auto& y=cols.b;
                 const bool valid=r.photovoltaic && r.photovoltaic->status==scaps_core::PhotovoltaicStatus::Converged;
                 const double jsc=valid && std::isfinite(r.photovoltaic->Jsc_Am2)?std::abs(r.photovoltaic->Jsc_Am2)*.1:0.;
@@ -1262,23 +1270,21 @@ bool Panel::Illumination(ProjectDraft &draft) {
     if(BeginSavedPlot(*w,"Light I-V",ImVec2(-1,std::max(280.f,ImGui::GetContentRegionAvail().y-30)))) {
                     ImPlot::SetupAxes("Voltage [V]","J [mA/cm^2]");ImPlot::SetupLegend(ImPlotLocation_NorthWest,ImPlotLegendFlags_Horizontal);
                     if(reset){auto &v=w->plotSession.settings.plots["Light I-V"];v.manual=false;v.ranges={};}
-                    if(x.size()>1 && x.front()!=x.back())FitSavedAxis(w->plotSession,"Light I-V",ImAxis_X1,*std::min_element(x.begin(),x.end()),*std::max_element(x.begin(),x.end()));
-                    if(jsc>0)FitSavedAxis(w->plotSession,"Light I-V",ImAxis_Y1,-1.2*jsc,jsc);
                     SetupSavedPlot(w->plotSession,"Light I-V");
                     HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",false,.1);
                     if(!IvIsReference(*w,live)){MovingLine(*w,"terminal","Light I-V",x,y,live.changeIv?LiveCurveColour:SingleShotColour,2.5f);}
                     IvReference(*w,live,false,.1);PreviewOverlay(*w,live,false,.1);
                     if(estimating) { // markers of the estimate: hollow-style, labelled as such
                         const auto &e=live.pvEstimate;const double zero=0.,sc=-std::abs(e.Jsc_A_m2)*.1,mj=e.Jmpp_A_m2*.1;
-                        if(std::isfinite(e.Voc_V))ImPlot::PlotScatter("Voc (estimate)",&e.Voc_V,&zero,1);
-                        if(std::isfinite(sc))ImPlot::PlotScatter("Jsc (estimate)",&zero,&sc,1);
-                        if(std::isfinite(e.Vmpp_V) && std::isfinite(mj))ImPlot::PlotScatter("MPP (estimate)",&e.Vmpp_V,&mj,1);
+                        if(std::isfinite(e.Voc_V))DrawPlotScatter("Voc (estimate)",&e.Voc_V,&zero,1);
+                        if(std::isfinite(sc))DrawPlotScatter("Jsc (estimate)",&zero,&sc,1);
+                        if(std::isfinite(e.Vmpp_V) && std::isfinite(mj))DrawPlotScatter("MPP (estimate)",&e.Vmpp_V,&mj,1);
                     }
                     if(valid && !estimating) {
                         const double zero=0.,shortCircuit=-jsc;
-                        if(std::isfinite(r.photovoltaic->Voc_V)) {const double voc=-r.photovoltaic->Voc_V;ImPlot::PlotScatter("Voc",&voc,&zero,1);}
-                        if(jsc>0)ImPlot::PlotScatter("Jsc",&zero,&shortCircuit,1);
-                        if(std::isfinite(r.photovoltaic->Vmpp_V) && std::isfinite(r.photovoltaic->Jmpp_Am2)) {const double v=-r.photovoltaic->Vmpp_V,j=r.photovoltaic->Jmpp_Am2*.1;ImPlot::PlotScatter("MPP",&v,&j,1);}
+                        if(std::isfinite(r.photovoltaic->Voc_V)) {const double voc=-r.photovoltaic->Voc_V;DrawPlotScatter("Voc",&voc,&zero,1);}
+                        if(jsc>0)DrawPlotScatter("Jsc",&zero,&shortCircuit,1);
+                        if(std::isfinite(r.photovoltaic->Vmpp_V) && std::isfinite(r.photovoltaic->Jmpp_Am2)) {const double v=-r.photovoltaic->Vmpp_V,j=r.photovoltaic->Jmpp_Am2*.1;DrawPlotScatter("MPP",&v,&j,1);}
                     }EndSavedPlot(*w,"Light I-V");
                 }
             }
@@ -1337,7 +1343,7 @@ bool Panel::Absorption(ProjectDraft &draft) {
     const auto &r=*(w->Current().Band()->optics?w->Current().Band():w->Current().Iv());
     if(r.optics) for(const auto &curve:r.optics->absorption) if(curve.layer_id==draft.layers[selected].id) {
         const auto &x=Vec(curve.wavelength_nm.get()),&y=Vec(curve.alpha_m1.get(),1.,1),&base=Vec(curve.without_tail_m1.get(),1.,1);
-        if(BeginSavedPlot(*w,"Absorption preview",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","alpha [m^-1]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);SetupSavedPlot(w->plotSession,"Absorption preview");ImPlot::PlotLine("With tail",x.data(),y.data(),int(x.size()));ImPlot::PlotLine("Without tail",x.data(),base.data(),int(x.size()));EndSavedPlot(*w,"Absorption preview");}
+        if(BeginSavedPlot(*w,"Absorption preview",ImVec2(-1,300))) {ImPlot::SetupAxes("Wavelength [nm]","alpha [m^-1]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);SetupSavedPlot(w->plotSession,"Absorption preview");DrawPlotLine("With tail",x.data(),y.data(),int(x.size()));DrawPlotLine("Without tail",x.data(),base.data(),int(x.size()));EndSavedPlot(*w,"Absorption preview");}
     }if(wide) ImGui::EndTable();return changed;
 }
 bool Panel::ProfileEditor(scaps_core::Profile& g,double thickness,const std::string& parameter,const scaps_core::Profile* composition,bool diffusion) {
@@ -1502,7 +1508,7 @@ void Panel::Preview(bool sheet) {
     if(!BeginSavedPlot(*w,"Nt(E) and occupancy",ImVec2(-1,std::max(300.f,ImGui::GetContentRegionAvail().y-8)))) {ImPlot::PopStyleVar();return;}
     ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside);
     ImPlot::SetupAxes("E - Ev [eV]",sheet?"Dit [cm^-2/eV]":"Nt [cm^-3/eV]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
-    ImPlot::SetupAxis(ImAxis_Y2,"Occupation fraction",ImPlotAxisFlags_AuxDefault);FitSavedAxis(w->plotSession,"Nt(E) and occupancy",ImAxis_Y2,0,1);SetupSavedPlot(w->plotSession,"Nt(E) and occupancy");
+    ImPlot::SetupAxis(ImAxis_Y2,"Occupation fraction",ImPlotAxisFlags_AuxDefault);SetupSavedPlot(w->plotSession,"Nt(E) and occupancy");
     if(!point.details){EndSavedPlot(*w,"Nt(E) and occupancy");ImPlot::PopStyleVar();return;}
     bool edgesDrawn=false;
     for(const auto &c:point.details->defect_previews) {
@@ -1511,11 +1517,11 @@ void Panel::Preview(bool sheet) {
         const auto id=c.id;const auto *xp=&Vec(c.energy_eV),*yp=&Vec(c.density,sheet?1e-4:1e-6);
         ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);
         if(c.single) {const double e=c.level_energy_eV;ImPlot::PlotInfLines((id+" (discrete Nt)").c_str(),&e,1);if(bool(c.second_level_energy_eV)) {const double e2=*c.second_level_energy_eV;ImPlot::PlotInfLines((id+" second transition").c_str(),&e2,1);}}
-        else ImPlot::PlotLine(id.c_str(),xp->data(),yp->data(),int(xp->size()));
+        else DrawPlotLine(id.c_str(),xp->data(),yp->data(),int(xp->size()));
         if(!edgesDrawn) {const auto &edges=Vec(c.band_edges_eV);for(int e=0;e<int(edges.size());++e) {const char *labels[]={"EvL","EcL","EvR","EcR"};ImPlot::PlotInfLines(sheet?labels[e]:e==0?"Ev":"Ec",&edges[e],1,ImPlotSpec(ImPlotProp_LineColor,ImVec4(.9f,.85f,.4f,1),ImPlotProp_LineWeight,2));ImPlot::TagX(edges[e],ImVec4(.5f,.45f,.15f,1),"%s",sheet?labels[e]:e==0?"Ev":"Ec");}edgesDrawn=true;}
         if(point.status=="Converged") {
             xp=&Vec(c.occupation_energy_eV);yp=&Vec(c.occupation);
-            ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlotSpec occupationStyle(ImPlotProp_LineWeight,2,ImPlotProp_Marker,ImPlotMarker_None);ImPlot::PlotLine((id+(c.amphoteric && c.correlated?" P-":" f")).c_str(),xp->data(),yp->data(),int(xp->size()),occupationStyle);
+            ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlotSpec occupationStyle(ImPlotProp_LineWeight,2,ImPlotProp_Marker,ImPlotMarker_None);DrawPlotLine((id+(c.amphoteric && c.correlated?" P-":" f")).c_str(),xp->data(),yp->data(),int(xp->size()),occupationStyle);
         }
     }EndSavedPlot(*w,"Nt(E) and occupancy");ImPlot::PopStyleVar();
 }
@@ -1655,7 +1661,7 @@ void Panel::Results() {
             ImPlot::SetupAxes("Voltage [V]",absoluteLog?"|J| [A/m^2]":"Signed J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
             if(absoluteLog) ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
             SetupSavedPlot(w->plotSession,"I-V");HistoryLines(*w,w->Current(),"iv","voltage_V","J_A_m2",absoluteLog);if(!Archived(w->Current(),result,"iv") && !IvIsReference(*w,w->Current())){MovingLine(*w,"terminal","I-V",v,j,w->Current().changeIv?LiveCurveColour:SingleShotColour);}
-            IvReference(*w,w->Current(),absoluteLog);PreviewOverlay(*w,w->Current(),absoluteLog);ImPlot::PlotScatter("Selected bias",&v[bias],&j[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});
+            IvReference(*w,w->Current(),absoluteLog);PreviewOverlay(*w,w->Current(),absoluteLog);DrawPlotScatter("Selected bias",&v[bias],&j[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});
             double selectedVoltage=v[bias];
             if(ImPlot::DragLineX(1,&selectedVoltage,ImVec4(1,.7f,.3f,1))) {
                 bias=int(std::min_element(v.begin(),v.end(),[&](double a,double b){return std::abs(a-selectedVoltage)<std::abs(b-selectedVoltage);})-v.begin());
@@ -1665,7 +1671,7 @@ void Panel::Results() {
         }
         return;
     }
-    if(p.status!="Converged" || !std::isfinite(p.J_A_m2)) {ImGui::TextWrapped("This bias did not converge; profiles are masked. Select a converged bias.");return;}
+    if(!p.valid || p.status!="Converged" || !std::isfinite(p.J_A_m2)) {ImGui::TextWrapped("This bias is invalid; profiles are masked. Select a converged bias.");return;}
     const auto &x=Vec(p.x_m.get(),1e6);
     if(x.empty()) return;
     bool contactAnnotations=w->plotSession.settings.contactAnnotations.value_or(false);
@@ -1679,8 +1685,6 @@ void Panel::Results() {
         ImPlot::SetupAxes("Position [um]","Energy [eV]");ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);
         const double end=total*1e6,metal=end*.04;
         FitSavedAxis(w->plotSession,"Bands / contacts",ImAxis_X1,-metal,end+metal);
-        {double lo=1e300,hi=-1e300;for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) for(double v:Vec(PointColumn(p,key).get())) if(std::isfinite(v)){lo=std::min(lo,v);hi=std::max(hi,v);}
-        if(hi>lo){const double m=.05*(hi-lo);FitSavedAxis(w->plotSession,"Bands / contacts",ImAxis_Y1,lo-m,hi+m);}}
         SetupSavedPlot(w->plotSession,"Bands / contacts");
         for(const auto *key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}) {const bool dashed=key[1]=='F';HistoryProfiles(*w,key,1.,false,dashed);if(!selected)ProfileReference(*w,key);if(profileIsReference || Archived(w->Current(),result,profileKind))continue;const auto &y=Vec(PointColumn(p,key).get());if(y.size()==x.size()){MovingLine(*w,key,key,x,y,XColour(key),2.f,dashed);}}
         const auto limits=ImPlot::GetPlotLimits();auto *draw=ImPlot::GetPlotDrawList();
@@ -1695,7 +1699,7 @@ void Panel::Results() {
             if(!ec.empty()) {
                 const double ef=(side?ec.back():ec.front())+chi-phi;const double xx[]={lo,hi},yy[]={ef,ef};
                 const bool flatContact=contactDoc.at(side?"right":"left").value("flat_band",false);
-                ImPlot::PlotLine(side?"Right contact E_F###Right contact Fermi level (phi_m)":"Left contact E_F###Left contact Fermi level (phi_m)",xx,yy,2);
+                DrawPlotLine(side?"##Right contact Fermi level (phi_m)":"##Left contact Fermi level (phi_m)",xx,yy,2,{ImPlotProp_Flags,ImPlotItemFlags_NoFit});
                 if(contactAnnotations)ImPlot::Annotation((lo+hi)/2,ef,ImVec4(1,.8f,.4f,1),ImVec2(side?-90.f:5.f,-28.f),true,"%s contact phi_m = %.3f eV%s",side?"Right":"Left",phi,flatContact?" (flat band)":"");
             }
         }
@@ -1709,7 +1713,7 @@ void Panel::Results() {
     if(BeginSavedPlot(*w,"Carriers",ImVec2(-1,h2))) {
         ImPlot::SetupAxes("Position [um]","Density [cm^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupAxisFormat(ImAxis_Y1,[](double value,char *buffer,int size,void*) {return std::snprintf(buffer,size,"1e%.0f",std::log10(value));});
-        ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);FitSavedAxis(w->plotSession,"Carriers",ImAxis_X1,0,total*1e6);
+        ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
 
 
         SetupSavedPlot(w->plotSession,"Carriers");
@@ -1770,7 +1774,7 @@ bool Panel::DltsControls(RunAction& a,const ProjectDraft& draft) {
     try {
         ValidateDlts(c);const auto filters=DltsFilters(c);const auto calibration=sst::physics::dlts::rateWindow({filters.front()});
         ImGui::Text("Preview: %zu members | first window %.5g s^-1 | gain %.5g",SweepValues(*a.range).size(),calibration.rate_per_s,calibration.gain);
-        if(BeginSavedPlot(*w,"DLTS protocol preview",ImVec2(-1,105))){const double filling=heldBias?c.reverse_V:c.pulse_V;const double t[]={0,c.pulse_width_s,c.pulse_width_s,c.pulse_width_s+c.last_sample_s},v[]={filling,filling,c.reverse_V,c.reverse_V};ImPlot::SetupAxes("Time [s]","Bias [V]");if(a.kind==ActionKind::Optical)ImPlot::SetupAxis(ImAxis_Y2,"Generation [1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,"DLTS protocol preview");ImPlot::PlotLine("Bias",t,v,4);if(a.kind==ActionKind::Optical){const double g[]={c.generation_multiplier,c.generation_multiplier,0,0};ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);ImPlot::PlotLine("Light",t,g,4);}EndSavedPlot(*w,"DLTS protocol preview");}
+        if(BeginSavedPlot(*w,"DLTS protocol preview",ImVec2(-1,105))){const double filling=heldBias?c.reverse_V:c.pulse_V;const double t[]={0,c.pulse_width_s,c.pulse_width_s,c.pulse_width_s+c.last_sample_s},v[]={filling,filling,c.reverse_V,c.reverse_V};ImPlot::SetupAxes("Time [s]","Bias [V]");if(a.kind==ActionKind::Optical)ImPlot::SetupAxis(ImAxis_Y2,"Generation [1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,"DLTS protocol preview");DrawPlotLine("Bias",t,v,4);if(a.kind==ActionKind::Optical){const double g[]={c.generation_multiplier,c.generation_multiplier,0,0};ImPlot::SetAxes(ImAxis_X1,ImAxis_Y2);DrawPlotLine("Light",t,g,4);}EndSavedPlot(*w,"DLTS protocol preview");}
     }catch(const std::exception& e){ImGui::TextWrapped("%s",e.what());}
     return changed;
 }
@@ -1802,16 +1806,16 @@ void Panel::DLTS(Ref<const AcResult> stored) {
     ImGui::Text("%s | T %.5g K | pulse %.5g s | reverse %.5g V | %s",row.id.c_str(),row.temperature_K,row.pulse_width_s,row.reverse_V,row.status.c_str());if(!row.message.empty())ImGui::TextWrapped("%s",row.message.c_str());
     const float h=185;
     const std::string plotPrefix="DLTS "+(stored?stored->kind:std::string(ActionId(ActionKind(dltsAction))));
-    if(BeginSavedPlot(*w,(plotPrefix+" transient").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Time after filling [s]","C [F]");ImPlot::SetupAxisFormat(ImAxis_Y1,"%.15g");ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" transient").c_str());if(row.time_s.size()==row.capacitance_F.size())ImPlot::PlotLine("C(t)",row.time_s.get().data(),row.capacitance_F.get().data(),int(row.time_s.size()));EndSavedPlot(*w,(plotPrefix+" transient").c_str());}
-    if(data && !data->spectra.empty() && BeginSavedPlot(*w,(plotPrefix+" spectrum").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Temperature [K]","S(T) [F]");ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" spectrum").c_str());for(const auto& spectrum:data->spectra)ImPlot::PlotLine(spectrum.id.c_str(),spectrum.temperature_K.data(),spectrum.signal_F.data(),int(spectrum.temperature_K.size()));EndSavedPlot(*w,(plotPrefix+" spectrum").c_str());}
-    if(row.laplace){const auto& l=*row.laplace;if(BeginSavedPlot(*w,(plotPrefix+" Laplace").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Emission rate [s^-1]","Amplitude / log(rate) [F]");ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" Laplace").c_str());ImPlot::PlotLine("Tikhonov",l.rate_per_s.data(),l.density_F_per_log_rate.data(),int(l.rate_per_s.size()));EndSavedPlot(*w,(plotPrefix+" Laplace").c_str());}ImGui::Text("alpha %.5g | RMS residual %.5g F | %zu peaks",l.alpha,l.residuals.rms_residual_F,l.peaks.size());for(const auto& warning:l.warnings)ImGui::TextWrapped("%s",warning.c_str());}
-    if(data && data->arrhenius){const auto& fit=*data->arrhenius;ImGui::Text("Ea = %.6g +/- %.3g eV | sigma = %.6g +/- %.3g cm^2",fit.trap_activation_eV,fit.sigma_activation_eV,fit.sigma_infinity_cm2,fit.sigma_cross_section_cm2);std::vector<double> x,y,line;for(const auto& s:data->spectra)if(s.peaks.size()==1){const auto& p=s.peaks[0];x.push_back(1/p.temperature_K);y.push_back(std::log(p.rate_per_s/(p.temperature_K*p.temperature_K)));line.push_back(std::log(fit.prefactor_per_s_K2)-fit.apparent_activation_eV/(8.617333262145e-5*p.temperature_K));}if(BeginSavedPlot(*w,(plotPrefix+" Arrhenius").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("1/T [K^-1]","ln(e/T^2) [s^-1 K^-2]");ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" Arrhenius").c_str());ImPlot::PlotScatter("Peaks",x.data(),y.data(),int(x.size()));ImPlot::PlotLine("Fit",x.data(),line.data(),int(x.size()));EndSavedPlot(*w,(plotPrefix+" Arrhenius").c_str());}}
+    if(BeginSavedPlot(*w,(plotPrefix+" transient").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Time after filling [s]","C [F]");ImPlot::SetupAxisFormat(ImAxis_Y1,"%.15g");ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" transient").c_str());if(row.time_s.size()==row.capacitance_F.size())DrawPlotLine("C(t)",row.time_s.get().data(),row.capacitance_F.get().data(),int(row.time_s.size()));EndSavedPlot(*w,(plotPrefix+" transient").c_str());}
+    if(data && !data->spectra.empty() && BeginSavedPlot(*w,(plotPrefix+" spectrum").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Temperature [K]","S(T) [F]");ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" spectrum").c_str());for(const auto& spectrum:data->spectra)DrawPlotLine(spectrum.id.c_str(),spectrum.temperature_K.data(),spectrum.signal_F.data(),int(spectrum.temperature_K.size()));EndSavedPlot(*w,(plotPrefix+" spectrum").c_str());}
+    if(row.laplace){const auto& l=*row.laplace;if(BeginSavedPlot(*w,(plotPrefix+" Laplace").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("Emission rate [s^-1]","Amplitude / log(rate) [F]");ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" Laplace").c_str());DrawPlotLine("Tikhonov",l.rate_per_s.data(),l.density_F_per_log_rate.data(),int(l.rate_per_s.size()));EndSavedPlot(*w,(plotPrefix+" Laplace").c_str());}ImGui::Text("alpha %.5g | RMS residual %.5g F | %zu peaks",l.alpha,l.residuals.rms_residual_F,l.peaks.size());for(const auto& warning:l.warnings)ImGui::TextWrapped("%s",warning.c_str());}
+    if(data && data->arrhenius){const auto& fit=*data->arrhenius;ImGui::Text("Ea = %.6g +/- %.3g eV | sigma = %.6g +/- %.3g cm^2",fit.trap_activation_eV,fit.sigma_activation_eV,fit.sigma_infinity_cm2,fit.sigma_cross_section_cm2);std::vector<double> x,y,line;for(const auto& s:data->spectra)if(s.peaks.size()==1){const auto& p=s.peaks[0];x.push_back(1/p.temperature_K);y.push_back(std::log(p.rate_per_s/(p.temperature_K*p.temperature_K)));line.push_back(std::log(fit.prefactor_per_s_K2)-fit.apparent_activation_eV/(8.617333262145e-5*p.temperature_K));}if(BeginSavedPlot(*w,(plotPrefix+" Arrhenius").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes("1/T [K^-1]","ln(e/T^2) [s^-1 K^-2]");ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" Arrhenius").c_str());DrawPlotScatter("Peaks",x.data(),y.data(),int(x.size()));DrawPlotLine("Fit",x.data(),line.data(),int(x.size()));EndSavedPlot(*w,(plotPrefix+" Arrhenius").c_str());}}
     if(stored && stored->runPlan) {
         int storedAction=6;for(int i=6;i<kActionCount;++i)if(stored->kind==ActionId(ActionKind(i)))storedAction=i;const auto& config=stored->runPlan->actions[storedAction].dlts;
         if(config.series==DltsSeries::PulseWidth || config.series==DltsSeries::Depth) {
             std::vector<double> x,y,fit;
             for(const auto& t:rows)if(t->status=="converged" && !t->amplitude_F.empty()){x.push_back(config.series==DltsSeries::PulseWidth?t->pulse_width_s:t->depth_m*1e6);y.push_back(config.series==DltsSeries::PulseWidth?t->amplitude_F.front():t->density_valid?t->trap_density_m3:NAN);if(data && data->capture)fit.push_back(data->capture->amplitude_F*(-std::expm1(-data->capture->rate_per_s*t->pulse_width_s)));}
-            if(BeginSavedPlot(*w,(plotPrefix+" profile").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes(config.series==DltsSeries::PulseWidth?"Filling width [s]":"Depletion depth [um]",config.series==DltsSeries::PulseWidth?"Amplitude [F]":"N_T [m^-3]");if(config.series==DltsSeries::PulseWidth)ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" profile").c_str());ImPlot::PlotLine("Members",x.data(),y.data(),int(x.size()));if(fit.size()==x.size())ImPlot::PlotLine("Capture fit",x.data(),fit.data(),int(x.size()));EndSavedPlot(*w,(plotPrefix+" profile").c_str());}
+            if(BeginSavedPlot(*w,(plotPrefix+" profile").c_str(),ImVec2(-1,h))){ImPlot::SetupAxes(config.series==DltsSeries::PulseWidth?"Filling width [s]":"Depletion depth [um]",config.series==DltsSeries::PulseWidth?"Amplitude [F]":"N_T [m^-3]");if(config.series==DltsSeries::PulseWidth)ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);ImPlot::SetupLegend(ImPlotLocation_East,ImPlotLegendFlags_Outside);SetupSavedPlot(w->plotSession,(plotPrefix+" profile").c_str());DrawPlotLine("Members",x.data(),y.data(),int(x.size()));if(fit.size()==x.size())DrawPlotLine("Capture fit",x.data(),fit.data(),int(x.size()));EndSavedPlot(*w,(plotPrefix+" profile").c_str());}
         }
     }
     if(data && data->capture)ImGui::Text("Capture sigma %.6g m^2 | rate %.6g s^-1 | RMS %.4g F",data->capture->sigma_m2,data->capture->rate_per_s,data->capture->rms_F);
@@ -1858,9 +1862,9 @@ void Panel::DLCP(Ref<const AcResult> stored) {
     });
     if(BeginSavedPlot(*w,"DLCP density",ImVec2(-1,height))) {
         ImPlot::SetupAxes("x = epsilon A/C0 (DLCP), A/C (CV) [um]","N [m^-3]");ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);ImPlot::SetupAxisFormat(ImAxis_Y1,"%.4g");if(!ticks.a.empty())ImPlot::SetupAxisTicks(ImAxis_Y1,ticks.a.data(),int(ticks.a.size()),nullptr,true);SetupSavedPlot(w->plotSession,"DLCP density");
-        ImPlot::PlotLine("N_DL (DLCP)",dl.a.data(),dl.b.data(),int(dl.a.size()),{ImPlotProp_Marker,ImPlotMarker_Circle});
-        ImPlot::PlotLine("N_CV (C-V)",cv.a.data(),cv.b.data(),int(cv.a.size()),{ImPlotProp_Marker,ImPlotMarker_Square});
-        ImPlot::PlotScatter("Current point",&dl.a[dlcpSelected],&dl.b[dlcpSelected],1,{ImPlotProp_MarkerSize,7.f});
+        DrawPlotLine("N_DL (DLCP)",dl.a.data(),dl.b.data(),int(dl.a.size()),{ImPlotProp_Marker,ImPlotMarker_Circle});
+        DrawPlotLine("N_CV (C-V)",cv.a.data(),cv.b.data(),int(cv.a.size()),{ImPlotProp_Marker,ImPlotMarker_Square});
+        DrawPlotScatter("Current point",&dl.a[dlcpSelected],&dl.b[dlcpSelected],1,{ImPlotProp_MarkerSize,7.f});
         if(ImPlot::IsPlotHovered() && ImGui::IsMouseClicked(0)) {
             float nearest=144;const auto mouse=ImGui::GetMousePos();for(int i=0;i<int(dl.a.size());++i)if(std::isfinite(dl.a[i]) && dl.b[i]>0){const auto p=ImPlot::PlotToPixels(dl.a[i],dl.b[i]);const float dx=p.x-mouse.x,dy=p.y-mouse.y;const float dist=dx*dx+dy*dy;if(dist<nearest){nearest=dist;dlcpSelected=i;}}
         }
@@ -1871,8 +1875,8 @@ void Panel::DLCP(Ref<const AcResult> stored) {
     if(BeginSavedPlot(*w,"DLCP capacitance fit",ImVec2(-1,height))) {
         ImPlot::SetupAxes("Vpp [V] (peak-to-peak)","C [F]");SetupSavedPlot(w->plotSession,"DLCP capacitance fit");
         const auto& p=chosen;const auto& c=Derived(p.samples,702,[&](Cols& c){for(const auto& s:p.samples){c.a.push_back(s.amplitude_V);c.b.push_back(s.C_F);c.c.push_back(p.C0_F+s.amplitude_V*(p.C1_F_per_V+s.amplitude_V*p.C2_F_per_V2));}});
-        ImPlot::PlotScatter("C(Vpp)",c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_MarkerSize,5.f});
-        ImPlot::PlotLine("C0 + C1 Vpp + C2 Vpp^2",c.a.data(),c.c.data(),int(c.a.size()),{ImPlotProp_LineWeight,3.f});
+        DrawPlotScatter("C(Vpp)",c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_MarkerSize,5.f});
+        DrawPlotLine("C0 + C1 Vpp + C2 Vpp^2",c.a.data(),c.c.data(),int(c.a.size()),{ImPlotProp_LineWeight,3.f});
         EndSavedPlot(*w,"DLCP capacitance fit");
     }
     if(ImGui::BeginTable("DLCP points",7,ImGuiTableFlags_Borders|ImGuiTableFlags_RowBg|ImGuiTableFlags_ScrollX|ImGuiTableFlags_ScrollY,ImVec2(0,std::max(110.f,ImGui::GetContentRegionAvail().y)))) {
@@ -2228,7 +2232,7 @@ void Panel::Compare() {
             IvReference(*w,*d,absoluteLog);if(d->id==w->project.active_device) PreviewOverlay(*w,*d,absoluteLog);
             if(d->id==w->project.active_device && !x.empty()) {
                 int bias=std::clamp(d->selectedBias,0,int(x.size())-1);double voltage=x[bias];
-                ImPlot::PlotScatter("Selected bias",&x[bias],&y[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});
+                DrawPlotScatter("Selected bias",&x[bias],&y[bias],1,{ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,6.f});
                 const auto nearest=[&](double at){return int(std::min_element(x.begin(),x.end(),[&](double a,double b){return std::abs(a-at)<std::abs(b-at);})-x.begin());};
                 if(ImPlot::DragLineX(1,&voltage,ImVec4(c[0],c[1],c[2],c[3]))) bias=nearest(voltage);
                 else if(ImPlot::IsPlotHovered() && ImGui::IsMouseReleased(0) && ImGui::GetIO().MouseDragMaxDistanceSqr[0]<16.f) bias=nearest(ImPlot::GetPlotMousePos().x); // click selects the nearest bias point
@@ -2374,7 +2378,7 @@ void Panel::Recorder() {
     if(compact && w->plotSession.settings.plots["Recorder vs parameter"].legend.value_or(true))BatchColourScale((axes[1].at("path").get<std::string>()+" ["+axes[1].at("unit").get<std::string>()+"]").c_str(),lo,hi);
     if(BeginSavedPlot(*w,"Recorder vs parameter",ImVec2(-1,std::max(220.f,ImGui::GetContentRegionAvail().y-5)))) {ImPlot::SetupLegend(ImPlotLocation_NorthWest);ImPlot::SetupAxes((path+" ["+axes[0].at("unit").get<std::string>()+"]").c_str(),(c.at("id").get<std::string>()+" ["+c.at("unit").get<std::string>()+"]").c_str(),ImPlotAxisFlags_None,ImPlotAxisFlags_None);if(axes[0].value("spacing",std::string{})=="log")ImPlot::SetupAxisScale(ImAxis_X1,ImPlotScale_Log10);
         SetupSavedPlot(w->plotSession,"Recorder vs parameter",compact);
-        for(auto &[group,points]:groups) {std::sort(points.begin(),points.end(),[](auto a,auto b){return a.first<b.first;});std::vector<double>x,y;for(auto [a,b]:points){x.push_back(a);y.push_back(b);}const std::string label=nested?ParameterLabel(axes[1].at("path").get<std::string>(),axes[1].at("unit"),group):c.at("id").get<std::string>();ImPlotSpec style(ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,3);if(compact)style.SetProp(ImPlotProp_LineColor,ImPlot::SampleColormap(float(hi>lo?(group-lo)/(hi-lo):.5),ImPlotColormap_Viridis));ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),style);}EndSavedPlot(*w,"Recorder vs parameter");}
+        for(auto &[group,points]:groups) {std::sort(points.begin(),points.end(),[](auto a,auto b){return a.first<b.first;});std::vector<double>x,y;for(auto [a,b]:points){x.push_back(a);y.push_back(b);}const std::string label=nested?ParameterLabel(axes[1].at("path").get<std::string>(),axes[1].at("unit"),group):c.at("id").get<std::string>();ImPlotSpec style(ImPlotProp_Marker,ImPlotMarker_Circle,ImPlotProp_MarkerSize,3);if(compact)style.SetProp(ImPlotProp_LineColor,ImPlot::SampleColormap(float(hi>lo?(group-lo)/(hi-lo):.5),ImPlotColormap_Viridis));DrawPlotLine(label.c_str(),x.data(),y.data(),int(x.size()),style);}EndSavedPlot(*w,"Recorder vs parameter");}
 }
 namespace {
 bool BatchAxes(Workflow& w,const char* id,bool iv) {
@@ -2464,10 +2468,10 @@ void Panel::ResultsBrowser() {
             if(!selected)ImGui::TextUnformatted("Action not sampled or curves not stored. Use Recorder / Calculate missing for an explicit new run.");
             const bool absolute=BatchAxes(*w,"Stored Actions",kind==ActionKind::Iv || kind==ActionKind::Band);
             const auto draw=[&](const Ref<const ResultBase>& result,const std::string& label,const ImVec4& colour,float weight) {
-                if(auto iv=std::dynamic_pointer_cast<const IvResult>(result)){const auto& c=IvCols(*iv,absolute);ImPlot::PlotLine(label.c_str(),c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,weight});}
+                if(auto iv=std::dynamic_pointer_cast<const IvResult>(result)){const auto& c=IvCols(*iv,absolute);DrawPlotLine(label.c_str(),c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,weight});}
                 else if(auto ac=std::dynamic_pointer_cast<const AcResult>(result)) {
-                    if(kind==ActionKind::Qe){const auto& c=Derived(ac->points,405,[&](Cols& c){for(const auto& p:ac->points){c.a.push_back(p.wavelength_nm);c.b.push_back(p.valid?p.EQE:NAN);}});ImPlot::PlotLine(label.c_str(),c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,weight});}
-                    else {const auto& c=AcCols(ac->points,kind==ActionKind::Cf?8:6);ImPlot::PlotLine(label.c_str(),c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,weight});}
+                    if(kind==ActionKind::Qe){const auto& c=Derived(ac->points,405,[&](Cols& c){for(const auto& p:ac->points){c.a.push_back(p.wavelength_nm);c.b.push_back(p.valid?p.EQE:NAN);}});DrawPlotLine(label.c_str(),c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,weight});}
+                    else {const auto& c=AcCols(ac->points,kind==ActionKind::Cf?8:6);DrawPlotLine(label.c_str(),c.a.data(),c.b.data(),int(c.a.size()),{ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,weight});}
                 }
             };
             if(BeginSavedPlot(*w,"Stored Actions",ImVec2(-1,std::max(200.f,ImGui::GetContentRegionAvail().y)))) {
@@ -2481,12 +2485,12 @@ void Panel::ResultsBrowser() {
                 recorderPlot=std::clamp(recorderPlot,0,int(table->recorderDraft->columns.size())-1);BeginRow("Quantity");if(ImGui::BeginCombo("##scalar",table->recorderDraft->columns[recorderPlot].id.c_str())){for(int i=0;i<int(table->recorderDraft->columns.size());++i)if(ImGui::Selectable(table->recorderDraft->columns[i].id.c_str(),i==recorderPlot))recorderPlot=i;ImGui::EndCombo();}EndRow();
                 const auto& c=table->recorderDraft->columns[recorderPlot];const auto& axis=table->batchDraft->axes.front();const bool nested=table->batchDraft->mode=="nested" && table->batchDraft->axes.size()==2;
                 std::set<double> groups{0};if(nested){groups.clear();for(const auto& row:table->rows)groups.insert(ParameterNumber(*row,table->batchDraft->axes[1].path));}
-                if(BeginSavedPlot(*w,"Stored scalars",ImVec2(-1,-1))){ImPlot::SetupAxes((axis.path+" ["+axis.unit+"]").c_str(),(c.id+" ["+c.unit+"]").c_str());SetupSavedPlot(w->plotSession,"Stored scalars");for(double group:groups){const auto& values=Derived(table->rows,500+recorderPlot,[&](Cols& values){for(const auto& row:table->rows)if(!nested || ParameterNumber(*row,table->batchDraft->axes[1].path)==group){values.a.push_back(ParameterNumber(*row,axis.path));const auto found=row->values.find(c.id);values.b.push_back(found!=row->values.end() && found->second.status=="ok"?found->second.value:NAN);}},group);ImPlot::PlotScatter((c.id+" / "+std::to_string(group)).c_str(),values.a.data(),values.b.data(),int(values.a.size()));}EndSavedPlot(*w,"Stored scalars");}
+                if(BeginSavedPlot(*w,"Stored scalars",ImVec2(-1,-1))){ImPlot::SetupAxes((axis.path+" ["+axis.unit+"]").c_str(),(c.id+" ["+c.unit+"]").c_str());SetupSavedPlot(w->plotSession,"Stored scalars");for(double group:groups){const auto& values=Derived(table->rows,500+recorderPlot,[&](Cols& values){for(const auto& row:table->rows)if(!nested || ParameterNumber(*row,table->batchDraft->axes[1].path)==group){values.a.push_back(ParameterNumber(*row,axis.path));const auto found=row->values.find(c.id);values.b.push_back(found!=row->values.end() && found->second.status=="ok"?found->second.value:NAN);}},group);DrawPlotScatter((c.id+" / "+std::to_string(group)).c_str(),values.a.data(),values.b.data(),int(values.a.size()));}EndSavedPlot(*w,"Stored scalars");}
             }else ImGui::TextUnformatted("Extract Recorder columns to view scalars.");ImGui::EndTabItem();
         }
         if(ImGui::BeginTabItem("Profiles")) {
             const auto iv=std::dynamic_pointer_cast<const IvResult>(selected);
-            if(iv && !iv->points.empty()) {d.selectedBias=std::clamp(d.selectedBias,0,int(iv->points.size())-1);BeginRow("Bias index");BoundIndex("##profile-bias",d.selectedBias,"selection.bias_index",int(iv->points.size())-1);EndRow();const auto& p=iv->points[d.selectedBias];if(p.x_m.empty())ImGui::TextUnformatted("Profiles not stored at this bias. Calculate missing explicitly from Recorder.");else if(BeginSavedPlot(*w,"Stored profiles",ImVec2(-1,-1))){ImPlot::SetupAxes("Position [um]","Energy [eV]");SetupSavedPlot(w->plotSession,"Stored profiles");const auto& x=Vec(p.x_m.get(),1e6);for(const auto* field:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}){const auto& y=PointColumn(p,field).get();if(y.size()==x.size())ImPlot::PlotLine(field,x.data(),y.data(),int(y.size()));}EndSavedPlot(*w,"Stored profiles");}}
+            if(iv && !iv->points.empty()) {d.selectedBias=std::clamp(d.selectedBias,0,int(iv->points.size())-1);BeginRow("Bias index");BoundIndex("##profile-bias",d.selectedBias,"selection.bias_index",int(iv->points.size())-1);EndRow();const auto& p=iv->points[d.selectedBias];if(p.x_m.empty())ImGui::TextUnformatted("Profiles not stored at this bias. Calculate missing explicitly from Recorder.");else if(BeginSavedPlot(*w,"Stored profiles",ImVec2(-1,-1))){ImPlot::SetupAxes("Position [um]","Energy [eV]");SetupSavedPlot(w->plotSession,"Stored profiles");const auto& x=Vec(p.x_m.get(),1e6);for(const auto* field:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV"}){const auto& y=PointColumn(p,field).get();if(y.size()==x.size())DrawPlotLine(field,x.data(),y.data(),int(y.size()));}EndSavedPlot(*w,"Stored profiles");}}
             else ImGui::TextUnformatted("Select Band or I-V with stored profiles.");ImGui::EndTabItem();
         }
         if(ImGui::BeginTabItem("Recorder")){Recorder();ImGui::EndTabItem();}
@@ -2507,7 +2511,7 @@ void Panel::BatchPlots() {
         if(compact && w->plotSession.settings.plots["Batch I-V running"].legend.value_or(true))BatchColourScale(colourLabel.c_str(),lo,hi);
         if(BeginSavedPlot(*w,"Batch I-V running",ImVec2(-1,-1))) {
             ImPlot::SetupLegend(ImPlotLocation_NorthWest);ImPlot::SetupAxes("Voltage [V] (left minus right)","J [A/m^2]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);SetupSavedPlot(w->plotSession,"Batch I-V running",compact);
-            for(const auto &m:d.liveMembers) {const auto name="member "+std::to_string(m.index+1)+" (running)##live"+std::to_string(m.index);const double v=valueAt(std::clamp(int(std::size_t(m.index)/stride),0,std::max(0,count-1)));const auto colour=ImPlot::SampleColormap(float(hi>lo?(v-lo)/(hi-lo):.5),ImPlotColormap_Viridis);ImPlotSpec style(ImPlotProp_LineWeight,m.index==d.selectedMember?3.f:1.5f,ImPlotProp_LineColor,colour);ImPlot::PlotLine(name.c_str(),m.v.get().data(),(absolute?Vec(m.j.get(),1.,4):m.j.get()).data(),int(std::min(m.v.size(),m.j.size())),style);}
+            for(const auto &m:d.liveMembers) {const auto name="member "+std::to_string(m.index+1)+" (running)##live"+std::to_string(m.index);const double v=valueAt(std::clamp(int(std::size_t(m.index)/stride),0,std::max(0,count-1)));const auto colour=ImPlot::SampleColormap(float(hi>lo?(v-lo)/(hi-lo):.5),ImPlotColormap_Viridis);ImPlotSpec style(ImPlotProp_LineWeight,m.index==d.selectedMember?3.f:1.5f,ImPlotProp_LineColor,colour);DrawPlotLine(name.c_str(),m.v.get().data(),(absolute?Vec(m.j.get(),1.,4):m.j.get()).data(),int(std::min(m.v.size(),m.j.size())),style);}
             PlotBadge("RUNNING (partial)",IM_COL32(255,140,25,230),IM_COL32(0,0,0,255),0);
             EndSavedPlot(*w,"Batch I-V running");
         }
@@ -2531,7 +2535,7 @@ void Panel::BatchPlots() {
             const auto& r=*rows[i];const auto& curve=batchPlotCurves[i];
             if(ImPlot::IsPlotHovered())for(std::size_t j=0;j<curve.v.size();++j)if(std::isfinite(curve.j[j])) {const auto pixel=ImPlot::PlotToPixels(curve.v[j],absolute?std::abs(curve.j[j]):curve.j[j]);const auto mouse=ImGui::GetMousePos();const double dist=(pixel.x-mouse.x)*(pixel.x-mouse.x)+(pixel.y-mouse.y)*(pixel.y-mouse.y);if(dist<nearest){nearest=dist;hit=i;}}
             const double v=ParameterNumber(r,path);const auto colour=ImPlot::SampleColormap(float(hi>lo?(v-lo)/(hi-lo):.5),ImPlotColormap_Viridis);
-            ImPlotSpec style(ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,i==d.selectedMember?3.f:1.5f);ImPlot::PlotLine(MemberLabel(r,table.at("spec")).c_str(),curve.v.data(),(absolute?Vec(curve.j,1.,4):curve.j).data(),int(curve.v.size()),style);
+            ImPlotSpec style(ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,i==d.selectedMember?3.f:1.5f);DrawPlotLine(MemberLabel(r,table.at("spec")).c_str(),curve.v.data(),(absolute?Vec(curve.j,1.,4):curve.j).data(),int(curve.v.size()),style);
         }
         if(hit>=0 && ImGui::IsMouseClicked(0) && !w->Busy())Do(Cmd::SelectBatchMember::With({{"index",hit}}));EndSavedPlot(*w,"Batch I-V overlay");}
 
@@ -2631,26 +2635,37 @@ void Panel::GenerationRecombination() {
     if(grTab==0) {
     if(!valid) ImGui::TextWrapped("Invalid working point: profiles are masked; raw values remain available in export.");
     // Log Y fitting uses visible series in EndSavedPlot; enable the right axis only for sheet channels.
-    double sheetMax=0;
-    if(valid) {
-        for(const auto &c:gr.channels) if(!grHidden.contains(c.mechanism) && c.valid) {
-            for(double v:c.R_sheet_m2_s.get())if(std::isfinite(v))sheetMax=std::max(sheetMax,v);
-        }
+    const auto hasSheets=[&](const GenerationRecombinationResult& rates) {
+        for(const auto& c:rates.channels)if(c.valid && !grHidden.contains(c.mechanism) && FitPlotBounds(c.x_m.get(),c.R_sheet_m2_s.get(),false,true))return true;
+        return false;
+    };
+    bool sheets=valid && hasSheets(gr);
+    if(!sheets)if(const auto* reference=device.ChangePoint();reference && reference->valid && reference->details)sheets=hasSheets(reference->details->generation_recombination);
+    if(!sheets)for(const auto& run:device.history) {
+        if(!run.at("visible").get<bool>() || !ShowRun(run) || run.at("run_id")==device.selectedRun || (run.at("kind")!="iv" && run.at("kind")!="band"))continue;
+        const auto history=std::dynamic_pointer_cast<const IvResult>(HistoryTyped(device,run));if(!history || history->points.empty())continue;
+        const auto& p=history->points[std::clamp(device.selectedBias,0,int(history->points.size())-1)];
+        if(p.details && hasSheets(p.details->generation_recombination)){sheets=true;break;}
     }
-    const double totalUm=[&]{double t=0;for(const auto &l:snapshot.meta.prim.at("project_snapshot").at("layers"))t+=l.at("thickness_m").get<double>()*1e6;return t;}();
     if(BeginSavedPlot(*w,"G(x), R(x)",ImVec2(-1,-1))) {
         ImPlot::SetupAxes("Position [um]","Bulk rate [m^-3 s^-1]",ImPlotAxisFlags_None,ImPlotAxisFlags_None);
         ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
         ImPlot::SetupLegend(ImPlotLocation_South,ImPlotLegendFlags_Outside|ImPlotLegendFlags_Horizontal);
-        FitSavedAxis(w->plotSession,"G(x), R(x)",ImAxis_X1,0,totalUm);
-        if(sheetMax>0){ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);}
+        if(sheets){ImPlot::SetupAxis(ImAxis_Y2,"Sheet rate [m^-2 s^-1]",ImPlotAxisFlags_AuxDefault);ImPlot::SetupAxisScale(ImAxis_Y2,ImPlotScale_Log10);}
         SetupSavedPlot(w->plotSession,"G(x), R(x)");
         auto plot=[&](const std::string &name,const Column &xx,const Column &yy,bool sheet,bool curveValid) {
             const auto &x=Vec(xx.get(),1e6),&y=Vec(yy.get(),1.,curveValid?2:3);if(x.size()!=y.size())return;
-            if(sheet && sheetMax<=0)return;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
+            if(sheet && !sheets)return;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
             const auto colour=XColour(name.substr(0,name.find(" / ")));const ImPlotSpec style(ImPlotProp_LineColor,colour,ImPlotProp_LineWeight,2.f,ImPlotProp_MarkerFillColor,colour,ImPlotProp_MarkerLineColor,colour);
-            if(sheet)ImPlot::PlotScatter(name.c_str(),x.data(),y.data(),int(x.size()),style);else MovingLine(*w,name.c_str(),name.c_str(),x,y,colour);
+            if(sheet && !device.ChangePoint())DrawPlotScatter(name.c_str(),x.data(),y.data(),int(x.size()),style);else MovingLine(*w,name.c_str(),name.c_str(),x,y,colour);
         };
+        if(const auto* point=device.ChangePoint()) {
+            const auto& p=*point;
+            if(p.details && p.valid){const auto& g=p.details->generation_recombination;
+                ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);if(showGeneration)ReferenceProfileLine(*w,"G",Vec(g.x_m.get(),1e6),Vec(g.generation_m3_s.get(),1.,2),XColour("G"));
+                for(const auto& c:g.channels)if(!grHidden.contains(c.mechanism) && c.valid){const bool sheet=!c.R_sheet_m2_s.empty();if(sheet && !sheets)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);ReferenceProfileLine(*w,c.mechanism+" / "+c.id,Vec(c.x_m.get(),1e6),Vec((sheet?c.R_sheet_m2_s:c.R_m3_s).get(),1.,2),XColour(c.mechanism));}
+            }
+        }
         if(showGeneration)HistoryProfiles(*w,"generation_m3_s",1.,true);
         if(showGeneration && !grIsReference && !Archived(device,snapshot,grFollow?"iv":"band"))plot("G",gr.x_m,gr.generation_m3_s,false,valid);
         for(const auto &run:device.history) {
@@ -2664,16 +2679,9 @@ void Panel::GenerationRecombination() {
                 const bool sheet=!channel.R_sheet_m2_s.empty();
                 const auto &x=Vec(channel.x_m.get(),1e6),&y=Vec((sheet?channel.R_sheet_m2_s:channel.R_m3_s).get(),1.,channel.valid?1:3);if(x.size()!=y.size())continue;
                 const auto label=channel.mechanism+" / "+channel.id+" / "+RunLabel(run)+"##"+run.at("run_id").get<std::string>();
-                if(sheet && sheetMax<=0)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
+                if(sheet && !sheets)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);
                 const auto mechName=channel.mechanism;const ImVec4 lc=selectedRun?XColour(mechName,shadeOf[mechName]++):ImVec4(colour[0],colour[1],colour[2],colour[3]);ImPlotSpec style(ImPlotProp_LineColor,lc,ImPlotProp_LineWeight,selectedRun?2.5f:1.f,ImPlotProp_MarkerFillColor,lc,ImPlotProp_MarkerLineColor,lc);
-                if(sheet)ImPlot::PlotScatter(label.c_str(),x.data(),y.data(),int(x.size()),style);else ImPlot::PlotLine(label.c_str(),x.data(),y.data(),int(x.size()),style);
-            }
-        }
-        if(const auto* point=device.ChangePoint()) {
-            const auto& p=*point;
-            if(p.details && p.valid){const auto& g=p.details->generation_recombination;
-                ImPlot::SetAxes(ImAxis_X1,ImAxis_Y1);if(showGeneration)GhostLine(*w,"G",Vec(g.x_m.get(),1e6),Vec(g.generation_m3_s.get(),1.,2),XColour("G"));
-                for(const auto& c:g.channels)if(!grHidden.contains(c.mechanism) && c.valid){const bool sheet=!c.R_sheet_m2_s.empty();if(sheet && sheetMax<=0)continue;ImPlot::SetAxes(ImAxis_X1,sheet?ImAxis_Y2:ImAxis_Y1);GhostLine(*w,c.mechanism+" / "+c.id,Vec(c.x_m.get(),1e6),Vec((sheet?c.R_sheet_m2_s:c.R_m3_s).get(),1.,2),XColour(c.mechanism));}
+                if(sheet)DrawPlotScatter(label.c_str(),x.data(),y.data(),int(x.size()),style);else DrawPlotLine(label.c_str(),x.data(),y.data(),int(x.size()),style);
             }
         }
         for(const auto &c:gr.channels) if(!grIsReference && !Archived(device,snapshot,grFollow?"iv":"band") && !grHidden.contains(c.mechanism)) {
@@ -2707,10 +2715,21 @@ void Panel::GenerationRecombination() {
         SetupSavedPlot(w->plotSession,"Integrated loss breakdown");
         const auto* reference=device.ChangePoint();
         const GenerationRecombinationResult* old=reference && reference->details && reference->valid?&reference->details->generation_recombination:nullptr;
-        int i=0;for(const auto& c:gr.channels){const double x=i,y=valid?c.integrated_current_A_m2:NAN;const auto colour=ImPlot::GetColormapColor(i++);if(!grHidden.contains(c.mechanism)){
-            if(old){const auto found=std::find_if(old->channels.begin(),old->channels.end(),[&](const auto& channel){return channel.mechanism==c.mechanism && channel.id==c.id;});if(found!=old->channels.end()){const auto& line=Derived(found->by_layer,730,[&](Cols& cols){cols.a={x-.35,x+.35};cols.b={found->integrated_current_A_m2,found->integrated_current_A_m2};},x);GhostLine(*w,c.mechanism+" / "+c.id,line.a,line.b,XColour(c.mechanism));}}
-            if(!grIsReference)ImPlot::PlotBars((c.mechanism+" / "+c.id).c_str(),&x,&y,1,.7,{ImPlotProp_FillColor,colour,ImPlotProp_LineColor,colour});
-        }}
+        const auto findChannel=[](const GenerationRecombinationResult& data,const RecombinationChannel& c)->const RecombinationChannel* {
+            const auto found=std::find_if(data.channels.begin(),data.channels.end(),[&](const auto& v){return v.mechanism==c.mechanism && v.id==c.id;});return found==data.channels.end()?nullptr:&*found;
+        };
+        int index=0;
+        const auto draw=[&](const RecombinationChannel& c,const RecombinationChannel* before,const RecombinationChannel* live) {
+            const double x=index++;if(grHidden.contains(c.mechanism))return;
+            const auto name=c.mechanism+" / "+c.id;auto colour=XColour(c.mechanism);
+            if(before){const double y=before->valid?before->integrated_current_A_m2:NAN;DrawPlotBars(name.c_str(),&x,&y,1,.7,{ImPlotProp_FillColor,colour,ImPlotProp_LineColor,colour});}
+            if(!live || grIsReference)return;
+            if(const auto* primary=ImPlot::GetItem(name.c_str());old && primary && !primary->Show)return;
+            if(old)colour.w=.5f;const double y=valid && live->valid?live->integrated_current_A_m2:NAN;
+            DrawPlotBars((old?"##live/"+name:name).c_str(),&x,&y,1,old?.35:.7,{ImPlotProp_FillColor,colour,ImPlotProp_LineColor,colour});
+        };
+        if(old){for(const auto& c:old->channels)draw(c,&c,findChannel(gr,c));for(const auto& c:gr.channels)if(!findChannel(*old,c))draw(c,nullptr,&c);}
+        else for(const auto& c:gr.channels)draw(c,nullptr,&c);
         EndSavedPlot(*w,"Integrated loss breakdown");
     }
     }

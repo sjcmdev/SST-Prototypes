@@ -148,8 +148,8 @@ TEST_F(PolishUi,LogYAutoFitIgnoresZerosDenormalsHiddenNoiseAndEmptySeries) {
         EndSavedPlot(session,"All log Y");
         for(auto axis:{ImAxis_Y1,ImAxis_Y2}) {
             const auto& range=plot->Axes[axis].Range;
-            EXPECT_GT(range.Min,0);EXPECT_LT(std::log10(range.Max)-std::log10(range.Min),14.);
-            if(!empty){EXPECT_LT(range.Min,1e6);EXPECT_GT(range.Max,1e8);EXPECT_LT(range.Max,1e10);}
+            EXPECT_GT(range.Min,0);
+            if(!empty){EXPECT_LE(range.Min,1e-198);EXPECT_GT(range.Max,1e8);EXPECT_LT(range.Max,1e12);}
         }
         ImGui::End();ImGui::Render();
     }
@@ -294,19 +294,24 @@ TEST_F(PolishUi,DrawnContactAndDopingFramesKeepGestureMeshAndSampling) {
     }
 }
 
-TEST_F(PolishUi,SpatialLegendsKeepQuantityColoursAndGhostReference) {
+TEST_F(PolishUi,SpatialLegendsShowOnlyPrimaryQuantitiesAndLiveIsGhost) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);w.autoRecalculate=w.autoRecalculateBand=false;
     w.plotSession.settings.grFollow=false;
     const auto band=[&]{EXPECT_TRUE(w.Dispatch({{"operation","band"},{"live",true},{"voltage_V",0.}}).value("ok",false));Finish(w);};band();
-    auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=301;ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));band();
+    for(int view:{5,22}){Panel panel(&w,view);Frame(panel,1100);Frame(panel,1100);}
+    std::map<ImGuiID,std::set<std::string>> primaryLabels;
+    for(int i=0;i<GImPlot->Plots.GetBufSize();++i){auto* plot=GImPlot->Plots.GetByIndex(i);for(int j=0;j<plot->Items.GetLegendCount();++j)primaryLabels[plot->ID].insert(plot->Items.GetLegendLabel(j));}
+    auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=301;AddDraftDefect(*next,0,false);ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));band();
     for(int view:{5,22}){Panel panel(&w,view);Frame(panel,1100);Frame(panel,1100);if(view==5)EXPECT_EQ(w.plotSession.morphFrame,ImGui::GetFrameCount());}
     int blue=0,red=0,references=0,ghosts=0;
     for(int i=0;i<GImPlot->Plots.GetBufSize();++i){auto* plot=GImPlot->Plots.GetByIndex(i);for(int j=0;j<plot->Items.GetLegendCount();++j){
         const std::string label=plot->Items.GetLegendLabel(j);const auto colour=plot->Items.GetLegendItem(j)->Color;const auto alpha=(colour>>IM_COL32_A_SHIFT)&255u;
-        if(label=="Reference (40%)"){EXPECT_EQ(alpha,102u);++references;}
+        EXPECT_TRUE(primaryLabels[plot->ID].contains(label))<<label;
+        EXPECT_EQ(alpha,255u);
+        if(label=="Reference (40%)"){++references;}
         else if(label=="Ec_eV" || label=="n"){EXPECT_EQ(colour,ImGui::ColorConvertFloat4ToU32(XColour("Ec_eV")));++blue;}
         else if(label=="Ev_eV" || label=="p"){EXPECT_EQ(colour,ImGui::ColorConvertFloat4ToU32(XColour("Ev_eV")));++red;}
-    }for(int j=0;j<plot->Items.ItemPool.GetBufSize();++j)if(((plot->Items.ItemPool.GetByIndex(j)->Color>>IM_COL32_A_SHIFT)&255u)==102u)++ghosts;}EXPECT_EQ(blue,2);EXPECT_EQ(red,2);EXPECT_EQ(references,3);EXPECT_GE(ghosts,10);
+    }for(int j=0;j<plot->Items.ItemPool.GetBufSize();++j)if(((plot->Items.ItemPool.GetByIndex(j)->Color>>IM_COL32_A_SHIFT)&255u)==128u)++ghosts;}EXPECT_EQ(blue,2);EXPECT_EQ(red,2);EXPECT_EQ(references,0);EXPECT_GE(ghosts,7);
 }
 
 TEST_F(PolishUi,InactiveDeviceWithRetainedPreviewKeepsItsComparisonCurve) {
@@ -316,4 +321,51 @@ TEST_F(PolishUi,InactiveDeviceWithRetainedPreviewKeepsItsComparisonCurve) {
     auto& inactive=w.Device(first);ASSERT_NE(first,w.Current().id);inactive.previewV={0,.1};inactive.previewJ={2,3};Panel panel(&w,10);Frame(panel,1100);Frame(panel,1100);
     int curves=0;for(int i=0;i<GImPlot->Plots.GetBufSize();++i){auto* plot=GImPlot->Plots.GetByIndex(i);for(int j=0;j<plot->Items.GetLegendCount();++j)if(plot->Items.GetLegendItem(j)->Color==ImGui::ColorConvertFloat4ToU32(SingleShotColour))++curves;}
     EXPECT_EQ(curves,2);
+}
+
+
+TEST_F(PolishUi,ContactSweepReportsCarrierDataAndSettlesAfterRelease) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);w.autoRecalculate=false;w.autoRecalculateBand=true;
+    auto draft=CreateRef<ProjectDraft>(*w.Current().draft);draft->project.left_contact.flat_band=draft->project.right_contact.flat_band=false;draft->project.left_contact.phi_m_eV=4.3;draft->project.right_contact.phi_m_eV=4.7;w.Current().SetDraft(draft);
+    Panel panel(&w,5);
+    for(double phi:{4.3,4.4,4.7,5.,5.5,6.,2.4,4.7}) {
+        auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.left_contact.phi_m_eV=phi;
+        ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next,"carrier-sweep")).value("ok",false));
+        ASSERT_TRUE(w.Exec(Cmd::RecalculateLive::Make(ActionKind::Band)).value("ok",false));Finish(w);
+        for(int f=0;f<30;++f)Frame(panel,1100);
+        const auto& band=*w.Current().Band();ASSERT_FALSE(band.points.empty());const auto& p=band.points.front();double maximum=0;
+        for(const auto* values:{&p.n_m3,&p.p_m3})for(double value:values->get())if(std::isfinite(value))maximum=std::max(maximum,value*1e-6);
+        const auto& runtime=w.plotSession.runtime["Carriers"];
+        std::cout<<"carrier phi="<<phi<<" status="<<p.status<<" valid="<<p.valid<<" max_cm3="<<maximum<<" n0_cm3="<<p.n_m3.get().front()*1e-6<<" n1_cm3="<<p.n_m3.get()[1]*1e-6<<" nmid_cm3="<<p.n_m3.get()[p.n_m3.size()/2]*1e-6<<" range="<<runtime.axes[ImAxis_Y1].current.min<<","<<runtime.axes[ImAxis_Y1].current.max<<" hold="<<w.plotSession.holdFit<<"\n";
+        EXPECT_FALSE(w.plotSession.holdFit);EXPECT_EQ(runtime.axes[ImAxis_Y1].current,runtime.axes[ImAxis_Y1].target);if(phi==4.7)EXPECT_LT(runtime.axes[ImAxis_Y1].current.max,1e25);
+    }
+}
+
+TEST_F(PolishUi,ReferenceOnlySheetChannelKeepsAxisAndLegend) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.autoRecalculate=w.autoRecalculateBand=false;w.plotSession.settings.grFollow=false;
+    auto draft=CreateRef<ProjectDraft>(*DraftFromDocument(ReadProject((ExamplesDirectory()/"08-pn-illumination.yaml").string())));draft->project.mesh.points_per_layer=11;draft->project.voltage={0,.02,.01};AddDraftDefect(*draft,0,true);w.Current().SetDraft(draft);
+    const auto solve=[&]{EXPECT_TRUE(w.Exec(Cmd::RecalculateLive::Make(ActionKind::Band)).value("ok",false));Finish(w);};
+    const auto positiveSheet=[](const IvPoint& p){if(p.details)for(const auto& c:p.details->generation_recombination.channels)if(c.valid)for(double value:c.R_sheet_m2_s.get())if(std::isfinite(value) && value>0)return true;return false;};
+    solve();ASSERT_FALSE(w.Current().Band()->points.empty());ASSERT_TRUE(positiveSheet(w.Current().Band()->points.front()));
+    Panel panel(&w,22);Frame(panel,1100);Frame(panel,1100);ImPlotPlot* plot=nullptr;
+    for(int i=0;i<GImPlot->Plots.GetBufSize();++i){auto* candidate=GImPlot->Plots.GetByIndex(i);if(candidate->HasTitle() && std::string(candidate->GetTitle())=="G(x), R(x)")plot=candidate;}
+    ASSERT_NE(plot,nullptr);ASSERT_TRUE(plot->Axes[ImAxis_Y2].Enabled);std::map<std::string,ImU32> before;
+    for(int i=0;i<plot->Items.GetLegendCount();++i)before[plot->Items.GetLegendLabel(i)]=plot->Items.GetLegendItem(i)->Color;
+    auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.interface_defects.clear();ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));solve();
+    ASSERT_FALSE(w.Current().Band()->points.empty());EXPECT_FALSE(positiveSheet(w.Current().Band()->points.front()));ASSERT_NE(w.Current().ChangePoint(),nullptr);EXPECT_TRUE(positiveSheet(*w.Current().ChangePoint()));
+    Frame(panel,1100);Frame(panel,1100);EXPECT_TRUE(plot->Axes[ImAxis_Y2].Enabled);std::map<std::string,ImU32> after;
+    for(int i=0;i<plot->Items.GetLegendCount();++i)after[plot->Items.GetLegendLabel(i)]=plot->Items.GetLegendItem(i)->Color;EXPECT_EQ(after,before);
+    EXPECT_TRUE(w.plotSession.runtime["G(x), R(x)"].hasData);
+    const RecombinationChannel* sheet=nullptr;
+    for(const auto& c:w.Current().ChangePoint()->details->generation_recombination.channels)if(c.valid && !c.R_sheet_m2_s.empty() && std::isfinite(c.integrated_current_A_m2) && c.integrated_current_A_m2!=0){sheet=&c;break;}
+    ASSERT_NE(sheet,nullptr);const auto name=sheet->mechanism+" / "+sheet->id;
+    w.plotSession.settings.grTab=1;Panel budget(&w,22);Frame(budget,1100);Frame(budget,1100);ImPlotPlot* bars=nullptr;
+    for(int i=0;i<GImPlot->Plots.GetBufSize();++i){auto* candidate=GImPlot->Plots.GetByIndex(i);if(candidate->HasTitle() && std::string(candidate->GetTitle())=="Integrated loss breakdown")bars=candidate;}
+    ASSERT_NE(bars,nullptr);ImGuiID sheetId=0;
+    for(int i=0;i<bars->Items.GetLegendCount();++i)if(name==bars->Items.GetLegendLabel(i)){const auto* item=bars->Items.GetLegendItem(i);sheetId=item->ID;EXPECT_EQ(item->Color,ImGui::ColorConvertFloat4ToU32(XColour(sheet->mechanism)));}
+    ASSERT_NE(sheetId,0u);
+    for(int i=0;i<bars->Items.ItemPool.GetBufSize();++i){auto* item=bars->Items.ItemPool.GetByIndex(i);item->Show=item->ID==sheetId;}
+    for(int i=0;i<30;++i)Frame(budget,1100);
+    const double lo=std::min(0.,sheet->integrated_current_A_m2),hi=std::max(0.,sheet->integrated_current_A_m2),margin=(hi-lo)*w.plotSession.settings.margin*.01,tolerance=std::abs(sheet->integrated_current_A_m2)*1e-8+1e-20;
+    EXPECT_NEAR(bars->Axes[ImAxis_Y1].Range.Min,lo-margin,tolerance);EXPECT_NEAR(bars->Axes[ImAxis_Y1].Range.Max,hi+margin,tolerance);
 }

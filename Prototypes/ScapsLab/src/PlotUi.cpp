@@ -1,6 +1,37 @@
 #include "PlotUi.hpp"
 #include <implot_internal.h>
+#include "Core/Presentation/Panels/WindowWorkspace.hpp"
 namespace SST::ScapsLab {
+std::optional<PlotBounds> FitPlotBounds(std::span<const double> x,std::span<const double> y,bool logX,bool logY) {
+    if(x.size()!=y.size())return {};
+    std::optional<PlotBounds> bounds;
+    for(std::size_t i=0;i<x.size();++i) {
+        if(!std::isfinite(x[i]) || !std::isfinite(y[i]) || (logX && x[i]<=0) || (logY && y[i]<=0))continue;
+        if(!bounds)bounds=PlotBounds{{x[i],x[i]},{y[i],y[i]}};
+        else {bounds->x={std::min(bounds->x.min,x[i]),std::max(bounds->x.max,x[i])};bounds->y={std::min(bounds->y.min,y[i]),std::max(bounds->y.max,y[i])};}
+    }
+    return bounds;
+}
+void FitDrawnSeries(const char *label,std::span<const double> x,std::span<const double> y) {
+    const auto *item=ImPlot::GetItem(label);if(!item || !item->Show || !ImPlot::FitThisFrame())return;
+    auto *plot=ImPlot::GetCurrentPlot();auto &xx=plot->Axes[plot->CurrentX],&yy=plot->Axes[plot->CurrentY];
+    if(const auto bounds=FitPlotBounds(x,y,xx.Scale==ImPlotScale_Log10,yy.Scale==ImPlotScale_Log10)) {
+        xx.ExtendFit(bounds->x.min);xx.ExtendFit(bounds->x.max);yy.ExtendFit(bounds->y.min);yy.ExtendFit(bounds->y.max);
+    }
+}
+void DrawPlotLine(const char *label,const double *x,const double *y,int count,ImPlotSpec spec) {
+    const bool fit=!(spec.Flags&ImPlotItemFlags_NoFit);spec.Flags|=ImPlotItemFlags_NoFit;
+    ImPlot::PlotLine(label,x,y,count,spec);if(fit && count>0)FitDrawnSeries(label,{x,std::size_t(count)},{y,std::size_t(count)});
+}
+void DrawPlotScatter(const char *label,const double *x,const double *y,int count,ImPlotSpec spec) {
+    const bool fit=!(spec.Flags&ImPlotItemFlags_NoFit);spec.Flags|=ImPlotItemFlags_NoFit;
+    ImPlot::PlotScatter(label,x,y,count,spec);if(fit && count>0)FitDrawnSeries(label,{x,std::size_t(count)},{y,std::size_t(count)});
+}
+void DrawPlotBars(const char *label,const double *x,const double *y,int count,double width,ImPlotSpec spec) {
+    const bool fit=!(spec.Flags&ImPlotItemFlags_NoFit);spec.Flags|=ImPlotItemFlags_NoFit;
+    ImPlot::PlotBars(label,x,y,count,width,spec);
+    if(fit)for(int i=0;i<count;++i){const double xx[]={x[i]-width/2,x[i]+width/2},yy[]={y[i],y[i]};FitDrawnSeries(label,xx,yy);if(std::isfinite(y[i])){const double zero=0;FitDrawnSeries(label,{x+i,1},{&zero,1});}}
+}
 bool CaptureDockLayout(PlotSettings &settings,bool shuttingDown) {
     const auto *context=ImGui::GetCurrentContext();
     if(!context || shuttingDown || !context->WithinFrameScope || ImGui::GetTopMostPopupModal())return false;
@@ -10,11 +41,15 @@ bool CaptureDockLayout(PlotSettings &settings,bool shuttingDown) {
     if(!ValidDockLayout(std::string_view(ini,size)))return false;
     settings.layout.assign(ini,size);return true;
 }
-bool ApplyDockLayout(const PlotSettings &settings) {
+bool ApplyDockLayout(const PlotSettings &settings,WindowWorkspace &workspace) {
     const auto *context=ImGui::GetCurrentContext();
-    if(!context || context->WithinFrameScope || settings.layout.empty() || !ValidDockLayout(settings.layout))return false;
+    if(!context || context->WithinFrameScope)return false;
+    const bool valid=!settings.layout.empty() && ValidDockLayout(settings.layout);
     // Reloading after DockSpace() replaces the live root and orphans its children.
-    ImGui::LoadIniSettingsFromMemory(settings.layout.data(),settings.layout.size());return true;
+    if(valid)ImGui::LoadIniSettingsFromMemory(settings.layout.data(),settings.layout.size());
+    // A saved global lock must not silently disable every panel in a reopened project.
+    if(workspace.IsLocked())(void)workspace.Apply({WindowAction::LockLayout});
+    return valid;
 }
 bool BeginSavedPlot(PlotSession &s,const char *title,ImVec2 size) {
     auto &r=s.runtime[title];r.explicitFit={};
@@ -69,7 +104,7 @@ bool EndSavedPlot(PlotSession &s,const char *title) {
         v.manual=true;for(int i=0;i<ImAxis_COUNT;++i)if(plot->Axes[i].Enabled){PlotRange range{plot->Axes[i].Range.Min,plot->Axes[i].Range.Max};if(range.Valid(plot->Axes[i].Scale==ImPlotScale_Log10))v.ranges[i]=range;}
         changed=true;plot->FitThisFrame=false;for(auto &a:plot->Axes)a.FitThisFrame=false;
     }
-    const auto finiteExtent=[](const ImPlotAxis &a){return std::isfinite(a.FitExtents.Min) && std::isfinite(a.FitExtents.Max);};
+    const auto finiteExtent=[](const ImPlotAxis &a){return std::isfinite(a.FitExtents.Min) && std::isfinite(a.FitExtents.Max) && a.FitExtents.Min<=a.FitExtents.Max;};
     bool xData=false,yData=false;for(const auto &a:plot->Axes)if(a.Enabled && finiteExtent(a)){if(a.Vertical)yData=true;else xData=true;}
     const bool data=xData && yData;
     for(int i=0;i<ImAxis_COUNT;++i){auto &a=plot->Axes[i];if(!a.Enabled)continue;
@@ -78,19 +113,20 @@ bool EndSavedPlot(PlotSession &s,const char *title) {
         if(manualAxis){a.FitThisFrame=false;if(data)a.SetRange(v.ranges[i]->min,v.ranges[i]->max);}
         if(!manualAxis && a.FitThisFrame) {
             PlotRange raw{a.FitExtents.Min,a.FitExtents.Max};
-            if(r.explicitFit[i]){const auto extra=*r.explicitFit[i];raw=s.liveData && finiteExtent(a)?PlotRange{std::min(raw.min,extra.min),std::max(raw.max,extra.max)}:extra;}
+            if(r.explicitFit[i]){const auto extra=*r.explicitFit[i];raw=finiteExtent(a)?PlotRange{std::min(raw.min,extra.min),std::max(raw.max,extra.max)}:extra;}
             if(log && a.Vertical) {
                 if(!std::isnormal(raw.max) || raw.max<=0)raw={1e-12,1.};
                 else {
                     if(raw.min==raw.max)raw={raw.min/std::sqrt(10.),raw.max*std::sqrt(10.)};
-                    raw.min=std::max({raw.min,raw.max*1e-12,1e-200});
+                    raw.min=std::max(raw.min,1e-200);
                 }
             }
             else if(log && raw.min>0 && raw.min==raw.max)raw={raw.min/std::sqrt(10.),raw.max*std::sqrt(10.)};
-            else if(!log && std::isfinite(raw.min) && raw.min==raw.max)raw={raw.min-.5,raw.max+.5}; // ImPlot's constant-series fallback
+            else if(!log && std::isfinite(raw.min) && raw.min==raw.max){const double pad=std::max(.5,std::abs(raw.min)*.05);raw={raw.min-pad,raw.max+pad};}
             if(raw.Valid(log)){
                 const auto padded=PadPlotRange(raw,s.settings.margin,log);auto &smooth=r.axes[i];const bool ready=smooth.initialized && smooth.log==log;
                 if(s.smoothFit)smooth.Fit(padded,log,s.holdFit);else smooth.Set(padded,log);
+                if(s.smoothFit && smooth.current!=smooth.target)s.morphFrame=ImGui::GetFrameCount();
                 if(!s.smoothFit || !ready)a.SetRange(smooth.current.min,smooth.current.max);
             }
             // Fit extents are collected every frame; applying them here would snap over the eased range.

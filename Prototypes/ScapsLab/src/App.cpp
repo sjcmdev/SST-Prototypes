@@ -105,7 +105,7 @@ class ScapsCloseGuard final : public Layer {
     void ApplySession() {
         auto &s=w.plotSession.settings;
         s.Read(w.project.ui);w.plotSession.runtime.clear();w.plotSession.epoch=w.epoch;appliedEpoch=w.epoch;loadedSettings=s;
-        ScapsLab::ApplyDockLayout(s);
+        ScapsLab::ApplyDockLayout(s,*app.GetEditorLayer().GetWindows());
         for(auto &panel:panels)if(const auto it=s.panels.find(panel->GetTitle());it!=s.panels.end())panel->SetVisible(it->second);
         observedSettings=s;changedAt=std::chrono::steady_clock::now();
     }
