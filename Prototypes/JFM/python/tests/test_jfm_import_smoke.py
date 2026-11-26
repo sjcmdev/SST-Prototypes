@@ -5,10 +5,10 @@ import sys
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parents[2]
-DAT_FILE = REPO / "Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat"
 SYNTHETIC_FILE = REPO / "Prototypes/JFM/example-data/syntetic-data/single-diode/canonical/SD-0/T-300K/I0-1e-10__A-1p5/clean.dat"
 sys.path.insert(0, str(ROOT))
 
@@ -17,8 +17,13 @@ from jfm_import.scaps_iv_parser import parse_scaps_iv
 from jfm_import.common import build_curve_name
 
 
-def test_dat_parser_returns_unified_shape() -> None:
-    result = parse_dat(DAT_FILE)
+@pytest.fixture
+def dat_file(real_data_file):
+    return real_data_file("C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat")
+
+
+def test_dat_parser_returns_unified_shape(dat_file) -> None:
+    result = parse_dat(dat_file)
 
     assert result["ok"] is True
     assert result["parser"] == "dat"
@@ -42,7 +47,7 @@ def test_scaps_parser_returns_curves() -> None:
     assert isinstance(result["curves"][0]["data"], np.ndarray)
 
 
-def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
+def test_cpp_adapter_returns_bound_shape(monkeypatch, dat_file) -> None:
     class JFMColumn:
         pass
 
@@ -70,7 +75,7 @@ def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
 
     from jfm_import.cpp_adapter import import_file
 
-    result = import_file(DAT_FILE)
+    result = import_file(dat_file)
     characteristic = result["characteristics"][0]
 
     assert result["parser"] == "dat"
@@ -82,7 +87,7 @@ def test_cpp_adapter_returns_bound_shape(monkeypatch) -> None:
     assert len(characteristic.data.current) == len(characteristic.data.voltage)
 
 
-def test_cpp_adapter_applies_parse_options(monkeypatch) -> None:
+def test_cpp_adapter_applies_parse_options(monkeypatch, dat_file) -> None:
     class JFMColumn:
         pass
 
@@ -111,7 +116,7 @@ def test_cpp_adapter_applies_parse_options(monkeypatch) -> None:
     from jfm_import.cpp_adapter import import_file
 
     result = import_file(
-        DAT_FILE,
+        dat_file,
         {
             "parser": "dat",
             "name_pattern": "curve_{stem}",
@@ -134,7 +139,7 @@ def test_cpp_adapter_applies_parse_options(monkeypatch) -> None:
     assert result["characteristics"][0].info.metadata["short_name"] == "C002_300.0"
 
 
-def test_import_variables_include_paths_and_allow_overrides(monkeypatch) -> None:
+def test_import_variables_include_paths_and_allow_overrides(monkeypatch, dat_file) -> None:
     class JFMColumn:
         pass
 
@@ -163,7 +168,7 @@ def test_import_variables_include_paths_and_allow_overrides(monkeypatch) -> None
     from jfm_import.cpp_adapter import import_file
 
     result = import_file(
-        DAT_FILE,
+        dat_file,
         {
             "parser": "dat",
             "short_name_pattern": "{T}_{parent_folder_1}_{file_name}",
@@ -184,7 +189,7 @@ def test_import_variables_include_paths_and_allow_overrides(monkeypatch) -> None
     assert metadata["T"] == "C002"
     assert metadata["file_name"].endswith(".dat")
     assert metadata["parent_folder_1"] == "C002"
-    assert metadata["parent_path_1"].endswith("real-measurement\\C002") or metadata["parent_path_1"].endswith("real-measurement/C002")
+    assert Path(metadata["parent_path_1"]) == dat_file.parent.parent
     assert metadata["short_name"].startswith("C002_C002_IV_C002")
 
 

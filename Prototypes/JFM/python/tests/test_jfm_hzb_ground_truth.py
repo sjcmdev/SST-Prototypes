@@ -44,7 +44,6 @@ from jfm_prefit.types import PrefitOptions, RangeOptions
 from jfm_constants import K_BOLTZMANN_EV
 
 PROJECT_PATH = ROOT.parent / "JFM-projects" / "HZB-project.yaml.jfm.yaml"
-DATA_DIR = ROOT.parent / "example-data" / "real-measurement" / "dat"
 
 # Known auto-selection gaps against this ground truth (see module docstring).
 # T181/T191: the bisection search never lands on the curated window -- it's
@@ -87,10 +86,10 @@ def _params(marks_for: dict[str, object] | None = None):
     ]
 
 
-def _load_sample(characteristic: dict):
+def _load_sample(characteristic: dict, real_data_file):
     name = characteristic["name"]
     temperature_k = float(characteristic["temperature_K"])
-    result = parse_dat(DATA_DIR / f"{name}.dat")
+    result = parse_dat(real_data_file(f"dat/{name}.dat"))
     data = np.asarray(result["curves"][0]["data"], dtype=float)
     voltage, current = data[:, 0], data[:, 1]
     sample, _ = prepare_sample(voltage, current, temperature_k, "dark")
@@ -120,8 +119,8 @@ def _boundary_close(actual: int, expected: int, span: int) -> bool:
 
 @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
 @pytest.mark.parametrize("characteristic", _params())
-def test_range_detection_matches_curated_project(characteristic: dict) -> None:
-    sample = _load_sample(characteristic)
+def test_range_detection_matches_curated_project(characteristic: dict, real_data_file) -> None:
+    sample = _load_sample(characteristic, real_data_file)
     prefit = characteristic["prefit"]
     fit_range = detect_fit_range(sample, _range_options(prefit)).fit_range
     expected = prefit["fit_range"]
@@ -154,8 +153,8 @@ def _assert_parameters_match(sample, model_id: str, actual: dict, expected: dict
 
 @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
 @pytest.mark.parametrize("characteristic", _params())
-def test_prefit_parameters_match_curated_project(characteristic: dict) -> None:
-    sample = _load_sample(characteristic)
+def test_prefit_parameters_match_curated_project(characteristic: dict, real_data_file) -> None:
+    sample = _load_sample(characteristic, real_data_file)
     prefit = characteristic["prefit"]
     options = PrefitOptions(range_options=_range_options(prefit))
     result = run_prefit(sample, prefit["model"], options)
@@ -164,7 +163,7 @@ def test_prefit_parameters_match_curated_project(characteristic: dict) -> None:
 
 @pytest.mark.skipif(not GROUND_TRUTH, reason=_SKIP_REASON)
 @pytest.mark.parametrize("characteristic", _params())
-def test_fit_parameters_match_curated_project(characteristic: dict) -> None:
+def test_fit_parameters_match_curated_project(characteristic: dict, real_data_file) -> None:
     """The curated "fit" section comes from the C++ Simplex engine, which
     this pytest environment cannot run directly (no embedded Python/GPU
     runtime here). In this project the Simplex fit converges to
@@ -172,7 +171,7 @@ def test_fit_parameters_match_curated_project(characteristic: dict) -> None:
     coincide to the parameters' own precision -- compare prefit vs fit
     blocks in HZB-project.yaml.jfm.yaml), so re-running prefit and
     comparing against the "fit" parameters is a faithful indirect check."""
-    sample = _load_sample(characteristic)
+    sample = _load_sample(characteristic, real_data_file)
     prefit = characteristic["prefit"]
     fit = characteristic["fit"]
     options = PrefitOptions(range_options=_range_options(prefit))
@@ -185,8 +184,8 @@ def test_fit_parameters_match_curated_project(characteristic: dict) -> None:
     "characteristic",
     _params({name: pytest.mark.xfail(reason=f"auto model selection gap, see module docstring", strict=True) for name in _KNOWN_MODEL_SELECTION_MISMATCHES}),
 )
-def test_auto_prefit_selects_curated_model(characteristic: dict) -> None:
-    sample = _load_sample(characteristic)
+def test_auto_prefit_selects_curated_model(characteristic: dict, real_data_file) -> None:
+    sample = _load_sample(characteristic, real_data_file)
     expected_model = characteristic["prefit"]["model"]
     expected_range = characteristic["prefit"]["fit_range"]
     expected_span = expected_range["upper_index"] - expected_range["lower_index"]

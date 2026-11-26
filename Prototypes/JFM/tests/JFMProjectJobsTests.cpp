@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "JFMRealData.hpp"
 #include <sst/physics/constants.hpp>
 
 #include <algorithm>
@@ -416,7 +417,9 @@ namespace SST::Prototypes::JFM
 
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
-		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("real-measurement") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
+		const Path dataPath = RealDataPath("C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat");
+		if (!FileSystem::Exists(dataPath.Native()))
+			GTEST_SKIP() << "JFM real-measurement file missing: " << dataPath.Utf8() << "; set SST_JFM_REAL_DATA to the data root";
 		ASSERT_TRUE(FileSystem::Exists(pythonRoot.Native())) << pythonRoot.Utf8();
 		ASSERT_TRUE(FileSystem::Exists(dataPath.Native())) << dataPath.Utf8();
 
@@ -448,7 +451,9 @@ namespace SST::Prototypes::JFM
 
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
-		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("real-measurement") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
+		const Path dataPath = RealDataPath("C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat");
+		if (!FileSystem::Exists(dataPath.Native()))
+			GTEST_SKIP() << "JFM real-measurement file missing: " << dataPath.Utf8() << "; set SST_JFM_REAL_DATA to the data root";
 
 #if DS_PYTHON_CAPI_AVAILABLE
 		auto runtime = EnsurePythonRuntimeForBridgeTests();
@@ -533,7 +538,9 @@ namespace SST::Prototypes::JFM
 #if DS_PYTHON_CAPI_AVAILABLE
 		const Path repoRoot = Path::FromResolved(FileSystem::CurrentPath());
 		const Path pythonRoot = ResolveJFMPythonRoot(ApplicationConfig{}, repoRoot);
-		const Path dataPath = repoRoot / Path("Prototypes") / Path("JFM") / Path("example-data") / Path("real-measurement") / Path("C002") / Path("IVT C002_Z015_6") / Path("IV_C002_Z015_6_300,0K.dat");
+		const Path dataPath = RealDataPath("C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat");
+		if (!FileSystem::Exists(dataPath.Native()))
+			GTEST_SKIP() << "JFM real-measurement file missing: " << dataPath.Utf8() << "; set SST_JFM_REAL_DATA to the data root";
 		auto runtime = EnsurePythonRuntimeForBridgeTests();
 		ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
 
@@ -572,8 +579,13 @@ namespace SST::Prototypes::JFM
         ASSERT_TRUE(runtime) << runtime.Error().technicalDetails;
         std::string text, error;
         ASSERT_TRUE(TextFileIO::Load(root / Path("Prototypes/JFM/JFM-projects/HZB-project.yaml.jfm.yaml"), text, error)) << error;
-        const auto loaded = JFMProjectYamlSerializer::Deserialize(text);
+        auto loaded = JFMProjectYamlSerializer::Deserialize(text);
         ASSERT_TRUE(loaded);
+        for (auto &characteristic : loaded->characteristics) {
+            characteristic.sourcePath = RealDataPath(("dat/" + characteristic.name + ".dat").c_str());
+            if (!FileSystem::Exists(characteristic.sourcePath.Native()))
+                GTEST_SKIP() << "JFM real-measurement file missing: " << characteristic.sourcePath.Utf8() << "; set SST_JFM_REAL_DATA to the data root";
+        }
         auto store = CreateRef<JFMWorkspaceStore>();
         auto handle = store->AttachProject(loaded.Value(), Path("HZB.jfm.yaml"));
         auto bus = CreateRef<EventBus>();
@@ -877,9 +889,11 @@ TEST_F(UnicodePaths, EmbeddedPythonPathAndImport) {
     const auto moduleRoot = root / name;
     std::string error;
     ASSERT_TRUE(TextFileIO::Save(moduleRoot / "au2_unicode_module.py", "value = 42\n", error)) << error;
-    const auto source = FileSystem::CurrentPath() / "Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat";
+    const auto source = RealDataPath("C002/IVT C002_Z015_6/IV_C002_Z015_6_300,0K.dat");
+    if (!FileSystem::Exists(source.Native()))
+        GTEST_SKIP() << "JFM real-measurement file missing: " << source.Utf8() << "; set SST_JFM_REAL_DATA to the data root";
     const auto target = root / (name.native() + std::filesystem::path("_300K.dat").native());
-    std::filesystem::copy_file(source, target.Native(), std::filesystem::copy_options::overwrite_existing);
+    std::filesystem::copy_file(source.Native(), target.Native(), std::filesystem::copy_options::overwrite_existing);
     PythonGilAcquireScope gil;
     ASSERT_TRUE(gil.IsActive());
     {

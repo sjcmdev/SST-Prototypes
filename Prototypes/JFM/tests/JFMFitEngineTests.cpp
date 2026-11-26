@@ -17,6 +17,7 @@
 #include "IO/JFMIORegistration.hpp"
 #include "IO/JFMProjectYamlSerializer.hpp"
 #include "Events/JFMEvents.hpp"
+#include "JFMRealData.hpp"
 
 #include <array>
 #include <algorithm>
@@ -461,9 +462,11 @@ namespace SST::Prototypes::JFM
 
     TEST(JFMFitEngineTests, VoltageRangeMapsDescendingRealSweepWithoutReordering)
     {
-        const auto fixture = std::filesystem::current_path() / "Prototypes/JFM/example-data/real-measurement/C002/IVT C002_Z035_02/IV_C002_Z035_02_300,0K_100mW.dat";
-        std::ifstream input(fixture);
-        ASSERT_TRUE(input.is_open()) << fixture;
+        const auto fixture = RealDataPath("C002/IVT C002_Z035_02/IV_C002_Z035_02_300,0K_100mW.dat");
+        if (!FileSystem::Exists(fixture.Native()))
+            GTEST_SKIP() << "JFM real-measurement file missing: " << fixture.Utf8() << "; set SST_JFM_REAL_DATA to the data root";
+        std::ifstream input(fixture.Native());
+        ASSERT_TRUE(input.is_open()) << fixture.Utf8();
         auto record = MakeRecord("SD-0");
         auto data = CreateRef<JFMCharacteristicData>();
         std::string line;

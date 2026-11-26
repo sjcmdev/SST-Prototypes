@@ -2,6 +2,23 @@
 
 Minimal executable project generated from `PrototypeTemplate`.
 
+### Real-measurement tests
+
+Python and native tests look under `example-data/real-measurement` by default.
+This private dataset is gitignored. Set `SST_JFM_REAL_DATA` to an external data
+root containing `dat/ivd_HZB25_T*.dat` and/or `C002/IVT .../*.dat` to test it
+without copying files into the repository. Tests skip only missing measurement
+files, with the missing path and this variable in the reason; existing files
+still run all assertions. Synthetic and other self-contained tests always run.
+For datasets stored separately, run each group with its corresponding root:
+
+```powershell
+$env:SST_JFM_REAL_DATA = 'D:/data/HZB' # contains dat/
+# Run test_jfm_hzb_ground_truth.py, or SelectedHzbCharacteristicHasVisibleSemilogPoints.
+$env:SST_JFM_REAL_DATA = 'D:/data/measurements' # contains C002/
+# Run test_jfm_import_smoke.py and the native import/descending-sweep tests.
+```
+
 Completed fit and Monte Carlo jobs append to the project's persistent run registry
 (`fit_runs` / `monte_carlo_runs`: stable ID, characteristic name, completion status).
 Save/reopen retains these entries; reruns keep earlier entries. Imported completed
