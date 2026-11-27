@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "solver/cpu_kernel.hpp"
 #include "solver/lm_core.hpp"
+#include "solver/lm_policy425.hpp"
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cfenv>
@@ -139,4 +141,92 @@ TEST(JFMCpuKernel, ZeroJunctionDoesNotEvaluateUndefinedInactiveTerms) {
         EXPECT_TRUE(std::isfinite(lm::cpu::objective(GpuModelType::SDRsRshAlphaRsh2Iph,l,p,v,y,4,h,g,true,path)));
         EXPECT_EQ(std::fetestexcept(FE_INVALID|FE_DIVBYZERO),0);
     }
+}
+
+TEST(JFMCpuKernel, N300PointOrderPinsPolishBoundary)
+{
+	GpuParamLayout layout;
+	layout.n_total = layout.n_free = 1;
+	layout.objective = JfmObjective::SignedSigma;
+	layout.sigma_abs = 1;
+	layout.sigma_rel = 0;
+	layout.free_to_total[0] = 0;
+	layout.min_bounds[0] = 0;
+	layout.max_bounds[0] = 2;
+	const double parameters[] = {1};
+	const std::array<double, 300> voltage{}, measured{};
+	double h[64]{}, g[8]{};
+	const auto objective = [&](double first, double tail, bool orthogonal)
+	{
+		const auto evaluate = [=](int i, double, GpuModelType, const double *, double, double *jacobian)
+		{
+			if (jacobian)
+			{
+				std::fill_n(jacobian, 7, 0.0);
+				jacobian[0] = orthogonal && i == 0 ? 0 : 1;
+			}
+			return i == 0 ? first : tail;
+		};
+		return lm::objectiveKernel(GpuModelType::SD0, layout, parameters, voltage.data(), measured.data(),
+			300, h, g, true, true, evaluate);
+	};
+	const double tiny = std::ldexp(1.0, -27);
+	const double current = objective(1, tiny, false);
+	EXPECT_EQ(std::bit_cast<std::uint64_t>(current), 0x3ff0000000000000ULL);
+	const double currentGradient = lm::gradient(layout, parameters, current, h, g);
+	const auto acceptsPolish = [&](double candidate, double gradient)
+	{
+		return candidate <= current * (1 + 2e-14) && gradient < currentGradient;
+	};
+	const double boundary = objective(std::sqrt(1 + 2e-14), 0, true);
+	EXPECT_EQ(std::bit_cast<std::uint64_t>(boundary), 0x3ff000000000005aULL);
+	EXPECT_TRUE(acceptsPolish(boundary, lm::gradient(layout, parameters, boundary, h, g)));
+	const double outside = objective(std::nextafter(std::sqrt(1 + 2e-14), 2.0), 0, true);
+	EXPECT_FALSE(acceptsPolish(outside, lm::gradient(layout, parameters, outside, h, g)));
+
+	// Reversing the same 300 terms changes the decision; a new reduction needs an R2 review.
+	const double candidate = objective(std::sqrt(1 + 100 * std::numeric_limits<double>::epsilon()), 0, true);
+	EXPECT_EQ(std::bit_cast<std::uint64_t>(candidate), 0x3ff0000000000064ULL);
+	EXPECT_FALSE(acceptsPolish(candidate, lm::gradient(layout, parameters, candidate, h, g)));
+	double reversed = 0;
+	for (int i = 299; i >= 0; --i)
+		reversed += i == 0 ? 1 : tiny * tiny;
+	EXPECT_EQ(std::bit_cast<std::uint64_t>(reversed), 0x3ff000000000004bULL);
+	EXPECT_GT(candidate, current * (1 + 2e-14));
+	EXPECT_LE(candidate, reversed * (1 + 2e-14));
+
+	// T257/n300 seed 41 changes bits with margin 0 or 4e-14; pin the production policy too.
+	GpuParamLayout fitLayout;
+	fitLayout.n_total = 7; fitLayout.n_free = 6; fitLayout.T = 257; fitLayout.dof = 294;
+	const double truth[] = {7.5235074385338072e-12, 1.6898464778001436, 7.8649978996147443,
+		19447.455372032924, 1.723920713055028, 16795.308326085047, 0};
+	const double lower[] = {1e-300, 1.0295310860651916, 1.5309961430036374,
+		1545.8295110994384, 0.62010602810366033, 1459.1016346941087};
+	const double upper[] = {2.4339047149497036e-08, 2.0295310860651918, 38.274903575090931,
+		38645.737777485956, 10, 36477.540867352713};
+	for (int j = 0; j < 7; ++j) fitLayout.fixed_values[j] = truth[j];
+	for (int j = 0; j < 6; ++j)
+	{
+		fitLayout.free_to_total[j] = j;
+		fitLayout.min_bounds[j] = lower[j]; fitLayout.max_bounds[j] = upper[j];
+	}
+	std::array<double, 300> fitVoltage, fitCurrent;
+	for (int i = 0; i < 300; ++i)
+	{
+		fitVoltage[i] = 0.1 + (1.02 - 0.1) * i / 299;
+		fitCurrent[i] = lm::current(GpuModelType::SDRsRshAlphaRsh2, fitVoltage[i], truth, 257, nullptr, true)
+			* (1 + .01 * lm::normal(12345 + std::uint64_t(41) * 0xD1B54A32D192ED03ULL, i));
+	}
+	double initial[8]{};
+	lm::start(fitLayout, 12345, 41, 3, initial);
+	const auto fit = lm::fit_variant(GpuModelType::SDRsRshAlphaRsh2, fitLayout, initial,
+		fitVoltage.data(), fitCurrent.data(), 300, 50);
+	EXPECT_EQ(fit.status, 1); EXPECT_EQ(fit.iterations, 9);
+	const double actual[] = {fit.chi, fit.gradient, fit.relative_change, fit.step,
+		fit.p[0], fit.p[1], fit.p[2], fit.p[3], fit.p[4], fit.p[5], fit.p[6], fit.p[7]};
+	const std::uint64_t expected[] = {0x3f45bec742f54ef2ULL, 0x3d1405f24fe086beULL,
+		0x3d049a2b2d64aa89ULL, 0x3d612c36eb807e67ULL, 0x3d9f56638fc5fee2ULL,
+		0x3ffaf54921367b3dULL, 0x401fac709d9dd25aULL, 0x40d22aed7ae4ab1cULL,
+		0x3ffce5c861f7dce5ULL, 0x40d06b3d00cd66a2ULL, 0, 0};
+	for (int i = 0; i < 12; ++i) EXPECT_EQ(std::bit_cast<std::uint64_t>(actual[i]), expected[i]);
 }

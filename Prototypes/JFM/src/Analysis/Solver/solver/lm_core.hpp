@@ -194,6 +194,7 @@ template<class Evaluator> JFM_HD inline double objectiveKernel(GpuModelType mode
    if(!isfinite(r))return inf;
    if(g)for(int k=0;k<7;++k)dj[k]*=derivative;
   }
+  // Point order is part of the LM polish acceptance contract.
   chi+=r*r;
   if(g) {
    double jv[8];for(int j=0;j<l.n_free;++j)jv[j]=dj[l.free_to_total[j]];
