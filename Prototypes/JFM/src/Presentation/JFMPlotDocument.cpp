@@ -21,8 +21,8 @@ namespace SST::Prototypes::JFM
         project.change("JFM figure", {{graph, project.root(), "Figure", 0, pl::Graph{}},
             {layer, graph, "Axes", 0, pl::Layer{}}, {workbook, project.root(), "Results", 0, pl::Workbook{}}}).apply(project);
     }
-    void JFMPlotDocument::BeginFrame() { active.clear(); rendered.clear(); }
-    pl::Id JFMPlotDocument::SetSeries(const plot::SeriesEntryView &entry, bool absoluteCurrent)
+    void JFMPlotDocument::BeginFrame() { active.clear(); rendered.clear(); autoFitInterrupted = false; }
+    pl::Id JFMPlotDocument::SetSeries(const plot::SeriesEntryView &entry, bool positiveCurrentOnly)
     {
         auto delimiter = entry.id.find("###");
         if (delimiter == std::string::npos) delimiter = entry.id.find("##");
@@ -47,8 +47,8 @@ namespace SST::Prototypes::JFM
             const auto* oldError=source.yError ? &std::get<std::vector<double>>(std::get<pl::Column>(project.object(source.yError).data).values) : nullptr;
             std::size_t row=0;unchanged=true;
             for(std::size_t i=0;i<entry.data.count;++i) {
-                const double value=absoluteCurrent?std::abs(entry.data.y[i]):entry.data.y[i];
-                if(!std::isfinite(entry.data.x[i]) || !std::isfinite(value) || (absoluteCurrent && value<=0)) continue;
+                const double value=entry.data.y[i];
+                if(!std::isfinite(entry.data.x[i]) || !std::isfinite(value) || (positiveCurrentOnly && value<=0)) continue;
                 if(row>=oldX.size() || std::memcmp(&oldX[row],entry.data.x+i,sizeof(double)) || std::memcmp(&oldY[row],&value,sizeof(double)) ||
                    (oldError && std::memcmp(&(*oldError)[row],entry.data.yError+i,sizeof(double)))) {unchanged=false;break;}
                 ++row;
@@ -61,8 +61,8 @@ namespace SST::Prototypes::JFM
         std::vector<double> x, y, error;
         for (std::size_t i = 0; i < entry.data.count; ++i)
         {
-            const auto value = absoluteCurrent ? std::abs(entry.data.y[i]) : entry.data.y[i];
-            if (!std::isfinite(entry.data.x[i]) || !std::isfinite(value) || (absoluteCurrent && value <= 0)) continue; // Preserve JFM's historical abs(I) convention.
+            const auto value = entry.data.y[i];
+            if (!std::isfinite(entry.data.x[i]) || !std::isfinite(value) || (positiveCurrentOnly && value <= 0)) continue;
             x.push_back(entry.data.x[i]); y.push_back(value);
             if (entry.data.yError) error.push_back(entry.data.yError[i]);
         }
@@ -132,6 +132,19 @@ namespace SST::Prototypes::JFM
             if (requested.y.scale != baseSpec->y.scale) { spec.y.scale = requested.y.scale; spec.y.range.reset(); }
             if (!(requested.legend == baseSpec->legend)) spec.legend = requested.legend;
         }
+        if (requested.autoFit == plot::AutoFit::Always) {
+            spec.x.range.reset(); spec.y.range.reset(); spec.bounds.reset();
+            spec.x.rescale = spec.y.rescale = plot::RescaleMode::Normal;
+            spec.autoFit = requested.autoFit;
+            spec.x.scale = requested.x.scale; spec.y.scale = requested.y.scale;
+        }
+        if ((!baseSpec || requested.x.scale != baseSpec->x.scale) && spec.top && !spec.top->linked && spec.top->formula.empty()) {
+            spec.top->scale = requested.x.scale; spec.top->range.reset();
+        }
+        if ((!baseSpec || requested.y.scale != baseSpec->y.scale) && spec.right && !spec.right->linked && spec.right->formula.empty()) {
+            spec.right->scale = requested.y.scale; spec.right->range.reset();
+        }
+        spec.autoFit = requested.autoFit;
         spec.padding = requested.padding; spec.customAxes = true;
         baseSpec = requested;
         if (!(current == spec)) { current = std::move(spec); project.change("Refresh JFM axes", {std::move(object)}).apply(project); }
@@ -140,6 +153,7 @@ namespace SST::Prototypes::JFM
     {
         auto pending = std::move(editor.pending); editor.pending.clear();
         for (const auto& edit : pending) {
+            autoFitInterrupted |= edit.kind == plot::PlotEditKind::Axis;
             const auto result = ExecutePlotEdit(*editCommands, engine, layer, edit,
                 [owner=weak_from_this()] { if (auto doc=owner.lock()) { doc->view = std::get<pl::Layer>(doc->project.object(doc->layer).data).view; doc->view.visibility.clear(); } });
             if (!result) editor.error = result.Error().technicalDetails;

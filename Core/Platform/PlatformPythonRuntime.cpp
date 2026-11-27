@@ -82,7 +82,12 @@ namespace SST::Platform
 
 	Path GetAppPythonRoot()
 	{
-		return Path("install") / "app" / "python";
+        const Path relative = Path("install") / "app" / "python";
+        if (const auto executable = CurrentExecutablePath()) {
+            const auto bundled = executable->parent_path() / relative;
+            if (FileSystem::Exists(bundled.Native())) return bundled;
+        }
+        return Path::FromResolved(FileSystem::CurrentPath()) / relative;
 	}
 
 	Path GetAppPythonPlatformRoot()
@@ -120,18 +125,17 @@ namespace SST::Platform
 
 	Path ResolveEmbeddedPythonHome()
     {
-        const Path executable = findNearbyVenvExecutable(Path::FromResolved(FileSystem::CurrentPath()));
-        const Path venvHome = executable.Empty() ? Path{} : readVenvHome(executable.parent_path().parent_path());
-        if (!venvHome.Empty() && FileSystem::Exists(venvHome.Native())) return venvHome;
-
 		const Path platformRoot = GetAppPythonPlatformRoot();
-		if (!platformRoot.Empty() && FileSystem::Exists(platformRoot.Native()))
+		if (!platformRoot.Empty() && FileSystem::Exists(getAppPythonPlatformExecutable().Native()))
 			return platformRoot;
 
 		const Path appRoot = GetAppPythonRoot();
-		if (FileSystem::Exists(appRoot.Native()))
+		if (FileSystem::Exists((getAppPythonGenericExecutable()).Native()))
 			return appRoot;
 
+        const Path executable = ResolvePreferredPythonExecutable();
+        const Path venvHome = executable == Path("python") ? Path{} : readVenvHome(executable.parent_path().parent_path());
+        if (!venvHome.Empty() && FileSystem::Exists(venvHome.Native())) return venvHome;
 		return {};
 	}
 

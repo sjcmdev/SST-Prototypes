@@ -1,10 +1,15 @@
 #include "Core/dspch.hpp"
 #include "Core/PlotExport/PlotEditing.hpp"
+#include "Core/Logging/Logger.hpp"
 #include "Core/ScientificRuntime/PlotExport/PlotExport.hpp"
 #include <imgui.h>
 #include "Core/Platform/ProcessRunner.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 
 namespace SST {
+namespace { WeakRef<EventBus> plotEvents; }
+void ConfigurePlotEditingNotifications(WeakRef<EventBus> events) { plotEvents = std::move(events); }
 ImFont* ResolvePlotPreviewFont(const std::string& family, const std::string& file) {
     static std::map<std::string,ImFont*> fonts;
     auto& font=fonts[family+"\n"+file];auto* atlas=ImGui::GetIO().Fonts;
@@ -39,11 +44,11 @@ public:
     PlotEditCommand(Ref<sst::plotlab::Project> p, sst::plotlab::Id layer,
                     const sst::ui::plot::PlotEdit& edit, std::function<void()> notify)
         : project(std::move(p)), layer(layer), gesture(edit.gesture), changed(std::move(notify)) {
-        operations.push_back(sst::plotlab::editPlot(*project, layer, edit));
+        operations.push_back(sst::plotlab::editPlot(*project, layer, edit, &status));
     }
     Result<void> Execute(CommandContext&) override { return Apply(false); }
     Result<void> Undo(CommandContext&) override { return Apply(true); }
-    bool IsUndoable() const noexcept override { return true; }
+    bool IsUndoable() const noexcept override { return !operations.front().empty(); }
     std::string Description() const override { return "Edit plot"; }
     std::size_t ByteSize() const noexcept override {
         std::size_t bytes = sizeof(*this);
@@ -61,6 +66,13 @@ public:
     }
 private:
     Result<void> Apply(bool undo) {
+        if (operations.front().empty()) {
+            const StructuredError info{ErrorCategory::Validation, Severity::Info, "Plot unchanged", status,
+                status, "PlotEditing", "plot.rescale.empty"};
+            DS_LOG_INFO("{}: {}", info.code, info.technicalDetails);
+            if (auto events = plotEvents.lock()) events->Queue(NotificationRequestedEvent{ToNotification(info)});
+            return {};
+        }
         try {
             if (undo) for (auto i = operations.rbegin(); i != operations.rend(); ++i) i->undo(*project);
             else for (auto& operation : operations) operation.apply(*project);
@@ -74,6 +86,7 @@ private:
     sst::plotlab::Id layer;
     std::uint64_t gesture;
     std::vector<sst::plotlab::Operation> operations;
+    std::string status;
     std::function<void()> changed;
 };
 }
@@ -96,6 +109,10 @@ Result<void> ExecutePlotEdit(CommandRegistry& commands, Ref<sst::plotlab::Projec
     context.Set("plot.project", std::move(project)); context.Set("plot.layer", layer);
     context.Set("plot.edit", edit); context.Set("plot.changed", std::move(changed));
     auto result = commands.Execute(id, std::move(context));
+    if (!result) {
+        DS_LOG_WARN("{}: {}", result.Error().code, result.Error().technicalDetails);
+        if (auto events = plotEvents.lock()) events->Queue(NotificationRequestedEvent{ToNotification(result.Error())});
+    }
     return result ? Result<void>{} : Result<void>{result.Error()};
 }
 }

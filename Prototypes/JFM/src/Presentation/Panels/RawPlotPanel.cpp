@@ -115,11 +115,6 @@ namespace SST::Prototypes::JFM
 		{
 			if (const auto it = info.metadata.find("short_name"); it != info.metadata.end() && !it->second.empty())
 				return it->second;
-			const std::size_t separator = info.name.find('_');
-			if (separator != std::string::npos && separator > 0 && separator <= 16)
-				return info.name.substr(0, separator);
-			if (info.name.size() > 32)
-				return info.name.substr(0, 29) + "...";
 			return info.name.empty() ? std::to_string(info.id) : info.name;
 		}
 
@@ -1030,6 +1025,7 @@ namespace SST::Prototypes::JFM
             figureSpec.x.label = "Voltage (V)"; figureSpec.y.label = "Current (A)";
             figureSpec.y.scale = area.scale == PlotScale::SemiLog ? sst::ui::plot::AxisScale::Log10 : sst::ui::plot::AxisScale::Linear;
             figureSpec.legend = {area.showLegend, true, true}; figureSpec.padding=area.fitPadding;
+            figureSpec.autoFit = area.autoFit ? sst::ui::plot::AutoFit::Always : sst::ui::plot::AutoFit::Manual;
             area.document->SetSpec(figureSpec);
 			const bool plotFont = BeginJFMPlotFrame(*area.document);
 			if (plotFont && ImPlot::BeginPlot(plotId.c_str(), area.document->preview.size, plotFlags))
@@ -1040,60 +1036,6 @@ namespace SST::Prototypes::JFM
 				if (area.scale == PlotScale::SemiLog)
 					ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
 
-				bool hasBounds = false;
-				double minX = 0.0;
-				double maxX = 0.0;
-				double minY = 0.0;
-				double maxY = 0.0;
-				for (const PlotCurveGroup &group : area.groups)
-				{
-					if (!group.visible)
-						continue;
-					for (CharacteristicId id : group.characteristicIds)
-					{
-						if (area.showOnlyActive && id != areaActiveId)
-							continue;
-						if (containsId(group.hiddenCharacteristicIds, id))
-							continue;
-						const auto characteristic = records.find(id);
-						if (characteristic == records.end() || !characteristic->second.data)
-							continue;
-						const JFMCharacteristicData &data = *characteristic->second.data;
-						const std::vector<double> &x = data.voltage;
-						const std::vector<double> &rawY = selectYValues(data);
-						for (std::size_t index = 0; index < x.size() && index < rawY.size(); ++index)
-						{
-							const double y = area.scale == PlotScale::SemiLog ? std::abs(rawY[index]) : rawY[index];
-							if (area.scale == PlotScale::SemiLog && y <= 0.0)
-								continue;
-							sst::ui::plot::IncludeBounds(x[index], y, hasBounds, minX, maxX, minY, maxY);
-						}
-					}
-				}
-				if (area.autoFit && hasBounds)
-				{
-					double dx = maxX - minX;
-					double dy = maxY - minY;
-					if (dx <= 0.0)
-						dx = std::max(1.0, std::abs(maxX) * 0.1);
-					if (dy <= 0.0)
-						dy = std::max(1.0, std::abs(maxY) * 0.1);
-					minX -= dx * area.fitPadding;
-					maxX += dx * area.fitPadding;
-					if (area.scale == PlotScale::SemiLog)
-					{
-						minY = std::max(1.0e-30, minY / (1.0 + area.fitPadding * 4.0));
-						maxY *= 1.0 + area.fitPadding * 4.0;
-					}
-					else
-					{
-						minY -= dy * area.fitPadding;
-						maxY += dy * area.fitPadding;
-					}
-					ImPlot::SetupAxesLimits(minX, maxX, minY, maxY, ImPlotCond_Always);
-				}
-
-				SetupJFMPlotAxes(*area.document);
 				const JFMUserSettings plotSettings = m_Settings != nullptr ? m_Settings->GetSnapshot() : JFMUserSettings{};
 				for (const PlotCurveGroup &group : area.groups)
 				{
@@ -1212,8 +1154,10 @@ namespace SST::Prototypes::JFM
 						}
 					}
 				}
+				SetupJFMPlotAxes(*area.document, true);
 				const bool rangeCursor = RenderRangeDragLines(area, records);
 				EndJFMPlot(*area.document, figureSpec, plotId.c_str());
+                if (area.document->autoFitInterrupted) area.autoFit = false;
 				if (rangeCursor)
 					ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 			}

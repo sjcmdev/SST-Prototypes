@@ -16,6 +16,7 @@
 #include "Core/JobSystem/JobEvents.hpp"
 #include "Core/ProgressTrackingSystem/ProgressTracker.hpp"
 #include "Core/Commands/SystemCommands.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
 #include "Core/Utils/Input.hpp"
 
 namespace SST
@@ -99,6 +100,10 @@ namespace SST
 		m_UndoStack = CreateRef<UndoStack>();
 		m_CommandRegistry = CreateRef<CommandRegistry>();
 		m_CommandRegistry->SetUndoStack(CreateWeakRef(m_UndoStack));
+        (void)m_CommandRegistry->AddObserver([bus = WeakRef<EventBus>(m_EventBus)](const CommandExecutionEvent& event) {
+            if (event.error && event.error->displayPolicy == DisplayPolicy::Notification)
+                if (auto target = bus.lock()) target->Queue(NotificationRequestedEvent{ToNotification(*event.error)});
+        });
 		m_CommandService = CreateRef<CommandService>(m_CommandRegistry, CreateWeakRef(m_UndoStack));
 		m_KeymapResolver = CreateRef<KeymapResolver>();
 		m_ContextManager = CreateRef<ContextManager>();

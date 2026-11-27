@@ -603,7 +603,7 @@ TEST_F(WorksheetUi, PlotDialogsUseOwnerUiFontAndStayInsideMainViewport) {
     ImGui::GetStyle().FontScaleMain = .75f; GraphFrame(graph); GraphFrame(graph);
     const auto* owner = ImGui::FindWindowByName("Graph test"); const auto* main = ImGui::GetMainViewport();
     int dialogs = 0;
-    for (const auto* window : GImGui->Windows) if (window->Active && (std::string_view(window->Name).starts_with("Plot Details###") || std::string_view(window->Name).starts_with("Axis editor###"))) {
+    for (const auto* window : GImGui->Windows) if (window->Active && !(window->Flags & ImGuiWindowFlags_ChildWindow) && (std::string_view(window->Name).starts_with("Plot Details###") || std::string_view(window->Name).starts_with("Axis editor###"))) {
         ++dialogs; EXPECT_NEAR(window->FontRefSize, owner->FontRefSize, 1);
         EXPECT_GE(window->Pos.x, main->WorkPos.x); EXPECT_GE(window->Pos.y, main->WorkPos.y);
         EXPECT_LE(window->Pos.x + window->Size.x, main->WorkPos.x + main->WorkSize.x);
@@ -655,4 +655,16 @@ TEST_F(WorksheetUi, PhysicalExportSizeAndFontsDoNotScaleTheInteractiveGraph) {
     }
     const auto& saved=std::get<pl::Graph>(doc->project->object(graph).data);
     EXPECT_DOUBLE_EQ(saved.widthMm,300); EXPECT_DOUBLE_EQ(saved.heightMm,20); EXPECT_DOUBLE_EQ(saved.fontSizePt,72);
+}
+
+TEST_F(WorksheetUi, AxisEditorListsLayersAndRestoresEachLayerViewport) {
+    const auto graph=doc->PlotColumns(sheet,{columns[1]},plot::SeriesKind::LineScatter);
+    const auto first=doc->project->children(graph).front();
+    auto second=doc->project->object(first);second.id=doc->project->reserveId();second.name="Second layer";second.order=1;
+    std::get<pl::Layer>(second.data).view.viewport=plot::Bounds{10,20,30,40};
+    doc->Execute(doc->project->change("Second layer",{second}));
+    auto& editor=session->plotEditors[graph];editor.axisDialog=plot::AxisSide::Bottom;
+    GraphFrame(graph);ASSERT_EQ(editor.layers.size(),2u);EXPECT_EQ(editor.layer,first);
+    editor.layer=second.id;GraphFrame(graph);EXPECT_EQ(editor.viewLayer,second.id);
+    ASSERT_TRUE(session->views[graph].viewport);EXPECT_NEAR(session->views[graph].viewport->minX,10,1e-9);
 }

@@ -1288,8 +1288,12 @@ namespace SST::Prototypes::PlotLab
         SyncProject();
         auto& doc = *state->document; auto& p = *doc.project;
         auto& editor = state->plotEditors[id];
+        const auto layers = p.children(id);
+        editor.layers.clear();
+        for (auto layer : layers) editor.layers.emplace_back(layer, p.object(layer).name);
+        if (std::find(layers.begin(),layers.end(),editor.layer) == layers.end()) editor.layer = layers.at(0);
         if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !state->activate) state->selected = id;
-        const auto plotsInLayer = p.children(p.children(id).front());
+        const auto plotsInLayer = p.children(editor.layer);
         const auto details = [&] {
             if (editor.selected.empty() && !plotsInLayer.empty()) editor.Select(std::to_string(plotsInLayer.front()), false);
             editor.details = true;
@@ -1339,7 +1343,7 @@ namespace SST::Prototypes::PlotLab
             }
             if (fontChanged)
                 Attempt([&] { doc.Execute(p.change("Graph font", {graphObject})); });
-            const auto layer = p.children(id).at(0);
+            const auto layer = editor.layer;
             auto spec = std::get<pl::Layer>(p.object(layer).data).spec;
             auto plots = p.children(layer);
             bool stale = false;
@@ -1387,6 +1391,16 @@ namespace SST::Prototypes::PlotLab
                     entryPlots.push_back(series);
             }
         auto &view = state->views[id];
+            if (editor.viewLayer && editor.viewLayer != layer) {
+                if (p.objects().contains(editor.viewLayer)) {
+                    auto previous = p.object(editor.viewLayer); std::get<pl::Layer>(previous.data).view = view;
+                    p.change("Remember layer viewport", {std::move(previous)}).apply(p);
+                }
+                view = std::get<pl::Layer>(p.object(layer).data).view;
+                view.fitted = view.viewport.has_value(); view.axisState.reset();
+                graphSources.erase(id);
+            }
+            editor.viewLayer = layer;
             std::vector<std::pair<pl::Id, std::uint64_t>> sources;
             for (auto series : plots) {
                 const auto& source = std::get<pl::Plot>(p.object(series).data);

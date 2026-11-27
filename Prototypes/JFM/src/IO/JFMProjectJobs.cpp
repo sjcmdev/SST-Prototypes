@@ -36,6 +36,7 @@ namespace SST::Prototypes::JFM
 		struct MaterializedSource
 		{
 			std::vector<JFMCharacteristicRecord> records;
+            std::string failure;
 		};
 
 		void AppendCacheField(std::string &key, const std::string &value)
@@ -325,7 +326,7 @@ namespace SST::Prototypes::JFM
 
 			if (info.sourcePath.Empty())
 			{
-				warnings.emplace_back("No source_path for " + info.name + "; raw arrays were not materialized.");
+				warnings.emplace_back("Curve " + info.name + ": no source_path. Restore its source file path or reimport the curve.");
 				advanceProgress();
 				continue;
 			}
@@ -336,40 +337,30 @@ namespace SST::Prototypes::JFM
 			if (parsed == parsedByRequest.end())
 			{
 				Detail::MaterializedSource source;
-				if (!FileSystem::Exists(info.sourcePath.Native()))
-				{
-					warnings.emplace_back("Source file missing for " + info.name + ": " + sourcePath);
-					parsedByRequest.emplace(cacheKey, std::move(source));
-					advanceProgress();
-					continue;
-				}
-
 				auto result = bridge.ImportFiles({info.sourcePath}, info.importOptions, {});
-				if (!result)
-				{
-					warnings.emplace_back("Raw data materialization failed for " + sourcePath + ": " + result.Error().technicalDetails);
-					parsedByRequest.emplace(cacheKey, std::move(source));
-					advanceProgress();
-					continue;
-				}
-
-				JFMImportBatchResult batch = std::move(result).Value();
-				warnings.insert(warnings.end(), batch.warnings.begin(), batch.warnings.end());
-				source.records.reserve(batch.characteristics.size());
-				for (JFMCharacteristic &characteristic : batch.characteristics)
-				{
-					source.records.emplace_back(JFMCharacteristicRecord{
-						std::move(characteristic.info),
-						CreateRef<const JFMCharacteristicData>(std::move(characteristic.data))});
-				}
-				parsed = parsedByRequest.emplace(cacheKey, std::move(source)).first;
+                if (!result) {
+                    source.failure = result.Error().userMessage + " " + result.Error().technicalDetails + " Fix: " + result.Error().suggestion;
+                } else {
+                    JFMImportBatchResult batch = std::move(result).Value();
+                    warnings.insert(warnings.end(), batch.warnings.begin(), batch.warnings.end());
+                    source.records.reserve(batch.characteristics.size());
+                    for (JFMCharacteristic &characteristic : batch.characteristics) {
+                        source.records.emplace_back(JFMCharacteristicRecord{
+                            std::move(characteristic.info), CreateRef<const JFMCharacteristicData>(std::move(characteristic.data))});
+                    }
+                }
+                parsed = parsedByRequest.emplace(cacheKey, std::move(source)).first;
 			}
 
+            if (!parsed->second.failure.empty()) {
+                warnings.emplace_back("Curve " + info.name + " [" + std::to_string(info.id) + "]: " + parsed->second.failure);
+                advanceProgress(); continue;
+            }
 			const JFMCharacteristicRecord *match = Detail::FindMaterializedMatch(parsed->second.records, info);
 			if (match == nullptr)
 			{
 				if (FileSystem::Exists(info.sourcePath.Native()))
-					warnings.emplace_back("No matching raw data found for " + info.name + " in " + sourcePath);
+					warnings.emplace_back("Curve " + info.name + ": no matching data in " + sourcePath + ". Restore the original source file or reimport this curve.");
 				advanceProgress();
 				continue;
 			}

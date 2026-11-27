@@ -2,6 +2,7 @@
 #include "ScientificRuntime/Python/PythonGilScope.hpp"
 
 #include "IO/JFMPythonImportBridge.hpp"
+#include "IO/JFMNativeDat.hpp"
 
 #include "IO/JFMPythonRuntime.hpp"
 
@@ -27,7 +28,7 @@ namespace SST::Prototypes::JFM
 			Severity::Error,
 			std::move(message),
 			std::move(details),
-			"Enable embedded Python for the JFM project and make sure Prototypes/JFM/python is on sys.path.",
+			"Restore the bundled install/app/python runtime and python modules beside the executable, or run uv sync --locked in the worktree. Basic .dat files can use the native dat parser.",
 			"JFMPythonImportBridge",
 			"jfm.python_import"};
 	}
@@ -209,6 +210,10 @@ namespace SST::Prototypes::JFM
 		const JFMImportOptions &options,
 		const ProgressCallback &progressCallback)
 	{
+        for (const auto& path : paths) if (!FileSystem::Exists(path.Native()))
+            return StructuredError{ErrorCategory::IO, Severity::Error, "Source file missing", path.Utf8(),
+                "Restore the source file at this path or reimport the curve from its new location.", "JFMImport", "jfm.import.source_missing"};
+        if (CanImportNativeDat(paths, options)) return ImportNativeDat(paths, options, progressCallback);
 #if DS_PYTHON_CAPI_AVAILABLE
 
 		if (m_PythonRoot.Empty() || !FileSystem::Exists(m_PythonRoot.Native()))
@@ -221,7 +226,7 @@ namespace SST::Prototypes::JFM
 		if (!PythonInterpreter::IsRuntimeInitialized())
 			return makePythonBridgeError(
 				"Python import failed.",
-				"Core ScientificRuntimeLayer has not initialized the embedded Python runtime.");
+				"Embedded Python runtime is unavailable (python.embed.runtime_missing or initialization failed); see the application log.");
 
         PythonGilAcquireScope gil;
         if (!gil.IsActive())

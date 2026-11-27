@@ -146,6 +146,8 @@ namespace SST::Prototypes::JFM
 		if (event.operation != state->importOperation || event.project != state->importProject)
 			return;
 
+        if (!event.warnings.empty()) NotifyFailure(state, NotificationCategory::Import, "JFM import needs attention",
+            event.warnings.front() + " See Import Status for every curve.");
 		state->importWarnings.insert(state->importWarnings.end(), event.warnings.begin(), event.warnings.end());
 		state->importBatches.push_back(event);
 		if (!event.finalBatch)
@@ -661,6 +663,8 @@ namespace SST::Prototypes::JFM
 		if (state->store == nullptr)
 			return;
 
+        if (!event.warnings.empty()) NotifyFailure(state, NotificationCategory::Import, "JFM curve reload needs attention",
+            event.warnings.front() + " See Import Status for every curve.");
 		const std::size_t updated = state->store->UpdateCharacteristicRecords(event.project, event.characteristics);
 		state->store->SetLastImportWarnings(event.project, event.warnings);
 		if (event.warnings.empty())

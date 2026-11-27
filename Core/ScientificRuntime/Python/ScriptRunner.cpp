@@ -57,6 +57,9 @@ namespace SST
 		}
 
 		const Path pythonExecutable = resolvePythonExecutable(options);
+        if (options.pythonExecutable.empty() && pythonExecutable == Path("python"))
+            return MakePythonUnavailableError("Project Python runtime was not found.", "No bundled interpreter or project venv exists.",
+                "Restore install/app/python beside the executable or run uv sync --locked in the worktree.", "python.embed.runtime_missing");
 		Platform::ProcessRunOptions processOptions;
 		processOptions.executable = pythonExecutable;
 		processOptions.arguments.push_back(scriptPath.Utf8());

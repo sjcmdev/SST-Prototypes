@@ -56,7 +56,7 @@ namespace SST
 			application.GetRuntimeServices().commandRegistry,
 			application.GetRuntimeServices().contextManager);
 		panelIds.overview = editorLayer.RegisterPanel<JFMOverviewPanel>(workspace);
-		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace);
+		panelIds.importStatus = editorLayer.RegisterPanel<ImportStatusPanel>(workspace, "Import Status", true, application.GetEventBusRef());
 		panelIds.rawPlot = editorLayer.RegisterPanel<RawPlotPanel>(
 			workspace,
 			settings,

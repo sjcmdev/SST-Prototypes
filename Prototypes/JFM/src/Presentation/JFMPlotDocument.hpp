@@ -16,13 +16,14 @@ namespace SST::Prototypes::JFM
     public:
         JFMPlotDocument();
         void BeginFrame();
-        sst::plotlab::Id SetSeries(const sst::ui::plot::SeriesEntryView &, bool absoluteCurrent = false);
+        sst::plotlab::Id SetSeries(const sst::ui::plot::SeriesEntryView &, bool positiveCurrentOnly = false);
         void SetSpec(sst::ui::plot::PlotSpec);
         void Save(const std::filesystem::path&) const;
         void Load(const std::filesystem::path&);
         void ApplyEdits();
         sst::ui::plot::PlotEditorState editor;
         std::string currentGroup;
+        bool autoFitInterrupted = false;
         sst::ui::plot::PlotPreview preview{{}, {96.f/72}};
         Ref<CommandRegistry> editCommands = CreateRef<CommandRegistry>();
         Ref<UndoStack> editUndo = CreateRef<UndoStack>();

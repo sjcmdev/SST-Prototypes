@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "IO/JFMImportPaths.hpp"
+#include "Core/Platform/ProcessRunner.hpp"
 
 namespace SST::Prototypes::JFM
 {
@@ -23,6 +24,10 @@ namespace SST::Prototypes::JFM
 
 	Path ResolveJFMPythonRoot(const ApplicationConfig &config)
 	{
+        if (const auto executable = Platform::CurrentExecutablePath()) {
+            const auto bundled = executable->parent_path() / "python";
+            if (FileSystem::Exists((bundled / "jfm_import" / "__init__.py").Native())) return bundled;
+        }
 		return ResolveJFMPythonRoot(config, Path::FromResolved(FileSystem::CurrentPath()));
 	}
 

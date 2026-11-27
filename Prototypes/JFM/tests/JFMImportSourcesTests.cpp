@@ -33,3 +33,25 @@ namespace SST::Prototypes::JFM
         ASSERT_EQ(missing.size(),1); EXPECT_EQ(missing[0].paths.size(),1);
     }
 }
+
+#include "IO/JFMNativeDat.hpp"
+TEST(JFMNativeDat, ImportsWithoutPythonAndReportsActionableFileErrors) {
+    using namespace SST;using namespace SST::Prototypes::JFM;
+    const Path path=Path::FromResolved(FileSystem::TempDirectoryPath()/"sst-native-T280.dat");
+    struct Cleanup {Path path;~Cleanup(){FileSystem::Remove(path.Native());}} cleanup{path};
+    std::string error;ASSERT_TRUE(TextFileIO::Save(path,"# measurement\n-1;0,1\n0;0,2\n1;0,3\n",error));
+    JFMPythonImportBridge bridge(Path{"missing-python-root"});
+    auto imported=bridge.ImportFiles({path},{});ASSERT_TRUE(imported)<<imported.Error().technicalDetails;
+    ASSERT_EQ(imported->characteristics.size(),1u);const auto& curve=imported->characteristics.front();
+    EXPECT_EQ(curve.data.voltage,(std::vector<double>{-1,0,1}));EXPECT_EQ(curve.data.current,(std::vector<double>{.1,.2,.3}));
+    EXPECT_EQ(curve.info.temperatureK,280);EXPECT_EQ(curve.info.sourceRecordKey,"0");
+    auto missing=bridge.ImportFiles({path.parent_path()/"missing.dat"},{});ASSERT_FALSE(missing);
+    EXPECT_EQ(missing.Error().category,ErrorCategory::IO);EXPECT_FALSE(missing.Error().suggestion.empty());
+    ASSERT_TRUE(TextFileIO::Save(path,"Voltage [V];I [A];J [A/cm2]\n0;0.1;0.2\n1;0.3;0.4\n",error));
+    auto named=bridge.ImportFiles({path},{});ASSERT_TRUE(named)<<named.Error().technicalDetails;
+    EXPECT_EQ(named->characteristics.front().data.current,(std::vector<double>{.1,.3}));
+    EXPECT_EQ(named->characteristics.front().data.currentDensity,(std::vector<double>{.2,.4}));
+    EXPECT_EQ(named->characteristics.front().info.columns[0].unit,"V");
+    JFMImportOptions custom;custom.namePattern="{T}";EXPECT_FALSE(CanImportNativeDat({path},custom));
+    custom={};custom.parser="dat_python";EXPECT_FALSE(CanImportNativeDat({path},custom));
+}

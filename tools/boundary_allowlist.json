@@ -6656,6 +6656,33 @@
       "sha256": "5fd2be8e0ef1b2388467304fe74c49fe81c106162caf6b1fd0352dc35fb03d1e",
       "count": 1,
       "reason": "Python binding edge: preserves legacy code/message while attaching typed terminal metadata. JSON conversion stays at public Python input/output."
+    },
+    {
+      "file": "Prototypes/JFM/src/Presentation/Panels/ImportStatusPanel.cpp",
+      "rule": "python",
+      "line": 34,
+      "code": "ImGui::Text(\"Python runtime: %s\", PythonInterpreter::IsRuntimeInitialized() ? \"ready\" : \"unavailable\");",
+      "sha256": "55398db521cd723fb57dbb115f20bbc036f525e1c7a299888a6ae0148e8f6cf9",
+      "count": 1,
+      "reason": "Import Status queries embedded Python runtime readiness; capability query only, no payload conversion or in-process text transport."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 51,
+      "code": "if (!PyStatus_Exception(status) && !home.Empty()",
+      "sha256": "05297692f51301c05af10e5b5b93c7777e80f1a2ee2c483fe6f58cc0b8cb59d5",
+      "count": 1,
+      "reason": "Embedded Python initialization edge: set the portable bundled interpreter home via the Python C API."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 54,
+      "code": "status = PyConfig_SetString(&config, &config.home, homePath.c_str());",
+      "sha256": "566ab6d5eff521ca543e1abd698a3e34e9c60d0cace51ed584d341aaebc2dad5",
+      "count": 1,
+      "reason": "Embedded Python initialization edge: set the portable bundled interpreter home via the Python C API."
     }
   ],
   "known-debt": [
