@@ -65,6 +65,7 @@ namespace SST::Prototypes::JFM
 
 		Result<Path> PersistMonteCarlo(const JFMMonteCarloWorkItem &item, const JFMMonteCarloComputation &computation)
 		{
+			ZoneScopedN("JFM.result.save");
 			const auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(
 				std::chrono::system_clock::now().time_since_epoch()).count();
 			Path directory = item.outputRoot

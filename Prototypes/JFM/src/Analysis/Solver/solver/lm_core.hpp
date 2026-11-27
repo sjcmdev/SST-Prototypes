@@ -4,6 +4,9 @@
 #include <limits>
 #include "gpu/gpu_types.hpp"
 #include "cpu_kernel.hpp"
+#if defined(TRACY_ENABLE) && !defined(__CUDACC__)
+#include <tracy/Tracy.hpp>
+#endif
 #ifdef __CUDACC__
 #define JFM_HD __host__ __device__
 #else
@@ -171,6 +174,12 @@ struct ScalarCurrentEvaluator {
  }
 };
 template<class Evaluator> JFM_HD inline double objectiveKernel(GpuModelType model,const GpuParamLayout& l,const double* p,const double* v,const double* y,int count,double* h,double* g,bool precise,bool shared,Evaluator evaluate) {
+#if defined(TRACY_ENABLE) && !defined(__CUDACC__)
+ ZoneScopedN("JFM.objective.model");
+ // Model, Lambert W and analytic Jacobian are fused; measure the batch, never individual points.
+ ZoneNamedN(jfmJacobian,"JFM.Jacobian",g!=nullptr);
+ ZoneNamedN(jfmLambertW,"JFM.LambertW.batch",true);
+#endif
  double params[8];full(l,p,params);double chi=0;
  if(g)for(int j=0;j<l.n_free;++j){g[j]=0;for(int k=0;k<l.n_free;++k)h[j*8+k]=0;}
  for(int i=0;i<count;++i) {

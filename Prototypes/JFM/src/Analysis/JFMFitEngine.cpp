@@ -357,6 +357,7 @@ namespace SST::Prototypes::JFM
 			const ParameterArray &parameters,
 			double noisePercent, const FitData &data)
 		{
+			ZoneScopedN("JFM.MC.finalChiSquared");
 			const double noise = std::clamp(noisePercent, 0.0, 100.0) / 100.0;
 			double chiSquared = 0.0;
 			const std::size_t count = std::min(voltage.size(), trueCurrent.size());
@@ -666,6 +667,7 @@ namespace SST::Prototypes::JFM
         constexpr std::size_t chunkSize = 8;
         const auto chunks = (static_cast<std::size_t>(settings.monteCarloSamples) + chunkSize - 1) / chunkSize;
         const auto runChunk = [&](std::size_t chunk) {
+        ZoneScopedN("JFM.MC.chunk");
 		FitData noisyData;
 		noisyData.voltage = output.result.voltage;
 		noisyData.sigma = output.result.currentSigma;
@@ -684,6 +686,8 @@ namespace SST::Prototypes::JFM
             const SolverOutput solved = Solve(*model, noisyData, *characteristic.info.temperatureK, start, fitValues, freeMask, monteCarloSolverSettings, settings.monteCarloMaxIterations, settings.monteCarloSeed, run, settings.monteCarloStartPerturbationPercent);
 			const double finalChiSquared = FinalMonteCarloChiSquared(*model, output.result.voltage, output.result.idealCurrent, *characteristic.info.temperatureK, solved.parameters, settings.monteCarloNoisePercent, noisyData);
 			JFMMonteCarloSample sample;
+			{
+			ZoneScopedN("JFM.MC.samplePopulation");
 			for (std::string_view name : model->parameters)
 				sample.parameters.push_back(solved.parameters[IndexOf(name)]);
 			sample.chiSquared = finalChiSquared;
@@ -699,6 +703,7 @@ namespace SST::Prototypes::JFM
             sample.linearPoints = branches.linearPoints; sample.logPoints = branches.logPoints;
             sample.stopReason = !sample.accepted ? "non_finite" : solved.result.stop_reason;
             output.result.samples[run] = std::move(sample);
+			}
 		}
         };
         if (context) {

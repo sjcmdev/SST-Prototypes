@@ -6,12 +6,18 @@ JFM_HD inline double logfloor(const GpuParamLayout& l,int j) {
  return l.min_bounds[j]>0?0:fmax(fabs(l.fixed_values[l.free_to_total[j]])*1e-12,1e-30);
 }
 JFM_HD inline Result fit_variant(GpuModelType model,const GpuParamLayout& l,const double* initial,const double* v,const double* y,int count,int limit=300) {
+#if defined(TRACY_ENABLE) && !defined(__CUDACC__)
+ ZoneScopedN("JFM.Fit");
+#endif
 
  constexpr bool shared=true;
  Result out;for(int j=0;j<l.n_free;++j)out.p[j]=initial[j];
  double mu=1e-3,h[64],g[8],scale[8]={};int polish_steps=0;out.chi=objective(model,l,out.p,v,y,count,h,g,true,shared);
  if(!isfinite(out.chi)){out.status=2;return out;}
  for(int it=0;it<limit;++it) {
+#if defined(TRACY_ENABLE) && !defined(__CUDACC__)
+  ZoneScopedN("JFM.LM.iteration");
+#endif
   out.iterations=it+1;out.gradient=gradient(l,out.p,out.chi,h,g);
   double target=1e-13;
   if(out.gradient<=gtol&&(out.relative_change<=ftol||out.step<=xtol)&&
@@ -26,6 +32,9 @@ JFM_HD inline Result fit_variant(GpuModelType model,const GpuParamLayout& l,cons
   }
   bool accepted=false;
   for(int retry=0;retry<48;++retry) {
+#if defined(TRACY_ENABLE) && !defined(__CUDACC__)
+   ZoneScopedN("JFM.LM.step");
+#endif
    double a[64]={},b[8],candidate[8];
    for(int j=0;j<l.n_free;++j) {
     bool aj=active(l,out.p,g,j);b[j]=aj?0:-g[j]*chain[j]/scale[j];

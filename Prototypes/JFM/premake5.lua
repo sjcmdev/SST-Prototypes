@@ -302,6 +302,9 @@ project "JFM"
 for _, target in ipairs { "JFM", "JFMTests" } do
     project(target)
     filter { "system:windows" }
+        includedirs { _SST_ROOT .. "/Vendor/Tracy/public" }
+        defines { "TRACY_ENABLE", "TRACY_ONLY_LOCALHOST" }
+        links { "Tracy" }
         floatingpoint "Strict"
     filter { "system:windows", "files:**/cpu_kernel_avx2.cpp" }
         vectorextensions "AVX2"
