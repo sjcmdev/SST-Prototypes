@@ -6,6 +6,7 @@
 
 #include "Core/Utils/Memory.hpp"
 #include "App/UiConfig.hpp"
+#include "Core/JobSystem/JobSystemConfig.hpp"
 
 namespace SST
 {
@@ -32,7 +33,7 @@ namespace SST
 		float fontScaleStepMin = 0.01f;
 		float fontScaleStepMax = 1.0f;
 		float fontScaleStepSliderMax = 0.5f;
-		int defaultWorkerThreadCount = 1;
+		int defaultWorkerThreadCount = DefaultComputeWorkerCount();
 		bool reserveUrgentWorkerByDefault = true;
 		ApplicationPaths paths;
 		AppearanceConfig appearance;

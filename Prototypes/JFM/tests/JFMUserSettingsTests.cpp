@@ -5,6 +5,11 @@
 
 namespace SST::Prototypes::JFM
 {
+	TEST(JFMUserSettingsTests, MonteCarloDefaultsToLevenbergMarquardt)
+	{
+		EXPECT_EQ(JFMFitMonteCarloSettings{}.fitMethod, "lm");
+	}
+
 	TEST(JFMUserSettingsTests, RoundTripsUserSettingsYaml)
 	{
 		const Path root = Path::FromResolved(FileSystem::TempDirectoryPath() / "sst-jfm-settings-test-root" / std::filesystem::u8path(u8"Za\u017c\u00f3\u0142\u0107_\u65e5\u672c_\U0001f600"));

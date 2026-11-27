@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
+#include <imgui_internal.h>
 #include "Presentation/Panels/MonteCarloCurvesPanel.hpp"
 #include "Vendor/implot/implot.h"
 #include "Vendor/implot/implot_internal.h"
@@ -154,6 +155,103 @@ namespace SST::Prototypes::JFM
             ASSERT_EQ(plot->Plots.GetBufSize(),1);
             // Ideal + accepted noisy + accepted fitted; rejected curves create no items.
             EXPECT_EQ(plot->Plots.GetByIndex(0)->Items.GetItemCount(),3);
+        }
+        ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
+    }
+
+    TEST(JFMPlotDocumentTests, SolverConvergencePercentageWarnsBelowFiftyPercent)
+    {
+        auto store = CreateRef<JFMWorkspaceStore>(); auto bus = CreateRef<EventBus>();
+        const auto project = store->GetActiveProjectHandle();
+        JFMCharacteristic curve; curve.info.name = "Convergence"; curve.info.temperatureK = 300.;
+        curve.data.voltage = {.2,.3}; curve.data.current = {1e-5,2e-5};
+        const auto id = store->AddCharacteristics(project,{curve}).front();
+        const JFMCharacteristicRef ref{project,id};
+        ASSERT_TRUE(store->SetPrefitModel(project,{id},"SD-0"));
+        JFMPrefitState pre; pre.modelId = "SD-0";
+        ASSERT_TRUE(store->ApplyPrefitResult(ref,store->BeginPrefit(ref),pre,{}));
+        JFMFitState fit; fit.modelId = "SD-0";
+        ASSERT_TRUE(store->ApplyFitResult(ref,store->BeginFit(ref),fit,{}));
+        auto *gui = ImGui::CreateContext(); auto *plot = ImPlot::CreateContext();
+        auto &io = ImGui::GetIO(); io.DisplaySize = {1200,800}; io.DeltaTime = 1.f/60; io.IniFilename = nullptr;
+        io.ConfigDebugHighlightIdConflicts = true; io.Fonts->AddFontDefault(); io.Fonts->Build();
+        {
+            MonteCarloCurvesPanel panel(store,bus);
+            for (int converged : {1,2}) {
+                JFMMonteCarloResult result; result.parameterNames = {"I0","A"};
+                result.voltage = curve.data.voltage; result.idealCurrent = curve.data.current; result.noiseSeed = 42;
+                for (int i = 0; i < 4; ++i) {
+                    JFMMonteCarloSample sample; sample.parameters = {1e-10,1.5};
+                    sample.converged = true; sample.solverConverged = i < converged; result.samples.push_back(sample);
+                }
+                JFMMonteCarloState state; state.modelId = "SD-0"; state.status = "completed";
+                const auto generation = store->BeginMonteCarlo(ref);
+                ASSERT_TRUE(store->ApplyMonteCarloResult(ref,generation,state,CreateRef<const JFMMonteCarloResult>(std::move(result))));
+                bus->PublishNew<MonteCarloCompleted>(ref,generation,state,JFMMonteCarloResult{});
+                ImGui::NewFrame(); ImGui::SetNextWindowSize({1100,700}); ImGui::Begin("Convergence test");
+                ImGui::LogToBuffer(); panel.RenderContent();
+                const std::string text = gui->LogBuffer.c_str(); ImGui::LogFinish();
+                ImGui::End(); ImGui::Render();
+                EXPECT_NE(text.find(converged == 1 ? "Solver converged: 1/4 (25.0%)" : "Solver converged: 2/4 (50.0%)"), std::string::npos);
+                bool highlighted = false;
+                const auto warning = ImGui::ColorConvertFloat4ToU32(ImVec4(1.f,.65f,.2f,1.f));
+                for (auto *list : ImGui::GetDrawData()->CmdLists)
+                    for (const auto &vertex : list->VtxBuffer) highlighted |= vertex.col == warning;
+                EXPECT_EQ(highlighted, converged == 1);
+                EXPECT_EQ(gui->DebugDrawIdConflictsCount, 0);
+            }
+        }
+        ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
+    }
+
+    TEST(JFMPlotDocumentTests, MonteCarloPreviewRefreshesForNewResultAndModel)
+    {
+        auto store = CreateRef<JFMWorkspaceStore>(); auto bus = CreateRef<EventBus>();
+        const auto project = store->GetActiveProjectHandle();
+        JFMCharacteristic curve; curve.info.name = "Preview refresh"; curve.info.temperatureK = 300.;
+        curve.data.voltage = {0.,.2,.4}; curve.data.current = {0.,0.,0.};
+        const auto id = store->AddCharacteristics(project,{curve}).front();
+        const JFMCharacteristicRef ref{project,id};
+        ASSERT_TRUE(store->SetPrefitModel(project,{id},"SD-0"));
+        JFMPrefitState pre; pre.modelId = "SD-0";
+        ASSERT_TRUE(store->ApplyPrefitResult(ref,store->BeginPrefit(ref),pre,{}));
+        JFMFitState fit; fit.modelId = "SD-0";
+        ASSERT_TRUE(store->ApplyFitResult(ref,store->BeginFit(ref),fit,{}));
+        JFMMonteCarloState state; state.modelId = "SD-0";
+        const auto makeResult = [&](double saturationCurrent) {
+            JFMMonteCarloResult result; result.parameterNames = {"I0","A","Rs","Rsh"};
+            result.voltage = curve.data.voltage; result.idealCurrent = curve.data.current;
+            result.noiseSeed = 42; result.noiseAmplitude.assign(3,0.);
+            result.samples = {{{saturationCurrent,1.5,100.,10.},0,0,1,true}};
+            return CreateRef<const JFMMonteCarloResult>(std::move(result));
+        };
+        auto shared = makeResult(1e-8);
+        ASSERT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,shared));
+        auto *gui = ImGui::CreateContext(); auto *plot = ImPlot::CreateContext();
+        auto &io = ImGui::GetIO(); io.DisplaySize = {1200,800}; io.DeltaTime = 1.f/60; io.IniFilename = nullptr;
+        io.Fonts->AddFontDefault(); io.Fonts->Build();
+        {
+            MonteCarloCurvesPanel panel(store,bus,"Preview refresh",true);
+            bus->PublishNew<MonteCarloRequested>(project,std::vector<CharacteristicId>{id});
+            const auto renderMaximum = [&] {
+                ImGui::NewFrame(); ImGui::SetNextWindowSize({1100,700});
+                ImPlot::SetNextAxesToFit(); panel.Render(); ImGui::Render();
+                return plot->Plots.GetByIndex(0)->Axes[ImAxis_Y1].FitExtents.Max;
+            };
+            const double original = renderMaximum();
+            EXPECT_DOUBLE_EQ(renderMaximum(),original);
+            shared = makeResult(1e-6);
+            EXPECT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,shared));
+            const double replaced = renderMaximum();
+            EXPECT_GT(replaced,original*10.);
+            state.modelId = "SD-RsRsh";
+            EXPECT_TRUE(store->SetPrefitModel(project,{id},state.modelId));
+            pre.modelId = state.modelId; fit.modelId = state.modelId;
+            EXPECT_TRUE(store->ApplyPrefitResult(ref,store->BeginPrefit(ref),pre,{}));
+            EXPECT_TRUE(store->ApplyFitResult(ref,store->BeginFit(ref),fit,{}));
+            EXPECT_TRUE(store->ApplyMonteCarloResult(ref,store->BeginMonteCarlo(ref),state,shared));
+            EXPECT_GT(std::abs(renderMaximum()-replaced),1e-8);
+            EXPECT_EQ(store->GetMonteCarloResult(ref),shared);
         }
         ImPlot::DestroyContext(plot); ImGui::DestroyContext(gui);
     }

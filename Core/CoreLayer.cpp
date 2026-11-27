@@ -33,8 +33,7 @@ namespace SST
 
 		std::size_t resolveWorkerThreadCount(const JobsConfig &jobsConfig)
 		{
-			const std::size_t urgentWorkerCount = static_cast<std::size_t>(jobsConfig.reserveUrgentWorker ? 1 : 0);
-			return static_cast<std::size_t>(std::max(1, jobsConfig.defaultWorkerThreadCount)) + urgentWorkerCount;
+			return static_cast<std::size_t>(std::max(1, jobsConfig.defaultWorkerThreadCount));
 		}
 
 	}
@@ -91,7 +90,7 @@ namespace SST
 			workerThreadCount,
 			jobsConfig.defaultWorkerThreadCount,
 			jobsConfig.reserveUrgentWorker);
-		m_JobSystem = CreateRef<JobSystem>(m_EventBus, workerThreadCount);
+		m_JobSystem = CreateRef<JobSystem>(m_EventBus, workerThreadCount, jobsConfig.reserveUrgentWorker);
 
 		DS_LOG_INFO("Init: ProgressTracker");
 		m_ProgressTracker = CreateRef<ProgressTracker>(m_EventBus);
@@ -245,6 +244,7 @@ namespace SST
 
 		const std::size_t targetThreadCount = resolveWorkerThreadCount(jobsConfig);
 		const std::size_t previousThreadCount = m_JobSystem->GetThreadCount();
+		m_JobSystem->SetReserveUrgentWorker(jobsConfig.reserveUrgentWorker);
 		if (!m_JobSystem->SetThreadCount(targetThreadCount))
 		{
 			DS_LOG_WARN(

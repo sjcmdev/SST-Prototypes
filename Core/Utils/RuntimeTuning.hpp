@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include "Core/JobSystem/JobSystemConfig.hpp"
 
 namespace SST
 {
@@ -27,7 +28,7 @@ namespace SST
 		inline constexpr bool UiSettingsPreviewEnabled = true;
 		inline constexpr bool UiSettingsAutoSaveOnPreview = false;
 
-		inline constexpr int JobsDefaultWorkerThreads = 5;
+		inline const int JobsDefaultWorkerThreads = DefaultComputeWorkerCount();
 		inline constexpr bool JobsReserveUrgentWorker = true;
 
 		inline constexpr std::size_t EventQueueInitialCapacity = 256;

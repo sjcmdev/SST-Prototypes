@@ -83,8 +83,8 @@ namespace SST::Prototypes::JFM
 	{
 		if (ref.project == InvalidProjectHandle || ref.characteristic == InvalidCharacteristicId)
 			return;
-		if (std::find(m_Plots.begin(), m_Plots.end(), ref) == m_Plots.end())
-			m_Plots.push_back(ref);
+		if (std::none_of(m_Plots.begin(), m_Plots.end(), [ref](const auto &plot) { return plot.ref == ref; }))
+			m_Plots.push_back(PlotPreview{ref});
 	}
 
 	void MonteCarloCurvesPanel::RenderContent()
@@ -121,12 +121,16 @@ namespace SST::Prototypes::JFM
             ImGui::EndTable();
         }
 
-		for (JFMCharacteristicRef ref : m_Plots)
+		for (auto &plotPreview : m_Plots)
 		{
+			const auto ref = plotPreview.ref;
 			const Ref<const JFMMonteCarloResult> result = m_Store->GetMonteCarloResult(ref);
 			const auto record = m_Store->FindCharacteristicRecord(ref);
 			if (result == nullptr || !record || !record->info.temperatureK || result->voltage.empty() || result->samples.empty())
+			{
+				plotPreview = PlotPreview{ref};
 				continue;
+			}
             const auto accepted = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.converged; });
             const auto converged = std::count_if(result->samples.begin(), result->samples.end(), [](const auto &s) { return s.solverConverged; });
             const bool previous = record->info.monteCarlo && record->info.monteCarlo->status == "running";
@@ -136,7 +140,12 @@ namespace SST::Prototypes::JFM
                 ImGui::Text("Samples: %s", state.sampleSaveStatus.c_str());
                 if (!state.sampleSaveError.empty()) ImGui::TextWrapped("%s", state.sampleSaveError.c_str());
             }
-            ImGui::Text("%s: %d/%d accepted, %d converged", record->info.name.c_str(), static_cast<int>(accepted), static_cast<int>(result->samples.size()), static_cast<int>(converged));
+            ImGui::Text("%s: %d/%d accepted", record->info.name.c_str(), static_cast<int>(accepted), static_cast<int>(result->samples.size()));
+            const double convergencePercent = 100.0 * converged / result->samples.size();
+            if (convergencePercent < 50.0) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.f, .65f, .2f, 1.f));
+            ImGui::Text("Solver converged: %d/%d (%.1f%%)", static_cast<int>(converged), static_cast<int>(result->samples.size()), convergencePercent);
+            if (convergencePercent < 50.0) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Solver convergence is separate from accepted finite samples. Below 50%%: review the stop reasons and fit method.");
 			std::map<std::string, int> reasons;
             int fallback = 0, flat = 0;
             for (const auto &s : result->samples) { ++reasons[s.stopReason]; fallback += s.fitMethod == "LM→NM"; flat += s.flatDirections; }
@@ -181,6 +190,15 @@ namespace SST::Prototypes::JFM
 
 				// Bound frame work while retaining the full ensemble for inspection and export.
 				const std::size_t drawCount = m_SingleIteration ? 1 : previewCount;
+				const std::string modelId = record->info.monteCarlo ? record->info.monteCarlo->modelId : "SD-RsRsh";
+				const double temperatureK = *record->info.temperatureK;
+				const int iteration = m_SingleIteration ? m_Iteration : -1;
+				if (plotPreview.result.lock() != result || plotPreview.modelId != modelId ||
+					plotPreview.temperatureK != temperatureK || plotPreview.iteration != iteration)
+					plotPreview = PlotPreview{ref, result, modelId, temperatureK, iteration};
+				// Cache only requested previews; single-iteration inspection reuses one slot.
+				plotPreview.fitted.resize(drawCount);
+				plotPreview.noisy.resize(drawCount);
 				for (std::size_t preview = 0; preview < drawCount; ++preview)
 				{
 					const std::size_t sampleIndex = m_SingleIteration ? static_cast<std::size_t>(m_Iteration)
@@ -198,13 +216,15 @@ namespace SST::Prototypes::JFM
                         if(sampleIndex<result->noisyCurrent.size()/pointCount)
                             PlotCurrent(label.c_str(),result->voltage,result->noisyCurrent.data()+sampleIndex*pointCount,pointCount,spec,m_SemiLog);
                         else {
-                            const auto curve=JFMMonteCarloNoisyCurve(*result,sampleIndex);
+                            auto &curve = plotPreview.noisy[preview];
+                            if (curve.empty()) curve = JFMMonteCarloNoisyCurve(*result,sampleIndex);
                             PlotCurrent(label.c_str(),result->voltage,curve.data(),curve.size(),spec,m_SemiLog);
                         }
 					}
 					if (m_ShowFitted)
 					{
-						std::vector<double> fitted = FitCurveForSample(*result, result->samples[sampleIndex], record->info.monteCarlo ? record->info.monteCarlo->modelId : "SD-RsRsh", *record->info.temperatureK);
+						auto &fitted = plotPreview.fitted[preview];
+						if (fitted.empty()) fitted = FitCurveForSample(*result, result->samples[sampleIndex], modelId, temperatureK);
 						ImPlotSpec spec;
 						spec.LineColor = ImVec4(0.10f, 0.56f, 1.0f, rejected ? 0.08f : m_SingleIteration ? 1.0f : 0.28f);
 						if (previous) spec.LineColor.w *= 0.45f;

@@ -21,11 +21,15 @@ namespace SST::Prototypes::JFM
     bool RenderJFMFitMethod(JFMFitMonteCarloSettings &settings, const JFMCharacteristicInfo* characteristic)
     {
         bool changed = false;
-        if (sst::ui::widgets::BeginCombo("Fit method", settings.fitMethod == "nm" ? "NM" : "LM")) {
-            for (const auto *method : {"lm", "nm"})
+        constexpr const char *nmWarning = "In Monte Carlo, NM reached solver convergence in only 0-15% of fits and was 10-40x slower than LM in the HZB benchmark. LM is recommended for MC.";
+        if (sst::ui::widgets::BeginCombo("Fit method", settings.fitMethod == "nm" ? "NM" : "LM", 0,
+                settings.fitMethod == "nm" ? nmWarning : "LM is the default and recommended Monte Carlo fit method.")) {
+            for (const auto *method : {"lm", "nm"}) {
                 if (ImGui::Selectable(method[0] == 'l' ? "LM" : "NM", settings.fitMethod == method)) {
                     settings.fitMethod = method; changed = true;
                 }
+                if (method[0] == 'n' && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", nmWarning);
+            }
             sst::ui::widgets::EndCombo();
         }
         if (sst::ui::widgets::BeginCombo("Objective", settings.objectiveMode.c_str(), 0, "Auto: all fitted currents > 0 use log_legacy; signed fit-range data use isc_shift.\nisc_shift: constant measured -I(V=0), propagated sigma, tangent linear below k*sigma.\nsigned_sigma: (model-data)/(sigma_rel*abs(data)+sigma_abs).\nlog_legacy is a unit-dependent regression reference, not statistical chi squared.")) {
