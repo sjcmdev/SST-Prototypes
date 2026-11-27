@@ -1,4 +1,5 @@
 #include "Core/dspch.hpp"
+#include "IO/JFMMonteCarloStorage.hpp"
 
 #include "IO/JFMProjectJobs.hpp"
 
@@ -12,6 +13,8 @@
 #include "IO/JFMProjectYamlSerializer.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <unordered_map>
 
 namespace SST::Prototypes::JFM
@@ -101,8 +104,8 @@ namespace SST::Prototypes::JFM
 		JFMProject snapshot,
 		ProjectHandle project,
 		JFMOperationId operation,
-		std::uint64_t revision)
-		: m_EventBus(std::move(eventBus)),
+		std::uint64_t revision, std::vector<JFMMonteCarloBundleRecord> samples)
+		: m_Samples(std::move(samples)), m_EventBus(std::move(eventBus)),
 		  m_Path(std::move(path)),
 		  m_Snapshot(std::move(snapshot)),
 		  m_Project(project),
@@ -123,6 +126,30 @@ namespace SST::Prototypes::JFM
 
 	void SaveProjectJob::Execute(JobContext &context)
 	{
+        context.SetStage("Save samples");
+        static std::atomic_uint64_t sequence{0};
+        const auto run="save-"+std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+"-"+std::to_string(++sequence);
+        for (const auto& record:m_Samples) {
+            context.ThrowIfCancellationRequested();
+            const auto recordInfo=std::find_if(m_Snapshot.characteristics.begin(),m_Snapshot.characteristics.end(),[&](const auto& info) { return info.id==record.characteristic; });
+            const auto storageId=recordInfo!=m_Snapshot.characteristics.end() && recordInfo->monteCarlo ? recordInfo->monteCarlo->sampleStorageId : std::string{};
+            if (!storageId.empty() && storageId.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")!=std::string::npos)
+                throw std::invalid_argument("Invalid Monte Carlo storage ID.");
+            // A run is immutable; repeated project saves reuse its completed sidecar.
+            const auto directory=m_Path.parent_path()/Path(m_Path.filename().Utf8()+".data")/Path(storageId.empty() ? run : storageId)/Path(std::to_string(record.characteristic));
+            if (!record.result) throw std::runtime_error("Project MC snapshot is missing.");
+            auto saved=std::filesystem::is_regular_file((directory/Path("samples.h5")).Native()) ? Result<void>{}
+                : SaveJFMMonteCarloHdf5(directory/Path("samples.h5"),*record.result,[&] { context.ThrowIfCancellationRequested(); });
+            if (!saved) {
+                if (m_EventBus) m_EventBus->Queue(ProjectSaveFailed{m_Path,saved.Error().technicalDetails,m_Project,m_Operation});
+                throw std::runtime_error(saved.Error().technicalDetails);
+            }
+            for (auto& info:m_Snapshot.characteristics) if (info.id==record.characteristic && info.monteCarlo) {
+                info.monteCarlo->outputPath=Path::FromResolved(directory.Native().lexically_relative(m_Path.parent_path().Native()));
+                info.monteCarlo->sampleStorageId=storageId.empty() ? run : storageId;
+                info.monteCarlo->sampleSaveStatus="saved"; info.monteCarlo->sampleSaveError.clear();
+            }
+        }
 		context.SetStage("Serialize");
 		context.SetProgress(0.0f, 2.0f);
 		auto serialized = JFMProjectYamlSerializer::Serialize(m_Snapshot);
@@ -189,8 +216,27 @@ namespace SST::Prototypes::JFM
 		}
 
 		context.SetProgress(2.0f, 2.0f);
-		if (m_EventBus != nullptr)
-			m_EventBus->Queue(ProjectLoadCompleted{m_Path, project.Value(), m_Operation});
+        std::vector<JFMMonteCarloBundleRecord> samples;
+        for (auto& info:project->characteristics) if (info.monteCarlo && !info.monteCarlo->outputPath.Empty()) {
+            context.ThrowIfCancellationRequested();
+            auto directory=info.monteCarlo->outputPath;
+            if (directory.Native().is_relative()) directory=m_Path.parent_path()/directory;
+            const auto file=directory/Path("samples.h5");
+            const bool binary=FileSystem::Exists(file.Native());
+            if (binary || FileSystem::Exists((directory/Path("parameters.tsv")).Native())) {
+                auto loaded=binary ? ReadJFMMonteCarloHdf5(file) : ReadJFMMonteCarloTsv(directory);
+                if (loaded) { samples.push_back({info.id,CreateRef<const JFMMonteCarloResult>(std::move(*loaded))}); info.monteCarlo->sampleSaveStatus="saved"; }
+                else { info.monteCarlo->sampleSaveStatus="failed"; info.monteCarlo->sampleSaveError=loaded.Error().technicalDetails; }
+                info.monteCarlo->outputPath=directory;
+            } else if (info.monteCarlo->sampleSaveStatus=="saved" || info.monteCarlo->sampleSaveStatus=="pending") {
+                info.monteCarlo->sampleSaveStatus="failed";
+                info.monteCarlo->sampleSaveError="MC sample file is missing. Restore the sample directory or rerun MC.";
+            }
+        }
+        if (m_EventBus) {
+            ProjectLoadCompleted event{m_Path,std::move(*project),m_Operation}; event.monteCarloResults=std::move(samples);
+            m_EventBus->Queue(std::move(event));
+        }
 	}
 
 	SaveProjectBundleJob::SaveProjectBundleJob(

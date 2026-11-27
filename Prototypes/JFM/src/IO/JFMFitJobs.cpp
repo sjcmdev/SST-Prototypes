@@ -2,15 +2,18 @@
 #include "Core/Diagnostics/OperationOutcome.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
 #include "Core/JobSystem/JobSystem.hpp"
+#include "Core/Logging/Logger.hpp"
 #include <thread>
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
 #include "IO/JFMFitJobs.hpp"
+#include "IO/JFMMonteCarloStorage.hpp"
 
 #include "Analysis/JFMFitEngine.hpp"
 #include "Core/JobSystem/JobContext.hpp"
+#include "Core/JobSystem/JobEvents.hpp"
 #include "Core/JobSystem/ParallelFor.hpp"
 #include "Events/JFMEvents.hpp"
 
@@ -18,6 +21,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <iterator>
 
 namespace SST::Prototypes::JFM
 {
@@ -63,64 +67,62 @@ namespace SST::Prototypes::JFM
 			scheduled = false;
 		}
 
-		Result<Path> PersistMonteCarlo(const JFMMonteCarloWorkItem &item, const JFMMonteCarloComputation &computation)
-		{
-			const auto stamp = std::chrono::duration_cast<std::chrono::milliseconds>(
-				std::chrono::system_clock::now().time_since_epoch()).count();
-			Path directory = item.outputRoot
-				/ std::filesystem::path("monte-carlo")
-				/ std::filesystem::path("project-" + std::to_string(item.ref.project))
-				/ std::filesystem::path("characteristic-" + std::to_string(item.ref.characteristic))
-				/ std::filesystem::path("run-" + std::to_string(stamp) + "-seed-" + std::to_string(item.settings.monteCarloSeed));
-			std::error_code error;
-			(void)FileSystem::CreateDirectories(directory.Native(), error);
-			if (error)
-				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo results could not be saved.", error.message(), "Check the projects directory permissions.", "JFMMonteCarloJob", "jfm.mc.write"};
-			if (!item.settings.saveSamples)
-				return directory;
+        Path MonteCarloDirectory(const JFMMonteCarloWorkItem& item) {
+            static std::atomic_uint64_t sequence{0};
+            const auto stamp=std::chrono::system_clock::now().time_since_epoch().count();
+            return item.outputRoot / std::filesystem::path("monte-carlo")
+                / std::filesystem::path("project-"+std::to_string(item.ref.project))
+                / std::filesystem::path("characteristic-"+std::to_string(item.ref.characteristic))
+                / std::filesystem::path("run-"+std::to_string(stamp)+"-"+std::to_string(++sequence));
+        }
 
-			const std::size_t savedSamples = item.settings.savedSampleLimit > 0
-				? std::min(computation.result.samples.size(), static_cast<std::size_t>(item.settings.savedSampleLimit))
-				: computation.result.samples.size();
-
-			std::ofstream noise(directory.Join("noise.tsv").Native());
-			if (!noise)
-				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo noise could not be saved.", "Cannot open noise.tsv.", "Check the projects directory permissions.", "JFMMonteCarloJob", "jfm.mc.noise"};
-			noise << std::setprecision(17) << "sample\tvoltage\tideal_current\tnoisy_current\tnoise\tsigma\n";
-			const std::size_t points = computation.result.voltage.size();
-			for (std::size_t sample = 0; sample < savedSamples; ++sample)
-			{
-                const auto curve=JFMMonteCarloNoisyCurve(computation.result,sample);
-				for (std::size_t point = 0; point < points; ++point)
-				{
-					if (point >= curve.size())
-						break;
-					const double ideal = computation.result.idealCurrent[point];
-					const double noisy = curve[point];
-					noise << sample << '\t' << computation.result.voltage[point] << '\t' << ideal << '\t' << noisy << '\t' << noisy - ideal << '\t' << computation.result.currentSigma[point] << '\n';
-				}
-			}
-
-			std::ofstream parameters(directory.Join("parameters.tsv").Native());
-			if (!parameters)
-				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo parameters could not be saved.", "Cannot open parameters.tsv.", "Check the projects directory permissions.", "JFMMonteCarloJob", "jfm.mc.parameters"};
-			parameters << std::setprecision(17) << "sample";
-			for (const std::string &name : computation.result.parameterNames)
-				parameters << '\t' << name;
-			parameters << "\tchi_squared\treduced_chi_squared\titerations\tconverged\taccepted\tsolver_converged\tstop_reason\tconfidence_available\tfit_method\tflat_directions\tlm_status\tobjective_chi_squared\tlinear_points\tlog_points\n";
-			for (std::size_t index = 0; index < savedSamples; ++index)
-			{
-				const JFMMonteCarloSample &sample = computation.result.samples[index];
-				parameters << index;
-				for (double value : sample.parameters)
-					parameters << '\t' << value;
-				parameters << '\t' << sample.chiSquared << '\t' << sample.reducedChiSquared << '\t' << sample.iterations << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << (sample.accepted ? 1 : 0) << '\t' << (sample.solverConverged ? 1 : 0) << '\t' << sample.stopReason << '\t' << (computation.result.confidenceAvailable ? 1 : 0) << '\t' << sample.fitMethod << '\t' << (sample.flatDirections ? 1 : 0) << '\t' << sample.lmStatus << '\t' << sample.objectiveChiSquared << '\t' << sample.linearPoints << '\t' << sample.logPoints << '\n';
-			}
-			if (!noise || !parameters)
-				return StructuredError{ErrorCategory::IO, Severity::Error, "Monte Carlo results could not be saved.", "Writing the result files failed.", "Check available disk space.", "JFMMonteCarloJob", "jfm.mc.write"};
-			return directory;
-		}
 	} // namespace
+
+    JFMMonteCarloSaveJob::JFMMonteCarloSaveJob(Ref<EventBus> bus, JFMCharacteristicRef ref, std::uint64_t generation,
+        Path directory, Ref<const JFMMonteCarloResult> result, bool tsv, double noisePercent)
+        : m_Bus(std::move(bus)), m_Ref(ref), m_Generation(generation), m_Directory(std::move(directory)),
+          m_Result(std::move(result)), m_Tsv(tsv), m_NoisePercent(noisePercent) {}
+
+    JFMMonteCarloSaveJob::~JFMMonteCarloSaveJob() {
+        if (!m_Finished) Finish("cancelled", "Sample save cancelled before starting; the result remains available in the project.");
+    }
+    void JFMMonteCarloSaveJob::Finish(std::string status, std::string error) {
+        m_Finished=true;
+        if (!m_Bus) return;
+        MonteCarloSamplesSaved event;
+        event.ref=m_Ref; event.generation=m_Generation; event.path=m_Directory;
+        event.status=std::move(status); event.error=std::move(error);
+        // Explicit exports report through Core progress; they cannot replace primary storage metadata.
+        if (!m_Tsv) m_Bus->Queue(std::move(event));
+    }
+    void JFMMonteCarloSaveJob::Execute(JobContext& context) {
+        const auto started=std::chrono::steady_clock::now();
+        context.SetStage(m_Tsv ? "Exporting MC samples" : "Saving MC samples");
+        try {
+            context.ThrowIfCancellationRequested();
+            context.SetProgress(0,1);
+            if (!m_Result) throw std::runtime_error("MC samples are unavailable.");
+            Result<void> saved;
+            if (m_Tsv) saved=ExportJFMMonteCarloTsv(m_Directory,*m_Result,m_NoisePercent,[&] { context.ThrowIfCancellationRequested(); });
+            else {
+                std::size_t checkpoints=0;
+                const auto expected=std::max<std::size_t>(1,(m_Result->samples.size()+255)/256+14);
+                saved=SaveJFMMonteCarloHdf5(m_Directory/Path("samples.h5"),*m_Result,[&] {
+                    context.ThrowIfCancellationRequested();
+                    context.SetProgress(static_cast<float>(std::min(++checkpoints,expected-1)),static_cast<float>(expected));
+                });
+            }
+            if (!saved) throw OperationException(saved.Error());
+            context.SetProgress(1,1); Finish("saved");
+            DS_LOG_INFO("JFM MC storage N={} save_ms={:.3f} path={}",m_Result->samples.size(),
+                std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count(),m_Directory.Utf8());
+        } catch (const std::exception& e) {
+            const bool cancelled=context.IsCancellationRequested();
+            Finish(cancelled ? "cancelled" : "failed",std::string(e.what())+" Result retained; save the project or retry export.");
+            if (cancelled) throw JobCancelledException(e.what());
+            throw;
+        }
+    }
 
 	bool JFMFitWorkQueue::Enqueue(std::vector<JFMFitWorkItem> items) { return EnqueueItems(m_Mutex, m_Pending, m_JobScheduled, std::move(items)); }
 	std::optional<std::vector<JFMFitWorkItem>> JFMFitWorkQueue::TakeNext() { return TakeItems(m_Mutex, m_Pending, m_JobScheduled); }
@@ -246,7 +248,9 @@ namespace SST::Prototypes::JFM
                         [&] { return context.IsCancellationRequested(); },
                         [&](const Ref<IJob>& job, JobPriority priority) { return context.SubmitJob(job, priority); },
                         [&](JobId id) { return context.WaitForJob(id); }, context.GetWorkerCount(), context.GetStopToken());
+					const auto started = std::chrono::steady_clock::now();
 					auto result = RunJFMMonteCarlo(item.characteristic, item.prefit, item.fit, item.settings, &sampleContext);
+					const auto solved = std::chrono::steady_clock::now();
                     if (!result || result->state.acceptedCount == 0)
                     {
 						const std::string error = !result ? result.Error().technicalDetails : "No accepted Monte Carlo samples: non-finite objective or model domain.";
@@ -255,19 +259,30 @@ namespace SST::Prototypes::JFM
                             m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, error});
 						continue;
 					}
-					auto outputPath = PersistMonteCarlo(item, *result);
-					if (!outputPath)
-					{
-						const std::string error = outputPath.Error().userMessage + " " + outputPath.Error().technicalDetails;
-						if (!firstError) firstError = outputPath.Error();
-						if (m_EventBus != nullptr)
-							m_EventBus->Queue(MonteCarloFailed{item.ref, item.generation, error});
-						continue;
-					}
-					++completed;
-                    result->state.outputPath = std::move(*outputPath);
-					if (m_EventBus != nullptr)
-						m_EventBus->Queue(MonteCarloCompleted{item.ref, item.generation, std::move(result->state), std::move(result->result)});
+                    result->state.totalMilliseconds=std::chrono::duration<double,std::milli>(solved-started).count();
+                    const auto runDirectory=MonteCarloDirectory(item);
+                    result->state.sampleStorageId=runDirectory.filename().Utf8();
+                    result->state.sampleSaveStatus=item.settings.saveSamples ? "pending" : "not_requested";
+                    result->state.outputPath=item.settings.saveSamples ? runDirectory : Path{};
+                    auto samples=CreateRef<const JFMMonteCarloResult>(std::move(result->result));
+                    MonteCarloCompleted published;
+                    published.ref=item.ref; published.generation=item.generation;
+                    published.state=std::move(result->state); published.result=samples;
+                    const auto directory=published.state.outputPath;
+                    const auto backend=published.state.backend;
+                    if (m_EventBus) m_EventBus->Queue(std::move(published));
+                    DS_LOG_INFO("JFM MC [{}] backend={} N={} workers={} solve_ms={:.3f} publish_ms={:.3f}",
+                        item.characteristic.info.name, backend, item.settings.monteCarloSamples, context.GetWorkerCount(),
+                        std::chrono::duration<double,std::milli>(solved-started).count(),
+                        std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-solved).count());
+                    ++completed;
+                    if (item.settings.saveSamples) {
+                        auto save=CreateRef<JFMMonteCarloSaveJob>(m_EventBus,item.ref,item.generation,directory,samples);
+                        if (!context.SubmitJob(save,JobPriority::Low)) {
+                            if (m_EventBus) m_EventBus->Queue(JobSubmitRequested{save,JobPriority::Low,"jfm.mc.save"});
+                            else throw std::runtime_error("MC sample save could not be submitted; retain the result and save the project.");
+                        }
+                    }
 				}
 				context.SetProgress(static_cast<float>(items->size()), static_cast<float>(items->size()));
 			}

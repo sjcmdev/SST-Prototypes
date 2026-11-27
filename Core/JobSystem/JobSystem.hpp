@@ -26,7 +26,7 @@ namespace SST
 	public:
 		using PreExecuteHook = std::function<Unique<IJobExecutionGuard>(const IJob &job)>;
 
-		explicit JobSystem(Ref<EventBus> eventBus = {}, std::size_t threadCount = 0);
+		explicit JobSystem(Ref<EventBus> eventBus = {}, std::size_t threadCount = 0, bool reserveUrgentWorker = false);
 		~JobSystem();
 
 		JobSystem(const JobSystem &) = delete;
@@ -43,6 +43,7 @@ namespace SST
 		[[nodiscard]] bool RemoveFromHistory(JobId id);
 		[[nodiscard]] std::size_t GetThreadCount() const;
 		[[nodiscard]] bool SetThreadCount(std::size_t threadCount);
+		void SetReserveUrgentWorker(bool reserve) { m_ReserveUrgentWorker = reserve; }
 		
 		// Safety features for job queue management
 		[[nodiscard]] bool PauseAllJobs();
@@ -111,6 +112,9 @@ namespace SST
 
 		// Execution backend.
 		BS::thread_pool<BS::tp::priority | BS::tp::pause> m_Pool;
+		std::atomic<std::size_t> m_ThreadCount;
+		BS::thread_pool<BS::tp::priority | BS::tp::pause> m_UrgentPool{1};
+		std::atomic_bool m_ReserveUrgentWorker{false};
 
 		// Runtime thread-count reconfiguration channel.
 		mutable std::mutex m_ThreadCountMutex;

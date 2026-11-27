@@ -7,6 +7,7 @@
 #include "Workspace/JFMWorkspaceStore.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,7 +27,16 @@ namespace SST::Prototypes::JFM
 
 		Ref<JFMWorkspaceStore> m_Store;
 		Ref<EventBus> m_EventBus;
-		std::vector<JFMCharacteristicRef> m_Plots;
+		struct PlotPreview
+		{
+			JFMCharacteristicRef ref;
+			std::weak_ptr<const JFMMonteCarloResult> result;
+			std::string modelId;
+			double temperatureK = 0.0;
+			int iteration = -1;
+			std::vector<std::vector<double>> fitted, noisy;
+		};
+		std::vector<PlotPreview> m_Plots;
 		bool m_ShowIdeal = true;
 		bool m_ShowNoisy = true;
 		bool m_ShowFitted = true;

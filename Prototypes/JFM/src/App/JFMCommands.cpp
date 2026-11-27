@@ -803,12 +803,11 @@ namespace SST::Prototypes::JFM
 
 	void queueSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, ProjectHandle project, const Path &path)
 	{
-		eventBus.Queue(ProjectSaveRequested{
-			path,
-			workspace->GetProjectSnapshot(project),
-			project,
-			InvalidJFMOperationId,
-			workspace->GetProjectRevision(project)});
+        auto snapshot=workspace->CaptureProjectBundle(project);
+        if (!snapshot) return;
+        ProjectSaveRequested event{path,std::move(snapshot->project),project,InvalidJFMOperationId,snapshot->revision};
+        event.monteCarloResults=std::move(snapshot->monteCarloResults);
+        eventBus.Queue(std::move(event));
 	}
 
 	void queueBundleSave(EventBus &eventBus, const Ref<JFMWorkspaceStore> &workspace, ProjectHandle project, const Path &path)
@@ -1392,6 +1391,18 @@ namespace SST::Prototypes::JFM
 			registry,
 			CommandMeta{ExportCharacteristicsFitTsvCommand, "Export Characteristics + Fit TSV", "JFM", "Export measured characteristics and fitted curves in one TSV.", {}, CommandFlags::AsyncCapable},
 			std::bind(handleExportCharacteristicsFitTsv, eventBus, workspace, std::placeholders::_1));
+
+        registerCommand(registry,
+            CommandMeta{CommandID{JFMExportMonteCarloTsvCommandId}, "Export MC samples TSV", "JFM", "Export all parameter samples and noisy curves in the background.", {}, CommandFlags::AsyncCapable},
+            [eventBus,workspace](CommandContext& context) -> Result<void> {
+                const auto project=projectFromContext(workspace,context);
+                auto id=context.GetCopy<CharacteristicId>("characteristic_id");
+                auto path=context.GetCopy<Path>("directory");
+                if (!id || !path || !workspace->GetMonteCarloResult({project,*id}))
+                    return makeCommandError("MC export requires a result and directory.",{});
+                ExportMonteCarloTsvRequested event; event.ref={project,*id}; event.directory=*path;
+                eventBus->Queue(std::move(event)); return {};
+            });
 
 		registerBinding(resolver, {"jfm.new_project", KeyChord{KeyCode::N, KeyModifiers::Ctrl}, NewProjectCommand, {}, KeymapLayer::Project, true});
 		registerBinding(resolver, {"jfm.open_project", KeyChord{KeyCode::O, KeyModifiers::Ctrl}, OpenProjectCommand, {}, KeymapLayer::Project, true});

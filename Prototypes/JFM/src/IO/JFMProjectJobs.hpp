@@ -22,7 +22,7 @@ namespace SST::Prototypes::JFM
 			JFMProject snapshot,
 			ProjectHandle project = InvalidProjectHandle,
 			JFMOperationId operation = InvalidJFMOperationId,
-			std::uint64_t revision = 0);
+			std::uint64_t revision = 0, std::vector<JFMMonteCarloBundleRecord> samples = {});
 
 		[[nodiscard]] std::string GetName() const override;
 		[[nodiscard]] std::string GetType() const override;
@@ -32,6 +32,7 @@ namespace SST::Prototypes::JFM
 		Ref<EventBus> m_EventBus;
 		Path m_Path;
 		JFMProject m_Snapshot;
+        std::vector<JFMMonteCarloBundleRecord> m_Samples;
 		ProjectHandle m_Project = InvalidProjectHandle;
 		JFMOperationId m_Operation = InvalidJFMOperationId;
 		std::uint64_t m_Revision = 0;

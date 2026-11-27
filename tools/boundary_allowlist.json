@@ -2608,22 +2608,22 @@
       "reason": "JFM project/bundle file adapter or embedded Python import/runtime binding."
     },
     {
-      "file": "Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
+      "file": "Prototypes/JFM/src/IO/JFMMonteCarloStorage.cpp",
       "rule": "text-stream",
-      "line": 447,
+      "line": 124,
       "code": "std::ostringstream parameters;",
       "sha256": "df92964cd82f27599459e32a28b9ee37680134e2d411d46003197ac9fcd5145f",
       "count": 1,
-      "reason": "JFM project/bundle file adapter or embedded Python import/runtime binding."
+      "reason": "Explicit Monte Carlo TSV file export; unchanged writer moved from the bundle codec. No in-process text transport."
     },
     {
-      "file": "Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
+      "file": "Prototypes/JFM/src/IO/JFMMonteCarloStorage.cpp",
       "rule": "text-stream",
-      "line": 464,
+      "line": 144,
       "code": "std::ostringstream noise;",
       "sha256": "7cb3ce530414345ed0588e830996ecc2fdb6caf841c2005c4ca93d97e4c77c44",
       "count": 1,
-      "reason": "JFM project/bundle file adapter or embedded Python import/runtime binding."
+      "reason": "Explicit Monte Carlo TSV file export; unchanged writer moved from the bundle codec. No in-process text transport."
     },
     {
       "file": "Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
@@ -4543,13 +4543,13 @@
       "reason": "Python binding edge: typed Walter arrays/metadata and analysis argument/result conversion at nanobind boundary (perfis1; legacy Json DTO debt F12 remains outside this edge)."
     },
     {
-      "file": "Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
+      "file": "Prototypes/JFM/src/IO/JFMMonteCarloStorage.cpp",
       "rule": "text-stream",
-      "line": 449,
+      "line": 119,
       "code": "auto flush=[](FILE *stream,std::ostringstream &buffer) {",
       "sha256": "909553f7a1fd3c41daedbe61671bc6f261042769e7255f29ec9b1ff7f4dfdbc8",
       "count": 1,
-      "reason": "Disk export edge: bounded 64 KiB TSV buffer flushed to FILE by atomic TextFileIO::Save (perfret1)."
+      "reason": "Explicit Monte Carlo TSV file export; unchanged writer moved from the bundle codec. No in-process text transport."
     },
     {
       "file": "Prototypes/PlotLab/src/PlotLabDocument.cpp",

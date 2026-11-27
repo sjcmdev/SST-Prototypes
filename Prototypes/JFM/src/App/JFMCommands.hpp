@@ -18,6 +18,7 @@ namespace SST
 
 namespace SST::Prototypes::JFM
 {
+    inline constexpr const char *JFMExportMonteCarloTsvCommandId = "jfm.export.mc_samples_tsv";
 	inline constexpr const char *JFMApplyProjectEditCommandId = "jfm.project.apply_edit";
 	inline constexpr const char *JFMImportApplyCommandId = "jfm.import.apply";
 	inline constexpr const char *JFMAddGroupCommandId = "jfm.tree.add_group";

@@ -815,13 +815,16 @@ namespace SST
 		{
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
-			ImGui::TextUnformatted("Default worker threads");
+			ImGui::TextUnformatted("Compute workers");
 			ImGui::TableSetColumnIndex(1);
-			if (ImGui::InputInt("##DefaultWorkerThreads", &m_DraftConfig.jobs.defaultWorkerThreadCount))
+			if (ImGui::SliderInt("##DefaultWorkerThreads", &m_DraftConfig.jobs.defaultWorkerThreadCount, 1,
+				std::max(DefaultComputeWorkerCount(), m_DraftConfig.jobs.defaultWorkerThreadCount)))
 			{
 				m_DraftConfig.jobs.defaultWorkerThreadCount = std::max(1, m_DraftConfig.jobs.defaultWorkerThreadCount);
 				m_DraftDirty = true;
 			}
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Default: logical CPUs - 1 (%d). Ctrl+click for exact entry. Existing overrides are retained.", DefaultComputeWorkerCount());
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -829,6 +832,8 @@ namespace SST
 			ImGui::TableSetColumnIndex(1);
 			if (ImGui::Checkbox("##ReserveUrgentWorker", &m_DraftConfig.jobs.reserveUrgentWorker))
 				m_DraftDirty = true;
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("Keep one separate worker for High/Highest priority jobs while compute workers are busy.");
 
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
@@ -841,7 +846,7 @@ namespace SST
 			{
 				ImGui::TableNextRow();
 				ImGui::TableSetColumnIndex(0);
-				ImGui::TextUnformatted("Current runtime threads");
+				ImGui::TextUnformatted("Current compute workers");
 				ImGui::TableSetColumnIndex(1);
 				ImGui::Text("%llu", static_cast<unsigned long long>(jobSystem->GetThreadCount()));
 			}

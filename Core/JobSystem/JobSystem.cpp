@@ -7,13 +7,59 @@
 #include "Core/JobSystem/JobSystem.hpp"
 #include "Core/JobSystem/JobContext.hpp"
 #include "Core/JobSystem/JobEvents.hpp"
+#include "Core/JobSystem/JobSystemConfig.hpp"
 #include "Core/Logging/Logger.hpp"
 
 #include "Core/EventSystem/BusEventSystem/EventBus.hpp"
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#undef GetJob
+#endif
+
 namespace SST
 {
 	namespace {
+#ifdef _WIN32
+		std::mutex g_PowerMutex;
+		std::size_t g_PoweredJobs = 0;
+		thread_local std::size_t g_PoweredThreadDepth = 0;
+
+		// A process-wide count also covers overlapping JobSystem instances and nested child jobs.
+		struct JobPowerGuard
+		{
+			THREAD_POWER_THROTTLING_STATE previousThread{THREAD_POWER_THROTTLING_CURRENT_VERSION, 0, 0};
+			JobPowerGuard()
+			{
+				std::lock_guard lock(g_PowerMutex);
+				if (g_PoweredJobs++ == 0) {
+					PROCESS_POWER_THROTTLING_STATE state{PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+						PROCESS_POWER_THROTTLING_EXECUTION_SPEED | PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, 0};
+					if (!SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &state, sizeof(state)))
+						DS_LOG_WARN("Could not disable process power throttling: {}", GetLastError());
+				}
+				if (g_PoweredThreadDepth++ == 0) {
+					GetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &previousThread, sizeof(previousThread));
+					THREAD_POWER_THROTTLING_STATE state{THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, 0};
+					if (!SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &state, sizeof(state)))
+						DS_LOG_WARN("Could not disable worker power throttling: {}", GetLastError());
+				}
+			}
+			~JobPowerGuard()
+			{
+				std::lock_guard lock(g_PowerMutex);
+				if (--g_PoweredThreadDepth == 0 && !SetThreadInformation(GetCurrentThread(), ThreadPowerThrottling, &previousThread, sizeof(previousThread)))
+					DS_LOG_WARN("Could not restore worker power throttling: {}", GetLastError());
+				if (--g_PoweredJobs == 0) {
+					PROCESS_POWER_THROTTLING_STATE state{PROCESS_POWER_THROTTLING_CURRENT_VERSION, 0, 0};
+					if (!SetProcessInformation(GetCurrentProcess(), ProcessPowerThrottling, &state, sizeof(state)))
+						DS_LOG_WARN("Could not restore process power throttling: {}", GetLastError());
+				}
+			}
+		};
+#endif
+
 		void trimLogs(JobRecord &record)
 		{
 			// A job retains at most 64 KiB / 256 log messages, including lifecycle entries.
@@ -55,8 +101,7 @@ namespace SST
 		if (requested != 0)
 			return requested;
 
-		const std::size_t detected = std::thread::hardware_concurrency(); 
-		return detected == 0 ? 1 : detected;
+		return static_cast<std::size_t>(DefaultComputeWorkerCount());
 	}
 
 	BS::priority_t JobSystem::toBackendPriority(JobPriority priority)
@@ -82,9 +127,10 @@ namespace SST
 		return status == JobStatus::Completed || status == JobStatus::Failed || status == JobStatus::Cancelled;
 	}
 
-	JobSystem::JobSystem(Ref<EventBus> eventBus, std::size_t threadCount)
+	JobSystem::JobSystem(Ref<EventBus> eventBus, std::size_t threadCount, bool reserveUrgentWorker)
 		: m_EventBus(std::move(eventBus)),
-		  m_Pool(resolveThreadCount(threadCount)) // todo: load it from config file
+		  m_Pool(resolveThreadCount(threadCount)), m_ThreadCount(m_Pool.get_thread_count()),
+		  m_ReserveUrgentWorker(reserveUrgentWorker)
 	{
 		m_ThreadCountWorker = std::jthread([this](std::stop_token stopToken) {
 			threadCountWorkerLoop(stopToken);
@@ -303,7 +349,7 @@ namespace SST
 
 	std::size_t JobSystem::GetThreadCount() const
 	{
-		return m_Pool.get_thread_count();
+		return m_ThreadCount.load(std::memory_order_relaxed);
 	}
 
 	bool JobSystem::SetThreadCount(std::size_t threadCount)
@@ -312,8 +358,6 @@ namespace SST
 			return false;
 
 		const std::size_t resolved = resolveThreadCount(threadCount);
-		if (resolved == m_Pool.get_thread_count())
-			return true;
 
 		{
 			std::lock_guard<std::mutex> lock(m_ThreadCountMutex);
@@ -416,8 +460,12 @@ namespace SST
 
 			cancelPendingDelayedSubmissions();
 			if (cancelJobs)
+			{
 				m_Pool.unpause();
+				m_UrgentPool.unpause();
+			}
 			m_Pool.wait();
+			m_UrgentPool.wait();
 			std::lock_guard lock(m_RecordsMutex);
 			trimHistory();
 		});
@@ -445,10 +493,14 @@ namespace SST
 			if (m_ShutdownRequested.load(std::memory_order_relaxed))
 				return;
 
+			if (requestedThreadCount == GetThreadCount())
+				continue;
+
 			// reset() pauses the backend pool, waits only for currently running tasks,
 			// applies the new thread count, and resumes queued work.
 			// Executing it on this dedicated jthread keeps caller threads responsive.
 			m_Pool.reset(requestedThreadCount);
+			m_ThreadCount.store(m_Pool.get_thread_count(), std::memory_order_relaxed);
 		}
 	}
 
@@ -486,6 +538,9 @@ namespace SST
 	{
 		ZoneScoped;
 		(void)Logger::Get();
+#ifdef _WIN32
+		JobPowerGuard power;
+#endif
 		LogContext logContext;
 		{ std::lock_guard lock(m_RecordsMutex); auto& stored=m_Records.at(id).logContext; ++stored.attempt; logContext=stored; }
 		ScopedLogContext logging(std::move(logContext));
@@ -523,7 +578,7 @@ namespace SST
 			onLog,
 			onCancelQuery,
 			onSubmitChild,
-			onWaitChild, m_Pool.get_thread_count(), cancellation);
+			onWaitChild, GetThreadCount(), cancellation);
 
 		WorkerContextGuard workerContext(this, id);
 
@@ -939,7 +994,8 @@ namespace SST
 
         const auto claimed = CreateRef<std::atomic_bool>(false);
         { std::lock_guard lock(m_RecordsMutex); m_Records.at(id).executionClaimed = claimed; }
-        m_Pool.detach_task(
+        auto &pool = m_ReserveUrgentWorker && priority >= JobPriority::High ? m_UrgentPool : m_Pool;
+        pool.detach_task(
             [this, id, job, claimed]() { if (!claimed->exchange(true)) runJob(id, job); },
 			toBackendPriority(priority));
 	}
@@ -954,6 +1010,7 @@ namespace SST
 			return true; // Already paused
 
 		m_Pool.pause();
+		m_UrgentPool.pause();
 		return true;
 	}
 
@@ -967,6 +1024,7 @@ namespace SST
 			return true; // Already resumed
 
 		m_Pool.unpause();
+		m_UrgentPool.unpause();
 		return true;
 	}
 
@@ -1043,12 +1101,12 @@ namespace SST
 		}
 
 		const std::size_t resolved = resolveThreadCount(newThreadCount);
-		const std::size_t currentThreadCount = m_Pool.get_thread_count();
+		const std::size_t currentThreadCount = GetThreadCount();
 
 		if (resolved == currentThreadCount)
 		{
 			outMessage = "Thread count unchanged (already " + std::to_string(resolved) + ")";
-			return true;
+			return SetThreadCount(resolved);
 		}
 
 		// Step 1: Validate the new thread count

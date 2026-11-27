@@ -61,6 +61,7 @@ namespace SST::Prototypes::JFM
 		double monteCarloStartPerturbationPercent = 5.0;
 		std::uint32_t monteCarloSeed = 42;
 		bool preferGpu = true;
+        bool useCpuWithGpu = true;
 		bool saveSamples = true;
 		int savedSampleLimit = 0;
 		std::array<std::array<float, 4>, 5> sigmaColors = {{
