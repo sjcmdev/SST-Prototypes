@@ -38,6 +38,9 @@ static bool useAvx2(Dispatch path) {
 
 void currents(GpuModelType model, const double* v, std::size_t count,
     const double* p, double T, double* output, Dispatch path) {
+#if defined(TRACY_ENABLE)
+    ZoneScopedN("JFM.LambertW.currents.batch");
+#endif
     std::size_t i = 0;
     if (useAvx2(path)) for (; count-i >= 4; i += 4) {
         CurrentBlock block;

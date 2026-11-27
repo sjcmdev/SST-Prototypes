@@ -89,6 +89,7 @@ namespace SST::Prototypes::JFM
 
 	void MonteCarloCurvesPanel::RenderContent()
 	{
+		ZoneScopedN("JFM.preview");
 
 		if (m_Store == nullptr)
 		{

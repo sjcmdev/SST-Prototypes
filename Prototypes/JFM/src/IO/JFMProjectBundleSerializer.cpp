@@ -445,6 +445,7 @@ namespace SST::Prototypes::JFM
 
 		Result<void> SaveMonteCarloTsv(const Path &parameterPath, const Path &noisePath, const JFMMonteCarloResult &result, double noisePercent)
 		{
+			ZoneScopedN("JFM.result.bundleSave");
             std::string error;
             auto flush=[](FILE *stream,std::ostringstream &buffer) {
                 const auto text=buffer.str(); buffer.str({});
