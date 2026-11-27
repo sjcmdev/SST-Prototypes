@@ -1470,6 +1470,7 @@ namespace SST::Prototypes::PlotLab
             }
             auto [seen, first] = graphSources.try_emplace(viewId, sources);
             view.dataChanged = !first && seen->second != sources;
+            view.dataRevision = p.revision();
             seen->second = std::move(sources);
             for (std::size_t i = 0; i < entries.size(); ++i)
             {
