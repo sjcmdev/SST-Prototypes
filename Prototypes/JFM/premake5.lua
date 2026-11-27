@@ -83,6 +83,11 @@ project "JFM"
         defines { "DS_PYTHON_CAPI_AVAILABLE=0" }
     end
 
+    if _SST_PYTHON_EMBED_AVAILABLE == true and os.host() == "windows" then
+        postbuildcommands {
+            '"' .. _SST_PYTHON_CONFIG_EXE .. '" "' .. _SST_ROOT .. '/scripts/python/bundle_python.py" --destination "%{cfg.targetdir}/install/app/python"'
+        }
+    end
     postbuildcommands {
         '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/JFM/install" "%{cfg.targetdir}/install"',
         '{COPYDIR} "' .. _SST_ROOT .. '/Prototypes/JFM/python" "%{cfg.targetdir}/python"'
@@ -183,6 +188,8 @@ project "JFMTests"
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMImportPaths.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonImportBridge.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonImportBridge.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMNativeDat.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/Presentation/Panels/ImportStatusPanel.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonRuntime.hpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonRuntime.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPythonPrefitBridge.hpp",
@@ -293,6 +300,7 @@ end
 project "JFMTests"
     files {
         _SST_ROOT .. "/Prototypes/JFM/src/Presentation/JFMPlotDocument.cpp",
+        _SST_ROOT .. "/Prototypes/JFM/src/Presentation/JFMPlotWidgets.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/Presentation/Panels/MonteCarloCurvesPanel.cpp",
         _SST_ROOT .. "/Prototypes/JFM/src/IO/JFMPlotExport.cpp"
     }

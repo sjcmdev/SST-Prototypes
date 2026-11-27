@@ -156,6 +156,8 @@ namespace SST
 
 		ExecutionScope	scope(m_IsExecuting);
 
+		try
+		{
 		Unique<ICommand> command = registration.factory(context);
 		if (!command)
 		{
@@ -184,6 +186,23 @@ namespace SST
 
 		notifyObservers(CommandExecutionEvent{id, registration.meta.name, CommandExecutionState::Succeeded, std::nullopt});
 		return outcome;
+        }
+        catch (const std::exception& exception)
+        {
+            auto error = MakeCommandError("command.execute.exception", "Could not complete " + registration.meta.name + ".",
+                "Command '" + id.value + "': " + exception.what(), "Check the command inputs and retry.", ErrorCategory::Internal);
+            DS_LOG_ERROR("{}: {}", error.code, error.technicalDetails);
+            notifyObservers({id, registration.meta.name, CommandExecutionState::Failed, error});
+            return error;
+        }
+        catch (...)
+        {
+            auto error = MakeCommandError("command.execute.exception", "Could not complete " + registration.meta.name + ".",
+                "Unknown exception in command '" + id.value + "'.", "Check the application log and retry.", ErrorCategory::Internal);
+            DS_LOG_ERROR("{}: {}", error.code, error.technicalDetails);
+            notifyObservers({id, registration.meta.name, CommandExecutionState::Failed, error});
+            return error;
+        }
 	}
 
 	std::size_t CommandRegistry::AddObserver(CommandExecutionObserver observer)

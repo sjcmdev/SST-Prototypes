@@ -23,21 +23,25 @@ namespace SST::Prototypes::JFM
             doc.BeginFrame();return true;
         } catch (const std::exception &e) { ImGui::TextWrapped("Graph font unavailable: %s", e.what()); return false; }
     }
-    void AddJFMPlotSeries(JFMPlotDocument &doc, const plot::SeriesEntryView &input, bool absoluteCurrent)
+    void AddJFMPlotSeries(JFMPlotDocument &doc, const plot::SeriesEntryView &input, bool positiveCurrentOnly)
     {
         auto source=input;source.group=doc.currentGroup;
-        const auto id = doc.SetSeries(source, absoluteCurrent);
+        const auto id = doc.SetSeries(source, positiveCurrentOnly);
         (void)id; // Draw once in persisted z-order after all domain series have been refreshed.
     }
-    void SetupJFMPlotAxes(JFMPlotDocument &doc)
+    void SetupJFMPlotAxes(JFMPlotDocument &doc, bool seriesReady)
     {
         const auto& spec = std::get<pl::Layer>(doc.project.object(doc.layer).data).spec;
-        if(spec.x.rescale==plot::RescaleMode::Auto || spec.y.rescale==plot::RescaleMode::Auto) {
+        if(spec.autoFit==plot::AutoFit::Always || spec.x.rescale==plot::RescaleMode::Auto || spec.y.rescale==plot::RescaleMode::Auto) {
             auto fit=spec;fit.autoFit=plot::AutoFit::Always;fit.bounds.reset();
-            std::vector<plot::SeriesEntryView> entries;for(auto id:doc.project.children(doc.layer)) entries.push_back(doc.project.series(id));
-            if(const auto bounds=plot::ResolveBounds(fit,entries.data(),entries.size(),doc.view)) {
-                if(spec.x.rescale==plot::RescaleMode::Auto) ImPlot::SetupAxisLimits(ImAxis_X1,bounds->minX,bounds->maxX,ImPlotCond_Always);
-                if(spec.y.rescale==plot::RescaleMode::Auto) ImPlot::SetupAxisLimits(ImAxis_Y1,bounds->minY,bounds->maxY,ImPlotCond_Always);
+            std::vector<plot::SeriesEntryView> entries;
+            if (seriesReady) for (const auto& [id,name] : doc.rendered) entries.push_back(doc.project.series(id));
+            else for (auto id : doc.project.children(doc.layer)) entries.push_back(doc.project.series(id));
+            plot::PlotViewState fitView; fitView.visibility = doc.view.visibility;
+            if (!seriesReady) fitView.excluded = doc.view.excluded;
+            if(const auto bounds=plot::ResolveBounds(fit,entries.data(),entries.size(),fitView)) {
+                if(spec.autoFit==plot::AutoFit::Always || spec.x.rescale==plot::RescaleMode::Auto) ImPlot::SetupAxisLimits(ImAxis_X1,bounds->minX,bounds->maxX,ImPlotCond_Always);
+                if(spec.autoFit==plot::AutoFit::Always || spec.y.rescale==plot::RescaleMode::Auto) ImPlot::SetupAxisLimits(ImAxis_Y1,bounds->minY,bounds->maxY,ImPlotCond_Always);
             }
         }
         plot::SetupPlotEditorAxes(spec, doc.view, doc.preview.metrics, &doc.editor);
@@ -60,6 +64,9 @@ namespace SST::Prototypes::JFM
             plot::RenderSeries(entry, doc.preview.metrics, &spec);
         }
         plot::PaintPlotEditorAxes(spec, doc.view, false, doc.preview.metrics);
+        const auto* currentPlot = ImPlot::GetCurrentPlot();
+        doc.autoFitInterrupted |= currentPlot->Held || currentPlot->Selecting
+            || (currentPlot->Hovered && ImGui::GetIO().MouseWheel != 0);
         ImPlot::EndPlot();
         doc.EndFrame(std::move(requested));
         plot::RenderPlotEditor(id.c_str(), spec, entries.data(), entries.size(), doc.view, doc.editor, doc.preview.metrics);

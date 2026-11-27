@@ -8276,6 +8276,69 @@
       "sha256": "ab882907f69e784106cb022cda344837ed1794ec998957f74a7be6bc98ca2e45",
       "count": 1,
       "reason": "Nanobind edge: convert Python recipe dictionaries/shared-local parameter metadata or result arrays directly to/from typed AnalysisRecipe and ScientificResult. No C++ module round trip."
+    },
+    {
+      "file": "Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
+      "rule": "text-stream",
+      "line": 447,
+      "code": "std::ostringstream parameters;",
+      "sha256": "df92964cd82f27599459e32a28b9ee37680134e2d411d46003197ac9fcd5145f",
+      "count": 1,
+      "reason": "JFM project/bundle file adapter or embedded Python import/runtime binding."
+    },
+    {
+      "file": "Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
+      "rule": "text-stream",
+      "line": 464,
+      "code": "std::ostringstream noise;",
+      "sha256": "7cb3ce530414345ed0588e830996ecc2fdb6caf841c2005c4ca93d97e4c77c44",
+      "count": 1,
+      "reason": "JFM project/bundle file adapter or embedded Python import/runtime binding."
+    },
+    {
+      "file": "Prototypes/PlotLab/src/PlotLabExport.cpp",
+      "rule": "python",
+      "line": 122,
+      "code": "nb::str(format.c_str()), dpi);",
+      "sha256": "11c1d4723278b0cd1b805f815e5dce7fa269b97000c7904d31e1c13aa2785b70",
+      "count": 1,
+      "reason": "Export-to-disk/Python plotting adapter."
+    },
+    {
+      "file": "Prototypes/JFM/src/IO/JFMProjectBundleSerializer.cpp",
+      "rule": "text-stream",
+      "line": 449,
+      "code": "auto flush=[](FILE *stream,std::ostringstream &buffer) {",
+      "sha256": "909553f7a1fd3c41daedbe61671bc6f261042769e7255f29ec9b1ff7f4dfdbc8",
+      "count": 1,
+      "reason": "Disk export edge: bounded 64 KiB TSV buffer flushed to FILE by atomic TextFileIO::Save (perfret1)."
+    },
+    {
+      "file": "Prototypes/JFM/src/Presentation/Panels/ImportStatusPanel.cpp",
+      "rule": "python",
+      "line": 34,
+      "code": "ImGui::Text(\"Python runtime: %s\", PythonInterpreter::IsRuntimeInitialized() ? \"ready\" : \"unavailable\");",
+      "sha256": "55398db521cd723fb57dbb115f20bbc036f525e1c7a299888a6ae0148e8f6cf9",
+      "count": 1,
+      "reason": "Import Status queries embedded Python runtime readiness; capability query only, no payload conversion or in-process text transport."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 51,
+      "code": "if (!PyStatus_Exception(status) && !home.Empty()",
+      "sha256": "05297692f51301c05af10e5b5b93c7777e80f1a2ee2c483fe6f58cc0b8cb59d5",
+      "count": 1,
+      "reason": "Embedded Python initialization edge: set the portable bundled interpreter home via the Python C API."
+    },
+    {
+      "file": "Core/ScientificRuntime/Python/PythonInterpreter.cpp",
+      "rule": "python",
+      "line": 54,
+      "code": "status = PyConfig_SetString(&config, &config.home, homePath.c_str());",
+      "sha256": "566ab6d5eff521ca543e1abd698a3e34e9c60d0cace51ed584d341aaebc2dad5",
+      "count": 1,
+      "reason": "Embedded Python initialization edge: set the portable bundled interpreter home via the Python C API."
     }
   ],
   "known-debt": [

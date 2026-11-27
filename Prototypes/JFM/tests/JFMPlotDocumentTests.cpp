@@ -1,5 +1,9 @@
 #include <gtest/gtest.h>
 #include "Presentation/JFMPlotDocument.hpp"
+#include "Core/PlotExport/PlotEditing.hpp"
+#include "Core/EventSystem/BusEventSystem/EventBus.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
+#include <sst/ui/Plot/ImPlotRenderer.hpp>
 #include "IO/JFMPlotExport.hpp"
 #include "Analysis/JFMMonteCarloStatistics.hpp"
 #include "Presentation/JFMFitMonteCarloWidgets.hpp"
@@ -35,7 +39,7 @@ namespace SST::Prototypes::JFM
         doc.BeginFrame(); doc.SetSeries({"Renamed###curve_7", {x,y,3}}); doc.EndFrame({});
         EXPECT_EQ(revision, doc.project.revision());
     }
-    TEST(JFMPlotDocumentTests, SemilogRetainsJfmAbsoluteCurrentAndOmitsZero)
+    TEST(JFMPlotDocumentTests, SemilogOmitsNonpositiveCurrent)
     {
         JFMPlotDocument doc;
         const double x[] = {0,1,2}, y[] = {-1,0,2};
@@ -43,7 +47,7 @@ namespace SST::Prototypes::JFM
         const auto id = doc.SetSeries({"Raw###raw", {x,y,3}}, true);
         doc.EndFrame({});
         auto data = doc.project.series(id).data;
-        ASSERT_EQ(data.count, 2); EXPECT_EQ(data.x[0], 0); EXPECT_EQ(data.y[0], 1); EXPECT_EQ(data.y[1], 2);
+        ASSERT_EQ(data.count, 1); EXPECT_EQ(data.x[0], 2); EXPECT_EQ(data.y[0], 2);
         doc.BeginFrame(); EXPECT_EQ(id, doc.SetSeries({"Raw###raw", {x,y,3}})); doc.EndFrame({});
         data = doc.project.series(id).data;
         ASSERT_EQ(data.count, 3); EXPECT_EQ(data.y[0], -1); EXPECT_EQ(data.y[1], 0);
@@ -379,4 +383,75 @@ TEST(JFMPlotDocumentTests, SameAddressDataChangesAreDetectedAndHistoryDoesNotRet
     doc->editor.pending.push_back(edit);doc->ApplyEdits();ASSERT_TRUE(doc->editUndo->CanUndo());
     doc.reset();EXPECT_TRUE(lifetime.expired());
 }
+}
+
+TEST(JFMUIFix, CommandExceptionsReturnStructuredErrorsAndAllowTheNextCommand) {
+    using namespace SST;
+    CommandRegistry registry;
+    int failures=0;
+    (void)registry.AddObserver([&](const CommandExecutionEvent& event) {
+        if (event.state==CommandExecutionState::Failed) { ++failures; ASSERT_TRUE(event.error); EXPECT_EQ(event.error->code,"command.execute.exception"); }
+    });
+    ASSERT_TRUE(registry.Register({CommandID{"throw.factory"},"Throwing factory"},[](CommandContext&)->Unique<ICommand> {throw std::invalid_argument("invalid UI target");}));
+    struct Throwing final : ICommand {
+        Result<void> Execute(CommandContext&) override {throw std::runtime_error("UI action failed");}
+        std::string Description() const override {return "Throwing execution";}
+    };
+    ASSERT_TRUE(registry.Register({CommandID{"throw.execute"},"Throwing command"},[](CommandContext&)->Unique<ICommand> {return CreateUnique<Throwing>();}));
+    for (const auto* id:{"throw.factory","throw.execute","throw.factory"}) {
+        auto result=registry.Execute(CommandID{id}); ASSERT_FALSE(result); EXPECT_EQ(result.Error().category,ErrorCategory::Internal);
+    }
+    EXPECT_EQ(failures,3);
+    auto events=CreateRef<EventBus>();int emptyNotifications=0;
+    auto subscription=events->Subscribe<NotificationRequestedEvent>([&](const auto& event) {if(event.notification.title=="plot.rescale.empty") ++emptyNotifications;});
+    ConfigurePlotEditingNotifications(events);
+    auto document=CreateRef<SST::Prototypes::JFM::JFMPlotDocument>();
+    sst::ui::plot::PlotEdit edit;edit.kind=sst::ui::plot::PlotEditKind::Rescale;
+    auto empty=ExecutePlotEdit(*document->editCommands,document->engine,document->layer,edit);
+    ASSERT_TRUE(empty); EXPECT_EQ(document->editUndo->GetUndoDepth(),0u);
+    events->ProcessQueue(); EXPECT_EQ(emptyNotifications,1);
+    edit.kind=sst::ui::plot::PlotEditKind::Remove;edit.series={"missing"};
+    auto stale=ExecutePlotEdit(*document->editCommands,document->engine,document->layer,edit);
+    ASSERT_FALSE(stale); EXPECT_EQ(stale.Error().code,"command.execute.exception");
+    edit.kind=sst::ui::plot::PlotEditKind::Legend;edit.series.clear();
+    EXPECT_TRUE(ExecutePlotEdit(*document->editCommands,document->engine,document->layer,edit));
+}
+TEST(JFMUIFix, AutoFitClearsStaleManualRangesAndSynchronizesOppositeScales) {
+    using namespace SST::Prototypes::JFM;
+    namespace p=sst::ui::plot; namespace pl=sst::plotlab;
+    JFMPlotDocument doc;
+    auto object=doc.project.object(doc.layer);auto& spec=std::get<pl::Layer>(object.data).spec;
+    spec.customAxes=true;spec.x.range=std::array<double,2>{0,30};spec.y.range=std::array<double,2>{0,.15};
+    spec.right=p::AxisSpec{};spec.right->scale=p::AxisScale::Log10;
+    doc.project.change("Restored axes",{object}).apply(doc.project);
+    p::PlotSpec requested;requested.autoFit=p::AutoFit::Always;doc.SetSpec(requested);
+    auto result=std::get<pl::Layer>(doc.project.object(doc.layer).data).spec;
+    EXPECT_FALSE(result.x.range);EXPECT_FALSE(result.y.range);ASSERT_TRUE(result.right);EXPECT_EQ(result.right->scale,p::AxisScale::Linear);
+    requested.y.scale=p::AxisScale::Log10;doc.SetSpec(requested);
+    EXPECT_EQ(std::get<pl::Layer>(doc.project.object(doc.layer).data).spec.right->scale,p::AxisScale::Log10);
+}
+
+#include "Presentation/JFMPlotWidgets.hpp"
+TEST(JFMUIFix, AutoFitUsesCurrentVisibleFinitePointsAcrossLinearAndLogFrames) {
+    using namespace SST::Prototypes::JFM;namespace p=sst::ui::plot;
+    ImGui::CreateContext();ImPlot::CreateContext();
+    struct Cleanup {~Cleanup(){ImPlot::DestroyContext();ImGui::DestroyContext();}} cleanup;
+    auto& io=ImGui::GetIO();io.IniFilename=nullptr;io.DisplaySize={1200,900};io.DeltaTime=1.f/60;
+    unsigned char* pixels;int width,height;io.Fonts->GetTexDataAsRGBA32(&pixels,&width,&height);
+    JFMPlotDocument doc;const double x[]={0,1,2,3},y[]={-100,0,2,std::numeric_limits<double>::quiet_NaN()};
+    const double otherX[]={20,30},otherY[]={10,20};
+    for (int frame=0;frame<5;++frame) {
+        ImGui::NewFrame();ImGui::SetNextWindowSize({1000,800});ImGui::Begin("autofit");
+        doc.BeginFrame();p::PlotSpec spec;spec.autoFit=p::AutoFit::Always;
+        spec.y.scale=(frame==2 || frame==4)?p::AxisScale::Log10:p::AxisScale::Linear;doc.SetSpec(spec);
+        if (frame!=4) doc.SetSeries({"Curve###curve",{x,y,4}},frame==2);
+        p::SeriesEntryView other{"Other###other",{otherX,otherY,2}};other.visible=frame==1;if(frame!=4) doc.SetSeries(other,frame==2);
+        ASSERT_TRUE(ImPlot::BeginPlot("raw",{700,500}));
+        SetupJFMPlotAxes(doc,true);ImPlot::SetupLock();const auto limits=ImPlot::GetPlotLimits();
+        if (frame==1) EXPECT_GT(limits.X.Max,30);else if(frame!=4) EXPECT_LT(limits.X.Max,4);
+        if (frame==2) {EXPECT_GT(limits.Y.Min,0);EXPECT_LT(limits.Y.Max,3);}
+        else if(frame!=4) {EXPECT_LT(limits.Y.Min,-100);EXPECT_GT(limits.Y.Max,2);}
+        EXPECT_NO_THROW(p::PaintPlotEditorAxes(std::get<sst::plotlab::Layer>(doc.project.object(doc.layer).data).spec,doc.view,false));
+        ImPlot::EndPlot();doc.EndFrame(spec);ImGui::End();ImGui::Render();
+    }
 }

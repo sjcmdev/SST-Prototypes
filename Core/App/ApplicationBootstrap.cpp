@@ -35,6 +35,7 @@
 #include "Core/Logging/LogRegistry.hpp"
 #include "Core/Logging/Logger.hpp"
 #include "Core/Notifications/Notifier.hpp"
+#include "Core/PlotExport/PlotEditing.hpp"
 #include "Core/Platform/PlatformSystem.hpp"
 #include "Core/Utils/Assert.hpp"
 #include "Core/Utils/Path.hpp"
@@ -710,6 +711,7 @@ namespace SST
 		m_RuntimeServices.keymapResolver = coreLayer->GetKeymapResolverHandle();
 		m_RuntimeServices.contextManager = coreLayer->GetContextManagerHandle();
 		m_RuntimeServices.notifier = CreateWeakRef(m_Notifier);
+        ConfigurePlotEditingNotifications(m_EventBus);
 		m_RuntimeServices.config = &m_Config;
 		m_RuntimeServices.configDirectory = m_Config.paths.userConfigDirectory;
 		m_RuntimeServices.paths = m_Config.paths;

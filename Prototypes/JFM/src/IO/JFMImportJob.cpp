@@ -117,8 +117,9 @@ namespace SST::Prototypes::JFM
 
 				if (!result)
 				{
-					groupWarnings.push_back(result.Error().technicalDetails);
-					allWarnings.push_back(result.Error().technicalDetails);
+                    const auto message = path.Utf8() + ": " + result.Error().userMessage + " " + result.Error().technicalDetails + " Fix: " + result.Error().suggestion;
+                    groupWarnings.push_back(message);
+                    allWarnings.push_back(message);
 					reportProgress(context, completedOffset, total, "Skipped " + path.filename().Utf8());
 					continue;
 				}

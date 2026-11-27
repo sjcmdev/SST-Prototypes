@@ -980,6 +980,8 @@ TEST_F(UnicodePaths, EmbeddedPythonPathAndImport) {
     {
 #if DS_PYTHON_CAPI_AVAILABLE
         auto runtime=EnsurePythonRuntimeForBridgeTests(); ASSERT_TRUE(runtime);
+        if (const auto* portable = std::getenv("SST_PORTABLE_ROOT"))
+            EXPECT_EQ(ResolveJFMPythonRoot(ApplicationConfig{}), Path(portable) / "python");
         std::optional<PythonGilAcquireScope> gil{std::in_place};
         const int status=PyRun_SimpleString(R"PY(
 import json, math, sst_jfm
@@ -1144,4 +1146,37 @@ assert sst_jfm.fit(bad)["error"]["code"] == "jfm.fit.validation"
         }
     }
 
+}
+
+#include "Presentation/Panels/ImportStatusPanel.hpp"
+#include "Core/Notifications/NotificationEvents.hpp"
+namespace SST::Prototypes::JFM {
+TEST(JFMUIFix, FailedReloadNamesEveryCurveOpensStatusAndNotifies) {
+    auto bus=CreateRef<EventBus>();auto store=CreateRef<JFMWorkspaceStore>();IOLayer io(bus);
+    const auto project=store->GetActiveProjectHandle();
+    RegisterJFMIOHandlers(io,{bus,store,{},{},{},Path{"missing-python"}});
+    ImportStatusPanel panel(store,"Import Status",false,bus);
+    JFMProject source;
+    for (int i=1;i<=2;++i) {JFMCharacteristicInfo info;info.id=i;info.name="Curve "+std::to_string(i);info.sourcePath=Path{"missing-shared-source.dat"};source.characteristics.push_back(info);}
+    std::vector<std::string> warnings;
+    auto warningSubscription=bus->Subscribe<ProjectDataMaterializationCompleted>([&](const auto& event){warnings=event.warnings;});
+    int notifications=0;auto notificationSubscription=bus->Subscribe<NotificationRequestedEvent>([&](const auto& event){++notifications;EXPECT_NE(event.notification.message.find("Fix:"),std::string::npos);});
+    MaterializeProjectDataJob job(bus,source,Path{"missing-python"},project);
+    auto context=MakeTestJobContext();job.Execute(context);bus->ProcessQueue();bus->ProcessQueue();
+    ASSERT_EQ(warnings.size(),2u);EXPECT_NE(warnings[0].find("Curve 1"),std::string::npos);EXPECT_NE(warnings[1].find("Curve 2"),std::string::npos);
+    EXPECT_NE(warnings[0].find("Fix:"),std::string::npos);EXPECT_TRUE(panel.IsVisible());EXPECT_EQ(notifications,1);
+    EXPECT_EQ(store->GetLastImportWarnings().size(),2u);
+}
+TEST(JFMUIFix, OwnerProjectMaterializesAllNumericDataWithoutPython) {
+    const Path path("Prototypes/JFM/JFM-projects/HZB-project.yaml.jfm.yaml");
+    std::string text,error;ASSERT_TRUE(TextFileIO::Load(path,text,error));auto project=JFMProjectYamlSerializer::Deserialize(text);ASSERT_TRUE(project);
+    if (std::getenv("SST_JFM_REAL_DATA"))
+        for (auto& info:project->characteristics) info.sourcePath=RealDataPath(("dat/" + info.sourcePath.filename().Utf8()).c_str());
+    if (!FileSystem::Exists(project->characteristics.front().sourcePath.Native())) GTEST_SKIP() << "Set SST_JFM_REAL_DATA to the measurement root.";
+    auto bus=CreateRef<EventBus>();std::vector<JFMCharacteristicRecord> records;std::vector<std::string> warnings;
+    auto subscription=bus->Subscribe<ProjectDataMaterializationCompleted>([&](const auto& event){records=event.characteristics;warnings=event.warnings;});
+    auto context=MakeTestJobContext();MaterializeProjectDataJob job(bus,project.Value(),Path{"missing-python-root"});job.Execute(context);bus->ProcessQueue();
+    EXPECT_EQ(records.size(),project->characteristics.size());EXPECT_TRUE(warnings.empty());
+    for (const auto& curve:records) {ASSERT_TRUE(curve.data);EXPECT_GT(curve.data->voltage.size(),10u);}
+}
 }

@@ -30,7 +30,7 @@ namespace SST::Prototypes::JFM
 	{
 		constexpr NativeFileDialogFilter PythonScriptFilter{"Python", "py"};
 
-		const char *ParserOptions[] = {"auto", "dat", "scaps_iv", "custom"};
+		const char *ParserOptions[] = {"auto", "dat", "scaps_iv", "custom", "dat_python"};
 		const char *DecimalOptions[] = {"auto", ".", ","};
 		const char *TemperatureOptions[] = {"auto", "filename", "header", "off"};
 		const char *VariableSources[] = {
@@ -357,6 +357,7 @@ namespace SST::Prototypes::JFM
 			ImGui::TableNextRow();
 			ImGui::TableSetColumnIndex(0);
 			sst::ui::widgets::Combo("Parser", &m_Parser, ParserOptions, IM_ARRAYSIZE(ParserOptions));
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("auto/dat: native numeric .dat reader. Custom naming rules and dat_python use bundled Python.");
 			sst::ui::widgets::Text("Name pattern", m_NamePattern.data(), m_NamePattern.size());
 			sst::ui::widgets::Text("Short name", m_ShortNamePattern.data(), m_ShortNamePattern.size());
 			sst::ui::widgets::Text("Variable delimiter", m_VariableDelimiter.data(), m_VariableDelimiter.size());
