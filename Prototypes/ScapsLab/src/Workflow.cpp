@@ -878,19 +878,20 @@ void Operation::Execute(JobContext &ctx) try {
         const auto mesh=prepareMeasurement(device,p,volts,std::vector<double>{p.temperature_K},meshConfig,pc);phase.lap("mesh");
         // Only previews use a previous model's state as a Newton guess; exact runs keep the qualified engine sweep.
         const bool liveSolve=preview || (automatic && op=="band" && request.value("preview",false));
+        auto solver=p.solver; if(preview)solver.full_diagnostics=false;
         auto guess=liveSolve && warmInput && warmInput->x_m==mesh.x_m && device.external.series_ohm_m2==0?warmInput:Ref<const scaps_core::DeviceState>{};
         std::unique_ptr<IVSession> cold;
         const auto nextPoint=[&](double voltage) {
             IVPoint pt;
             if(guess) {
-                auto solved=solve_bias(device,mesh,*guess,voltage,p.temperature_K,p.solver,pc);
+                auto solved=solve_bias(device,mesh,*guess,voltage,p.temperature_K,solver,pc);
                 pt.voltage_V=voltage;pt.temperature_K=p.temperature_K;pt.status=solved.status;pt.iterations=solved.iterations;pt.final_residual_norm=solved.final_residual_norm;pt.state=std::move(solved.state);
                 const auto& currents=pt.state.Jtotal_Am2;
                 if(!currents.empty()) {for(double j:currents)pt.J_total_Am2+=j;pt.J_total_Am2/=currents.size();for(double j:currents)pt.J_conservation_error_Am2=std::max(pt.J_conservation_error_Am2,std::abs(j-pt.J_total_Am2));}
                 if(!std::isinf(device.external.shunt_ohm_m2)){pt.J_shunt_Am2=-voltage/device.external.shunt_ohm_m2;pt.J_total_Am2+=pt.J_shunt_Am2;}
             }
             if(!guess || pt.status!=SolverStatus::Converged) {
-                if(!cold)cold=std::make_unique<IVSession>(device,mesh,p.temperature_K,p.solver,pc);
+                if(!cold)cold=std::make_unique<IVSession>(device,mesh,p.temperature_K,solver,pc);
                 pt=cold->next(voltage);
             }
             if((liveSolve || (automatic && op=="band") || (retainBiasProfiles && !warmOutput)) && pt.status==SolverStatus::Converged && device.external.series_ohm_m2==0) {
