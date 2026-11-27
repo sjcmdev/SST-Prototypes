@@ -69,6 +69,7 @@ namespace SST
         [[nodiscard]] Ref<IPanel> Clone() const final { return {}; } // Use the undoable workspace factory.
         void Render() override;
         [[nodiscard]] virtual std::string ImGuiName() const;
+        void RequestActivation() { Request({WindowAction::Activate}); }
 
     protected:
         virtual void RenderContent() = 0;

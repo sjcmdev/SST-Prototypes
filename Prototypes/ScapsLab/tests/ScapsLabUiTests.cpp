@@ -334,6 +334,11 @@ TEST(ScapsLab,MainLoopPreservesProjectAndReportsLayerExceptions) {
     std::filesystem::current_path(std::filesystem::path(SCAPSLAB_HEADLESS).parent_path().parent_path()/"ScapsLab");
     int updates=0,renders=0;Workflow project(CreateRef<JobSystem>(nullptr,1));project.Current().SetDocument(ReadProject(SCAPSLAB_PROJECT));project.projectDirty=true;const auto before=project.Workspace();
     auto app=Application::Create(6,argv,[&](Application &application){application.PushLayer(CreateUnique<Broken>(updates,false));application.PushLayer(CreateUnique<Broken>(renders,true));application.PushLayer(CreateUnique<Probe>(dialogSeen));});
+    if(const char* portable=std::getenv("SST_PORTABLE_ROOT");portable && *portable){
+        const auto expected=std::filesystem::weakly_canonical(std::filesystem::u8path(portable)/"install"/"app"/"config");
+        EXPECT_EQ(std::filesystem::weakly_canonical(app.GetConfig().directory.Native()),expected);
+        EXPECT_EQ(std::filesystem::weakly_canonical(std::filesystem::u8path(app.GetConfig().layout.imGuiIniPath)).parent_path(),expected/"layouts");
+    }
     EXPECT_EQ(app.Run(),0);EXPECT_EQ(updates,1);EXPECT_EQ(renders,1);EXPECT_TRUE(dialogSeen);EXPECT_EQ(project.Workspace(),before);EXPECT_TRUE(project.projectDirty);EXPECT_TRUE(std::filesystem::exists(file));
 }
 
@@ -418,7 +423,7 @@ TEST(ScapsLab,LiveDragLatestWinsStartsFewJobsAndEndsWithTheExactFinalRun) {
     for(std::size_t i=0;i<ref.Current().result.at("points").size();++i) EXPECT_EQ(w.Current().result.at("points")[i].at("J_A_m2"),ref.Current().result.at("points")[i].at("J_A_m2"));
 }
 TEST(ScapsLab,CoarsePreviewIsNeverSavedStoredOrUsedForReadouts) {
-    Workflow w(CreateRef<JobSystem>(nullptr,1));w.Current().SetDocument(TinyDevice());w.autoRecalculate=true;
+    Workflow w(CreateRef<JobSystem>(nullptr,1));auto sample=TinyDevice();sample["voltage"]["step_V"]=.01;w.Current().SetDocument(sample);w.autoRecalculate=true;
     ASSERT_TRUE(w.Dispatch({{"operation","run"}}).at("ok").get<bool>());Settle(w);
     const Json resultBefore=*w.Current().result,historyBefore=*w.Current().history;
     w.lastFullMs=1000;w.dragging=true;auto doc=w.Current().Document();doc["temperature_K"]=310.;
@@ -553,7 +558,8 @@ TEST(ScapsLabLive, ReferenceSurvivesReleaseAndTheNextParameterGesture) {
 }
 TEST(ScapsLabLive, WarmBandMatchesColdAfterAParameterEdit) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.Current().SetDocument(TinyDevice());
-    const auto run=[&]{w.StartOperation({{"operation","band"},{"live",true},{"voltage_V",.01}},w.Current().id);while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}};
+    w.WatchPlots();
+    const auto run=[&]{const auto generation=w.plotGen;w.StartOperation({{"operation","band"},{"live",true},{"voltage_V",.01}},w.Current().id);while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}EXPECT_GT(w.plotGen,generation);};
     run();ASSERT_TRUE(w.Current().warmBand);auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=301;w.Current().SetDraft(next);
     run();const auto warm=w.Current().Band();w.Current().warmBand.reset();run();const auto cold=w.Current().Band();
     ASSERT_EQ(warm->points.size(),1u);const auto& a=warm->points[0];const auto& b=cold->points[0];ASSERT_TRUE(a.valid);ASSERT_TRUE(b.valid);
@@ -579,7 +585,7 @@ TEST(ScapsLabLive, QeOnEditRunsDuringDragAndRefinesOnRelease) {
     Workflow w(CreateRef<JobSystem>(nullptr,2));w.lightResponse=true;w.Current().SetDocument(TinyDevice());
     auto plan=CreateRef<RunPlan>();plan->actions[4].include=true;plan->actions[4].onEdit=true;plan->actions[4].range=SweepRange{SweepSampling::Points,false,500,700,1,17};
     ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make(plan)).value("ok",false));Settle(w);const auto reference=w.Current().acResults.get("qe");
-    w.SetRunPlanTyped(plan);w.dragging=true;auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=310;
+    w.SetRunPlanTyped(plan);w.livePreviewStride=2;w.dragging=true;auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=310;
     ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next,"qe-drag")).value("ok",false));
     w.OnUpdate(0);ASSERT_TRUE(w.Current().liveMesh);ASSERT_TRUE(w.ActiveOp());EXPECT_EQ(w.ActiveOp()->liveMeshInput,w.Current().liveMesh);
     const auto deadline=std::chrono::steady_clock::now()+std::chrono::seconds(20);

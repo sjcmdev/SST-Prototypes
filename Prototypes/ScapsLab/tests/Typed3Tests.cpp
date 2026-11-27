@@ -17,6 +17,45 @@ namespace {
 void Wait(Workflow& w){while(w.Pending()){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}ASSERT_TRUE(w.response.value("ok",false))<<w.response;}
 Ref<const ProjectDraft> SmallDraft(){auto p=scaps_core::make_default_device_project();p.layers.resize(2);for(auto& l:p.layers)l.defects.clear();p.interface_defects.clear();p.mesh.points_per_layer=11;p.voltage={0,.01,.01};return DraftFromProject(std::move(p));}
 }
+TEST(RunActions, ResultFocusSurvivesEditsDuringDragAndChoosesTheNewRunAction) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.Current().SetDraft(SmallDraft());
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Wait(w);const auto run=w.Current().selectedRun;
+    EXPECT_EQ(w.focusResultRun,run);w.dragging=w.interacting=true;
+    auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=310;ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));EXPECT_TRUE(w.Current().selectedRun.empty());
+    w.RestoreResultFocus();EXPECT_TRUE(w.Current().selectedRun.empty());EXPECT_EQ(w.focusResultRun,run);
+    w.dragging=w.interacting=false;w.project.ui["results_action"]="qe";w.RestoreResultFocus();EXPECT_EQ(w.Current().selectedRun,run);EXPECT_EQ(w.project.ui["results_action"],"iv");EXPECT_TRUE(w.focusResultRun.empty());
+}
+TEST(RunActions, LivePreviewResolutionUsesCommandPathAndValidatesHeadlessInputs) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;
+    for(int every:{0,1,2,3,4}){ASSERT_TRUE(w.Exec(Cmd::LivePreviewResolution::Make(every)).value("ok",false));EXPECT_EQ(w.livePreviewStride,every);}
+    ASSERT_TRUE(w.Dispatch({{"operation","live_preview_resolution"},{"every_nth",2}}).value("ok",false));EXPECT_EQ(w.livePreviewStride,2);
+    for(const Json invalid:{Json(-1),Json(5),Json(true),Json("auto"),Json(10000000000LL)}){const auto reply=w.Dispatch({{"operation","live_preview_resolution"},{"every_nth",invalid}});EXPECT_FALSE(reply.value("ok",true));EXPECT_EQ(w.livePreviewStride,2);}
+}
+TEST(RunActions, PreviewSamplingKeepsEndpointsAndHonestShortCurves) {
+    for(int size:{0,1,3,8,11,17,61,201})for(int stride:{1,2,3,4,100}) {
+        std::vector<double> samples;for(int i=0;i<size;++i)samples.push_back(double(i));const auto coarse=PreviewSamples(samples,stride);
+        if(size){EXPECT_EQ(coarse.front(),samples.front());EXPECT_EQ(coarse.back(),samples.back());}
+        EXPECT_GE(coarse.size(),std::min<std::size_t>(8,samples.size()));EXPECT_LE(coarse.size(),samples.size());
+        for(double value:coarse)EXPECT_EQ(value,samples[std::size_t(value)]);
+    }
+}
+TEST(RunActions, ClearAllSimulationKindsOneUndoAndReleaseRetainedResults)
+{
+    Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.Current().SetDraft(SmallDraft());
+    auto plan=CreateRef<RunPlan>();ASSERT_TRUE(w.Exec(Cmd::SetRunPlan::Make(plan)).value("ok",false));
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make(plan)).value("ok",false));Wait(w);EXPECT_EQ(w.focusView,18);w.focusView=-1;
+    ASSERT_TRUE(w.Exec(Cmd::CaptureLive::Make(ActionKind::Iv)).value("ok",false));
+    auto batch=CreateRef<BatchDraft>(*w.Current().batch);batch->axes.front().values=std::vector<double>{300,301};
+    ASSERT_TRUE(w.Exec(Cmd::QuickSweep::Make(batch,w.Current().recorder,w.Current().draft,plan)).value("ok",false));Wait(w);EXPECT_EQ(w.focusView,18);
+    ASSERT_TRUE(w.Exec(Cmd::RunBatch::Make(batch,w.Current().recorder,plan)).value("ok",false));Wait(w);
+    const auto count=w.StoredSimulationCount();EXPECT_GE(count,4u);const auto entries=w.Current().history.size();const auto depth=w.projectUndo.GetUndoDepth();
+    std::weak_ptr<const ResultBase> retained=w.Current().batchResult.typed();
+    ASSERT_TRUE(w.Exec(Cmd::ClearHistory::With({{"scope","all"},{"include_pinned",true}})).value("ok",false));
+    EXPECT_EQ(w.StoredSimulationCount(),0u);EXPECT_TRUE(w.Current().runs->empty());EXPECT_TRUE(w.Current().batchResult.empty());EXPECT_TRUE(w.Current().result.empty());EXPECT_EQ(w.projectUndo.GetUndoDepth(),depth+1);EXPECT_FALSE(retained.expired());
+    ASSERT_TRUE(w.Exec(Cmd::Undo::With()).value("ok",false));EXPECT_EQ(w.StoredSimulationCount(),count);EXPECT_EQ(w.Current().history.size(),entries);
+    ASSERT_TRUE(w.Exec(Cmd::Redo::With()).value("ok",false));EXPECT_EQ(w.StoredSimulationCount(),0u);
+    w.projectUndo.Clear();EXPECT_TRUE(retained.expired());
+}
 TEST(Typed3, DirectFileAdapter) {
     for(const auto& file:std::filesystem::directory_iterator(ExamplesDirectory())) {
         const auto extension=file.path().extension();if(extension!=".scapslab" && extension!=".yaml")continue;

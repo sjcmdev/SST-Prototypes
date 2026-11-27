@@ -1,4 +1,5 @@
 #include "Panel.hpp"
+#include "Core/Presentation/TreeKeyboard.hpp"
 #include "Domain/ParameterBounds.hpp"
 #include "Core/Platform/ProcessRunner.hpp"
 #include <numbers>
@@ -572,16 +573,27 @@ double PlotCacheSum() {
     for(const auto &e:Cache().entries)for(const auto &l:e.lines){add(l.x);add(l.y);}
     return sum;
 }
+void DrawClearSimulations(Workflow& w) {
+    const auto count=w.StoredSimulationCount();
+    ImGui::BeginDisabled(w.AnyActive() || count==0);
+    if(ImGui::Button("Clear all simulations..."))w.clearSimulations=true;
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip(w.AnyActive()?"Wait for running simulations or stop them first.":"Remove Single shot, Quick batch, Batch and Capture live runs from all devices, including pinned runs. One Undo restores them.");
+    if(ImGui::BeginPopupContextItem("simulation-history-menu")){if(ImGui::MenuItem("Clear all simulations..."))w.clearSimulations=true;ImGui::EndPopup();}
+    ImGui::EndDisabled();
+    if(count==0)w.clearSimulations=false;
+    if(w.clearSimulations) {
+        ImGui::Text("Remove %zu stored simulation%s from all devices?",count,count==1?"":"s");
+        ImGui::TextUnformatted("Includes pinned runs and captures. Undo restores all runs in one step.");
+        ImGui::BeginDisabled(w.AnyActive() || count==0);
+        if(ImGui::Button("Clear simulations")){(void)w.Exec(Cmd::ClearHistory::With({{"scope","all"},{"include_pinned",true}}));w.clearSimulations=false;}
+        ImGui::EndDisabled();ImGui::SameLine();if(ImGui::Button("Cancel"))w.clearSimulations=false;
+    }
+}
 void DrawHistory(Workflow &w,bool global) {
     ImGui::PushID(global?"global-history":"device-history");
+    DrawClearSimulations(w);
     ImGui::BeginDisabled(w.Busy());
     if(ImGui::Button(global?"Clear unpinned (all devices)":"Clear unpinned (active device)")) (void)w.Exec(Cmd::ClearHistory::With({{"scope",global?"all":"device"}}));
-    ImGui::SameLine();if(ImGui::Button(global?"Clear including pinned...":"Clear active including pinned..."))ImGui::OpenPopup("Confirm clear");
-    if(ImGui::BeginPopupModal("Confirm clear",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted(global?"Clear all runs from every device, including pinned?":"Clear all runs from the active device, including pinned?");
-        if(ImGui::Button("Clear all")){(void)w.Exec(Cmd::ClearHistory::With({{"scope",global?"all":"device"},{"include_pinned",true}}));ImGui::CloseCurrentPopup();}
-        ImGui::SameLine();if(ImGui::Button("Cancel"))ImGui::CloseCurrentPopup();ImGui::EndPopup();
-    }
     int retention=w.project.ui.value("history_retention",5);
     BeginRow("Legacy runs retained");if(SweepPoints("##retention",retention,"history_retention")) {auto ui=w.project.ui;ui["history_retention"]=retention;(void)w.Exec(Cmd::EditProject::With({{"ui",ui}}));}EndRow();
     // Commands replace device state; draw from a snapshot while dispatching edits.
@@ -1940,7 +1952,23 @@ void Panel::AC() {
         EndSavedPlot(*w,names[view]);
     }
 }
+void Panel::DeleteTreeRecord() {
+    if(!w->HasDevice(treeDevice) || w->AnyActive())return;
+    auto& d=w->Device(treeDevice);
+    if(treeKind==TreeKind::Run){Do(Cmd::ClearHistory::With({{"device_id",d.id},{"run_ids",Json::array({treeRecord})}}));return;}
+    if(treeKind==TreeKind::Device){if(w->project.devices.size()>1)Do(Cmd::RemoveDevice::With({{"device_id",d.id}}));return;}
+    if(treeKind==TreeKind::Contact){w->status="Terminal contacts are required by the device; edit them in Contacts.";return;}
+    if(treeKind==TreeKind::None)return;
+    if(w->project.active_device!=d.id)Do(Cmd::SelectDevice::Make(d.id));
+    if(treeKind==TreeKind::Layer){if(d.draft->layers.size()>1)Do(Cmd::EditLayer::With({{"action","remove"},{"layer_id",treeRecord}}));return;}
+    auto draft=CreateRef<ProjectDraft>(*d.draft);
+    if(treeKind==TreeKind::Interface){for(int k=int(draft->project.interface_defects.size())-1;k>=0;--k)if(draft->project.interface_defects[k].left_layer_index>=0 && draft->layers[draft->project.interface_defects[k].left_layer_index].id==treeRecord)RemoveDraftDefect(*draft,draft->project.interface_defects[k].left_layer_index,k,true);}
+    else if(treeKind==TreeKind::InterfaceDefect){for(int k=0;k<int(draft->project.interface_defects.size());++k)if(draft->project.interface_defects[k].id==treeRecord){RemoveDraftDefect(*draft,draft->project.interface_defects[k].left_layer_index,k,true);break;}}
+    else for(int i=0;i<int(draft->layers.size());++i)for(int k=0;k<int(draft->layers[i].defects.size());++k)if(draft->layers[i].defects[k].id==treeRecord){RemoveDraftDefect(*draft,i,k,false);break;}
+    Do(Cmd::EditDocument::Make(std::move(draft)));
+}
 void Panel::Devices() {
+    if(w->inputContexts)w->inputContexts->SetActive("scapslab.tree.focused",TreeKeyboardFocused());
     // Project tree: Project > Devices > device > (Layers, Interfaces, Contacts, Illumination, Results). One line per item.
     ImGui::BeginDisabled(w->Busy());
     if(ImGui::Button(ICON_FA_PLUS " New device")) Do(Cmd::AddDevice::With());w->tutorialOverlay.Item("scapslab.Project","new");ImGui::SameLine();
@@ -1960,7 +1988,8 @@ void Panel::Devices() {
     } else if(w->dirty || !w->status.empty()) ImGui::TextDisabled("%s%s",w->dirty?"* unsaved  ":"",w->status.c_str());
     ImGui::Separator();
     const auto select=[&](const DeviceState &d) {if(w->project.active_device!=d.id) Do(Cmd::SelectDevice::With({{"device_id",d.id}}));};
-    const auto go=[&](int target) {if(PanelShown(target))w->focusView=target;}; // hidden panels: no jump
+    const auto go=[&](int target) {if(PanelShown(target))w->revealView=target;};
+    const auto pick=[&](TreeKind kind,const DeviceState& d,std::string id={}){treeKind=kind;treeDevice=d.id;treeRecord=std::move(id);}; // hidden panels: no jump
     // Tree node with room for inline decoration; returns {open, clicked (not the arrow)}.
     const auto node=[&](const char *id,ImGuiTreeNodeFlags flags,bool selected) {
         const bool open=ImGui::TreeNodeEx(id,flags|ImGuiTreeNodeFlags_SpanAvailWidth|ImGuiTreeNodeFlags_AllowOverlap|ImGuiTreeNodeFlags_OpenOnArrow|(selected?ImGuiTreeNodeFlags_Selected:0));
@@ -1984,7 +2013,7 @@ void Panel::Devices() {
                 ImGui::PushID(d.id.c_str());
                 const float rowRight=ImGui::GetCursorPosX()+ImGui::GetContentRegionAvail().x,box=ImGui::GetFrameHeight();
                 const auto [open,clicked]=node("##device",ImGuiTreeNodeFlags_DefaultOpen,active);
-                if(clicked) {select(d);go(14);}
+                if(clicked) {pick(TreeKind::Device,d);select(d);go(14);}
                 if(ImGui::IsItemHovered()) ImGui::SetTooltip("%s\nStatus: %s",d.name.c_str(),d.status.c_str());
                 if(ImGui::BeginDragDropSource()) {ImGui::SetDragDropPayload("SCAPSLAB_DEVICE",d.id.c_str(),d.id.size()+1);ImGui::TextUnformatted(d.name.c_str());ImGui::EndDragDropSource();}
                 if(ImGui::BeginDragDropTarget()) {if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_DEVICE")) Do(Cmd::MoveDevice::With({{"device_id",static_cast<const char*>(payload->Data)},{"index",int(&dp-&devices[0])}}));ImGui::EndDragDropTarget();}
@@ -2033,7 +2062,8 @@ void Panel::Devices() {
                         if(PanelShown(2)) { // contacts are the first and last items of the stack
                             const auto contact=[&](const char *label,const char *id) {
                                 ImGui::PushID(id);const auto [co,cc]=node("##contact",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)co;
-                                if(cc) {select(d);go(2);}
+                                if(cc) {pick(TreeKind::Contact,d);select(d);go(2);}
+                                if(ImGui::IsItemHovered())ImGui::SetTooltip("Terminal contacts define the device boundaries and cannot be deleted. Edit them in Contacts.");
                                 text(label);ImGui::PopID();
                             };
                             contact(ICON_FA_PLUG " Left contact (front)","left");
@@ -2041,7 +2071,7 @@ void Panel::Devices() {
                         for(int i=0;i<int(layers.size());++i) {
                             const auto &l=layers[i];const auto &defects=l.value("defects",Json::array());ImGui::PushID(i);
                             const auto [lopen,lclick]=node("##layer",defects.empty()?ImGuiTreeNodeFlags_Leaf:ImGuiTreeNodeFlags_None,active && d.selectedLayer==i && d.selectedInterface<0);
-                            if(lclick) {select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;go(1);}
+                            if(lclick) {pick(TreeKind::Layer,d,d.draft->layers[i].id);select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;go(1);}
                             Library::DropTarget(*w,{d.draft->layers[i].id,i,false,false,d.id});
                             { // drag a layer onto another row of the same device: reorder through the layer "move" operation (stable IDs kept)
                                 const std::string payloadText=d.id+"\n"+l.value("scapslab_id",std::string{});
@@ -2073,7 +2103,7 @@ void Panel::Devices() {
                             if(lopen) {
                                 for(int k=0;k<int(defects.size());++k) {
                                     ImGui::PushID(k);const auto [dopen,dclick]=node("##defect",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)dopen;
-                                    if(dclick) {select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;selectedDefect=k;go(11);}
+                                    if(dclick) {pick(TreeKind::Defect,d,d.draft->layers[i].defects[k].id);select(d);w->Current().selectedLayer=i;w->Current().selectedInterface=-1;selectedDefect=k;go(11);}
                                     text(ICON_FA_CIRCLE_DOT " "+defects[k].value("scapslab_id",std::string("defect")));ImGui::PopID();
                                 }
                                 ImGui::TreePop();
@@ -2083,7 +2113,7 @@ void Panel::Devices() {
                             if(i+1<int(layers.size()) && !sheetIdx.empty()) { // interface shown inline only when it has defects; not draggable, but a drop here maps to the layer move index
                                 ImGui::PushID(1000+i);
                                 const auto [iopen,iclick]=node("##interface",ImGuiTreeNodeFlags_DefaultOpen,active && d.selectedInterface==i);
-                                if(iclick) {select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;go(12);}
+                                if(iclick) {pick(TreeKind::Interface,d,d.draft->layers[i].id);select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;go(12);}
                                 if(ImGui::BeginDragDropTarget()) {
                                     if(const auto *payload=ImGui::AcceptDragDropPayload("SCAPSLAB_LAYER",ImGuiDragDropFlags_AcceptBeforeDelivery|ImGuiDragDropFlags_AcceptNoDrawDefaultRect)) {
                                         const std::string text=static_cast<const char*>(payload->Data);const auto nl=text.find('\n');
@@ -2108,7 +2138,7 @@ void Panel::Devices() {
                                 if(iopen) {
                                     for(const int k:sheetIdx) {
                                         ImGui::PushID(k);const auto [dopen,dclick]=node("##idefect",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)dopen;
-                                        if(dclick) {select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;selectedDefect=k;go(12);}
+                                        if(dclick) {pick(TreeKind::InterfaceDefect,d,d.draft->project.interface_defects[k].id);select(d);w->Current().selectedInterface=i;w->Current().selectedLayer=i;selectedDefect=k;go(12);}
                                         text(ICON_FA_CIRCLE_DOT " "+sheets[k].value("id",std::string("defect")));ImGui::PopID();
                                     }
                                     ImGui::TreePop();
@@ -2116,7 +2146,7 @@ void Panel::Devices() {
                                 ImGui::PopID();
                             }
                         }
-                        if(PanelShown(2)) {ImGui::PushID("right");const auto [co,cc]=node("##contact",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)co;if(cc) {select(d);go(2);}text(ICON_FA_PLUG " Right contact (back)");ImGui::PopID();}
+                        if(PanelShown(2)) {ImGui::PushID("right");const auto [co,cc]=node("##contact",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,false);(void)co;if(cc) {pick(TreeKind::Contact,d);select(d);go(2);}text(ICON_FA_PLUG " Right contact (back)");ImGui::PopID();}
                         ImGui::TreePop();
                     }
                     for(const auto &[label,target]:{std::pair<const char*,int>{ICON_FA_SUN " Illumination",19}}) {
@@ -2135,9 +2165,10 @@ void Panel::Devices() {
                             ImGui::PushID(id.c_str());
                             const auto [ropen,rclick]=node("##run",ImGuiTreeNodeFlags_Leaf|ImGuiTreeNodeFlags_NoTreePushOnOpen,active && (d.selectedRun==id || multi.contains(id)));(void)ropen;
                             const std::string kind=run.value("kind",std::string{});
-                            const bool hiddenKind=!PanelShown(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="dlcp"?23:kind=="qe"?19:kind=="band"?14:kind=="batch"?16:5);
+                            const bool hiddenKind=!PanelShown(18);
                             if(hiddenKind && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) ImGui::SetTooltip("panel disabled in basic mode");
                             if(rclick && !hiddenKind) {
+                                pick(TreeKind::Run,d,id);
                                 const auto &io=ImGui::GetIO();
                                 if(io.KeyShift && !anchor.empty()) {
                                     int a=-1;for(int k=0;k<int(history.size());++k)if(history[k].at("run_id")==anchor)a=k;
@@ -2145,7 +2176,7 @@ void Panel::Devices() {
                                 } else if(io.KeyCtrl) {if(!multi.erase(id))multi.insert(id);anchor=id;}
                                 else {multi={id};anchor=id;}
                                 deferred.push_back({{"operation","history_select"},{"device_id",d.id},{"run_id",id}});
-                                if(!io.KeyShift && !io.KeyCtrl)go(kind=="iv"?10:kind=="cv"?6:kind=="cf"?8:kind=="dlcp"?23:kind=="qe"?19:kind=="band"?14:5);
+                                if(!io.KeyShift && !io.KeyCtrl)go(18);
                             }
                             if(ImGui::BeginPopupContextItem("runmenu")) {
                                 if(!multi.contains(id)){multi={id};anchor=id;}
@@ -2158,6 +2189,7 @@ void Panel::Devices() {
                                 if(ImGui::MenuItem(("Compare (overlay)"+count).c_str()))each({{"pinned",true},{"visible",true}});
                                 if(ImGui::MenuItem(("Export CSV..."+count).c_str())) try {if(const auto path=SaveFileDialog({"Results CSV","csv"},"results.csv"))deferred.push_back({{"operation","export_results"},{"path",path->Utf8()},{"format","csv"},{"run_ids",picked}});}catch(const std::exception &e){w->status=e.what();}
                                 ImGui::Separator();
+                                if(ImGui::MenuItem("Clear all simulations...")){w->clearSimulations=true;w->focusView=18;}
                                 if(ImGui::MenuItem(("Delete"+count).c_str())){deferred.push_back({{"operation","history_clear"},{"device_id",d.id},{"run_ids",picked}});multi.clear();}
                                 ImGui::EndPopup();
                             }
@@ -2177,6 +2209,8 @@ void Panel::Devices() {
         }
         ImGui::TreePop();
     }
+    const bool deleteRequested=std::exchange(w->deleteTreeRecord,false);
+    if(TreeDeletePressed() || (deleteRequested && TreeKeyboardFocused()))DeleteTreeRecord();
     if(openRename) {openRename=false;ImGui::OpenPopup("Rename##dialog");}
     if(ImGui::BeginPopupModal("Rename##dialog",nullptr,ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(renameId.empty()?"Rename project":"Rename device");
@@ -2392,6 +2426,7 @@ bool BatchAxes(Workflow& w,const char* id,bool iv) {
 }
 }
 void Panel::ResultsBrowser() {
+    DrawClearSimulations(*w);
     auto& d=w->Current();const auto history=d.history.share();
     if(!d.liveMembers.empty() || (d.selectedRun.empty() && !d.batchResult.empty() && !d.batchResult.typed()->runPlan)){BatchPlots();return;}
     BeginRow("Stored Run");

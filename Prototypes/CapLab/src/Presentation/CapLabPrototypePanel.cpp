@@ -1,5 +1,6 @@
 #include "Core/dspch.hpp"
 #include "Presentation/CapLabPrototypePanel.hpp"
+#include "Core/Presentation/TreeKeyboard.hpp"
 #include "Presentation/SelectionLabel.hpp"
 #include <imgui.h>
 #include <sst/ui/Widgets/LabelledControls.hpp>
@@ -176,8 +177,10 @@ void CapLabPrototypePanel::RenderTree() {
         ImGui::PushID(static_cast<int>(sample.id));
         ImGui::SetNextItemOpen(true, ImGuiCond_Once);
         if (ImGui::TreeNode(sample.name.c_str())) {
-            for (const auto &sweep : doc.project.sweeps) if (sweep.sample_id == sample.id)
+            for (const auto &sweep : doc.project.sweeps) if (sweep.sample_id == sample.id) {
+                if(ImGui::Selectable(("Measurement "+std::to_string(sweep.id)).c_str(),selectedMeasurement==sweep.id))selectedMeasurement=sweep.id;
                 ImGui::TextWrapped("Cp (F) / Rp (Ω): %zu points; T=%s K", std::get<pl::Worksheet>(doc.project.engine->object(sweep.id).data).rows.size(), Nullable(sweep.temperature_K).dump().c_str());
+            }
             auto &areaMm2 = areaDraft.try_emplace(sample.id, sample.area_m2.value_or(0)*1e6).first->second;
             sst::ui::widgets::Double("Sample area (mm2)", &areaMm2, .01f, "%.9g");
             if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -187,11 +190,13 @@ void CapLabPrototypePanel::RenderTree() {
             }
             if (!ImGui::IsItemActive()) areaMm2 = sample.area_m2.value_or(0)*1e6;
             if (!sample.area_m2) ImGui::TextDisabled("unknown - enter sample area");
-            for (const auto &m : doc.project.measurements) if (m.at("sample_id") == sample.id)
+            for (const auto &m : doc.project.measurements) if (m.at("sample_id") == sample.id) {
+                const auto id=m.at("id").get<pl::Id>();if(ImGui::Selectable(("Measurement "+std::to_string(id)).c_str(),selectedMeasurement==id))selectedMeasurement=id;
                 ImGui::Text("%s / %s: %zu points; T=%s K",m.at("metadata").at("kind").get<std::string>().c_str(),
                     m.at("metadata").at("variant").get<std::string>().c_str(),
                     std::get<pl::Worksheet>(doc.project.engine->object(m.at("id").get<pl::Id>()).data).rows.size(),
                     m.at("metadata").at("temperature_K").dump().c_str());
+            }
             for (const auto &h : doc.project.historical) if (h.at("sample_id") == sample.id)
                 if (ImGui::TreeNode("Historical ProPho results and selections")) {
                     ImGui::TextWrapped("%s",h.at("data").dump(2).c_str()); ImGui::TreePop();
@@ -199,6 +204,9 @@ void CapLabPrototypePanel::RenderTree() {
             ImGui::TreePop();
         }
         ImGui::PopID();
+    }
+    if(TreeDeletePressed() && selectedMeasurement) {
+        CommandContext c;c.Set("edit",Json{{"measurement_id",selectedMeasurement}});(void)commands->Execute(CommandID{"caplab.measurement"},std::move(c));selectedMeasurement=0;return;
     }
     if (ImGui::CollapsingHeader("Delete measurement (Undo)")) {
         std::vector<pl::Id> ids;

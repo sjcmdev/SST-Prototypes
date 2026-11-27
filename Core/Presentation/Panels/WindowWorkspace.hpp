@@ -35,6 +35,7 @@ namespace SST
         void SetActive(WindowId id) { if (!m_FocusRequested) m_Active = id; }
         void RenderMenu();
         void RenderOverlays();
+        void NotifyLockedDrag();
         void RenderContextMenu(EditorWindow &window);
         void InstallSettingsHandler();
         void RemoveSettingsHandler();
@@ -50,6 +51,7 @@ namespace SST
         WeakRef<CommandRegistry> m_Commands;
         std::size_t m_CommandObserver = 0;
         bool m_Locked = false;
+        double m_LockNoticeUntil = 0;
         WindowId m_Active = 0;
         float m_X = 0, m_Y = 30, m_Width = 1280, m_Height = 690;
         std::map<std::string, std::pair<std::string, std::string>> m_Workspaces;

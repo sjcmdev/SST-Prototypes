@@ -33,8 +33,16 @@ public:
             if(auto *fw=panels[0]->GetWorkflow();fw->focusPanel>=0) {ImGui::SetWindowFocus(panels[fw->focusPanel]->ImGuiName().c_str());fw->focusPanel=-1;}
             auto *w=panels[0]->GetWorkflow();
             if(w->focusLayers) {ImGui::SetWindowFocus(panels[w->Current().selectedInterface>=0?12:1]->ImGuiName().c_str());w->focusLayers=false;}
+            if(w->revealView>=0 && w->revealView<int(panels.size())) {
+                auto& p=panels[w->revealView];auto state=p->GetState();state.visible=true;if(state.mode==WindowMode::Minimized)state.mode=WindowMode::Normal;p->ApplyState(state);
+                if(auto* native=ImGui::FindWindowByName(p->ImGuiName().c_str());native && native->DockNode && native->DockNode->TabBar)native->DockNode->TabBar->NextSelectedTabId=native->TabId;
+                w->revealView=-1;
+            }
             if(w->focusView>=0 && w->focusView<int(panels.size()) && !ScapsLab::PanelShown(w->focusView)) w->focusView=-1;
-            if(w->focusView>=0 && w->focusView<int(panels.size())) {auto &p=panels[w->focusView];p->SetVisible(true);ImGui::SetWindowFocus(p->ImGuiName().c_str());w->focusView=-1;}
+            if(w->focusView>=0 && w->focusView<int(panels.size()) && !w->dragging && !w->interacting && !ImGui::IsAnyItemActive() && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                if(w->focusView==18)w->RestoreResultFocus();
+                auto &p=panels[w->focusView];p->RequestActivation();w->focusView=-1;
+            }
             if(w->resetLayout) {w->plotSession.ResetRanges();w->plotSession.settings.layout.clear();w->plotSession.settings.panels.clear();w->projectDirty=true;w->RefreshDirty();w->resetLayout=false;(void)w->commands->Execute(CommandID{"app.layout.reset"});force=true;done=false;}
             else if(focus) {ImGui::SetWindowFocus(panels[1]->ImGuiName().c_str());ImGui::SetWindowFocus(panels[5]->ImGuiName().c_str());focus=false;}return;} done=true;
         // SettingsIniData is only filled by a save, so it is empty right after the loaded layout; serialize the live settings instead.
@@ -176,10 +184,14 @@ public:
             }ImGui::End();
         }
         if(auto *window=glfwGetCurrentContext()) glfwSetWindowTitle(window,(w.project.name+(w.dirty?" *":"")+" - ScapsLab").c_str());
+        if(w.inputContexts) {
+            const bool historyKeys=!ImGui::GetIO().WantTextInput && !ImGui::IsAnyItemActive() && !ImGui::IsPopupOpen(nullptr,ImGuiPopupFlags_AnyPopupId);
+            w.inputContexts->SetActive("scapslab.undo.available",historyKeys && w.CanUndo());
+            w.inputContexts->SetActive("scapslab.redo.available",historyKeys && w.CanRedo());
+        }
         if(!ImGui::GetIO().WantTextInput) {
             if(ImGui::IsKeyPressed(ImGuiKey_F,false) && !ImGui::GetIO().KeyCtrl && !ImGui::GetIO().KeyShift && !ImGui::GetIO().KeyAlt) w.fineLock=!w.fineLock; // F = fine slider mode (touchpads)
             for(const auto &[chord,id]:{
-                std::pair{ImGuiMod_Ctrl | ImGuiKey_Z,"scapslab.undo"},std::pair{ImGuiMod_Ctrl | ImGuiKey_Y,"scapslab.redo"},
                 std::pair{ImGuiMod_Ctrl | ImGuiKey_N,"scapslab.file.new"}, // Ctrl+S: Core's global binding -> CoreEvents::ProjectSaveRequested -> Workflow::RegisterIo
                 std::pair{ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_S,"scapslab.file.save_as"},std::pair{ImGuiMod_Ctrl | ImGuiKey_O,"scapslab.file.open"}})
                 if(ImGui::Shortcut(chord) && w.commands->CanExecute(CommandID{id}))(void)w.commands->Execute(CommandID{id});
@@ -336,6 +348,15 @@ void SetupApplication(Application &app) {
         while(w->Pending()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     auto &editor=app.GetEditorLayer();
+    w->livePreviewStride=std::clamp(w->settings.value("live_preview_stride",0),0,4);
+    editor.RegisterSettingsTab({"scapslab.live_preview","Live preview",[w]{
+        if(ImGui::BeginTable("live-preview-settings",2)) {
+            ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Live preview resolution");ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);
+            int stride=w->livePreviewStride;if(ImGui::Combo("##resolution",&stride,"Auto\0Every point\0Every 2nd point\0Every 3rd point\0Every 4th point\0")){(void)w->Exec(Cmd::LivePreviewResolution::Make(stride));}
+            if(ImGui::IsItemHovered())ImGui::SetTooltip("During a drag only: Auto targets 30 solves/s using measured solve time, capped at every 4th sweep point. Keeps both endpoints and at least 8 sweep samples. Spatial mesh stays fixed for smooth profiles. Release always computes the full, exact result.");
+            ImGui::EndTable();
+        }
+    }});
     editor.RegisterSettingsTab({"scapslab.parameter_bounds","Parameter bounds",[w]{DrawParameterBoundsPreferences(*w);}});
     std::vector<Ref<Panel>> panels;
     for(int v=0;v<26;++v) if(!single || std::atoi(gallery)==v) {

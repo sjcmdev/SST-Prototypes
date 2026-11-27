@@ -39,7 +39,7 @@ private:
     bool residualOverlay=true, circuitRecalc=false, circuitAutoReady=false;
     std::string circuitDocument;
     pl::Id selectedCircuit=0, circuitMeasurement=0;
-    pl::Id selectedDefect=0;
+    pl::Id selectedDefect=0, selectedMeasurement=0;
     CapLabWorkflow *state;
     Ref<CommandRegistry> commands;
 };

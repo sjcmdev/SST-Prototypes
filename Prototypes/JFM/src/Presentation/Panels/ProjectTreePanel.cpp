@@ -1,6 +1,7 @@
 #include "Core/dspch.hpp"
 
 #include "Presentation/Panels/ProjectTreePanel.hpp"
+#include "Core/Presentation/TreeKeyboard.hpp"
 
 #include "Core/Platform/NativeFileDialog.hpp"
 #include "Core/Commands/CommandRegistry.hpp"
@@ -164,7 +165,7 @@ namespace SST::Prototypes::JFM
 		if (auto contextManager = m_ContextManager.lock())
 			contextManager->SetActive(
 				"jfm.project_tree.focused",
-				ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput);
+				TreeKeyboardFocused());
 
 		if (m_Store == nullptr)
 		{
@@ -1040,7 +1041,7 @@ namespace SST::Prototypes::JFM
 
 	void ProjectTreePanel::HandleKeyboard(const JFMProject &project, TreeRenderState &state)
 	{
-		const bool treeFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && !ImGui::GetIO().WantTextInput;
+		const bool treeFocused = TreeKeyboardFocused();
 		if (!treeFocused)
 			return;
 

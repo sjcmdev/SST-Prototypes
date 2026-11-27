@@ -136,7 +136,9 @@ namespace SST
 			}
 
 			Path ResolveConfigDirectory(char **argv)
-			{
+            {
+                if (const char *portable = std::getenv("SST_PORTABLE_ROOT"); portable && *portable)
+                    return Path::FromResolved(std::filesystem::u8path(portable) / "install" / "app" / "config");
 				const Path fromCwd = FindConfigDirectoryInAncestors(Path::FromResolved(FileSystem::CurrentPath()));
 				if (!fromCwd.Empty())
 					return fromCwd;
@@ -533,7 +535,16 @@ namespace SST
 		ZoneScopedN("Application.initializeAssetManager");
 		ApplicationDetail::SetCrashStage("initialize asset manager");
 		ApplicationDetail::StartupStepTimer assetTimer("CreateFromSpecification.initializeAssetManager.detail");
-		const Path defaultAppRoot = m_Config.paths.assetsDirectory.parent_path();
+		Path defaultAppRoot = m_Config.paths.assetsDirectory.parent_path();
+        if (std::getenv("SST_PORTABLE_ROOT") && m_Runtime.argv && m_Runtime.argv[0])
+        {
+            std::error_code error;
+            const auto executable = FileSystem::Absolute(m_Runtime.argv[0], error);
+            if (!error) {
+                const auto packaged = ApplicationDetail::FindConfigDirectoryInAncestors(Path::FromResolved(executable.parent_path()));
+                if (!packaged.Empty()) defaultAppRoot = ConfigManager::ResolvePortablePaths(packaged).assetsDirectory.parent_path();
+            }
+        }
 		const Path userOverrideRoot = m_Config.paths.userConfigDirectory.parent_path();
 		m_AssetManager = CreateRef<AssetManager>(defaultAppRoot, userOverrideRoot);
 		m_AssetManager->RegisterAsset(AssetDescriptor{"assets/icon.ico", AssetType::Icon, AssetCriticality::Critical, "1", "app.icon"});
@@ -963,7 +974,7 @@ namespace SST
 		m_Config = m_ConfigManager->GetConfig();
 #if defined(_WIN32)
         // Keep normal app layouts across rebuilds; screenshot clients use isolated portable config.
-        if (m_Runtime.specification.screenshotPath.Empty() && m_Runtime.argv && m_Runtime.argv[0])
+        if (!std::getenv("SST_PORTABLE_ROOT") && m_Runtime.specification.screenshotPath.Empty() && m_Runtime.argv && m_Runtime.argv[0])
             if (const wchar_t *profile = _wgetenv(L"LOCALAPPDATA"); profile && *profile)
             {
                 const auto app = std::filesystem::path(m_Runtime.argv[0]).stem();

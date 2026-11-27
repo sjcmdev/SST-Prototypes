@@ -1,4 +1,5 @@
 #include "Panel.hpp"
+#include "Core/Input/KeymapResolver.hpp"
 #include "Core/Presentation/CommandMenu.hpp"
 #include "Core/App/Application.hpp"
 #include "Core/Presentation/EditorLayer.hpp"
@@ -76,6 +77,14 @@ public:
                 throw std::runtime_error("Cannot register menu: "+id);
         };
         auto idle=[&w]{return !w.Busy();};
+        w.inputContexts=editor.GetServices().contextManager.lock();
+        menu("scapslab.tree.delete","",[&w]{w.deleteTreeRecord=true;});
+        if(auto keymap=editor.GetServices().keymapResolver.lock()) {
+            for(auto [id,key]:{std::pair{"scapslab.tree.delete",KeyCode::Delete},std::pair{"scapslab.tree.backspace",KeyCode::Backspace}})
+                (void)keymap->RegisterBinding({id,{key,KeyModifiers::None},CommandID{"scapslab.tree.delete"},ContextExpr{"scapslab.tree.focused"},KeymapLayer::WindowLocal,true});
+            for(auto [id,key]:{std::pair{"scapslab.undo",KeyCode::Z},std::pair{"scapslab.redo",KeyCode::Y}})
+                (void)keymap->RegisterBinding({id,{key,KeyModifiers::Ctrl},CommandID{id},ContextExpr{std::string(id)+".available"},KeymapLayer::Project,true});
+        }
         auto operation=[&](const char *op,std::function<bool()> enabled,const char *path="") { // menu path and shortcut come from the typed command's Info (Commands/Commands.hpp); only `enabled` is app state
             const CommandID id{std::string("scapslab.")+op};const auto meta=w.commands->GetMeta(id);
             if(!meta || !w.commands->SetMenu(id,*path?path:meta.Value().menuPath,meta.Value().shortcut,std::move(enabled))) throw std::runtime_error("Cannot configure menu");
@@ -97,10 +106,11 @@ public:
         operation("undo",[&w]{return w.CanUndo();}); // synchronous: not gated by running calculations
         operation("redo",[&w]{return w.CanRedo();});
         menu("scapslab.history.clear","Edit/Clear history...",[this]{clear=true;});
+        menu("scapslab.simulations.clear","Simulate/Clear all simulations...",[&w]{w.clearSimulations=true;w.focusView=18;},"",[&w]{return !w.AnyActive() && w.StoredSimulationCount()>0;});
         operation("run",idle);if(ExperimentalPanels())operation("run_batch",idle,"Simulate/Run batch");
         operation("cancel",[&w]{return w.AnyActive();});
         menu("scapslab.view.experimental","View/Show experimental panels (applies after restart)",[this]{ExperimentalPanels()=!ExperimentalPanels();SaveExperimental();this->w.status="Experimental panels "+std::string(ExperimentalPanels()?"on":"off")+": restart ScapsLab to apply";},"",{},[]{return ExperimentalPanels();});
-        for(const auto &panel:this->panels) if(panel->GetId()) menu("scapslab.view."+std::to_string(panel->GetId()),"View/"+panel->GetTitle(),[panel]{panel->SetVisible(!panel->IsVisible());},"",{},[panel]{return panel->IsVisible();});
+        for(const auto &panel:this->panels) if(panel->GetId()) menu("scapslab.view."+std::to_string(panel->GetId()),"View/"+panel->GetTitle(),[panel]{panel->RequestActivation();},"",{},[panel]{return panel->IsVisible();});
         WindowId top=0;for(const auto &p:this->panels)top=std::max(top,p->GetId());
         for(WindowId i=1;i<=top;++i) if(auto panel=editor.FindPanel(i).lock();panel && panel->GetTitle()=="Settings") {
             menu("scapslab.preferences","Tools/Preferences...",[panel]{panel->SetVisible(true);});break;

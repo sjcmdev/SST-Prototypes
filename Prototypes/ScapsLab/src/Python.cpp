@@ -42,7 +42,7 @@ NB_MODULE(sst_scapslab, m) {
         })
         .def("poll",[](Workflow &s) {
             s.OnUpdate(0); Json j={{"running",s.Pending() || s.boundsFileBusy || s.tutorial.Automatic()},{"auto_recalculate_pending",(s.autoRecalculate && s.Current().needsRecalculate) || (s.autoRecalculateBand && s.Current().needsBand)},{"status",s.status},{"response",s.response}};
-            const auto& d=s.Current();j["live"]={{"revision",d.revision},{"iv_preview_revision",d.previewRev},{"voltage_V",d.previewV},{"J_A_m2",d.previewJ},{"band_revision",d.bandRevision}};
+            const auto& d=s.Current();j["live"]={{"revision",d.revision},{"iv_preview_revision",d.previewRev},{"voltage_V",d.previewV},{"J_A_m2",d.previewJ},{"band_revision",d.bandRevision},{"resolution_every_nth",s.livePreviewStride},{"gesture_stride",d.liveStride}};
             if(s.bindingBoundsReply && !s.boundsFileDiagnostic.empty())j["response"]={{"ok",false},{"error",{{"code","invalid_bounds_file"},{"message",s.boundsFileDiagnostic}}}};
             j["tutorial"]=s.tutorial.Report();
             if(s.bindingLibraryReply && !s.Pending())j["response"]=Library::Python::Reply(s.library,s.bindingLibraryData);

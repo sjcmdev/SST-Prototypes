@@ -14,7 +14,7 @@ namespace SST
             bool hovered = false, held = false;
             const auto id = window->GetID(label);
             ImGui::PushClipRect(rect.Min, rect.Max, false);
-            const bool pressed = ImGui::ItemAdd(rect, id) && enabled && ImGui::ButtonBehavior(rect, id, &hovered, &held);
+            const bool pressed = ImGui::ItemAdd(rect, id) && ImGui::ButtonBehavior(rect, id, &hovered, &held);
             auto *draw = window->DrawList;
             draw->AddRectFilled(rect.Min, rect.Max, ImGui::GetColorU32(hovered ?
                 (held ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered) : ImGuiCol_TitleBgActive));
@@ -23,7 +23,7 @@ namespace SST
                 ImGui::GetColorU32(enabled ? ImGuiCol_Text : ImGuiCol_TextDisabled), label);
             ImGui::PopClipRect();
             if (hovered) ImGui::SetTooltip("%s", tooltip);
-            return pressed;
+            return enabled && pressed;
         }
     }
 
@@ -96,15 +96,16 @@ namespace SST
             m_State.width = window->SizeFull.x; m_State.height = window->SizeFull.y;
             m_State.dockId = window->DockId;
         }
-        const ImRect title = window->DockNode ? window->DC.DockTabItemRect : window->TitleBarRect();
+        const ImRect title = window->DockIsActive ? window->DC.DockTabItemRect : window->TitleBarRect();
         const bool titleHovered = title.Contains(ImGui::GetMousePos()) &&
             (ImGui::GetHoveredID() == window->TabId || ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows));
+        if (locked && titleHovered && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) workspace->NotifyLockedDrag();
         // Action buttons must not also trigger the title bar's double-click gesture.
-        const bool titleGestureHovered = titleHovered && (window->DockNode ||
+        const bool titleGestureHovered = titleHovered && (window->DockIsActive ||
             ImGui::GetMousePos().x < title.Max.x - 4 * title.GetHeight());
         if (titleGestureHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && m_Capabilities.maximizable)
             Request({WindowAction::Maximize});
-        if (window->DockNode && titleHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && m_Capabilities.closable)
+        if (window->DockIsActive && titleHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle) && m_Capabilities.closable)
             Request({WindowAction::Close});
 
         if (workspace)
@@ -125,7 +126,7 @@ namespace SST
         }
         if (content)
         {
-            if (window->DockNode && ImGui::DockNodeBeginAmendTabBar(window->DockNode))
+            if (window->DockIsActive && ImGui::DockNodeBeginAmendTabBar(window->DockNode))
             {
                 ImGui::PushID("sst-window-actions");
                 auto *tabBar = window->DockNode->TabBar;
@@ -150,15 +151,15 @@ namespace SST
                 ImGui::PopID();
                 ImGui::DockNodeEndAmendTabBar();
             }
-            else if (!window->DockNode)
+            else if (!window->DockIsActive)
             {
                 auto bar = window->TitleBarRect();
                 const float size = bar.GetHeight();
                 float right = bar.Max.x;
                 for (auto [label, action, enabled, tooltip] : {
                     std::tuple{ICON_FA_XMARK, WindowAction::Close, m_Capabilities.closable, "Close"},
-                    std::tuple{ICON_FA_THUMBTACK, WindowAction::Pin, m_Capabilities.pinnable && !locked, m_State.pinned ? "Unpin" : "Pin"},
-                    std::tuple{maximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE, WindowAction::Maximize, m_Capabilities.maximizable && !locked && !m_State.pinned, maximized ? "Restore" : "Maximize"},
+                    std::tuple{ICON_FA_THUMBTACK, WindowAction::Pin, m_Capabilities.pinnable && !locked, locked ? "Unlock layout to pin this window" : m_State.pinned ? "Unpin" : "Pin"},
+                    std::tuple{maximized ? ICON_FA_WINDOW_RESTORE : ICON_FA_WINDOW_MAXIMIZE, WindowAction::Maximize, m_Capabilities.maximizable && !locked && !m_State.pinned, locked ? "Unlock layout to maximize this window" : m_State.pinned ? "Unpin this window to maximize" : maximized ? "Restore" : "Maximize"},
                     std::tuple{ICON_FA_WINDOW_MINIMIZE, WindowAction::Minimize, m_Capabilities.minimizable, "Minimize"}})
                 {
                     const ImRect rect(ImVec2(right - size, bar.Min.y), ImVec2(right, bar.Max.y));
@@ -244,6 +245,8 @@ namespace SST
         ImGui::EndMenu();
     }
 
+    void WindowWorkspace::NotifyLockedDrag() { m_LockNoticeUntil = ImGui::GetTime() + 2.; }
+
     void WindowWorkspace::RenderOverlays()
     {
         const auto windows = Windows();
@@ -260,6 +263,17 @@ namespace SST
                 if (window->GetId() == m_Active && m_FocusRequested)
                 { ImGui::FocusWindow(gui); m_FocusRequested = false; }
             }
+        }
+        if (m_Locked)
+        {
+            ImGui::SetNextWindowViewport(viewport->ID);
+            ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x + viewport->WorkSize.x - 12, viewport->WorkPos.y + 8), ImGuiCond_Always, ImVec2(1, 0));
+            ImGui::Begin("Layout lock###sst-layout-lock", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoMove);
+            if (GImGui->OpenPopupStack.empty()) ImGui::BringWindowToDisplayFront(ImGui::GetCurrentWindow());
+            if (ImGui::SmallButton(ICON_FA_LOCK " Layout locked - Unlock")) (void)Execute({WindowAction::LockLayout});
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Layout is locked: moving, resizing and docking are disabled. Click to unlock.");
+            if (ImGui::GetTime() < m_LockNoticeUntil) ImGui::TextUnformatted("Unlock layout to move this window.");
+            ImGui::End();
         }
         // shortcut: one-row minimized strip; add scrolling when apps routinely minimize many views.
         if (std::any_of(windows.begin(), windows.end(), [](const auto &w) { return w->IsVisible() && w->GetState().mode == WindowMode::Minimized; }))

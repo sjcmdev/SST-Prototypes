@@ -48,6 +48,14 @@ inline std::vector<double> ActionSamples(const RunAction& action,const scaps_cor
     if(action.kind!=ActionKind::Iv)throw std::invalid_argument("Action range is missing");
     return scaps_core::make_voltage_list(project.voltage);
 }
+inline std::vector<double> PreviewSamples(std::vector<double> samples,int every) {
+    if(samples.size()<8)return samples;
+    const auto stride=std::min<std::size_t>(std::clamp(every,1,4),(samples.size()-1)/7);
+    if(stride==1)return samples;
+    std::vector<double> coarse;coarse.reserve((samples.size()-1)/stride+2);
+    for(std::size_t i=0;i<samples.size();++i)if(i%stride==0 || i+1==samples.size())coarse.push_back(samples[i]);
+    return coarse;
+}
 inline void ValidateRunPlan(const RunPlan& plan,const ProjectDraft& draft,bool automatic=false) {
     bool any=false;
     for(std::size_t i=0;i<plan.actions.size();++i) {

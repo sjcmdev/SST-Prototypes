@@ -113,6 +113,16 @@ struct RecalculateLive : Req<RecalculateLive> {
         s.RecalculateLive(k);return {};
     }
 };
+struct LivePreviewResolution : Req<LivePreviewResolution> {
+    static constexpr Info info{"live_preview_resolution","Live preview resolution","0: Auto; 1..4: every n-th sweep point during a drag","","",true};
+    int every=0;
+    static LivePreviewResolution Make(int value){LivePreviewResolution c;c.every=value;return c;}
+    Out Execute(ILabStore& s) const {
+        int value=every;if(args.contains("every_nth")){const auto& a=args.at("every_nth");if(!a.is_number_integer() || a<0 || a>4)return Reject("invalid_resolution","Invalid preview resolution","every_nth must be an integer from 0 (Auto) to 4");value=a.get<int>();}
+        if(value<0 || value>4)return Reject("invalid_resolution","Invalid preview resolution","every_nth must be 0..4");
+        s.SetLivePreviewStride(value);return {};
+    }
+};
 struct LiveEditing : Req<LiveEditing> {
     static constexpr Info info{"live_editing","Live editing","Begin or release a live parameter gesture","","",true};
     bool active=false;

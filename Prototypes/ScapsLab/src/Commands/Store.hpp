@@ -43,6 +43,7 @@ public:
     virtual void CaptureLiveTyped(ActionKind) {throw std::logic_error("Capture live unavailable");}
     virtual void RecalculateLive(ActionKind) {throw std::logic_error("Live recalculation unavailable");}
     virtual void SelectBias(int) {throw std::logic_error("Bias selection unavailable");}
+    virtual void SetLivePreviewStride(int) {throw std::logic_error("Live preview settings unavailable");}
     virtual void SetLiveEditing(bool) {throw std::logic_error("Live editing unavailable");}
     virtual void RecalculateStoredBias() {throw std::logic_error("Stored bias unavailable");}
     virtual void ResumeActions() {throw std::logic_error("No paused Actions");}

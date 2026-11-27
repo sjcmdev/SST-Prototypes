@@ -1,7 +1,13 @@
-﻿# SST prototype keybindings.
+# SST prototype keybindings.
 # System bindings are registered by CoreLayer at startup. This file documents
 # the current defaults and is also the place for future user-defined bindings.
 bindings:
+  - id: "jfm.tree.backspace"
+    chord: "Backspace"
+    command: "jfm.tree.delete"
+    context: "jfm.project_tree.focused"
+    layer: 2
+    enabled: true
   - id: "system.undo"
     chord: "Ctrl+Z"
     command: "edit.undo"

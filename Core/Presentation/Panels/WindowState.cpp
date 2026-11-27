@@ -328,7 +328,11 @@ namespace SST
         else if (action == WindowAction::Reveal)
         { if (!cap.projectItem) return invalid("EditorWindow has no project item."); window->RevealInProject(); return {}; }
         else if (action == WindowAction::Activate || action == WindowAction::Next || action == WindowAction::Previous)
-        { s.visible = true; if (s.mode == WindowMode::Minimized) { s.mode = s.restoreMode; s.restoreMode = WindowMode::Normal; } m_Active = window->GetId(); m_FocusRequested = true; }
+        {
+            for (auto &other : windows) if (other != window && other->GetState().mode == WindowMode::Maximized)
+            { auto state = other->GetState(); state.mode = WindowMode::Normal; state.restoreMode = WindowMode::Normal; other->ApplyState(state); }
+            s.visible = true; if (s.mode == WindowMode::Minimized) { s.mode = s.restoreMode; s.restoreMode = WindowMode::Normal; } m_Active = window->GetId(); m_FocusRequested = true;
+        }
         if (action != WindowAction::Minimize) { m_Active = window->GetId(); m_FocusRequested = true; }
         else if (m_Active == window->GetId()) { m_Active = 0; m_FocusRequested = false; }
         window->ApplyState(s); return {};

@@ -1,0 +1,60 @@
+﻿# SST prototype keybindings.
+# System bindings are registered by CoreLayer at startup. This file documents
+# the current defaults and is also the place for future user-defined bindings.
+bindings:
+  - id: "scapslab.undo"
+    chord: "Ctrl+Z"
+    command: "scapslab.undo"
+    context: "scapslab.undo.available"
+    layer: 1
+    enabled: true
+  - id: "scapslab.redo"
+    chord: "Ctrl+Y"
+    command: "scapslab.redo"
+    context: "scapslab.redo.available"
+    layer: 1
+    enabled: true
+  - id: "system.undo"
+    chord: "Ctrl+Z"
+    command: "edit.undo"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "system.redo"
+    chord: "Ctrl+Y"
+    command: "edit.redo"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "system.command_palette"
+    chord: "Ctrl+Shift+P"
+    command: "app.command_palette"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "system.quit"
+    chord: "Ctrl+Shift+W"
+    command: "app.quit"
+    context: ""
+    layer: 0
+    enabled: true
+  - id: "system.save"
+    chord: "Ctrl+S"
+    command: "project.save"
+    context: ""
+    layer: 0
+    enabled: true
+
+
+  - id: "scapslab.tree.delete"
+    chord: "Delete"
+    command: "scapslab.tree.delete"
+    context: "scapslab.tree.focused"
+    layer: 2
+    enabled: true
+  - id: "scapslab.tree.backspace"
+    chord: "Backspace"
+    command: "scapslab.tree.delete"
+    context: "scapslab.tree.focused"
+    layer: 2
+    enabled: true

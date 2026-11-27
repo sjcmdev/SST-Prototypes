@@ -1,4 +1,5 @@
 #include "PlotLabWorkspace.hpp"
+#include "Core/Presentation/TreeKeyboard.hpp"
 #include "Core/App/Application.hpp"
 #include "Core/IO/TextFileIO.hpp"
 #include "Core/JobSystem/JobContext.hpp"
@@ -357,7 +358,7 @@ namespace SST::Prototypes::PlotLab
             }
             ImGui::SameLine();
             ImGui::BeginDisabled(state->selected == p.root());
-            if (ImGui::Button("Delete..."))
+            if (ImGui::Button("Delete...") || (state->selected != p.root() && TreeDeletePressed()))
                 remove = state->selected;
             ImGui::EndDisabled();
             if (ImGui::Button("Create graph from columns..."))

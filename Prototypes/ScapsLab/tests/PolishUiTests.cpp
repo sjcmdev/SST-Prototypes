@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include "Panel.hpp"
+#include "Core/Presentation/TreeKeyboard.hpp"
 #include "PlotUi.hpp"
 #include <scaps_core/solver_core.hpp>
 #include <imgui_internal.h>
@@ -41,6 +42,52 @@ protected:
         return false;
     }
 };
+}
+TEST_F(PolishUi,TreeDeletionIsFocusedAndNeverRunsWhileTyping)
+{
+    auto& io=ImGui::GetIO();
+    char buffer[64]="typed record";
+    const auto frame=[&](bool text,bool other){ImGui::NewFrame();ImGui::Begin("Tree");ImGui::SetWindowFocus();if(text){ImGui::InputText("##edit",buffer,sizeof(buffer));ImGui::SetKeyboardFocusHere(-1);}ImGui::End();if(other){ImGui::Begin("Other");ImGui::SetWindowFocus();ImGui::End();}ImGui::Begin("Tree");const bool pressed=TreeDeletePressed();ImGui::End();ImGui::Render();return pressed;};
+    frame(false,false);io.AddKeyEvent(ImGuiKey_Delete,true);EXPECT_TRUE(frame(false,false));io.AddKeyEvent(ImGuiKey_Delete,false);frame(false,false);
+    io.AddKeyEvent(ImGuiKey_Backspace,true);EXPECT_FALSE(frame(false,true));io.AddKeyEvent(ImGuiKey_Backspace,false);frame(true,false);frame(true,false);
+    io.AddKeyEvent(ImGuiKey_Delete,true);EXPECT_FALSE(frame(true,false));io.AddKeyEvent(ImGuiKey_Delete,false);frame(true,false);
+}
+TEST_F(PolishUi,ProjectTreeDeleteAndBackspaceUseTheLayerCommandAndUndo) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);auto draft=CreateRef<ProjectDraft>(*w.Current().draft);draft->project.interface_defects.clear();EditLayer(*draft,"add");w.Current().SetDraft(draft);
+    const auto count=draft->layers.size();Panel panel(&w,0);Frame(panel,1100);Frame(panel,1100);
+    ImGuiID id=ImHashStr("Polish UI");for(const auto* part:{"##project","##devices"})id=ImHashStr(part,0,id);id=ImHashStr(w.Current().id.c_str(),0,id);id=ImHashStr("##device",0,id);id=ImHashStr("##layers",0,id);int index=0;id=ImHashData(&index,sizeof(index),id);id=ImHashStr("##layer",0,id);
+    auto& io=ImGui::GetIO();bool clicked=false;
+    for(float y=50;y<850 && !clicked;y+=4){io.AddMousePosEvent(170,y);Frame(panel,1100);Frame(panel,1100);if(GImGui->HoveredId==id){io.AddMouseButtonEvent(0,true);Frame(panel,1100);io.AddMouseButtonEvent(0,false);Frame(panel,1100);clicked=true;}}
+    ASSERT_TRUE(clicked);EXPECT_EQ(w.revealView,1);
+    for(const auto key:{ImGuiKey_Delete,ImGuiKey_Backspace}){
+        io.AddKeyEvent(key,true);Frame(panel,1100);io.AddKeyEvent(key,false);Frame(panel,1100);Finish(w);ASSERT_EQ(w.Current().draft->layers.size(),count-1);
+        ASSERT_TRUE(w.Exec(Cmd::Undo::With()).value("ok",false));EXPECT_EQ(w.Current().draft->layers.size(),count);
+    }
+}
+TEST_F(PolishUi,PreviewReleaseMatchesNormalSingleShotBitForBit)
+{
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);auto plan=CreateRef<RunPlan>();plan->actions[0].include=plan->actions[0].onEdit=plan->actions[1].onEdit=true;plan->actions[1].range={SweepSampling::Points,false,0,.1,.01,11};
+    ASSERT_TRUE(w.Exec(Cmd::SetRunPlan::Make(plan)).value("ok",false));w.livePreviewStride=4;w.dragging=w.interacting=true;
+    auto edited=CreateRef<ProjectDraft>(*w.Current().draft);edited->project.temperature_K=310;ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(edited)).value("ok",false));
+    for(int i=0;i<3;++i){w.OnUpdate(0);Finish(w);}EXPECT_FALSE(w.Current().previewV.empty());EXPECT_TRUE(w.Current().history.empty());
+    w.dragging=w.interacting=false;w.Current().changedAt-=std::chrono::seconds(1);for(int i=0;i<3;++i){w.OnUpdate(0);Finish(w);}
+    const auto releasedBand=w.Current().Band();const auto released=w.Current().Iv();ASSERT_EQ(released->points.size(),11u);
+    Workflow normal(CreateRef<JobSystem>(nullptr,1));Small(normal);normal.Current().SetDraft(edited);ASSERT_TRUE(normal.Exec(Cmd::SingleShot::Make(plan)).value("ok",false));Finish(normal);
+    const auto exact=normal.Current().Iv();ASSERT_EQ(exact->points.size(),released->points.size());
+    const auto exactBand=normal.Current().Band();ASSERT_FALSE(exactBand->points.empty());ASSERT_FALSE(releasedBand->points.empty());
+    for(const auto* key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV","n_m3","p_m3"})EXPECT_EQ(PointColumn(exactBand->points[0],key).get(),PointColumn(releasedBand->points[0],key).get());
+    for(std::size_t i=0;i<exact->points.size();++i){const auto& a=exact->points[i];const auto& b=released->points[i];EXPECT_EQ(a.voltage_V,b.voltage_V);EXPECT_EQ(a.J_A_m2,b.J_A_m2);for(const auto* key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV","n_m3","p_m3"})EXPECT_EQ(PointColumn(a,key).get(),PointColumn(b,key).get());}
+    EXPECT_TRUE(w.Current().previewV.empty());EXPECT_TRUE(w.Current().history.empty());
+}
+TEST_F(PolishUi,ClearConfirmationSurvivesFocusAndUsesOneUndoStep) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Finish(w);Panel panel(&w,18);
+    w.clearSimulations=true;EXPECT_NE(Text(panel).find("Remove 1 stored simulation"),std::string::npos);
+    ImGui::SetWindowFocus(nullptr);EXPECT_NE(Text(panel).find("Remove 1 stored simulation"),std::string::npos);
+    ASSERT_TRUE(Click(panel,"Cancel",""));EXPECT_FALSE(w.clearSimulations);EXPECT_EQ(w.StoredSimulationCount(),1u);
+    const auto depth=w.projectUndo.GetUndoDepth();w.clearSimulations=true;ASSERT_TRUE(Click(panel,"Clear simulations",""));
+    EXPECT_FALSE(w.clearSimulations);EXPECT_EQ(w.StoredSimulationCount(),0u);EXPECT_EQ(w.projectUndo.GetUndoDepth(),depth+1);
+    ASSERT_TRUE(w.Exec(Cmd::Undo::With()).value("ok",false));EXPECT_EQ(w.StoredSimulationCount(),1u);
 }
 TEST_F(PolishUi,SingleShotTemperatureDragReleaseShowsExactLive) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);auto plan=CreateRef<RunPlan>();plan->actions[0].onEdit=plan->actions[1].onEdit=true;
@@ -266,7 +313,7 @@ TEST_F(PolishUi,FlatBandSliderTakeoverIsOneUndoGesture) {
 }
 TEST_F(PolishUi,DrawnContactAndDopingFramesKeepGestureMeshAndSampling) {
     const char* evidence=std::getenv("SCAPSLAB_LIVE_EVIDENCE");std::ofstream output;if(evidence)output.open(evidence);
-    if(output)output<<std::setprecision(17)<<"gesture,frame,parameter,render_ms,frame_period_ms,band_revision,x_um,Ec_eV\n";
+    if(output)output<<std::setprecision(17)<<"gesture,frame,parameter,render_ms,frame_period_ms,band_revision,x_um,Ec_eV,raw_Ec_eV,source_Ec_eV,from_Ec_eV,morph_elapsed,plot_gen\n";
     for(int parameter=0;parameter<3;++parameter) {
         Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);w.autoRecalculate=false;w.autoRecalculateBand=true;
         auto draft=CreateRef<ProjectDraft>(*w.Current().draft);draft->project.left_contact.flat_band=draft->project.right_contact.flat_band=false;draft->project.left_contact.phi_m_eV=4.3;draft->project.right_contact.phi_m_eV=4.7;w.Current().SetDraft(draft);
@@ -284,11 +331,11 @@ TEST_F(PolishUi,DrawnContactAndDopingFramesKeepGestureMeshAndSampling) {
             EXPECT_EQ(w.Current().Band()->mesh_x_m.get(),grid);EXPECT_EQ(w.Current().warmBand->x_m,grid);
             for(const auto& [id,c]:w.plotSession.curves)if(id.ends_with("/Ec_eV")){
                 if(previous.size()==c.y.size())for(std::size_t i=0;i<c.y.size();++i)maxDelta=std::max(maxDelta,std::abs(c.y[i]-previous[i]));previous=c.y;++drawn;
-                if(output)for(std::size_t i=0;i<c.x.size();++i)output<<parameter<<','<<frame<<','<<value<<','<<ms<<','<<period<<','<<w.Current().bandRevision<<','<<c.x[i]<<','<<c.y[i]<<'\n';
+                if(output)for(std::size_t i=0;i<c.x.size();++i)output<<parameter<<','<<frame<<','<<value<<','<<ms<<','<<period<<','<<w.Current().bandRevision<<','<<c.x[i]<<','<<c.y[i]<<','<<(w.Current().Band()->points.empty() || i>=w.Current().Band()->points[0].Ec_eV.size()?NAN:w.Current().Band()->points[0].Ec_eV.get()[i])<<','<<c.sourceY[i]<<','<<c.from[i]<<','<<c.elapsed<<','<<w.plotGen<<'\n';
             }
             std::this_thread::sleep_until(frameStart+std::chrono::milliseconds(15));
         }
-        EXPECT_GT(drawn,100);EXPECT_LT(maxDelta,.02);EXPECT_GT(w.liveBandsStarted,2u);
+        EXPECT_GT(drawn,100);EXPECT_GT(maxDelta,1e-7);EXPECT_LT(maxDelta,.002);EXPECT_GT(w.liveBandsStarted,2u);
         const double seconds=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();std::cout<<"drawn gesture "<<parameter<<": max Ec frame delta "<<maxDelta<<" eV, "<<w.liveBandsStarted/seconds<<" solves/s, "<<120/seconds<<" frames/s\n";
         w.dragging=w.interacting=false;w.autoRecalculateBand=false;Finish(w);w.OnUpdate(0);EXPECT_FALSE(w.Current().liveGesture);EXPECT_FALSE(w.Current().liveMesh);
     }

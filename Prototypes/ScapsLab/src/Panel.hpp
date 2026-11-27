@@ -12,6 +12,7 @@ Bounds DisplayBounds(std::string_view key,double nativeScale=1);
 bool DrawBoundValue(const char* id,double& value,std::string_view key,double nativeScale=1,const void* address=nullptr,const char* label="",bool showUnit=false);
 void DrawParameterBoundsPreferences(Workflow&);
 void DrawHistory(Workflow &workflow,bool global=false);
+void DrawClearSimulations(Workflow&);
 int PlotCacheBuildCount();   // test hooks (S3): number of plot-cache (re)builds so far, and the sum of all finite cached values
 double PlotCacheSum();
 void SetPlotDataHook(void (*hook)(bool)); // called with true/false around plot-data cache lookups/drawing (allocation-count test)
@@ -50,6 +51,7 @@ class Panel final : public EditorWindow {
 public:
     Panel(Workflow *workflow, int view, bool gallery=false);
     void RenderContent() override;
+    void OnContentSkipped() override {if(view==0 && w->inputContexts)w->inputContexts->SetActive("scapslab.tree.focused",false);}
     bool IsDirty() const override {return view==0 && w->dirty;}
     Workflow *GetWorkflow() const {return w;}
     void PinLayer(const std::string &device,const std::string &layer) {pinDevice=device;pinLayer=layer;} // extra Layers window: edits this layer only
@@ -103,6 +105,10 @@ private:
     void StructureEdit();
     void Preview(bool interface);
     int selectedDefect=0;
+    enum class TreeKind {None,Device,Layer,Defect,Interface,InterfaceDefect,Run,Contact};
+    TreeKind treeKind=TreeKind::None;
+    std::string treeDevice,treeRecord;
+    void DeleteTreeRecord();
     void Report(const Json &response);                                  // failed command: status + response
     template<class T> void Do(const T &command) {Report(w->Exec(command));} // typed command (Commands/Commands.hpp)
     void Results();

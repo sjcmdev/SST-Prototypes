@@ -11,6 +11,7 @@
 #include "Core/Undo/UndoStack.hpp"
 #include "Core/Presentation/Tutorial.hpp"
 #include "Domain/Results.hpp"
+#include "Core/Input/ContextManager.hpp"
 #include "Domain/ProjectDraft.hpp"
 #include <scaps_core/solver_types.hpp>
 #include "Domain/BatchDraft.hpp"
@@ -353,6 +354,7 @@ public:
     void HistoryOp(const Json &request) override; // history_select/update/clear: in place on the UI thread (no workspace copy; undoable as a run delta, see Commands/UndoOps.cpp)
     void RecalculateLive(ActionKind) override;
     void SelectBias(int) override;
+    void SetLivePreviewStride(int every) override {livePreviewStride=every;settings["live_preview_stride"]=every;SaveSettings();}
     void SetLiveEditing(bool active) override {dragging=active;}
     void RecalculateStoredBias() override;
     Json response;
@@ -370,7 +372,9 @@ public:
     std::uint64_t docGen=0;  // bumped by DocumentEdited only: result plots are keyed by plotGen (result data), so a drag does not rebuild them
     std::uint64_t plotGen=0; // S3: bumped by RunCompleted/HistoryChanged/SelectionChanged/DocumentEdited/DeviceListChanged/ProjectLoaded; panel plot caches compare it (no per-frame hashing/conversion)
     PlotSession plotSession;
-    bool plotPreferences=false;
+    bool plotPreferences=false, clearSimulations=false, deleteTreeRecord=false;
+    Ref<ContextManager> inputContexts;
+    std::size_t StoredSimulationCount() const;
     // S6: one lane per device (serial inside, parallel across devices). `lanes[""]`-style project lane is `projectLane`: project-level
     // requests (load while calculating) wait there until every device lane is idle; the save job has its own lane `saveLane`.
     struct Queued {Json request; std::string key;Ref<const ProjectDraft> draft;}; // key: a newer queued request with the same non-empty key replaces this one (latest wins)
@@ -399,8 +403,13 @@ public:
     std::vector<std::pair<std::string,std::string>> pinnedLayers; // open extra "Layer: <name>" windows: {device id, layer id}
     // Live recalculation while a slider is held (latest wins, <=10/s, coarse every 4th point when the last full run took >150 ms)
     bool dragging = false, dragSeen = false, fineLock = false, liveSeen = false; // dragSeen: set by the slider helper each frame, App copies it to dragging
+    int livePreviewStride = 0; // 0: auto, 1..4: every n-th sweep point (both endpoints retained)
     double lastFullMs = 0; unsigned previewsStarted = 0, liveBandsStarted = 0; std::chrono::steady_clock::time_point lastLive, lastBandLive, lastAcLive;
     bool autoRecalculateBand = false, autoRecalculate = false, interacting = false, focusLayers = false, resetLayout = false, pendingSheet = false;
+    std::string focusResultDevice,focusResultRun;
+    void FocusResults(const DeviceState&);
+    void RestoreResultFocus();
+    int revealView = -1;
     int focusView = -1, focusPanel = -1, pendingDefect = -1;
     bool dirty = false, projectDirty = false, preferProjectUndo = false, includeResults = true, lightResponse = false;
     UndoStack projectUndo;

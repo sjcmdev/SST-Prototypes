@@ -1408,6 +1408,7 @@ namespace SST::Prototypes::JFM
 		registerBinding(resolver, {"jfm.tree.paste", KeyChord{KeyCode::V, KeyModifiers::Ctrl}, CommandID{JFMRequestPasteTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
 		registerBinding(resolver, {"jfm.tree.duplicate", KeyChord{KeyCode::D, KeyModifiers::Ctrl}, CommandID{JFMRequestDuplicateTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
 		registerBinding(resolver, {"jfm.tree.delete", KeyChord{KeyCode::Delete, KeyModifiers::None}, CommandID{JFMDeleteTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
+		registerBinding(resolver, {"jfm.tree.backspace", KeyChord{KeyCode::Backspace, KeyModifiers::None}, CommandID{JFMDeleteTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
 		registerBinding(resolver, {"jfm.tree.rename", KeyChord{KeyCode::F2, KeyModifiers::None}, CommandID{JFMRequestRenameTreeItemCommandId}, projectTreeFocused, KeymapLayer::WindowLocal, true});
 	}
 } // namespace SST::Prototypes::JFM

@@ -77,6 +77,35 @@ namespace SST
             frame(); frame();
         }
     };
+    TEST_F(WindowChromeTest, FloatingSingletonWithRetainedDockNodeHasEveryChromeActionAndRedocks)
+    {
+        workspace->Find(b)->SetVisible(false);frame();
+        const auto node=ImGui::DockBuilderAddNode(0,ImGuiDockNodeFlags_None);
+        ImGui::DockBuilderSetNodePos(node,{100,100});ImGui::DockBuilderSetNodeSize(node,{600,400});
+        ImGui::DockBuilderDockWindow(workspace->Find(a)->ImGuiName().c_str(),node);ImGui::DockBuilderFinish(node);
+        frame();frame();frame();ASSERT_NE(gui(a)->DockNode,nullptr);ASSERT_FALSE(gui(a)->DockIsActive);
+        clickChrome(a,1);EXPECT_TRUE(workspace->Find(a)->GetState().pinned);
+        clickChrome(a,1);EXPECT_FALSE(workspace->Find(a)->GetState().pinned);
+        clickChrome(a,2);EXPECT_EQ(workspace->Find(a)->GetState().mode,WindowMode::Maximized);
+        clickChrome(a,2);EXPECT_EQ(workspace->Find(a)->GetState().mode,WindowMode::Normal);
+        clickChrome(a,3);EXPECT_EQ(workspace->Find(a)->GetState().mode,WindowMode::Minimized);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Activate,a}));frame();frame();
+        clickChrome(a,0);EXPECT_FALSE(workspace->Find(a)->IsVisible());
+        ASSERT_TRUE(workspace->Execute({WindowAction::Activate,a}));frame();frame();
+        WindowRequest dock{WindowAction::Dock,a};dock.dockId=ImGui::GetMainViewport()->ID;
+        ASSERT_TRUE(workspace->Execute(dock));frame();frame();EXPECT_TRUE(gui(a)->DockIsActive);
+    }
+    TEST_F(WindowChromeTest, LockedLayoutShowsNoticeAndUnlocksWithOneClick)
+    {
+        ASSERT_TRUE(workspace->Execute({WindowAction::Maximize,a}));frame();frame();
+        ASSERT_TRUE(workspace->Execute({WindowAction::LockLayout}));workspace->NotifyLockedDrag();frame();frame();
+        auto* indicator=ImGui::FindWindowByName("###sst-layout-lock");ASSERT_NE(indicator,nullptr);
+        ImGui::FocusWindow(gui(a));frame();frame();
+        EXPECT_LT(GImGui->Windows.find_index(gui(a)),GImGui->Windows.find_index(indicator));
+        const auto at=ImVec2(indicator->Pos.x+30,indicator->Pos.y+10);ImGui::GetIO().AddMousePosEvent(at.x,at.y);frame();
+        ImGui::GetIO().AddMouseButtonEvent(0,true);frame();ImGui::GetIO().AddMouseButtonEvent(0,false);frame();
+        EXPECT_FALSE(workspace->IsLocked());
+    }
     TEST_F(WindowChromeTest, RestoreButtonAfterMaximize)
     {
         workspace->Find(b)->SetVisible(false); frame(); frame();
@@ -144,6 +173,7 @@ namespace SST
     {
         workspace->Find(b)->SetVisible(false); frame(); frame();
         ASSERT_TRUE(workspace->Execute({WindowAction::Pin, a})); frame();
+        ASSERT_TRUE(workspace->Execute({WindowAction::LockLayout})); frame(); frame();
         const auto pos = gui(a)->TitleBarRect().GetCenter();
         ImGui::GetIO().AddMousePosEvent(pos.x, pos.y); frame();
 
@@ -152,6 +182,8 @@ namespace SST
         ASSERT_GT(GImGui->OpenPopupStack.Size, 0);
         const auto popup = GImGui->OpenPopupStack.back().Window; ASSERT_NE(popup, nullptr);
         EXPECT_LT(GImGui->Windows.find_index(gui(a)), GImGui->Windows.find_index(popup));
+        const auto indicator=ImGui::FindWindowByName("###sst-layout-lock");ASSERT_NE(indicator,nullptr);
+        EXPECT_LT(GImGui->Windows.find_index(indicator),GImGui->Windows.find_index(popup));
     }
     TEST_F(WindowChromeTest, DockedCloseWithChildContentDoesNotCloseSibling)
     {
@@ -267,6 +299,16 @@ namespace SST
         ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Right, true); frame();
         ImGui::GetIO().AddMouseButtonEvent(ImGuiMouseButton_Right, false); frame();
         EXPECT_GT(GImGui->OpenPopupStack.Size, 0);
+    }
+    TEST_F(WindowChromeTest, ActivatingDockedPanelRestoresTheCoveringMaximizedWindow)
+    {
+        dockBoth(); const auto dock = gui(a)->DockId;
+        ASSERT_TRUE(workspace->Execute({WindowAction::Maximize, a})); frame(); frame();
+        ASSERT_EQ(workspace->Find(a)->GetState().mode, WindowMode::Maximized);
+        ASSERT_TRUE(workspace->Execute({WindowAction::Activate, b})); frame(); frame();
+        EXPECT_EQ(workspace->Find(a)->GetState().mode, WindowMode::Normal);
+        EXPECT_EQ(gui(a)->DockId, dock); EXPECT_TRUE(gui(b)->DockTabIsVisible);
+        EXPECT_EQ(GImGui->NavWindow, gui(b));
     }
     TEST_F(WindowChromeTest, ViewOnlyCommandsAndUndoRequestAutosave)
     {
