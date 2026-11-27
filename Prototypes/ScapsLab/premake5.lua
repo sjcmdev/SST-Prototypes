@@ -14,7 +14,7 @@ project "ScapsCore"
     targetdir (_SST_ROOT .. "/build/bin/" .. outputdir .. "/%{prj.name}")
     objdir (_SST_ROOT .. "/build/bin-int/" .. outputdir .. "/%{prj.name}")
     files { scaps .. "/src/**.cpp", scaps .. "/src/**.hpp", scaps .. "/include/**.hpp" }
-    removefiles { scaps .. "/src/batch_python.cpp", scaps .. "/src/illumination_python.cpp" }
+    removefiles { scaps .. "/src/*_python.cpp" }
     includedirs { scaps .. "/include", _SST_ROOT .. "/Vendor/yaml-cpp/include" }
     defines { "YAML_CPP_STATIC_DEFINE" }
     links { "yaml-cpp" }
