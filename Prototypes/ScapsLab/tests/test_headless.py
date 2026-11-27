@@ -54,6 +54,11 @@ def check_run_actions(document):
     assert len(single['project']['devices'][0]['history']) == 5
     iv_id = next(r['run_id'] for r in single['project']['devices'][0]['history'] if r['kind'] == 'iv')
     assert run.results_select(iv_id)['ok']
+    updated = run.update_current_single_shot()
+    assert updated['ok'] and updated['selected_run'] == iv_id, updated
+    assert len(updated['project']['devices'][0]['history']) == 5
+    assert run.execute(dict(operation='undo'))['ok']
+    assert run.execute(dict(operation='redo'))['ok']
     selected = run.select_bias(2)
     assert selected['ok'] and selected['project']['devices'][0]['selection']['bias'] == 2
     stored = run.recalculate_stored_bias()

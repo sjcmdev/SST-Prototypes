@@ -40,6 +40,8 @@ public:
     virtual void SetRunPlanTyped(std::shared_ptr<const RunPlan>,const std::string& gesture={}) {throw std::logic_error("Run Actions unavailable");}
     virtual void RunDlcpTyped(std::optional<RunAction>) {throw std::logic_error("DLCP unavailable");}
     virtual void SingleShotTyped(std::shared_ptr<const RunPlan>) {throw std::logic_error("Single shot unavailable");}
+    virtual bool CanUpdateSingleShot() const {return false;}
+    virtual void UpdateSingleShotTyped() {throw std::logic_error("Single shot update unavailable");}
     virtual void CaptureLiveTyped(ActionKind) {throw std::logic_error("Capture live unavailable");}
     virtual void RecalculateLive(ActionKind) {throw std::logic_error("Live recalculation unavailable");}
     virtual void SelectBias(int) {throw std::logic_error("Bias selection unavailable");}

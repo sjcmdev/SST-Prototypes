@@ -35,8 +35,8 @@ TEST(RunActions, PreviewSamplingKeepsEndpointsAndHonestShortCurves) {
     for(int size:{0,1,3,8,11,17,61,201})for(int stride:{1,2,3,4,100}) {
         std::vector<double> samples;for(int i=0;i<size;++i)samples.push_back(double(i));const auto coarse=PreviewSamples(samples,stride);
         if(size){EXPECT_EQ(coarse.front(),samples.front());EXPECT_EQ(coarse.back(),samples.back());}
-        EXPECT_GE(coarse.size(),std::min<std::size_t>(8,samples.size()));EXPECT_LE(coarse.size(),samples.size());
-        for(double value:coarse)EXPECT_EQ(value,samples[std::size_t(value)]);
+        EXPECT_LE(coarse.size(),samples.size());
+        for(std::size_t i=0;i<coarse.size();++i)EXPECT_EQ(coarse[i],i+1==coarse.size()?size-1:i*std::clamp(stride,1,4));
     }
 }
 TEST(RunActions, ClearAllSimulationKindsOneUndoAndReleaseRetainedResults)
@@ -130,7 +130,10 @@ TEST(RunActions, IncludeAndOnEditAreIndependentAndAutoExactNeverStores) {
     for(int i=0;i<3;++i) {
         auto next=CreateRef<ProjectDraft>(*w.Current().draft);next->project.temperature_K=301+i;
         ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(next)).value("ok",false));Wait(w);
-        w.Current().changedAt=std::chrono::steady_clock::now()-std::chrono::seconds(1);w.OnUpdate(0);Wait(w);
+        w.Current().changedAt=std::chrono::steady_clock::now()-std::chrono::seconds(1);w.OnUpdate(0);
+        ASSERT_TRUE(w.ActiveOp());EXPECT_TRUE(w.ActiveOp()->request.value("preview",false));Wait(w);
+        w.Current().changedAt-=std::chrono::seconds(1);w.OnUpdate(0);
+        ASSERT_TRUE(w.ActiveOp());EXPECT_FALSE(w.ActiveOp()->request.value("preview",false));Wait(w);
         EXPECT_EQ(w.Current().history.size(),0u);EXPECT_EQ(w.Current().runs->size(),0u);EXPECT_DOUBLE_EQ(w.Current().Iv()->meta.prim.at("project_snapshot").at("temperature_K"),301+i);
         EXPECT_TRUE(w.Current().Iv()->liveOnly);EXPECT_TRUE(w.Workspace().at("devices")[0].at("result").empty());EXPECT_TRUE(w.Runs().empty());
     }
@@ -457,13 +460,13 @@ TEST(OwnerUi, CancelledExactSolveKeepsLastLiveCurveUntilReplacement) {
     while(w.Pending() && std::chrono::steady_clock::now()<deadline){w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_FALSE(w.Pending());EXPECT_EQ(d.previewJ,(std::vector<double>{123,124}));
 }
-TEST(OwnerUi, BiasNavigationAnchorsReferenceAndUsesStoredProfilesWithoutJobs) {
+TEST(OwnerUi, BiasNavigationUsesStoredProfilesWithoutAStaleReferenceOrJobs) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));w.lightResponse=true;w.autoRecalculate=w.autoRecalculateBand=false;w.Current().SetDraft(SmallDraft());
     auto plan=CreateRef<RunPlan>();plan->actions[1].range=SweepRange{SweepSampling::Points,false,0,.02,.01,3};
     ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make(plan)).value("ok",false));Wait(w);auto& d=w.Current();const auto shot=d.result.typed();ASSERT_EQ(shot->points.size(),3u);
     ASSERT_TRUE(w.Exec(Cmd::SelectRun::Make(d.id,"")).value("ok",false));
-    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(1)).value("ok",false));EXPECT_FALSE(w.Busy());EXPECT_EQ(d.changeIv,shot);EXPECT_EQ(d.changeBias,0);EXPECT_EQ(d.ChangePoint(),&shot->points[0]);
-    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(2)).value("ok",false));EXPECT_FALSE(w.Busy());EXPECT_EQ(d.ChangePoint(),&shot->points[0]);EXPECT_EQ(d.ProfileSweep()->points[2].voltage_V,.02);EXPECT_TRUE(shot->points[2].details);EXPECT_EQ(d.history.size(),1u);
+    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(1)).value("ok",false));EXPECT_FALSE(w.Busy());EXPECT_FALSE(d.changeIv);EXPECT_FALSE(d.changeBand);EXPECT_EQ(d.ChangePoint(),nullptr);
+    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(2)).value("ok",false));EXPECT_FALSE(w.Busy());EXPECT_EQ(d.ChangePoint(),nullptr);EXPECT_EQ(d.ProfileSweep()->points[2].voltage_V,.02);EXPECT_TRUE(shot->points[2].details);EXPECT_EQ(d.history.size(),1u);
 }
 
 TEST(WorkspaceV4, ActionRangeUnknownFieldsAndDisabledMemberPauseSurviveRoundtrip) {

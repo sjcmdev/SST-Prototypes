@@ -21,6 +21,7 @@ void Branch(CommandRegistry &registry, const std::vector<CommandMeta> &commands,
             ImGui::PushID(command.id.value.c_str());
             if (ImGui::MenuItem(rest.c_str(), command.shortcut.c_str(), command.checked && command.checked(), registry.CanExecute(command.id).HasValue()))
                 (void)registry.Execute(command.id);
+            if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && !command.description.empty())ImGui::SetTooltip("%s",command.description.c_str());
             ImGui::PopID();
         }
     }

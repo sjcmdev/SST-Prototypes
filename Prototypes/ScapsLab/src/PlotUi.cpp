@@ -19,13 +19,29 @@ void FitDrawnSeries(const char *label,std::span<const double> x,std::span<const 
         xx.ExtendFit(bounds->x.min);xx.ExtendFit(bounds->x.max);yy.ExtendFit(bounds->y.min);yy.ExtendFit(bounds->y.max);
     }
 }
+namespace {
+struct DrawPoints {
+    const double *x,*y;
+    double floor;
+    explicit DrawPoints(const double* x,const double* y):x(x),y(y) {
+        auto* plot=ImPlot::GetCurrentPlot();auto& axis=plot->Axes[plot->CurrentY];
+        floor=axis.Scale==ImPlotScale_Log10?axis.Range.Min:0.;
+    }
+    static ImPlotPoint At(int i,void* data) {
+        const auto& p=*static_cast<const DrawPoints*>(data);
+        return {p.x[i],p.y[i]==0?p.floor:p.y[i]};
+    }
+};
+}
 void DrawPlotLine(const char *label,const double *x,const double *y,int count,ImPlotSpec spec) {
     const bool fit=!(spec.Flags&ImPlotItemFlags_NoFit);spec.Flags|=ImPlotItemFlags_NoFit;
-    ImPlot::PlotLine(label,x,y,count,spec);if(fit && count>0)FitDrawnSeries(label,{x,std::size_t(count)},{y,std::size_t(count)});
+    ImPlot::SetupLock();DrawPoints points(x,y);
+    ImPlot::PlotLineG(label,DrawPoints::At,&points,count,spec);if(fit && count>0)FitDrawnSeries(label,{x,std::size_t(count)},{y,std::size_t(count)});
 }
 void DrawPlotScatter(const char *label,const double *x,const double *y,int count,ImPlotSpec spec) {
     const bool fit=!(spec.Flags&ImPlotItemFlags_NoFit);spec.Flags|=ImPlotItemFlags_NoFit;
-    ImPlot::PlotScatter(label,x,y,count,spec);if(fit && count>0)FitDrawnSeries(label,{x,std::size_t(count)},{y,std::size_t(count)});
+    ImPlot::SetupLock();DrawPoints points(x,y);
+    ImPlot::PlotScatterG(label,DrawPoints::At,&points,count,spec);if(fit && count>0)FitDrawnSeries(label,{x,std::size_t(count)},{y,std::size_t(count)});
 }
 void DrawPlotBars(const char *label,const double *x,const double *y,int count,double width,ImPlotSpec spec) {
     const bool fit=!(spec.Flags&ImPlotItemFlags_NoFit);spec.Flags|=ImPlotItemFlags_NoFit;

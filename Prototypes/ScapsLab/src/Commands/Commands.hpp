@@ -85,6 +85,14 @@ struct SingleShot : Req<SingleShot> {
     static SingleShot Make(std::shared_ptr<const RunPlan> p={}) {SingleShot c;c.plan=std::move(p);return c;}
     Out Execute(ILabStore& s) const {if(s.Busy())return Reject("busy","Busy","A job is still active");s.SingleShotTyped(plan?plan:args.contains("actions")?std::make_shared<const RunPlan>(ReadRunPlan(args.at("actions"))):nullptr);return {};}
 };
+struct UpdateSingleShot : Req<UpdateSingleShot> {
+    static constexpr Info info{"update_current_single_shot","Update current single shot","Select a stored Single shot to replace it with the current draft; one Undo restores it","Simulate/Update current single shot","",false,true};
+    Out Execute(ILabStore& s) const {
+        if(s.Busy())return Reject("busy","Busy","A job is still active");
+        if(!s.CanUpdateSingleShot())return Reject("no_single_shot","No Single shot selected","Select a stored Single shot to update it","Select a Single shot in Results");
+        s.UpdateSingleShotTyped();return {};
+    }
+};
 struct SetRunPlan : Req<SetRunPlan> {
     static constexpr Info info{"run_settings","Run settings","Edit Run Actions","","",true};
     std::shared_ptr<const RunPlan> plan;

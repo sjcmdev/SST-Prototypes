@@ -209,15 +209,19 @@ TEST(ScapsLab,AutoRecalculateCancelsAndDebounces) {
     ASSERT_TRUE(w.jobs->ResumeAllJobs());
     while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     EXPECT_EQ(w.jobs->GetJob(obsolete)->status,JobStatus::Cancelled);EXPECT_EQ(w.Current().Document().at("temperature_K"),301);
-    w.interacting=true;w.Current().changedAt-=std::chrono::seconds(1);w.OnUpdate(0);EXPECT_FALSE(w.Pending());
+    w.interacting=true;w.Current().changedAt-=std::chrono::seconds(1);w.OnUpdate(0);ASSERT_TRUE(w.Pending());
+    ASSERT_TRUE(w.ActiveOp());EXPECT_TRUE(w.ActiveOp()->request.value("preview",false));EXPECT_EQ(w.ActiveOp()->request.value("stride",0),4);
+    while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+    EXPECT_FALSE(w.Current().previewV.empty());w.OnUpdate(0);EXPECT_FALSE(w.Pending());
     w.interacting=false;w.Current().changedAt=std::chrono::steady_clock::now();const auto start=w.Current().changedAt;
     while(!w.Pending() && std::chrono::steady_clock::now()-start<std::chrono::seconds(5)) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.Pending());
-    EXPECT_GE((std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()),250.0);
+    EXPECT_GE((std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()),100.0);
+    ASSERT_TRUE(w.ActiveOp());EXPECT_FALSE(w.ActiveOp()->request.value("preview",false));
     while(w.Pending()) {w.OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(1));}
     ASSERT_TRUE(w.response.at("ok").get<bool>())<<w.response.dump();
     EXPECT_GT(w.Current().result.at("compute_time_ms").get<double>(),0);EXPECT_EQ(w.Current().result.at("mesh_node_count"),w.Current().result.at("mesh_x_m").size());
-    std::cout<<"Auto-recalculate compute_ms="<<w.Current().result.at("compute_time_ms")<<"; edit-release-to-result_ms="<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<"; debounce_ms=250\n";
+    std::cout<<"Auto-recalculate compute_ms="<<w.Current().result.at("compute_time_ms")<<"; edit-release-to-result_ms="<<std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count()<<"; debounce_ms=100 after typed preview\n";
     w.OnUpdate(0);EXPECT_FALSE(w.Pending());
 }
 

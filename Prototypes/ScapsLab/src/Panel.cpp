@@ -213,13 +213,13 @@ Ref<const ResultBase> HistoryTyped(const DeviceState &device,const Json &run) {
     if(!run.value("profiles_stored",true) && live && live->Provenance()==run.at("provenance"))return live;
     return device.RunResult(run.at("run_id").get_ref<const std::string &>());
 }
-// True when the selected run is an I-V/band run that is not the live result (so the live curve and other runs are drawn dimmed).
+// Bias/time changes do not make a curve stale; only different device parameters do.
 bool SelectedOffLive(const DeviceState &device,const std::string &kind) {
     if(device.selectedRun.empty())return false;
     for(const auto &run:device.history) if(Is(run.at("run_id"),device.selectedRun)) {
         if(!Is(run.at("kind"),kind) && !(kind=="iv" && Is(run.at("kind"),"band")))return false;
-        const auto live=(Is(run.at("kind"),"band")?device.bandResult:device.result).typed();
-        return !live || live->Provenance().is_null() || live->Provenance()!=run.at("provenance");
+        const auto stored=device.RunResult(device.selectedRun);
+        return stored && stored->snapshot && device.draft && !CompareDrafts(*stored->snapshot,*device.draft).Empty();
     }
     return false;
 }
@@ -228,7 +228,7 @@ ImPlotSpec LiveStyle(const DeviceState &device,float weight) {
     if(!SelectedOffLive(device,"iv"))return ImPlotSpec{ImPlotProp_LineColor,device.changeIv?LiveCurveColour:SingleShotColour,ImPlotProp_LineWeight,weight};
     const auto c=device.colour.get<std::vector<float>>();return {ImPlotProp_LineColor,ImVec4(c[0],c[1],c[2],.3f),ImPlotProp_LineWeight,weight};
 }
-bool ShowRun(const Json &run) {return run.value("pinned",false) || Is(run.at("kind"),"batch");}
+bool ShowRun(const Json &run) {return run.value("explicit",false) || run.value("pinned",false) || Is(run.at("kind"),"batch");}
 // Colour scheme for all plots versus x (one table; Ec/n blue, Ev/p red, G green, one colour per recombination mechanism).
 // Dashed polyline drawn on the plot draw list (ImPlot has no dashed style). Call between PushPlotClipRect/PopPlotClipRect.
 void DashedLine(const std::vector<double> &x,const std::vector<double> &y,ImVec4 c,float dash=7.f,float gap=4.f,float weight=1.8f) {
@@ -404,15 +404,15 @@ const std::vector<double> &Vec(const Json &node,double scale=1.,int mode=0) {
 }
 const std::vector<double>& Vec(const std::vector<double>& node,double scale=1.,int mode=0) {
     PlotDataScope scope;
-    return Derived(node,mode,[&](Cols& c){c.a=node;for(auto& v:c.a){v*=scale;if(mode==4)v=v==0?NAN:std::abs(v);else if(mode==1?v<=0:mode==2?(!std::isfinite(v) || v<=0):mode==3)v=NAN;}},scale).a;
+    return Derived(node,mode,[&](Cols& c){c.a=node;for(auto& v:c.a){v*=scale;if(mode==4)v=std::abs(v);else if(mode==1?v<=0:mode==2?(!std::isfinite(v) || v<=0):mode==3)v=NAN;}},scale).a;
 }
 const Cols& IvCols(const std::vector<IvPoint>& points,bool absolute,double scale=1.) {
     PlotDataScope scope;
-    return Derived(points,100,[&](Cols& c){for(const auto& p:points){c.a.push_back(p.voltage_V);const bool valid=p.valid && std::isfinite(p.J_A_m2);if(!valid)++c.n;const double current=valid?p.J_A_m2*scale:NAN;c.b.push_back(absolute?(current==0?NAN:std::abs(current)):current);}},absolute?-scale:scale);
+    return Derived(points,100,[&](Cols& c){for(const auto& p:points){c.a.push_back(p.voltage_V);const bool valid=p.valid && std::isfinite(p.J_A_m2);if(!valid)++c.n;const double current=valid?p.J_A_m2*scale:NAN;c.b.push_back(absolute?std::abs(current):current);}},absolute?-scale:scale);
 }
 const Cols& IvCols(const IvResult& result,bool absolute) {
     if(result.curve.empty())return IvCols(result.points,absolute);
-    PlotDataScope scope;return Derived(result.curve,101,[&](Cols& c){for(const auto& p:result.curve){c.a.push_back(p.voltage_V);const bool valid=ValidIvSample(p);if(!valid)++c.n;const double j=valid?p.J_Am2:NAN;c.b.push_back(absolute?(j==0?NAN:std::abs(j)):j);}},absolute?-1.:1.);
+    PlotDataScope scope;return Derived(result.curve,101,[&](Cols& c){for(const auto& p:result.curve){c.a.push_back(p.voltage_V);const bool valid=ValidIvSample(p);if(!valid)++c.n;const double j=valid?p.J_Am2:NAN;c.b.push_back(absolute?std::abs(j):j);}},absolute?-1.:1.);
 }
 const Cols& AcCols(const std::vector<AcPoint>& points,int view) {
     PlotDataScope scope;
@@ -427,7 +427,7 @@ const Cols &IvCols(const Json &points,bool absolute) {
             c.a.push_back(pt.at("voltage_V"));const bool valid=pt.value("valid",false) && pt.at("J_A_m2").is_number();
             if(!valid) ++c.n;
             const double current=valid?pt.at("J_A_m2").get<double>():NAN;
-            c.b.push_back(absolute?(current==0?NAN:std::abs(current)):current);
+            c.b.push_back(absolute?std::abs(current):current);
         }
     },absolute?1.:0.);
 }
@@ -460,7 +460,7 @@ void IvStatus(const DeviceState& d) {
     if(d.Stale())ImGui::TextDisabled("outdated: model edited");
 }
 void PreviewOverlay(Workflow& w,const DeviceState &d,bool absolute,double scale=1.) {
-    auto J=[&](double j){return absolute?(j==0?double(NAN):std::abs(j)*scale):j*scale;};
+    auto J=[&](double j){return absolute?(std::abs(j)*scale):j*scale;};
     if(d.liveRunning && !d.liveV.empty()) {
         std::vector<double> y;y.reserve(d.liveJ.size());for(double j:d.liveJ) y.push_back(J(j));
         MovingLine(w,"terminal","live (running)##live",d.liveV,y,LiveCurveColour);
@@ -494,7 +494,7 @@ void HistoryLines(Workflow &w,const DeviceState &device,const std::string &kind,
             const bool chosen=dim && run.at("run_id")==device.selectedRun;
             if(!run.at("visible").get<bool>() || (!ShowRun(run) && !chosen) || (run.at("kind")!=kind && !(kind=="iv" && run.at("kind")=="batch")))continue;
             HLine l;
-            const auto add=[&](double x,double value){l.x.push_back(x);l.y.push_back(absolute?(value==0?NAN:std::abs(value)):value*scale);};
+            const auto add=[&](double x,double value){l.x.push_back(x);l.y.push_back(absolute?(std::abs(value)*scale):value*scale);};
             if(run.at("kind")=="batch") {
                 const auto typed=HistoryTyped(device,run);
                 if(const auto batch=dynamic_cast<const BatchResult *>(typed.get())) // curve columns straight from the packed table: the table's Json view is never built for a plot
@@ -970,6 +970,11 @@ bool Panel::RunActions(ProjectDraft& draft) {
     ImGui::BeginDisabled(w->Busy() || !error.empty());
     if(ImGui::Button("Single shot"))Do(Cmd::SingleShot::Make(plan));w->tutorialOverlay.Item("scapslab.Run","run");
     ImGui::EndDisabled();ImGui::SameLine();
+    ImGui::BeginDisabled(w->Busy() || !w->CanUpdateSingleShot());
+    if(ImGui::Button("Update current single shot"))Do(Cmd::UpdateSingleShot::With());
+    ImGui::EndDisabled();
+    if(ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))ImGui::SetTooltip(w->Busy()?"Wait for the current calculation or stop it first.":!w->CanUpdateSingleShot()?"Select a stored Single shot in Results to update it.":"Replace the selected Single shot with the current draft. One Undo restores it.");
+    ImGui::SameLine();
     if(ImGui::Button("Results"))w->focusView=18;
     ImGui::SameLine();ImGui::TextUnformatted("Pause after Action");ImGui::SameLine();changed|=ImGui::Checkbox("##pause-action",&plan->pauseAfterAction);
     ImGui::SameLine();ImGui::TextUnformatted("Member");ImGui::SameLine();changed|=ImGui::Checkbox("##pause-member",&plan->pauseAfterMember);
@@ -1607,7 +1612,7 @@ void Panel::Results() {
     const auto bandBadge=[&]{
         const auto &d=w->Current();
         if(liveBand && d.result.empty()==false && d.Stale()) PlotBadge("LIVE band (exact I-V follows)",IM_COL32(255,140,25,230),IM_COL32(0,0,0,255),0);
-        else if(view==5 && !liveBand && !d.BandFresh() && (d.Stale() || d.needsBand)) PlotBadge("outdated: model edited",IM_COL32(95,95,105,210),IM_COL32(235,235,240,255),0);
+        else if(view==5 && !liveBand && !d.BandFresh() && d.Stale()) PlotBadge("outdated: model edited",IM_COL32(95,95,105,210),IM_COL32(235,235,240,255),0);
     };
     if(!liveBand) for(const auto &run:w->Current().history) if(run.at("run_id")==w->Current().selectedRun && (run.at("kind")=="iv" || run.at("kind")=="band")) {
         selected=&run;

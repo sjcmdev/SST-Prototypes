@@ -3,7 +3,7 @@
 // Table of all typed commands + registration. Workflow::Dispatch reaches them by id "scapslab.<operation>" (the JSON adapter).
 namespace SST::ScapsLab::Cmd {
 namespace {
-using All = std::tuple<LibraryOperation, BoundsFile, Run, RunBand, RunCv, RunCf, RunQe, RunDlcp, RunDlts, RunLaplace, RunCapture, RunOptical, SingleShot, SetRunPlan, CaptureLive, ResumeRun, RecalculateLive, LivePreviewResolution, LiveEditing, SelectBias, RecalculateStoredBias, RunBatch, RetryBatchMember, RecordBatch, PreviewBatch, QuickSweep, BatchParameters, SelectBatchMember, SetBatchSettings, Inspect, RunAll, Cancel, SetAutoRecalculate,
+using All = std::tuple<LibraryOperation, BoundsFile, Run, RunBand, RunCv, RunCf, RunQe, RunDlcp, RunDlts, RunLaplace, RunCapture, RunOptical, SingleShot, UpdateSingleShot, SetRunPlan, CaptureLive, ResumeRun, RecalculateLive, LivePreviewResolution, LiveEditing, SelectBias, RecalculateStoredBias, RunBatch, RetryBatchMember, RecordBatch, PreviewBatch, QuickSweep, BatchParameters, SelectBatchMember, SetBatchSettings, Inspect, RunAll, Cancel, SetAutoRecalculate,
     EditDocument, EditLayer, LoadMaterial, SaveMaterial, SetProfile, LoadProfile, PreviewProfile, ImportDef, Undo, Redo, ListHistory, SelectRun, UpdateRun, ClearHistory,
     AddDevice, DuplicateDevice, RemoveDevice, UpdateDevice, MoveDevice, ListDevices, EditProject, SetActionSettings, SelectDevice,
     NewProject, LoadProject, LoadDocument, SaveProject, SaveDocument, ExportAc, ExportDlcp, ExportGr, ExportResults, ExportBatch, ExportProfile, ExportDef, SendToPlotLab,
@@ -25,6 +25,7 @@ template<class T> Result<void> Add(CommandRegistry &registry, ILabStore &store) 
     const auto &i = T::info;
     CommandMeta meta{CommandID{std::string("scapslab.") + i.op}, i.name, "ScapsLab", i.description, {}, CommandFlags::AsyncCapable | (i.hidden ? CommandFlags::HiddenFromPalette : CommandFlags::None)};
     meta.menuPath = i.menu;meta.shortcut = i.shortcut;
+    if constexpr(std::is_same_v<T,UpdateSingleShot>)meta.enabled=[&store]{return !store.Busy() && store.CanUpdateSingleShot();};
     return registry.Register(std::move(meta), [&store](CommandContext &) -> Unique<ICommand> {return CreateUnique<Typed<T>>(store);});
 }
 }

@@ -111,6 +111,9 @@ class Session:
     def single_shot(self, actions=None):
         return self.execute(dict(operation='single_shot', **({'actions': actions} if actions is not None else {})))
 
+    def update_current_single_shot(self):
+        return self.execute(dict(operation='update_current_single_shot'))
+
     def capture_live(self, kind='iv'):
         return self.execute(dict(operation='capture_live', kind=kind))
 

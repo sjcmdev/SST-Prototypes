@@ -1380,6 +1380,7 @@ void Workflow::StartOperation(const Json &r,const std::string &id,Ref<const Proj
 
     const bool liveBand=op=="band" && r.value("live",false); // background band refresh: no "running" status, no history
     if(liveBand && pending->detailRun.empty()) {
+        d.biasVoltage_V=r.at("voltage_V").get<double>();
         pending->action=d.runPlan->actions[0];pending->action->voltage_V=r.at("voltage_V").get<double>();
         if(pending->action->temperature_K>0){auto snapshot=CreateRef<ProjectDraft>(*d.draft);snapshot->project.temperature_K=pending->action->temperature_K;pending->draft=std::move(snapshot);}
     }
@@ -1539,13 +1540,25 @@ void Workflow::StartActions(const std::string& device,Ref<const RunPlan> plan,bo
     pending->retainBiasProfiles=true;
     pending->jsonResponse=!lightResponse;pending->feed=CreateRef<LiveFeed>();
     lane.pending=std::move(pending);lane.liveSeq=0;lane.liveAt={};lane.runStarted=std::chrono::steady_clock::now();lane.active=jobs->Submit(lane.pending);
-    if(!preview){d.needsRecalculate=false;d.needsBand=false;}d.status="running";status=preview?"Live preview":automatic?"Live Actions":"Single shot";response=Json{};
+    if(!preview){d.previewRequested=false;d.needsRecalculate=false;d.needsBand=false;}d.status="running";status=preview?"Live preview":automatic?"Live Actions":"Single shot";response=Json{};
 }
 void Workflow::RunDlcpTyped(std::optional<RunAction> action) {
     auto plan=CreateRef<RunPlan>(*Current().runPlan);if(action)plan->actions[5]=std::move(*action);
     for(auto& a:plan->actions)a.include=a.kind==ActionKind::Dlcp;StartActions(project.active_device,std::move(plan));
 }
 void Workflow::SingleShotTyped(Ref<const RunPlan> plan) {StartActions(project.active_device,plan?std::move(plan):Current().runPlan);}
+bool Workflow::CanUpdateSingleShot() const {
+    const auto& d=const_cast<Workflow*>(this)->Current();
+    for(const auto& run:d.history)if(run.at("run_id")==d.selectedRun)return run.at("request").value("operation",std::string{})=="single_shot" && bool(d.RunResult(d.selectedRun));
+    return false;
+}
+void Workflow::UpdateSingleShotTyped() {
+    if(!CanUpdateSingleShot())throw std::invalid_argument("Select a stored Single shot to update");
+    auto& d=Current();auto plan=CreateRef<RunPlan>(*d.runPlan);
+    const auto& selected=*std::find_if(d.history.begin(),d.history.end(),[&](const auto& run){return run.at("run_id")==d.selectedRun;});
+    for(auto& a:plan->actions)a.include=selected.at("kind")==ActionId(a.kind);
+    StartActions(d.id,std::move(plan));LaneOf(d.id).pending->replaceRun=d.selectedRun;
+}
 void Workflow::RecalculateLive(ActionKind kind) {
     auto& d=Current();auto plan=CreateRef<RunPlan>(*d.runPlan);
     for(auto& a:plan->actions)a.onEdit=a.kind==kind;
@@ -1558,9 +1571,13 @@ void Workflow::SelectBias(int index) {
     auto& d=Current();auto source=std::dynamic_pointer_cast<const IvResult>(d.RunResult(d.selectedRun));
     if(!source)source=d.Iv();
     if(index<0 || index>=int(source->points.size()))throw std::invalid_argument("Bias index out of range");
-    if(index!=d.selectedBias && d.selectedRun.empty())d.RememberChange();
+    if(index!=d.selectedBias) {
+        auto& lane=LaneOf(d.id);
+        if(lane.pending && lane.Op()=="band" && lane.pending->request.value("live",false))SupersedeJobs(d.id);
+    }
     d.selectedBias=index;d.biasVoltage_V=source->points[index].voltage_V;
-    if(d.selectedRun.empty())d.needsBiasDetails=!source->points[index].details && !(d.BandFresh() && !d.Band()->points.empty() && d.Band()->points.front().voltage_V==d.biasVoltage_V);
+    const auto band=d.ProfileBand();
+    d.needsBiasDetails=!source->points[index].details && (band->points.empty() || band->points.front().voltage_V!=d.biasVoltage_V || (d.selectedRun.empty() && !d.BandFresh()));
     d.changedAt=std::chrono::steady_clock::now();Emit(SelectionChanged(d.id));
 }
 void Workflow::RecalculateStoredBias() {
@@ -1627,6 +1644,7 @@ bool Workflow::CanUndo() const {
 bool Workflow::CanRedo() const {if(const auto available=Library::EditorCanStep(library,false))return *available;return (preferProjectUndo?projectUndo:const_cast<Workflow *>(this)->Current().undo).CanRedo();}
 void Workflow::ApplyDraft(DeviceState &d,Ref<const ProjectDraft> draft) {
     d.RememberChange();
+    d.previewRequested=autoRecalculate || std::any_of(d.runPlan->actions.begin()+1,d.runPlan->actions.end(),[](const auto& a){return a.onEdit;});
     d.liveV.clear();d.liveJ.clear(); // the last preview curve stays visible until a newer one replaces it point by point (owner: no blinking)
     d.SetDraft(std::move(draft));
     d.needsRecalculate=true;d.needsBand=true;d.changedAt=std::chrono::steady_clock::now();d.status=d.history.empty()?"no results":"previous";
@@ -1701,14 +1719,14 @@ void Workflow::OnUpdate(float) {
     static const bool perf=std::getenv("SCAPSLAB_PERF")!=nullptr; // SCAPSLAB_PERF=1: log UI-thread hitches (>2 ms) to stderr
     const auto t0=std::chrono::steady_clock::now();
     auto& d=Current();
-    if(dragging && !d.liveGesture) {
+    if((dragging || d.previewRequested) && !d.liveGesture) {
         const auto& meta=d.Iv()->meta.prim;const double estimate=lastFullMs>0?lastFullMs:meta.is_object()?meta.value("compute_time_ms",0.):0.;
         d.liveGesture=true;d.liveStride=livePreviewStride>0?std::clamp(livePreviewStride,1,4):std::clamp(int(std::clamp(std::ceil(estimate/25.),1.,4.)),1,4);d.liveBiases=ActionSamples(d.runPlan->actions[1],d.draft->project);
         const auto result=d.bandResult.empty()?d.Iv():d.Band();const auto& layers=d.draft->project.layers;
         bool sameGeometry=result->snapshot && result->snapshot->project.layers.size()==layers.size();
         if(sameGeometry)for(std::size_t i=0;i<layers.size();++i)sameGeometry&=result->snapshot->project.layers[i].thickness_m==layers[i].thickness_m;
         if(sameGeometry){const auto warm=d.warmBand?d.warmBand:d.warmIv;if(warm)d.liveMesh=CreateRef<const std::vector<double>>(warm->x_m);else if(!result->mesh_x_m.empty())d.liveMesh=CreateRef<const std::vector<double>>(result->mesh_x_m.get());}
-    }else if(!dragging && d.liveGesture){d.liveGesture=false;d.liveMesh.reset();d.liveBiases.clear();}
+    }else if(!dragging && !d.previewRequested && d.liveGesture){d.liveGesture=false;d.liveMesh.reset();d.liveBiases.clear();}
     UpdateOperation();PollLibrary();PollIo();PersistRecent();
     const auto t1=std::chrono::steady_clock::now();
     UpdateTutorial();
@@ -1744,7 +1762,7 @@ void Workflow::UpdateOperation() {
     for(auto &[id,L]:lanes) {
         if(L.active) {
             busy=true;
-            if(L.pending && !dragging && L.pending->request.value("preview",false)) {L.pending->superseded=true;(void)CancelLane(L);} // slider released: drop the preview, the exact run follows
+            if(L.pending && !dragging && L.pending->request.value("preview",false) && (!HasDevice(L.device) || !Device(L.device).previewRequested)) {L.pending->superseded=true;(void)CancelLane(L);} // slider released: drop the preview, the exact run follows
             const auto live=jobs->TryGetStatus(L.active);
             if((!live || *live==JobStatus::Completed) && L.pending->runPlan && (L.pending->actionBatch?L.pending->nextMember<L.pending->actionBatch->rows.size():L.pending->nextAction<L.pending->runPlan->actions.size())) {
                 if(!L.pending->paused)L.active=jobs->Submit(L.pending);
@@ -1767,10 +1785,10 @@ void Workflow::UpdateOperation() {
         // Live band + carrier profiles at the working point (d.biasVoltage_V): same lane, <=30/s while dragging, latest wins, alternating with the I-V preview.
         const bool autoIv=autoRecalculate || d.runPlan->actions[1].onEdit,autoBand=autoRecalculateBand || d.runPlan->actions[0].onEdit;
         const bool anyAuto=autoIv || std::any_of(d.runPlan->actions.begin()+2,d.runPlan->actions.end(),[](const auto& a){return a.onEdit;});
-        const bool bandDue=((autoBand && d.needsBand && (dragging || (!interacting && now-d.changedAt>=std::chrono::milliseconds(250)))) || (d.selectedRun.empty() && d.needsBiasDetails)) && now-lastBandLive>=std::chrono::milliseconds(16);
-        const bool previewDue=autoIv && dragging && d.needsRecalculate && d.revision!=d.previewRev && now-lastLive>=std::chrono::milliseconds(16);
+        const bool bandDue=((autoBand && d.needsBand && (dragging || (!interacting && now-d.changedAt>=std::chrono::milliseconds(250)))) || d.needsBiasDetails) && now-lastBandLive>=std::chrono::milliseconds(16);
+        const bool previewDue=autoIv && (dragging || d.previewRequested) && d.needsRecalculate && d.revision!=d.previewRev && now-lastLive>=std::chrono::milliseconds(16);
         int ac=-1;for(int i=2;i<5;++i)if(d.runPlan->actions[i].onEdit && (!d.acRevisions.contains(ActionId(ActionKind(i))) || d.acRevisions.at(ActionId(ActionKind(i)))!=d.revision)){ac=i;break;}
-        const bool acDue=dragging && d.needsRecalculate && ac>=0 && now-lastAcLive>=std::chrono::milliseconds(16);
+        const bool acDue=(dragging || d.previewRequested) && d.needsRecalculate && ac>=0 && now-lastAcLive>=std::chrono::milliseconds(16);
         if(acDue && (!bandDue || lastAcLive<=lastBandLive) && (!previewDue || lastAcLive<=lastLive)) {
             auto plan=CreateRef<RunPlan>(*d.runPlan);for(auto& a:plan->actions)a.onEdit=int(a.kind)==ac;
             auto& a=plan->actions[ac];auto coarse=PreviewSamples(ActionSamples(a,d.draft->project),d.liveStride);
@@ -1778,7 +1796,8 @@ void Workflow::UpdateOperation() {
             lastAcLive=now;StartActions(d.id,std::move(plan),true,true);
         } else if(bandDue && (!previewDue || lastBandLive<=lastLive)) {
             d.needsBand=false;d.needsBiasDetails=false;lastBandLive=now;++liveBandsStarted;
-            Submit(d.id,{{"operation","band"},{"voltage_V",d.biasVoltage_V},{"live",true},{"preview",dragging},{"rev",d.revision}},"auto-band");
+            if(std::dynamic_pointer_cast<const IvResult>(d.RunResult(d.selectedRun)))RecalculateStoredBias();
+            else Submit(d.id,{{"operation","band"},{"voltage_V",d.biasVoltage_V},{"live",true},{"preview",dragging},{"rev",d.revision}},"auto-band");
         } else if(previewDue) { // live preview: previous run finished (never queued), <=30/s
             lastLive=now;d.previewRev=d.revision;liveSeen=true;++previewsStarted;
             Submit(d.id,{{"operation","run"},{"preview",true},{"stride",d.liveStride}},"auto");
@@ -1798,7 +1817,7 @@ void Workflow::FinishOperation(Lane &L) {
     const bool liveBand=op=="band" && pending->request.value("live",false);
     if(op=="single_shot" && !pending->automatic && snapshot->status==JobStatus::Completed)lastFullMs=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-L.runStarted).count();
     const bool continuation=dragging && pending->automatic && (liveBand || pending->request.value("preview",false));
-    const bool dropped=pending->superseded || (!continuation && ((op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe" || op=="dlcp" || op=="dlts" || op=="laplace_dlts" || op=="capture_dlts" || op=="optical_dlts" || op=="single_shot") && pending->revision!=Device(L.device).revision)); // undo/redo changed the document under this job: its result is for an older document
+    const bool dropped=pending->superseded || (liveBand && pending->detailRun.empty() && pending->request.at("voltage_V").get<double>()!=Device(L.device).biasVoltage_V) || (!continuation && ((op=="run" || op=="band" || op=="cv" || op=="cf" || op=="qe" || op=="dlcp" || op=="dlts" || op=="laplace_dlts" || op=="capture_dlts" || op=="optical_dlts" || op=="single_shot") && pending->revision!=Device(L.device).revision)); // undo/redo changed the document under this job: its result is for an older document
     auto &d=Device(L.device);
     if(d.liveGesture && !pending->superseded && !d.liveMesh && pending->liveMeshOutput)d.liveMesh=pending->liveMeshOutput;
     if(pending->warmOutput){if(op=="band")d.warmBand=pending->warmOutput;else if(op=="run" || op=="single_shot"){d.warmIv=pending->warmOutput;d.warmBand=pending->warmOutput;}}
@@ -1810,7 +1829,10 @@ void Workflow::FinishOperation(Lane &L) {
         d.liveDlcp.clear();d.liveDlts.clear();d.pvEstimate=PvEstimate{};d.liveMembers.clear();d.liveMemberTotal=0;d.liveBatch.reset();d.liveRunning=false;
     }
     const bool outValid=pending->typedOut?pending->outputValid:pending->output.is_object() && pending->output.value("valid",false);
-    if(!pending->completedActions.empty() && (!dropped || !pending->automatic)) {
+    if(pending->request.value("preview",false) && pending->revision==d.revision && !dropped)d.previewRequested=false;
+    const bool replacing=!pending->replaceRun.empty();
+    const std::vector<Undo::DeviceBefore> beforeUpdate=replacing?std::vector<Undo::DeviceBefore>{Undo::DeviceBefore(d)}:std::vector<Undo::DeviceBefore>{};
+    if(!pending->completedActions.empty() && (!dropped || !pending->automatic) && (!replacing || (!dropped && snapshot->status==JobStatus::Completed && outValid && d.RunResult(pending->replaceRun)))) {
         auto runs=CreateRef<RunMap>(*d.runs);
         for(const auto& [kind,result]:pending->completedActions) {
             if(!dropped && kind==ActionKind::Iv) {d.result.adopt(std::static_pointer_cast<const IvResult>(result));if(!d.BandFresh() && std::none_of(pending->completedActions.begin(),pending->completedActions.end(),[](const auto& a){return a.first==ActionKind::Band;}))d.bandResult.clear();d.resultRevision=d.revision;}
@@ -1818,13 +1840,20 @@ void Workflow::FinishOperation(Lane &L) {
             else if(!dropped) {d.acResults.set(ActionId(kind),std::static_pointer_cast<const AcResult>(result));d.acRevisions[ActionId(kind)]=d.revision;}
             if(!pending->automatic) {
                 const auto& meta=result->MetaOf().prim;
-                const auto id=StoreRun(d.history.mut(),ActionId(kind),meta,meta.at("project_snapshot"),pending->request,project.ui.value("history_retention",5),pending->batchGroup);
+                std::string id;
+                if(replacing) {
+                    auto& history=d.history.mut();auto target=std::find_if(history.begin(),history.end(),[&](const auto& run){return run.at("run_id")==pending->replaceRun;});
+                    Json next=Json::array({*target});(void)StoreRun(next,ActionId(kind),meta,meta.at("project_snapshot"),pending->request,1);
+                    auto updated=std::move(next.back());for(const char* key:{"run_id","name","colour","pinned","visible","group_id","label"})updated[key]=target->at(key);
+                    id=pending->replaceRun;*target=std::move(updated);
+                } else id=StoreRun(d.history.mut(),ActionId(kind),meta,meta.at("project_snapshot"),pending->request,project.ui.value("history_retention",5),pending->batchGroup);
                 (*runs)[id]=result;d.selectedRun=id;d.selectedAttempt=0;
             }
             Emit(RunCompleted(d.id,pending->automatic?"":d.selectedRun,ActionId(kind),d.revision));
         }
         if(!dropped && !pending->automatic)for(const auto& [kind,result]:pending->completedActions){if(kind==ActionKind::Iv){d.changeIv.reset();d.changeBand.reset();}else if(kind==ActionKind::Band)d.changeBand.reset();else d.changeAc.erase(ActionId(kind));}
-        d.runs=std::move(runs);d.SyncRuns();if(!dropped && std::any_of(pending->completedActions.begin(),pending->completedActions.end(),[](const auto& a){return a.first==ActionKind::Iv;})){d.previewV.clear();d.previewJ.clear();}d.status=outValid?"solved":"failed";if(!pending->automatic)projectDirty=true;
+        d.runs=std::move(runs);d.SyncRuns();LimitProfiles(d);if(!dropped && std::any_of(pending->completedActions.begin(),pending->completedActions.end(),[](const auto& a){return a.first==ActionKind::Iv;})){d.previewV.clear();d.previewJ.clear();}d.status=outValid?"solved":"failed";if(!pending->automatic)projectDirty=true;
+        if(replacing && projectUndo.PushExecuted(Undo::History(*this,"Update current single shot",Undo::Compare(beforeUpdate,*this,false))))preferProjectUndo=true;
         if(!pending->automatic) {Emit(HistoryChanged(d.id));Emit(SelectionChanged(d.id));FocusResults(d);}
     }
             if(!pending->members.empty() && !dropped) { // members were prepared on the worker; here they only enter the history

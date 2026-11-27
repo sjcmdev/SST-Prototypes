@@ -24,6 +24,7 @@ NB_MODULE(sst_scapslab, m) {
                 if(op=="library")response=s.Exec(Cmd::LibraryOperation::Make(Library::Python::ReadRequest(value)));
                 else if(op=="run_settings")response=s.Exec(Cmd::SetRunPlan::Make(CreateRef<const RunPlan>(ReadRunPlan(value.at("actions")))));
                 else if(op=="single_shot")response=s.Exec(Cmd::SingleShot::Make(value.contains("actions")?CreateRef<const RunPlan>(ReadRunPlan(value.at("actions"))):nullptr));
+                else if(op=="update_current_single_shot")response=s.Exec(Cmd::UpdateSingleShot::With());
                 else if(op=="run_batch" && (value.contains("actions") || value.contains("spec") || value.contains("columns")))response=s.Exec(Cmd::RunBatch::Make(value.contains("spec")?ReadBatchDraft(value.at("spec")):s.Current().batch,value.contains("columns")?ReadRecorderDraft(value.at("columns")):s.Current().recorder,value.contains("actions")?CreateRef<const RunPlan>(ReadRunPlan(value.at("actions"))):s.Current().runPlanEdited?s.Current().runPlan:nullptr));
                 else response=s.Dispatch(value);
                 if(op=="parameter_bounds" && response.value("ok",false)) {

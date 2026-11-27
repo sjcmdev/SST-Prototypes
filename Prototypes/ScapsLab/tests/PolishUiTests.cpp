@@ -79,6 +79,92 @@ TEST_F(PolishUi,PreviewReleaseMatchesNormalSingleShotBitForBit)
     for(std::size_t i=0;i<exact->points.size();++i){const auto& a=exact->points[i];const auto& b=released->points[i];EXPECT_EQ(a.voltage_V,b.voltage_V);EXPECT_EQ(a.J_A_m2,b.J_A_m2);for(const auto* key:{"Ec_eV","Ev_eV","EFn_eV","EFp_eV","n_m3","p_m3"})EXPECT_EQ(PointColumn(a,key).get(),PointColumn(b,key).get());}
     EXPECT_TRUE(w.Current().previewV.empty());EXPECT_TRUE(w.Current().history.empty());
 }
+TEST_F(PolishUi,BiasNavigationKeepsNormalBandsAndLatestMissingBiasWins) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);
+    ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Finish(w);
+    ASSERT_TRUE(w.Exec(Cmd::SelectRun::Make(w.Current().id,"")).value("ok",false));
+    const auto revision=w.Current().revision;
+    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(1)).value("ok",false));
+    EXPECT_FALSE(w.Current().changeIv);EXPECT_FALSE(w.Current().changeBand);EXPECT_FALSE(w.Current().Stale());
+    w.Current().needsRecalculate=true;EXPECT_FALSE(w.Current().Stale());w.Current().needsRecalculate=false;
+    Panel bands(&w,5);Frame(bands,1100);Frame(bands,1100);
+    for(auto& plot:GImPlot->Plots.Buf)for(int j=0;j<plot.Items.GetLegendCount();++j) {
+        const std::string label=plot.Items.GetLegendLabel(j);
+        if(label=="Ec_eV" || label=="Ev_eV")EXPECT_EQ((plot.Items.GetLegendItem(j)->Color>>IM_COL32_A_SHIFT)&255u,255u);
+    }
+    w.Current().result.adopt(DropProfiles(*w.Current().Iv()));
+    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(0)).value("ok",false));w.lastBandLive={};w.OnUpdate(0);
+    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(2)).value("ok",false));
+    for(int i=0;i<4;++i){w.lastBandLive={};w.OnUpdate(0);Finish(w);}
+    ASSERT_FALSE(w.Current().Band()->points.empty());EXPECT_DOUBLE_EQ(w.Current().Band()->points[0].voltage_V,.02);
+    EXPECT_EQ(w.Current().revision,revision);EXPECT_FALSE(w.Current().Stale());EXPECT_FALSE(w.Current().changeIv);
+    EXPECT_EQ(w.Current().history.size(),1u);
+    const auto run=w.Current().history.front().at("run_id").get<std::string>();
+    auto runs=CreateRef<RunMap>(*w.Current().runs);(*runs)[run]=DropProfiles(*std::static_pointer_cast<const IvResult>(w.Current().RunResult(run)));w.Current().runs=std::move(runs);
+    ASSERT_TRUE(w.Exec(Cmd::SelectRun::Make(w.Current().id,run)).value("ok",false));
+    ASSERT_TRUE(w.Exec(Cmd::SelectBias::Make(1)).value("ok",false));
+    for(int i=0;i<3;++i){w.lastBandLive={};w.OnUpdate(0);Finish(w);}
+    ASSERT_TRUE(w.Current().storedBand);EXPECT_EQ(w.Current().detailRun,run);EXPECT_DOUBLE_EQ(w.Current().storedBand->points.front().voltage_V,.01);
+    EXPECT_EQ(w.Current().history.size(),1u);
+}
+TEST_F(PolishUi,SingleShotsAppendUpdateInPlaceAndUndoTypedResults) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);
+    EXPECT_FALSE(w.Exec(Cmd::UpdateSingleShot::With()).value("ok",true));
+    for(int i=0;i<3;++i){ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Finish(w);}
+    auto& d=w.Current();ASSERT_EQ(d.history.size(),3u);const auto first=d.RunResult(d.history.front().at("run_id"));
+    const auto id=d.selectedRun;const auto old=d.RunResult(id);const auto colour=d.history.back().at("colour");
+    auto draft=CreateRef<ProjectDraft>(*d.draft);draft->project.temperature_K=325;
+    ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(draft,"")).value("ok",false));
+    ASSERT_TRUE(w.Exec(Cmd::SelectRun::Make(d.id,id)).value("ok",false));
+    const auto depth=w.projectUndo.GetUndoDepth();
+    ASSERT_TRUE(w.Dispatch({{"operation","update_current_single_shot"}}).value("ok",false));Finish(w);
+    const auto updated=d.RunResult(id);EXPECT_NE(updated,old);EXPECT_DOUBLE_EQ(updated->snapshot->project.temperature_K,325);
+    EXPECT_EQ(d.history.size(),3u);EXPECT_EQ(d.selectedRun,id);EXPECT_EQ(d.history.back().at("colour"),colour);EXPECT_EQ(w.projectUndo.GetUndoDepth(),depth+1);
+    EXPECT_EQ(d.RunResult(d.history.front().at("run_id")),first);
+    ASSERT_TRUE(w.Exec(Cmd::Undo::With()).value("ok",false));EXPECT_EQ(d.RunResult(id),old);
+    EXPECT_EQ(d.result.typed(),updated);EXPECT_FALSE(d.Stale());
+    ASSERT_TRUE(w.Exec(Cmd::Redo::With()).value("ok",false));EXPECT_EQ(d.RunResult(id),updated);
+    Panel iv(&w,10);Frame(iv,1100);Frame(iv,1100);
+    int shots=0;for(auto& plot:GImPlot->Plots.Buf)for(int j=0;j<plot.Items.GetLegendCount();++j)if(std::string(plot.Items.GetLegendLabel(j)).find("Single shot")!=std::string::npos)++shots;
+    EXPECT_EQ(shots,3);
+}
+TEST_F(PolishUi,TypedEditUsesDefaultCoarsePreviewBeforeExactRun) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);auto plan=CreateRef<RunPlan>();plan->actions[1].onEdit=true;
+    ASSERT_TRUE(w.Exec(Cmd::SetRunPlan::Make(plan)).value("ok",false));
+    auto draft=CreateRef<ProjectDraft>(*w.Current().draft);draft->project.voltage={-.1,.1,.01};draft->project.layers[0].Nd_m3*=1.1;
+    ASSERT_TRUE(w.Exec(Cmd::EditDocument::Make(draft,"")).value("ok",false));w.lastFullMs=1;
+    w.OnUpdate(0);ASSERT_TRUE(w.ActiveOp());EXPECT_TRUE(w.ActiveOp()->request.value("preview",false));EXPECT_EQ(w.ActiveOp()->request.value("stride",0),4);
+    Finish(w);EXPECT_LT(w.Current().previewV.size(),21u);EXPECT_FALSE(w.Current().previewV.empty());
+    w.Current().changedAt-=std::chrono::seconds(1);for(int i=0;i<3;++i){w.OnUpdate(0);Finish(w);}
+    EXPECT_EQ(w.Current().Iv()->points.size(),21u);EXPECT_TRUE(w.Current().history.empty());EXPECT_TRUE(w.Current().previewV.empty());
+}
+TEST_F(PolishUi,HundredSingleShotsKeepCurvesAndBoundProfileRetention) {
+    Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);std::size_t afterWarmup=0;
+    for(int i=0;i<100;++i){ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Finish(w);w.RestoreResultFocus();if(i==24)afterWarmup=PrivateBytes();}
+    auto& d=w.Current();EXPECT_EQ(d.history.size(),100u);EXPECT_EQ(d.runs->size(),100u);
+    std::set<std::array<double,4>> colours;for(const auto& run:d.history)colours.insert(run.at("colour").get<std::array<double,4>>());EXPECT_EQ(colours.size(),100u);
+    int profiles=0;for(const auto& [id,result]:*d.runs){const auto iv=std::dynamic_pointer_cast<const IvResult>(result);ASSERT_TRUE(iv);EXPECT_EQ(iv->points.size(),3u);profiles+=HasProfiles(*iv);}
+    EXPECT_LE(profiles,6);const auto bytes=PrivateBytes();EXPECT_LT(bytes,afterWarmup+(64u<<20));
+    std::cout<<"sllive7 memory: 25 runs "<<afterWarmup<<", 100 runs "<<bytes<<", full profile runs "<<profiles<<"\n";
+    const auto saved=w.Snapshot();EXPECT_EQ(saved.at("project").at("devices")[0].at("history").size(),100u);
+    Workflow loaded(CreateRef<JobSystem>(nullptr,1));loaded.SetWorkspace(saved.at("project"));
+    EXPECT_EQ(loaded.Current().history.size(),100u);EXPECT_EQ(loaded.Current().runs->size(),100u);
+}
+TEST_F(PolishUi,LogZeroReachesCurrentAxisFloorWithoutChangingDataOrFit) {
+    const double x[]={-1,0,1},y[]={1,0,1};
+    for(double floor:{1e-3,1e-6}) {
+        ImGui::NewFrame();ImGui::SetNextWindowSize({900,700});ImGui::Begin("Log dip");
+        ASSERT_TRUE(ImPlot::BeginPlot("I-V",{-1,500}));ImPlot::SetupAxes("V","|J|");
+        ImPlot::SetupAxisScale(ImAxis_Y1,ImPlotScale_Log10);
+        ImPlot::SetupAxesLimits(-1.1,1.1,floor,10.,ImPlotCond_Always);ImPlot::SetupFinish();
+        auto* draw=ImPlot::GetPlotDrawList();const int before=draw->VtxBuffer.Size;
+        DrawPlotLine("zero current",x,y,3);
+        const auto bottom=ImPlot::PlotToPixels(0,floor);bool reached=false;
+        for(int i=before;i<draw->VtxBuffer.Size;++i){const auto p=draw->VtxBuffer[i].pos;if(std::abs(p.x-bottom.x)<3 && std::abs(p.y-bottom.y)<3)reached=true;}
+        EXPECT_TRUE(reached);EXPECT_EQ(y[1],0.);const auto fit=FitPlotBounds(x,y,false,true);ASSERT_TRUE(fit);EXPECT_EQ(fit->y.min,1.);
+        ImPlot::EndPlot();ImGui::End();ImGui::Render();
+    }
+}
 TEST_F(PolishUi,ClearConfirmationSurvivesFocusAndUsesOneUndoStep) {
     Workflow w(CreateRef<JobSystem>(nullptr,1));Small(w);
     ASSERT_TRUE(w.Exec(Cmd::SingleShot::Make()).value("ok",false));Finish(w);Panel panel(&w,18);

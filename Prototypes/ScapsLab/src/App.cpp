@@ -348,12 +348,12 @@ void SetupApplication(Application &app) {
         while(w->Pending()) {w->OnUpdate(0);std::this_thread::sleep_for(std::chrono::milliseconds(5));}
     }
     auto &editor=app.GetEditorLayer();
-    w->livePreviewStride=std::clamp(w->settings.value("live_preview_stride",0),0,4);
+    w->livePreviewStride=std::clamp(w->settings.value("live_preview_stride",4),0,4);
     editor.RegisterSettingsTab({"scapslab.live_preview","Live preview",[w]{
         if(ImGui::BeginTable("live-preview-settings",2)) {
             ImGui::TableNextColumn();ImGui::AlignTextToFramePadding();ImGui::TextUnformatted("Live preview resolution");ImGui::TableNextColumn();ImGui::SetNextItemWidth(-1);
             int stride=w->livePreviewStride;if(ImGui::Combo("##resolution",&stride,"Auto\0Every point\0Every 2nd point\0Every 3rd point\0Every 4th point\0")){(void)w->Exec(Cmd::LivePreviewResolution::Make(stride));}
-            if(ImGui::IsItemHovered())ImGui::SetTooltip("During a drag only: Auto targets 30 solves/s using measured solve time, capped at every 4th sweep point. Keeps both endpoints and at least 8 sweep samples. Spatial mesh stays fixed for smooth profiles. Release always computes the full, exact result.");
+            if(ImGui::IsItemHovered())ImGui::SetTooltip("For drag and typed edits: every 4th sweep point by default. Auto targets 30 solves/s using measured solve time, capped at every 4th sweep point. Keeps both endpoints. Spatial mesh stays fixed for smooth profiles. Release always computes the full, exact result.");
             ImGui::EndTable();
         }
     }});

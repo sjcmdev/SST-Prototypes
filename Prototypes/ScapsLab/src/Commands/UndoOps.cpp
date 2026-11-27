@@ -66,11 +66,13 @@ struct RunsStep {
     std::vector<std::string> erase;
     std::vector<Ins> insert;                           // ascending index
     std::vector<std::pair<std::string, Json>> patch;   // run_id, json patch
-    bool Empty() const {return erase.empty() && insert.empty() && patch.empty();}
+    std::vector<std::pair<std::string,Ref<const ResultBase>>> replace;
+    bool Empty() const {return erase.empty() && insert.empty() && patch.empty() && replace.empty();}
     std::size_t Bytes() const {
         std::size_t n = 0;
         for(const auto &i : insert) n += JsonBytes(i.entry) + sizeof(Ins);
         for(const auto &p : patch) n += JsonBytes(p.second) + p.first.capacity();
+        for(const auto& r:replace)n+=sizeof(r)+r.first.capacity();
         return n + erase.size() * sizeof(std::string);
     }
     void Apply(Json &history, RunMap &runs) const {
@@ -83,6 +85,7 @@ struct RunsStep {
             if(i.result) runs[i.entry.at("run_id").get<std::string>()] = i.result;
         }
         for(const auto &[id, p] : patch) for(auto &r : history) if(r.at("run_id") == id) {r = r.patch(p);break;}
+        for(const auto& [id,result]:replace)runs[id]=result;
     }
 };
 }
@@ -229,6 +232,8 @@ Deltas Compare(const std::vector<DeviceBefore> &before, Workflow &w, bool withLi
             } else if(&hb[i] != &ha[it->second]) {
                 const auto x = WithoutBookkeeping(hb[i]), y = WithoutBookkeeping(ha[it->second]);
                 if(x != y) {dd->fwd.patch.emplace_back(id, Json::diff(x, y));dd->back.patch.emplace_back(id, Json::diff(y, x));}
+                const auto old=b.results.runs->find(id);const auto current=d.RunResult(id);
+                if(old!=b.results.runs->end() && old->second!=current && x!=y){dd->fwd.replace.emplace_back(id,current);dd->back.replace.emplace_back(id,old->second);}
             }
         }
         for(std::size_t j = 0; j < ha.size(); ++j) {

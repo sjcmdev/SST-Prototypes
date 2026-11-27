@@ -207,6 +207,7 @@ std::string RunLabel(const Json &run) {
         if(!label.empty())label+=", ";
         label+=ParameterLabel(change.at("parameter_id"),change.at("unit"),change.at("after"),change.at("before"));
     }
+    if(run.contains("request") && run.at("request").value("operation",std::string{})=="single_shot")return run.at("label").get<std::string>()+(label.empty()?"":" - "+label);
     return label.empty()?run.at("label").get<std::string>():label;
 }
 std::string DiffLabel(const Json &previous,const Json &document) {
@@ -233,9 +234,9 @@ std::string StoreRun(Json &history,const std::string &kind,const Json &result,co
     const auto modelDiff=Json::diff(previous,document);
     if(label.empty()) label=history.empty()?"Initial run":previous==document?"Same parameters":"Model changed: "+modelDiff.front().at("path").get<std::string>();
     if(request.value("operation",std::string{})=="single_shot") {
-        const std::time_t seconds=result.at("provenance").at("time_unix_ms").get<std::int64_t>()/1000;std::tm local{};localtime_s(&local,&seconds);char time[32];std::strftime(time,sizeof(time),"%H:%M:%S",&local);label=std::string("Single shot ")+time;
+        const std::time_t seconds=result.at("provenance").at("time_unix_ms").get<std::int64_t>()/1000;std::tm local{};localtime_s(&local,&seconds);char time[32];std::strftime(time,sizeof(time),"%H:%M:%S",&local);label=std::string("Single shot ")+std::to_string(sequence.load())+" ("+time+")";
     }
-    const double t=double(sequence%12)/12.;
+    const double t=std::fmod(double(sequence.load())*.6180339887498949,1.);
     Json colour=Json::array({.5+.45*std::cos(6.283*t),.5+.45*std::cos(6.283*(t-.333)),.5+.45*std::cos(6.283*(t+.333)),1.});
     history.push_back({{"run_id",id},{"kind",kind},{"model_hash",modelHash?*modelHash:DocumentHash(document)},{"document",document},{"diff",changes},{"model_diff",modelDiff},{"label",label},{"request",request},{"time_unix_ms",result.at("provenance").at("time_unix_ms")},{"elapsed_s",result.value("elapsed_s",result.value("compute_time_ms",0.)/1000.)},{"provenance",result.at("provenance")},{"pinned",false},{"name",""},{"visible",true},{"colour",colour},{"group_id",group}});
     if(request.value("operation",std::string{})=="single_shot" || request.value("operation",std::string{})=="capture_live")history.back()["explicit"]=true;
@@ -263,7 +264,7 @@ void LimitProfiles(DeviceState &d,int keep) {
     const auto &h=*d.history;std::vector<std::string> drop;int kept=0;
     for(std::size_t i=h.size();i-->0;) {
         const auto &run=h[i];
-        if(run.value("explicit",false) || run.value("legacy",false) || !run.value("profiles_stored",true)) continue;
+        if(run.value("legacy",false) || (run.value("explicit",false) && run.at("kind")!="iv" && run.at("kind")!="band") || !run.value("profiles_stored",true)) continue;
         const auto id=run.at("run_id").get<std::string>();const auto typed=d.RunResult(id);
         const auto iv=dynamic_cast<const IvResult*>(typed.get());const auto ac=dynamic_cast<const AcResult*>(typed.get());
         const bool has=iv?HasProfiles(*iv):ac&&(ac->has>>31&1u)&&((ac->has&1u)||(ac->meta.prim.is_object()&&ac->meta.prim.contains("mesh_x_m")));
