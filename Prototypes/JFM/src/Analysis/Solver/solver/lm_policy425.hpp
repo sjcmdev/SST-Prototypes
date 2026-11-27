@@ -60,8 +60,11 @@ JFM_HD inline Result fit_variant(GpuModelType model,const GpuParamLayout& l,cons
    bool rounding_polish=chi<=out.chi*(1+2e-14)&&candidate_gradient<out.gradient;
    if(chi<out.chi||rounding_polish) {
     out.relative_change=fabs(out.chi-chi)/fmax(out.chi,l.objective==JfmObjective::LogLegacy?1e-300:double(l.dof));out.step=step;
-    for(int j=0;j<l.n_free;++j)out.p[j]=candidate[j];
-    out.chi=objective(model,l,out.p,v,y,count,h,g,true,shared);mu=fmax(mu/(10),1e-15);accepted=true;break;
+    for(int j=0;j<l.n_free;++j) {
+     out.p[j]=candidate[j];g[j]=cg[j];
+     for(int k=0;k<l.n_free;++k)h[j*8+k]=ch[j*8+k];
+    }
+    out.chi=chi;mu=fmax(mu/(10),1e-15);accepted=true;break;
    }
    if(out.gradient<=target&&step<=xtol){out.step=step;out.relative_change=0;out.status=1;return out;}
    mu*=2;
